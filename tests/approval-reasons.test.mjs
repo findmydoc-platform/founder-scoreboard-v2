@@ -120,10 +120,12 @@ test("approval RPCs enforce proposed state, roles, CAS, notes, and atomic return
     assert.doesNotMatch(sql, /v_notification_recipient_id\s*<>\s*p_actor_profile_id/);
   }
 
-  assert.match(migration, /revoke all on function public\.decide_initiative_approval_transaction[^]*from public/);
-  assert.match(migration, /grant all on function public\.decide_deliverable_approval_transaction[^]*to service_role/);
+  assert.match(migration, /drop function public\.decide_initiative_approval_transaction/);
+  assert.match(migration, /drop function public\.decide_deliverable_approval_transaction/);
+  assert.match(migration, /grant execute on function public\.mutate_planning_approval_command_transaction[^]*to service_role/);
   assert.match(verification, /verifyApprovalDecisionRpcs/);
-  assert.match(verification, /RPC did not require an approval decision note/);
+  assert.match(verification, /prepare_planning_approval_command/);
+  assert.match(verification, /approval preparation did not validate its canonical input/);
 });
 
 test("returned planning items use the existing personal Google Chat delivery pipeline", () => {

@@ -31,8 +31,8 @@ test("Browser and Team transports delegate Revise writes to one deep module", as
     read("src/features/planning-items/model/planning-items-team-update-preview.ts"),
     read("src/features/planning-items/model/planning-item-update.ts"),
     read("src/app/api/tasks/[id]/route.ts"),
-    read("src/app/api/team/planning-items/v1/items/[id]/route.ts"),
-    read("src/app/api/team/planning-items/v1/items/[id]/preview/route.ts"),
+    read("src/app/api/team/planning-items/v2/items/[id]/route.ts"),
+    read("src/app/api/team/planning-items/v2/items/[id]/preview/route.ts"),
   ]);
 
   assert.match(taskAdapter, /createBrowserRevisePlanningItems/);

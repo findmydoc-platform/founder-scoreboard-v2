@@ -188,7 +188,7 @@ test("planning items publish an approval-aware repository contract", async () =>
   assert.match(teamCreateRoute, /mode: "preview"/);
   assert.match(createModule, /create_team_planning_items_with_projection_transaction/);
   assert.match(intakeDocs, /Canonical `itemType` values are `epic`, `initiative`, `deliverable`, and `sub_issue`/);
-  assert.match(intakeDocs, /deprecated `milestone` item type/);
+  assert.match(intakeDocs, /retired `milestone` item type/);
   assert.match(intakeDocs, /Sub-Issue.*approved Deliverable/);
 });
 

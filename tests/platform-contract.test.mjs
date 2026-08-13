@@ -86,7 +86,7 @@ test("deployment workflows keep validation, artifact creation, and production sa
   assert.match(productionWorkflow, /refs\/heads\/main/);
   assert.match(
     productionWorkflow,
-    /Verify Supabase Migration History[\s\S]*pnpm run verify:migrations[\s\S]*Build Vercel Output[\s\S]*build --prod[\s\S]*Apply Supabase Migrations to Production[\s\S]*pnpm run deploy:supabase-migrations[\s\S]*Verify Production Database Security[\s\S]*pnpm run verify:database-security -- --production[\s\S]*Verify Production Supabase Schema[\s\S]*pnpm run verify:supabase[\s\S]*Verify Production Auth Mapping[\s\S]*pnpm run verify:auth[\s\S]*vercel-deploy-prebuilt\.sh production/,
+    /Verify Supabase Migration History[\s\S]*pnpm run verify:migrations[\s\S]*Build Vercel Output[\s\S]*build --prod[\s\S]*Activate Production Maintenance Mode[\s\S]*PLANNING_MAINTENANCE_MODE: "1"[\s\S]*Verify Production Maintenance Mode[\s\S]*Apply Supabase Migrations to Production[\s\S]*pnpm run deploy:supabase-migrations[\s\S]*Verify Production Database Security[\s\S]*pnpm run verify:database-security -- --production[\s\S]*Verify Production Supabase Schema[\s\S]*pnpm run verify:supabase[\s\S]*Verify Production Auth Mapping[\s\S]*pnpm run verify:auth[\s\S]*Deploy Prebuilt Output to Vercel Production[\s\S]*Verify Production Application[\s\S]*Restore Maintenance Mode After Cutover Failure/,
   );
 
   assert.match(deployScript, /git archive HEAD/);
@@ -102,4 +102,5 @@ test("deployment workflows keep validation, artifact creation, and production sa
   assert.match(deployScript, /TEAM_ACCESS_REQUIRED/);
   assert.match(deployScript, /deploymentUrl=/);
   assert.match(deployScript, /VERCEL_INSPECT_MAX_ATTEMPTS:-36/);
+  assert.match(deployScript, /PLANNING_MAINTENANCE_MODE/);
 });

@@ -1,9 +1,5 @@
 import type { NextRequest } from "next/server";
-import {
-  buildPlanningItemsContext,
-  planningItemsV2Context,
-} from "@/features/planning-items/model/planning-items-context";
-import type { TeamPlanningItemsApiContract } from "@/features/planning-items/model/planning-items-team-api-contract";
+import { buildPlanningItemsContext } from "@/features/planning-items/model/planning-items-context";
 import {
   handlePlanningItemsRequest,
   planningItemsJson,
@@ -11,7 +7,6 @@ import {
 
 export async function handleTeamPlanningItemsContext(
   request: NextRequest,
-  contract: TeamPlanningItemsApiContract,
 ) {
   return handlePlanningItemsRequest(
     request,
@@ -21,7 +16,7 @@ export async function handleTeamPlanningItemsContext(
       const context = await buildPlanningItemsContext(permission.supabase, permission.profile);
       return planningItemsJson({
         ok: true,
-        context: contract.version === "v2" ? planningItemsV2Context(context) : context,
+        context,
       });
     },
   );

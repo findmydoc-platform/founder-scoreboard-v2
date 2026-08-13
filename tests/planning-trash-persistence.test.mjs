@@ -58,12 +58,10 @@ test("normal planning reads use the centralized active read models", async () =>
   await assert.rejects(() => read("src/lib/planning-data-loader.ts"), /ENOENT/);
 });
 
-test("schema verification covers trash metadata and both active views", async () => {
+test("schema verification covers canonical trash metadata and the active task view", async () => {
   const checks = JSON.parse(await read("src/lib/planning-schema-checks.json"));
   const names = new Set(checks.map((entry) => entry.name));
 
-  assert.ok(names.has("packages.trash"));
   assert.ok(names.has("tasks.trash"));
-  assert.ok(names.has("active_packages"));
   assert.ok(names.has("active_tasks"));
 });

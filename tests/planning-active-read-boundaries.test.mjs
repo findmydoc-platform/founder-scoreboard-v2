@@ -22,7 +22,7 @@ test("operational planning readers use centralized active views", async () => {
   const createTaskRoute = sources[0];
   assert.match(createTaskRoute, /ACTIVE_TASKS_TABLE/);
   assert.doesNotMatch(createTaskRoute, /\.from\("tasks"\)\s*\.select/);
-  assert.doesNotMatch(createTaskRoute, /\.from\("planning_item_legacy_ids"\)|package_id|milestone_id/);
+  assert.doesNotMatch(createTaskRoute, /\.from\("planning_item_historical_links"\)|package_id|milestone_id/);
   assert.match(createTaskRoute, /Object\.hasOwn\(payload, "packageId"\)/);
   assert.match(createTaskRoute, /Object\.hasOwn\(payload, "assignee"\)/);
   assert.match(createTaskRoute, /payload\.ownerId/);

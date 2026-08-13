@@ -15,10 +15,6 @@ import {
   planningItemsError,
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
-import {
-  teamPlanningItemsV1Contract,
-  type TeamPlanningItemsApiContract,
-} from "@/features/planning-items/model/planning-items-team-api-contract";
 import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
 import {
   taskGitHubSyncFailure,
@@ -38,7 +34,6 @@ function syncFailureStatus(result: PlanningItemGitHubSyncResult) {
 export async function handleTeamPlanningItemGitHubSync(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
-  contract: TeamPlanningItemsApiContract = teamPlanningItemsV1Contract,
 ) {
   return handlePlanningItemsRequest(
     request,
@@ -69,8 +64,7 @@ export async function handleTeamPlanningItemGitHubSync(
       const { id } = await context.params;
       const itemId = id.trim();
       if (!itemId) return planningItemsError("Planungselement-ID ist erforderlich.", 400);
-      if (!contract.allowLegacyItemIds
-        && !await hasCanonicalTeamPlanningItem(permission.supabase, itemId)) {
+      if (!await hasCanonicalTeamPlanningItem(permission.supabase, itemId)) {
         return planningItemsError("Planungselement wurde nicht gefunden.", 404);
       }
       const requestedIdempotencyKey = request.headers?.get?.("idempotency-key")?.trim() || "";

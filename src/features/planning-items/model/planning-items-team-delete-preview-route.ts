@@ -12,16 +12,11 @@ import {
   planningItemsError,
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
-import {
-  teamPlanningItemsV1Contract,
-  type TeamPlanningItemsApiContract,
-} from "@/features/planning-items/model/planning-items-team-api-contract";
 import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
 
 export async function handleTeamPlanningItemDeletePreview(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
-  contract: TeamPlanningItemsApiContract = teamPlanningItemsV1Contract,
 ) {
   return handlePlanningItemsRequest(
     request,
@@ -34,8 +29,7 @@ export async function handleTeamPlanningItemDeletePreview(
 
       const parsed = parseEmptyEpicDeletePayload(await request.json().catch(() => null));
       if (!parsed.ok) return planningItemsError(parsed.error, 400);
-      if (!contract.allowLegacyItemIds
-        && !await hasCanonicalTeamPlanningItem(permission.supabase, itemId)) {
+      if (!await hasCanonicalTeamPlanningItem(permission.supabase, itemId)) {
         return planningItemsError("Planungselement wurde nicht gefunden.", 404);
       }
 
@@ -64,7 +58,7 @@ export async function handleTeamPlanningItemDeletePreview(
       return planningItemsJson({
         ok: true,
         ...preview,
-        code: preview.code ? contract.epicNotEmptyCode : null,
+        code: preview.code ? "EPIC_NOT_EMPTY" : null,
       });
     },
   );

@@ -17,7 +17,7 @@ type TokenCreateResponse = {
   tokenRecord?: TeamPlanningItemTokenRecord;
 };
 
-const tokensEndpoint = "/api/team/planning-items/v1/tokens";
+const tokensEndpoint = "/api/team/planning-items/v2/tokens";
 
 export function loadPlanningItemsTokens(apiClient: BrowserApiClient) {
   return apiClient.requestJson<TokenListResponse>(tokensEndpoint);

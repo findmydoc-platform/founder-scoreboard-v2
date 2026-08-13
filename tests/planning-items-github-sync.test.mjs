@@ -96,8 +96,9 @@ const standaloneRoute = await loadTranspiledModule(
       },
     },
     "@/features/planning-items/model/planning-items-contract": contract,
-    "@/features/planning-items/model/planning-items-team-api-contract": {},
-    "@/features/planning-items/model/planning-items-team-canonical-item": {},
+    "@/features/planning-items/model/planning-items-team-canonical-item": {
+      hasCanonicalTeamPlanningItem: async () => true,
+    },
     "@/features/planning-items/model/planning-items-github-sync": {
       loadPlanningItemGitHubSyncTarget: async (_supabase, itemId, command) => ({
         ok: true,
@@ -239,7 +240,6 @@ const update = await loadTranspiledModule(
     "@/lib/status": {},
     "@/features/planning-items/model/planning-items-contract": contract,
     "@/features/planning-items/model/planning-item-normalization": {},
-    "@/features/planning-items/model/planning-items-team-api-contract": {},
   },
 );
 
@@ -310,18 +310,12 @@ test("PATCH permits sync-only commands and keeps mode-command coupling strict", 
     title: "No command",
   }).ok, false);
 
-  const v1Alias = update.parsePlanningItemPatchPayload({
+  const legacyAlias = update.parsePlanningItemPatchPayload({
     expectedUpdatedAt,
     packageId: "legacy-package",
   });
-  assert.equal(v1Alias.ok, true);
-  assert.equal(v1Alias.hasLegacyAliases, true);
-  const v2Alias = update.parsePlanningItemPatchPayload({
-    expectedUpdatedAt,
-    packageId: "legacy-package",
-  }, { allowLegacyAliases: false });
-  assert.equal(v2Alias.ok, false);
-  assert.match(v2Alias.error, /v2 akzeptiert nur parentTaskId/);
+  assert.equal(legacyAlias.ok, false);
+  assert.match(legacyAlias.error, /unbekannte Feld packageId/);
 });
 
 test("create idempotency hash includes GitHub mode and per-item decisions", () => {
@@ -438,7 +432,7 @@ test("standalone async sync requires the new scope and returns 202 without an id
     }),
   }, {
     params: Promise.resolve({ id: "task-1" }),
-  }, { allowLegacyItemIds: true });
+  });
   const body = await response.json();
 
   assert.equal(standaloneScope, "write:planning-items:github-sync");
@@ -456,7 +450,7 @@ test("standalone wait sync preserves GitHub failure status", async () => {
     }),
   }, {
     params: Promise.resolve({ id: "task-1" }),
-  }, { allowLegacyItemIds: true });
+  });
   const body = await response.json();
 
   assert.equal(response.status, 503);

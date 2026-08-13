@@ -10,6 +10,7 @@ export const productionBaseline = {
 
 export const approvedDestructiveDdlByMigration = new Map([
   ["20260721120056_replace_task_activity_with_audit_log.sql", new Set(["drop table"])],
+  ["20260813125245_planning_legacy_big_bang_cutover.sql", new Set(["drop table", "drop column"])],
 ]);
 
 export const approvedOutOfOrderMigrationVersions = new Set([

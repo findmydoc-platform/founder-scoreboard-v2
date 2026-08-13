@@ -5,8 +5,6 @@ export const TEAM_PLANNING_ITEMS_TOKEN_TTL_DAYS = 90;
 export const FOUNDEROPS_PLANNING_PROJECT_ID = "findmydoc-founder-execution";
 
 export const TEAM_PLANNING_ITEM_TYPES = ["epic", "initiative", "deliverable", "sub_issue"] as const;
-/** Deprecated Team v1 transport alias. The adapter normalizes it to `epic`. */
-export const TEAM_PLANNING_LEGACY_ITEM_TYPE_ALIASES = ["milestone"] as const;
 export const TEAM_PLANNING_ITEM_GENERIC_TASK_TYPES = ["deliverable", "sub_issue"] as const;
 export const TEAM_PLANNING_STRATEGIC_STATUSES = ["Offen", "In Arbeit", "Pausiert", "Blockiert", "Erledigt"] as const;
 export const TEAM_PLANNING_TASK_STATUSES = ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] as const;
@@ -88,22 +86,15 @@ export const TEAM_PLANNING_ITEM_PATCH_FIELDS = TEAM_PLANNING_ITEM_CREATE_FIELDS.
   (field) => field !== "itemType",
 ) as Exclude<(typeof TEAM_PLANNING_ITEM_CREATE_FIELDS)[number], "itemType">[];
 
-/** Deprecated Team v1 transport aliases normalized at the API boundary. */
-export const TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS = ["packageId", "milestoneId"] as const;
-
 export type TeamPlanningItemScope = (typeof TEAM_PLANNING_ITEM_SCOPES)[number];
 export type TeamPlanningItemType = (typeof TEAM_PLANNING_ITEM_TYPES)[number];
-export type TeamPlanningLegacyItemType = (typeof TEAM_PLANNING_LEGACY_ITEM_TYPE_ALIASES)[number];
 export type TeamPlanningItemGenericTaskType = (typeof TEAM_PLANNING_ITEM_GENERIC_TASK_TYPES)[number];
 export type PlanningItemFieldKey = keyof typeof PLANNING_ITEM_FIELD_RULES;
-export type TeamPlanningItemPatchField =
-  | (typeof TEAM_PLANNING_ITEM_PATCH_FIELDS)[number]
-  | (typeof TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS)[number];
+export type TeamPlanningItemPatchField = (typeof TEAM_PLANNING_ITEM_PATCH_FIELDS)[number];
 export type TeamPlanningItemGitHubSyncMode =
   (typeof TEAM_PLANNING_ITEM_GITHUB_SYNC_MODES)[number];
 
 export function normalizeTeamPlanningItemType(value: unknown): TeamPlanningItemType | null {
-  if (value === "milestone") return "epic";
   return TEAM_PLANNING_ITEM_TYPES.includes(value as TeamPlanningItemType)
     ? value as TeamPlanningItemType
     : null;

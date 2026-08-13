@@ -38,17 +38,23 @@ test("planning legacy preflight covers every destructive cutover data boundary",
   }
 });
 
-test("cutover runbook requires restore proof and object-by-object RESTRICT drops", () => {
+test("cutover runbook requires restore proof and object-by-object RESTRICT drops", async () => {
   assert.match(runbook, /full custom-format database dump/);
   assert.match(runbook, /founderops_cutover_restore_test/);
   assert.match(runbook, /source\/restored counts match/);
   assert.match(runbook, /Object-by-object `RESTRICT` manifest/);
   assert.match(runbook, /drop view public\.active_packages restrict/);
-  assert.match(runbook, /drop table public\.planning_item_legacy_ids restrict/);
+  assert.match(runbook, /Historical URL redirects and delete receipts are preserved under canonical names/);
+  assert.match(script, /source snapshots preserved/);
+  assert.match(runbook, /immutable legacy source snapshots/i);
+  const migration = await readFile("supabase/migrations/20260813125245_planning_legacy_big_bang_cutover.sql", "utf8");
+  assert.match(migration, /planning_cutover_source_columns/);
+  assert.match(migration, /source snapshot fidelity failed/);
+  assert.match(migration, /jsonb_object_keys\(link\.source_snapshot\)/);
   assert.match(runbook, /drop column package_id restrict/);
   assert.match(runbook, /drop column milestone_id restrict/);
   assert.match(runbook, /drop table public\.packages restrict/);
   assert.match(runbook, /drop table public\.milestones restrict/);
-  assert.match(runbook, /CEO explicitly approves/);
+  assert.match(runbook, /in-transaction parity, row-count, and checksum gates/);
   assert.doesNotMatch(runbook, /drop[^;\n]*cascade|truncate table|delete from/i);
 });

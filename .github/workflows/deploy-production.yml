@@ -39,7 +39,7 @@ jobs:
     name: Deploy Production
     needs: require-main
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     environment:
       name: production
       url: ${{ steps.vercel_production.outputs.deploymentUrl }}
@@ -87,6 +87,23 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: pnpm dlx vercel@"${VERCEL_CLI_VERSION}" build --prod --token="$VERCEL_TOKEN"
 
+      - name: Activate Production Maintenance Mode
+        id: maintenance_deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REQUIRE_SUPABASE_AUTH: "true"
+          APP_URL: ${{ secrets.APP_URL }}
+          PLANNING_MAINTENANCE_MODE: "1"
+        run: bash ./.github/scripts/deploy/vercel-deploy-prebuilt.sh production
+
+      - name: Verify Production Maintenance Mode
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: bash ./.github/scripts/deploy/verify-production-maintenance.sh active
+
       - name: Apply Supabase Migrations to Production
         env:
           SCHEMA_DEPLOY_TARGET: production
@@ -131,8 +148,21 @@ jobs:
           GOOGLE_CHAT_DELIVERY_ENABLED: ${{ secrets.GOOGLE_CHAT_DELIVERY_ENABLED }}
         run: bash ./.github/scripts/deploy/vercel-deploy-prebuilt.sh production
 
+      - name: Verify Production Application
+        id: verify_production_app
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: bash ./.github/scripts/deploy/verify-production-maintenance.sh inactive
+
+      - name: Restore Maintenance Mode After Cutover Failure
+        if: failure() && steps.maintenance_deployment.outcome == 'success'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: bash ./.github/scripts/deploy/restore-maintenance-deployment.sh "${{ steps.maintenance_deployment.outputs.deploymentUrl }}"
+
       - name: Reconcile Existing GitHub Comments
-        if: steps.vercel_production.outcome == 'success'
+        if: steps.verify_production_app.outcome == 'success'
         env:
           APP_URL: ${{ secrets.APP_URL }}
           FOUNDEROPS_DELIVERY_SECRET: ${{ secrets.FOUNDEROPS_DELIVERY_SECRET }}

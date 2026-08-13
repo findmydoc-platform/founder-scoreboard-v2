@@ -291,7 +291,7 @@ test("health stays slim while Supabase verification covers operational migration
   assert.match(schemaChecks, /notification_preferences/);
   assert.match(schemaChecks, /tasks\.carryover/);
   assert.match(schemaChecks, /sprint_commitments/);
-  assert.match(schemaChecks, /packages\.initiative/);
+  assert.doesNotMatch(schemaChecks, /packages\.initiative|active_packages/);
   assert.match(schemaChecks, /tasks\.template_v2/);
   assert.match(schemaChecks, /task_relationship_edges/);
   assert.match(schemaChecks, /task_external_comments/);
@@ -438,7 +438,7 @@ test("Planning Items API is the sole automated planning-item creation contract",
   assert.match(planningItemsRoute, /createTeamCreatePlanningItems/);
   assert.doesNotMatch(planningItemsRoute, /\.rpc\(/);
   assert.match(planningItemsCreate, /create_team_planning_items_with_projection_transaction/);
-  assert.match(planningItemsDocumentation, /supported contract for new automation/);
+  assert.match(planningItemsDocumentation, /is the supported contract/);
   assert.match(taskRoutePolicy, /Founder können Aufgaben nur in Review geben/);
   assert.match(taskRoutePolicy, /Diese Felder sind geschützt/);
   assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);

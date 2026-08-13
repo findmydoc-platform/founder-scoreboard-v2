@@ -17,16 +17,13 @@ export const EMPTY_EPIC_DELETE_WARNING = "Zugeordnete Initiativen oder Aufgaben 
 export type EmptyEpicChildren = Readonly<{ initiatives: number; tasks: number }>;
 
 type EmptyEpicDeleteProjection = Readonly<{
-  itemType: "epic" | "milestone";
   sortOrder: number;
   children: EmptyEpicChildren;
-  contractVersion: number;
 }>;
 
 export type EmptyEpicDeleteState = Readonly<{
   item: Epic | null;
   projection: EmptyEpicDeleteProjection | null;
-  legacyProtected: boolean;
 }>;
 
 export type EmptyEpicDeleteCommitPlan = Readonly<{
@@ -51,7 +48,6 @@ type PlanningSupabase = Readonly<{
 
 type DeleteTransaction = Readonly<{
   replayed?: boolean;
-  itemType?: "epic" | "milestone";
   item?: Record<string, unknown>;
   task?: Record<string, unknown>;
   children?: Partial<EmptyEpicChildren>;
@@ -126,12 +122,10 @@ function epicFromRow(value: unknown): Epic | null {
 function projectionFromRow(
   value: unknown,
   children: EmptyEpicChildren,
-  itemType: "epic" | "milestone" = "epic",
-  contractVersion = 2,
 ): EmptyEpicDeleteProjection | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
-  return { itemType, sortOrder: Number(row.sort_order || 0), children, contractVersion };
+  return { sortOrder: Number(row.sort_order || 0), children };
 }
 
 function deleteMetadata(projection: EmptyEpicDeleteProjection) {
@@ -159,7 +153,7 @@ export const emptyEpicDeleteDecisionCore: PlanningDecisionCore<EmptyEpicDeleteSt
       return { ok: false, error: { code: "conflict", reason: "revision" } };
     }
     const children = state.projection.children;
-    const canDelete = !state.legacyProtected && children.initiatives === 0 && children.tasks === 0;
+    const canDelete = children.initiatives === 0 && children.tasks === 0;
     return {
       ok: true,
       items: [state.item],
@@ -187,7 +181,7 @@ async function loadDeleteState(supabase: PlanningSupabase, candidateId: string):
   if (!prepared.data || typeof prepared.data !== "object") return { state: null, error: new Error("Invalid empty Epic delete state") };
   const value = prepared.data as Record<string, unknown>;
   const item = epicFromRow(value.item);
-  if (!item) return { state: { item: null, projection: null, legacyProtected: false }, error: null };
+  if (!item) return { state: { item: null, projection: null }, error: null };
   const rawChildren = value.children && typeof value.children === "object"
     ? value.children as Record<string, unknown>
     : {};
@@ -200,13 +194,12 @@ async function loadDeleteState(supabase: PlanningSupabase, candidateId: string):
     state: {
       item,
       projection,
-      legacyProtected: Boolean(value.legacyProtected),
     },
     error: null,
   };
 }
 
-function replayReceipt(value: unknown, contractVersion: number): PlanningPreparation<EmptyEpicDeleteState> | null {
+function replayReceipt(value: unknown): PlanningPreparation<EmptyEpicDeleteState> | null {
   if (!value || typeof value !== "object") return null;
   const transaction = value as DeleteTransaction;
   const row = transaction.item || transaction.task;
@@ -215,8 +208,7 @@ function replayReceipt(value: unknown, contractVersion: number): PlanningPrepara
     initiatives: Number(transaction.children?.initiatives || 0),
     tasks: Number(transaction.children?.tasks || 0),
   };
-  const itemType = transaction.itemType === "milestone" ? "milestone" : "epic";
-  const projection = projectionFromRow(row, children, itemType, contractVersion);
+  const projection = projectionFromRow(row, children);
   if (!item || !projection) return null;
   return {
     kind: "replay",
@@ -239,7 +231,7 @@ async function prepareDelete(
   const action = deleteAction(request.command);
   if (!action) return { data: { kind: "error", error: invalid("deleteEmptyEpicRequired") }, error: null };
   if (request.actor.credential.kind === "planningToken" && request.idempotencyKey) {
-    const stored = await supabase.from("team_planning_milestone_delete_requests")
+    const stored = await supabase.from("team_planning_item_delete_requests")
       .select("request_hash,response,contract_version")
       .eq("token_id", request.actor.credential.tokenId)
       .eq("idempotency_key", request.idempotencyKey)
@@ -251,7 +243,10 @@ async function prepareDelete(
       if (row.request_hash !== expectedHash) {
         return { data: { kind: "error", error: { code: "conflict", reason: "idempotency" } }, error: null };
       }
-      const replay = replayReceipt(row.response, Number(row.contract_version || 1));
+      if (Number(row.contract_version || 1) < 2) {
+        return { data: { kind: "error", error: { code: "conflict", reason: "idempotency" } }, error: null };
+      }
+      const replay = replayReceipt(row.response);
       return replay ? { data: replay, error: null } : { data: null, error: new Error("Invalid stored empty Epic delete receipt") };
     }
   }
@@ -302,10 +297,10 @@ async function commitDelete(
   const token = request.actor.credential.kind === "planningToken" ? request.actor.credential : null;
   const metadata = request.requestMetadata;
   const result = token
-    ? await supabase.rpc("delete_team_planning_milestone_transaction", {
+    ? await supabase.rpc("delete_team_planning_item_transaction", {
         p_token_id: token.tokenId,
         p_profile_id: request.actor.profileId,
-        p_milestone_id: request.plan.itemId,
+        p_item_id: request.plan.itemId,
         p_expected_updated_at: request.plan.expectedRevision,
         p_idempotency_key: request.idempotencyKey || null,
         p_request_hash: emptyEpicDeleteHash({ itemId: request.plan.requestedItemId, expectedUpdatedAt: request.plan.expectedRevision }),
@@ -330,7 +325,7 @@ async function commitDelete(
     initiatives: Number(transaction?.children?.initiatives || 0),
     tasks: Number(transaction?.children?.tasks || 0),
   };
-  const projection = projectionFromRow(row, children, "epic", 2);
+  const projection = projectionFromRow(row, children);
   if (!item || !projection) return { data: null, error: new Error("Invalid empty Epic delete result") };
   return {
     data: {
@@ -363,13 +358,11 @@ function projectionFromResult(result: Extract<PlanningResult, { ok: true }>) {
   const projection = value as Partial<EmptyEpicDeleteProjection>;
   if (!projection.children) return null;
   return {
-    itemType: projection.itemType === "milestone" ? "milestone" as const : "epic" as const,
     sortOrder: Number(projection.sortOrder || 0),
     children: {
       initiatives: Number(projection.children.initiatives || 0),
       tasks: Number(projection.children.tasks || 0),
     },
-    contractVersion: Number(projection.contractVersion || 2),
   };
 }
 
@@ -377,7 +370,7 @@ export function emptyEpicDeleteTeamItem(result: Extract<PlanningResult, { ok: tr
   const item = result.items[0];
   const projection = projectionFromResult(result);
   if (!item || item.kind !== "epic" || !projection) return null;
-  const itemType = projection.contractVersion === 1 ? projection.itemType : "epic";
+  const itemType = "epic" as const;
   return {
     itemType,
     item: {

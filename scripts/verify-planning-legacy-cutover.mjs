@@ -1,8 +1,8 @@
 import pg from "pg";
 
 const [target, phase, ...unexpected] = process.argv.slice(2).filter((argument) => argument !== "--");
-if (unexpected.length || target !== "--local" || !["--parity", "--ready-to-drop"].includes(phase)) {
-  throw new Error("Usage: pnpm run verify:planning-legacy-cutover -- --local --parity|--ready-to-drop");
+if (unexpected.length || target !== "--local" || !["--parity", "--ready-to-drop", "--post-cutover"].includes(phase)) {
+  throw new Error("Usage: pnpm run verify:planning-legacy-cutover -- --local --parity|--ready-to-drop|--post-cutover");
 }
 
 const localDatabase = process.env.PLANNING_CUTOVER_LOCAL_DATABASE || "postgres";
@@ -268,12 +268,49 @@ const readyToDropChecks = [
   },
 ];
 
+const postCutoverChecks = [
+  {
+    name: "legacy relations removed",
+    sql: `select name as id from unnest(array[
+      'packages','milestones','active_packages','planning_item_legacy_ids','team_planning_milestone_delete_requests'
+    ]) name where to_regclass('public.' || name) is not null`,
+  },
+  {
+    name: "legacy columns removed",
+    sql: `select table_name || '.' || column_name as id from information_schema.columns
+      where table_schema = 'public' and ((table_name = 'tasks' and column_name in ('package_id','milestone_id'))
+        or (table_name = 'profile_ui_preferences' and column_name = 'expanded_package_ids'))`,
+  },
+  {
+    name: "historical links and source snapshots preserved",
+    sql: `select item_type || ':' || historical_id as id from public.planning_item_historical_links
+      where item_type not in ('epic','initiative') or historical_id = '' or task_id = ''
+        or source_snapshot is null or source_snapshot->>'id' is distinct from historical_id
+        or (item_type = 'epic' and (source_snapshot->>'created_at' is null or source_snapshot->>'updated_at' is null))`,
+  },
+  {
+    name: "canonical delete receipts preserved",
+    sql: `select id::text from public.team_planning_item_delete_requests
+      where item_id = '' or contract_version not in (1,2) or jsonb_typeof(response) <> 'object'`,
+  },
+  {
+    name: "canonical parent graph",
+    sql: `select child.id from public.tasks child left join public.tasks parent on parent.id = child.parent_task_id
+      where (child.task_type = 'epic' and child.parent_task_id is not null)
+        or (child.task_type = 'initiative' and child.parent_task_id is not null and parent.task_type is distinct from 'epic')
+        or (child.task_type = 'deliverable' and child.parent_task_id is not null and parent.task_type is distinct from 'initiative')
+        or (child.task_type = 'sub_issue' and parent.task_type is distinct from 'deliverable')`,
+  },
+];
+
 const client = new pg.Client(connection);
 await client.connect();
 
 try {
   await client.query("begin read only isolation level repeatable read");
-  const checks = phase === "--ready-to-drop" ? [...parityChecks, ...readyToDropChecks] : parityChecks;
+  const checks = phase === "--post-cutover"
+    ? postCutoverChecks
+    : phase === "--ready-to-drop" ? [...parityChecks, ...readyToDropChecks] : parityChecks;
   const report = [];
   for (const check of checks) {
     const result = await client.query(`select id::text from (${check.sql}) failures limit 21`);

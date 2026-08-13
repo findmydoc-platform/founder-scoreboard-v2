@@ -13,25 +13,17 @@ import {
 } from "@/features/planning-items/model/planning-items-route";
 import { previewPlanningItemGitHubSync } from "@/features/planning-items/model/planning-items-github-sync-preview";
 import { isStrategicPlanningItemType } from "@/features/planning-items/model/planning-items-contract";
-import {
-  teamPlanningItemsV1Contract,
-  type TeamPlanningItemsApiContract,
-} from "@/features/planning-items/model/planning-items-team-api-contract";
 
 export async function handleTeamPlanningItemUpdatePreview(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
-  contract: TeamPlanningItemsApiContract = teamPlanningItemsV1Contract,
 ) {
   return handlePlanningItemsRequest(request, "write:planning-items:update", "Planning-Items-Update konnte nicht geprüft werden.", async (permission) => {
     const { id } = await context.params;
     const itemId = id.trim();
     if (!itemId) return planningItemsError("Planungselement-ID ist erforderlich.", 400);
 
-    const parsed = parsePlanningItemPatchPayload(
-      await request.json().catch(() => null),
-      { allowLegacyAliases: contract.allowLegacyAliases },
-    );
+    const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
     if (parsed.githubSyncMode
       && !permission.scopes.includes("write:planning-items:github-sync")) {
@@ -43,7 +35,6 @@ export async function handleTeamPlanningItemUpdatePreview(
       itemId,
       parsed,
       supabase: permission.supabase,
-      allowLegacyReferences: contract.allowLegacyItemIds,
     });
     if (!result.ok) return planningItemsError(result.error, result.status);
 

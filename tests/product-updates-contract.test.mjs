@@ -90,7 +90,7 @@ test("product update diff classification excludes removal-only UI maintenance", 
   assert.equal(requiresProductUpdateForDiff(expandedUi), true);
 
   const serverOnly = parseGitNumstat(
-    "10\t0\tsrc/app/api/team/planning-items/v1/items/route.ts",
+    "10\t0\tsrc/app/api/team/planning-items/v2/items/route.ts",
   );
   assert.equal(requiresProductUpdateForDiff(serverOnly), false);
 });
