@@ -101,4 +101,5 @@ test("deployment workflows keep validation, artifact creation, and production sa
   assert.match(deployScript, /seatBlock/);
   assert.match(deployScript, /TEAM_ACCESS_REQUIRED/);
   assert.match(deployScript, /deploymentUrl=/);
+  assert.match(deployScript, /VERCEL_INSPECT_MAX_ATTEMPTS:-36/);
 });
