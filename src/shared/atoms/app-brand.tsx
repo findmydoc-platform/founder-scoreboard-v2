@@ -18,11 +18,16 @@ export function AppBrand({
   founderOpsVariant,
 }: Props) {
   const isLogin = size === "login";
-  const resolvedFounderOpsVariant = founderOpsVariant || (isLogin ? "badge" : "subline");
+  const resolvedFounderOpsVariant = founderOpsVariant || "subline";
   const founderOpsLabel = resolvedFounderOpsVariant === "subline" ? (
     <span className="mt-1.5 flex flex-col items-start gap-1">
-      <span className="text-[11px] font-medium leading-none tracking-[0.02em] text-slate-500">FounderOps</span>
-      <span className="h-0.5 w-7 rounded-full bg-emerald-400" aria-hidden="true" />
+      <span className={isLogin
+        ? "text-lg font-medium leading-none tracking-[0.02em] text-slate-500"
+        : "text-[11px] font-medium leading-none tracking-[0.02em] text-slate-500"}
+      >
+        Founder Ops
+      </span>
+      <span className={isLogin ? "h-0.5 w-8 rounded-full bg-emerald-400" : "h-0.5 w-7 rounded-full bg-emerald-400"} aria-hidden="true" />
     </span>
   ) : (
     <span className={isLogin
@@ -30,7 +35,7 @@ export function AppBrand({
       : "mt-0.5 inline-flex items-center gap-1 rounded-full border border-[#FF2D2D] bg-[#5A000A] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white"}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-[#FF2D2D]" aria-hidden="true" />
-      FounderOps
+      Founder Ops
     </span>
   );
   const content = (
@@ -39,12 +44,12 @@ export function AppBrand({
       <img
         src="/assets/cross-mark.svg"
         alt=""
-        className={isLogin ? "h-14 w-14 shrink-0" : "h-10 w-10 shrink-0"}
+        className={isLogin ? "h-16 w-16 shrink-0" : "h-10 w-10 shrink-0"}
         aria-hidden="true"
       />
       <span className={`min-w-0 whitespace-nowrap ${textClassName}`}>
         <span className={isLogin
-          ? "block text-[28px] font-bold leading-none tracking-tight text-[#070119]"
+          ? "block text-[36px] font-bold leading-none tracking-tight text-[#070119]"
           : "block text-xl font-bold tracking-tight text-[#070119]"}
         >
           findmydoc
@@ -54,7 +59,7 @@ export function AppBrand({
     </>
   );
 
-  const classes = `flex ${resolvedFounderOpsVariant === "subline" ? "items-start" : "items-center"} ${isLogin ? "gap-5" : "gap-3"} ${className}`;
+  const classes = `flex ${resolvedFounderOpsVariant === "subline" ? "items-start" : "items-center"} ${isLogin ? "gap-6" : "gap-3"} ${className}`;
 
   if (href) {
     return (

@@ -55,7 +55,7 @@ export function AuthControl({
         onClick={onSignIn}
         disabled={busy}
         className={variant === "gate"
-          ? "inline-flex h-14 w-full items-center justify-center gap-3 rounded-[5px] bg-[#1557ff] px-4 text-base font-medium text-white shadow-sm transition hover:bg-[#0d47e5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1557ff] disabled:cursor-not-allowed disabled:opacity-60"
+          ? "inline-flex h-12 w-full items-center justify-center gap-3 rounded-[5px] bg-[#1557ff] px-4 text-base font-medium text-white shadow-sm transition hover:bg-[#0d47e5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1557ff] disabled:cursor-not-allowed disabled:opacity-60"
           : "inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"}
       >
         <SiGithub size={variant === "gate" ? 21 : 17} aria-hidden="true" />
