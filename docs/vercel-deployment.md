@@ -58,6 +58,7 @@ GITHUB_APP_CLIENT_ID=
 GITHUB_APP_CLIENT_SECRET=
 GITHUB_APP_PRIVATE_KEY=
 GITHUB_APP_INSTALLATION_ID=
+GITHUB_APP_WEBHOOK_SECRET=
 GITHUB_TOKEN_ENCRYPTION_KEY=
 GOOGLE_CHAT_WEBHOOK_URL=
 GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
@@ -171,7 +172,10 @@ Before production GitHub features work, configure the GitHub App owned by `findm
 - Set `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_INSTALLATION_ID`, and either `GITHUB_APP_PRIVATE_KEY` or `GITHUB_APP_PRIVATE_KEY_PATH`.
 - Set `GITHUB_TOKEN_ENCRYPTION_KEY` to a base64 value that decodes to exactly 32 bytes.
 - Configure the GitHub App user authorization callback URL as `https://founder-ops.findmydoc.eu/api/github-app/callback`.
-- Keep the webhook secret reserved for the later inbound webhook phase; the current runtime does not require `GITHUB_APP_WEBHOOK_SECRET`.
+- Set a high-entropy `GITHUB_APP_WEBHOOK_SECRET` in Vercel Production before the deployment that enables inbound delivery. If it is added after a merge deployment, rerun the protected production workflow on `main` before configuring GitHub. Do not copy the production secret into Preview; preview delivery requires a separate GitHub App and secret.
+- Configure the GitHub App webhook URL as `https://founder-ops.findmydoc.eu/api/github/webhooks`, use `application/json`, keep SSL verification enabled, and subscribe only to Issue events for this phase.
+- Add a platform firewall or rate-limit rule for `/api/github/webhooks` before enabling public delivery.
+- The webhook endpoint stores only normalized Issue trigger metadata and a payload hash. It does not mutate FounderOps planning items; see `docs/github-webhook-intake.md` for activation and failed-delivery recovery.
 - Run the additive Supabase migration that creates `github_app_user_tokens` before enabling the connect button for users.
 
 ## Planning Trash Maintenance

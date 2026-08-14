@@ -13,6 +13,8 @@ FounderOps treats GitHub mutations as resource-specific reconciliation, not as b
 | Ensure absent | Validated repository and resource identity | Delete once. A resource-specific `404` may mean success; authentication and target errors must still fail. |
 | Webhook projection | GitHub delivery ID | Deduplicate `X-GitHub-Delivery`, persist the event, and project it without triggering a blind write-back loop. |
 
+The active receipt contract and the staged event scope are documented in [`github-webhook-intake.md`](github-webhook-intake.md). Receipt is durable but does not currently project inbound values into FounderOps.
+
 ## Transport and GraphQL adapters
 
 - `src/lib/github-http.ts` is the only transport for `api.github.com`.

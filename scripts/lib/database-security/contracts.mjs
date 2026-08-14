@@ -22,6 +22,10 @@ export const highRiskAuthenticatedTablePrivileges = Object.freeze([
   "MAINTAIN",
 ]);
 
+export const serviceRoleOnlyTablePrivileges = Object.freeze([
+  ["github_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
+]);
+
 export const sequencePrivileges = Object.freeze(["USAGE", "SELECT", "UPDATE"]);
 
 export const mappedTeamReadPolicies = Object.freeze([
