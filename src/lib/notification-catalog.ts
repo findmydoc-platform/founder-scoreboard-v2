@@ -1,4 +1,5 @@
 export const notificationCatalog = {
+  "platform_release.published": { lifecycle: "informational", label: "Platform-Release", eventLabel: "Platform-Release veröffentlicht", tone: "blue", digest: false, directDm: false },
   "planning_item.returned": { lifecycle: "actionable", label: "Überarbeitung", eventLabel: "Zur Überarbeitung zurückgegeben", tone: "amber", digest: true, directDm: true },
   "planning_item.rejected": { lifecycle: "informational", label: "Abgelehnt", eventLabel: "Planungselement abgelehnt", tone: "red", digest: true, directDm: true },
   "task.blocker_reported": { lifecycle: "actionable", label: "Blocker", eventLabel: "Blocker gemeldet", tone: "red", digest: true, directDm: true },

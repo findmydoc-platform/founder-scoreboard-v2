@@ -98,6 +98,134 @@ final result: passed
 
 final result: passed
 
+## Platform Releases — 2026-08-14
+
+### Comparison target
+
+- Archive reference: `/Users/razorspoint/.codex/generated_images/019ff047-7f7d-7e61-b198-d7f3723937ed/exec-22d1e7d6-dcf2-45a1-bb0b-e1e51e25c94f.png`.
+- Detail reference: `/Users/razorspoint/.codex/generated_images/019ff047-7f7d-7e61-b198-d7f3723937ed/exec-9e354707-2ceb-4026-8e54-0d28b71e8f8c.png`.
+- Technical-detail reference: `/Users/razorspoint/.codex/generated_images/019ff047-7f7d-7e61-b198-d7f3723937ed/exec-8812d2a3-010b-4ddb-a070-e9e3d844378e.png`.
+- Final desktop captures: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-releases-archive-desktop-final.jpg`, `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-detail-desktop-final.jpg`, and `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-technical-desktop-final.jpg` at 1672x941.
+- Final mobile captures: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-releases-archive-mobile-final.jpg`, `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-detail-mobile-final.jpg`, and `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-mobile-menu-final.jpg` at 390x844.
+
+### Findings
+
+- The current release and its non-technical summary are immediately scannable; five or six benefits stay visible without exposing technical evidence by default.
+- Search and application filters keep previous releases secondary. Only the first release of a new major version receives the green major-release treatment.
+- Detailed changes, Pull Requests, Founder Board links, commits, GitHub Releases, deployment evidence, and the manifest are progressively disclosed.
+- The current-release card appears in expanded and collapsed desktop navigation and only inside the open mobile menu.
+- Optional release visuals remain manifest-driven. The demo release intentionally contains an image-free entry instead of an unrelated placeholder.
+- No actionable P0, P1, or P2 visual, interaction, responsiveness, content, or accessibility differences remain.
+
+### Runtime checks
+
+- Verified release search, application filters, all disclosure controls, application links, planning links, GitHub links, notification navigation, personal read state, and manifest download.
+- Verified desktop, collapsed-sidebar, mobile-detail, mobile-menu, archive, and expanded technical states.
+- Browser console check returned no warnings or errors.
+
+### Comparison history
+
+1. Reduced duplicated copy, oversized mobile typography, and excessive major-release emphasis.
+2. Fixed notification navigation, Finder Board labels, badge wrapping, long planning identifiers, and mobile filter overflow.
+3. Removed an unrelated seed visual while retaining optional visual support and aligned the local planning links with the release content.
+
+### Final result
+
+final result: passed
+
+## Platform Release Shared Header — 2026-08-14
+
+### Comparison target
+
+- Shared-header source truth: `/var/folders/q5/4tfj719d17d39dfk6lq_7m8h0000gn/T/codex-clipboard-b6257f2c-1b27-4aaa-8aef-25edc5e6cf59.png` (`3456 x 2234` pixels).
+- Release archive source truth: `/Users/razorspoint/.codex/generated_images/019ff047-7f7d-7e61-b198-d7f3723937ed/exec-11b09cca-c1c2-4589-a8b8-cfbc929c2827.png` (`1672 x 941` pixels).
+- Desktop archive implementation: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-releases-shared-header-desktop.png` (`1661 x 935` captured pixels from a `1672 x 941` CSS viewport).
+- Desktop detail implementation: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-detail-shared-header-desktop.png` (`1661 x 935` captured pixels from a `1672 x 941` CSS viewport).
+- Mobile archive implementation: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-releases-shared-header-mobile.png` (`379 x 820` captured pixels from a `390 x 844` CSS viewport).
+- Mobile detail implementation: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-detail-shared-header-mobile.png` (`379 x 820` captured pixels from a `390 x 844` CSS viewport).
+- Browser capture used the same CSS viewport and browser density for source-scale comparison; the OS browser chrome in the shared-header reference was excluded from layout judgments.
+- State: archive, release detail, and expanded technical details with live local release data.
+
+### Findings
+
+- No actionable P0, P1, or P2 visual differences remain.
+- Fonts and typography: The release pages now use the same `FounderOps` eyebrow, page-title size, weight, line height, and slate hierarchy as the shared application header. Release-specific summary typography remains subordinate inside the detail content.
+- Spacing and layout rhythm: The standard header owns the top application band on archive and detail routes. The archive's duplicate page title was removed, and its search starts in the normal content area below the header. Desktop content remains centered and mobile content uses the established 16px edge padding without horizontal overflow.
+- Colors and visual tokens: Header borders, white surfaces, slate copy, blue controls, release highlighting, radii, and shadows use the existing FounderOps tokens. The first major version remains the only emerald-highlighted archive entry.
+- Image quality and asset fidelity: No new image assets were introduced. Existing release visuals and the product logo remain unchanged; icons come from the established icon libraries.
+- Copy and content: `Plattform-Releases` and `Gemeinsame Auslieferungen von Website und Clinic Dashboard.` are now consistently shown in the shared header. The archive no longer duplicates that copy in its content region.
+- Responsiveness: At `390 x 844`, the shared mobile navigation control, title, header actions, search, filters, archive cards, and detail content remain readable. Document `scrollWidth` equals `clientWidth` (`379px`) after browser chrome normalization.
+- Interaction and runtime: Archive filters and navigation remained present; technical details expanded successfully. GitHub Release and deployment-run links resolved to valid HTTPS URLs, including compatibility display for an older locally seeded object-shaped URL. No browser console errors or warnings were recorded.
+
+### Full-view and focused comparison evidence
+
+- The shared-header reference, release archive reference, and desktop implementation were opened together in one comparison input. The implementation preserves the selected archive density while adding the mandatory shared application header.
+- Focused header evidence was readable in the full desktop comparison, so no additional crop was required. Mobile archive and detail captures were reviewed separately for responsive wrapping and overflow.
+
+### Comparison history
+
+1. Initial implementation used a bespoke release shell with only a mobile brand row and no desktop application header.
+2. The release shell was replaced with the shared `AppHeader`, including the standard navigation trigger, common header data actions, help, and account control. The archive's duplicate content heading was removed and spacing tightened.
+3. Expanded technical-detail QA exposed older local seed data with object-shaped GitHub URL references. The public Manifest v2 validator remains strict for the runner's string contract, while the UI now reads the older local shape defensively. Post-fix links resolve correctly and no visual regression remains.
+
+### Final result
+
+final result: passed
+
+## Platform Release Sidebar Card Refinement — 2026-08-14
+
+### Comparison target
+
+- Original implementation feedback: `/var/folders/q5/4tfj719d17d39dfk6lq_7m8h0000gn/T/codex-clipboard-e31c350d-d7ff-411f-9a5d-f279e8f3ee33.png`.
+- Information-density reference: `/var/folders/q5/4tfj719d17d39dfk6lq_7m8h0000gn/T/codex-clipboard-70ba0028-a5cb-496b-b877-b282b02fc3f7.png`.
+- Desktop implementation: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-sidebar-card-refined-desktop.jpg` at `1672 x 941`.
+- Mobile implementation: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-sidebar-card-refined-mobile.jpg` at `390 x 844`.
+
+### Findings
+
+- Removed the decorative leading icon from expanded desktop and mobile cards, returning the full card width to the release message.
+- The current release summary is fully visible in the seeded desktop and mobile states. Longer summaries retain bounded four-line desktop and three-line mobile fallbacks.
+- Version, date, unread state, and navigation affordance remain visible without competing with the non-technical summary.
+- The collapsed desktop sidebar keeps the compact release icon because no textual card fits that state.
+- Desktop and mobile comparisons show no clipping, horizontal overflow, or actionable P0, P1, or P2 difference from the requested hierarchy.
+- Browser console: no errors or warnings.
+
+### Final result
+
+final result: passed
+
+## Platform Release current-main integration — 2026-08-14
+
+### Comparison target
+
+- Archive reference: `/Users/razorspoint/.codex/generated_images/019ff047-7f7d-7e61-b198-d7f3723937ed/exec-11b09cca-c1c2-4589-a8b8-cfbc929c2827.png`.
+- Detail reference: `/Users/razorspoint/.codex/generated_images/019ff047-7f7d-7e61-b198-d7f3723937ed/exec-9e354707-2ceb-4026-8e54-0d28b71e8f8c.png`.
+- Desktop captures after integrating `origin/main`: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-releases-main-sync-desktop.jpg` and `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-detail-main-sync-desktop.jpg`.
+- Mobile captures after integrating `origin/main`: `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-releases-main-sync-mobile.jpg`, `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-detail-main-sync-mobile.jpg`, `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-menu-main-sync-mobile.jpg`, and `/Users/razorspoint/.codex/visualizations/2026/08/12/019ff627-a2fa-74f3-9112-9f5d796bb36c/platform-release-technical-content-main-sync-mobile.jpg`.
+- State: authenticated local seed, light theme, archive, detail, expanded technical evidence, open mobile menu, `1672 x 941` desktop CSS viewport, and `390 x 844` mobile viewport.
+
+### Findings
+
+- No actionable P0, P1, or P2 visual findings remain after the responsive `origin/main` integration.
+- The shared FounderOps header stays present on archive and detail pages. Release content starts below it without duplicating the page title.
+- The desktop navigation retains the release entry and the current-release card. The mobile page omits that card until the navigation drawer is open.
+- The archive keeps the current release immediately scannable, preserves search and application filters, and highlights only the first release of a new major version in emerald.
+- The detail page leads with the non-technical summary and six short benefits for `v0.52.0`. Detailed changes and technical GitHub evidence remain collapsed by default.
+- The expanded technical section keeps GitHub Releases, Pull Requests, Founder Board issues, commits, deployment evidence, and the Manifest v2 readable at mobile width.
+- Desktop and mobile comparison inputs preserve the selected spacing, typography, restrained icon usage, progressive disclosure, and application links. No page-level horizontal overflow was measured at `390px`.
+
+### Interaction and runtime checks
+
+- Search narrowed the archive to the two releases containing `Praxen` and restored the complete list after clearing.
+- Mobile navigation opened and closed through its explicit close control without leaving the release detail.
+- A Founder Board Sub-Issue opened from the technical section and returned to the exact release through `Zurück zum Release` without the previous browser hang.
+- Technical details expanded on desktop and mobile. The mobile document retained `scrollWidth === innerWidth === 390`.
+- The browser console reported no warnings or errors.
+
+### Final result
+
+final result: passed
+
 ## Kanban Card Status Row — 2026-08-01
 
 ### Implementation evidence

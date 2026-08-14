@@ -32,6 +32,27 @@
     ]
   },
   {
+    "id": "2026-08-14-platform-releases",
+    "releasedAt": "2026-08-14",
+    "expiresAt": "2026-09-13",
+    "featureTourId": "platform-releases-v1",
+    "title": "Website- und Dashboard-Releases auf einen Blick",
+    "summary": "FounderOps zeigt jetzt verständlich, was auf Website und Clinic Dashboard ausgeliefert wurde. Technische Nachweise bleiben bei Bedarf direkt erreichbar.",
+    "slides": [
+      {
+        "id": "platform-releases-overview",
+        "title": "Auslieferungen verständlich nachvollziehen",
+        "description": "Der aktuelle Plattform-Release steht dauerhaft im Menü. Im Archiv findest du frühere Auslieferungen; Details, Pull Requests, Commits und Deployment-Nachweise lassen sich schrittweise öffnen.",
+        "image": {
+          "src": "/product-updates/2026-08-14-platform-releases/platform-releases.jpg",
+          "alt": "FounderOps mit dem Archiv der Plattform-Releases und dem aktuellen Release im Seitenmenü",
+          "width": 1672,
+          "height": 941
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-08-13-planning-api-v2",
     "releasedAt": "2026-08-13",
     "expiresAt": "2026-09-12",

@@ -39,8 +39,36 @@ export const taskEvidenceLinksTourId = "task-evidence-links-v1";
 export const unifiedPlanningHierarchyTourId = "unified-planning-hierarchy-v1";
 export const planningApiV2TourId = "planning-api-v2";
 export const mobileResponsiveWorkspacesTourId = "mobile-responsive-workspaces-v1";
+export const platformReleasesTourId = "platform-releases-v1";
 
 export const featureTours = [
+  {
+    id: platformReleasesTourId,
+    productUpdateId: "2026-08-14-platform-releases",
+    startWorkspace: "planning",
+    requiredSelectors: ["[data-tour-id='workspace-nav-platform-releases']", "[data-tour-id='current-platform-release']"],
+    steps: [
+      {
+        element: "[data-tour-id='workspace-nav-platform-releases']",
+        popover: {
+          title: "Plattform-Releases öffnen",
+          description: "Hier findest du alle gemeinsamen Auslieferungen von Website und Clinic Dashboard.",
+          side: "right",
+          align: "center",
+        },
+      },
+      {
+        element: "[data-tour-id='current-platform-release']",
+        popover: {
+          title: "Aktuellen Release direkt ansehen",
+          description: "Die Karte zeigt den neuesten Release. Ein blauer Punkt weist auf eine noch ungelesene Auslieferung hin.",
+          side: "right",
+          align: "end",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: mobileResponsiveWorkspacesTourId,
     productUpdateId: "2026-08-14-mobile-founderops",
