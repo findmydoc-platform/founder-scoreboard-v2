@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/display";
 import { roleLabel } from "@/lib/platform";
 import { buildSprintScoreTableViewModel, DEFAULT_SPRINT_SCORE_FILTERS, type SprintScoreAttentionFilter, type SprintScoreSort, type SprintScoreTableFilters } from "@/features/sprint/model/sprint-score-table-view-model";
 import type { CommitmentLevel, Sprint, SprintCommitment } from "@/lib/types";
-import { UiBadge } from "@/shared/atoms/ui-primitives";
+import { UiBadge, UiEmptyState } from "@/shared/atoms/ui-primitives";
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
 import { DataCell, DataColumnHeader, DataEmptyRow, DataHeaderCell, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
 import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
@@ -107,7 +107,8 @@ export function SprintFounderScoreTable({
   );
 
   return (
-    <DataTableFrame
+    <div data-tour-id="sprint-responsive-score">
+      <DataTableFrame
       title="FounderOps Score v2.1"
       description={`${sprintStatusLabel[sprint.status]} · ${formatDate(sprint.startDate)} bis ${formatDate(sprint.endDate)}`}
       caption="FounderOps Score nach Founder"
@@ -115,6 +116,77 @@ export function SprintFounderScoreTable({
       filtering={{ mode: "embedded", toolbar }}
       minWidth={980}
       actions={<UiBadge tone={sprint.scoreLocked ? "blue" : "amber"} size="md">{sprint.scoreLocked ? "Score gelockt" : "Score offen"}</UiBadge>}
+      mobileContentBreakpoint="xl"
+      mobileContent={(
+        <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
+          {visibleRows.map((row) => {
+            const relevantTasks = row.committed > 0;
+            const strikeLevel = row.strikeState?.strikeLevel ?? 0;
+            const resetStreak = row.strikeState?.fulfilledResetStreak ?? 0;
+            const hasOpenScoreSignal = row.openScore > 0 || row.openScoreObjections > 0;
+            const totalStatusClass = row.v21Score.awayNeutral
+              ? "text-blue-700"
+              : row.v21Score.fulfilled
+                ? "text-emerald-700"
+                : relevantTasks
+                  ? "text-amber-700"
+                  : "text-slate-400";
+            const totalStatusLabel = row.v21Score.awayNeutral
+              ? "Away-neutral"
+              : row.v21Score.fulfilled
+                ? "erfüllt"
+                : relevantTasks
+                  ? "nicht erfüllt"
+                  : "–";
+            return (
+              <article key={row.profile.id} className="grid gap-4 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-slate-950">{row.profile.name}</h3>
+                    <p className="text-xs text-slate-500">{roleLabel(row.profile)}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-xl font-semibold tabular-nums text-slate-950">{row.v21Score.totalPoints}/20</div>
+                    <div className={`text-xs font-semibold ${totalStatusClass}`}>{totalStatusLabel}</div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Commitment
+                    <CustomSelect value={row.commitment.commitmentLevel} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateCommitment({ ...row.commitment, commitmentLevel: value as CommitmentLevel })} className="h-11 w-full text-sm" options={["Lite", "Standard", "Heavy", "Away"].map((level) => ({ value: level, label: level }))} />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Wochenstunden
+                    <input
+                      type="number"
+                      min={0}
+                      max={80}
+                      value={row.commitment.weeklyHours}
+                      disabled={pending || sprint.scoreLocked}
+                      onChange={(event) => onUpdateCommitment({ ...row.commitment, weeklyHours: Number(event.target.value) })}
+                      className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:bg-slate-50 disabled:opacity-60"
+                    />
+                  </label>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md bg-slate-50 p-3 text-xs">
+                  <div><dt className="text-slate-500">Aufgaben</dt><dd className="mt-0.5 font-semibold text-slate-900">{row.committed}</dd></div>
+                  <div><dt className="text-slate-500">Workflow</dt><dd className={row.blocked > 0 ? "mt-0.5 font-semibold text-red-700" : "mt-0.5 font-semibold text-slate-900"}>{row.active} aktiv · {row.blocked} blockiert</dd></div>
+                  <div><dt className="text-slate-500">Delivery</dt><dd className="mt-0.5">{scoreFraction(row.v21Score.deliveryPoints, 12, relevantTasks)}</dd></div>
+                  <div><dt className="text-slate-500">Form / Review-Reife</dt><dd className="mt-0.5">{scoreFraction(row.v21Score.formPoints, 4, relevantTasks)}</dd></div>
+                  <div><dt className="text-slate-500">Weekly</dt><dd className="mt-0.5">{scoreFraction(row.v21Score.weeklyPoints, 4, relevantTasks)}</dd></div>
+                  <div><dt className="text-slate-500">Aufwand</dt><dd className="mt-0.5 font-semibold text-slate-900">{row.hours}h</dd></div>
+                </dl>
+                <div className="flex flex-wrap gap-2">
+                  <UiBadge tone={strikeLevel > 0 ? "red" : "slate"}>Strike {strikeLevel}/3</UiBadge>
+                  {resetStreak > 0 && <UiBadge tone="white">{resetStreak} Reset-Sprint</UiBadge>}
+                  {hasOpenScoreSignal && <UiBadge tone="amber">{row.openScore} Score · {row.openScoreObjections} Einwand</UiBadge>}
+                </div>
+              </article>
+            );
+          })}
+          {!visibleRows.length && <UiEmptyState className="m-4 md:col-span-2">{totalCount ? "Keine Founder für diese Filter." : "Noch keine Founder vorhanden."}</UiEmptyState>}
+        </div>
+      )}
     >
           <DataTableHead>
             <tr>
@@ -204,6 +276,7 @@ export function SprintFounderScoreTable({
             })}
             {!visibleRows.length && <DataEmptyRow colSpan={14}>{totalCount ? "Keine Founder für diese Filter." : "Noch keine Founder vorhanden."}</DataEmptyRow>}
           </tbody>
-    </DataTableFrame>
+      </DataTableFrame>
+    </div>
   );
 }

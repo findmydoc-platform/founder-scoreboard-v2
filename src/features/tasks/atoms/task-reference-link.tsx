@@ -38,7 +38,7 @@ export function TaskReferenceLink({
       aria-haspopup={onOpenTask ? "dialog" : undefined}
       draggable={draggable}
       className={classNames(
-        "group/task-reference min-w-0 cursor-pointer underline-offset-2 transition hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:text-blue-700 focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+        "coarse-touch-target group/task-reference min-h-11 min-w-0 cursor-pointer items-center underline-offset-2 transition hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:text-blue-700 focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 sm:min-h-0 sm:items-start",
         layout === "inline" && "inline-flex items-start gap-1.5",
         layout === "block" && "block",
         layout === "flex" && "flex",

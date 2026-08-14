@@ -8,7 +8,7 @@ import { taskAssigneeLabel } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { PlanningShellState, Sprint, Task, TaskStatus } from "@/lib/types";
-import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
+import { UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
 import { buildSprintTaskTableRows, DEFAULT_SPRINT_TASK_FILTERS, type SprintTaskReviewFilter, type SprintTaskRiskFilter, type SprintTaskScoreFilter, type SprintTaskSort, type SprintTaskTableFilters } from "@/features/sprint/model/sprint-task-table-view-model";
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
 import { DataCell, DataColumnHeader, DataEmptyRow, DataHeaderCell, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
@@ -102,7 +102,56 @@ export function SprintTaskTables({
           <FilterField label="Score"><CustomSelect aria-label="Sprint-Aufgaben nach Score filtern" value={filters.score} onChange={(score) => updateFilters({ score: score as SprintTaskScoreFilter })} className="h-10 text-sm" options={scoreOptions} /></FilterField>
         </div>
       </FilterToolbar>
-      <DataTableFrame title="Sprint-Aufgaben" caption="Aufgaben im ausgewählten Sprint" results={[{ id: "sprint", visibleCount: visibleSprintTasks.length, totalCount: sprintTasks.length }]} filtering={{ mode: "external", labelledBy: "sprint-task-filters" }} minWidth={940}>
+      <DataTableFrame
+        title="Sprint-Aufgaben"
+        caption="Aufgaben im ausgewählten Sprint"
+        results={[{ id: "sprint", visibleCount: visibleSprintTasks.length, totalCount: sprintTasks.length }]}
+        filtering={{ mode: "external", labelledBy: "sprint-task-filters" }}
+        minWidth={940}
+        mobileContentBreakpoint="xl"
+        mobileContent={(
+          <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
+            {visibleSprintTasks.map((task) => (
+              <article key={task.id} className="grid gap-4 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white">
+                <div className="min-w-0">
+                  <TaskReferenceLink task={task} onOpenTask={onOpenTask} layout="flex" className="min-h-11 items-start py-1 text-left font-semibold leading-5 text-slate-950">
+                    <span className="line-clamp-2">{task.title}</span>
+                  </TaskReferenceLink>
+                  <p className="mt-1 text-xs text-slate-500">{taskAssigneeLabel(task)}</p>
+                </div>
+                <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                  Status
+                  <TaskStatusControl
+                    status={task.status}
+                    canChange={!pending && task.reviewStatus !== "requested" && (canManageFinalTaskStatus || normalizeStatus(task.status) !== "Erledigt")}
+                    onChange={(status) => onChangeStatus(task, status)}
+                    options={canManageFinalTaskStatus ? taskStatuses : taskStatuses.filter((status) => status !== "Erledigt")}
+                    selectClassName="h-11 w-full text-sm font-semibold"
+                  />
+                </label>
+                <dl className="grid grid-cols-2 gap-3 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+                  <div><dt className="text-slate-500">Review</dt><dd className="mt-1 font-semibold text-slate-800">{reviewLabel(task.reviewStatus)}</dd></div>
+                  <div><dt className="text-slate-500">Score</dt><dd className="mt-1 font-semibold text-slate-800">{task.scorePoints} {task.scoreFinal ? "final" : "offen"}</dd></div>
+                  <div className="col-span-2"><dt className="text-slate-500">Review Owner</dt><dd className="mt-1 font-semibold text-slate-800">{reviewOwnerName(task)}{isSelfReview(task) ? " · Self-Review" : ""}</dd></div>
+                </dl>
+                <div className="flex flex-wrap gap-2">
+                  {task.carriedFromSprintId && <UiBadge tone="blue" size="xs">Carry-over</UiBadge>}
+                  {task.sprintOutcome && <UiBadge tone="slate" size="xs">{task.sprintOutcome}</UiBadge>}
+                </div>
+                <div className="grid gap-2 sm:flex sm:flex-wrap">
+                  {task.reviewStatus === "not_requested" || normalizeStatus(task.status) === "Nacharbeit" ? (
+                    <UiButton type="button" disabled={pending || sprint.scoreLocked} onClick={() => onRequestReview(task)} variant="blue" size="sm" className="w-full sm:w-auto">Review anfragen</UiButton>
+                  ) : null}
+                  {task.reviewStatus === "requested" || normalizeStatus(task.status) === "Review" ? (
+                    <UiButton type="button" disabled={pending} onClick={() => onOpenReviewTask(task.id)} variant="blue" size="sm" className="w-full sm:w-auto">Review öffnen</UiButton>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+            {!visibleSprintTasks.length && <UiEmptyState className="m-4 md:col-span-2">{sprintTasks.length ? "Keine Sprint-Aufgaben für diese Filter." : "Noch keine Aufgaben in diesem Sprint."}</UiEmptyState>}
+          </div>
+        )}
+      >
             <DataTableHead>
               <tr>
                 <DataColumnHeader className="px-4" label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky />
@@ -173,7 +222,41 @@ export function SprintTaskTables({
       </DataTableFrame>
 
       {otherTasks.length > 0 && (
-        <DataTableFrame title="Backlog und andere Sprints" description="Nicht im ausgewählten Sprint." caption="Aufgaben außerhalb des ausgewählten Sprints" results={[{ id: "other", visibleCount: visibleOtherTasks.length, totalCount: otherTasks.length }]} filtering={{ mode: "external", labelledBy: "sprint-task-filters" }} minWidth={840}>
+        <DataTableFrame
+          title="Backlog und andere Sprints"
+          description="Nicht im ausgewählten Sprint."
+          caption="Aufgaben außerhalb des ausgewählten Sprints"
+          results={[{ id: "other", visibleCount: visibleOtherTasks.length, totalCount: otherTasks.length }]}
+          filtering={{ mode: "external", labelledBy: "sprint-task-filters" }}
+          minWidth={840}
+          mobileContentBreakpoint="xl"
+          mobileContent={(
+            <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
+              {visibleOtherTasks.map((task) => {
+                const currentSprint = data.sprints.find((item) => item.id === task.sprintId);
+                return (
+                  <article key={task.id} className="grid gap-4 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white">
+                    <div className="min-w-0">
+                      <TaskReferenceLink task={task} onOpenTask={onOpenTask} layout="flex" className="min-h-11 items-start py-1 font-semibold leading-5 text-slate-950">
+                        <span className="line-clamp-2">{task.title}</span>
+                      </TaskReferenceLink>
+                      <p className="mt-1 text-xs text-slate-500">{task.workstream} · {task.priority} · {task.hours}h</p>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-3 text-xs text-slate-600">
+                      <div><dt className="font-semibold text-slate-500">Zuständig</dt><dd className="mt-1">{taskAssigneeLabel(task)}</dd></div>
+                      <div><dt className="font-semibold text-slate-500">Aktueller Sprint</dt><dd className="mt-1">{currentSprint?.name || "ohne Sprint"}</dd></div>
+                    </dl>
+                    <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                      Sprint zuweisen
+                      <CustomSelect value={task.sprintId} disabled={pending} onChange={(value) => onAssignSprint(task, value)} className="h-11 w-full text-sm" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
+                    </label>
+                  </article>
+                );
+              })}
+              {!visibleOtherTasks.length && <UiEmptyState className="m-4 md:col-span-2">{otherTasks.length ? "Keine Aufgaben aus anderen Sprints für diese Filter." : "Noch keine Aufgaben aus anderen Sprints vorhanden."}</UiEmptyState>}
+            </div>
+          )}
+        >
               <DataTableHead>
                 <tr>
                   <DataColumnHeader className="px-4" label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky />

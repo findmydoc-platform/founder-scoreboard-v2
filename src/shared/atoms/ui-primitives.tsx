@@ -88,7 +88,7 @@ type UiButtonStyleProps = {
 
 function buttonClassName({ variant = "secondary", size = "md", className }: UiButtonStyleProps & { className?: string }) {
   return classNames(
-    "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11",
     buttonSizes[size],
     buttonVariants[variant],
     className,

@@ -30,7 +30,7 @@ export function TeamRoleSummary({
           ))}
         </div>
       </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
         {platformRoleOptions.map((role) => {
           const count = profiles.filter((profile) => profile.platformRole === role).length;
           return (

@@ -513,9 +513,9 @@ export function TaskDetailSurface({
 
   if (surface === "modal") {
     return (
-      <div className="flex h-full min-h-0 min-w-0 flex-col bg-white">
+      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto overscroll-contain bg-white sm:overflow-hidden sm:overscroll-auto">
         <div className="shrink-0 px-4 pt-4 sm:px-6">{operationalHeader}</div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-6">
+        <div className="min-h-0 shrink-0 overflow-visible px-4 pb-5 sm:flex-1 sm:overflow-y-auto sm:overscroll-contain sm:px-6">
           {issueContent}
         </div>
       </div>

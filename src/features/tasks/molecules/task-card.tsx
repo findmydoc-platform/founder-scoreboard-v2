@@ -59,7 +59,7 @@ function TaskCardGitHubLink({ task }: { task: Task }) {
       target="_blank"
       rel="noreferrer"
       draggable={false}
-      className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-sm text-[11px] font-medium text-slate-500 underline-offset-2 transition hover:text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+      className="coarse-touch-target mt-2 inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-sm text-[11px] font-medium text-slate-500 underline-offset-2 transition hover:text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 sm:min-h-0"
       aria-label={`GitHub Issue ${issue.label} in einem neuen Tab öffnen`}
     >
       <SiGithub size={13} className="shrink-0" aria-hidden="true" />

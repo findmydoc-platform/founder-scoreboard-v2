@@ -10,7 +10,7 @@ import { dateRange, taskAssigneeOptions } from "@/lib/display";
 import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
 import type { Profile, Sprint, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
-import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
+import { UiBadge, UiEmptyState, type UiTone } from "@/shared/atoms/ui-primitives";
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
 import { DataCell, DataColumnHeader, DataEmptyRow, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
 import { buildTaskTableViewModel, type TaskTableSort } from "@/features/tasks/model/task-table-view-model";
@@ -111,7 +111,65 @@ export function TaskTableView({
   const riskOptions = [{ value: "Alle", label: "Alle Risiken" }, { value: "critical", label: "Kritisch" }, { value: "blocked", label: "Blockiert" }, { value: "evidence", label: "Evidence fehlt" }, { value: "github", label: "GitHub fehlt" }];
 
   return (
-    <DataTableFrame title="Aufgaben" description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "deadline" ? "Zieltermin" : "Status"}`} caption="Gefilterte Planungsaufgaben" results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: allTasks.filter((task) => task.taskType !== "sub_issue").length }]} filtering={{ mode: "external", labelledBy: "planning-filters" }} minWidth={1040}>
+    <DataTableFrame
+      title="Aufgaben"
+      description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "deadline" ? "Zieltermin" : "Status"}`}
+      caption="Gefilterte Planungsaufgaben"
+      results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: allTasks.filter((task) => task.taskType !== "sub_issue").length }]}
+      filtering={{ mode: "external", labelledBy: "planning-filters" }}
+      minWidth={1040}
+      mobileContentBreakpoint="xl"
+      mobileContent={(
+        <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
+          {sortedTasks.map((task) => {
+            const canUpdateStatus = canChangeTaskStatus(task);
+            return (
+              <article key={task.id} className="grid gap-4 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <TaskReferenceLink task={task} onOpenTask={onOpenTask} layout="flex" className="min-h-11 items-start py-1 text-left font-semibold leading-5 text-slate-900">
+                      <span className="line-clamp-2">{task.title}</span>
+                    </TaskReferenceLink>
+                    <div className="mt-1 text-xs text-slate-500">{task.workstream || "ohne Bereich"}</div>
+                  </div>
+                  <UiBadge tone={priorityBadgeTone(task.priority)}>{task.priority}</UiBadge>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Status
+                    <TaskStatusControl
+                      status={task.status}
+                      canChange={canUpdateStatus}
+                      onChange={(status) => onUpdateTask(task, { status })}
+                      options={canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]}
+                      selectClassName="h-11 w-full text-sm"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Zuständig
+                    <CustomSelect aria-label={`Zuständigkeit für ${task.title} ändern`} value={task.assigneeId || task.assignee} onChange={(value) => onUpdateTask(task, { assignee: value, assigneeId: value })} className="h-11 w-full text-sm" options={taskAssigneeOptions(task.taskType, profiles)} />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500 sm:col-span-2">
+                    Sprint
+                    <CustomSelect aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => onUpdateTask(task, { sprintId: value })} className="h-11 w-full text-sm" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
+                  </label>
+                </div>
+                <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                  <span><strong className="font-semibold text-slate-700">Zeitraum:</strong> {dateRange(task)}</span>
+                  <span><strong className="font-semibold text-slate-700">Zieltermin:</strong> {task.deadline || "–"}</span>
+                </div>
+                <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
+              </article>
+            );
+          })}
+          {!sortedTasks.length && (
+            <UiEmptyState className="m-4 md:col-span-2">
+              {allTasks.some((task) => task.taskType !== "sub_issue") ? "Keine Aufgaben für diese Filter." : "Noch keine Aufgaben vorhanden."}
+            </UiEmptyState>
+          )}
+        </div>
+      )}
+    >
         <DataTableHead>
           <tr>
             <DataColumnHeader label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky />

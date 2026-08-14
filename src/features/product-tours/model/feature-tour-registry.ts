@@ -38,8 +38,37 @@ export const githubProjectSettingsTourId = "github-project-settings-v1";
 export const taskEvidenceLinksTourId = "task-evidence-links-v1";
 export const unifiedPlanningHierarchyTourId = "unified-planning-hierarchy-v1";
 export const planningApiV2TourId = "planning-api-v2";
+export const mobileResponsiveWorkspacesTourId = "mobile-responsive-workspaces-v1";
 
 export const featureTours = [
+  {
+    id: mobileResponsiveWorkspacesTourId,
+    productUpdateId: "2026-08-14-mobile-founderops",
+    startWorkspace: "planning",
+    requiredSelectors: ["[data-tour-id='planning-kanban-level-switch']"],
+    stepTransitions: [{ workspace: "sprint" }],
+    steps: [
+      {
+        element: "[data-tour-id='planning-kanban-level-switch']",
+        popover: {
+          title: "Planung passt sich dem Gerät an",
+          description: "Auf Smartphones stehen Statusspalten untereinander, auf iPads zweispaltig. Ebene, Parent-Filter und Aktionen bleiben direkt erreichbar.",
+          side: "bottom",
+          align: "start",
+        },
+      },
+      {
+        element: "[data-tour-id='sprint-responsive-score']",
+        popover: {
+          title: "Breite Tabellen werden zu Karten",
+          description: "Founder Score, Weeklys und Sprint-Aufgaben nutzen auf Smartphone und iPad bedienbare Karten. Ab Desktopbreite bleibt die vollständige Tabelle erhalten.",
+          side: "top",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: planningApiV2TourId,
     productUpdateId: "2026-08-13-planning-api-v2",

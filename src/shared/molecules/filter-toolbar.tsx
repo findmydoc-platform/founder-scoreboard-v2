@@ -209,7 +209,7 @@ export function FilterSegmentedControl<Value extends string>({
 }) {
   return (
     <div className={classNames(
-      variant === "structural" ? "flex min-w-0 max-w-full overflow-x-auto border border-slate-300 bg-white" : "flex min-w-0 flex-wrap gap-2",
+      variant === "structural" ? "flex min-w-0 max-w-full overflow-x-auto border border-slate-300 bg-white [contain:inline-size]" : "flex min-w-0 flex-wrap gap-2",
       className,
     )} role="group" aria-label={label}>
       {options.map((option) => {

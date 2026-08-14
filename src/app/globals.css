@@ -16,9 +16,13 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 html {
+  max-width: 100%;
+  overflow-x: clip;
   scrollbar-gutter: stable;
 }
 
@@ -63,10 +67,51 @@ button {
   cursor: pointer;
 }
 
+@media (pointer: coarse) {
+  button:not([tabindex="-1"]),
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  select {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 1.5rem;
+    min-width: 1.5rem;
+  }
+
+  .coarse-touch-target {
+    min-height: 2.75rem !important;
+  }
+}
+
+@media (max-width: 639px) {
+  button:not([tabindex="-1"]),
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  select {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 1.5rem;
+    min-width: 1.5rem;
+  }
+}
+
 @media (min-width: 1024px) {
   .app-sidebar-main {
-    padding-left: 16rem;
+    padding-left: 4rem;
     transition: padding-left 200ms ease-out;
+  }
+}
+
+/* Restore the full planning shell before desktop-sized app windows reach Tailwind xl. */
+@media (min-width: 1200px) {
+  .app-sidebar-main {
+    padding-left: 16rem;
   }
 
   .app-sidebar-peer[data-sidebar-state="collapsed"] ~ .app-sidebar-main {

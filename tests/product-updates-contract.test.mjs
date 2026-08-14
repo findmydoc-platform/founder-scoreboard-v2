@@ -39,7 +39,7 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   const validationWorkflow = await readFile(".github/workflows/dependency-validation.yml", "utf8");
   const verifier = await readFile("scripts/verify-product-updates.mjs", "utf8");
 
-  assert.equal(updates.length, 6);
+  assert.equal(updates.length, 7);
   assert.ok(updates.every((update) => update.slides.length > 0));
   assert.ok(updates.every((update) => update.expiresAt && update.featureTourId));
   assert.ok(updates.every((update) => update.slides.every((slide) => slide.featureTourId === undefined)));

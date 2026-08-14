@@ -266,10 +266,11 @@ export function BacklogRankTable({
         minWidth={backlogTableMinWidth}
         surfaceVariant="structural"
         className={selectedTasks.length ? "border-t-0" : "border-t-4 border-t-blue-700"}
+        mobileContentBreakpoint="xl"
         mobileContent={
-          <div className="divide-y divide-slate-200 border-t border-slate-200 bg-white">
+          <div className="grid divide-y divide-slate-200 border-t border-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
             {items.map((item, index) => (
-              <article key={item.task.id} className={classNames("grid gap-3 px-4 py-4", item.task.id === draggedTaskId && "bg-blue-50/70 opacity-60", item.rank === 1 && "border-l-4 border-l-blue-700 pl-3")}>
+              <article key={item.task.id} className={classNames("grid gap-3 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white", item.task.id === draggedTaskId && "bg-blue-50/70 opacity-60", item.rank === 1 && "border-l-4 border-l-blue-700 pl-3")}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-start gap-3">
                     <SelectionCheckbox
@@ -298,7 +299,7 @@ export function BacklogRankTable({
               </article>
             ))}
             {!items.length && (
-              <UiEmptyState className="m-4 rounded-none px-4 py-8">
+              <UiEmptyState className="m-4 rounded-none px-4 py-8 md:col-span-2">
                 <div className="grid justify-items-center gap-3">
                   <span>{emptyContent}</span>
                   {!allItems.length && canManageBacklog && <UiButton variant="blue" size="sm" onClick={onProposeDeliverable}><Plus size={15} /> Deliverable vorschlagen</UiButton>}

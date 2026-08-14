@@ -25,7 +25,7 @@ export function BacklogContentSkeleton() {
             <UiSkeletonPulse className="h-5 w-44" />
             <UiSkeletonPulse className="mt-2 h-3 w-72 bg-slate-100" />
           </div>
-          <div className="lg:hidden">
+          <div className="xl:hidden">
             {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="grid gap-3 border-b border-slate-200 px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
@@ -39,7 +39,7 @@ export function BacklogContentSkeleton() {
               </div>
             ))}
           </div>
-          <div className="hidden overflow-x-auto lg:block">
+          <div className="hidden overflow-x-auto xl:block">
             <div className={`grid ${backlogTableMinWidthClass} ${backlogSkeletonGridClassName} border-b border-slate-300 bg-slate-50 px-3 py-3`}>
               {backlogTableColumns.map((column) => <UiSkeletonPulse key={column.id} className={`h-3 ${column.skeletonWidth}`} />)}
             </div>

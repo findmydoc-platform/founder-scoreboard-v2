@@ -1,5 +1,37 @@
 [
   {
+    "id": "2026-08-14-mobile-founderops",
+    "releasedAt": "2026-08-14",
+    "expiresAt": "2026-09-13",
+    "featureTourId": "mobile-responsive-workspaces-v1",
+    "title": "FounderOps funktioniert jetzt mobil",
+    "summary": "Planung, Backlog, Sprint und Team lassen sich jetzt auf Smartphones und iPads vollständig bedienen. Auf dem Desktop bleibt die vertraute Ansicht erhalten.",
+    "slides": [
+      {
+        "id": "mobile-planning",
+        "title": "Planung auf Smartphone und iPad",
+        "description": "Statusspalten, Filter und Navigation passen sich der verfügbaren Breite an. Auf Smartphones stehen die Spalten untereinander, auf iPads nutzt die Planung den Platz zweispaltig.",
+        "image": {
+          "src": "/product-updates/2026-08-14-mobile-founderops/planning-ipad-landscape.png",
+          "alt": "FounderOps Planung auf einem iPad im Querformat mit kompakter Navigation und zweispaltigem Kanban",
+          "width": 1024,
+          "height": 768
+        }
+      },
+      {
+        "id": "mobile-sprint-score",
+        "title": "Sprint-Daten ohne Tabellenwischen",
+        "description": "Founder Score, Weeklys und Sprint-Aufgaben erscheinen auf kleineren Geräten als übersichtliche Karten mit denselben Filtern und Aktionen.",
+        "image": {
+          "src": "/product-updates/2026-08-14-mobile-founderops/sprint-score-phone.png",
+          "alt": "FounderOps Score als bedienbare Karten auf einem Smartphone",
+          "width": 390,
+          "height": 844
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-08-13-planning-api-v2",
     "releasedAt": "2026-08-13",
     "expiresAt": "2026-09-12",

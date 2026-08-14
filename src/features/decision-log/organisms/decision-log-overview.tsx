@@ -19,7 +19,7 @@ import {
   visibleDecisionLogEntries,
 } from "@/features/decision-log/model/decision-log-view-model";
 import { DecisionDetailPanel, DecisionDetailSheet } from "@/features/decision-log/molecules/decision-detail-panel";
-import { classNames, UiBadge, UiButton, UiNotice, type UiTone } from "@/shared/atoms/ui-primitives";
+import { classNames, UiBadge, UiButton, UiEmptyState, UiNotice, type UiTone } from "@/shared/atoms/ui-primitives";
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
 import { DataCell, DataColumnHeader, DataEmptyRow, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
 import { FilterField, FilterSegmentedControl, FilterToggleGroup, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
@@ -219,6 +219,53 @@ function DecisionLogLoadedOverview({ entries, fetchedAt }: { entries: NotionDeci
             filtering={{ mode: "embedded", toolbar }}
             minWidth={940}
             surfaceVariant="structural"
+            mobileContentBreakpoint="xl"
+            mobileContent={(
+              <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
+                {visibleEntries.map((entry) => {
+                  const reasons = viewModel.reasonsById.get(entry.id) || [];
+                  const selected = selectedEntry?.id === entry.id;
+                  const showOpenVote = Boolean(entry.googleFormUrl) && decisionLogFormLabel(entry) === "Zur Abstimmung ↗";
+                  return (
+                    <article key={entry.id} className={classNames("grid gap-3 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white", selected && "bg-blue-50/60 md:!bg-blue-50/60")}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold tabular-nums text-slate-500">{formatDate(entry.date)}</span>
+                        <UiBadge tone={statusTone(entry.status)} shape="rectangular">{statusLabel(entry)}</UiBadge>
+                      </div>
+                      <button
+                        type="button"
+                        aria-describedby={selected ? "decision-detail-selection-status" : undefined}
+                        aria-pressed={selected}
+                        onClick={() => openEntry(entry)}
+                        className="min-h-11 rounded-md text-left font-semibold leading-5 text-slate-950 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      >
+                        {entry.decision}
+                      </button>
+                      {entry.summary && <p className="line-clamp-3 text-sm leading-5 text-slate-600">{entry.summary}</p>}
+                      <div className="flex flex-wrap gap-2">
+                        {entry.category && <UiBadge tone="slate" size="xs">{entry.category}</UiBadge>}
+                        {entry.owners.length ? <UiBadge tone="white" size="xs">{entry.owners.join(", ")}</UiBadge> : null}
+                      </div>
+                      {reasons.length ? (
+                        <ul className="grid gap-1 text-xs font-medium text-slate-600">
+                          {reasons.map((reason) => <li key={reason.key}>• {reason.label}</li>)}
+                        </ul>
+                      ) : null}
+                      {showOpenVote && (
+                        <a className="inline-flex min-h-11 items-center font-semibold text-blue-700" href={entry.googleFormUrl} rel="noreferrer" target="_blank">
+                          Zur Abstimmung ↗
+                        </a>
+                      )}
+                    </article>
+                  );
+                })}
+                {!visibleEntries.length && (
+                  <UiEmptyState className="m-4 md:col-span-2">
+                    {entries.length ? "Keine Entscheidungen für diese Ansicht und Filter." : "Noch keine Entscheidungen in Notion vorhanden."}
+                  </UiEmptyState>
+                )}
+              </div>
+            )}
           >
             <DataTableHead>
               <tr>

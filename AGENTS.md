@@ -29,6 +29,17 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - After meaningful frontend or API changes, run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
 - Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns. Add a project skill only when `.agents/skills/AGENTS.md` admits it.
 
+## Responsive UI Verification
+
+- Preserve the established desktop experience at `1200px` and wider unless the task explicitly changes desktop behavior. Adapt existing components for smaller screens instead of creating a separate mobile design system.
+- For meaningful layout changes, verify the smallest relevant phone, a typical phone, one tablet orientation, and desktop. Shell, navigation, modal, and wide-data changes use the practical reference matrix `320x568`, `390x844`, `768x1024`, `1024x768`, and `1440x900`; low-risk content changes may use the relevant subset.
+- Shell and board breakpoint changes must also verify a desktop-sized split window between tablet and full desktop; use `1234x900` unless the reported host window provides a more relevant width.
+- Do not allow page-level horizontal scrolling. A self-contained board, tab strip, table, or other two-dimensional surface may scroll internally when reflow would remove essential meaning, but its overflow must remain clipped to that surface.
+- Keep primary actions, filters, navigation, and form controls visible or directly reachable. Mobile dialogs and drawers must trap and restore focus, lock background interaction, and keep their close action reachable.
+- Aim for `44px` touch targets on phone and coarse-pointer layouts. Do not ship interactive targets below `24px` unless the larger surrounding control provides the real hit area and the exception is evident from the component structure.
+- When a desktop table becomes hard to operate below `1280px`, provide a card or stacked representation from the same data and actions. Keep the desktop table unchanged and reuse shared filters, badges, selects, and action components.
+- After meaningful UI work, inspect real rendered screens at the applicable matrix sizes and include an inline screenshot in the handoff as required by the repository-wide UI rule.
+
 ## Maintainability Review System
 
 - Read-only maintainability reviewers live under `.codex/agents/`. Before a run, use `pnpm run review:route -- --base origin/main --format json`, state the selected and omitted reviewers with reasons, and obtain explicit user confirmation.

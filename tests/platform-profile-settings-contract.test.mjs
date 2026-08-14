@@ -157,6 +157,8 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   assert.match(provider, /tourRequested/);
   assert.match(provider, /if \(!tourRequested \|\| !tour/);
   assert.match(provider, /MutationObserver/);
+  assert.match(provider, /findVisibleTourElement/);
+  assert.match(provider, /getClientRects\(\)\.length > 0/);
   assert.match(provider, /selectNextFeatureTour\(featureTours, workspace/);
   assert.doesNotMatch(provider, /targetWorkspace/);
   assert.match(provider, /waitForElement\(initialSelector\)/);
@@ -302,7 +304,7 @@ test("team overview no longer edits personal self-service settings", async () =>
   assert.match(teamCard, /aria-label=\{definition\.description\}/);
   assert.doesNotMatch(teamCard, /role="tooltip"/);
   assert.doesNotMatch(teamCard, /group-hover:block/);
-  assert.match(teamCard, /lg:grid-cols-\[minmax\(220px,0\.8fr\)_minmax\(520px,2fr\)_auto\]/);
+  assert.match(teamCard, /xl:grid-cols-\[minmax\(220px,0\.8fr\)_minmax\(520px,2fr\)_auto\]/);
   assert.match(teamCard, /whitespace-nowrap/);
   assert.match(teamCard, /Aufgaben dieser Person, die noch nicht erledigt sind/);
   assert.match(teamCard, /Offene P0- und P1-Aufgaben dieser Person/);

@@ -5,13 +5,15 @@ import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surf
 import test from "node:test";
 import assert from "node:assert/strict";
 
-test("dev role switch is local-only and flows through API authorization", async () => {
+test("test profile switch is role-based in the UI, local-only, and flows through API authorization", async () => {
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const localAuth = await readFile("src/lib/local-development-auth.ts", "utf8");
   const ui = await readPlanningSurface();
   const requestContext = await readFile("src/features/planning/hooks/use-planning-request-context.ts", "utf8");
   const browserApiClient = await readFile("src/lib/browser-api-client.ts", "utf8");
-  const devSwitch = await readFile("src/features/planning/molecules/dev-role-switch.tsx", "utf8");
+  const authControl = await readFile("src/features/settings/organisms/auth-control.tsx", "utf8");
+  const personas = await readFile("src/features/planning/model/test-profile-personas.ts", "utf8");
+  const banner = await readFile("src/features/planning/molecules/test-profile-banner.tsx", "utf8");
 
   assert.match(authz, /x-fmd-dev-profile-id/);
   assert.match(authz, /isLocalLoginRequestAllowed/);
@@ -20,10 +22,18 @@ test("dev role switch is local-only and flows through API authorization", async 
   assert.match(localAuth, /isLoopbackRequestHost/);
   assert.match(localAuth, /isLoopbackSupabaseUrl/);
   assert.match(authz, /isOperationalLeadRole\(profile\.platform_role\)/);
-  assert.match(ui, /DevRoleSwitch/);
+  assert.match(ui, /TestProfileBanner/);
+  assert.match(ui, /testProfilePersonas/);
   assert.match(ui, /usePlanningRequestContext/);
-  assert.match(devSwitch, /Dev-Ansicht/);
-  assert.match(devSwitch, /roleLabel\(effectiveProfile\)/);
+  assert.match(authControl, /Testprofil wechseln/);
+  assert.match(authControl, /Eigene Ansicht/);
+  assert.match(authControl, /activeTestProfile/);
+  assert.match(personas, /Clara CEO/);
+  assert.match(personas, /Felix Founder/);
+  assert.match(personas, /Dora Deputy/);
+  assert.match(personas, /Viktor Viewer/);
+  assert.match(banner, /Beenden/);
+  assert.doesNotMatch(`${ui}\n${authControl}\n${banner}`, /Dev-Ansicht/);
   assert.match(requestContext, /createBrowserApiClient/);
   assert.match(browserApiClient, /x-fmd-dev-profile-id/);
   assert.match(requestContext, /devProfileStateKey/);
@@ -883,9 +893,9 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   assert.match(teamCard, /title=\{definition\.description\}/);
   assert.match(teamCard, /aria-label=\{definition\.description\}/);
   assert.doesNotMatch(teamCard, /role="tooltip"/);
-  assert.match(teamCard, /lg:flex-nowrap/);
+  assert.match(teamCard, /xl:flex-nowrap/);
   assert.match(teamCard, /gap-x-6/);
-  assert.match(teamCard, /lg:grid-cols-\[minmax\(220px,0\.8fr\)_minmax\(520px,2fr\)_auto\]/);
+  assert.match(teamCard, /xl:grid-cols-\[minmax\(220px,0\.8fr\)_minmax\(520px,2fr\)_auto\]/);
   assert.match(teamSummary, /CEO · \{profile\.name\}/);
   assert.doesNotMatch(teamSummary, /CEO-Bearbeitung aktiv/);
   assert.doesNotMatch(teamSummary, /Nur Ansicht/);
@@ -943,7 +953,7 @@ test("board tasks can be dragged between status columns", async () => {
   assert.match(taskCard, /draggable=\{Boolean\(onDragStart\)\}/);
   assert.match(ui, /const isEmpty = tasks\.length === 0/);
   assert.match(ui, /data-collapsed=\{isEmpty\}/);
-  assert.match(ui, /min-w-24 max-w-24 basis-24/);
+  assert.match(ui, /isEmpty[\s\S]*\? "w-24"/);
   assert.match(ui, /isAvailableEmptyTarget/);
   assert.match(ui, /Hier ablegen/);
   assert.match(ui, /onDrop=\{\(event\) => onDropTask\(status, event\)\}/);
