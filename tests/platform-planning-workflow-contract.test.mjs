@@ -404,7 +404,7 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(ui, /PlanningBootShell/);
   assert.doesNotMatch(ui, /ShieldCheck/);
   assert.match(ui, /variant="gate"/);
-  assert.match(ui, /Founder Planning/);
+  assert.doesNotMatch(ui, /Founder Planning/);
   assert.match(ui, /Willkommen zurück/);
   assert.match(ui, /planning-login-network\.svg/);
   assert.doesNotMatch(authControl, /Rollen und Zugriff werden nach dem Login/);

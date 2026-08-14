@@ -23,16 +23,13 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
 
   return (
     <main className="min-h-screen bg-[#f8fafc] text-slate-950">
-      <section className="grid min-h-screen lg:grid-cols-[minmax(390px,34.5vw)_minmax(0,1fr)]">
-        <div className="flex min-h-screen bg-white px-6 py-12 sm:px-10 lg:border-r lg:border-slate-300 lg:px-12">
-          <div className="m-auto w-full max-w-[324px] lg:-translate-y-2 lg:translate-x-2">
-            <AppBrand size="login" />
+      <section className="grid min-h-screen lg:grid-cols-[minmax(480px,43vw)_minmax(0,1fr)]">
+        <div className="flex min-h-screen bg-white px-6 py-10 sm:px-10 lg:border-r lg:border-slate-200 lg:px-12">
+          <div className="m-auto w-full max-w-[380px] lg:-translate-y-14">
+            <AppBrand size="login" className="lg:-translate-y-10" />
 
-            <div className="mt-20 min-w-0">
-              <div className="text-base font-medium text-[#28c99a]">
-                Founder Planning
-              </div>
-              <h1 className="mt-4 text-[32px] font-semibold leading-[1.15] tracking-[-0.025em] text-[#070119]">
+            <div className="mt-28 min-w-0 sm:mt-32 lg:mt-36">
+              <h1 className="text-[32px] font-semibold leading-[1.15] tracking-[-0.025em] text-[#070119] sm:text-[34px]">
                 {isLoadingState
                   ? authError
                     ? "Laden fehlgeschlagen"
@@ -56,7 +53,7 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
                   variant="gate"
                 />
               ) : (
-                <div className="grid h-14 place-items-center rounded-[5px] border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-600">
+                <div className="grid h-12 place-items-center rounded-[5px] border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-600">
                   Anmeldung wird geprüft...
                 </div>
               )}
@@ -71,7 +68,7 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
             fill
             priority
             unoptimized
-            sizes="65.5vw"
+            sizes="57vw"
             className="object-cover object-center"
           />
         </div>
