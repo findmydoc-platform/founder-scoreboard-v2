@@ -2,6 +2,7 @@ import {
   authenticatedFunctionAllowlist,
   highRiskAuthenticatedTablePrivileges,
   sequencePrivileges,
+  serviceRoleOnlyTablePrivileges,
   tablePrivileges,
 } from "./contracts.mjs";
 import { addRows } from "./failures.mjs";
@@ -9,6 +10,12 @@ import { addRows } from "./failures.mjs";
 const allowedAuthenticatedFunctions = new Set(authenticatedFunctionAllowlist);
 const highRiskAuthenticatedPrivileges = new Set(
   highRiskAuthenticatedTablePrivileges,
+);
+const serviceRoleOnlyTablePrivilegeMap = new Map(
+  serviceRoleOnlyTablePrivileges.map(([tableName, privileges]) => [
+    tableName,
+    new Set(privileges),
+  ]),
 );
 
 export async function verifyCatalogSecurity(client, failures) {
@@ -77,6 +84,90 @@ export async function verifyCatalogSecurity(client, failures) {
     "authenticated RLS-bypassing relation privileges",
     unsafeAuthenticatedTablePrivileges,
     ["relation_name", "privilege_name"],
+  );
+
+  const serviceRoleOnlyTableNames = [...serviceRoleOnlyTablePrivilegeMap.keys()];
+  const serviceRoleOnlyRelations = await client.query(
+    `select relation.relname as relation_name
+     from pg_class as relation
+     join pg_namespace as schema on schema.oid = relation.relnamespace
+     where schema.nspname = 'public'
+       and relation.relkind in ('r', 'p')
+       and relation.relname = any($1::text[])
+     order by relation.relname`,
+    [serviceRoleOnlyTableNames],
+  );
+  const existingServiceRoleOnlyTables = new Set(
+    serviceRoleOnlyRelations.rows.map((row) => row.relation_name),
+  );
+  for (const tableName of serviceRoleOnlyTableNames) {
+    if (!existingServiceRoleOnlyTables.has(tableName)) {
+      failures.push(`missing service-role-only table: ${tableName}`);
+    }
+  }
+
+  const serviceRoleOnlyPrivileges = await client.query(
+    `with inspected_role(role_name) as (
+       values ('anon'::name), ('authenticated'::name), ('service_role'::name)
+     ),
+     privilege(privilege_name) as (
+       select unnest($1::text[])
+     )
+     select inspected_role.role_name::text,
+       relation.relname as relation_name,
+       privilege.privilege_name
+     from inspected_role
+     join pg_roles as database_role
+       on database_role.rolname = inspected_role.role_name
+     cross join pg_class as relation
+     join pg_namespace as schema
+       on schema.oid = relation.relnamespace
+     cross join privilege
+     where schema.nspname = 'public'
+       and relation.relkind in ('r', 'p')
+       and relation.relname = any($2::text[])
+       and has_table_privilege(
+         database_role.oid,
+         relation.oid,
+         privilege.privilege_name
+       )
+     order by inspected_role.role_name, relation.relname, privilege.privilege_name`,
+    [tablePrivileges, serviceRoleOnlyTableNames],
+  );
+  const effectiveServiceRoleOnlyPrivileges = new Set(
+    serviceRoleOnlyPrivileges.rows.map(
+      (row) => `${row.role_name}:${row.relation_name}:${row.privilege_name}`,
+    ),
+  );
+  for (const row of serviceRoleOnlyPrivileges.rows) {
+    const allowedPrivileges = serviceRoleOnlyTablePrivilegeMap.get(row.relation_name);
+    if (row.role_name !== "service_role" || !allowedPrivileges?.has(row.privilege_name)) {
+      failures.push(
+        `unexpected service-role-only table privilege: ${row.role_name}:${row.relation_name}:${row.privilege_name}`,
+      );
+    }
+  }
+  for (const [tableName, requiredPrivileges] of serviceRoleOnlyTablePrivilegeMap) {
+    for (const privilegeName of requiredPrivileges) {
+      if (!effectiveServiceRoleOnlyPrivileges.has(`service_role:${tableName}:${privilegeName}`)) {
+        failures.push(`missing service-role-only table privilege: service_role:${tableName}:${privilegeName}`);
+      }
+    }
+  }
+
+  const serviceRoleOnlyPolicies = await client.query(
+    `select tablename, policyname, cmd
+     from pg_policies
+     where schemaname = 'public'
+       and tablename = any($1::text[])
+     order by tablename, policyname`,
+    [serviceRoleOnlyTableNames],
+  );
+  addRows(
+    failures,
+    "service-role-only tables with RLS policies",
+    serviceRoleOnlyPolicies.rows,
+    ["tablename", "policyname", "cmd"],
   );
 
   const effectiveSequencePrivileges = await client.query(

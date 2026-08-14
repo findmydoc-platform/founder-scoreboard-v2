@@ -794,6 +794,7 @@ const result = {
   githubProjectNumber: project.github_project_number,
   profiles: await count("profiles"),
   githubAppConnections: await count("github_app_user_tokens"),
+  githubWebhookDeliveries: await count("github_webhook_deliveries"),
   planningItemHistoricalLinks: await count("planning_item_historical_links"),
   tasks: await count("tasks"),
   taskDeletionOperations: await count("task_deletion_operations"),
