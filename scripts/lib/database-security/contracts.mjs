@@ -39,6 +39,7 @@ export const mappedTeamReadPolicies = Object.freeze([
   ["meeting_attendance_select_team", "meeting_attendance"],
   ["meetings_select_team", "meetings"],
   ["planning_item_historical_links_select_team", "planning_item_historical_links"],
+  ["platform_releases_select_team", "platform_releases"],
   ["profiles_select_team", "profiles"],
   ["projects_select_team", "projects"],
   ["score_objections_select_team", "score_objections"],

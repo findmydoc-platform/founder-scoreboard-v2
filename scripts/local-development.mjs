@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
@@ -127,6 +127,76 @@ function materializeTasks(source) {
       approvalRevision: task.approvalRevision || 1,
     };
   });
+}
+
+function stableJsonValue(value) {
+  if (Array.isArray(value)) return value.map(stableJsonValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableJsonValue(value[key])]));
+}
+
+function localPlatformReleaseManifest(version, publishedAt, summary, titles) {
+  const changes = titles.map((title, index) => ({
+    id: `${version.replaceAll(".", "-")}-change-${index + 1}`,
+    kind: index === titles.length - 1 ? "fix" : "feature",
+    pullRequests: [{ repository: index % 2 ? "findmydoc-platform/clinic-dashboard" : "findmydoc-platform/website", number: 1842 - index }],
+    section: index % 2 ? "dashboard" : "public",
+    summary: [
+      "Relevanz, Verfügbarkeit und Bewertungen werden jetzt verständlicher zusammengeführt.",
+      "Die Suche versteht Tippfehler und Synonyme und liefert dadurch schneller passende Ergebnisse.",
+      "Entfernung und Sprechzeiten lassen sich einfacher und genauer auswählen.",
+      "Die Berechnung zeigt kürzere Wege zuverlässiger an.",
+      "Ergebnislisten bleiben auch bei vielen Treffern übersichtlich.",
+      "Mehrere seltene Darstellungsfehler wurden behoben.",
+    ][index] || "Diese Änderung verbessert Stabilität und Verständlichkeit.",
+    title,
+    visualUrls: [],
+  }));
+  const component = (key, displayName, repository, productionUrl) => ({
+    key,
+    displayName,
+    productionUrl,
+    repository,
+    targetSha: key === "website" ? "a1b2c3d" : "d4e5f6a",
+    release: { url: `https://github.com/${repository}/releases/tag/${version}` },
+    deploymentRun: { url: `https://github.com/${repository}/actions/runs/2387` },
+    commits: [{ bump: "patch", message: `Release ${version}`, sha: key === "website" ? "a1b2c3d" : "d4e5f6a", url: `https://github.com/${repository}/commit/${key === "website" ? "a1b2c3d" : "d4e5f6a"}` }],
+    pullRequests: changes.filter((change) => change.pullRequests[0].repository === repository).slice(0, 3).map((change) => ({
+      number: change.pullRequests[0].number,
+      repository,
+      title: change.title,
+      url: `https://github.com/${repository}/pull/${change.pullRequests[0].number}`,
+      commitShas: [key === "website" ? "a1b2c3d" : "d4e5f6a"],
+      issues: [{ number: 214 + changes.indexOf(change), repository: "findmydoc-platform/management", title: change.title, url: `https://github.com/findmydoc-platform/management/issues/${214 + changes.indexOf(change)}` }],
+    })),
+  });
+  const planDigest = createHash("sha256").update(`plan:${version}`).digest("hex");
+  const contentDigest = createHash("sha256").update(`content:${version}`).digest("hex");
+  const unsigned = {
+    schemaVersion: 2,
+    version,
+    summary,
+    highlights: changes.slice(0, 6).map((change) => change.id),
+    changes,
+    components: [component("website", "Website", "findmydoc-platform/website", "https://findmydoc.eu"), component("dashboard", "Clinic Dashboard", "findmydoc-platform/clinic-dashboard", "https://clinics.findmydoc.eu")],
+    visuals: [],
+    planDigest,
+    contentDigest,
+    publishedAt,
+  };
+  const canonical = `${JSON.stringify(stableJsonValue(unsigned), null, 2)}\n`;
+  return { ...unsigned, manifestDigest: createHash("sha256").update(canonical).digest("hex") };
+}
+
+function localPlatformReleaseManifests() {
+  return [
+    localPlatformReleaseManifest("v1.0.0", "2026-09-03T08:30:00.000Z", "findmydoc bringt Suche und Praxissteuerung in einer stabilen Hauptversion zusammen.", ["Gemeinsame Plattformbasis", "Verlässliche Release-Nachweise"]),
+    localPlatformReleaseManifest("v0.52.0", "2026-08-11T08:24:00.000Z", "Patient:innen finden schneller passende Arzttermine.", ["Relevantere Ergebnisse für Patient:innen", "Fuzzy- und Synonym-Suche", "Neue Optionen für Entfernung und Sprechzeiten", "Kürzere Wege durch präzisere Berechnung", "Bessere Übersicht in den Ergebnissen", "Stabiler und schneller"]),
+    localPlatformReleaseManifest("v0.51.0", "2026-07-28T09:10:00.000Z", "Praxen steuern Verfügbarkeiten übersichtlicher.", ["Klarere Verfügbarkeiten", "Einfachere Tagesansicht"]),
+    localPlatformReleaseManifest("v0.50.0", "2026-07-09T07:45:00.000Z", "Die Terminsuche reagiert schneller und verständlicher.", ["Schnellere Terminsuche", "Verständlichere Fehlermeldungen"]),
+    localPlatformReleaseManifest("v0.49.0", "2026-06-18T11:00:00.000Z", "Patient:innen erkennen passende Praxen auf einen Blick.", ["Bessere Praxisübersicht", "Klarere Kontaktdaten"]),
+    localPlatformReleaseManifest("v0.48.0", "2026-06-04T10:15:00.000Z", "Clinic-Teams verwalten Standorte zuverlässiger.", ["Zuverlässigere Standortverwaltung", "Verbesserte Teamansicht"]),
+  ];
 }
 
 function canonicalSeedEpics(source) {
@@ -286,6 +356,11 @@ async function seedPlanningDatabase(status) {
       weekly_capacity: profile.weeklyCapacity,
       profile_color: profile.color || "#64748b",
     })));
+    await client.query("delete from notification_events where entity_type='platform_release'");
+    await client.query("delete from platform_releases");
+    for (const manifest of localPlatformReleaseManifests()) {
+      await client.query("select public.ingest_platform_release_v1($1::jsonb)", [JSON.stringify(manifest)]);
+    }
     await upsertRows(client, "sprints", ["id", "project_id", "name", "status", "start_date", "end_date", "review_due_at", "score_locked"], source.sprints.map((sprint) => ({
       id: sprint.id,
       project_id: source.project.id,
@@ -372,6 +447,28 @@ async function seedPlanningDatabase(status) {
     const parentFirst = allTaskRows.sort((left, right) => taskTypeOrder[left.task_type] - taskTypeOrder[right.task_type]);
     for (const row of parentFirst) {
       await upsertRows(client, "tasks", Object.keys(row), [row]);
+    }
+    const releaseLinkedSubIssues = [
+      ["sebastian-contact-route-implementieren", "Relevantere Ergebnisse für Patient:innen"],
+      ["sebastian-contact-footer-link-aktualisieren", "Fuzzy- und Synonym-Suche"],
+      ["sebastian-contact-partner-link-aktualisieren", "Neue Optionen für Entfernung und Sprechzeiten"],
+      ["sebastian-contact-404-regressionstest", "Kürzere Wege durch präzisere Berechnung"],
+      ["sebastian-contact-mobile-smoke-test", "Bessere Übersicht in den Ergebnissen"],
+    ];
+    const releaseLinkedSubIssueIds = releaseLinkedSubIssues.map(([taskId]) => taskId);
+    await client.query("update tasks set title='Schnellere Arzttermin-Suche für Patient:innen',github_repo='findmydoc-platform/management',github_issue_number=210,github_issue_url='https://github.com/findmydoc-platform/management/issues/210' where id='GC1'");
+    await client.query("update tasks set title='Smart Match Release v0.52',github_repo='findmydoc-platform/management',github_issue_number=213,github_issue_url='https://github.com/findmydoc-platform/management/issues/213' where id='sebastian-contact-404-beheben-oder-links-umstellen'");
+    await client.query("delete from task_links where task_id = any($1::text[]) and type = 'github_pull_request'", [releaseLinkedSubIssueIds]);
+    for (const [position, [taskId, taskTitle]] of releaseLinkedSubIssues.entries()) {
+      await client.query("update tasks set title=$2 where id=$1", [taskId, taskTitle]);
+      await client.query(
+        "insert into task_links (task_id,type,label,url,position,metadata) values ($1,'github_pull_request',$2,$3,$4,$5::jsonb)",
+        [taskId, "Release v0.52.0: schnellere Arztsuche", "https://github.com/findmydoc-platform/website/pull/1842", position, JSON.stringify({ repository: "findmydoc-platform/website", number: 1842, status: "merged", mergedAt: "2026-08-10T15:00:00.000Z" })],
+      );
+      await client.query(
+        "update tasks set github_repo=$2,github_issue_number=$3,github_issue_url=$4 where id=$1",
+        [taskId, "findmydoc-platform/management", 214 + position, `https://github.com/findmydoc-platform/management/issues/${214 + position}`],
+      );
     }
     await upsertRows(client, "planning_item_strategy", ["task_id", "goal", "success_criteria", "scope_constraints"], source.initiatives.map((item) => ({
       task_id: item.id,

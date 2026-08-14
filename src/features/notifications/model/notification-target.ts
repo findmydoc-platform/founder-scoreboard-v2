@@ -42,6 +42,9 @@ export function notificationTarget(event: NotificationTargetInput): Notification
   if (entityType === "fmd_tool") {
     return { workspace: "tools", href: "/tools" };
   }
+  if (entityType === "platform_release" && entityId) {
+    return { workspace: "notifications", href: `/team/platform-releases/${encodeURIComponent(entityId)}` };
+  }
 
   return { workspace: "notifications", href: "/notifications" };
 }

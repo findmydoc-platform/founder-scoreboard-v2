@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import { workspacePath } from "@/features/planning/model/workspace-routes";
 import { navigateAfterNotificationStatusUpdate } from "@/features/notifications/model/notification-navigation";
 import { notificationTarget } from "@/features/notifications/model/notification-target";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
@@ -175,6 +176,14 @@ export function useNotificationCommands({
       void updateNotificationStatus(event.id, "seen");
       openTaskPanel(task.id);
     } else {
+      if (target.href !== workspacePath(target.workspace)) {
+        setShowNotifications(false);
+        void navigateAfterNotificationStatusUpdate(
+          () => updateNotificationStatus(event.id, "seen"),
+          () => router.push(target.href),
+        );
+        return;
+      }
       void updateNotificationStatus(event.id, "seen");
       setWorkspace(target.workspace);
     }

@@ -29,6 +29,8 @@ type Props = {
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialDetailDataError?: string;
+  returnHref?: string;
+  returnLabel?: string;
 };
 
 export function TaskDetailPage({
@@ -40,6 +42,8 @@ export function TaskDetailPage({
   initialAuthUser = null,
   initialCurrentProfile = null,
   initialDetailDataError = "",
+  returnHref = "/planning",
+  returnLabel = "Zur Planung",
 }: Props) {
   const router = useRouter();
   const [overviewDirty, setOverviewDirty] = useState(false);
@@ -79,11 +83,12 @@ export function TaskDetailPage({
       <TaskDetailHeader
         title={task.title}
         headerData={controller.headerData}
+        backLabel={returnLabel}
         notificationsOpen={controller.showNotifications}
         onToggleNotifications={() => controller.showNotifications ? controller.setShowNotifications(false) : controller.openNotificationInbox()}
         onOpenNotification={controller.openNotification}
         onDismissNotification={controller.dismissNotification}
-        onBack={() => discardGuard.request(() => router.push("/planning"))}
+        onBack={() => discardGuard.request(() => window.location.assign(returnHref))}
         actions={(
           <GitHubSyncTrigger
             count={githubSyncQueue.count}

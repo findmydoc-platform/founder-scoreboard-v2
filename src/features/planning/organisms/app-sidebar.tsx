@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronsLeft, ChevronsRight, X } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { forwardRef, useEffect, useState } from "react";
 import { appNavigationSections, appNavItems, appWorkspaceIds, hiddenWorkspaceIds, type AppWorkspace, type VisibleAppWorkspace } from "@/features/planning/model/workspace-routes";
+import { PlatformReleaseSidebarCard } from "@/features/platform-releases/organisms/platform-release-sidebar-card";
 import { AppBrand } from "@/shared/atoms/app-brand";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
@@ -11,7 +12,7 @@ export { appNavItems, appWorkspaceIds, hiddenWorkspaceIds };
 export type { AppWorkspace, VisibleAppWorkspace };
 
 type AppSidebarProps = {
-  activeWorkspace?: AppWorkspace;
+  activeWorkspace?: AppWorkspace | "platform-releases";
   source?: "supabase";
   authAvailable?: boolean;
   authUserEmail?: string;
@@ -48,9 +49,13 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
   }, []);
 
   const visibleNavItems = appNavItems.filter((item) => !item.ceoOnly || currentPlatformRole === "ceo");
+  const platformReleasesNavItem = { id: "platform-releases" as const, label: "Plattform-Releases", icon: Sparkles, href: "/team/platform-releases", navigationSection: "steering" as const };
   const visibleNavigationSections = appNavigationSections.map((section) => ({
     ...section,
-    items: visibleNavItems.filter((item) => item.navigationSection === section.id),
+    items: [
+      ...visibleNavItems.filter((item) => item.navigationSection === section.id),
+      ...(section.id === "steering" ? [platformReleasesNavItem] : []),
+    ],
   })).filter((section) => section.items.length > 0);
 
   const toggleDesktopSidebar = () => {
@@ -65,7 +70,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
     });
   };
 
-  const renderNavItem = (item: (typeof appNavItems)[number], variant: "desktop" | "mobile") => {
+  const renderNavItem = (item: (typeof appNavItems)[number] | typeof platformReleasesNavItem, variant: "desktop" | "mobile") => {
     const Icon = item.icon;
     const active = activeWorkspace === item.id;
     const desktopClassName = `flex h-11 w-full items-center rounded-md text-left text-sm font-medium transition-colors min-[1200px]:h-10 ${
@@ -145,6 +150,9 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
         <nav className={`flex-1 overflow-y-auto py-4 ${desktopSidebarExpanded ? "px-2 min-[1200px]:px-3" : "px-2"}`} aria-label="Hauptnavigation">
           {renderNavigationSections("desktop")}
         </nav>
+        <div className={`border-t border-slate-100 py-3 ${desktopSidebarExpanded ? "px-3" : "px-2"}`}>
+          <PlatformReleaseSidebarCard compact={!desktopSidebarExpanded} />
+        </div>
       </aside>
 
       {mobileOpen && (
@@ -160,6 +168,9 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
             <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Mobile Hauptnavigation">
               {renderNavigationSections("mobile")}
             </nav>
+            <div className="border-t border-slate-100 p-3">
+              <PlatformReleaseSidebarCard mobile onNavigate={onMobileClose} />
+            </div>
           </aside>
         </div>
       )}

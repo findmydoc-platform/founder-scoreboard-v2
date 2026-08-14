@@ -253,8 +253,8 @@ async function verifyUnmappedAuthReadBoundary(status) {
       throw new Error("Temporary unmapped local Auth user could not sign in.");
     }
 
-    for (const table of ["profiles", "tasks"]) {
-      const { data, error } = await unmapped.from(table).select("id").limit(1);
+    for (const [table, identityColumn] of [["profiles", "id"], ["tasks", "id"], ["platform_releases", "version"]]) {
+      const { data, error } = await unmapped.from(table).select(identityColumn).limit(1);
       if (error) throw new Error(`Unmapped Auth RLS read failed unexpectedly for ${table}.`);
       if (data?.length) {
         throw new Error(`Unmapped Auth user unexpectedly read team data from ${table}.`);
@@ -266,6 +266,43 @@ async function verifyUnmappedAuthReadBoundary(status) {
       const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
       if (deleteError) throw new Error("Temporary unmapped local Auth user could not be removed.");
     }
+  }
+}
+
+async function verifyPlatformReleaseAccessBoundary(status, mapped) {
+  const { data: releases, error: readError } = await mapped
+    .from("platform_releases")
+    .select("version,summary,manifest")
+    .limit(1);
+  if (readError || !releases?.length) {
+    throw new Error("Mapped local profile could not read the seeded Platform Release through RLS.");
+  }
+
+  const release = releases[0];
+  const { data: updateData, error: updateError } = await mapped
+    .from("platform_releases")
+    .update({ summary: release.summary })
+    .eq("version", release.version)
+    .select("version");
+  if (!updateError || updateError.code !== "42501" || updateData?.length) {
+    throw new Error("Authenticated user unexpectedly mutated a Platform Release directly.");
+  }
+
+  const { data: deniedRpcData, error: deniedRpcError } = await mapped
+    .rpc("ingest_platform_release_v1", { p_manifest: release.manifest });
+  if (!deniedRpcError || deniedRpcError.code !== "42501" || deniedRpcData) {
+    throw new Error("Authenticated user unexpectedly executed the Platform Release ingest RPC.");
+  }
+
+  const adminKey = status.SERVICE_ROLE_KEY || status.SECRET_KEY;
+  if (!adminKey) throw new Error("Local Supabase status did not expose an admin key.");
+  const admin = createClient(status.API_URL, adminKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: replay, error: replayError } = await admin
+    .rpc("ingest_platform_release_v1", { p_manifest: release.manifest });
+  if (replayError || replay?.version !== release.version || replay?.replayed !== true) {
+    throw new Error("Service role could not replay the seeded Platform Release through the ingest RPC.");
   }
 }
 
@@ -767,6 +804,7 @@ async function main() {
     if (signInError || !signInData.session) throw new Error("Seeded local Auth user could not sign in.");
     const token = signInData.session.access_token;
     await verifyDirectProfileMutationDenied(supabase, signInData.user.id);
+    await verifyPlatformReleaseAccessBoundary(status, supabase);
     await verifyPlanningApiGitHubSyncScope(token, source.tasks[0].id);
     await verifyEmptyEpicDeleteRoutes(token);
     await verifyPlanningRelationshipRoutes(token, source.tasks[0].id, source.tasks[1].id);

@@ -99,7 +99,12 @@ test("team RLS mirrors mapped app membership and contributor roles", async () =>
     const sourceTableName = tableName === "planning_item_historical_links"
       ? "planning_item_legacy_ids"
       : tableName;
-    const policySource = sourcePolicyName === "planning_item_legacy_ids_select_team" ? hierarchy : migration;
+    const policySource = sourcePolicyName === "planning_item_legacy_ids_select_team"
+      ? hierarchy
+      : migrations.find((candidate) => new RegExp(
+        `(?:alter|create) policy ${sourcePolicyName}\\s+on public\\.${sourceTableName}`,
+        "i",
+      ).test(candidate.sql))?.sql || migration;
     const policyStatement = policySource.match(
       new RegExp(
         `(?:alter|create) policy ${sourcePolicyName}\\s+on public\\.${sourceTableName}[\\s\\S]*?;`,

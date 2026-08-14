@@ -235,7 +235,7 @@ test("initiative links preserve legacy notification ids through the canonical ma
   assert.match(page, /planning_item_historical_links/);
   assert.match(page, /\.eq\("item_type", "initiative"\)/);
   assert.match(page, /\.eq\("historical_id", id\)/);
-  assert.match(page, /redirect\(`\/tasks\/\$\{encodeURIComponent\(data\?\.task_id \|\| id\)\}`\)/);
+  assert.match(page, /redirect\(`\/tasks\/\$\{encodeURIComponent\(data\?\.task_id \|\| id\)\}\$\{returnQuery\}`\)/);
   assert.doesNotMatch(page, /requirePlanningContributor|requireOperationalLead|requireCEO/);
 });
 
