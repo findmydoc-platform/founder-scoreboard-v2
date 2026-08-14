@@ -13,7 +13,7 @@ import { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS, type ProjectsRi
 import type { EpicChildCounts } from "@/features/projects/model/epic-contract";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
-import { normalizeStatus, taskStatuses } from "@/lib/status";
+import { normalizeStatus, priorityBadgeTone, taskStatuses } from "@/lib/status";
 import type { ApprovalDecisionAction, PlanningShellState, Profile, Task } from "@/lib/types";
 import type { ApprovalReasonAction } from "@/lib/approval-decision-policy";
 import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
@@ -373,7 +373,7 @@ function InitiativeTreeItem({
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-start justify-between gap-3 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3 p-3">
         <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 gap-2 text-left" aria-expanded={isOpen}>
           <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-500">
             {isOpen ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
@@ -386,7 +386,7 @@ function InitiativeTreeItem({
             <span className="mt-2 block text-sm leading-6 text-slate-600">{initiative.strategy?.goal || initiative.description}</span>
           </span>
         </button>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
           <UiBadge tone="white">{tasks.length} Deliverables</UiBadge>
           <UiBadge tone="orange">{blocked} blockiert</UiBadge>
           {canEdit && (
@@ -443,7 +443,35 @@ function DeliverableTable({
   const toggleSort = (sort: ProjectsSort) => onFiltersChange({ sort, direction: filters.sort === sort && filters.direction === "asc" ? "desc" : "asc" });
   const directionFor = (sort: ProjectsSort): SortDirection => filters.sort === sort ? filters.direction : null;
   return (
-    <DataTableFrame title="Deliverables" caption="Deliverables der Initiative" results={[{ id: "deliverables", visibleCount: tasks.length, totalCount }]} filtering={{ mode: "external", labelledBy: "project-data-filters" }} minWidth={760}>
+    <DataTableFrame
+      title="Deliverables"
+      caption="Deliverables der Initiative"
+      results={[{ id: "deliverables", visibleCount: tasks.length, totalCount }]}
+      filtering={{ mode: "external", labelledBy: "project-data-filters" }}
+      minWidth={760}
+      mobileContentBreakpoint="xl"
+      mobileContent={(
+        <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
+          {tasks.map((task) => (
+            <article key={task.id} className="grid gap-3 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white">
+              <TaskReferenceLink task={task} onOpenTask={onOpenTask} layout="flex" className="min-h-11 items-start py-1 font-semibold leading-5 text-slate-950">
+                <span className="line-clamp-2">{task.title}</span>
+              </TaskReferenceLink>
+              <div className="flex flex-wrap gap-2">
+                <UiBadge tone={priorityBadgeTone(task.priority)}>{task.priority}</UiBadge>
+                <UiBadge tone="white">{task.approvalStatus === "approved" ? normalizeStatus(task.status) : task.approvalStatus}</UiBadge>
+              </div>
+              <dl className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                <div><dt className="font-semibold text-slate-500">Owner</dt><dd>{taskAssigneeLabel(task)}</dd></div>
+                <div><dt className="font-semibold text-slate-500">Aufwand</dt><dd>{task.hours}h</dd></div>
+                <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Zeitraum</dt><dd>{dateRange(task)}</dd></div>
+              </dl>
+            </article>
+          ))}
+          {!tasks.length && <UiEmptyState className="m-4 md:col-span-2">{totalCount ? "Keine Deliverables für diese Filter." : "Noch keine Deliverables in dieser Initiative."}</UiEmptyState>}
+        </div>
+      )}
+    >
       <DataTableHead>
         <tr>
           <DataColumnHeader label="Deliverable" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky filter={<ColumnFilterPopover label="Deliverables nach Priorität filtern" activeCount={filters.priority === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ priority: "Alle" })}><CustomSelect aria-label="Priorität wählen" value={filters.priority} onChange={(priority) => onFiltersChange({ priority })} options={priorityOptions} className="h-10" /></ColumnFilterPopover>} />

@@ -29,7 +29,7 @@ export default async function AuthErrorPage({ searchParams }: Props) {
         </div>
         <Link
           href={returnPath}
-          className="mt-6 inline-flex h-10 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+          className="mt-6 inline-flex h-11 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 sm:h-10"
         >
           Zurück zur App
         </Link>

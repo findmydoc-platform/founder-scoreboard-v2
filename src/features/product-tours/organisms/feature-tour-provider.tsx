@@ -71,8 +71,15 @@ function persistFeatureTourResume(resume: FeatureTourResume) {
   }
 }
 
+function findVisibleTourElement(selector: string) {
+  return Array.from(document.querySelectorAll<HTMLElement>(selector)).find((element) => {
+    const style = window.getComputedStyle(element);
+    return element.getClientRects().length > 0 && style.visibility !== "hidden";
+  }) || null;
+}
+
 function waitForElement(selector: string, timeoutMs = 8000) {
-  const existing = document.querySelector(selector);
+  const existing = findVisibleTourElement(selector);
   if (existing) return Promise.resolve(existing);
 
   return new Promise<Element | null>((resolve) => {
@@ -81,7 +88,7 @@ function waitForElement(selector: string, timeoutMs = 8000) {
       resolve(null);
     }, timeoutMs);
     const observer = new MutationObserver(() => {
-      const element = document.querySelector(selector);
+      const element = findVisibleTourElement(selector);
       if (!element) return;
       window.clearTimeout(timeout);
       observer.disconnect();

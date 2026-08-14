@@ -58,12 +58,24 @@ export function TaskBoardView({
   const completedCardLimit = 20;
 
   return (
-    <div
-      className="flex min-w-0 gap-3 overflow-auto pb-3 [scrollbar-gutter:stable] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
-      tabIndex={0}
-      role="region"
-      aria-label="Board horizontal und vertikal scrollen"
-    >
+    <div className="w-full min-w-0 overflow-hidden [contain:layout_paint]">
+      <div
+        className="flex w-full min-w-0 gap-3 overflow-x-auto overscroll-x-contain pb-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset [scrollbar-gutter:stable]"
+        tabIndex={0}
+        role="region"
+        aria-label="Board nach Status"
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+            event.preventDefault();
+            event.currentTarget.scrollBy({ left: event.key === "ArrowRight" ? 280 : -280 });
+          }
+          if (event.key === "Home" || event.key === "End") {
+            event.preventDefault();
+            event.currentTarget.scrollTo({ left: event.key === "End" ? event.currentTarget.scrollWidth : 0 });
+          }
+        }}
+      >
       {statuses.map((status) => {
         const tasks = visibleTasks.filter((task) => task.taskType === itemType && normalizeStatus(task.status) === status);
         const orderedTasks = status === "Erledigt"
@@ -97,10 +109,10 @@ export function TaskBoardView({
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onDragOverStatus(null);
             }}
             onDrop={(event) => onDropTask(status, event)}
-            className={`flex shrink-0 grow-0 flex-col overflow-hidden rounded-lg border bg-slate-50/80 transition-[width,min-width,max-width,border-color,background-color,box-shadow] duration-200 motion-reduce:transition-none ${
+            className={`flex min-w-0 shrink-0 grow-0 flex-col overflow-hidden rounded-lg border bg-slate-50/80 transition-[width,border-color,background-color,box-shadow] duration-200 motion-reduce:transition-none ${
               isEmpty
-                ? "min-w-24 max-w-24 basis-24"
-                : "min-w-[min(320px,calc(100vw-2rem))] max-w-[min(320px,calc(100vw-2rem))] basis-[min(320px,calc(100vw-2rem))]"
+                ? "w-24"
+                : "w-[min(82vw,360px)] md:max-[1199px]:w-[520px] min-[1200px]:w-[320px]"
             } ${
               isDropTarget
                 ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
@@ -110,7 +122,7 @@ export function TaskBoardView({
             }`}
           >
             <div className={`flex min-w-0 border-b border-slate-200 bg-white ${
-              isEmpty ? "flex-col items-center gap-2 px-2 py-3" : "items-center justify-between px-3.5 py-2.5"
+              isEmpty ? "flex-col items-center justify-start gap-2 px-2 py-3" : "items-center justify-between px-3.5 py-2.5"
             }`}>
               <div className={isEmpty ? "flex min-w-0 flex-col items-center gap-1.5" : "flex items-center gap-2"}>
                 <TaskStatusBadge
@@ -129,7 +141,7 @@ export function TaskBoardView({
                 <Plus size={15} />
               </button>
             </div>
-            <div className={isEmpty ? "flex min-h-72 flex-1 justify-center px-2 py-5" : "grid min-w-0 gap-2 p-2"}>
+            <div className={isEmpty ? "flex min-h-72 flex-1 items-start justify-center px-2 py-5" : "grid min-w-0 gap-2 p-2"}>
               {tasks.length ? renderedTasks.map((task) => {
                 const canUpdateStatus = canChangeTaskStatus(task);
                 return (
@@ -179,6 +191,7 @@ export function TaskBoardView({
           </section>
         );
       })}
+      </div>
     </div>
   );
 }

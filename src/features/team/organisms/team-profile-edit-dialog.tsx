@@ -53,9 +53,9 @@ export function TeamProfileEditDialog({
   };
 
   return (
-    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4 py-6" role="dialog" aria-modal="true" aria-label={`${draftProfile.name} bearbeiten`}>
-      <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-4 shadow-2xl">
-        <div className="flex items-start justify-between gap-3">
+    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-900/35 sm:items-center sm:px-4 sm:py-6" role="dialog" aria-modal="true" aria-label={`${draftProfile.name} bearbeiten`}>
+      <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-2xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-lg">
+        <div className="flex shrink-0 items-start justify-between gap-3 px-4 pt-4">
           <div>
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Personeneinstellungen</div>
             <h3 className="mt-1 text-lg font-semibold text-slate-950">{draftProfile.name}</h3>
@@ -66,7 +66,7 @@ export function TeamProfileEditDialog({
           </UiButton>
         </div>
 
-        <div className="mt-5 grid gap-4">
+        <div className="mt-5 grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 pb-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <UiField as="div">
               Plattformrolle
@@ -136,10 +136,10 @@ export function TeamProfileEditDialog({
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-          <div className="text-xs font-semibold text-slate-500">{dirty ? "Ungespeicherte Änderungen" : "Keine Änderungen"}</div>
-          <div className="flex gap-2">
-            <UiButton type="button" onClick={onReset} disabled={!dirty || saving}>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-4">
+          <div className="w-full text-xs font-semibold text-slate-500 sm:w-auto">{dirty ? "Ungespeicherte Änderungen" : "Keine Änderungen"}</div>
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-nowrap">
+            <UiButton type="button" onClick={onReset} disabled={!dirty || saving} className="col-span-2 sm:col-span-1">
               Zurücksetzen
             </UiButton>
             <UiButton type="button" onClick={onClose} disabled={saving}>

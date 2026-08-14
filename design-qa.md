@@ -56,6 +56,48 @@ result: passed
 
 final result: passed
 
+## FounderOps Responsive Overhaul — 2026-08-14
+
+### Comparison target
+
+- Source captures: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-revalidation/01-planning-phone-390x844.png`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-revalidation/05-planning-ipad-landscape-1024x768.png`, and `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-revalidation/10-planning-desktop-1440x900.png`.
+- Final captures: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-overhaul-final/planning-phone-390x844.png`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-overhaul-final/planning-ipad-landscape-1024x768.png`, and `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-overhaul-final/planning-desktop-1440x900.png`.
+- Combined same-viewport inputs: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-overhaul-final/comparison-phone-planning.png`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-overhaul-final/comparison-ipad-planning.png`, and `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-overhaul-final/comparison-desktop-planning.png`.
+- Additional score captures: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-overhaul-final/sprint-score-phone-390x844.png` and `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-overhaul-final/sprint-score-ipad-portrait-768x1024.png`.
+- State: authenticated local development data, light theme, matching route and viewport in each before-and-after comparison.
+
+### Findings
+
+- No actionable P0, P1, or P2 visual findings remain.
+- Phone boards now reflow into a single readable status stack. Tablet boards use two columns, while the original horizontal desktop board returns at the established `xl` breakpoint.
+- Wide task, backlog rank, project, decision, attendance, sprint task, and founder score data use the same data and actions in reusable cards below `xl`; desktop tables remain unchanged.
+- The 1024-pixel landscape layout uses the existing compact 64-pixel navigation rail instead of sacrificing a quarter of the working area to the full sidebar.
+- Header, filters, tabs, dialogs, task detail, team metrics, buttons, and references stay within the page viewport. Intentional tab-strip scrolling is locally contained and does not create page-level horizontal scrolling.
+- Phone and tablet screenshots preserve the existing visual system, typography, controls, tokens, and information hierarchy. No replacement component system or new mobile-only product flow was introduced.
+- The desktop comparison retains the 256-pixel sidebar, desktop data density, horizontal board, card styling, and primary control placement.
+
+### Responsive matrix
+
+- `320x568`: Planning board, mobile navigation, task creation dialog, and task detail remain usable; the task detail owns the vertical scroll instead of leaving a near-zero content viewport.
+- `390x844`: All visible workspaces were route-checked without page-level horizontal overflow; wide data surfaces render cards instead of clipped tables.
+- `430x932`: Planning, Backlog, Sprint, and Team remain within the viewport.
+- `768x1024`: Planning and Sprint use two-column tablet layouts with no visible wide tables.
+- `1024x768`: Planning keeps a 64-pixel navigation rail and a two-column board without page-level horizontal overflow.
+- `1440x900`: Planning, Backlog, and Sprint retain their established desktop sidebar, board, and table treatments.
+
+### Interaction and runtime checks
+
+- Mobile navigation traps focus, marks the background inert, locks page scrolling, closes on Escape, and returns focus to its trigger.
+- The 320-pixel create dialog keeps its actions accessible, focuses the title input, and scrolls its long form internally.
+- Planning table and Backlog rank views expose the same live content through cards on phone sizes.
+- The product update tour was completed from the update gallery through Planning and Sprint Score to its final confirmation step.
+- The final fresh browser tab reported no console warnings or errors.
+- `pnpm test`: 679 passed. `pnpm run lint`, `pnpm run build`, and `pnpm run verify:product-updates`: passed.
+
+### Final result
+
+final result: passed
+
 ## Kanban Card Status Row — 2026-08-01
 
 ### Implementation evidence
@@ -861,5 +903,95 @@ final result: passed
 3. This pass regrouped and relabeled the visible navigation without changing its interaction or visual system; desktop and mobile captures confirmed the new copy fits.
 
 ### Final result
+
+final result: passed
+
+## FounderOps Mobile Completion Audit — 2026-08-14
+
+### Audit scope
+
+- User goal: make the complete FounderOps experience practical on smartphones and tablets while preserving the established desktop experience.
+- Fresh route captures: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-completion-audit/phone-route-contact-sheet-final.jpg`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-completion-audit/tablet-portrait-contact-sheet.jpg`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-completion-audit/tablet-landscape-contact-sheet.jpg`, and `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-completion-audit/desktop-contact-sheet.jpg`.
+- Interaction captures: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-completion-audit/phone-core-flows-contact-sheet.jpg` and `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-completion-audit/47-phone-task-drawer.jpg`.
+- Fix comparisons: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-completion-audit/comparison-team-dialog-320.jpg` and `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-mobile-completion-audit/comparison-tablet-touch-targets.jpg`.
+
+### Steps and health
+
+1. Phone workspace entry at `390x844`: healthy. Planning, Backlog, Sprint, Events, Team, Notifications, Tools, Profile, strategic Backlog, and the Decision Log error state remain within the viewport and expose no visible table overflow.
+2. Small-phone core flows at `320x568`: healthy after correction. Navigation, task drawer, full task detail, task creation, management edit, table cards, contained Gantt scrolling, and the auth error path keep their controls reachable.
+3. Tablet portrait at `768x1024`: healthy. Planning and score surfaces use two-column cards; all ten audited workspace routes have zero page-level horizontal overflow.
+4. Tablet landscape at `1024x768`: healthy. The 64-pixel navigation rail preserves working space, Planning uses two columns, and wide data remains in cards.
+5. Desktop at `1440x900`: healthy. The 256-pixel sidebar, horizontal Planning board, Backlog table, four Sprint tables, and established density remain intact.
+6. Touch-device behavior: healthy after correction. With touch emulation active, `(pointer: coarse)` matches and shared Task and GitHub references compute to a 44-pixel minimum height.
+7. Legacy and entry routes: healthy. Root, Settings, Execution, Reviews, review detail, and historical Initiative routes reach their current destination without horizontal overflow.
+
+### Findings and corrections
+
+- P1 resolved: the Team management dialog was 882 pixels tall in a 568-pixel viewport, placing both its close control and footer outside the visible area. It now fills the phone viewport, keeps header and actions fixed, and gives the fields a dedicated internal scroll area.
+- P2 resolved: the standalone auth recovery link measured 40 pixels high on phones. It now measures 44 pixels on phones and retains the original 40-pixel desktop height.
+- P2 resolved: the coarse-pointer Task target rule was initially overridden by the `sm` utility at tablet widths. The final cascade computes Task and GitHub references to 44 pixels on emulated touch tablets without changing fine-pointer desktop density.
+- Loading-state alignment resolved: the Backlog skeleton now keeps its card representation through tablet widths, matching the loaded surface.
+- No actionable P0, P1, or P2 visual or interaction findings remain after the second pass.
+
+### Accessibility evidence and limits
+
+- Confirmed from the live UI: no page-level horizontal scrolling; no visible interactive target below 24 pixels on phone routes; focus entry and return for mobile navigation and task drawer; Escape closing; background scroll locking; reachable dialog close and footer controls; and 44-pixel coarse-pointer Task targets.
+- The audit does not claim full WCAG compliance. Screen-reader announcements, browser zoom above the tested layouts, and platform-specific VoiceOver or TalkBack behavior were not covered.
+- Live Decision Log rows could not be rendered because the local Notion configuration is absent. Its responsive unavailable state was captured; the row-to-card implementation remains covered by the responsive source contract and the full test suite.
+
+### Final result
+
+final result: passed
+
+---
+
+## Mobile Test Profiles and Compact Sticky Planning Controls — 2026-08-14
+
+### Comparison target
+
+- Source visual truth, profile selection: `/Users/razorspoint/.codex/generated_images/019fbcbf-43c9-7071-a635-a186d9e8b1a2/exec-448b1d55-95ca-4f98-a482-1f002f502cbe.png` (`853 x 1844` pixels).
+- Source visual truth, active profile banner: `/Users/razorspoint/.codex/generated_images/019fbcbf-43c9-7071-a635-a186d9e8b1a2/exec-4724ee37-905f-4fbc-bc37-bbf6f53a7ab4.png` (`853 x 1844` pixels).
+- Intended implementation viewport matrix: `320 x 568`, `390 x 844`, `768 x 1024`, `1024 x 768`, and `1440 x 900` CSS pixels.
+- Intended states: own identity, profile menu open, active test profile, compact planning controls after page scroll, and mobile filter sheet open.
+- Implementation screenshot: unavailable in this pass.
+
+### Findings
+
+- The rendered comparison is blocked. The in-app browser selected for the local preview rejected the `http://localhost:3002/planning` reload under its URL security policy even though the development server and production build are healthy.
+- Source visuals were opened successfully. They establish the approved combination: role selection from the existing profile affordance, a persistent green exit banner for an active alternate profile, and compact planning controls.
+- Deterministic checks are not a substitute for rendered evidence, but they passed: `pnpm test` (`682/682`), `pnpm run lint`, `pnpm run build`, responsive source contracts, modal focus/scroll-lock contracts, and `git diff --check`.
+- Fonts and typography, spacing and layout rhythm, colors and visual tokens, icons, copy, interaction states, responsiveness, and final image fidelity cannot be signed off for the new controls until current browser-rendered screenshots are available.
+- No app-specific image assets were introduced by this change; profile states use text initials and the existing Lucide icon system. This still requires live visual inspection for optical balance.
+
+### Comparison history
+
+1. The source profile-selection and active-banner references were opened at their native `853 x 1844` pixel dimensions.
+2. The current implementation could not be captured due to the browser URL-policy block, so no combined comparison input could be produced and no P0/P1/P2 visual pass can be claimed.
+
+### Blocker resolution
+
+- Open or reload `http://localhost:3002/planning` manually in the in-app browser, then provide that tab to the task. Capture all intended states at the viewport matrix above, combine the matching source and implementation states, fix any P0/P1/P2 differences, and append the post-fix evidence here.
+
+final result: blocked
+
+### Rendered resolution and breakpoint correction
+
+- The browser blocker was resolved after the local Planning tab was opened manually. The implementation was then inspected from the live app at `320x568`, `390x844`, `768x1024`, `1024x768`, `1234x964`, and `1440x900` CSS pixels.
+- Profile-menu comparison: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/18-profile-menu-source-vs-final.png`.
+- Active-profile comparison: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/19-test-profile-source-vs-final.png`.
+- Final layout evidence: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/20-final-phone-320x568.png`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/11-final-phone-390x844.png`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/21-final-tablet-768x1024.png`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/13-final-tablet-board-1024x768.png`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/14-final-desktop-window-1234x964.png`, and `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/15-desktop-1440x900.png`.
+- Interaction evidence: `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/06-phone-filter-sheet-390x844.png`, `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/16-mobile-test-profile-banner-390x844.png`, and `/Users/razorspoint/.codex/visualizations/2026/08/14/founderops-breakpoint-fix/17-mobile-profile-menu-390x844.png`.
+
+#### Findings and corrections
+
+- P1 resolved: a `1234px` desktop-sized app window was incorrectly held in the compact tablet shell because the restoration breakpoint was `1280px`. The full sidebar, desktop header controls, inline filters, and desktop board now return at `1200px`; `1024px` remains the compact tablet shell.
+- P1 resolved: the two-column tablet grid stretched an empty status column across half the screen. The board is now a contained horizontal surface at every compact width: the active phone column is `min(82vw, 360px)`, the tablet column is `520px`, desktop returns to `320px`, and empty statuses remain `96px` peeks.
+- The board keeps root `scrollX` at `0`, supports touch or trackpad scrolling, and supports `ArrowLeft`, `ArrowRight`, `Home`, and `End` while the board region is focused. No tested viewport exposes page-level horizontal scrolling.
+- The mobile Planning controls remain one `49px` sticky row. With an active test profile, the persistent green banner adds `40px`, so the combined sticky footprint is `89px`; the page header scrolls away.
+- The mobile filter sheet opens with focus on its close control, locks background scrolling, stays within the viewport, and restores focus to the Filter button when closed.
+- Profile selection is available from the existing account icon with the role-based names `Clara CEO`, `Felix Founder`, `Dora Deputy`, and `Viktor Viewer`. The active profile changes the icon to its initials and exposes the persistent green exit banner.
+- The source-to-implementation comparisons confirm the selected interaction pattern while intentionally replacing personal source names and the earlier compact selector with the approved role-based account menu.
+
+#### Final result
 
 final result: passed

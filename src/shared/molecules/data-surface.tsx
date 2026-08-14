@@ -43,13 +43,13 @@ type DataSurfaceHeaderProps = HTMLAttributes<HTMLDivElement> & {
 
 export function DataSurfaceHeader({ title, description, actions, variant = "default", className, children, ...props }: DataSurfaceHeaderProps) {
   return (
-    <div className={classNames("flex items-start justify-between gap-3 border-b px-4 py-3", variant === "structural" ? "border-slate-300" : "border-slate-100", className)} {...props}>
+    <div className={classNames("flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3 sm:flex-nowrap", variant === "structural" ? "border-slate-300" : "border-slate-100", className)} {...props}>
       <div className="min-w-0">
         {title && <h2 className="text-base font-semibold text-slate-950">{title}</h2>}
         {description && <p className="text-xs text-slate-500">{description}</p>}
         {children}
       </div>
-      {actions && <div className="shrink-0">{actions}</div>}
+      {actions && <div className="max-w-full shrink-0">{actions}</div>}
     </div>
   );
 }
@@ -63,7 +63,7 @@ export function DataOverflow({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={classNames("overflow-auto pb-2 [scrollbar-gutter:stable] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset", className)}
+      className={classNames("overflow-auto pb-2 [contain:inline-size] [scrollbar-gutter:stable] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset", className)}
       tabIndex={tabIndex}
       role={role}
       aria-label={ariaLabel}
@@ -173,6 +173,7 @@ export function DataTableFrame({
   className,
   surfaceVariant = "default",
   mobileContent,
+  mobileContentBreakpoint = "lg",
   children,
 }: {
   title: string;
@@ -185,6 +186,7 @@ export function DataTableFrame({
   className?: string;
   surfaceVariant?: "default" | "structural";
   mobileContent?: ReactNode;
+  mobileContentBreakpoint?: "lg" | "xl";
   children: ReactNode;
 }) {
   const generatedId = useId();
@@ -201,8 +203,8 @@ export function DataTableFrame({
         </div>
       </DataSurfaceHeader>
       {filtering.mode === "embedded" && filtering.toolbar}
-      {mobileContent && <div className="lg:hidden">{mobileContent}</div>}
-      <DataOverflow className={mobileContent ? "hidden lg:block" : undefined} aria-labelledby={titleId} aria-describedby={describedBy}>
+      {mobileContent && <div className={mobileContentBreakpoint === "xl" ? "xl:hidden" : "lg:hidden"}>{mobileContent}</div>}
+      <DataOverflow className={mobileContent ? (mobileContentBreakpoint === "xl" ? "hidden xl:block" : "hidden lg:block") : undefined} aria-labelledby={titleId} aria-describedby={describedBy}>
         <DataTable minWidth={minWidth} aria-labelledby={titleId} aria-describedby={describedBy}>
           <caption className="sr-only">{caption}</caption>
           {children}

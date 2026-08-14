@@ -130,7 +130,7 @@ test("planning focus mode requests browser fullscreen and removes nonessential a
   assert.match(shell, /focusModeActive \? "min-w-0" : "app-sidebar-main"/);
   assert.match(header, /workspace === "planning" \|\| workspace === "backlog"/);
   assert.match(header, /Fokusmodus im Vollbild starten/);
-  assert.match(header, /focusModeActive \? focusModeButton/);
+  assert.match(header, /focusModeActive \? <>\{focusModeButton\}\{accountControl\}<\//);
   assert.match(appHeader, /compact/);
   assert.match(appHeader, /Fokusmodus/);
 });
