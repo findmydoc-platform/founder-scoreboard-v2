@@ -13,6 +13,23 @@ export function githubRepoSlug(repository?: string | null) {
   return requireAllowedGitHubRepository(repository);
 }
 
+export function isGitHubIssueApiUrl(
+  value: string,
+  issueNumber: number,
+  repository?: string | null,
+) {
+  const { owner, repo } = splitGitHubRepository(repository);
+  try {
+    const url = new URL(value);
+    const expectedPath = `/repos/${owner}/${repo}/issues/${issueNumber}`.toLowerCase();
+    return url.protocol === "https:"
+      && url.hostname.toLowerCase() === "api.github.com"
+      && url.pathname.replace(/\/$/, "").toLowerCase() === expectedPath;
+  } catch {
+    return false;
+  }
+}
+
 function githubRawUrl(path: string, repository?: string | null) {
   const { owner, repo } = splitGitHubRepository(repository);
   const branch = process.env.GITHUB_SYNC_BRANCH || "main";
@@ -223,6 +240,19 @@ export async function archiveGitHubIssue(issueNumber: number, token: string, rep
   );
 }
 
+export type GitHubIssueComment = {
+  id: number;
+  body: string;
+  html_url: string;
+  issue_url?: string;
+  created_at: string;
+  updated_at?: string;
+  user?: {
+    login?: string;
+    avatar_url?: string;
+  } | null;
+};
+
 export async function createGitHubIssueComment(
   issueNumber: number,
   comment: string,
@@ -251,16 +281,7 @@ export async function listGitHubIssueComments(
   repository?: string | null,
 ) {
   const { owner, repo } = splitGitHubRepository(repository);
-  const comments: Array<{
-    id: number;
-    body: string;
-    html_url: string;
-    created_at: string;
-    user?: {
-      login?: string;
-      avatar_url?: string;
-    } | null;
-  }> = [];
+  const comments: GitHubIssueComment[] = [];
 
   for (let page = 1; page <= 100; page += 1) {
     const pageComments = await githubJson<typeof comments>(
@@ -276,6 +297,22 @@ export async function listGitHubIssueComments(
   }
 
   return comments;
+}
+
+export async function getGitHubIssueComment(
+  commentId: number,
+  token: string,
+  repository?: string | null,
+) {
+  const { owner, repo } = splitGitHubRepository(repository);
+  return githubJson<GitHubIssueComment>(
+    `https://api.github.com/repos/${owner}/${repo}/issues/comments/${commentId}`,
+    {
+      token,
+      cache: "no-store",
+      errorMessage: "GitHub Kommentar konnte nicht geladen werden",
+    },
+  );
 }
 
 export async function getGitHubIssue(

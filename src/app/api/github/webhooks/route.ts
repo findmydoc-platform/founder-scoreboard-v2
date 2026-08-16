@@ -1,9 +1,13 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import {
   acceptGitHubIssueWebhook,
   createSupabaseGitHubWebhookDeliveryStore,
   githubWebhookMaxPayloadBytes,
 } from "@/lib/github-webhook-intake";
+import {
+  createSupabaseGitHubIssueCommentWebhookStore,
+  processGitHubIssueCommentWebhookDelivery,
+} from "@/lib/github-issue-comment-webhook";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";
@@ -103,6 +107,14 @@ export async function POST(request: NextRequest) {
   if (result.kind === "ping") return NextResponse.json({ ok: true });
   if (result.kind === "ignored") return new Response(null, { status: 204 });
   if (result.kind === "rejected") return jsonError(result.code, result.message, result.status);
+  if (result.delivery.eventName === "issue_comment") {
+    after(async () => {
+      await processGitHubIssueCommentWebhookDelivery({
+        deliveryId: result.delivery.deliveryId,
+        store: createSupabaseGitHubIssueCommentWebhookStore(supabase),
+      }).catch(() => undefined);
+    });
+  }
   if (result.duplicate) {
     return NextResponse.json({ ok: true, accepted: true, duplicate: true });
   }

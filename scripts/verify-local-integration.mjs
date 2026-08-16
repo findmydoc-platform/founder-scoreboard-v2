@@ -182,9 +182,13 @@ async function verifyCanonicalPlanningPreferences(status) {
 async function insertGitHubWebhookDelivery(client, {
   deliveryId,
   eventName,
+  action = "created",
+  repositoryFullName = "findmydoc-platform/management",
+  issueNumber = 17,
   commentId = null,
   commentNodeId = null,
   commentUpdatedAt = null,
+  receivedAt = null,
 }) {
   await client.query(
     `insert into public.github_webhook_deliveries (
@@ -201,18 +205,57 @@ async function insertGitHubWebhookDelivery(client, {
       comment_id,
       comment_node_id,
       comment_updated_at,
-      payload_sha256
-    ) values ($1,$2,'created',42,101,'findmydoc-platform/management',202,'I_kwDOExample',17,$3,$4,$5,$6,$7)`,
+      payload_sha256,
+      received_at
+    ) values ($1,$2,$3,42,101,$4,202,'I_kwDOExample',$5,$6,$7,$8,$9,$10,coalesce($11::timestamptz,clock_timestamp()))`,
     [
       deliveryId,
       eventName,
+      action,
+      repositoryFullName,
+      issueNumber,
       "2026-08-14T12:30:00Z",
       commentId,
       commentNodeId,
       commentUpdatedAt,
       "a".repeat(64),
+      receivedAt,
     ],
   );
+}
+
+async function applyGitHubCommentProjection(client, {
+  deliveryId,
+  lockToken,
+  operation,
+  taskId,
+  commentUpdatedAt,
+  authorLogin = null,
+  authorAvatarUrl = null,
+  body = null,
+  htmlUrl = null,
+  createdAt = null,
+  importedAt = null,
+}) {
+  const result = await client.query(
+    `select public.apply_github_issue_comment_webhook_projection(
+      $1,$2::uuid,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10::timestamptz,$11::timestamptz
+    ) as result`,
+    [
+      deliveryId,
+      lockToken,
+      operation,
+      taskId,
+      commentUpdatedAt,
+      authorLogin,
+      authorAvatarUrl,
+      body,
+      htmlUrl,
+      createdAt,
+      importedAt,
+    ],
+  );
+  return result.rows[0]?.result;
 }
 
 async function expectGitHubWebhookDeliveryConstraintViolation(client, label, insert) {
@@ -229,7 +272,7 @@ async function expectGitHubWebhookDeliveryConstraintViolation(client, label, ins
   if (!rejected) throw new Error(`${label} unexpectedly bypassed the webhook delivery constraint.`);
 }
 
-async function verifyGitHubWebhookDeliveryJournal(status) {
+async function verifyGitHubWebhookDeliveryJournal(status, source) {
   const client = new pg.Client({ connectionString: status.DB_URL });
   await client.connect();
   try {
@@ -268,6 +311,355 @@ async function verifyGitHubWebhookDeliveryJournal(status) {
       throw new Error("Valid GitHub Issue comment delivery metadata did not persist exactly.");
     }
 
+    const privilege = await client.query(
+      `select
+        has_function_privilege(
+          'service_role',
+          'public.claim_github_issue_comment_webhook_delivery(text,uuid,integer)',
+          'EXECUTE'
+        ) as service_can_claim,
+        has_function_privilege(
+          'authenticated',
+          'public.claim_github_issue_comment_webhook_delivery(text,uuid,integer)',
+          'EXECUTE'
+        ) as authenticated_can_claim,
+        has_function_privilege(
+          'service_role',
+          'public.resolve_github_issue_comment_webhook_tasks(text,integer)',
+          'EXECUTE'
+        ) as service_can_resolve,
+        has_function_privilege(
+          'authenticated',
+          'public.resolve_github_issue_comment_webhook_tasks(text,integer)',
+          'EXECUTE'
+        ) as authenticated_can_resolve,
+        has_function_privilege(
+          'service_role',
+          'public.apply_github_issue_comment_webhook_projection(text,uuid,text,text,timestamptz,text,text,text,text,timestamptz,timestamptz)',
+          'EXECUTE'
+        ) as service_can_apply,
+        has_function_privilege(
+          'authenticated',
+          'public.apply_github_issue_comment_webhook_projection(text,uuid,text,text,timestamptz,text,text,text,text,timestamptz,timestamptz)',
+          'EXECUTE'
+        ) as authenticated_can_apply,
+        has_table_privilege(
+          'service_role',
+          'public.github_webhook_deliveries',
+          'UPDATE'
+        ) as service_can_update_directly`,
+    );
+    if (!privilege.rows[0]?.service_can_claim
+      || privilege.rows[0]?.authenticated_can_claim
+      || !privilege.rows[0]?.service_can_resolve
+      || privilege.rows[0]?.authenticated_can_resolve
+      || !privilege.rows[0]?.service_can_apply
+      || privilege.rows[0]?.authenticated_can_apply
+      || privilege.rows[0]?.service_can_update_directly) {
+      throw new Error("GitHub Issue comment webhook RPC authorization boundary changed.");
+    }
+
+    const lockToken = randomUUID();
+    const claim = await client.query(
+      `select *
+       from public.claim_github_issue_comment_webhook_delivery($1,$2::uuid,$3)`,
+      ["verify-comment-valid", lockToken, 120],
+    );
+    if (claim.rows.length !== 1
+      || claim.rows[0]?.delivery_id !== "verify-comment-valid"
+      || claim.rows[0]?.action !== "created"
+      || Number(claim.rows[0]?.comment_id) !== 404
+      || new Date(claim.rows[0]?.comment_updated_at).toISOString() !== "2026-08-14T12:31:00.000Z"
+      || Number(claim.rows[0]?.attempts) !== 1) {
+      throw new Error("GitHub Issue comment delivery claim did not return the locked identity.");
+    }
+
+    const wrongFinalize = await client.query(
+      `select public.finalize_github_issue_comment_webhook_delivery(
+        $1,$2::uuid,'processed','comment_upserted',null,null
+      ) as finalized`,
+      ["verify-comment-valid", randomUUID()],
+    );
+    if (wrongFinalize.rows[0]?.finalized !== false) {
+      throw new Error("GitHub Issue comment delivery accepted a foreign lock token.");
+    }
+
+    const finalize = await client.query(
+      `select public.finalize_github_issue_comment_webhook_delivery(
+        $1,$2::uuid,'processed','comment_upserted',null,null
+      ) as finalized`,
+      ["verify-comment-valid", lockToken],
+    );
+    if (finalize.rows[0]?.finalized !== true) {
+      throw new Error("GitHub Issue comment delivery could not be finalized by its lock owner.");
+    }
+    const finalState = await client.query(
+      `select status,status_reason,attempts,locked_at,lock_token,processed_at
+       from public.github_webhook_deliveries
+       where delivery_id = 'verify-comment-valid'`,
+    );
+    if (finalState.rows[0]?.status !== "processed"
+      || finalState.rows[0]?.status_reason !== "comment_upserted"
+      || Number(finalState.rows[0]?.attempts) !== 1
+      || finalState.rows[0]?.locked_at !== null
+      || finalState.rows[0]?.lock_token !== null
+      || !finalState.rows[0]?.processed_at) {
+      throw new Error("GitHub Issue comment delivery final state is inconsistent.");
+    }
+    const replayClaim = await client.query(
+      `select *
+       from public.claim_github_issue_comment_webhook_delivery($1,$2::uuid,$3)`,
+      ["verify-comment-valid", randomUUID(), 120],
+    );
+    if (replayClaim.rows.length !== 0) {
+      throw new Error("A processed GitHub Issue comment delivery was claimed again.");
+    }
+
+    const mappingTaskId = "verify-github-comment-mapping";
+    const ambiguousTaskId = "verify-github-comment-ambiguous";
+    const mappingIssueNumber = 2147483001;
+    const mappingRepository = "findmydoc-platform/management";
+    const mappingIssueUrl = `https://github.com/${mappingRepository}/issues/${mappingIssueNumber}`;
+    const parentInitiativeId = source.initiatives[0]?.id;
+    if (!parentInitiativeId) throw new Error("Local seed has no Initiative for GitHub comment mapping verification.");
+
+    await client.query(
+      `insert into public.tasks (
+        id,project_id,parent_task_id,title,status,priority,task_type,score_relevant,
+        approval_status,github_repo,issue_number
+      ) values ($1,$2,$3,$4,'Offen','P3','deliverable',false,'proposed',$5,$6)`,
+      [
+        mappingTaskId,
+        source.project.id,
+        parentInitiativeId,
+        "GitHub comment webhook mapping verifier",
+        mappingRepository,
+        String(mappingIssueNumber),
+      ],
+    );
+
+    let mapping = await client.query(
+      "select * from public.resolve_github_issue_comment_webhook_tasks($1,$2)",
+      [mappingRepository, mappingIssueNumber],
+    );
+    if (mapping.rows.length !== 1 || mapping.rows[0]?.task_id !== mappingTaskId) {
+      throw new Error("Legacy issue_number mapping did not resolve through the shared compatibility contract.");
+    }
+
+    await client.query(
+      `update public.tasks
+       set github_repo=null,issue_number=null,issue_url=$2
+       where id=$1`,
+      [mappingTaskId, mappingIssueUrl],
+    );
+    mapping = await client.query(
+      "select * from public.resolve_github_issue_comment_webhook_tasks($1,$2)",
+      [mappingRepository, mappingIssueNumber],
+    );
+    if (mapping.rows.length !== 1 || mapping.rows[0]?.task_id !== mappingTaskId) {
+      throw new Error("Legacy issue_url mapping did not resolve through the shared compatibility contract.");
+    }
+
+    await client.query(
+      `update public.tasks
+       set github_repo=$2,github_issue_number=$3,github_issue_url=$4,issue_number=null,issue_url=null
+       where id=$1`,
+      [mappingTaskId, mappingRepository, mappingIssueNumber, mappingIssueUrl],
+    );
+    mapping = await client.query(
+      "select * from public.resolve_github_issue_comment_webhook_tasks($1,$2)",
+      [mappingRepository, mappingIssueNumber],
+    );
+    if (mapping.rows.length !== 1 || mapping.rows[0]?.task_id !== mappingTaskId) {
+      throw new Error("Modern GitHub Issue mapping did not resolve through the shared compatibility contract.");
+    }
+
+    await client.query(
+      "update public.tasks set issue_number=$2 where id=$1",
+      [mappingTaskId, String(mappingIssueNumber + 1)],
+    );
+    mapping = await client.query(
+      "select * from public.resolve_github_issue_comment_webhook_tasks($1,$2)",
+      [mappingRepository, mappingIssueNumber],
+    );
+    if (mapping.rows.length !== 0) {
+      throw new Error("Conflicting GitHub Issue references unexpectedly resolved to a webhook task.");
+    }
+    await client.query(
+      "update public.tasks set issue_number=null where id=$1",
+      [mappingTaskId],
+    );
+
+    await client.query(
+      `insert into public.tasks (
+        id,project_id,parent_task_id,title,status,priority,task_type,score_relevant,
+        approval_status,github_repo,github_issue_number,github_issue_url
+      ) values ($1,$2,$3,$4,'Offen','P3','deliverable',false,'proposed',$5,$6,$7)`,
+      [
+        ambiguousTaskId,
+        source.project.id,
+        parentInitiativeId,
+        "Ambiguous GitHub comment webhook mapping verifier",
+        mappingRepository,
+        mappingIssueNumber,
+        mappingIssueUrl,
+      ],
+    );
+    mapping = await client.query(
+      "select * from public.resolve_github_issue_comment_webhook_tasks($1,$2)",
+      [mappingRepository, mappingIssueNumber],
+    );
+    if (mapping.rows.length !== 2) {
+      throw new Error("Ambiguous GitHub Issue mapping did not fail closed with two candidates.");
+    }
+    await client.query(
+      "update public.tasks set github_issue_number=$2,github_issue_url=$3 where id=$1",
+      [
+        ambiguousTaskId,
+        mappingIssueNumber - 1,
+        `https://github.com/${mappingRepository}/issues/${mappingIssueNumber - 1}`,
+      ],
+    );
+
+    const deletedCommentId = 9100000001;
+    const deletedVersion = "2026-08-14T12:40:00Z";
+    await client.query(
+      `insert into public.task_external_comments (
+        task_id,source,external_id,author_login,body,html_url,created_at,imported_at
+      ) values ($1,'github',$2,'old-author','Old snapshot',$3,$4,$4)`,
+      [
+        mappingTaskId,
+        String(deletedCommentId),
+        `${mappingIssueUrl}#issuecomment-${deletedCommentId}`,
+        "2026-08-14T12:30:00Z",
+      ],
+    );
+    await insertGitHubWebhookDelivery(client, {
+      deliveryId: "verify-comment-old-before-delete",
+      eventName: "issue_comment",
+      action: "edited",
+      issueNumber: mappingIssueNumber,
+      commentId: deletedCommentId,
+      commentNodeId: "IC_verifyOldBeforeDelete",
+      commentUpdatedAt: deletedVersion,
+      receivedAt: "2026-08-14T12:40:01Z",
+    });
+    await insertGitHubWebhookDelivery(client, {
+      deliveryId: "verify-comment-delete",
+      eventName: "issue_comment",
+      action: "deleted",
+      issueNumber: mappingIssueNumber,
+      commentId: deletedCommentId,
+      commentNodeId: "IC_verifyDelete",
+      commentUpdatedAt: deletedVersion,
+      receivedAt: "2026-08-14T12:40:02Z",
+    });
+    const oldDeleteRaceLock = randomUUID();
+    const deleteLock = randomUUID();
+    await client.query(
+      "select * from public.claim_github_issue_comment_webhook_delivery($1,$2::uuid,120)",
+      ["verify-comment-old-before-delete", oldDeleteRaceLock],
+    );
+    await client.query(
+      "select * from public.claim_github_issue_comment_webhook_delivery($1,$2::uuid,120)",
+      ["verify-comment-delete", deleteLock],
+    );
+    const deleteResult = await applyGitHubCommentProjection(client, {
+      deliveryId: "verify-comment-delete",
+      lockToken: deleteLock,
+      operation: "delete",
+      taskId: mappingTaskId,
+      commentUpdatedAt: deletedVersion,
+    });
+    const staleDeleteRaceResult = await applyGitHubCommentProjection(client, {
+      deliveryId: "verify-comment-old-before-delete",
+      lockToken: oldDeleteRaceLock,
+      operation: "upsert",
+      taskId: mappingTaskId,
+      commentUpdatedAt: deletedVersion,
+      authorLogin: "old-author",
+      body: "Resurrected stale snapshot",
+      htmlUrl: `${mappingIssueUrl}#issuecomment-${deletedCommentId}`,
+      createdAt: "2026-08-14T12:30:00Z",
+      importedAt: "2026-08-14T12:40:03Z",
+    });
+    const deletedProjection = await client.query(
+      "select body from public.task_external_comments where source='github' and external_id=$1",
+      [String(deletedCommentId)],
+    );
+    if (deleteResult !== "applied"
+      || staleDeleteRaceResult !== "stale"
+      || deletedProjection.rows.length !== 0) {
+      throw new Error("A stale GitHub comment snapshot resurrected a verified deletion.");
+    }
+
+    const editedCommentId = 9100000002;
+    const oldEditVersion = "2026-08-14T12:41:00Z";
+    const newEditVersion = "2026-08-14T12:42:00Z";
+    await insertGitHubWebhookDelivery(client, {
+      deliveryId: "verify-comment-old-edit",
+      eventName: "issue_comment",
+      action: "edited",
+      issueNumber: mappingIssueNumber,
+      commentId: editedCommentId,
+      commentNodeId: "IC_verifyOldEdit",
+      commentUpdatedAt: oldEditVersion,
+      receivedAt: "2026-08-14T12:41:01Z",
+    });
+    await insertGitHubWebhookDelivery(client, {
+      deliveryId: "verify-comment-new-edit",
+      eventName: "issue_comment",
+      action: "edited",
+      issueNumber: mappingIssueNumber,
+      commentId: editedCommentId,
+      commentNodeId: "IC_verifyNewEdit",
+      commentUpdatedAt: newEditVersion,
+      receivedAt: "2026-08-14T12:42:01Z",
+    });
+    const oldEditLock = randomUUID();
+    const newEditLock = randomUUID();
+    await client.query(
+      "select * from public.claim_github_issue_comment_webhook_delivery($1,$2::uuid,120)",
+      ["verify-comment-old-edit", oldEditLock],
+    );
+    await client.query(
+      "select * from public.claim_github_issue_comment_webhook_delivery($1,$2::uuid,120)",
+      ["verify-comment-new-edit", newEditLock],
+    );
+    const newEditResult = await applyGitHubCommentProjection(client, {
+      deliveryId: "verify-comment-new-edit",
+      lockToken: newEditLock,
+      operation: "upsert",
+      taskId: mappingTaskId,
+      commentUpdatedAt: newEditVersion,
+      authorLogin: "new-author",
+      body: "Newest snapshot",
+      htmlUrl: `${mappingIssueUrl}#issuecomment-${editedCommentId}`,
+      createdAt: "2026-08-14T12:30:00Z",
+      importedAt: "2026-08-14T12:42:02Z",
+    });
+    const oldEditResult = await applyGitHubCommentProjection(client, {
+      deliveryId: "verify-comment-old-edit",
+      lockToken: oldEditLock,
+      operation: "upsert",
+      taskId: mappingTaskId,
+      commentUpdatedAt: oldEditVersion,
+      authorLogin: "old-author",
+      body: "Older snapshot",
+      htmlUrl: `${mappingIssueUrl}#issuecomment-${editedCommentId}`,
+      createdAt: "2026-08-14T12:30:00Z",
+      importedAt: "2026-08-14T12:42:03Z",
+    });
+    const editedProjection = await client.query(
+      "select body from public.task_external_comments where source='github' and external_id=$1",
+      [String(editedCommentId)],
+    );
+    if (newEditResult !== "applied"
+      || oldEditResult !== "stale"
+      || editedProjection.rows[0]?.body !== "Newest snapshot") {
+      throw new Error("An older GitHub comment snapshot overwrote the newest edit.");
+    }
+
     await expectGitHubWebhookDeliveryConstraintViolation(client, "Incomplete Issue comment delivery", () => (
       insertGitHubWebhookDelivery(client, {
         deliveryId: "verify-comment-incomplete",
@@ -285,7 +677,7 @@ async function verifyGitHubWebhookDeliveryJournal(status) {
     ));
 
     await client.query("rollback");
-    console.log("GitHub webhook delivery journal metadata constraints verified.");
+    console.log("GitHub webhook delivery journal metadata, claim lifecycle, and RPC authorization verified.");
   } catch (error) {
     await client.query("rollback").catch(() => {});
     throw error;
@@ -883,7 +1275,7 @@ async function main() {
   const source = JSON.parse(readFileSync(seedSourcePath, "utf8"));
   await verifySeedConvergence(status, source);
   await verifyCanonicalPlanningPreferences(status);
-  await verifyGitHubWebhookDeliveryJournal(status);
+  await verifyGitHubWebhookDeliveryJournal(status, source);
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-bulk-sprint-assignment.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-move-transaction.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-relationship-transaction.mjs")], { cwd: root, stdio: "inherit" });

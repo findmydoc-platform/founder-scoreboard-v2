@@ -13,8 +13,15 @@ export function hasGitHubCommentMarker(body: string, commentId: number) {
   return new RegExp(`<!--\\s*${githubCommentMarker(commentId)}\\s*-->`).test(body);
 }
 
+export function githubCommentMarkerId(body: string) {
+  const match = body.match(/<!--\s*fmd-comment-id:(\d+)\s*-->/);
+  if (!match) return null;
+  const commentId = Number(match[1]);
+  return Number.isSafeInteger(commentId) && commentId > 0 ? commentId : null;
+}
+
 function hasAnyGitHubCommentMarker(body: string) {
-  return /<!--\s*fmd-comment-id:\d+\s*-->/.test(body);
+  return githubCommentMarkerId(body) !== null;
 }
 
 function normalizedCommentBody(value: string) {

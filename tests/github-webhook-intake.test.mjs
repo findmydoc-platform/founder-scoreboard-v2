@@ -238,13 +238,17 @@ test("delivery persistence distinguishes new, replayed, conflicting, and unavail
     ...base,
     store: { record: async () => "stored" },
   });
-  assert.deepEqual(stored, { kind: "accepted", duplicate: false });
+  assert.equal(stored.kind, "accepted");
+  assert.equal(stored.duplicate, false);
+  assert.equal(stored.delivery.deliveryId, "delivery-123");
 
   const duplicate = await webhook.acceptGitHubIssueWebhook({
     ...base,
     store: { record: async () => "duplicate" },
   });
-  assert.deepEqual(duplicate, { kind: "accepted", duplicate: true });
+  assert.equal(duplicate.kind, "accepted");
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(duplicate.delivery.deliveryId, "delivery-123");
 
   const conflict = await webhook.acceptGitHubIssueWebhook({
     ...base,
@@ -357,12 +361,18 @@ test("the Supabase store inserts normalized metadata and reconciles delivery-id 
 });
 
 test("the route rejects unsafe transport shapes and maps receipt outcomes", async () => {
-  let intakeResult = { kind: "accepted", duplicate: false };
+  const issueDelivery = { eventName: "issues", deliveryId: "delivery-route" };
+  const commentDelivery = { eventName: "issue_comment", deliveryId: "comment-delivery-route" };
+  let intakeResult = { kind: "accepted", duplicate: false, delivery: issueDelivery };
   let intakeArguments = null;
+  const afterCallbacks = [];
+  const processedDeliveryIds = [];
   const supabase = { serviceRole: true };
   const store = { record: async () => "stored" };
+  const projectionStore = { projection: true };
   const route = await loadTranspiledModule("src/app/api/github/webhooks/route.ts", {
     "next/server": {
+      after: (callback) => afterCallbacks.push(callback),
       NextResponse: {
         json: (body, init = {}) => ({
           body,
@@ -381,6 +391,16 @@ test("the route rejects unsafe transport shapes and maps receipt outcomes", asyn
         return store;
       },
       githubWebhookMaxPayloadBytes: 1024,
+    },
+    "@/lib/github-issue-comment-webhook": {
+      createSupabaseGitHubIssueCommentWebhookStore: (client) => {
+        assert.equal(client, supabase);
+        return projectionStore;
+      },
+      processGitHubIssueCommentWebhookDelivery: async ({ deliveryId, store: receivedStore }) => {
+        assert.equal(receivedStore, projectionStore);
+        processedDeliveryIds.push(deliveryId);
+      },
     },
     "@/lib/supabase-service-role": {
       getServerServiceRoleSupabase: () => supabase,
@@ -437,11 +457,15 @@ test("the route rejects unsafe transport shapes and maps receipt outcomes", asyn
     assert.deepEqual(response.body, { ok: true, accepted: true });
     assert.equal(Buffer.from(intakeArguments.rawBody).toString("utf8"), "{\"action\":\"edited\"}");
     assert.equal(intakeArguments.store, store);
+    assert.equal(afterCallbacks.length, 0);
 
-    intakeResult = { kind: "accepted", duplicate: true };
+    intakeResult = { kind: "accepted", duplicate: true, delivery: commentDelivery };
     response = await route.POST(request());
     assert.equal(response.status, 200);
     assert.equal(response.body.duplicate, true);
+    assert.equal(afterCallbacks.length, 1);
+    await afterCallbacks.shift()();
+    assert.deepEqual(processedDeliveryIds, ["comment-delivery-route"]);
 
     intakeResult = { kind: "ignored" };
     response = await route.POST(request());

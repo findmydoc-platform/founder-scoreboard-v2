@@ -15,6 +15,9 @@ test("github comment delivery recognizes its durable marker before posting", () 
   ], { commentId: 17, authorLogin: "original-author", body: "Original text" });
 
   assert.equal(policy.githubCommentMarker(17), "fmd-comment-id:17");
+  assert.equal(policy.githubCommentMarkerId("Changed text\n\n<!-- fmd-comment-id:17 -->"), 17);
+  assert.equal(policy.githubCommentMarkerId("<!-- fmd-comment-id:0 -->"), null);
+  assert.equal(policy.githubCommentMarkerId("No marker"), null);
   assert.equal(existing?.comment.id, 42);
   assert.equal(existing?.reason, "marker_reconciled");
 });
