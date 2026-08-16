@@ -1,4 +1,4 @@
 {
-  "classification": "visual-polish",
-  "reason": "Unifies the Founder Ops login branding and spacing without adding or materially expanding application functionality."
+  "classification": "bug-fix",
+  "reason": "Prevents mobile task detail tabs from freezing the locked detail panel without adding or expanding product functionality."
 }
