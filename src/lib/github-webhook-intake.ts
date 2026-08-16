@@ -8,6 +8,7 @@ export const githubWebhookMaxPayloadBytes = 2 * 1024 * 1024;
 
 const deliveryIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const signaturePattern = /^sha256=([0-9a-f]{64})$/i;
+const issueCommentActions = new Set(["created", "edited", "deleted"]);
 
 type JsonObject = Record<string, unknown>;
 
@@ -19,7 +20,7 @@ export type GitHubWebhookHeaders = {
 
 export type GitHubWebhookDeliveryRecord = {
   deliveryId: string;
-  eventName: "issues";
+  eventName: "issues" | "issue_comment";
   action: string;
   installationId: number;
   repositoryId: number;
@@ -28,6 +29,9 @@ export type GitHubWebhookDeliveryRecord = {
   issueNodeId: string;
   issueNumber: number;
   issueUpdatedAt: string;
+  commentId: number | null;
+  commentNodeId: string | null;
+  commentUpdatedAt: string | null;
   senderId: number | null;
   senderLogin: string | null;
   payloadSha256: string;
@@ -111,7 +115,9 @@ export function inspectGitHubIssueWebhook({
     return rejected(400, "github_webhook_invalid_headers", "GitHub webhook headers are invalid.");
   }
 
-  if (eventName !== "ping" && eventName !== "issues") return { kind: "ignored" };
+  if (eventName !== "ping" && eventName !== "issues" && eventName !== "issue_comment") {
+    return { kind: "ignored" };
+  }
 
   let payload: unknown;
   try {
@@ -128,6 +134,7 @@ export function inspectGitHubIssueWebhook({
   const installation = isJsonObject(payload.installation) ? payload.installation : null;
   const repository = isJsonObject(payload.repository) ? payload.repository : null;
   const issue = isJsonObject(payload.issue) ? payload.issue : null;
+  const comment = isJsonObject(payload.comment) ? payload.comment : null;
   const sender = isJsonObject(payload.sender) ? payload.sender : null;
   const installationId = positiveSafeInteger(installation?.id);
   const repositoryId = positiveSafeInteger(repository?.id);
@@ -158,14 +165,28 @@ export function inspectGitHubIssueWebhook({
     return rejected(403, "github_webhook_wrong_repository", "GitHub webhook repository is not allowed.");
   }
   if (Object.prototype.hasOwnProperty.call(issue, "pull_request")) {
+    if (eventName === "issue_comment") return { kind: "ignored" };
     return rejected(400, "github_webhook_not_issue", "GitHub webhook payload does not describe an Issue.");
+  }
+
+  let commentId: number | null = null;
+  let commentNodeId: string | null = null;
+  let commentUpdatedAt: string | null = null;
+  if (eventName === "issue_comment") {
+    if (!issueCommentActions.has(action)) return { kind: "ignored" };
+    commentId = positiveSafeInteger(comment?.id);
+    commentNodeId = boundedText(comment?.node_id, 255);
+    commentUpdatedAt = validTimestamp(comment?.updated_at);
+    if (!commentId || !commentNodeId || !commentUpdatedAt) {
+      return rejected(400, "github_webhook_invalid_payload", "GitHub Issue comment webhook payload is incomplete.");
+    }
   }
 
   return {
     kind: "accepted",
     delivery: {
       deliveryId,
-      eventName: "issues",
+      eventName,
       action,
       installationId,
       repositoryId,
@@ -174,6 +195,9 @@ export function inspectGitHubIssueWebhook({
       issueNodeId,
       issueNumber,
       issueUpdatedAt,
+      commentId,
+      commentNodeId,
+      commentUpdatedAt,
       senderId,
       senderLogin,
       payloadSha256: createHash("sha256").update(rawBody).digest("hex"),
@@ -195,6 +219,9 @@ export function createSupabaseGitHubWebhookDeliveryStore(supabase: SupabaseClien
         issue_node_id: delivery.issueNodeId,
         issue_number: delivery.issueNumber,
         issue_updated_at: delivery.issueUpdatedAt,
+        comment_id: delivery.commentId,
+        comment_node_id: delivery.commentNodeId,
+        comment_updated_at: delivery.commentUpdatedAt,
         sender_id: delivery.senderId,
         sender_login: delivery.senderLogin,
         payload_sha256: delivery.payloadSha256,

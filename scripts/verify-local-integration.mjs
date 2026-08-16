@@ -179,6 +179,121 @@ async function verifyCanonicalPlanningPreferences(status) {
   }
 }
 
+async function insertGitHubWebhookDelivery(client, {
+  deliveryId,
+  eventName,
+  commentId = null,
+  commentNodeId = null,
+  commentUpdatedAt = null,
+}) {
+  await client.query(
+    `insert into public.github_webhook_deliveries (
+      delivery_id,
+      event_name,
+      action,
+      installation_id,
+      repository_id,
+      repository_full_name,
+      issue_id,
+      issue_node_id,
+      issue_number,
+      issue_updated_at,
+      comment_id,
+      comment_node_id,
+      comment_updated_at,
+      payload_sha256
+    ) values ($1,$2,'created',42,101,'findmydoc-platform/management',202,'I_kwDOExample',17,$3,$4,$5,$6,$7)`,
+    [
+      deliveryId,
+      eventName,
+      "2026-08-14T12:30:00Z",
+      commentId,
+      commentNodeId,
+      commentUpdatedAt,
+      "a".repeat(64),
+    ],
+  );
+}
+
+async function expectGitHubWebhookDeliveryConstraintViolation(client, label, insert) {
+  await client.query("savepoint github_webhook_delivery_constraint");
+  let rejected = false;
+  try {
+    await insert();
+  } catch (error) {
+    if (error?.code !== "23514") throw error;
+    rejected = true;
+  } finally {
+    await client.query("rollback to savepoint github_webhook_delivery_constraint");
+  }
+  if (!rejected) throw new Error(`${label} unexpectedly bypassed the webhook delivery constraint.`);
+}
+
+async function verifyGitHubWebhookDeliveryJournal(status) {
+  const client = new pg.Client({ connectionString: status.DB_URL });
+  await client.connect();
+  try {
+    await client.query("begin");
+
+    const columns = await client.query(
+      `select column_name
+       from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'github_webhook_deliveries'
+         and column_name like 'comment\\_%' escape '\\'
+       order by column_name`,
+    );
+    const commentColumns = columns.rows.map((row) => row.column_name);
+    const expectedCommentColumns = ["comment_id", "comment_node_id", "comment_updated_at"];
+    if (JSON.stringify(commentColumns) !== JSON.stringify(expectedCommentColumns)) {
+      throw new Error(`GitHub webhook delivery comment columns changed: ${commentColumns.join(", ")}.`);
+    }
+
+    await insertGitHubWebhookDelivery(client, {
+      deliveryId: "verify-comment-valid",
+      eventName: "issue_comment",
+      commentId: 404,
+      commentNodeId: "IC_kwDOExample",
+      commentUpdatedAt: "2026-08-14T12:31:00Z",
+    });
+    const stored = await client.query(
+      `select
+        comment_id = 404 as id_matches,
+        comment_node_id = 'IC_kwDOExample' as node_id_matches,
+        comment_updated_at = '2026-08-14T12:31:00Z'::timestamptz as timestamp_matches
+       from public.github_webhook_deliveries
+       where delivery_id = 'verify-comment-valid'`,
+    );
+    if (!stored.rows[0]?.id_matches || !stored.rows[0]?.node_id_matches || !stored.rows[0]?.timestamp_matches) {
+      throw new Error("Valid GitHub Issue comment delivery metadata did not persist exactly.");
+    }
+
+    await expectGitHubWebhookDeliveryConstraintViolation(client, "Incomplete Issue comment delivery", () => (
+      insertGitHubWebhookDelivery(client, {
+        deliveryId: "verify-comment-incomplete",
+        eventName: "issue_comment",
+      })
+    ));
+    await expectGitHubWebhookDeliveryConstraintViolation(client, "Issue delivery with comment metadata", () => (
+      insertGitHubWebhookDelivery(client, {
+        deliveryId: "verify-issue-with-comment",
+        eventName: "issues",
+        commentId: 405,
+        commentNodeId: "IC_kwDOUnexpected",
+        commentUpdatedAt: "2026-08-14T12:32:00Z",
+      })
+    ));
+
+    await client.query("rollback");
+    console.log("GitHub webhook delivery journal metadata constraints verified.");
+  } catch (error) {
+    await client.query("rollback").catch(() => {});
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
 async function verifyGitHubProjectRoleBoundary(status, source) {
   const client = new pg.Client({ connectionString: status.DB_URL });
   await client.connect();
@@ -768,6 +883,7 @@ async function main() {
   const source = JSON.parse(readFileSync(seedSourcePath, "utf8"));
   await verifySeedConvergence(status, source);
   await verifyCanonicalPlanningPreferences(status);
+  await verifyGitHubWebhookDeliveryJournal(status);
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-bulk-sprint-assignment.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-move-transaction.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-relationship-transaction.mjs")], { cwd: root, stdio: "inherit" });
