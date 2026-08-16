@@ -5,6 +5,7 @@ import { serviceRoleOnlyTablePrivileges } from "../scripts/lib/database-security
 import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 
 const migrationPath = "supabase/migrations/20260814180126_github_issue_webhook_delivery_journal.sql";
+const commentMigrationPath = "supabase/migrations/20260816104243_github_issue_comment_webhook.sql";
 
 test("the webhook migration creates a service-role-only delivery journal", async () => {
   const [migration, schemaContract] = await Promise.all([
@@ -40,7 +41,25 @@ test("the webhook migration creates a service-role-only delivery journal", async
   ]);
 });
 
-test("runtime configuration and operations docs expose the Issue-only intake boundary", async () => {
+test("the comment webhook migration adds metadata without storing comment content", async () => {
+  const [migration, schemaContract] = await Promise.all([
+    readFile(commentMigrationPath, "utf8"),
+    readSupabaseSchemaContract(),
+  ]);
+
+  assert.match(migration, /add column if not exists comment_id bigint/i);
+  assert.match(migration, /add column if not exists comment_node_id text/i);
+  assert.match(migration, /add column if not exists comment_updated_at timestamptz/i);
+  assert.match(migration, /event_name = 'issue_comment'/i);
+  assert.match(migration, /comment_id > 0/i);
+  assert.match(migration, /github_webhook_deliveries_comment_idx/i);
+  assert.doesNotMatch(migration, /comment_(?:body|payload)/i);
+  assert.match(schemaContract, /comment_id bigint/);
+  assert.match(schemaContract, /comment_node_id text/);
+  assert.match(schemaContract, /comment_updated_at timestamptz/);
+});
+
+test("runtime configuration and operations docs expose the Issue and comment intake boundary", async () => {
   const [envExample, deployment, idempotency, intakeDoc, schemaChecks, verifier] = await Promise.all([
     readFile(".env.example", "utf8"),
     readFile("docs/vercel-deployment.md", "utf8"),
@@ -52,13 +71,15 @@ test("runtime configuration and operations docs expose the Issue-only intake bou
 
   assert.match(envExample, /^GITHUB_APP_WEBHOOK_SECRET=$/m);
   assert.match(deployment, /\/api\/github\/webhooks/);
-  assert.match(deployment, /Issue events/i);
+  assert.match(deployment, /Issues and Issue comment events/i);
   assert.match(idempotency, /github-webhook-intake\.md/);
   assert.match(intakeDoc, /FounderOps remains the source of truth/i);
   assert.match(intakeDoc, /does not mutate planning items/i);
   assert.match(intakeDoc, /sub_issues/);
   assert.match(intakeDoc, /issue_dependencies/);
   assert.match(intakeDoc, /issue_comment/);
+  assert.match(intakeDoc, /never the comment body/i);
+  assert.match(intakeDoc, /pull-request conversation comments are ignored/i);
   assert.match(intakeDoc, /Recent deliveries/);
   assert.match(intakeDoc, /Redeliver/);
   assert.match(intakeDoc, /Preview must not receive the production webhook secret/);
@@ -71,6 +92,9 @@ test("runtime configuration and operations docs expose the Issue-only intake bou
   assert.equal(deliveryCheck.health, false);
   assert.match(deliveryCheck.select, /delivery_id/);
   assert.match(deliveryCheck.select, /payload_sha256/);
+  assert.match(deliveryCheck.select, /comment_id/);
+  assert.match(deliveryCheck.select, /comment_node_id/);
+  assert.match(deliveryCheck.select, /comment_updated_at/);
   assert.equal(deliveryCheck.select.split(",").includes("payload"), false);
   assert.match(verifier, /githubWebhookDeliveries: await count\("github_webhook_deliveries"\)/);
 });

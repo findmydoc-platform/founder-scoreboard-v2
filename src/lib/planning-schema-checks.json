@@ -20,7 +20,7 @@
   {
     "name": "github_webhook_deliveries",
     "table": "github_webhook_deliveries",
-    "select": "delivery_id,event_name,action,installation_id,repository_id,repository_full_name,issue_id,issue_node_id,issue_number,issue_updated_at,sender_id,sender_login,payload_sha256,status,processing_version,attempts,available_at,locked_at,lock_token,processed_at,last_error,received_at,updated_at",
+    "select": "delivery_id,event_name,action,installation_id,repository_id,repository_full_name,issue_id,issue_node_id,issue_number,issue_updated_at,comment_id,comment_node_id,comment_updated_at,sender_id,sender_login,payload_sha256,status,processing_version,attempts,available_at,locked_at,lock_token,processed_at,last_error,received_at,updated_at",
     "health": false
   },
   {

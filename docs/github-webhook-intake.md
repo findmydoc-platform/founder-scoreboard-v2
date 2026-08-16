@@ -1,6 +1,6 @@
-# GitHub Issue Webhook Intake
+# GitHub Issue and Comment Webhook Intake
 
-FounderOps remains the source of truth. The inbound endpoint introduced here is a transport and audit boundary: it verifies and durably journals GitHub Issue deliveries, but it does not mutate planning items or call the GitHub API.
+FounderOps remains the source of truth. The inbound endpoint introduced here is a transport and audit boundary: it verifies and durably journals GitHub Issue and Issue comment deliveries, but it does not mutate planning items or call the GitHub API.
 
 ## Active receipt contract
 
@@ -10,18 +10,18 @@ The endpoint performs these steps in order:
 
 1. Require the server-only webhook secret, expected GitHub App installation ID, and Supabase service-role client.
 2. Verify `X-Hub-Signature-256` against the exact raw request bytes before parsing JSON.
-3. Validate `X-GitHub-Delivery`, `X-GitHub-Event`, the installation ID, the repository allowlist, and the Issue identity.
+3. Validate `X-GitHub-Delivery`, `X-GitHub-Event`, the installation ID, the repository allowlist, and the Issue identity. Issue comment deliveries additionally require a stable comment identity and timestamp.
 4. Insert normalized trigger metadata and a hash of the verified raw payload into `github_webhook_deliveries` before returning success.
 5. Deduplicate retries by `X-GitHub-Delivery`; the same delivery ID with a different event or payload hash is a conflict.
 
-The journal deliberately does not copy Issue titles, bodies, labels, milestones, or the full webhook payload. The future processor must reload the current Issue from GitHub. The table is inaccessible to `public`, `anon`, and `authenticated`; the server-side `service_role` receives only `SELECT` and `INSERT`. Signatures and authorization headers are never stored.
+The journal deliberately does not copy Issue titles, bodies, labels, milestones, comment bodies, or the full webhook payload. The future processor must reload the current Issue or comment from GitHub. The table is inaccessible to `public`, `anon`, and `authenticated`; the server-side `service_role` receives only `SELECT` and `INSERT`. Signatures and authorization headers are never stored.
 
 Response behavior:
 
 | Condition | Response |
 | --- | --- |
 | Signed `ping` | `200` |
-| New verified Issue delivery persisted | `202` |
+| New verified Issue or Issue comment delivery persisted | `202` |
 | Exact replay already persisted | `200` |
 | Signed event outside the active scope | `204` |
 | Invalid signature, headers, payload, installation, or repository | `4xx` |
@@ -33,9 +33,9 @@ Response behavior:
 | --- | --- | --- | --- |
 | P0 | `ping` | Acknowledge, do not persist | Verifies webhook configuration without creating domain data. |
 | P0 | `issues` | Verify and persist every action name and stable identity | One event covers the main Issue lifecycle without storing content or introducing premature field mapping. |
+| P0 | `issue_comment` | Verify and persist `created`, `edited`, and `deleted` for Issue comments | Captures the conversation trigger without retaining comment text. Pull-request conversation comments are ignored. |
 | P1 | `sub_issues` | Ignore for now | Needed when GitHub owns the native parent-child hierarchy. Enable together with a relationship processor. |
 | P1 | `issue_dependencies` | Ignore for now | Needed when native blocked-by relationships become authoritative. Enable together with a relationship processor. |
-| P2 | `issue_comment` | Ignore for now | Requires an explicit author, visibility, content-retention, and write-back-loop policy before ingestion. |
 
 Every `issues` action is currently receipt-only. This includes:
 
@@ -44,6 +44,8 @@ Every `issues` action is currently receipt-only. This includes:
 - `milestoned`, `demilestoned`, `labeled`, and `unlabeled`.
 
 None of these actions currently changes FounderOps. Labels and milestones are not approved processor scope; they require a separate field-ownership decision before any inbound mapping. All other Issue actions remain journaled under the same receipt-only rule.
+
+Issue comment deliveries follow the same receipt-only boundary. The journal stores the stable comment ID, node ID, and observed `updated_at` timestamp, but never the comment body. GitHub emits `issue_comment` for both Issues and pull requests; deliveries whose Issue object contains `pull_request` are acknowledged without persistence.
 
 Separate milestone-definition, project, pull-request, release, and workflow events are outside this Issue-only intake. Issue milestone attachment and removal already arrive through `issues`.
 
@@ -80,7 +82,7 @@ Before GitHub becomes authoritative, add automated failed-delivery monitoring th
 2. Let the protected workflow apply the additive Supabase migration and deploy the application successfully.
 3. Add a platform firewall or rate-limit rule for `/api/github/webhooks` before enabling public delivery.
 4. Configure `https://founder-ops.findmydoc.eu/api/github/webhooks`, the same secret, JSON content type, and SSL verification in the GitHub App.
-5. Grant only the GitHub App repository permissions needed to read Issues, subscribe only to Issue events for this phase, and keep the installation restricted to approved repositories.
-6. Confirm the automatic `ping`, one controlled Issue edit, and an exact redelivery in the journal before relying on the intake operationally.
+5. Grant only the GitHub App repository permissions needed to read Issues, subscribe only to Issues and Issue comment events for this phase, and keep the installation restricted to approved repositories.
+6. Confirm the automatic `ping`, one controlled Issue edit, one controlled Issue comment, and an exact redelivery in the journal before relying on the intake operationally.
 
 Preview must not receive the production webhook secret. A preview webhook requires a separate GitHub App, endpoint, and secret.

@@ -42,6 +42,19 @@ function issuePayload(overrides = {}) {
   };
 }
 
+function commentPayload(overrides = {}) {
+  return issuePayload({
+    action: "created",
+    comment: {
+      id: 404,
+      node_id: "IC_kwDOExample",
+      body: "Comment content must not be persisted.",
+      updated_at: "2026-08-14T12:31:00Z",
+    },
+    ...overrides,
+  });
+}
+
 function signedEnvelope(body, {
   deliveryId = "delivery-123",
   eventName = "issues",
@@ -88,10 +101,45 @@ test("a signed Issue event is normalized around stable GitHub identities", () =>
     issueNodeId: "I_kwDOExample",
     issueNumber: 17,
     issueUpdatedAt: "2026-08-14T12:30:00Z",
+    commentId: null,
+    commentNodeId: null,
+    commentUpdatedAt: null,
     senderId: 303,
     senderLogin: "founder",
     payloadSha256: createHash("sha256").update(envelope.rawBody).digest("hex"),
   });
+});
+
+test("a signed Issue comment event stores stable identities without comment content", () => {
+  const payload = commentPayload();
+  const envelope = signedEnvelope(payload, { eventName: "issue_comment" });
+  const result = webhook.inspectGitHubIssueWebhook({
+    ...envelope,
+    webhookSecret,
+    expectedInstallationId,
+  });
+
+  assert.equal(result.kind, "accepted");
+  assert.deepEqual(result.delivery, {
+    deliveryId: "delivery-123",
+    eventName: "issue_comment",
+    action: "created",
+    installationId: 42,
+    repositoryId: 101,
+    repositoryFullName: "findmydoc-platform/management",
+    issueId: 202,
+    issueNodeId: "I_kwDOExample",
+    issueNumber: 17,
+    issueUpdatedAt: "2026-08-14T12:30:00Z",
+    commentId: 404,
+    commentNodeId: "IC_kwDOExample",
+    commentUpdatedAt: "2026-08-14T12:31:00Z",
+    senderId: 303,
+    senderLogin: "founder",
+    payloadSha256: createHash("sha256").update(envelope.rawBody).digest("hex"),
+  });
+  assert.equal(Object.hasOwn(result.delivery, "body"), false);
+  assert.equal(Object.hasOwn(result.delivery, "commentBody"), false);
 });
 
 test("signature verification happens before payload parsing", () => {
@@ -139,6 +187,43 @@ test("the installation, repository, and Issue shape are fail-closed", () => {
   assert.equal(wrongResource.kind, "rejected");
   assert.equal(wrongResource.status, 400);
   assert.equal(wrongResource.code, "github_webhook_not_issue");
+});
+
+test("Issue comment intake ignores pull-request comments and unknown actions", () => {
+  const pullRequestComment = commentPayload();
+  pullRequestComment.issue.pull_request = { url: "https://api.github.com/repos/example/pulls/17" };
+  assert.deepEqual(inspect(pullRequestComment, { eventName: "issue_comment" }), { kind: "ignored" });
+
+  assert.deepEqual(
+    inspect(commentPayload({ action: "pinned" }), { eventName: "issue_comment" }),
+    { kind: "ignored" },
+  );
+});
+
+test("Issue comment intake accepts every documented action", () => {
+  for (const action of ["created", "edited", "deleted"]) {
+    const result = inspect(commentPayload({ action }), { eventName: "issue_comment" });
+    assert.equal(result.kind, "accepted");
+    assert.equal(result.delivery.action, action);
+    assert.equal(result.delivery.eventName, "issue_comment");
+  }
+});
+
+test("Issue comment intake rejects incomplete comment identities", () => {
+  const missingComment = commentPayload();
+  delete missingComment.comment;
+  const missing = inspect(missingComment, { eventName: "issue_comment" });
+  assert.equal(missing.kind, "rejected");
+  assert.equal(missing.status, 400);
+  assert.equal(missing.code, "github_webhook_invalid_payload");
+
+  const invalidTimestamp = commentPayload({
+    comment: { id: 404, node_id: "IC_kwDOExample", updated_at: "not-a-date" },
+  });
+  const invalid = inspect(invalidTimestamp, { eventName: "issue_comment" });
+  assert.equal(invalid.kind, "rejected");
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.code, "github_webhook_invalid_payload");
 });
 
 test("delivery persistence distinguishes new, replayed, conflicting, and unavailable receipts", async () => {
@@ -227,6 +312,20 @@ test("the Supabase store inserts normalized metadata and reconciles delivery-id 
   assert.equal(Object.hasOwn(newDelivery.state.inserted, "title"), false);
   assert.equal(Object.hasOwn(newDelivery.state.inserted, "body"), false);
   assert.equal(Object.hasOwn(newDelivery.state.inserted, "signature"), false);
+  assert.equal(newDelivery.state.inserted.comment_id, null);
+  assert.equal(newDelivery.state.inserted.comment_node_id, null);
+  assert.equal(newDelivery.state.inserted.comment_updated_at, null);
+
+  const acceptedComment = inspect(commentPayload(), { eventName: "issue_comment" });
+  assert.equal(acceptedComment.kind, "accepted");
+  const commentDelivery = supabaseFixture();
+  const commentStore = webhook.createSupabaseGitHubWebhookDeliveryStore(commentDelivery.client);
+  assert.equal(await commentStore.record(acceptedComment.delivery), "stored");
+  assert.equal(commentDelivery.state.inserted.comment_id, 404);
+  assert.equal(commentDelivery.state.inserted.comment_node_id, "IC_kwDOExample");
+  assert.equal(commentDelivery.state.inserted.comment_updated_at, "2026-08-14T12:31:00Z");
+  assert.equal(Object.hasOwn(commentDelivery.state.inserted, "comment"), false);
+  assert.equal(Object.hasOwn(commentDelivery.state.inserted, "comment_body"), false);
 
   const duplicateDelivery = supabaseFixture({
     insertError: { code: "23505" },
