@@ -50,7 +50,7 @@ export type GitHubWebhookInspection =
   | { kind: "rejected"; status: 400 | 401 | 403 | 409 | 503; code: string; message: string };
 
 export type GitHubWebhookIntakeResult =
-  | { kind: "accepted"; duplicate: boolean }
+  | { kind: "accepted"; duplicate: boolean; delivery: GitHubWebhookDeliveryRecord }
   | Exclude<GitHubWebhookInspection, { kind: "accepted" }>;
 
 function rejected(
@@ -269,7 +269,11 @@ export async function acceptGitHubIssueWebhook({
     if (recorded === "conflict") {
       return rejected(409, "github_webhook_delivery_conflict", "GitHub webhook delivery identity conflicts with stored data.");
     }
-    return { kind: "accepted", duplicate: recorded === "duplicate" };
+    return {
+      kind: "accepted",
+      duplicate: recorded === "duplicate",
+      delivery: inspection.delivery,
+    };
   } catch {
     return rejected(503, "github_webhook_storage_unavailable", "GitHub webhook delivery could not be stored.");
   }
