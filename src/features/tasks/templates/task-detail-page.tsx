@@ -2,7 +2,7 @@
 
 import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { usePlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
@@ -48,8 +48,9 @@ export function TaskDetailPage({
   const router = useRouter();
   const [overviewDirty, setOverviewDirty] = useState(false);
   const discardGuard = useTaskDiscardGuard(overviewDirty);
+  const initialData = useMemo(() => taskDetailModelToPlanningShellState(initialModel), [initialModel]);
   const controller = usePlanningAppController({
-    initialData: taskDetailModelToPlanningShellState(initialModel),
+    initialData,
     initialHeaderData: headerData,
     initialWorkspace: "planning",
     source,
