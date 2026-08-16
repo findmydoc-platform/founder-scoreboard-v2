@@ -72,6 +72,7 @@ export function TaskDetailTabs({
   const renderedTabsKey = renderedTabs.join(":");
   const resolvedValue = resolveTaskDetailTab(value, renderedTabs);
   const tabRefs = useRef<Partial<Record<TaskDetailTabId, HTMLButtonElement | null>>>({});
+  const tabListRef = useRef<HTMLDivElement | null>(null);
   const announcementRef = useRef<HTMLDivElement | null>(null);
   const [rovingState, setRovingState] = useState(() => ({
     value: resolvedValue,
@@ -88,8 +89,7 @@ export function TaskDetailTabs({
     window.requestAnimationFrame(() => {
       if (announcementRef.current) announcementRef.current.textContent = "Übersicht geöffnet.";
       const tab = tabRefs.current[resolvedValue];
-      tab?.focus();
-      tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      tab?.focus({ preventScroll: true });
     });
   }, [onValueChange, renderedTabsKey, resolvedValue, value]);
 
@@ -97,11 +97,29 @@ export function TaskDetailTabs({
     setRovingState({ value: resolvedValue, focusedValue: nextValue });
   };
 
+  const scrollTabListTo = (tab: HTMLButtonElement | null | undefined) => {
+    const tabList = tabListRef.current;
+    if (!tab || !tabList) return;
+
+    const tabStart = tab.getBoundingClientRect().left
+      - tabList.getBoundingClientRect().left
+      + tabList.scrollLeft;
+    const tabEnd = tabStart + tab.offsetWidth;
+    const visibleStart = tabList.scrollLeft;
+    const visibleEnd = visibleStart + tabList.clientWidth;
+
+    if (tabStart < visibleStart) {
+      tabList.scrollTo({ left: tabStart, behavior: "auto" });
+    } else if (tabEnd > visibleEnd) {
+      tabList.scrollTo({ left: tabEnd - tabList.clientWidth, behavior: "auto" });
+    }
+  };
+
   const focusTab = (nextValue: TaskDetailTabId) => {
     setFocusedValue(nextValue);
     const tab = tabRefs.current[nextValue];
-    tab?.focus();
-    tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    tab?.focus({ preventScroll: true });
+    scrollTabListTo(tab);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentValue: TaskDetailTabId) => {
@@ -146,6 +164,7 @@ export function TaskDetailTabs({
   return (
     <div className={classNames("min-w-0", className)}>
       <div
+        ref={tabListRef}
         role="tablist"
         aria-label={ariaLabel}
         aria-orientation="horizontal"
@@ -186,9 +205,8 @@ export function TaskDetailTabs({
                   ? "border-blue-600 text-blue-700"
                   : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-950",
               )}
-              onFocus={(event) => {
+              onFocus={() => {
                 setFocusedValue(tabValue);
-                event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
               }}
               onClick={() => {
                 if (!active) onValueChange(tabValue);
