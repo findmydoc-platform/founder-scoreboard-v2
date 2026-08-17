@@ -1,12 +1,12 @@
 "use client";
 
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Code2, Download, ExternalLink } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Code2, Download, ExternalLink, MinusCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { platformReleaseRequest } from "../model/platform-release-api";
 import { platformReleaseReferenceUrl } from "../model/platform-release-manifest";
-import { formatReleaseDate, highlightedChanges, type PlatformReleasePlanningLink, type PlatformReleaseRecord } from "../model/platform-release-model";
+import { formatReleaseDate, highlightedChanges, releaseKindLabel, type PlatformReleasePlanningLink, type PlatformReleaseRecord } from "../model/platform-release-model";
 import { taskDetailHrefWithReturnTo } from "@/features/tasks/model/task-detail-return-navigation";
 
 type Props = {
@@ -131,12 +131,12 @@ function TechnicalDetails({ release }: { release: PlatformReleaseRecord }) {
       <section>
         <h4 className="text-[11px] font-bold uppercase tracking-[0.08em] text-blue-700">Deployment-Nachweise</h4>
         <div className="mt-2 divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200">
-          {release.manifest.components.map((component) => <div key={component.key} className="grid gap-2 px-3 py-2.5 text-xs sm:grid-cols-[105px_95px_minmax(0,1fr)_auto] sm:items-center"><span className="font-semibold text-blue-700">{component.displayName}</span><span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700"><CheckCircle2 size={14} />Erfolgreich</span><span className="font-mono text-slate-500">Ziel-SHA {component.targetSha.slice(0, 7)}</span><ExternalAnchor href={platformReleaseReferenceUrl(component.deploymentRun)} className="font-semibold">Run öffnen</ExternalAnchor></div>)}
+          {release.manifest.components.map((component) => <div key={component.key} className="grid gap-2 px-3 py-2.5 text-xs sm:grid-cols-[105px_180px_minmax(0,1fr)_auto] sm:items-center"><span className="font-semibold text-blue-700">{component.displayName}</span>{component.deploymentRun ? <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700"><CheckCircle2 size={14} />Nachweis verfügbar</span> : <span className="inline-flex items-center gap-1.5 font-semibold text-slate-500"><MinusCircle size={14} />Kein Nachweis verfügbar</span>}<span className="font-mono text-slate-500">Ziel-SHA {component.targetSha.slice(0, 7)}</span>{component.deploymentRun ? <ExternalAnchor href={platformReleaseReferenceUrl(component.deploymentRun)} className="font-semibold">Run öffnen</ExternalAnchor> : <span />}</div>)}
         </div>
       </section>
 
       <button type="button" onClick={downloadManifest} className="flex w-full items-center justify-between gap-4 rounded-lg border border-slate-200 px-3 py-3 text-left text-sm font-semibold text-blue-700 hover:bg-blue-50">
-        <span className="inline-flex items-center gap-2"><Download size={16} />Manifest v2 herunterladen</span>
+        <span className="inline-flex items-center gap-2"><Download size={16} />Manifest v{release.manifest.schemaVersion} herunterladen</span>
         <span className="min-w-0 truncate font-mono text-xs font-normal text-slate-500">Digest&nbsp; sha256:{release.manifestDigest.slice(0, 16)}…</span>
       </button>
     </div>
@@ -150,13 +150,13 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
   const nonHighlights = release.manifest.changes.filter((change) => !release.manifest.highlights.includes(change.id));
 
   useEffect(() => {
-    if (release.seenAt) return;
+    if (release.seenAt || !release.notificationId) return;
     void platformReleaseRequest(`/api/team/platform-releases/v1/releases/${encodeURIComponent(release.version)}/seen`, { method: "POST" }).catch(() => undefined);
-  }, [release.seenAt, release.version]);
+  }, [release.notificationId, release.seenAt, release.version]);
 
   return (
     <div className="mx-auto max-w-[1190px] px-4 py-6 sm:px-8 lg:py-8">
-      <Link href="/team/platform-releases" className="hidden items-center gap-2 text-sm font-semibold text-blue-700 hover:underline sm:inline-flex"><ArrowLeft size={16} aria-hidden="true" />Zurück zu Plattform-Releases</Link>
+      <Link href="/team/platform-releases" className="hidden items-center gap-2 text-sm font-semibold text-blue-700 hover:underline sm:inline-flex"><ArrowLeft size={16} aria-hidden="true" />Zurück zu Releases</Link>
       <div className="mt-7 grid gap-10 lg:grid-cols-[215px_minmax(0,1fr)]">
         <aside className="hidden border-r border-slate-200 pr-6 lg:block">
           <div className="text-xs font-medium text-slate-500">Version</div>
@@ -173,7 +173,7 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
         <article className="min-w-0">
           <header className="border-b border-slate-200 pb-8">
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-blue-700">
-              <span>Plattform-Release {release.version}</span><span className="text-slate-400">•</span><span className="normal-case tracking-normal text-slate-500">{formatReleaseDate(release.publishedAt)}</span>
+              <span>{releaseKindLabel(release)} {release.version}</span><span className="text-slate-400">•</span><span className="normal-case tracking-normal text-slate-500">{formatReleaseDate(release.publishedAt)}</span>
             </div>
             <h1 className="mt-3 max-w-3xl text-[24px] font-semibold leading-[1.18] tracking-tight text-slate-950 sm:text-4xl sm:leading-tight">{release.summary}</h1>
             <ul className="mt-5 space-y-2 text-sm leading-6 text-slate-600">

@@ -196,7 +196,51 @@ function localPlatformReleaseManifests() {
     localPlatformReleaseManifest("v0.50.0", "2026-07-09T07:45:00.000Z", "Die Terminsuche reagiert schneller und verständlicher.", ["Schnellere Terminsuche", "Verständlichere Fehlermeldungen"]),
     localPlatformReleaseManifest("v0.49.0", "2026-06-18T11:00:00.000Z", "Patient:innen erkennen passende Praxen auf einen Blick.", ["Bessere Praxisübersicht", "Klarere Kontaktdaten"]),
     localPlatformReleaseManifest("v0.48.0", "2026-06-04T10:15:00.000Z", "Clinic-Teams verwalten Standorte zuverlässiger.", ["Zuverlässigere Standortverwaltung", "Verbesserte Teamansicht"]),
+    localApplicationReleaseManifest(),
   ];
+}
+
+function localApplicationReleaseManifest() {
+  const version = "v0.45.0";
+  const targetSha = "c1d2e3f";
+  const planDigest = createHash("sha256").update(`plan:${version}`).digest("hex");
+  const contentDigest = createHash("sha256").update(`content:${version}`).digest("hex");
+  const unsigned = {
+    schemaVersion: 3,
+    releaseMode: "application",
+    notificationMode: "silent",
+    source: { kind: "github-release-import", importedAt: "2026-08-17T10:00:00.000Z" },
+    version,
+    summary: "Die Website bündelt eine klarere Suche und verlässlichere Klinikprofile.",
+    highlights: ["website-search"],
+    changes: [{
+      id: "website-search",
+      kind: "feature",
+      componentKeys: ["website"],
+      pullRequests: [{ repository: "findmydoc-platform/website", number: 1600 }],
+      commitShas: [targetSha],
+      title: "Klarere Website-Suche",
+      summary: "Patient:innen erkennen passende Kliniken schneller und erhalten verlässlichere Profildaten.",
+      visualUrls: [],
+    }],
+    components: [{
+      key: "website",
+      displayName: "Website",
+      productionUrl: "https://findmydoc.eu",
+      repository: "findmydoc-platform/website",
+      targetSha,
+      release: `https://github.com/findmydoc-platform/website/releases/tag/${version}`,
+      deploymentRun: null,
+      commits: [{ bump: "minor", message: "feat: improve search", sha: targetSha, url: `https://github.com/findmydoc-platform/website/commit/${targetSha}` }],
+      pullRequests: [{ number: 1600, repository: "findmydoc-platform/website", title: "feat: improve search", url: "https://github.com/findmydoc-platform/website/pull/1600", commitShas: [targetSha], issues: [] }],
+    }],
+    visuals: [],
+    planDigest,
+    contentDigest,
+    publishedAt: "2026-05-20T10:00:00.000Z",
+  };
+  const canonical = `${JSON.stringify(stableJsonValue(unsigned), null, 2)}\n`;
+  return { ...unsigned, manifestDigest: createHash("sha256").update(canonical).digest("hex") };
 }
 
 function canonicalSeedEpics(source) {

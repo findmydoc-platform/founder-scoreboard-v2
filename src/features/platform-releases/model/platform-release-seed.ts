@@ -1,4 +1,4 @@
-import type { PlatformReleaseManifestV2 } from "./platform-release-manifest";
+import type { PlatformReleaseManifestV2, PlatformReleaseManifestV3 } from "./platform-release-manifest";
 import type { PlatformReleaseRecord } from "./platform-release-model";
 
 const digest = "7f3c9b2a8d4e6f105b7c9d1e3f5a7b9c2d4e6f80123456789abcdef012345678";
@@ -77,6 +77,54 @@ function titleSafe(value: string) {
   return value.slice(0, 120);
 }
 
+function applicationRelease(): PlatformReleaseRecord {
+  const manifest: PlatformReleaseManifestV3 = {
+    schemaVersion: 3,
+    releaseMode: "application",
+    notificationMode: "silent",
+    source: { kind: "github-release-import", importedAt: "2026-08-17T10:00:00.000Z" },
+    version: "v0.45.0",
+    summary: "Die Website bündelt eine klarere Suche und verlässlichere Klinikprofile.",
+    highlights: ["website-search"],
+    changes: [{
+      id: "website-search",
+      kind: "feature",
+      componentKeys: ["website"],
+      pullRequests: [{ repository: "findmydoc-platform/website", number: 1600 }],
+      commitShas: ["c1d2e3f"],
+      title: "Klarere Website-Suche",
+      summary: "Patient:innen erkennen passende Kliniken schneller und erhalten verlässlichere Profildaten.",
+      visualUrls: [],
+    }],
+    components: [{
+      key: "website",
+      displayName: "Website",
+      productionUrl: "https://findmydoc.eu",
+      repository: "findmydoc-platform/website",
+      targetSha: "c1d2e3f",
+      release: "https://github.com/findmydoc-platform/website/releases/tag/v0.45.0",
+      deploymentRun: null,
+      commits: [{ bump: "minor", message: "feat: improve search", sha: "c1d2e3f", url: "https://github.com/findmydoc-platform/website/commit/c1d2e3f" }],
+      pullRequests: [{ number: 1600, repository: "findmydoc-platform/website", title: "feat: improve search", url: "https://github.com/findmydoc-platform/website/pull/1600", commitShas: ["c1d2e3f"], issues: [] }],
+    }],
+    visuals: [],
+    planDigest: digest,
+    contentDigest: digest,
+    manifestDigest: digest,
+    publishedAt: "2026-05-20T10:00:00.000Z",
+  };
+  return {
+    version: manifest.version,
+    summary: manifest.summary,
+    publishedAt: manifest.publishedAt,
+    manifestDigest: manifest.manifestDigest,
+    manifest,
+    planningReferences: [],
+    notificationId: null,
+    seenAt: manifest.publishedAt,
+  };
+}
+
 export const platformReleaseSeed: PlatformReleaseRecord[] = [
   release("v1.0.0", "2026-09-03T08:30:00.000Z", "findmydoc bringt Suche und Praxissteuerung in einer stabilen Hauptversion zusammen.", ["Gemeinsame Plattformbasis", "Verlässliche Release-Nachweise"], true),
   release("v0.52.0", "2026-08-11T08:24:00.000Z", "Patient:innen finden schneller passende Arzttermine.", ["Relevantere Ergebnisse für Patient:innen", "Fuzzy- und Synonym-Suche", "Neue Optionen für Entfernung und Sprechzeiten", "Kürzere Wege durch präzisere Berechnung", "Bessere Übersicht in den Ergebnissen", "Stabiler und schneller"]),
@@ -84,4 +132,5 @@ export const platformReleaseSeed: PlatformReleaseRecord[] = [
   release("v0.50.0", "2026-07-09T07:45:00.000Z", "Die Terminsuche reagiert schneller und verständlicher.", ["Schnellere Terminsuche", "Verständlichere Fehlermeldungen"]),
   release("v0.49.0", "2026-06-18T11:00:00.000Z", "Patient:innen erkennen passende Praxen auf einen Blick.", ["Bessere Praxisübersicht", "Klarere Kontaktdaten"]),
   release("v0.48.0", "2026-06-04T10:15:00.000Z", "Clinic-Teams verwalten Standorte zuverlässiger.", ["Zuverlässigere Standortverwaltung", "Verbesserte Teamansicht"]),
+  applicationRelease(),
 ];

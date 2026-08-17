@@ -42,12 +42,12 @@
       {
         "id": "platform-releases-overview",
         "title": "Auslieferungen verständlich nachvollziehen",
-        "description": "Der aktuelle Plattform-Release steht dauerhaft im Menü. Im Archiv findest du frühere Auslieferungen; Details, Pull Requests, Commits und Deployment-Nachweise lassen sich schrittweise öffnen.",
+        "description": "Der aktuelle Release steht dauerhaft im Menü. Im Archiv findest du frühere Auslieferungen; Details, Pull Requests, Commits und Deployment-Nachweise lassen sich schrittweise öffnen.",
         "image": {
           "src": "/product-updates/2026-08-14-platform-releases/platform-releases.jpg",
-          "alt": "FounderOps mit dem Archiv der Plattform-Releases und dem aktuellen Release im Seitenmenü",
-          "width": 1672,
-          "height": 941
+          "alt": "FounderOps mit dem Release-Archiv und dem aktuellen Release im Seitenmenü",
+            "width": 1200,
+            "height": 919
         }
       }
     ]

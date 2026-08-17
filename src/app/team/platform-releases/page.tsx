@@ -11,7 +11,7 @@ import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 import { requiresSupabaseAuth } from "@/lib/supabase";
 
-export const metadata: Metadata = { title: "Plattform-Releases · findmydoc Planning" };
+export const metadata: Metadata = { title: "Releases · findmydoc Planning" };
 export const dynamic = "force-dynamic";
 
 export default async function PlatformReleasesPage() {
