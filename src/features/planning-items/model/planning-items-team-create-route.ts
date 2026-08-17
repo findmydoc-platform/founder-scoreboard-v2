@@ -39,8 +39,8 @@ export async function handleTeamPlanningItemsCreatePreview(
       }
       const actor = actorContextFromPlanningTokenAuth(permission);
       if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
-      let items: readonly { errors: readonly string[] }[] = [];
-      await createTeamCreatePlanningItems({
+      let items: readonly { errors: readonly string[] }[] | undefined;
+      const result = await createTeamCreatePlanningItems({
         supabase: permission.supabase,
         actor: actor.actor,
         tokenId: permission.tokenId,
@@ -52,6 +52,16 @@ export async function handleTeamPlanningItemsCreatePreview(
         mode: "preview",
         command: planningItemCreateCommand(parsed.items, actor.actor.profileId),
       });
+      if (!result.ok) {
+        const mapped = planningCreateError(result.error);
+        if (mapped.issues) {
+          return planningItemsJson({ ok: false, error: mapped.message, items }, mapped.status);
+        }
+        return planningItemsError(mapped.message, mapped.status);
+      }
+      if (!items) {
+        return planningItemsError("Planning-Items-Erstellung konnte nicht geprüft werden.", 500);
+      }
       return planningItemsJson({ ok: true, valid: items.every((item) => !item.errors.length), items });
     },
   );
