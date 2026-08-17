@@ -5,6 +5,7 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 async function loadCreate() {
   const contract = await loadTranspiledModule("src/features/planning-items/model/planning-items-contract.ts");
+  const reviewState = await loadTranspiledModule("src/features/reviews/model/task-review-state.ts");
   const normalization = await loadTranspiledModule(
     "src/features/planning-items/model/planning-item-normalization.ts",
     {
@@ -26,6 +27,7 @@ async function loadCreate() {
       "@/features/planning-items/model/planning-items-github-sync-preview": {
         previewPlanningItemGitHubSync: () => ({ status: "accepted" }),
       },
+      "@/features/reviews/model/task-review-state": reviewState,
     },
   );
 }

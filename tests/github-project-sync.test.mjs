@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
+const projectFieldContext = await loadTranspiledModule("src/lib/github-sync/project-field-context.ts");
+
 function projectValidationData(overrides = {}) {
   return {
     organization: {
@@ -154,6 +156,7 @@ async function loadProjectProjection(githubGraphql) {
         return { owner, repo, repository };
       },
     },
+    "./project-field-context": projectFieldContext,
   });
 }
 
@@ -189,6 +192,33 @@ test("existing Project membership is observed without mutation", async () => {
   const result = await project.projectTaskToFounderOpsGitHubProject(projectInput());
   assert.deepEqual(result, { changes: [], warnings: [] });
   assert.equal(mutations, 0);
+});
+
+test("archived Project membership is immediately restored", async () => {
+  const mutations = [];
+  const project = await loadProjectProjection(async ({ query, variables }) => {
+    if (query.includes("FounderOpsProjectMembership")) {
+      return {
+        organization: { projectV2: { id: "project-21", closed: false } },
+        repository: {
+          issue: {
+            id: "issue-76",
+            projectItems: { nodes: [{ id: "item-1", isArchived: true, project: { id: "project-21" } }] },
+          },
+        },
+      };
+    }
+    if (query.includes("FounderOpsUnarchiveProjectItem")) {
+      mutations.push(variables);
+      return { unarchiveProjectV2Item: { item: { id: "item-1" } } };
+    }
+    if (query.includes("FounderOpsProjectFields")) return fieldContext();
+    throw new Error("Unexpected GraphQL operation.");
+  });
+
+  const result = await project.projectTaskToFounderOpsGitHubProject(projectInput());
+  assert.deepEqual(result, { changes: [], warnings: [] });
+  assert.deepEqual(mutations, [{ projectId: "project-21", itemId: "item-1" }]);
 });
 
 test("missing Project membership is added once and a lost response is reconciled on replay", async () => {

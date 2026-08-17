@@ -13,8 +13,8 @@ import type { PlanningItemGitHubSyncCommand } from "./planning-items-contract";
 type ReparentKind = "initiative" | "deliverable" | "sub_issue";
 type ReparentRoute = "initiative" | "task";
 type ReparentAction = Extract<PlanningAction, { kind: "changeParent" }>;
-type ParentState = Readonly<{ id: string; kind: string; revision: string; approvalStatus: string; trashed: boolean; reviewLocked: boolean; reviewFinal: boolean }>;
-type ItemState = Readonly<{ row: DbTask; task: Task; kind: string; revision: string; parentId: string; trashed: boolean; reviewLocked: boolean; reviewFinal: boolean }>;
+type ParentState = Readonly<{ id: string; kind: string; revision: string; approvalStatus: string; trashed: boolean; completed: boolean; reviewLocked: boolean; reviewFinal: boolean }>;
+type ItemState = Readonly<{ row: DbTask; task: Task; kind: string; revision: string; parentId: string; trashed: boolean; completed: boolean; reviewLocked: boolean; reviewFinal: boolean }>;
 
 export type PlanningReparentState = Readonly<{
   item: ItemState | null;
@@ -86,6 +86,7 @@ function parentState(value: unknown): ParentState | null {
   return {
     id: String(row.id), kind: String(row.task_type || ""), revision: String(row.updated_at || ""),
     approvalStatus: String(row.approval_status || ""), trashed: Boolean(row.trashed_at),
+    completed: row.status === "Erledigt",
     reviewLocked: row.review_status === "requested" || Boolean(row.score_final),
     reviewFinal: row.review_status === "accepted" && Boolean(row.score_final),
   };
@@ -105,6 +106,7 @@ function preparationState(value: unknown, expectedKind: ReparentKind | "any"): P
     item: row && task ? {
       row: row as unknown as DbTask, task, kind: String(row.task_type || ""), revision: String(row.updated_at || ""),
       parentId: String(row.parent_task_id || ""), trashed: Boolean(row.trashed_at),
+      completed: row.status === "Erledigt",
       reviewLocked: row.review_status === "requested" || Boolean(row.score_final),
       reviewFinal: row.review_status === "accepted" && Boolean(row.score_final),
     } : null,
@@ -138,6 +140,7 @@ function decide(actionInput: ReparentAction, state: PlanningReparentState) {
   const operational = state.actor.role === "ceo" || state.actor.role === "deputy";
   if ((item.kind === "initiative" || item.kind === "deliverable") && !operational) return { ok: false as const, error: { code: "forbidden", reason: "reparentRequiresOperationalLead" } as PlanningError };
   if (item.kind === "sub_issue" && !operational && !owns(item, state.actor)) return { ok: false as const, error: { code: "forbidden", reason: "subIssueReparentRequiresOwnership" } as PlanningError };
+  if (item.completed || state.oldParent?.completed) return { ok: false as const, error: conflict("completed") };
   if (item.kind === "deliverable" && item.reviewLocked) return { ok: false as const, error: conflict(item.reviewFinal ? "reviewFinal" : "reviewLocked") };
   if (state.oldParent?.reviewLocked) return { ok: false as const, error: conflict(state.oldParent.reviewFinal ? "parentReviewFinal" : "parentReviewLocked") };
   const parentId = state.requestedParentId;
@@ -197,6 +200,7 @@ function providerError(code: string, message: string, plan: PlanningReparentComm
   if (code === "P0004" || code === "P0005") return { ok: false, error: { code: "forbidden", reason: "reparentTokenInactiveOrMissingScope" } };
   if (code === "P0006") return { ok: false, error: { code: "forbidden", reason: "reparentAuthorizationChanged" } };
   if (code === "P0009") return { ok: false, error: conflict(message.includes("current parent") ? (message.includes("final") ? "parentReviewFinal" : "parentReviewLocked") : (message.includes("final") ? "reviewFinal" : "reviewLocked")) };
+  if (code === "P0016") return { ok: false, error: conflict("completed") };
   if (code === "23514") return { ok: false, error: conflict("parentInvalid") };
   if (code === "22023") return { ok: false, error: invalid("reparentInvalid") };
   return null;
@@ -295,6 +299,7 @@ export function planningReparentError(error: PlanningError, route: ReparentRoute
     if (reason === "parentRejected") return { message: "Deliverables können nicht in einer abgelehnten Initiative liegen.", status: 400 };
     if (reason === "reviewFinal" || reason === "parentReviewFinal") return { message: "Dieses Issue ist nach dem finalen Review geschützt. Öffne das Review erneut, bevor du den Inhalt änderst.", status: 409 };
     if (reason === "reviewLocked" || reason === "parentReviewLocked") return { message: "Dieses Issue ist während des aktiven Reviews geschützt. Schließe das Review ab oder ziehe es mit Begründung zurück.", status: 409 };
+    if (reason === "completed") return { message: "Dieses Issue ist nach dem Schließen geschützt. Öffne es wieder, bevor du den Inhalt änderst.", status: 409 };
     if (reason === "trashed") return { message: "Planungselement befindet sich im Papierkorb und kann nicht geändert werden.", status: 409 };
     return { message: "Übergeordnete Planungsebene ist ungültig.", status: 400 };
   }

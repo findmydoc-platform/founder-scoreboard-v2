@@ -55,7 +55,7 @@ import { auditRequestMetadata } from "@/lib/api-input";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import type { Task } from "@/lib/types";
-import { hasReviewLockedTaskChanges, isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
+import { hasCompletedTaskChanges, hasReviewLockedTaskChanges, isTaskReviewActive, isTaskReviewLocked, reviewLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 import { normalizeEvidenceLinkList } from "@/features/tasks/model/task-evidence-links";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
@@ -357,19 +357,23 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     payload.evidenceLink = normalizedEvidence.links[0] || "";
   }
   const currentReviewState = { reviewStatus: currentTask.review_status, scoreFinal: Boolean(currentTask.score_final) } as Pick<Task, "reviewStatus" | "scoreFinal">;
+  if (currentTask.status === "Erledigt" && hasCompletedTaskChanges(payload)) {
+    return apiError(TASK_COMPLETED_LOCKED_MESSAGE, 409);
+  }
   if (currentTask.task_type === "deliverable" && isTaskReviewLocked(currentReviewState) && hasReviewLockedTaskChanges(payload, { allowReviewOwnerChange: isTaskReviewActive(currentReviewState) })) {
     return apiError(reviewLockMessage(currentReviewState), 409);
   }
   if (currentTask.parent_task_id) {
     const { data: parentReviewState, error: parentReviewError } = await supabase
       .from(ACTIVE_TASKS_TABLE)
-      .select("review_status,score_final")
+      .select("status,review_status,score_final")
       .eq("id", currentTask.parent_task_id)
       .maybeSingle();
     if (parentReviewError) return apiError(parentReviewError.message, 500);
     if (parentReviewState) {
       const parentReviewTask = { reviewStatus: parentReviewState.review_status, scoreFinal: Boolean(parentReviewState.score_final) } as Pick<Task, "reviewStatus" | "scoreFinal">;
       if (isTaskReviewLocked(parentReviewTask)) return apiError(reviewLockMessage(parentReviewTask), 409);
+      if (parentReviewState.status === "Erledigt") return apiError(TASK_COMPLETED_LOCKED_MESSAGE, 409);
     }
   }
   const normalizedStatusUpdate = withoutUnchangedTaskStatus(currentTask, payload);
@@ -389,6 +393,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       reviewOwnerProfileId: currentTask.review_owner_profile_id || "",
       reviewStatus: currentTask.review_status || "not_requested",
       scoreFinal: Boolean(currentTask.score_final),
+      status: currentTask.status || "",
       taskType: currentTask.task_type === "sub_issue" ? "sub_issue" : "deliverable",
     },
     profile: permission.profile,

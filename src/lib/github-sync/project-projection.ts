@@ -6,57 +6,36 @@ import {
 } from "../github-project-config";
 import { splitGitHubRepository } from "../github-repositories";
 import type { Task } from "../types";
-
-type ProjectField = {
-  id: string;
-  name: string;
-  dataType: string;
-  options?: Array<{ id: string; name: string }>;
-  configuration?: {
-    iterations: Array<{ id: string; title: string; startDate: string }>;
-    completedIterations: Array<{ id: string; title: string; startDate: string }>;
-  };
-};
-
-type IssueField = {
-  id: string;
-  name: string;
-  dataType: string;
-  options?: Array<{ id: string; name: string }>;
-};
-
-type ProjectItemFieldValue = {
-  field?: { id: string; name: string } | null;
-  text?: string | null;
-  number?: number | null;
-  date?: string | null;
-  optionId?: string | null;
-  iterationId?: string | null;
-};
-
-type IssueFieldValue = {
-  field?: { name: string } | null;
-  optionId?: string | null;
-  value?: string | null;
-};
+import {
+  githubIssueFieldsSelection,
+  githubIssueFieldValuesSelection,
+  githubIssuePriorityOption,
+  githubProjectFieldsSelection,
+  githubProjectItemFieldValuesSelection,
+  githubProjectStatusOption,
+  type GitHubIssueField,
+  type GitHubIssueFieldValue,
+  type GitHubProjectField,
+  type GitHubProjectItemFieldValue,
+} from "./project-field-context";
 
 type FieldContextData = {
   organization?: {
     projectV2?: {
       id: string;
       closed: boolean;
-      fields: { nodes: Array<ProjectField | null> };
+      fields: { nodes: Array<GitHubProjectField | null> };
     } | null;
-    issueFields: { nodes: Array<IssueField | null> };
+    issueFields: { nodes: Array<GitHubIssueField | null> };
   } | null;
   node?: {
     id: string;
     project: { id: string };
     content?: {
       id: string;
-      issueFieldValues: { nodes: Array<IssueFieldValue | null> };
+      issueFieldValues: { nodes: Array<GitHubIssueFieldValue | null> };
     } | null;
-    fieldValues: { nodes: Array<ProjectItemFieldValue | null> };
+    fieldValues: { nodes: Array<GitHubProjectItemFieldValue | null> };
   } | null;
 };
 
@@ -76,61 +55,14 @@ type FounderOpsGitHubProjectFieldInput = {
   token: string;
 };
 
-const statusOptions: Record<string, string> = {
-  Offen: "Todo",
-  "In Arbeit": "In Progress",
-  Review: "Review",
-  Nacharbeit: "Changes Requested",
-  Blockiert: "Blocked",
-  Erledigt: "Done",
-};
-
-const priorityOptions: Record<string, string> = {
-  P0: "Urgent",
-  P1: "High",
-  P2: "Medium",
-  P3: "Low",
-  P4: "Low",
-};
-
-function githubProjectStatusOption(status: string) {
-  return statusOptions[status] || "";
-}
-
-function githubIssuePriorityOption(priority: string) {
-  return priorityOptions[priority] || "";
-}
-
 const fieldContextQuery = `query FounderOpsProjectFields($owner: String!, $number: Int!, $itemId: ID!) {
   organization(login: $owner) {
     projectV2(number: $number) {
       id
       closed
-      fields(first: 100) {
-        nodes {
-          __typename
-          ... on ProjectV2Field { id name dataType }
-          ... on ProjectV2SingleSelectField { id name dataType options { id name } }
-          ... on ProjectV2IterationField {
-            id
-            name
-            dataType
-            configuration {
-              iterations { id title startDate }
-              completedIterations { id title startDate }
-            }
-          }
-        }
-      }
+      ${githubProjectFieldsSelection}
     }
-    issueFields(first: 100) {
-      nodes {
-        __typename
-        ... on IssueFieldCommon { name dataType }
-        ... on IssueFieldSingleSelect { id options { id name } }
-        ... on IssueFieldDate { id }
-      }
-    }
+    ${githubIssueFieldsSelection}
   }
   node(id: $itemId) {
     ... on ProjectV2Item {
@@ -139,46 +71,10 @@ const fieldContextQuery = `query FounderOpsProjectFields($owner: String!, $numbe
       content {
         ... on Issue {
           id
-          issueFieldValues(first: 100) {
-            nodes {
-              __typename
-              ... on IssueFieldSingleSelectValue {
-                field { ... on IssueFieldCommon { name } }
-                optionId
-              }
-              ... on IssueFieldDateValue {
-                field { ... on IssueFieldCommon { name } }
-                value
-              }
-            }
-          }
+          ${githubIssueFieldValuesSelection}
         }
       }
-      fieldValues(first: 100) {
-        nodes {
-          __typename
-          ... on ProjectV2ItemFieldTextValue {
-            field { ... on ProjectV2FieldCommon { id name } }
-            text
-          }
-          ... on ProjectV2ItemFieldNumberValue {
-            field { ... on ProjectV2FieldCommon { id name } }
-            number
-          }
-          ... on ProjectV2ItemFieldDateValue {
-            field { ... on ProjectV2FieldCommon { id name } }
-            date
-          }
-          ... on ProjectV2ItemFieldSingleSelectValue {
-            field { ... on ProjectV2FieldCommon { id name } }
-            optionId
-          }
-          ... on ProjectV2ItemFieldIterationValue {
-            field { ... on ProjectV2FieldCommon { id name } }
-            iterationId
-          }
-        }
-      }
+      ${githubProjectItemFieldValuesSelection}
     }
   }
 }`;
@@ -247,16 +143,16 @@ async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubProjectF
   }
 
   const projectFields = new Map(
-    project.fields.nodes.filter((field): field is ProjectField => Boolean(field?.id && field.name)).map((field) => [field.name, field]),
+    project.fields.nodes.filter((field): field is GitHubProjectField => Boolean(field?.id && field.name)).map((field) => [field.name, field]),
   );
   const projectValues = new Map(
-    item.fieldValues.nodes.filter((value): value is ProjectItemFieldValue => Boolean(value?.field?.name)).map((value) => [value.field!.name, value]),
+    item.fieldValues.nodes.filter((value): value is GitHubProjectItemFieldValue => Boolean(value?.field?.name)).map((value) => [value.field!.name, value]),
   );
   const issueFields = new Map(
-    (data.organization?.issueFields.nodes || []).filter((field): field is IssueField => Boolean(field?.id && field.name)).map((field) => [field.name, field]),
+    (data.organization?.issueFields.nodes || []).filter((field): field is GitHubIssueField => Boolean(field?.id && field.name)).map((field) => [field.name, field]),
   );
   const issueValues = new Map(
-    item.content.issueFieldValues.nodes.filter((value): value is IssueFieldValue => Boolean(value?.field?.name)).map((value) => [value.field!.name, value]),
+    item.content.issueFieldValues.nodes.filter((value): value is GitHubIssueFieldValue => Boolean(value?.field?.name)).map((value) => [value.field!.name, value]),
   );
 
   const updateProjectField = async (fieldName: string, expectedType: string, value: Record<string, unknown> | null, current: unknown) => {
@@ -407,7 +303,7 @@ type ProjectMembershipData = {
     issue?: {
       id: string;
       projectItems: {
-        nodes: Array<{ id: string; project: { id: string } }>;
+        nodes: Array<{ id: string; isArchived: boolean; project: { id: string } }>;
       };
     } | null;
   } | null;
@@ -427,7 +323,7 @@ const projectMembershipQuery = `query FounderOpsProjectMembership(
     issue(number: $issueNumber) {
       id
       projectItems(first: 100) {
-        nodes { id project { id } }
+        nodes { id isArchived project { id } }
       }
     }
   }
@@ -439,7 +335,13 @@ const addProjectItemMutation = `mutation FounderOpsAddProjectItem($projectId: ID
   }
 }`;
 
-async function loadGitHubProjectSettings(supabase: SupabaseClient) {
+const unarchiveProjectItemMutation = `mutation FounderOpsUnarchiveProjectItem($projectId: ID!, $itemId: ID!) {
+  unarchiveProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+    item { id }
+  }
+}`;
+
+export async function loadGitHubProjectSettings(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("projects")
     .select("github_project_owner,github_project_number")
@@ -454,6 +356,8 @@ async function loadGitHubProjectSettings(supabase: SupabaseClient) {
     number: data.github_project_number,
   };
 }
+
+export const loadFounderOpsGitHubProjectSettings = loadGitHubProjectSettings;
 
 async function loadGitHubProjectSprint(supabase: SupabaseClient, sprintId: string) {
   if (!sprintId) return { sprint: null as FounderOpsGitHubSprint | null, warnings: [] as string[] };
@@ -508,7 +412,23 @@ async function ensureProjectMembership({
   if (!issue) throw new Error(`GitHub Issue ${repository}#${issueNumber} konnte für die Project-Aufnahme nicht gelesen werden.`);
 
   const existing = issue.projectItems.nodes.find((item) => item.project.id === project.id);
-  if (existing) return { itemId: existing.id, projectId: project.id };
+  if (existing) {
+    if (existing.isArchived) {
+      const unarchived = await githubGraphql<{
+        unarchiveProjectV2Item?: { item?: { id: string } | null } | null;
+      }>({
+        query: unarchiveProjectItemMutation,
+        variables: { projectId: project.id, itemId: existing.id },
+        token,
+        operation: "mutation",
+        errorMessage: "GitHub Project-Mitgliedschaft konnte nicht wiederhergestellt werden",
+      });
+      if (unarchived.unarchiveProjectV2Item?.item?.id !== existing.id) {
+        throw new Error(`GitHub Project-Item ${existing.id} wurde nicht wiederhergestellt.`);
+      }
+    }
+    return { itemId: existing.id, projectId: project.id };
+  }
 
   const mutation = await githubGraphql<{
     addProjectV2ItemById?: { item?: { id: string } | null } | null;

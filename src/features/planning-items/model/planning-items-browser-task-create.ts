@@ -10,7 +10,7 @@ import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
-import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
+import { isReviewStateLocked, reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 import { unsupportedSubIssueCreateField } from "@/features/tasks/model/task-creation-draft";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
@@ -323,13 +323,14 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (taskType === "sub_issue") {
     const { data: parent, error: parentError } = await supabase
       .from(ACTIVE_TASKS_TABLE)
-      .select("id,title,task_type,approval_status,review_status,score_final")
+      .select("id,title,task_type,approval_status,status,review_status,score_final")
       .eq("id", parentTaskId)
       .single();
     if (parentError || !parent || parent.task_type !== "deliverable") return apiError("Deliverable wurde nicht gefunden.", 404);
     if (isReviewStateLocked(parent.review_status, parent.score_final)) {
       return apiError(reviewStateLockMessage(parent.review_status, parent.score_final), 409);
     }
+    if (parent.status === "Erledigt") return apiError(TASK_COMPLETED_LOCKED_MESSAGE, 409);
     parentApprovalStatus = (parent.approval_status as Task["parentApprovalStatus"]) || null;
   }
 

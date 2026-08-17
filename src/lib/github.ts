@@ -1,7 +1,7 @@
 import type { LinkedPullRequest } from "./types";
 import { githubGraphql } from "./github-graphql";
-import { githubJson } from "./github-http";
-import { requireAllowedGitHubRepository, splitGitHubRepository } from "./github-repositories";
+import { GITHUB_ISSUE_DEPENDENCY_API_VERSION, githubJson } from "./github-http";
+import { normalizeGitHubRepository, requireAllowedGitHubRepository, splitGitHubRepository } from "./github-repositories";
 
 export { GitHubApiError } from "./github-http";
 
@@ -323,14 +323,57 @@ export async function getGitHubIssue(
   const { owner, repo } = splitGitHubRepository(repository);
   return githubJson<{
     id: number;
+    node_id?: string;
     number: number;
+    title?: string;
     body?: string | null;
     html_url: string;
+    state?: "open" | "closed";
+    updated_at?: string;
+    labels?: Array<string | { name?: string | null }>;
+    assignees?: Array<{ id?: number; login?: string }>;
     pull_request?: unknown;
   }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
     token,
     cache: "no-store",
     errorMessage: "GitHub Issue konnte nicht geladen werden",
+  });
+}
+
+export async function listGitHubIssueBlockedBy(
+  issueNumber: number,
+  token: string,
+  repository?: string | null,
+) {
+  const { owner, repo } = splitGitHubRepository(repository);
+  const dependencies = await githubJson<Array<{
+    id: number;
+    number: number;
+    html_url: string;
+    repository_url?: string;
+  }>>(
+    `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by?per_page=100`,
+    {
+      token,
+      apiVersion: GITHUB_ISSUE_DEPENDENCY_API_VERSION,
+      cache: "no-store",
+      errorMessage: "GitHub Dependency konnte nicht gelesen werden",
+    },
+  );
+  return dependencies.map((dependency) => {
+    let repositoryFullName: string | null = null;
+    try {
+      const repositoryUrl = new URL(dependency.repository_url || "");
+      const match = repositoryUrl.hostname.toLowerCase() === "api.github.com"
+        ? repositoryUrl.pathname.match(/^\/repos\/([^/]+)\/([^/]+)\/?$/i)
+        : null;
+      repositoryFullName = match
+        ? normalizeGitHubRepository(`${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`)
+        : null;
+    } catch {
+      repositoryFullName = null;
+    }
+    return { ...dependency, repositoryFullName };
   });
 }
 

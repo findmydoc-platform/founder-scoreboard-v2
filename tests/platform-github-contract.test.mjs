@@ -296,8 +296,10 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(relationshipSection, /canRemoveRelation/);
   assert.match(`${relationshipSection}\n${relationshipForm}`, /Abhängigkeit existiert bereits/);
   assert.doesNotMatch(relationshipSection, /RelationshipPanelList/);
-  assert.match(github, /blockedIssueNumber/);
-  assert.match(github, /blockingIssueNumber/);
+  assert.match(github, /GitHubIssueCoordinate/);
+  assert.match(github, /coordinateKey/);
+  assert.match(github, /dependency\.blocked/);
+  assert.match(github, /dependency\.blocking/);
   assert.match(github, /desiredBlockingCurrent/);
   assert.match(github, /desiredBlockedByCurrent/);
   assert.match(github, /listGitHubIssuesBlocking/);

@@ -2,6 +2,7 @@ import type { ReviewDecision, Task, TaskReviewChecklist, TaskStatus } from "@/li
 
 export const REVIEW_LOCKED_MESSAGE = "Dieses Issue ist während des aktiven Reviews geschützt. Schließe das Review ab oder ziehe es mit Begründung zurück.";
 export const REVIEW_FINAL_LOCKED_MESSAGE = "Dieses Issue ist nach dem finalen Review geschützt. Öffne das Review erneut, bevor du den Inhalt änderst.";
+export const TASK_COMPLETED_LOCKED_MESSAGE = "Dieses Issue ist nach dem Schließen geschützt. Öffne es wieder, bevor du den Inhalt änderst.";
 
 export const reviewDecisionLabels: Record<ReviewDecision, string> = {
   accepted: "Akzeptiert",
@@ -46,6 +47,13 @@ export function isReviewStateLocked(reviewStatus: string | null | undefined, sco
 
 export function reviewStateLockMessage(reviewStatus: string | null | undefined, scoreFinal: boolean | null | undefined) {
   return isReviewStateFinal(reviewStatus, scoreFinal) ? REVIEW_FINAL_LOCKED_MESSAGE : REVIEW_LOCKED_MESSAGE;
+}
+
+export function hasCompletedTaskChanges(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return true;
+  const record = payload as Record<string, unknown>;
+  const changed = Object.keys(record).filter((key) => key !== "expectedUpdatedAt");
+  return changed.length !== 1 || changed[0] !== "status" || record.status !== "Offen";
 }
 
 export function reviewChecklistCheckedCount(checklist: TaskReviewChecklist) {

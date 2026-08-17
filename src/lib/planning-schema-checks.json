@@ -24,6 +24,12 @@
     "health": false
   },
   {
+    "name": "github_planning_webhook_deliveries",
+    "table": "github_planning_webhook_deliveries",
+    "select": "delivery_id,event_name,action,installation_id,organization_id,organization_login,repository_id,repository_full_name,issue_id,issue_node_id,issue_number,issue_updated_at,related_repository_id,related_repository_full_name,related_issue_id,related_issue_node_id,related_issue_number,related_issue_updated_at,project_node_id,project_item_node_id,project_item_updated_at,project_content_node_id,project_content_type,project_field_node_id,changed_fields,target_user_id,target_user_login,sender_id,sender_login,sender_type,payload_sha256,status,status_reason,processing_version,attempts,available_at,locked_at,lock_token,processed_at,last_error,received_at,updated_at",
+    "health": false
+  },
+  {
     "name": "github_issue_sync_locks",
     "table": "github_issue_sync_locks",
     "select": "resource_key,task_id,locked_by_profile_id,lock_token,locked_at,expires_at",

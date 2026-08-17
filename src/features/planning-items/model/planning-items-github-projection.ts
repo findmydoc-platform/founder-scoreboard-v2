@@ -13,7 +13,7 @@ type ProjectionRequest = Readonly<{
   id: string;
   planning_operation_id: string;
   task_id: string;
-  actor_profile_id: string;
+  actor_profile_id: string | null;
   create_if_missing: boolean;
   status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed";
   result: PlanningItemGitHubSyncResult | null;
@@ -97,7 +97,7 @@ export async function dispatchPlanningGitHubProjections({
       try {
         const executed = await executePlanningItemGitHubSyncs({
           supabase,
-          actorProfileId: request.actor_profile_id,
+          actorProfileId: request.actor_profile_id || "",
           targets: [{
             itemId: request.task_id,
             itemType: "deliverable",

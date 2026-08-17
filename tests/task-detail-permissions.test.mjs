@@ -32,6 +32,7 @@ const task = {
   reviewOwnerProfileId: "reviewer-1",
   reviewStatus: "not_requested",
   scoreFinal: false,
+  status: "In Arbeit",
   taskType: "sub_issue",
 };
 
@@ -129,6 +130,22 @@ test("minor rework unlocks the issue for the assignee", () => {
   });
   assert.equal(permissions.canEditBrief, true);
   assert.equal(permissions.canUpdateWorkingStatus, true);
+});
+
+test("completed items keep comments and the explicit reopen transition but lock every content mutation", () => {
+  const permissions = taskDetailPermissions({
+    task: { ...deliverableTask, status: "Erledigt", reviewStatus: "accepted", scoreFinal: true },
+    profile: { id: "ceo", name: "CEO", platformRole: "ceo" },
+  });
+  assert.equal(permissions.canComment, true);
+  assert.equal(permissions.canEditBrief, false);
+  assert.equal(permissions.canEditEvidence, false);
+  assert.equal(permissions.canEditNotes, false);
+  assert.equal(permissions.canManageTaskMeta, false);
+  assert.equal(permissions.canReportBlocker, false);
+  assert.equal(permissions.canCreateSubIssue, false);
+  assert.equal(permissions.canUpdateStatus, true);
+  assert.deepEqual(taskStatusOptionsForPermissions("Erledigt", permissions, "deliverable"), ["Erledigt", "Offen"]);
 });
 
 test("Viewer remains fully read-only", () => {

@@ -316,6 +316,15 @@ test("PATCH permits sync-only commands and keeps mode-command coupling strict", 
   });
   assert.equal(unknownField.ok, false);
   assert.match(unknownField.error, /unbekannte Feld unsupportedField/);
+
+  assert.equal(update.parsePlanningItemPatchPayload({ expectedUpdatedAt, sprintId: "sprint-1" }).ok, false);
+  assert.equal(update.parsePlanningItemPatchPayload({ expectedUpdatedAt, evidenceLink: "https://example.com" }).ok, false);
+  const internal = update.parsePlanningItemPatchPayload(
+    { expectedUpdatedAt, sprintId: "sprint-1", evidenceLink: "https://example.com" },
+    { allowWebhookProjectionFields: true },
+  );
+  assert.equal(internal.ok, true);
+  assert.deepEqual(internal.presentFields, ["sprintId", "evidenceLink"]);
 });
 
 test("create idempotency hash includes GitHub mode and per-item decisions", () => {

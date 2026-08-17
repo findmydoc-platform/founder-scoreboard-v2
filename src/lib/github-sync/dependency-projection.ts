@@ -1,11 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { listGitHubIssueBlockedBy } from "../github";
 import {
   GITHUB_ISSUE_DEPENDENCY_API_VERSION,
   githubJson,
   githubRequest,
 } from "../github-http";
-import { resolveGitHubIssueNumber } from "../github-issue-reference";
-import { splitGitHubRepository } from "../github-repositories";
+import { parseGitHubIssueUrl, resolveGitHubIssueNumber } from "../github-issue-reference";
+import { normalizeGitHubRepository, splitGitHubRepository } from "../github-repositories";
 
 type RelationshipRow = {
   id: number;
@@ -31,22 +32,74 @@ type GitHubIssueReference = {
 
 type GitHubIssueDependency = GitHubIssueReference & {
   repository_url?: string;
+  repositoryFullName?: string | null;
 };
 
-type GitHubIssueDependencyInput = {
-  blockedIssueNumber: number;
-  blockingIssueNumber: number;
-};
+type GitHubIssueCoordinate = Readonly<{
+  repository: string;
+  issueNumber: number;
+}>;
 
-function rowIssueNumber(
+type GitHubIssueDependencyInput = Readonly<{
+  blocked: GitHubIssueCoordinate;
+  blocking: GitHubIssueCoordinate;
+}>;
+
+function coordinateKey(coordinate: GitHubIssueCoordinate) {
+  return `${coordinate.repository}#${coordinate.issueNumber}`;
+}
+
+function sameCoordinate(left: GitHubIssueCoordinate, right: GitHubIssueCoordinate) {
+  return coordinateKey(left) === coordinateKey(right);
+}
+
+function rowRepository(row: RelationshipTaskRow, fallbackRepository: string) {
+  if (row.github_repo) return normalizeGitHubRepository(row.github_repo);
+  for (const value of [row.github_issue_url, row.issue_url]) {
+    const reference = parseGitHubIssueUrl(value);
+    const repository = reference ? normalizeGitHubRepository(reference.repository) : null;
+    if (repository) return repository;
+  }
+  return normalizeGitHubRepository(fallbackRepository);
+}
+
+function dependencyCoordinate(
+  dependency: GitHubIssueDependency,
+  fallbackRepository: string,
+): GitHubIssueCoordinate | null {
+  let repository = dependency.repositoryFullName
+    ? normalizeGitHubRepository(dependency.repositoryFullName)
+    : null;
+  if (!repository && dependency.repository_url) {
+    try {
+      const url = new URL(dependency.repository_url);
+      const match = url.hostname.toLowerCase() === "api.github.com"
+        ? url.pathname.match(/^\/repos\/([^/]+)\/([^/]+)\/?$/i)
+        : null;
+      repository = match
+        ? normalizeGitHubRepository(`${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`)
+        : null;
+    } catch {
+      repository = null;
+    }
+  }
+  repository ||= normalizeGitHubRepository(fallbackRepository);
+  return repository && Number.isSafeInteger(dependency.number) && dependency.number > 0
+    ? { repository, issueNumber: dependency.number }
+    : null;
+}
+
+function rowIssueCoordinate(
   row: RelationshipTaskRow,
   currentTaskId: string,
   currentIssueNumber: number,
   repository: string,
-) {
-  if (row.id === currentTaskId) return currentIssueNumber;
-  if (row.github_repo && row.github_repo !== repository) return null;
-  return resolveGitHubIssueNumber(row, { repository });
+): GitHubIssueCoordinate | null {
+  if (row.id === currentTaskId) return { repository, issueNumber: currentIssueNumber };
+  const rowGitHubRepository = rowRepository(row, repository);
+  if (!rowGitHubRepository) return null;
+  const issueNumber = resolveGitHubIssueNumber(row, { repository: rowGitHubRepository });
+  return issueNumber ? { repository: rowGitHubRepository, issueNumber } : null;
 }
 
 async function loadDependencyContext(
@@ -75,13 +128,13 @@ async function loadDependencyContext(
   if (incomingRelationships.error) throw new Error(incomingRelationships.error.message);
   if (linkedTasks.error) throw new Error(linkedTasks.error.message);
 
-  const issueNumberByTaskId = new Map<string, number>();
-  const managedIssueNumbers = new Set<number>();
+  const issueCoordinateByTaskId = new Map<string, GitHubIssueCoordinate>();
+  const managedIssueCoordinates = new Map<string, GitHubIssueCoordinate>();
   for (const row of (linkedTasks.data || []) as RelationshipTaskRow[]) {
-    const issueNumber = rowIssueNumber(row, taskId, currentIssueNumber, repository);
-    if (!issueNumber) continue;
-    issueNumberByTaskId.set(row.id, issueNumber);
-    managedIssueNumbers.add(issueNumber);
+    const coordinate = rowIssueCoordinate(row, taskId, currentIssueNumber, repository);
+    if (!coordinate) continue;
+    issueCoordinateByTaskId.set(row.id, coordinate);
+    managedIssueCoordinates.set(coordinateKey(coordinate), coordinate);
   }
 
   const relationshipById = new Map<number, RelationshipRow>();
@@ -93,33 +146,20 @@ async function loadDependencyContext(
   for (const relationship of relationshipById.values()) {
     const blockedTaskId = relationship.relation_type === "blocks" ? relationship.related_task_id : relationship.task_id;
     const blockingTaskId = relationship.relation_type === "blocks" ? relationship.task_id : relationship.related_task_id;
-    const blockedIssueNumber = issueNumberByTaskId.get(blockedTaskId);
-    const blockingIssueNumber = issueNumberByTaskId.get(blockingTaskId);
-    if (!blockedIssueNumber || !blockingIssueNumber || blockedIssueNumber === blockingIssueNumber) continue;
+    const blocked = issueCoordinateByTaskId.get(blockedTaskId);
+    const blocking = issueCoordinateByTaskId.get(blockingTaskId);
+    if (!blocked || !blocking || sameCoordinate(blocked, blocking)) continue;
 
-    desiredDependencies.set(`${blockedIssueNumber}:${blockingIssueNumber}`, {
-      blockedIssueNumber,
-      blockingIssueNumber,
+    desiredDependencies.set(`${coordinateKey(blocked)}:${coordinateKey(blocking)}`, {
+      blocked,
+      blocking,
     });
   }
 
   return {
     desiredDependencies: [...desiredDependencies.values()],
-    managedIssueNumbers: [...managedIssueNumbers],
+    managedIssueCoordinates: [...managedIssueCoordinates.values()],
   };
-}
-
-async function listGitHubIssueBlockedBy(issueNumber: number, token: string, repository: string) {
-  const { owner, repo } = splitGitHubRepository(repository);
-  return githubJson<GitHubIssueDependency[]>(
-    `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by?per_page=100`,
-    {
-      token,
-      apiVersion: GITHUB_ISSUE_DEPENDENCY_API_VERSION,
-      cache: "no-store",
-      errorMessage: "GitHub Dependencies konnten nicht geladen werden",
-    },
-  );
 }
 
 async function listGitHubIssuesBlocking(issueNumber: number, token: string, repository: string) {
@@ -200,86 +240,109 @@ export async function projectTaskGitHubDependencies({
   repository: string;
   token: string;
 }) {
-  const { desiredDependencies, managedIssueNumbers } = await loadDependencyContext(
+  const current: GitHubIssueCoordinate = {
+    repository: splitGitHubRepository(repository).repository,
+    issueNumber: currentIssueNumber,
+  };
+  const { desiredDependencies, managedIssueCoordinates } = await loadDependencyContext(
     supabase,
     taskId,
     currentIssueNumber,
-    repository,
+    current.repository,
   );
-  const managedNumbers = new Set(managedIssueNumbers);
-  const desiredBlockingCurrent = new Set<number>();
-  const desiredBlockedByCurrent = new Set<number>();
+  const managedCoordinates = new Set(managedIssueCoordinates.map(coordinateKey));
+  const desiredBlockingCurrent = new Map<string, GitHubIssueCoordinate>();
+  const desiredBlockedByCurrent = new Map<string, GitHubIssueCoordinate>();
   for (const dependency of desiredDependencies) {
-    if (dependency.blockedIssueNumber === currentIssueNumber) {
-      desiredBlockingCurrent.add(dependency.blockingIssueNumber);
+    if (sameCoordinate(dependency.blocked, current)) {
+      desiredBlockingCurrent.set(coordinateKey(dependency.blocking), dependency.blocking);
     }
-    if (dependency.blockingIssueNumber === currentIssueNumber) {
-      desiredBlockedByCurrent.add(dependency.blockedIssueNumber);
+    if (sameCoordinate(dependency.blocking, current)) {
+      desiredBlockedByCurrent.set(coordinateKey(dependency.blocked), dependency.blocked);
     }
   }
 
-  const issueCache = new Map<number, GitHubIssueReference>();
-  const issueReference = async (issueNumber: number) => {
-    const cached = issueCache.get(issueNumber);
+  const issueCache = new Map<string, GitHubIssueReference>();
+  const issueReference = async (coordinate: GitHubIssueCoordinate) => {
+    const key = coordinateKey(coordinate);
+    const cached = issueCache.get(key);
     if (cached) return cached;
-    const issue = await getGitHubIssue(issueNumber, token, repository);
-    issueCache.set(issueNumber, issue);
+    const issue = await getGitHubIssue(coordinate.issueNumber, token, coordinate.repository);
+    if (issue.number !== coordinate.issueNumber) {
+      throw new Error("GitHub Issue identity changed during dependency projection.");
+    }
+    issueCache.set(key, issue);
     return issue;
   };
 
   let added = 0;
   let removed = 0;
   const [existingBlockedBy, existingBlocking] = await Promise.all([
-    listGitHubIssueBlockedBy(currentIssueNumber, token, repository),
-    listGitHubIssuesBlocking(currentIssueNumber, token, repository),
+    listGitHubIssueBlockedBy(current.issueNumber, token, current.repository),
+    listGitHubIssuesBlocking(current.issueNumber, token, current.repository),
   ]);
-  const existingManagedBlockedBy = new Map(
-    existingBlockedBy
-      .filter((dependency) => managedNumbers.has(dependency.number))
-      .map((dependency) => [dependency.number, dependency]),
-  );
-  const existingManagedBlocking = new Map(
-    existingBlocking
-      .filter((dependency) => managedNumbers.has(dependency.number))
-      .map((dependency) => [dependency.number, dependency]),
-  );
+  const existingManagedBlockedBy = new Map<string, Readonly<{
+    dependency: GitHubIssueDependency;
+    coordinate: GitHubIssueCoordinate;
+  }>>();
+  for (const dependency of existingBlockedBy) {
+    const coordinate = dependencyCoordinate(dependency, current.repository);
+    if (coordinate && managedCoordinates.has(coordinateKey(coordinate))) {
+      existingManagedBlockedBy.set(coordinateKey(coordinate), { dependency, coordinate });
+    }
+  }
+  const existingManagedBlocking = new Map<string, Readonly<{
+    dependency: GitHubIssueDependency;
+    coordinate: GitHubIssueCoordinate;
+  }>>();
+  for (const dependency of existingBlocking) {
+    const coordinate = dependencyCoordinate(dependency, current.repository);
+    if (coordinate && managedCoordinates.has(coordinateKey(coordinate))) {
+      existingManagedBlocking.set(coordinateKey(coordinate), { dependency, coordinate });
+    }
+  }
 
-  for (const blockingIssueNumber of desiredBlockingCurrent) {
-    if (existingManagedBlockedBy.has(blockingIssueNumber)) continue;
-    const blockingIssue = await issueReference(blockingIssueNumber);
-    await addGitHubIssueBlockedBy(currentIssueNumber, blockingIssue.id, token, repository);
+  for (const [key, blockingCoordinate] of desiredBlockingCurrent) {
+    if (existingManagedBlockedBy.has(key)) continue;
+    const blockingIssue = await issueReference(blockingCoordinate);
+    await addGitHubIssueBlockedBy(current.issueNumber, blockingIssue.id, token, current.repository);
     added += 1;
   }
-  for (const existingDependency of existingManagedBlockedBy.values()) {
-    if (desiredBlockingCurrent.has(existingDependency.number)) continue;
+  for (const [key, existing] of existingManagedBlockedBy) {
+    if (desiredBlockingCurrent.has(key)) continue;
     await removeGitHubIssueBlockedBy(
-      currentIssueNumber,
-      existingDependency.id,
+      current.issueNumber,
+      existing.dependency.id,
       token,
-      repository,
+      current.repository,
     );
     removed += 1;
   }
 
   let currentIssue: GitHubIssueReference | null = null;
   const currentIssueReference = async () => {
-    currentIssue ||= await issueReference(currentIssueNumber);
+    currentIssue ||= await issueReference(current);
     return currentIssue;
   };
-  for (const blockedIssueNumber of desiredBlockedByCurrent) {
-    if (existingManagedBlocking.has(blockedIssueNumber)) continue;
+  for (const [key, blockedCoordinate] of desiredBlockedByCurrent) {
+    if (existingManagedBlocking.has(key)) continue;
     const blockingIssue = await currentIssueReference();
-    await addGitHubIssueBlockedBy(blockedIssueNumber, blockingIssue.id, token, repository);
-    added += 1;
-  }
-  for (const existingDependency of existingManagedBlocking.values()) {
-    if (desiredBlockedByCurrent.has(existingDependency.number)) continue;
-    const blockingIssue = await currentIssueReference();
-    await removeGitHubIssueBlockedBy(
-      existingDependency.number,
+    await addGitHubIssueBlockedBy(
+      blockedCoordinate.issueNumber,
       blockingIssue.id,
       token,
-      repository,
+      blockedCoordinate.repository,
+    );
+    added += 1;
+  }
+  for (const [key, existing] of existingManagedBlocking) {
+    if (desiredBlockedByCurrent.has(key)) continue;
+    const blockingIssue = await currentIssueReference();
+    await removeGitHubIssueBlockedBy(
+      existing.coordinate.issueNumber,
+      blockingIssue.id,
+      token,
+      existing.coordinate.repository,
     );
     removed += 1;
   }

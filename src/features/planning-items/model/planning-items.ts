@@ -109,6 +109,7 @@ export type DeliverableChanges = Readonly<{
   endDate?: string | null;
   deadline?: string | null;
   hours?: number;
+  evidenceLink?: string | null;
 }>;
 
 export type SubIssueChanges = Readonly<{

@@ -1,0 +1,33 @@
+name: Process GitHub Webhooks
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: process-github-webhooks-production
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  process:
+    name: Process one bounded batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Process GitHub webhook deliveries
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          FOUNDEROPS_MAINTENANCE_SECRET: ${{ secrets.FOUNDEROPS_MAINTENANCE_SECRET }}
+        run: bash ./.github/scripts/maintenance/process-github-webhooks.sh
