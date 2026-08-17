@@ -1,4 +1,4 @@
-import type { PlatformReleaseManifestV2 } from "./platform-release-manifest";
+import type { PlatformReleaseManifest } from "./platform-release-manifest";
 
 export type PlatformReleasePlanningLink = {
   id: string;
@@ -19,7 +19,7 @@ export type PlatformReleaseRecord = {
   summary: string;
   publishedAt: string;
   manifestDigest: string;
-  manifest: PlatformReleaseManifestV2;
+  manifest: PlatformReleaseManifest;
   planningReferences: PlatformReleasePlanningReference[];
   notificationId: number | null;
   seenAt: string | null;
@@ -45,7 +45,13 @@ export function isMajorRelease(version: string) {
 
 export function highlightedChanges(release: PlatformReleaseRecord) {
   const changes = new Map(release.manifest.changes.map((change) => [change.id, change]));
-  return release.manifest.highlights.map((id) => changes.get(id)).filter(Boolean) as PlatformReleaseManifestV2["changes"];
+  return release.manifest.highlights.map((id) => changes.get(id)).filter(Boolean) as PlatformReleaseManifest["changes"];
+}
+
+export function releaseKindLabel(release: PlatformReleaseRecord) {
+  return release.manifest.schemaVersion === 3 && release.manifest.releaseMode === "application"
+    ? "Anwendungs-Release"
+    : "Plattform-Release";
 }
 
 export function releaseApplicationNames(release: PlatformReleaseRecord) {

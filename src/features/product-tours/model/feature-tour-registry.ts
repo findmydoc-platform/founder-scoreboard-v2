@@ -51,7 +51,7 @@ export const featureTours = [
       {
         element: "[data-tour-id='workspace-nav-platform-releases']",
         popover: {
-          title: "Plattform-Releases öffnen",
+          title: "Releases öffnen",
           description: "Hier findest du alle gemeinsamen Auslieferungen von Website und Clinic Dashboard.",
           side: "right",
           align: "center",

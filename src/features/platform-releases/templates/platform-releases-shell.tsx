@@ -41,8 +41,8 @@ export function PlatformReleasesShell({ authUser = null, children, currentPlatfo
           mobileNavOpen={mobileOpen}
           onOpenMobileNav={() => setMobileOpen(true)}
           eyebrow="FounderOps"
-          title="Plattform-Releases"
-          description="Gemeinsame Auslieferungen von Website und Clinic Dashboard."
+          title="Releases"
+          description="Auslieferungen einzelner Anwendungen und der gemeinsamen Plattform."
           actions={(
             <>
               <PlanningHeaderDataActions headerData={headerData} />

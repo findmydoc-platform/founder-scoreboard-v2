@@ -813,6 +813,59 @@ async function verifyPlatformReleaseAccessBoundary(status, mapped) {
   }
 }
 
+async function verifyPlatformReleaseIngestModes(status) {
+  const client = new pg.Client({ connectionString: status.DB_URL });
+  const publishedAt = "2026-08-17T12:00:00.000Z";
+  const base = {
+    summary: "Lokaler Integrationstest für Release-Benachrichtigungen.",
+    publishedAt,
+    planDigest: "1".repeat(64),
+    contentDigest: "2".repeat(64),
+    components: [],
+    changes: [],
+    highlights: [],
+    visuals: [],
+  };
+  const standard = { ...base, schemaVersion: 2, version: "v9.98.1", manifestDigest: "3".repeat(64) };
+  const silent = {
+    ...base,
+    schemaVersion: 3,
+    version: "v9.98.2",
+    manifestDigest: "4".repeat(64),
+    releaseMode: "application",
+    notificationMode: "silent",
+    source: { kind: "github-release-import", importedAt: publishedAt },
+  };
+  await client.connect();
+  try {
+    await client.query("begin");
+    const profileCount = Number((await client.query("select count(*)::integer as count from public.profiles")).rows[0].count);
+    const before = Number((await client.query("select count(*)::integer as count from public.notification_events")).rows[0].count);
+    const standardResult = (await client.query("select public.ingest_platform_release_v1($1::jsonb) as result", [JSON.stringify(standard)])).rows[0].result;
+    if (standardResult.replayed !== false) throw new Error("Manifest v2 was not accepted as a first ingest.");
+    const afterStandard = Number((await client.query("select count(*)::integer as count from public.notification_events")).rows[0].count);
+    if (afterStandard !== before + profileCount) throw new Error("Manifest v2 did not create exactly one notification per profile.");
+    const standardReplay = (await client.query("select public.ingest_platform_release_v1($1::jsonb) as result", [JSON.stringify(standard)])).rows[0].result;
+    if (standardReplay.replayed !== true) throw new Error("Manifest v2 replay was not idempotent.");
+    const silentResult = (await client.query("select public.ingest_platform_release_v1($1::jsonb) as result", [JSON.stringify(silent)])).rows[0].result;
+    if (silentResult.replayed !== false) throw new Error("Silent Manifest v3 was not accepted as a first ingest.");
+    const afterSilent = Number((await client.query("select count(*)::integer as count from public.notification_events")).rows[0].count);
+    if (afterSilent !== afterStandard) throw new Error("Silent Manifest v3 unexpectedly created notifications.");
+    const silentReplay = (await client.query("select public.ingest_platform_release_v1($1::jsonb) as result", [JSON.stringify(silent)])).rows[0].result;
+    if (silentReplay.replayed !== true) throw new Error("Silent Manifest v3 replay was not idempotent.");
+    const stored = (await client.query(
+      "select schema_version, manifest = $2::jsonb as exact from public.platform_releases where version = $1",
+      [silent.version, JSON.stringify(silent)],
+    )).rows[0];
+    if (stored.schema_version !== 3 || stored.exact !== true) {
+      throw new Error("Silent Manifest v3 was not stored exactly with schema version 3.");
+    }
+  } finally {
+    await client.query("rollback").catch(() => undefined);
+    await client.end();
+  }
+}
+
 async function verifyDirectProfileMutationDenied(supabase, userId) {
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
@@ -1313,6 +1366,7 @@ async function main() {
     const token = signInData.session.access_token;
     await verifyDirectProfileMutationDenied(supabase, signInData.user.id);
     await verifyPlatformReleaseAccessBoundary(status, supabase);
+    await verifyPlatformReleaseIngestModes(status);
     await verifyPlanningApiGitHubSyncScope(token, source.tasks[0].id);
     await verifyEmptyEpicDeleteRoutes(token);
     await verifyPlanningRelationshipRoutes(token, source.tasks[0].id, source.tasks[1].id);

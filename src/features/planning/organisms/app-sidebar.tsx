@@ -49,7 +49,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
   }, []);
 
   const visibleNavItems = appNavItems.filter((item) => !item.ceoOnly || currentPlatformRole === "ceo");
-  const platformReleasesNavItem = { id: "platform-releases" as const, label: "Plattform-Releases", icon: Sparkles, href: "/team/platform-releases", navigationSection: "steering" as const };
+  const platformReleasesNavItem = { id: "platform-releases" as const, label: "Releases", icon: Sparkles, href: "/team/platform-releases", navigationSection: "steering" as const };
   const visibleNavigationSections = appNavigationSections.map((section) => ({
     ...section,
     items: [

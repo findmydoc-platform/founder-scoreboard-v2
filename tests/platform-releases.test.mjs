@@ -47,6 +47,45 @@ function fixture() {
   return manifest;
 }
 
+function applicationFixture() {
+  const v2 = fixture();
+  const targetSha = "a".repeat(40);
+  const manifest = {
+    schemaVersion: 3,
+    releaseMode: "application",
+    notificationMode: "silent",
+    source: { kind: "github-release-import", importedAt: "2026-08-17T10:00:00.000Z" },
+    version: "v0.45.0",
+    summary: "Die Website bündelt die bis dahin veröffentlichten Verbesserungen.",
+    highlights: ["website-release"],
+    changes: [{
+      id: "website-release",
+      kind: "feature",
+      componentKeys: ["website"],
+      pullRequests: [{ repository: "findmydoc-platform/website", number: 42 }],
+      commitShas: [],
+      summary: "Die Website wurde mit mehreren Verbesserungen veröffentlicht.",
+      title: "Verbesserte Website",
+      visualUrls: [],
+    }],
+    components: [{
+      ...v2.components[0],
+      targetSha,
+      release: "https://github.com/findmydoc-platform/website/releases/tag/v0.45.0",
+      deploymentRun: null,
+      commits: [{ ...v2.components[0].commits[0], sha: targetSha, url: `https://github.com/findmydoc-platform/website/commit/${targetSha}` }],
+      pullRequests: [{ ...v2.components[0].pullRequests[0], commitShas: [targetSha] }],
+    }],
+    visuals: [],
+    planDigest: "3".repeat(64),
+    contentDigest: "4".repeat(64),
+    publishedAt: "2026-08-01T10:00:00.000Z",
+    manifestDigest: "0".repeat(64),
+  };
+  manifest.manifestDigest = createHash("sha256").update(manifestContract.canonicalPlatformReleaseManifest(manifest)).digest("hex");
+  return manifest;
+}
+
 test("Manifest v2 validation and digest follow the release-runner contract", () => {
   const manifest = fixture();
   assert.equal(manifestContract.validatePlatformReleaseManifest(manifest).ok, true);
@@ -55,6 +94,60 @@ test("Manifest v2 validation and digest follow the release-runner contract", () 
   assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, highlights: ["missing"] }).ok, false);
   assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, components: manifest.components.map((component) => ({ ...component, release: { url: component.release } })) }).ok, false);
   assert.equal(manifestContract.platformReleaseReferenceUrl({ url: manifest.components[0].release }), manifest.components[0].release);
+});
+
+test("Manifest v3 supports registered application releases and optional deployment evidence", () => {
+  const manifest = applicationFixture();
+  assert.equal(manifestContract.validatePlatformReleaseManifest(manifest).ok, true);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, releaseMode: "platform" }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, components: [{ ...manifest.components[0], repository: "other/repository" }] }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, components: [{ ...manifest.components[0], release: "https://example.com/releases/v0.45.0" }] }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, notificationMode: "other" }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, notificationMode: "standard" }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, components: [{ ...manifest.components[0], release: "https://github.com/findmydoc-platform/website/releases/tag/v0.44.0" }] }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, components: [{ ...manifest.components[0], pullRequests: [{ ...manifest.components[0].pullRequests[0], url: "https://github.com/findmydoc-platform/website/pull/99" }] }] }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, components: [{ ...manifest.components[0], commits: [{ ...manifest.components[0].commits[0], url: `https://github.com/findmydoc-platform/website/commit/${"b".repeat(40)}` }] }] }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, changes: [{ ...manifest.changes[0], componentKeys: ["dashboard"] }] }).ok, false);
+});
+
+test("Manifest v3 binds change provenance to the declared components", () => {
+  const application = applicationFixture();
+  const dashboardSha = "b".repeat(40);
+  const dashboardPullRequest = {
+    commitShas: [dashboardSha], issues: [], number: 77, repository: "findmydoc-platform/clinic-dashboard",
+    title: "feat: dashboard", url: "https://github.com/findmydoc-platform/clinic-dashboard/pull/77",
+  };
+  const platform = {
+    ...application,
+    releaseMode: "platform",
+    notificationMode: "standard",
+    source: { kind: "native" },
+    components: [...application.components, {
+      key: "dashboard", displayName: "Clinic Dashboard", productionUrl: "https://clinics.findmydoc.eu",
+      repository: "findmydoc-platform/clinic-dashboard", targetSha: dashboardSha,
+      release: "https://github.com/findmydoc-platform/clinic-dashboard/releases/tag/v0.45.0",
+      deploymentRun: "https://github.com/findmydoc-platform/clinic-dashboard/actions/runs/77",
+      commits: [{ bump: "minor", message: "feat: dashboard", sha: dashboardSha, url: `https://github.com/findmydoc-platform/clinic-dashboard/commit/${dashboardSha}` }],
+      pullRequests: [dashboardPullRequest],
+    }],
+  };
+  assert.equal(manifestContract.validatePlatformReleaseManifest(platform).ok, true);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({
+    ...platform,
+    changes: [{ ...platform.changes[0], pullRequests: [{ repository: dashboardPullRequest.repository, number: dashboardPullRequest.number }] }],
+  }).ok, false);
+});
+
+test("Silent application releases are already seen without a notification row", () => {
+  const manifest = applicationFixture();
+  assert.deepEqual(manifestContract.platformReleaseNotificationState(manifest, manifest.publishedAt), {
+    notificationId: null,
+    seenAt: manifest.publishedAt,
+  });
+  assert.deepEqual(manifestContract.platformReleaseNotificationState(manifest, manifest.publishedAt, { id: 7, seen_at: null }), {
+    notificationId: 7,
+    seenAt: manifest.publishedAt,
+  });
 });
 
 test("Platform Release notifications remain personal and in-app only", () => {
@@ -72,6 +165,8 @@ test("Platform Release notifications navigate to the release detail after markin
   assert.match(commands, /target\.href !== workspacePath\(target\.workspace\)/);
   assert.match(commands, /navigateAfterNotificationStatusUpdate/);
   assert.match(commands, /router\.push\(target\.href\)/);
+  const detail = await readFile("src/features/platform-releases/organisms/platform-release-detail.tsx", "utf8");
+  assert.match(detail, /release\.seenAt \|\| !release\.notificationId/);
 });
 
 test("Platform Release planning links preserve a safe return to the release detail", async () => {
@@ -102,6 +197,15 @@ test("Migration keeps immutable release provenance and personal notifications at
   assert.match(migration, /grant execute on function public\.ingest_platform_release_v1\(jsonb\) to service_role/);
   assert.doesNotMatch(migration, /grant execute on function public\.ingest_platform_release_v1\(jsonb\) to authenticated/);
   assert.match(databaseSecurityContracts, /\["platform_releases_select_team", "platform_releases"\]/);
+});
+
+test("Manifest v3 migration keeps v2 compatible and supports silent ingestion", async () => {
+  const migration = await readFile("supabase/migrations/20260817132304_platform_release_manifest_v3.sql", "utf8");
+  assert.match(migration, /schema_version in \(2, 3\)/);
+  assert.match(migration, /v_silent boolean/);
+  assert.match(migration, /if not v_silent then/);
+  assert.match(migration, /insert into public\.notification_events/);
+  assert.match(migration, /grant execute on function public\.ingest_platform_release_v1\(jsonb\) to service_role/);
 });
 
 test("Ingest endpoint enforces bearer auth, idempotency and exact digest verification", async () => {

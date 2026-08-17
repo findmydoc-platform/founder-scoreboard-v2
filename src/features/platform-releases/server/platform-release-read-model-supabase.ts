@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
-import type { PlatformReleaseManifestV2 } from "../model/platform-release-manifest";
+import { platformReleaseNotificationState, type PlatformReleaseManifest } from "../model/platform-release-manifest";
 import { platformReleaseSeed } from "../model/platform-release-seed";
 import { compareReleaseVersions, type PlatformReleasePlanningLink, type PlatformReleasePlanningReference, type PlatformReleaseRecord } from "../model/platform-release-model";
 
@@ -11,7 +11,7 @@ type ReleaseRow = {
   summary: string;
   published_at: string;
   manifest_digest: string;
-  manifest: PlatformReleaseManifestV2;
+  manifest: PlatformReleaseManifest;
 };
 
 type TaskRow = {
@@ -62,7 +62,7 @@ function referenceKey(repository: string, number: number) {
   return `${repository.trim().toLowerCase()}#${number}`;
 }
 
-function derivePlanningReferences(manifest: PlatformReleaseManifestV2, tasks: TaskRow[], taskLinks: TaskLinkRow[]) {
+function derivePlanningReferences(manifest: PlatformReleaseManifest, tasks: TaskRow[], taskLinks: TaskLinkRow[]) {
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const taskIdsByPr = new Map<string, string[]>();
   for (const link of taskLinks) {
@@ -115,6 +115,7 @@ export async function loadPlatformReleases(supabase: SupabaseClient, profileId?:
   const notificationByVersion = new Map(notifications.map((notification) => [notification.entity_id, notification]));
   return ((releaseResult.data || []) as ReleaseRow[]).map((row) => {
     const notification = notificationByVersion.get(row.version);
+    const notificationState = platformReleaseNotificationState(row.manifest, row.published_at, notification);
     return {
       version: row.version,
       summary: row.summary,
@@ -122,8 +123,7 @@ export async function loadPlatformReleases(supabase: SupabaseClient, profileId?:
       manifestDigest: row.manifest_digest,
       manifest: row.manifest,
       planningReferences: derivePlanningReferences(row.manifest, tasks, taskLinks),
-      notificationId: notification?.id || null,
-      seenAt: notification?.seen_at || null,
+      ...notificationState,
     };
   }).sort((left, right) => compareReleaseVersions(left.version, right.version));
 }
