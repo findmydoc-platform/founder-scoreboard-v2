@@ -46,8 +46,8 @@
         "image": {
           "src": "/product-updates/2026-08-14-platform-releases/platform-releases.jpg",
           "alt": "FounderOps mit dem Release-Archiv und dem aktuellen Release im Seitenmenü",
-          "width": 1672,
-          "height": 941
+            "width": 1200,
+            "height": 919
         }
       }
     ]
