@@ -279,6 +279,41 @@ test("Team create preview only reports success after it receives preview items",
   });
 });
 
+test("Team create preview fails closed when a successful runner skips preview items", async () => {
+  const { route } = await loadTeamCreateRoute({
+    runResult: { ok: true, status: "previewed", items: [], changes: [], effects: [], warnings: [] },
+  });
+
+  const response = await route.handleTeamPlanningItemsCreatePreview({
+    json: async () => ({ items: [{ itemType: "epic", title: "Preview" }] }),
+  });
+
+  assert.deepEqual(response, {
+    body: { ok: false, error: "Planning-Items-Erstellung konnte nicht geprüft werden." },
+    status: 500,
+  });
+});
+
+test("Team create preview preserves completed invalid previews", async () => {
+  const previewItems = [{ errors: ["Titel ist erforderlich."] }];
+  const { route } = await loadTeamCreateRoute({
+    runResult: {
+      ok: false,
+      error: { code: "invalidCommand", issues: [{ path: "command.items.0", reason: "Titel ist erforderlich." }] },
+    },
+    previewItems,
+  });
+
+  const response = await route.handleTeamPlanningItemsCreatePreview({
+    json: async () => ({ items: [{ itemType: "epic", title: "Preview" }] }),
+  });
+
+  assert.deepEqual(response, {
+    body: { ok: true, valid: false, items: previewItems },
+    status: 200,
+  });
+});
+
 test("Team create error mapping preserves public authentication and schema statuses", async () => {
   const create = await loadCreate();
   assert.deepEqual(create.planningCreateError({ code: "forbidden", reason: "planningTokenInactive" }), {

@@ -52,11 +52,8 @@ export async function handleTeamPlanningItemsCreatePreview(
         mode: "preview",
         command: planningItemCreateCommand(parsed.items, actor.actor.profileId),
       });
-      if (!result.ok) {
+      if (!result.ok && result.error.code !== "invalidCommand") {
         const mapped = planningCreateError(result.error);
-        if (mapped.issues) {
-          return planningItemsJson({ ok: false, error: mapped.message, items }, mapped.status);
-        }
         return planningItemsError(mapped.message, mapped.status);
       }
       if (!items) {
