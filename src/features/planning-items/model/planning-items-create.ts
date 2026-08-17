@@ -599,14 +599,17 @@ async function prepareTeamCreate(
   request: PlanningPreparationRequest,
 ): Promise<{ data: PlanningPreparation<PlanningCreateState> | null; error: unknown | null }> {
   if (request.command.kind !== "createItems") return { data: { kind: "error", error: invalidCreate("createItemsRequired", "command.kind") }, error: null };
-  const existingRequest = await dependencies.supabase
-    .from("team_task_intake_batches")
-    .select("id,request_hash,response_tasks,contract_version")
-    .eq("token_id", dependencies.tokenId)
-    .eq("idempotency_key", request.idempotencyKey || "")
-    .maybeSingle();
-  if (existingRequest.error) return { data: null, error: existingRequest.error };
-  const stored = existingRequest.data as StoredCreateRequest | null;
+  let stored: StoredCreateRequest | null = null;
+  if (request.idempotencyKey) {
+    const existingRequest = await dependencies.supabase
+      .from("team_task_intake_batches")
+      .select("id,request_hash,response_tasks,contract_version")
+      .eq("token_id", dependencies.tokenId)
+      .eq("idempotency_key", request.idempotencyKey)
+      .maybeSingle();
+    if (existingRequest.error) return { data: null, error: existingRequest.error };
+    stored = existingRequest.data as StoredCreateRequest | null;
+  }
   if (stored && Number(stored.contract_version || 1) < 2) {
     return { data: { kind: "error", error: { code: "conflict", reason: "idempotency" } }, error: null };
   }
@@ -713,7 +716,9 @@ export function createTeamCreatePlanningItems(dependencies: TeamCreateDependenci
       const preparation = await prepareTeamCreate(dependencies, {
         actor: invocation.actor,
         command: invocation.command,
-        idempotencyKey: invocation.idempotencyKey,
+        ...(invocation.mode === "commit" && invocation.idempotencyKey
+          ? { idempotencyKey: invocation.idempotencyKey }
+          : {}),
       });
       if (preparation.error || !preparation.data) return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: true } };
       if (preparation.data.kind === "error") return { ok: false, error: preparation.data.error };
