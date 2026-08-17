@@ -12,7 +12,7 @@ import {
   validateTaskStatusUpdate,
   type TaskRouteDbUpdate,
 } from "@/features/tasks/model/task-route-update-helpers";
-import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
+import { isReviewStateLocked, reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 import { isSubIssueStatus, normalizeSubIssueStatus } from "@/lib/status";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
@@ -44,6 +44,7 @@ type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 type UnknownRecord = Record<string, unknown>;
 type DatabaseRow = Record<string, unknown>;
 export type PlanningItemReplayType = TeamPlanningItemType;
+type PlanningItemPatchField = TeamPlanningItemPatchField | "evidenceLink" | "sprintId";
 
 type StrategyRow = {
   task_id: string;
@@ -85,11 +86,16 @@ export type PlanningItemUpdatePreview = {
   githubSyncParentApprovalStatus?: unknown;
 };
 
-const patchFields = new Set<string>([
+const patchFields = new Set<PlanningItemPatchField>([
   ...TEAM_PLANNING_ITEM_PATCH_FIELDS,
 ]);
+const webhookPatchFields = new Set<PlanningItemPatchField>([
+  ...TEAM_PLANNING_ITEM_PATCH_FIELDS,
+  "evidenceLink",
+  "sprintId",
+]);
 const strategicStatuses = new Set<string>(TEAM_PLANNING_STRATEGIC_STATUSES);
-const fieldsByType: Record<TeamPlanningItemType, Set<TeamPlanningItemPatchField>> = {
+const fieldsByType: Record<TeamPlanningItemType, Set<PlanningItemPatchField>> = {
   epic: new Set(["title", "description", "ownerId", "targetDate", "status"]),
   initiative: new Set([
     "title", "description", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "parentTaskId",
@@ -98,18 +104,18 @@ const fieldsByType: Record<TeamPlanningItemType, Set<TeamPlanningItemPatchField>
   deliverable: new Set([
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
     "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "priority", "workstream", "startDate",
-    "endDate", "deadline", "hours", "status",
+    "endDate", "deadline", "hours", "evidenceLink", "sprintId", "status",
   ]),
   sub_issue: new Set([
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
     "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "githubRepo", "status",
   ]),
 };
-const founderInitiativeFields = new Set<TeamPlanningItemPatchField>([
+const founderInitiativeFields = new Set<PlanningItemPatchField>([
   "title", "description", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "priority", "responsibleProfileIds",
   "consultedProfileIds", "informedProfileIds", "status",
 ]);
-const founderTaskBriefFields = new Set<TeamPlanningItemPatchField>([
+const founderTaskBriefFields = new Set<PlanningItemPatchField>([
   "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
   "evidenceRequired", "definitionOfDone",
 ]);
@@ -222,6 +228,7 @@ function publicTask(row: DatabaseRow): UnknownRecord {
     scopeConstraints: String(row.scope_constraints || ""),
     acceptanceCriteria: String(row.acceptance_criteria || ""),
     evidenceRequired: String(row.evidence_required || ""),
+    evidenceLink: String(row.evidence_link || ""),
     definitionOfDone: String(row.definition_of_done || ""),
     parentTaskId: String(row.parent_task_id || ""),
     ownerId: String(row.owner || row.assignee || ""),
@@ -273,17 +280,19 @@ export function planningItemUpdateHash({ itemId, itemType, expectedUpdatedAt, pa
 
 export function parsePlanningItemPatchPayload(
   payload: unknown,
+  options: Readonly<{ allowWebhookProjectionFields?: boolean }> = {},
 ) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { ok: false as const, error: "PATCH-Payload muss ein Objekt sein." };
   }
   const raw = payload as UnknownRecord;
+  const allowedPatchFields = options.allowWebhookProjectionFields ? webhookPatchFields : patchFields;
   const unknownKey = Object.keys(raw).find((key) => (
     key !== "expectedUpdatedAt"
     && key !== "itemType"
     && key !== "githubSync"
     && key !== "githubSyncMode"
-    && !patchFields.has(key)
+    && !allowedPatchFields.has(key as PlanningItemPatchField)
   ));
   if (unknownKey) return { ok: false as const, error: `PATCH-Payload enthält das unbekannte Feld ${unknownKey}.` };
   if (hasOwn(raw, "itemType")) return { ok: false as const, error: "itemType ist unveränderlich und darf nicht gepatcht werden." };
@@ -301,7 +310,9 @@ export function parsePlanningItemPatchPayload(
   const githubSyncMode = parsePlanningItemGitHubSyncMode(raw.githubSyncMode);
   if (hasGitHubSync && !githubSyncMode) return { ok: false as const, error: "githubSyncMode muss bei GitHub-Sync async oder wait sein." };
   if (!hasGitHubSync && hasMode) return { ok: false as const, error: "githubSyncMode ist nur zusammen mit githubSync zulässig." };
-  const presentFields = Object.keys(raw).filter((key): key is TeamPlanningItemPatchField => patchFields.has(key));
+  const presentFields = Object.keys(raw).filter(
+    (key): key is PlanningItemPatchField => allowedPatchFields.has(key as PlanningItemPatchField),
+  );
   if (!presentFields.length && !githubSync) return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld oder githubSync." };
   return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null };
 }
@@ -312,7 +323,7 @@ async function loadTarget(
 ): Promise<TargetLoadResult> {
   const taskResult = await supabase
     .from(ACTIVE_TASKS_TABLE)
-    .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,start_date,end_date,deadline,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
+    .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,start_date,end_date,deadline,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
     .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID)
     .eq("id", itemId)
     .maybeSingle();
@@ -332,7 +343,7 @@ function appendSystemEffect(effects: PlanningItemSystemEffect[], field: string, 
   if (!sameValue(before, after)) effects.push({ field, before, after, reason });
 }
 
-function validatePermission(actor: AuthenticatedProfile, itemType: TeamPlanningItemType, target: DatabaseRow, presentFields: TeamPlanningItemPatchField[]) {
+function validatePermission(actor: AuthenticatedProfile, itemType: TeamPlanningItemType, target: DatabaseRow, presentFields: PlanningItemPatchField[]) {
   const errors: string[] = [];
   if (["ceo", "deputy"].includes(actor.platformRole)) return errors;
   if (itemType === "epic") return ["Nur CEO oder Deputy können Epics bearbeiten."];
@@ -349,7 +360,7 @@ function validatePermission(actor: AuthenticatedProfile, itemType: TeamPlanningI
       owner: String(target.owner || ""), ownerId: String(target.owner || ""),
       reviewOwnerProfileId: String(target.review_owner_profile_id || ""),
       reviewStatus: String(target.review_status || "not_requested") as Task["reviewStatus"],
-      scoreFinal: Boolean(target.score_final), taskType: itemType,
+      scoreFinal: Boolean(target.score_final), status: String(target.status || ""), taskType: itemType,
     },
     profile: actor,
   });
@@ -361,7 +372,7 @@ function validatePermission(actor: AuthenticatedProfile, itemType: TeamPlanningI
   return errors;
 }
 
-function normalizePatch(raw: UnknownRecord, presentFields: TeamPlanningItemPatchField[], itemType: TeamPlanningItemType) {
+function normalizePatch(raw: UnknownRecord, presentFields: PlanningItemPatchField[], itemType: TeamPlanningItemType) {
   const normalized: UnknownRecord = {};
   const errors: string[] = [];
   for (const field of presentFields) {
@@ -378,6 +389,7 @@ function normalizePatch(raw: UnknownRecord, presentFields: TeamPlanningItemPatch
       case "intendedOutcome":
       case "scopeConstraints":
       case "evidenceRequired":
+      case "evidenceLink":
       case "definitionOfDone": result = normalizePatchText(value, 4_000); break;
       case "acceptanceCriteria": result = normalizePatchAcceptanceCriteria(value); break;
       case "priority": result = normalizePatchPriority(value); break;
@@ -399,6 +411,7 @@ function normalizePatch(raw: UnknownRecord, presentFields: TeamPlanningItemPatch
       case "informedProfileIds": result = normalizePatchStringList(value); break;
       case "accountableProfileId":
       case "parentTaskId":
+      case "sprintId":
       case "ownerId": result = normalizePatchId(value); break;
       case "githubRepo": result = normalizePatchText(value, 120, true); break;
       default: result = { ok: false, error: "wird nicht unterstützt" };
@@ -430,6 +443,7 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
     ["startDate", "start_date"], ["endDate", "end_date"], ["deadline", "deadline"], ["hours", "estimate_hours"],
     ["problemStatement", "problem_statement"], ["intendedOutcome", "intended_outcome"], ["scopeConstraints", "scope_constraints"],
     ["acceptanceCriteria", "acceptance_criteria"], ["evidenceRequired", "evidence_required"], ["definitionOfDone", "definition_of_done"],
+    ["evidenceLink", "evidence_link"], ["sprintId", "sprint_id"],
     ["githubRepo", "github_repo"],
   ];
   for (const [field, column] of maps) if (changed.has(field)) dbPatch[column] = resultingItem[field];
@@ -479,7 +493,7 @@ export async function buildPlanningItemUpdatePreview({
   const [profilesResult, parentsResult, sprintsResult, raciResult] = await Promise.all([
     supabase.from("profiles").select("id,platform_role"),
     supabase.from(ACTIVE_TASKS_TABLE)
-      .select("id,task_type,parent_task_id,owner,assignee,approval_status,review_status,score_final,sprint_id")
+      .select("id,task_type,parent_task_id,owner,assignee,approval_status,status,review_status,score_final,sprint_id")
       .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
     supabase.from("sprints").select("id,score_locked"),
     supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order"),
@@ -515,6 +529,8 @@ export async function buildPlanningItemUpdatePreview({
       errors.push("Sub-Issue braucht ein freigegebenes Parent-Deliverable.");
     } else if (isReviewStateLocked(String(parent.review_status || ""), Boolean(parent.score_final))) {
       errors.push(reviewStateLockMessage(String(parent.review_status || ""), Boolean(parent.score_final)));
+    } else if (String(parent.status || "") === "Erledigt") {
+      errors.push(TASK_COMPLETED_LOCKED_MESSAGE);
     }
   }
   for (const field of ["ownerId", "accountableProfileId"] as const) {
@@ -525,6 +541,15 @@ export async function buildPlanningItemUpdatePreview({
     const values = normalizedPatch[field];
     if (Array.isArray(values) && values.some((value) => typeof value === "string" && !profileIds.has(value))) {
       errors.push(`${field} enthält unbekannte Profile.`);
+    }
+  }
+  if (hasOwn(normalizedPatch, "sprintId")) {
+    const targetSprintId = String(normalizedPatch.sprintId || "");
+    const sourceSprintId = String(target.row.sprint_id || "");
+    if (targetSprintId && !sprints.has(targetSprintId)) errors.push("sprintId wurde nicht gefunden.");
+    if (targetSprintId && Boolean(sprints.get(targetSprintId)?.score_locked)) errors.push("Der Ziel-Sprint ist gesperrt.");
+    if (sourceSprintId && sourceSprintId !== targetSprintId && Boolean(sprints.get(sourceSprintId)?.score_locked)) {
+      errors.push("Die Zuordnung aus einem gesperrten Sprint kann nicht geändert werden.");
     }
   }
   if (hasOwn(normalizedPatch, "githubRepo")) {
@@ -544,22 +569,32 @@ export async function buildPlanningItemUpdatePreview({
   const rewritesLegacySubIssueStatus = target.itemType === "sub_issue"
     && parsed.presentFields.includes("status")
     && !isSubIssueStatus(String(target.row.status || ""));
-  const fieldChanged = (field: TeamPlanningItemPatchField) => {
+  const fieldChanged = (field: PlanningItemPatchField) => {
     if (field === "parentTaskId") {
       return !sameValue(currentItem.parentTaskId, parentTaskId);
     }
     return !sameValue(currentItem[field], resultingItem[field]);
   };
   const changedFields = parsed.presentFields.filter((field) => fieldChanged(field) || (field === "status" && rewritesLegacySubIssueStatus));
+  const statusChanged = changedFields.includes("status") && (target.itemType === "deliverable" || target.itemType === "sub_issue");
   const taskUpdateRequested = (target.itemType === "deliverable" || target.itemType === "sub_issue") && changedFields.length > 0;
-  if (taskUpdateRequested && target.itemType === "deliverable" && isReviewStateLocked(String(target.row.review_status || ""), Boolean(target.row.score_final))) {
+  const completedReopen = statusChanged
+    && changedFields.length === 1
+    && String(target.row.status || "") === "Erledigt"
+    && String(resultingItem.status || "") === "Offen";
+  if (taskUpdateRequested && String(target.row.status || "") === "Erledigt" && !completedReopen) {
+    return { ok: false, status: 409, error: TASK_COMPLETED_LOCKED_MESSAGE };
+  }
+  if (taskUpdateRequested && !completedReopen && target.itemType === "deliverable" && isReviewStateLocked(String(target.row.review_status || ""), Boolean(target.row.score_final))) {
     return { ok: false, status: 409, error: reviewStateLockMessage(String(target.row.review_status || ""), Boolean(target.row.score_final)) };
   }
   if (taskUpdateRequested && target.itemType === "sub_issue" && parent && isReviewStateLocked(String(parent.review_status || ""), Boolean(parent.score_final))) {
     return { ok: false, status: 409, error: reviewStateLockMessage(String(parent.review_status || ""), Boolean(parent.score_final)) };
   }
+  if (taskUpdateRequested && target.itemType === "sub_issue" && parent && String(parent.status || "") === "Erledigt") {
+    return { ok: false, status: 409, error: TASK_COMPLETED_LOCKED_MESSAGE };
+  }
 
-  const statusChanged = changedFields.includes("status") && (target.itemType === "deliverable" || target.itemType === "sub_issue");
   const statusPayload = statusChanged ? { status: String(resultingItem.status || "") } : {};
   const statusPermissions = taskDetailPermissions({
     task: {
@@ -570,6 +605,7 @@ export async function buildPlanningItemUpdatePreview({
       reviewOwnerProfileId: String(target.row.review_owner_profile_id || ""),
       reviewStatus: String(target.row.review_status || "not_requested") as Task["reviewStatus"],
       scoreFinal: Boolean(target.row.score_final),
+      status: String(target.row.status || ""),
       taskType: target.itemType,
     },
     profile: actor,
@@ -801,6 +837,7 @@ export function planningItemReviseCommand(
       ...(hasOwn(patch, "endDate") ? { endDate: String(patch.endDate || "") || null } : {}),
       ...(hasOwn(patch, "deadline") ? { deadline: String(patch.deadline || "") || null } : {}),
       ...(hasOwn(patch, "hours") ? { hours: Number(patch.hours || 0) } : {}),
+      ...(hasOwn(patch, "evidenceLink") ? { evidenceLink: String(patch.evidenceLink || "") || null } : {}),
     } as PlanningItemChanges;
   }
   return { kind: "reviseItem", itemId, expectedRevision, changes };
@@ -846,6 +883,7 @@ function reviseError(error: unknown): PlanningError {
   if (code === "P0008") return { code: "conflict", reason: "state", details: { reviseState: "parentApproval" } };
   if (code === "P0010") return { code: "conflict", reason: "state", details: { reviseState: "reviewLocked" } };
   if (code === "P0015") return { code: "conflict", reason: "state", details: { reviseState: "sprintLocked" } };
+  if (code === "P0016") return { code: "conflict", reason: "state", details: { reviseState: "completedLocked" } };
   if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
   if (code === "P0006") return { code: "forbidden", reason: "reviseNotAllowed" };
   if (code === "23503" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "profileNotFound" }] };

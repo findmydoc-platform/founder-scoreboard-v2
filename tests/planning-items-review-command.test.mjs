@@ -243,6 +243,7 @@ test("review role, ownership, reviewer, lock, revision, and state boundaries fai
     [fixture(), owner, model.requestPlanningReviewCommand("task-one", { expectedUpdatedAt: "2026-08-12T12:00:00.000Z" }), "conflict"],
     [fixture({ taskRow: task({ approval_status: "proposed" }) }), actor, model.requestPlanningReviewCommand("task-one", { expectedUpdatedAt: revision }), "conflict"],
     [fixture(), viewer, model.requestPlanningReviewCommand("task-one", { expectedUpdatedAt: revision }), "forbidden"],
+    [fixture({ taskRow: task({ status: "Erledigt", review_status: "not_requested", score_points: 0, score_final: false }) }), actor, model.requestPlanningReviewCommand("task-one", { expectedUpdatedAt: revision }), "conflict"],
   ];
   for (const [current, currentActor, command, code] of boundaries) {
     const result = await model.createPlanningReviewPlanningItems(current.client).run({ actor: currentActor, mode: "commit", command });

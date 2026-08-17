@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
+const projectFieldContext = await loadTranspiledModule("src/lib/github-sync/project-field-context.ts");
+
 const statusOptions = [
   ["status-todo", "Todo"],
   ["status-progress", "In Progress"],
@@ -136,6 +138,7 @@ async function loadProjectProjection(handler) {
         return { owner, repo, repository };
       },
     },
+    "./project-field-context": projectFieldContext,
   });
 }
 

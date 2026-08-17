@@ -335,6 +335,9 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
   if (action.expectedRevision && action.expectedRevision !== task.revision) {
     return { ok: false as const, error: { code: "conflict", reason: "revision" } as PlanningError };
   }
+  if (task.status === "Erledigt" && action.kind !== "reopenReview") {
+    return { ok: false as const, error: conflict("completed") };
+  }
   if (actor.platformRole === "viewer") {
     return { ok: false as const, error: { code: "forbidden", reason: "planningReviewRequiresContributor" } as PlanningError };
   }
@@ -651,6 +654,7 @@ function providerError(code: string, request: PlanningCommitRequest<PlanningRevi
   if (code === "P0005" || code === "P0006") return { ok: false, error: { code: "forbidden", reason: "planningReviewAuthorizationChanged" } };
   if (code === "P0007") return { ok: false, error: conflict("reviewerInvalid") };
   if (code === "P0010") return { ok: false, error: conflict("trashed") };
+  if (code === "P0016") return { ok: false, error: conflict("completed") };
   if (code === "22023" || code === "23514") return { ok: false, error: invalid("invalidPlanningReview") };
   return null;
 }
@@ -785,6 +789,7 @@ export function planningReviewError(error: PlanningError, action: "request" | "d
   if (error.code === "conflict") {
     const reason = String(error.details?.planningReviewReason || "");
     if (reason === "trashed") return { message: "Aufgabe befindet sich im Papierkorb und kann nicht geändert werden.", status: 409 };
+    if (reason === "completed") return { message: "Dieses Issue ist nach dem Schließen geschützt. Öffne es wieder, bevor du das Review änderst.", status: 409 };
     if (reason === "sprintLocked") return { message: "Sprint-Score ist bereits gelockt.", status: 409 };
     if (reason === "reviewerRequired") return { message: action === "reopen" ? "Lege vor dem erneuten Review eine Review-Verantwortung fest." : "Lege vor der Review-Anfrage eine Review-Verantwortung fest.", status: 409 };
     if (reason === "reviewerInvalid") return { message: "Die Review-Verantwortung braucht eine beitragende Rolle.", status: 409 };

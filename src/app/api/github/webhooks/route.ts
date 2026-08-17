@@ -8,6 +8,7 @@ import {
   createSupabaseGitHubIssueCommentWebhookStore,
   processGitHubIssueCommentWebhookDelivery,
 } from "@/lib/github-issue-comment-webhook";
+import { processGitHubPlanningWebhookDelivery } from "@/lib/github-planning-webhook";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,7 @@ async function readBoundedRawBody(request: NextRequest): Promise<RawBodyReadResu
 export async function POST(request: NextRequest) {
   const webhookSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || "";
   const expectedInstallationId = process.env.GITHUB_APP_INSTALLATION_ID?.trim() || "";
+  const expectedOrganizationId = process.env.GITHUB_WEBHOOK_ORGANIZATION_ID?.trim() || "";
   const supabase = getServerServiceRoleSupabase();
   if (!webhookSecret || !/^\d+$/.test(expectedInstallationId) || !supabase) {
     return jsonError("github_webhook_unavailable", "GitHub webhook intake is unavailable.", 503);
@@ -101,6 +103,7 @@ export async function POST(request: NextRequest) {
     },
     webhookSecret,
     expectedInstallationId,
+    expectedOrganizationId,
     store: createSupabaseGitHubWebhookDeliveryStore(supabase),
   });
 
@@ -112,6 +115,13 @@ export async function POST(request: NextRequest) {
       await processGitHubIssueCommentWebhookDelivery({
         deliveryId: result.delivery.deliveryId,
         store: createSupabaseGitHubIssueCommentWebhookStore(supabase),
+      }).catch(() => undefined);
+    });
+  } else {
+    after(async () => {
+      await processGitHubPlanningWebhookDelivery({
+        deliveryId: result.delivery.deliveryId,
+        supabase,
       }).catch(() => undefined);
     });
   }

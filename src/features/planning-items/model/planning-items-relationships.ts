@@ -48,6 +48,7 @@ type RelationshipTaskState = Readonly<{
   assignee: string;
   parentId: string;
   trashed: boolean;
+  completed: boolean;
 }>;
 
 type RelationshipInitiativeState = Readonly<{
@@ -64,6 +65,7 @@ export type PlanningRelationshipState = Readonly<{
   actorName: string;
   reviewLocked: boolean;
   finalReviewLocked: boolean;
+  completedLocked: boolean;
 }>;
 
 export type PlanningRelationshipCommitPlan = Readonly<{
@@ -230,6 +232,7 @@ export const planningRelationshipDecisionCore: PlanningDecisionCore<
       return { ok: false, error: { code: "forbidden", reason: "planningRelationshipRequiresContributor" } };
     }
     if (state.reviewLocked) return { ok: false, error: stateConflict(state.finalReviewLocked ? "finalReviewLocked" : "reviewLocked") };
+    if (state.completedLocked) return { ok: false, error: stateConflict("completedLocked") };
 
     const canManageAll = actor.platformRole === "ceo" || actor.platformRole === "deputy";
     const canManageDependency = canManageBlockedBy(state, actor.profileId, actor.platformRole);
@@ -322,6 +325,7 @@ function taskState(value: unknown): RelationshipTaskState | null {
     assignee: String(row.assignee || ""),
     parentId: String(row.parent_task_id || ""),
     trashed: Boolean(row.trashed_at),
+    completed: row.status === "Erledigt",
   };
 }
 
@@ -350,9 +354,11 @@ function preparationState(value: unknown): PlanningRelationshipState | null {
   const initiativeRow = row.initiative && typeof row.initiative === "object"
     ? row.initiative as Record<string, unknown>
     : null;
+  const source = taskState(row.source);
+  const related = taskState(row.related);
   return {
-    source: taskState(row.source),
-    related: taskState(row.related),
+    source,
+    related,
     relation: relationship(row.relation),
     existingRelation: relationship(row.existingRelation),
     actorName: String(row.actorName || ""),
@@ -362,6 +368,7 @@ function preparationState(value: unknown): PlanningRelationshipState | null {
     } : null,
     reviewLocked: Boolean(row.reviewLocked),
     finalReviewLocked: Boolean(row.finalReviewLocked),
+    completedLocked: Boolean(row.completedLocked) || Boolean(source?.completed || related?.completed),
   };
 }
 
@@ -397,6 +404,7 @@ function providerError(code: string, request: PlanningCommitRequest<PlanningRela
   if (code === "P0003") return { ok: false, error: stateConflict("duplicate") };
   if (code === "P0006") return { ok: false, error: { code: "forbidden", reason: "planningRelationshipAuthorizationChanged" } };
   if (code === "P0008") return { ok: false, error: stateConflict("reviewLocked") };
+  if (code === "P0016") return { ok: false, error: stateConflict("completedLocked") };
   if (code === "P0010") return { ok: false, error: stateConflict("sourceTrashed") };
   if (code === "P0011") return { ok: false, error: stateConflict("relatedTrashed") };
   if (code === "22023" || code === "23514") return { ok: false, error: invalid("invalidPlanningRelationship") };
@@ -493,6 +501,9 @@ export function planningRelationshipError(error: PlanningError): Readonly<{ mess
     }
     if (reason === "finalReviewLocked") {
       return { message: "Dieses Issue ist nach dem finalen Review geschützt. Öffne das Review erneut, bevor du den Inhalt änderst.", status: 409 };
+    }
+    if (reason === "completedLocked") {
+      return { message: "Dieses Issue ist nach dem Schließen geschützt. Öffne es wieder, bevor du den Inhalt änderst.", status: 409 };
     }
     return { message: "Dieses Issue ist während des aktiven Reviews geschützt. Schließe das Review ab oder ziehe es mit Begründung zurück.", status: 409 };
   }

@@ -37,6 +37,7 @@ test("the webhook migration creates a service-role-only delivery journal", async
   assert.doesNotMatch(migration, /\b(?:insert into|update|delete from)\s+public\.(?:tasks|deliverables|initiatives|epics)\b/i);
   assert.match(schemaContract, /github_webhook_deliveries/);
   assert.deepEqual(serviceRoleOnlyTablePrivileges, [
+    ["github_planning_webhook_deliveries", ["SELECT", "INSERT"]],
     ["github_webhook_deliveries", ["SELECT", "INSERT"]],
   ]);
 });
@@ -70,16 +71,14 @@ test("runtime configuration and operations docs expose the Issue and comment int
   ]);
 
   assert.match(envExample, /^GITHUB_APP_WEBHOOK_SECRET=$/m);
+  assert.match(envExample, /^GITHUB_WEBHOOK_ORGANIZATION_ID=$/m);
   assert.match(deployment, /\/api\/github\/webhooks/);
-  assert.match(deployment, /Issues and Issue comment events/i);
   assert.match(idempotency, /github-webhook-intake\.md/);
   assert.match(intakeDoc, /FounderOps remains the source of truth/i);
-  assert.match(intakeDoc, /does not mutate planning items/i);
   assert.match(intakeDoc, /sub_issues/);
   assert.match(intakeDoc, /issue_dependencies/);
   assert.match(intakeDoc, /issue_comment/);
-  assert.match(intakeDoc, /never the comment body/i);
-  assert.match(intakeDoc, /pull-request conversation comments are ignored/i);
+  assert.match(intakeDoc, /pull-request comments are ignored/i);
   assert.match(intakeDoc, /Recent deliveries/);
   assert.match(intakeDoc, /Redeliver/);
   assert.match(intakeDoc, /Preview must not receive the production webhook secret/);

@@ -5,6 +5,7 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const webhookSecret = "test-webhook-secret";
 const expectedInstallationId = "42";
+const expectedOrganizationId = "606";
 const allowedRepositories = new Set([
   "findmydoc-platform/management",
   "findmydoc-platform/website",
@@ -76,6 +77,7 @@ function inspect(body, envelopeOptions = {}, intakeOptions = {}) {
     ...signedEnvelope(body, envelopeOptions),
     webhookSecret,
     expectedInstallationId,
+    expectedOrganizationId,
     ...intakeOptions,
   });
 }
@@ -95,19 +97,55 @@ test("a signed Issue event is normalized around stable GitHub identities", () =>
     eventName: "issues",
     action: "edited",
     installationId: 42,
+    organizationId: null,
+    organizationLogin: null,
     repositoryId: 101,
     repositoryFullName: "findmydoc-platform/management",
     issueId: 202,
     issueNodeId: "I_kwDOExample",
     issueNumber: 17,
     issueUpdatedAt: "2026-08-14T12:30:00Z",
+    relatedRepositoryId: null,
+    relatedRepositoryFullName: null,
+    relatedIssueId: null,
+    relatedIssueNodeId: null,
+    relatedIssueNumber: null,
+    relatedIssueUpdatedAt: null,
+    projectNodeId: null,
+    projectItemNodeId: null,
+    projectItemUpdatedAt: null,
+    projectContentNodeId: null,
+    projectContentType: null,
+    projectFieldNodeId: null,
+    changedFields: [],
+    targetUserId: null,
+    targetUserLogin: null,
     commentId: null,
     commentNodeId: null,
     commentUpdatedAt: null,
     senderId: 303,
     senderLogin: "founder",
+    senderType: null,
     payloadSha256: createHash("sha256").update(envelope.rawBody).digest("hex"),
   });
+});
+
+test("Issue field events persist only the field name and reload values later", () => {
+  const result = inspect(issuePayload({
+    action: "field_added",
+    field: {
+      name: "Priority",
+      type: "single_select",
+      value: "High",
+      previous_value: "Medium",
+    },
+  }));
+
+  assert.equal(result.kind, "accepted");
+  assert.deepEqual(result.delivery.changedFields, ["issue_field:Priority"]);
+  assert.equal(JSON.stringify(result.delivery).includes("High"), false);
+  assert.equal(JSON.stringify(result.delivery).includes("Medium"), false);
+  assert.equal(Object.hasOwn(result.delivery, "field"), false);
 });
 
 test("a signed Issue comment event stores stable identities without comment content", () => {
@@ -125,17 +163,35 @@ test("a signed Issue comment event stores stable identities without comment cont
     eventName: "issue_comment",
     action: "created",
     installationId: 42,
+    organizationId: null,
+    organizationLogin: null,
     repositoryId: 101,
     repositoryFullName: "findmydoc-platform/management",
     issueId: 202,
     issueNodeId: "I_kwDOExample",
     issueNumber: 17,
     issueUpdatedAt: "2026-08-14T12:30:00Z",
+    relatedRepositoryId: null,
+    relatedRepositoryFullName: null,
+    relatedIssueId: null,
+    relatedIssueNodeId: null,
+    relatedIssueNumber: null,
+    relatedIssueUpdatedAt: null,
+    projectNodeId: null,
+    projectItemNodeId: null,
+    projectItemUpdatedAt: null,
+    projectContentNodeId: null,
+    projectContentType: null,
+    projectFieldNodeId: null,
+    changedFields: [],
+    targetUserId: null,
+    targetUserLogin: null,
     commentId: 404,
     commentNodeId: "IC_kwDOExample",
     commentUpdatedAt: "2026-08-14T12:31:00Z",
     senderId: 303,
     senderLogin: "founder",
+    senderType: null,
     payloadSha256: createHash("sha256").update(envelope.rawBody).digest("hex"),
   });
   assert.equal(Object.hasOwn(result.delivery, "body"), false);
@@ -200,6 +256,11 @@ test("Issue comment intake ignores pull-request comments and unknown actions", (
   );
 });
 
+test("Issue planning intake ignores actions outside the explicit write contract", () => {
+  assert.deepEqual(inspect(issuePayload({ action: "opened" })), { kind: "ignored" });
+  assert.deepEqual(inspect(issuePayload({ action: "pinned" })), { kind: "ignored" });
+});
+
 test("Issue comment intake accepts every documented action", () => {
   for (const action of ["created", "edited", "deleted"]) {
     const result = inspect(commentPayload({ action }), { eventName: "issue_comment" });
@@ -226,12 +287,162 @@ test("Issue comment intake rejects incomplete comment identities", () => {
   assert.equal(invalid.code, "github_webhook_invalid_payload");
 });
 
+test("relationship and Project events retain only stable identities and changed field names", () => {
+  const subIssue = inspect({
+    action: "sub_issue_added",
+    installation: { id: 42 },
+    repository: { id: 101, full_name: "findmydoc-platform/management" },
+    parent_issue: { id: 202, node_id: "I_parent", number: 17, updated_at: "2026-08-14T12:30:00Z" },
+    parent_issue_repo: { id: 101, full_name: "findmydoc-platform/management" },
+    sub_issue: { id: 203, node_id: "I_child", number: 18, updated_at: "2026-08-14T12:31:00Z" },
+    sub_issue_repo: { id: 101, full_name: "findmydoc-platform/management" },
+    sender: { id: 303, login: "founder", type: "User" },
+  }, { eventName: "sub_issues" });
+  assert.equal(subIssue.kind, "accepted");
+  assert.equal(subIssue.delivery.issueNumber, 17);
+  assert.equal(subIssue.delivery.issueUpdatedAt, "2026-08-14T12:30:00Z");
+  assert.equal(subIssue.delivery.relatedIssueNumber, 18);
+  assert.equal(subIssue.delivery.relatedIssueUpdatedAt, "2026-08-14T12:31:00Z");
+  assert.deepEqual(subIssue.delivery.changedFields, ["parentTaskId"]);
+
+  const dependency = inspect({
+    action: "blocked_by_added",
+    installation: { id: 42 },
+    repository: { id: 101, full_name: "findmydoc-platform/management" },
+    blocked_issue: { id: 202, node_id: "I_blocked", number: 17, updated_at: "2026-08-14T12:30:00Z" },
+    blocking_issue: { id: 203, node_id: "I_blocking", number: 18, updated_at: "2026-08-14T12:31:00Z" },
+    blocking_issue_repo: { id: 101, full_name: "findmydoc-platform/management" },
+    sender: { id: 303, login: "founder", type: "User" },
+  }, { eventName: "issue_dependencies" });
+  assert.equal(dependency.kind, "accepted");
+  assert.equal(dependency.delivery.issueNumber, 17);
+  assert.equal(dependency.delivery.issueUpdatedAt, "2026-08-14T12:30:00Z");
+  assert.equal(dependency.delivery.relatedIssueNumber, 18);
+  assert.equal(dependency.delivery.relatedIssueUpdatedAt, "2026-08-14T12:31:00Z");
+  assert.deepEqual(dependency.delivery.changedFields, ["blockedBy"]);
+
+  const project = inspect({
+    action: "edited",
+    organization: { id: 606, login: "findmydoc-platform" },
+    projects_v2_item: {
+      node_id: "PVTI_item",
+      project_node_id: "PVT_project",
+      content_node_id: "I_issue",
+      content_type: "Issue",
+      updated_at: "2026-08-14T12:31:00Z",
+    },
+    changes: { field_value: { field_node_id: "PVTF_status", field_type: "single_select" } },
+    sender: { id: 303, login: "founder", type: "User" },
+  }, { eventName: "projects_v2_item" });
+  assert.equal(project.kind, "accepted");
+  assert.equal(project.delivery.projectNodeId, "PVT_project");
+  assert.equal(project.delivery.projectItemNodeId, "PVTI_item");
+  assert.equal(project.delivery.projectItemUpdatedAt, "2026-08-14T12:31:00Z");
+  assert.equal(project.delivery.projectContentNodeId, "I_issue");
+  assert.equal(project.delivery.projectFieldNodeId, "PVTF_status");
+  assert.equal(project.delivery.installationId, null);
+  assert.equal(project.delivery.organizationId, 606);
+  assert.deepEqual(project.delivery.changedFields, ["field_value"]);
+  assert.equal(Object.hasOwn(project.delivery, "payload"), false);
+});
+
+test("relationship intake accepts only the documented GitHub actions", () => {
+  const subIssuePayload = {
+    installation: { id: 42 },
+    repository: { id: 101, full_name: "findmydoc-platform/management" },
+    parent_issue: { id: 202, node_id: "I_parent", number: 17, updated_at: "2026-08-14T12:30:00Z" },
+    parent_issue_repo: { id: 101, full_name: "findmydoc-platform/management" },
+    sub_issue: { id: 203, node_id: "I_child", number: 18, updated_at: "2026-08-14T12:31:00Z" },
+    sub_issue_repo: { id: 101, full_name: "findmydoc-platform/management" },
+    sender: { id: 303, login: "founder", type: "User" },
+  };
+  for (const action of ["parent_issue_added", "parent_issue_removed", "sub_issue_added", "sub_issue_removed"]) {
+    const result = inspect({ ...subIssuePayload, action }, { eventName: "sub_issues" });
+    assert.equal(result.kind, "accepted");
+    assert.equal(result.delivery.action, action);
+  }
+  assert.deepEqual(inspect({ ...subIssuePayload, action: "future_action" }, { eventName: "sub_issues" }), { kind: "ignored" });
+
+  const dependencyPayload = {
+    installation: { id: 42 },
+    repository: { id: 101, full_name: "findmydoc-platform/management" },
+    blocked_issue: { id: 202, node_id: "I_blocked", number: 17, updated_at: "2026-08-14T12:30:00Z" },
+    blocking_issue: { id: 203, node_id: "I_blocking", number: 18, updated_at: "2026-08-14T12:31:00Z" },
+    blocking_issue_repo: { id: 101, full_name: "findmydoc-platform/management" },
+    sender: { id: 303, login: "founder", type: "User" },
+  };
+  for (const action of ["blocked_by_added", "blocked_by_removed", "blocking_added", "blocking_removed"]) {
+    const result = inspect({ ...dependencyPayload, action }, { eventName: "issue_dependencies" });
+    assert.equal(result.kind, "accepted");
+    assert.equal(result.delivery.action, action);
+  }
+  assert.deepEqual(inspect({ ...dependencyPayload, action: "future_action" }, { eventName: "issue_dependencies" }), { kind: "ignored" });
+});
+
+test("Project item intake requires the configured stable organization identity", () => {
+  const payload = {
+    action: "created",
+    organization: { id: 606, login: "findmydoc-platform" },
+    projects_v2_item: {
+      node_id: "PVTI_item",
+      project_node_id: "PVT_project",
+      content_node_id: "I_issue",
+      content_type: "Issue",
+      updated_at: "2026-08-14T12:31:00Z",
+    },
+    sender: { id: 303, login: "founder", type: "User" },
+  };
+
+  const unavailable = inspect(payload, { eventName: "projects_v2_item" }, { expectedOrganizationId: "" });
+  assert.equal(unavailable.kind, "rejected");
+  assert.equal(unavailable.status, 503);
+  assert.equal(unavailable.code, "github_webhook_project_unavailable");
+
+  const wrongOrganization = inspect({
+    ...payload,
+    organization: { id: 607, login: "external" },
+  }, { eventName: "projects_v2_item" });
+  assert.equal(wrongOrganization.kind, "rejected");
+  assert.equal(wrongOrganization.status, 403);
+  assert.equal(wrongOrganization.code, "github_webhook_wrong_organization");
+});
+
+test("relationship and Project mutations require causal timestamps", () => {
+  const relationship = inspect({
+    action: "blocked_by_added",
+    installation: { id: 42 },
+    repository: { id: 101, full_name: "findmydoc-platform/management" },
+    blocked_issue: { id: 202, node_id: "I_blocked", number: 17, updated_at: "2026-08-14T12:30:00Z" },
+    blocking_issue: { id: 203, node_id: "I_blocking", number: 18 },
+    blocking_issue_repo: { id: 102, full_name: "findmydoc-platform/website" },
+    sender: { id: 303, login: "founder", type: "User" },
+  }, { eventName: "issue_dependencies" });
+  assert.equal(relationship.kind, "rejected");
+  assert.equal(relationship.code, "github_webhook_invalid_payload");
+
+  const project = inspect({
+    action: "edited",
+    organization: { id: 606, login: "findmydoc-platform" },
+    projects_v2_item: {
+      node_id: "PVTI_item",
+      project_node_id: "PVT_project",
+      content_node_id: "I_issue",
+      content_type: "Issue",
+    },
+    changes: { field_value: { field_node_id: "PVTF_status" } },
+    sender: { id: 303, login: "founder", type: "User" },
+  }, { eventName: "projects_v2_item" });
+  assert.equal(project.kind, "rejected");
+  assert.equal(project.code, "github_webhook_invalid_payload");
+});
+
 test("delivery persistence distinguishes new, replayed, conflicting, and unavailable receipts", async () => {
   const envelope = signedEnvelope(issuePayload());
   const base = {
     ...envelope,
     webhookSecret,
     expectedInstallationId,
+    expectedOrganizationId,
   };
 
   const stored = await webhook.acceptGitHubIssueWebhook({
@@ -267,7 +478,7 @@ test("delivery persistence distinguishes new, replayed, conflicting, and unavail
   assert.equal(unavailable.code, "github_webhook_storage_unavailable");
 });
 
-function supabaseFixture({ insertError = null, existing = null } = {}) {
+function supabaseFixture({ insertError = null, existing = null, expectedTable = "github_planning_webhook_deliveries" } = {}) {
   const state = {
     inserted: null,
     selectedColumns: null,
@@ -277,7 +488,7 @@ function supabaseFixture({ insertError = null, existing = null } = {}) {
     state,
     client: {
       from(table) {
-        assert.equal(table, "github_webhook_deliveries");
+        assert.equal(table, expectedTable);
         return {
           async insert(row) {
             state.inserted = row;
@@ -316,13 +527,13 @@ test("the Supabase store inserts normalized metadata and reconciles delivery-id 
   assert.equal(Object.hasOwn(newDelivery.state.inserted, "title"), false);
   assert.equal(Object.hasOwn(newDelivery.state.inserted, "body"), false);
   assert.equal(Object.hasOwn(newDelivery.state.inserted, "signature"), false);
-  assert.equal(newDelivery.state.inserted.comment_id, null);
-  assert.equal(newDelivery.state.inserted.comment_node_id, null);
-  assert.equal(newDelivery.state.inserted.comment_updated_at, null);
+  assert.equal(Object.hasOwn(newDelivery.state.inserted, "comment_id"), false);
+  assert.equal(Object.hasOwn(newDelivery.state.inserted, "comment_node_id"), false);
+  assert.equal(Object.hasOwn(newDelivery.state.inserted, "comment_updated_at"), false);
 
   const acceptedComment = inspect(commentPayload(), { eventName: "issue_comment" });
   assert.equal(acceptedComment.kind, "accepted");
-  const commentDelivery = supabaseFixture();
+  const commentDelivery = supabaseFixture({ expectedTable: "github_webhook_deliveries" });
   const commentStore = webhook.createSupabaseGitHubWebhookDeliveryStore(commentDelivery.client);
   assert.equal(await commentStore.record(acceptedComment.delivery), "stored");
   assert.equal(commentDelivery.state.inserted.comment_id, 404);
@@ -370,6 +581,7 @@ test("the route rejects unsafe transport shapes and maps receipt outcomes", asyn
   const supabase = { serviceRole: true };
   const store = { record: async () => "stored" };
   const projectionStore = { projection: true };
+  const processedPlanningDeliveryIds = [];
   const route = await loadTranspiledModule("src/app/api/github/webhooks/route.ts", {
     "next/server": {
       after: (callback) => afterCallbacks.push(callback),
@@ -402,6 +614,12 @@ test("the route rejects unsafe transport shapes and maps receipt outcomes", asyn
         processedDeliveryIds.push(deliveryId);
       },
     },
+    "@/lib/github-planning-webhook": {
+      processGitHubPlanningWebhookDelivery: async ({ deliveryId, supabase: receivedSupabase }) => {
+        assert.equal(receivedSupabase, supabase);
+        processedPlanningDeliveryIds.push(deliveryId);
+      },
+    },
     "@/lib/supabase-service-role": {
       getServerServiceRoleSupabase: () => supabase,
     },
@@ -409,6 +627,7 @@ test("the route rejects unsafe transport shapes and maps receipt outcomes", asyn
 
   const previousSecret = process.env.GITHUB_APP_WEBHOOK_SECRET;
   const previousInstallation = process.env.GITHUB_APP_INSTALLATION_ID;
+  const previousOrganization = process.env.GITHUB_WEBHOOK_ORGANIZATION_ID;
   const request = (body = "{\"ok\":true}", headerOverrides = {}, options = {}) => {
     const rawBody = Buffer.from(body);
     const headers = new Headers({
@@ -451,13 +670,17 @@ test("the route rejects unsafe transport shapes and maps receipt outcomes", asyn
 
     process.env.GITHUB_APP_WEBHOOK_SECRET = webhookSecret;
     process.env.GITHUB_APP_INSTALLATION_ID = expectedInstallationId;
+    process.env.GITHUB_WEBHOOK_ORGANIZATION_ID = expectedOrganizationId;
 
     response = await route.POST(request("{\"action\":\"edited\"}"));
     assert.equal(response.status, 202);
     assert.deepEqual(response.body, { ok: true, accepted: true });
     assert.equal(Buffer.from(intakeArguments.rawBody).toString("utf8"), "{\"action\":\"edited\"}");
     assert.equal(intakeArguments.store, store);
-    assert.equal(afterCallbacks.length, 0);
+    assert.equal(intakeArguments.expectedOrganizationId, expectedOrganizationId);
+    assert.equal(afterCallbacks.length, 1);
+    await afterCallbacks.shift()();
+    assert.deepEqual(processedPlanningDeliveryIds, ["delivery-route"]);
 
     intakeResult = { kind: "accepted", duplicate: true, delivery: commentDelivery };
     response = await route.POST(request());
@@ -504,6 +727,8 @@ test("the route rejects unsafe transport shapes and maps receipt outcomes", asyn
     else process.env.GITHUB_APP_WEBHOOK_SECRET = previousSecret;
     if (previousInstallation === undefined) delete process.env.GITHUB_APP_INSTALLATION_ID;
     else process.env.GITHUB_APP_INSTALLATION_ID = previousInstallation;
+    if (previousOrganization === undefined) delete process.env.GITHUB_WEBHOOK_ORGANIZATION_ID;
+    else process.env.GITHUB_WEBHOOK_ORGANIZATION_ID = previousOrganization;
   }
 });
 

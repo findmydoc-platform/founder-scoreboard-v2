@@ -88,6 +88,32 @@ try {
     [claim.rows[0].id, recoveredLock, JSON.stringify({ status: "synced", code: "github_sync_succeeded" })],
   );
 
+  const terminalPredecessorOperation = `verify-terminal-predecessor:${suffix}`;
+  const terminalPredecessor = await client.query(
+    "select (public.enqueue_planning_github_projection_request($1,$2,$3,true)).*",
+    [terminalPredecessorOperation, taskId, profileId],
+  );
+  await client.query(
+    "update public.planning_github_projection_outbox set status='failed',status_reason='delivery_failed',last_error='injected terminal failure' where id=$1",
+    [terminalPredecessor.rows[0].id],
+  );
+  const successorOperation = `verify-terminal-successor:${suffix}`;
+  const successor = await client.query(
+    "select (public.enqueue_planning_github_projection_request($1,$2,$3,true)).*",
+    [successorOperation, taskId, profileId],
+  );
+  const successorLock = randomUUID();
+  const claimedSuccessor = await client.query(
+    "select * from public.claim_planning_github_projection_requests($1,25,120,$2)",
+    [successorLock, successorOperation],
+  );
+  assert.equal(claimedSuccessor.rows.length, 1);
+  assert.equal(claimedSuccessor.rows[0].id, successor.rows[0].id);
+  await client.query(
+    "select public.finalize_planning_github_projection_request($1,$2,true,$3::jsonb,null)",
+    [successor.rows[0].id, successorLock, JSON.stringify({ status: "synced", code: "github_sync_succeeded" })],
+  );
+
   const orderedOperation = `verify-order:${suffix}`;
   const ordered = await client.query(
     "select (public.enqueue_planning_github_projection_request($1,$2,$3,true)).*",

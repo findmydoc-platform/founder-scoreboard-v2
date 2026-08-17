@@ -48,6 +48,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       reviewOwnerProfileId: "",
       reviewStatus: task.review_status || "not_requested",
       scoreFinal: Boolean(task.score_final),
+      status: task.status || "",
       taskType: task.task_type === "sub_issue" ? "sub_issue" : "deliverable",
     },
     profile: permission.profile,

@@ -38,13 +38,36 @@ function supabaseFixture({ relationships = [], tasks = [] } = {}) {
 
 async function loadDependencyProjection({ githubJson, githubRequest = async () => new Response(null, { status: 204 }) }) {
   return loadTranspiledModule("src/lib/github-sync/dependency-projection.ts", {
+    "../github": {
+      listGitHubIssueBlockedBy: async (issueNumber, token, repository) => {
+        const [owner, repo] = repository.split("/");
+        return githubJson(
+          `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by?per_page=100`,
+          {
+            token,
+            apiVersion: "2026-03-10",
+            cache: "no-store",
+            errorMessage: "GitHub Dependencies konnten nicht geladen werden",
+          },
+        );
+      },
+    },
     "../github-repositories": {
+      normalizeGitHubRepository: (repository) => [
+        "findmydoc-platform/management",
+        "findmydoc-platform/website",
+        "findmydoc-platform/clinic-dashboard",
+      ].includes(repository) ? repository : null,
       splitGitHubRepository: (repository) => {
         const [owner, repo] = repository.split("/");
         return { owner, repo, repository };
       },
     },
     "../github-issue-reference": {
+      parseGitHubIssueUrl: (value) => {
+        const match = (value || "").match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
+        return match ? { repository: match[1], number: Number(match[2]) } : null;
+      },
       resolveGitHubIssueNumber: (row) => row.github_issue_number || null,
     },
     "../github-http": {
@@ -295,4 +318,79 @@ test("a lost outgoing dependency-add response is reconciled before another POST"
   );
   await projection.projectTaskGitHubDependencies(projectionInput(supabase));
   assert.equal(addCalls, 1);
+});
+
+test("cross-repository dependencies keep repository identity even when Issue numbers match", async () => {
+  const posts = [];
+  const projection = await loadDependencyProjection({
+    githubJson: async (url, options) => {
+      if (url.includes("/dependencies/blocked_by?") || url.includes("/dependencies/blocking?")) return [];
+      if (url === "https://api.github.com/repos/findmydoc-platform/website/issues/10") {
+        return { id: 210, number: 10, html_url: "website-10" };
+      }
+      if (options.method === "POST") {
+        posts.push({ url, body: options.body });
+        return { id: 210, number: 10, html_url: "website-10" };
+      }
+      throw new Error(`Unexpected GitHub request: ${options.method || "GET"} ${url}`);
+    },
+  });
+  const result = await projection.projectTaskGitHubDependencies(projectionInput(
+    supabaseFixture({
+      relationships: [{
+        id: 3,
+        task_id: "task-10",
+        related_task_id: "website-10",
+        relation_type: "blocked_by",
+      }],
+      tasks: [
+        linkedTasks()[0],
+        { id: "website-10", github_repo: "findmydoc-platform/website", github_issue_number: 10 },
+      ],
+    }),
+  ));
+
+  assert.deepEqual(result, { added: 1, removed: 0 });
+  assert.deepEqual(posts, [{
+    url: "https://api.github.com/repos/findmydoc-platform/management/issues/10/dependencies/blocked_by",
+    body: { issue_id: 210 },
+  }]);
+});
+
+test("stale cross-repository dependencies are removed from the correct blocked Issue", async () => {
+  const removed = [];
+  const projection = await loadDependencyProjection({
+    githubJson: async (url, options) => {
+      if (url.includes("/dependencies/blocked_by?")) return [];
+      if (url.includes("/dependencies/blocking?")) {
+        return [{
+          id: 220,
+          number: 20,
+          html_url: "website-20",
+          repository_url: "https://api.github.com/repos/findmydoc-platform/website",
+        }];
+      }
+      if (url === "https://api.github.com/repos/findmydoc-platform/management/issues/10" && !options.method) {
+        return { id: 100, number: 10, html_url: "management-10" };
+      }
+      throw new Error(`Unexpected GitHub request: ${options.method || "GET"} ${url}`);
+    },
+    githubRequest: async (url) => {
+      removed.push(url);
+      return new Response(null, { status: 204 });
+    },
+  });
+  const result = await projection.projectTaskGitHubDependencies(projectionInput(
+    supabaseFixture({
+      tasks: [
+        linkedTasks()[0],
+        { id: "website-20", github_repo: "findmydoc-platform/website", github_issue_number: 20 },
+      ],
+    }),
+  ));
+
+  assert.deepEqual(result, { added: 0, removed: 1 });
+  assert.deepEqual(removed, [
+    "https://api.github.com/repos/findmydoc-platform/website/issues/20/dependencies/blocked_by/100",
+  ]);
 });

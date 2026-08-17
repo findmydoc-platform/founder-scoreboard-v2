@@ -7,6 +7,8 @@ import { compactAlphanumeric, slugify } from "@/lib/slug";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
+import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
+import { reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 
 const maxUploadBytes = 10 * 1024 * 1024;
 const allowedMimeTypes = new Set([
@@ -44,13 +46,38 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,task_type,github_repo,github_issue_number,issue_number")
+    .select("id,title,task_type,assignee,owner,status,review_owner_profile_id,review_status,score_final,github_repo,github_issue_number,issue_number")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
   if (task.task_type === "epic" || task.task_type === "initiative") {
     return apiError("Strategische Planungselemente unterstützen keine GitHub-Anhänge.", 400);
+  }
+  const detailPermissions = taskDetailPermissions({
+    task: {
+      assignee: task.assignee || "",
+      assigneeId: task.assignee || "",
+      owner: task.owner || "",
+      ownerId: task.owner || "",
+      reviewOwnerProfileId: task.review_owner_profile_id || "",
+      reviewStatus: task.review_status || "not_requested",
+      scoreFinal: Boolean(task.score_final),
+      status: task.status || "",
+      taskType: task.task_type,
+    },
+    profile: permission.profile,
+    unrestricted: !permission.profile,
+  });
+  const canAttach = task.task_type === "deliverable"
+    ? detailPermissions.canEditEvidence
+    : detailPermissions.canEditBrief;
+  if (!canAttach) {
+    if (task.status === "Erledigt") return apiError(TASK_COMPLETED_LOCKED_MESSAGE, 409);
+    if (task.review_status === "requested" || task.score_final) {
+      return apiError(reviewStateLockMessage(task.review_status, Boolean(task.score_final)), 409);
+    }
+    return apiError("Du darfst für dieses Issue keine Anhänge hochladen.", 403);
   }
 
   const formData = await request.formData();

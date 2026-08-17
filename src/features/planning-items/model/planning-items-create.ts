@@ -20,6 +20,7 @@ import {
   type TeamPlanningItemType,
 } from "@/features/planning-items/model/planning-items-contract";
 import { previewPlanningItemGitHubSync } from "@/features/planning-items/model/planning-items-github-sync-preview";
+import { isReviewStateLocked, reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 import {
   intakeDate,
   intakeHours,
@@ -38,6 +39,9 @@ type ParentRow = {
   id: string;
   task_type: TeamPlanningItemType;
   approval_status: string | null;
+  status: string | null;
+  review_status: string | null;
+  score_final: boolean | null;
   trashed_at: string | null;
 };
 
@@ -217,7 +221,7 @@ export async function buildPlanningItemCreatePreview(
     supabase.from("profiles").select("id,name"),
     supabase
       .from(ACTIVE_TASKS_TABLE)
-      .select("id,task_type,approval_status,trashed_at")
+      .select("id,task_type,approval_status,status,review_status,score_final,trashed_at")
       .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
   ]);
   if (profilesResult.error || parentsResult.error) {
@@ -270,6 +274,9 @@ export async function buildPlanningItemCreatePreview(
     if (itemType === "sub_issue") {
       if (!parent || parent.task_type !== "deliverable") errors.push("Sub-Issue braucht ein gültiges Parent-Deliverable.");
       else if (parent.approval_status !== "approved") errors.push("Sub-Issue braucht ein freigegebenes Parent-Deliverable.");
+      else if (isReviewStateLocked(parent.review_status, Boolean(parent.score_final))) {
+        errors.push(reviewStateLockMessage(parent.review_status, Boolean(parent.score_final)));
+      } else if (parent.status === "Erledigt") errors.push(TASK_COMPLETED_LOCKED_MESSAGE);
     }
 
     const targetDate = intakeDate(raw.targetDate);

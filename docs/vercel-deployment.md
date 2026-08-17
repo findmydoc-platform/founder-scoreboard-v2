@@ -172,10 +172,12 @@ Before production GitHub features work, configure the GitHub App owned by `findm
 - Set `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_INSTALLATION_ID`, and either `GITHUB_APP_PRIVATE_KEY` or `GITHUB_APP_PRIVATE_KEY_PATH`.
 - Set `GITHUB_TOKEN_ENCRYPTION_KEY` to a base64 value that decodes to exactly 32 bytes.
 - Configure the GitHub App user authorization callback URL as `https://founder-ops.findmydoc.eu/api/github-app/callback`.
-- Set a high-entropy `GITHUB_APP_WEBHOOK_SECRET` in Vercel Production before the deployment that enables inbound delivery. If it is added after a merge deployment, rerun the protected production workflow on `main` before configuring GitHub. Do not copy the production secret into Preview; preview delivery requires a separate GitHub App and secret.
-- Configure the GitHub App webhook URL as `https://founder-ops.findmydoc.eu/api/github/webhooks`, use `application/json`, keep SSL verification enabled, and subscribe only to Issues and Issue comment events for this phase.
+- Set a high-entropy `GITHUB_APP_WEBHOOK_SECRET` and the stable numeric `GITHUB_WEBHOOK_ORGANIZATION_ID` in Vercel Production before the deployment that enables inbound delivery. If either is added after a merge deployment, rerun the protected production workflow on `main` before configuring GitHub. Do not copy the production secret into Preview; preview delivery requires a separate GitHub App or webhook configuration and secret.
+- Configure the GitHub App webhook URL as `https://founder-ops.findmydoc.eu/api/github/webhooks`, use `application/json`, keep SSL verification enabled, and subscribe to Issues, Issue comment, Sub-issues, and Issue dependencies events.
+- Configure a separate organization webhook at the same URL with the same secret, `application/json`, and SSL verification, and subscribe it only to Projects v2 item events. GitHub does not expose `projects_v2_item` to GitHub App webhooks.
 - Add a platform firewall or rate-limit rule for `/api/github/webhooks` before enabling public delivery.
-- The webhook endpoint stores only normalized Issue and Issue-comment trigger metadata plus a payload hash. It does not mutate FounderOps planning items; see `docs/github-webhook-intake.md` for activation and failed-delivery recovery.
+- The webhook endpoint stores only normalized trigger metadata plus a payload hash. Authorized human changes run through FounderOps permissions and are projected back immediately through the GitHub App; denied changes are restored from FounderOps desired state. See `docs/github-webhook-intake.md` for the ownership matrix, locks, activation, and failed-delivery recovery.
+- Configure the same `FOUNDEROPS_MAINTENANCE_SECRET` in Vercel Production and the GitHub `production` environment together with `APP_URL`. The scheduled `process-github-webhooks.yml` workflow recovers retryable and stale post-receipt processing without a manual sync.
 - Run the additive Supabase migration that creates `github_app_user_tokens` before enabling the connect button for users.
 
 ## Planning Trash Maintenance
