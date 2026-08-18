@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-08-18-github-issue-webhook-sync",
+    "releasedAt": "2026-08-18",
+    "expiresAt": "2026-09-17",
+    "featureTourId": "github-issue-webhook-sync-v1",
+    "title": "GitHub-Issues bleiben automatisch aktuell",
+    "summary": "Änderungen und Kommentare aus verknüpften GitHub-Issues erscheinen automatisch in FounderOps. FounderOps bleibt dabei führend und schützt die Planung vor nicht erlaubten Änderungen.",
+    "slides": [
+      {
+        "id": "github-issue-webhook-sync",
+        "title": "GitHub-Änderungen im Kontext sehen",
+        "description": "Im Aktivitätstab siehst du automatische GitHub-Updates und Kommentare direkt am verknüpften Issue. FounderOps übernimmt nur Änderungen, die für die jeweilige Person und den Prozess erlaubt sind.",
+        "image": {
+          "src": "/product-updates/2026-08-18-github-issue-webhook-sync/github-issue-webhook-sync.png",
+          "alt": "FounderOps-Aktivität mit einem automatisch übernommenen GitHub-Issue-Update",
+          "width": 1440,
+          "height": 1100
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-08-14-mobile-founderops",
     "releasedAt": "2026-08-14",
     "expiresAt": "2026-09-13",

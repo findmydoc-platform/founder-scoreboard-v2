@@ -40,8 +40,28 @@ export const unifiedPlanningHierarchyTourId = "unified-planning-hierarchy-v1";
 export const planningApiV2TourId = "planning-api-v2";
 export const mobileResponsiveWorkspacesTourId = "mobile-responsive-workspaces-v1";
 export const platformReleasesTourId = "platform-releases-v1";
+export const githubIssueWebhookSyncTourId = "github-issue-webhook-sync-v1";
 
 export const featureTours = [
+  {
+    id: githubIssueWebhookSyncTourId,
+    productUpdateId: "2026-08-18-github-issue-webhook-sync",
+    startWorkspace: "planning",
+    openTaskDetail: true,
+    requiredSelectors: ["[data-tour-id='task-detail-tab-activity']"],
+    steps: [
+      {
+        element: "[data-tour-id='task-detail-tab-activity']",
+        popover: {
+          title: "GitHub-Änderungen nachverfolgen",
+          description: "Öffne Aktivität, um Updates und Kommentare aus dem verknüpften GitHub-Issue nachzuvollziehen. FounderOps übernimmt nur Änderungen, die für die jeweilige Person und den Prozess erlaubt sind.",
+          side: "bottom",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: platformReleasesTourId,
     productUpdateId: "2026-08-14-platform-releases",

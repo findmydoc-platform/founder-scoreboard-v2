@@ -21,3 +21,7 @@ test("task detail tabs preserve keyboard navigation without viewport scrolling",
   assert.match(tabs, /tab\?\.focus\(\{ preventScroll: true \}\)/);
   assert.match(tabs, /tabList\.scrollTo\(/);
 });
+
+test("activity tab provides a stable product-tour anchor", () => {
+  assert.match(tabs, /data-tour-id=\{tabValue === "activity" \? "task-detail-tab-activity" : undefined\}/);
+});
