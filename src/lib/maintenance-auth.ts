@@ -14,3 +14,18 @@ export function validateMaintenanceSecret(provided: string | null | undefined) {
   const expected = process.env.FOUNDEROPS_MAINTENANCE_SECRET?.trim() || "";
   return Boolean(candidate && expected && secretValuesMatch(candidate, expected));
 }
+
+function bearerCredential(value: string | null | undefined) {
+  const match = /^\s*Bearer\s+(.+?)\s*$/i.exec(value || "");
+  return match?.[1] || "";
+}
+
+export function hasCronSecret() {
+  return Boolean(process.env.CRON_SECRET?.trim());
+}
+
+export function validateCronSecret(provided: string | null | undefined) {
+  const candidate = bearerCredential(provided);
+  const expected = process.env.CRON_SECRET?.trim() || "";
+  return Boolean(candidate && expected && secretValuesMatch(candidate, expected));
+}
