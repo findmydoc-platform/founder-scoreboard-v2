@@ -143,6 +143,54 @@ function taskSnapshot() {
   };
 }
 
+function supabaseTaskReadFixture({ task, taskLinks = [], taskLinksError = null } = {}) {
+  const calls = [];
+  const taskQuery = {
+    select(columns) {
+      calls.push({ table: "tasks", method: "select", columns });
+      return taskQuery;
+    },
+    eq(column, value) {
+      calls.push({ table: "tasks", method: "eq", column, value });
+      return taskQuery;
+    },
+    is(column, value) {
+      calls.push({ table: "tasks", method: "is", column, value });
+      return taskQuery;
+    },
+    async maybeSingle() {
+      return { data: task || null, error: null };
+    },
+  };
+  const linkQuery = {
+    select(columns) {
+      calls.push({ table: "task_links", method: "select", columns });
+      return linkQuery;
+    },
+    eq(column, value) {
+      calls.push({ table: "task_links", method: "eq", column, value });
+      return linkQuery;
+    },
+    order(column) {
+      calls.push({ table: "task_links", method: "order", column });
+      return linkQuery;
+    },
+    then(resolve, reject) {
+      return Promise.resolve({ data: taskLinks, error: taskLinksError }).then(resolve, reject);
+    },
+  };
+  return {
+    calls,
+    supabase: {
+      from(table) {
+        if (table === "tasks") return taskQuery;
+        if (table === "task_links") return linkQuery;
+        throw new Error(`Unexpected table: ${table}`);
+      },
+    },
+  };
+}
+
 function issueSnapshot(overrides = {}) {
   return {
     id: 101,
@@ -195,6 +243,58 @@ test.beforeEach(() => {
   dispatched.length = 0;
   domainRuns.length = 0;
   relationshipRuns.length = 0;
+});
+
+test("Supabase planning webhook store loads evidence links from task_links", async () => {
+  const { supabase, calls } = supabaseTaskReadFixture({
+    task: {
+      id: "task-one",
+      task_type: "deliverable",
+      title: "Current title",
+      evidence_link: "https://legacy.example/evidence",
+      updated_at: "2026-08-18T10:00:00.000Z",
+    },
+    taskLinks: [
+      { id: 2, position: 1, url: "https://example.com/second" },
+      { id: 1, position: 0, url: "https://example.com/first" },
+    ],
+  });
+
+  const store = processor.createSupabaseGitHubPlanningWebhookStore(supabase);
+  const task = await store.loadTask("task-one");
+
+  assert.deepEqual(task?.evidenceLinks, ["https://example.com/second", "https://example.com/first"]);
+  assert.equal(task?.evidenceLink, "https://example.com/second");
+  const taskSelect = calls.find((call) => call.table === "tasks" && call.method === "select");
+  assert.ok(taskSelect);
+  assert.equal(taskSelect.columns.includes("evidence_links"), false);
+  assert.deepEqual(
+    calls.filter((call) => call.table === "task_links"),
+    [
+      { table: "task_links", method: "select", columns: "url,position,id" },
+      { table: "task_links", method: "eq", column: "task_id", value: "task-one" },
+      { table: "task_links", method: "eq", column: "type", value: "evidence" },
+      { table: "task_links", method: "order", column: "position" },
+      { table: "task_links", method: "order", column: "id" },
+    ],
+  );
+});
+
+test("Supabase planning webhook store fails closed when evidence links cannot be loaded", async () => {
+  const { supabase } = supabaseTaskReadFixture({
+    task: {
+      id: "task-one",
+      task_type: "deliverable",
+      updated_at: "2026-08-18T10:00:00.000Z",
+    },
+    taskLinksError: { message: "permission denied" },
+  });
+
+  const store = processor.createSupabaseGitHubPlanningWebhookStore(supabase);
+  await assert.rejects(
+    store.loadTask("task-one"),
+    /FounderOps task evidence links could not be loaded: permission denied/,
+  );
 });
 
 test("an authorized human change runs the FounderOps command and immediately projects desired state", async () => {
