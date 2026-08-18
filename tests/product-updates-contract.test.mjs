@@ -39,17 +39,25 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   const validationWorkflow = await readFile(".github/workflows/dependency-validation.yml", "utf8");
   const verifier = await readFile("scripts/verify-product-updates.mjs", "utf8");
 
-  assert.equal(updates.length, 8);
+  assert.equal(updates.length, 9);
   assert.ok(updates.every((update) => update.slides.length > 0));
   assert.ok(updates.every((update) => update.expiresAt && update.featureTourId));
   assert.ok(updates.every((update) => update.slides.every((slide) => slide.featureTourId === undefined)));
   assert.ok(updates.flatMap((update) => update.slides).every((slide) => slide.image?.src.startsWith("/product-updates/") && slide.image.alt));
   const planningApiUpdate = updates.find((update) => update.id === "2026-08-13-planning-api-v2");
+  const githubWebhookUpdate = updates.find((update) => update.id === "2026-08-18-github-issue-webhook-sync");
+  assert.equal(githubWebhookUpdate?.featureTourId, "github-issue-webhook-sync-v1");
+  assert.equal(
+    githubWebhookUpdate?.slides[0]?.image?.src,
+    "/product-updates/2026-08-18-github-issue-webhook-sync/github-issue-webhook-sync.png",
+  );
   assert.equal(
     planningApiUpdate?.slides[0]?.link?.href,
     "https://github.com/findmydoc-platform/agent-skills/tree/main/skills/founderops-planning-items",
   );
   assert.match(tours, /product-updates-v1/);
+  assert.match(tours, /github-issue-webhook-sync-v1/);
+  assert.match(tours, /productUpdateId: "2026-08-18-github-issue-webhook-sync"/);
   assert.match(tours, /issue-sharing-v1/);
   assert.match(tours, /productUpdateId: "2026-07-21-whats-new-gallery"/);
   assert.match(tours, /task-activity-v1/);
@@ -60,6 +68,7 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   assert.match(tours, /Vorschlag, Review oder allgemeinen Abstimmungsbedarf/);
   assert.match(tours, /task-share-trigger/);
   assert.match(tours, /task-share-popover/);
+  assert.match(tours, /task-detail-tab-activity/);
   assert.match(tours, /help-menu-trigger/);
   assert.match(tours, /product-updates-menu-link/);
   assert.match(

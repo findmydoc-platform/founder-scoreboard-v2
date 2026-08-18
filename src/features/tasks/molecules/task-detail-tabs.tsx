@@ -198,6 +198,7 @@ export function TaskDetailTabs({
               aria-selected={active}
               tabIndex={tabValue === focusedValue ? 0 : -1}
               data-state={active ? "active" : "inactive"}
+              data-tour-id={tabValue === "activity" ? "task-detail-tab-activity" : undefined}
               className={classNames(
                 "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset",
