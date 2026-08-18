@@ -224,6 +224,56 @@ async function insertGitHubWebhookDelivery(client, {
   );
 }
 
+async function insertGitHubPlanningWebhookDelivery(client, {
+  deliveryId,
+  issueNumber = 17,
+  status = "received",
+  statusReason = null,
+  attempts = 0,
+  availableAt = null,
+  lastError = null,
+  archivedAt = null,
+  archiveReason = null,
+}) {
+  await client.query(
+    `insert into public.github_planning_webhook_deliveries (
+      delivery_id,
+      event_name,
+      action,
+      installation_id,
+      repository_id,
+      repository_full_name,
+      issue_id,
+      issue_node_id,
+      issue_number,
+      issue_updated_at,
+      payload_sha256,
+      status,
+      status_reason,
+      attempts,
+      available_at,
+      last_error,
+      archived_at,
+      archive_reason
+    ) values (
+      $1,'issues','edited',42,101,'findmydoc-platform/management',202,'I_kwDOExample',$2,
+      '2026-08-14T12:30:00Z',$3,$4,$5,$6,coalesce($7::timestamptz,clock_timestamp()),$8,$9::timestamptz,$10
+    )`,
+    [
+      deliveryId,
+      issueNumber,
+      "b".repeat(64),
+      status,
+      statusReason,
+      attempts,
+      availableAt,
+      lastError,
+      archivedAt,
+      archiveReason,
+    ],
+  );
+}
+
 async function applyGitHubCommentProjection(client, {
   deliveryId,
   lockToken,
@@ -290,6 +340,92 @@ async function verifyGitHubWebhookDeliveryJournal(status, source) {
     const expectedCommentColumns = ["comment_id", "comment_node_id", "comment_updated_at"];
     if (JSON.stringify(commentColumns) !== JSON.stringify(expectedCommentColumns)) {
       throw new Error(`GitHub webhook delivery comment columns changed: ${commentColumns.join(", ")}.`);
+    }
+
+    const functionComment = await client.query(
+      `select obj_description(
+        'public.claim_github_issue_comment_webhook_delivery(text,uuid,integer)'::regprocedure,
+        'pg_proc'
+      ) as description`,
+    );
+    const expectedFunctionComment = "Claims one verified Issue comment delivery for idempotent projection. Exact redelivery can recover retryable, failed, or stale processing rows unless an operator archived the delivery; archived failures remain retained and are never reclaimed.";
+    if (functionComment.rows[0]?.description !== expectedFunctionComment) {
+      throw new Error("GitHub Issue comment claim function documentation is stale.");
+    }
+
+    await insertGitHubPlanningWebhookDelivery(client, {
+      deliveryId: "verify-planning-archived",
+      status: "retry_scheduled",
+      statusReason: "processing_error",
+      attempts: 4,
+      availableAt: "2026-08-14T12:30:00Z",
+      lastError: "Planning retry retained for archive verification.",
+      archivedAt: "2026-08-14T12:35:00Z",
+      archiveReason: "local_integration_archive",
+    });
+    const archivedPlanningClaim = await client.query(
+      `select *
+       from public.claim_github_planning_webhook_delivery($1,$2::uuid,$3)`,
+      ["verify-planning-archived", randomUUID(), 120],
+    );
+    if (archivedPlanningClaim.rows.length !== 0) {
+      throw new Error("An archived GitHub planning delivery was claimed again.");
+    }
+    const archivedPlanningState = await client.query(
+      `select status,status_reason,attempts,locked_at,lock_token,last_error,archived_at,archive_reason
+       from public.github_planning_webhook_deliveries
+       where delivery_id = 'verify-planning-archived'`,
+    );
+    if (archivedPlanningState.rows[0]?.status !== "retry_scheduled"
+      || archivedPlanningState.rows[0]?.status_reason !== "processing_error"
+      || Number(archivedPlanningState.rows[0]?.attempts) !== 4
+      || archivedPlanningState.rows[0]?.locked_at !== null
+      || archivedPlanningState.rows[0]?.lock_token !== null
+      || archivedPlanningState.rows[0]?.last_error !== "Planning retry retained for archive verification."
+      || !archivedPlanningState.rows[0]?.archived_at
+      || archivedPlanningState.rows[0]?.archive_reason !== "local_integration_archive") {
+      throw new Error("Archived GitHub planning delivery state changed during claim.");
+    }
+
+    await insertGitHubWebhookDelivery(client, {
+      deliveryId: "verify-comment-archived",
+      eventName: "issue_comment",
+      commentId: 405,
+      commentNodeId: "IC_kwDOArchived",
+      commentUpdatedAt: "2026-08-14T12:31:00Z",
+    });
+    await client.query(
+      `update public.github_webhook_deliveries
+       set status='failed',
+           status_reason='processing_error',
+           attempts=5,
+           last_error='Comment failure retained for archive verification.',
+           archived_at='2026-08-14T12:35:00Z',
+           archive_reason='local_integration_archive'
+       where delivery_id='verify-comment-archived'`,
+    );
+    const archivedCommentClaim = await client.query(
+      `select *
+       from public.claim_github_issue_comment_webhook_delivery($1,$2::uuid,$3)`,
+      ["verify-comment-archived", randomUUID(), 120],
+    );
+    if (archivedCommentClaim.rows.length !== 0) {
+      throw new Error("An archived GitHub Issue comment delivery was claimed again.");
+    }
+    const archivedCommentState = await client.query(
+      `select status,status_reason,attempts,locked_at,lock_token,last_error,archived_at,archive_reason
+       from public.github_webhook_deliveries
+       where delivery_id = 'verify-comment-archived'`,
+    );
+    if (archivedCommentState.rows[0]?.status !== "failed"
+      || archivedCommentState.rows[0]?.status_reason !== "processing_error"
+      || Number(archivedCommentState.rows[0]?.attempts) !== 5
+      || archivedCommentState.rows[0]?.locked_at !== null
+      || archivedCommentState.rows[0]?.lock_token !== null
+      || archivedCommentState.rows[0]?.last_error !== "Comment failure retained for archive verification."
+      || !archivedCommentState.rows[0]?.archived_at
+      || archivedCommentState.rows[0]?.archive_reason !== "local_integration_archive") {
+      throw new Error("Archived GitHub Issue comment delivery state changed during claim.");
     }
 
     await insertGitHubWebhookDelivery(client, {
