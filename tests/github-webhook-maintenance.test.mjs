@@ -117,11 +117,19 @@ function maintenanceQueueSupabase({
   planningTerminalReasons = [],
   commentTerminalReasons = [],
   projectionTerminalReasons = [],
+  planningArchivedReasons = [],
+  commentArchivedReasons = [],
   outstanding = { planning: 2, comments: 4, projection: 6 },
 } = {}) {
-  const terminalReasons = {
-    github_planning_webhook_deliveries: planningTerminalReasons,
-    github_webhook_deliveries: commentTerminalReasons,
+  const deliveryRows = {
+    github_planning_webhook_deliveries: [
+      ...planningTerminalReasons.map((row) => ({ ...row, archived_at: null })),
+      ...planningArchivedReasons.map((row) => ({ ...row, archived_at: "2026-08-18T09:00:00Z" })),
+    ],
+    github_webhook_deliveries: [
+      ...commentTerminalReasons.map((row) => ({ ...row, archived_at: null })),
+      ...commentArchivedReasons.map((row) => ({ ...row, archived_at: "2026-08-18T09:00:00Z" })),
+    ],
     planning_github_projection_outbox: projectionTerminalReasons,
   };
   const outstandingByTable = {
@@ -132,14 +140,25 @@ function maintenanceQueueSupabase({
   return {
     from(table) {
       let selectedColumns = "";
+      const filters = [];
       const builder = {
         select: (columns) => { selectedColumns = columns; return builder; },
-        eq: () => builder,
-        in: () => builder,
+        eq: (column, value) => { filters.push(["eq", column, value]); return builder; },
+        in: (column, value) => { filters.push(["in", column, value]); return builder; },
+        is: (column, value) => { filters.push(["is", column, value]); return builder; },
+        not: (column, operator, value) => { filters.push(["not", column, operator, value]); return builder; },
         then(resolve) {
+          const rows = (deliveryRows[table] || []).filter((row) => filters.every(([method, column, first, second]) => {
+            if (column !== "archived_at") return true;
+            if (method === "is") return row.archived_at === first;
+            if (method === "not" && first === "is" && second === null) return row.archived_at !== null;
+            return true;
+          }));
           const result = selectedColumns === "status_reason"
-            ? { data: terminalReasons[table], error: null }
-            : { count: outstandingByTable[table], error: null };
+            ? { data: rows.map((row) => ({ status_reason: row.status_reason })), error: null }
+            : selectedColumns === "archive_reason"
+              ? { data: rows.map((row) => ({ archive_reason: row.archive_reason })), error: null }
+              : { count: outstandingByTable[table], error: null };
           return Promise.resolve(result).then(resolve);
         },
       };
@@ -192,6 +211,8 @@ test("Cron maintenance exposes only grouped terminal failure reasons and fails v
         { status_reason: "processing_error" },
         { status_reason: "processing_error" },
       ],
+      planningArchivedReasons: [{ archive_reason: "superseded_test_failure_task_links_fixed" }],
+      commentArchivedReasons: [{ archive_reason: "source_comment_unavailable_without_projection" }],
     }),
     deliveries: emptyDeliveries(),
   });
@@ -203,6 +224,7 @@ test("Cron maintenance exposes only grouped terminal failure reasons and fails v
   assert.equal(response.body.projectionDispatchFailed, 0);
   assert.equal(response.body.projectionOutstanding, 6);
   assert.equal(response.body.terminalFailed, 9);
+  assert.equal(response.body.archivedTerminalFailed, 2);
   assert.equal(response.body.outstanding, 12);
   assert.deepEqual(response.body.terminalFailureReasons, {
     planning: [{ reason: "ambiguous_task_mapping", count: 1 }],
@@ -214,6 +236,36 @@ test("Cron maintenance exposes only grouped terminal failure reasons and fails v
       { reason: "github_sync_unavailable", count: 3 },
       { reason: "processing_error", count: 2 },
     ],
+  });
+  assert.deepEqual(response.body.archivedTerminalFailureReasons, {
+    planning: [{ reason: "superseded_test_failure_task_links_fixed", count: 1 }],
+    comments: [{ reason: "source_comment_unavailable_without_projection", count: 1 }],
+    projection: [],
+  });
+});
+
+test("Cron maintenance reports archived terminal failures without failing the current queue", async () => {
+  const route = await loadCronMaintenanceRoute({
+    supabase: maintenanceQueueSupabase({
+      planningArchivedReasons: [
+        { archive_reason: "superseded_test_failure_task_links_fixed" },
+        { archive_reason: "superseded_test_failure_task_links_fixed" },
+      ],
+      commentArchivedReasons: [{ archive_reason: "source_comment_unavailable_without_projection" }],
+      outstanding: { planning: 0, comments: 0, projection: 0 },
+    }),
+    deliveries: emptyDeliveries(),
+  });
+
+  const response = await route.GET({ headers: new Headers({ authorization: "Bearer cron-test-secret" }) });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.terminalFailed, 0);
+  assert.equal(response.body.archivedTerminalFailed, 3);
+  assert.deepEqual(response.body.archivedTerminalFailureReasons, {
+    planning: [{ reason: "superseded_test_failure_task_links_fixed", count: 2 }],
+    comments: [{ reason: "source_comment_unavailable_without_projection", count: 1 }],
+    projection: [],
   });
 });
 
@@ -227,8 +279,14 @@ test("Cron maintenance fails visibly when a projection dispatch cannot finalize"
   assert.equal(response.status, 503);
   assert.equal(response.body.ok, false);
   assert.equal(response.body.terminalFailed, 0);
+  assert.equal(response.body.archivedTerminalFailed, 0);
   assert.equal(response.body.projectionDispatchFailed, 1);
   assert.deepEqual(response.body.terminalFailureReasons, {
+    planning: [],
+    comments: [],
+    projection: [],
+  });
+  assert.deepEqual(response.body.archivedTerminalFailureReasons, {
     planning: [],
     comments: [],
     projection: [],
