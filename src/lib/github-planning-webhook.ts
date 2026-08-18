@@ -376,14 +376,27 @@ export function createSupabaseGitHubPlanningWebhookStore(
     },
 
     async loadTask(taskId) {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("id,task_type,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,evidence_links,definition_of_done,status,priority,workstream,estimate_hours,start_date,deadline,sprint_id,owner,assignee,parent_task_id,review_status,score_final,updated_at")
-        .eq("id", taskId)
-        .is("trashed_at", null)
-        .maybeSingle();
-      if (error) throw new Error(`FounderOps planning task could not be loaded: ${error.message}`);
-      return taskSnapshot(data);
+      const [taskResult, evidenceLinksResult] = await Promise.all([
+        supabase
+          .from("tasks")
+          .select("id,task_type,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,status,priority,workstream,estimate_hours,start_date,deadline,sprint_id,owner,assignee,parent_task_id,review_status,score_final,updated_at")
+          .eq("id", taskId)
+          .is("trashed_at", null)
+          .maybeSingle(),
+        supabase
+          .from("task_links")
+          .select("url,position,id")
+          .eq("task_id", taskId)
+          .eq("type", "evidence")
+          .order("position")
+          .order("id"),
+      ]);
+      if (taskResult.error) throw new Error(`FounderOps planning task could not be loaded: ${taskResult.error.message}`);
+      if (evidenceLinksResult.error) throw new Error(`FounderOps task evidence links could not be loaded: ${evidenceLinksResult.error.message}`);
+      return taskSnapshot({
+        ...(taskResult.data || {}),
+        evidence_links: (evidenceLinksResult.data || []).map((link: { url?: unknown }) => text(link.url)).filter(Boolean),
+      });
     },
 
     async findBlockedByRelationship(taskId, relatedTaskId) {
