@@ -103,20 +103,20 @@ Response behavior:
 | Invalid signature, headers, payload, installation, organization, or repository | `4xx` |
 | Missing runtime configuration or unavailable storage | `503` |
 
-Processors use leases and finalize each delivery as `processed`, `ignored`, `retry_scheduled`, or `failed`. Generic processing errors use bounded exponential delay and become terminal after five attempts. Corrective projections have their own five-attempt outbox lifecycle; the delivery remains retryable while its projection is pending and becomes terminal with it. The scheduled `process-github-webhooks.yml` workflow runs every 15 minutes, drains both queues, reclaims ready or stale work in batches of at most 25, and fails visibly when terminal failures remain.
+Processors use leases and finalize each delivery as `processed`, `ignored`, `retry_scheduled`, or `failed`. Generic processing errors use bounded exponential delay and become terminal after five attempts. Corrective projections have their own five-attempt outbox lifecycle; the delivery remains retryable while its projection is pending and becomes terminal with it. A Vercel Cron Job calls `GET /api/maintenance/github-webhooks` every five minutes, drains both queues, and reclaims ready or stale work in batches of at most 25. It is protected by the Vercel `CRON_SECRET` bearer credential. Terminal failures and a projection dispatch that cannot be finalized durably return `503`; terminal failures include only grouped status reasons, never payload content.
 
-GitHub itself does not automatically redeliver failed HTTP deliveries. Inspect the GitHub App's **Advanced -> Recent deliveries** for transport failures and use **Redeliver** only after the endpoint is healthy. Internal post-receipt failures are recovered from the journal by the maintenance workflow.
+GitHub itself does not automatically redeliver failed HTTP deliveries. Inspect the GitHub App's **Advanced -> Recent deliveries** for transport failures and use **Redeliver** only after the endpoint is healthy. Internal post-receipt failures are recovered from the journal by the Vercel Cron Job.
 
 ## Activation checklist
 
 1. Merge through the protected production workflow so the additive migration and application deploy together.
-2. Set `GITHUB_APP_WEBHOOK_SECRET`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_WEBHOOK_ORGANIZATION_ID`, and `FOUNDEROPS_MAINTENANCE_SECRET` in Vercel Production. A Vercel environment change requires a new protected deployment.
-3. Set the production GitHub environment secrets `APP_URL` and the same `FOUNDEROPS_MAINTENANCE_SECRET` for the scheduled retry workflow.
+2. Set `GITHUB_APP_WEBHOOK_SECRET`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_WEBHOOK_ORGANIZATION_ID`, and a high-entropy `CRON_SECRET` in Vercel Production. A Vercel environment change requires a new protected deployment.
+3. No GitHub Actions secret is required for webhook recovery. Vercel supplies `CRON_SECRET` as the bearer credential for the production Cron invocation.
 4. Configure the GitHub App webhook URL as `https://founder-ops.findmydoc.eu/api/github/webhooks`, use `application/json`, keep SSL verification enabled, use the same high-entropy webhook secret, and subscribe to `issues`, `issue_comment`, `sub_issues`, and `issue_dependencies`.
 5. Configure a separate organization webhook at the same URL with `application/json`, SSL verification, and the same secret. Subscribe that organization webhook only to `projects_v2_item`; GitHub exposes this event to organization webhooks, not GitHub App webhooks.
 6. Grant the GitHub App the existing least-privilege Issue and organization Project access needed for read/write projection calls.
 7. Keep the App installation restricted to the approved repositories and add a platform firewall or rate-limit rule for `/api/github/webhooks`.
 8. Verify a signed `ping`, an authorized structured Issue edit, a locked or unauthorized edit that is corrected, comment create/edit/delete, one managed Project field, one sub-issue change, and one dependency change. Confirm both journal completion and the final FounderOps/GitHub state.
-9. Run the maintenance workflow manually once and confirm zero outstanding or terminal deliveries before relying on the scheduled path.
+9. Confirm the Vercel Cron Job runs after production deployment and that its invocation reports no projection dispatch failure and zero outstanding or terminal deliveries before relying on the scheduled path.
 
 Preview must not receive the production webhook secret. Preview testing requires a separate GitHub App or webhook configuration, endpoint, organization identity, and secret.

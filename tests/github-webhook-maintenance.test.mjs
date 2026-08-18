@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
@@ -78,53 +78,79 @@ test("maintenance drains ready and stale deliveries through the normal processor
   });
 });
 
-test("the production retry path is secret-protected, bounded, and warmed up", async () => {
-  const [route, workflow, script] = await Promise.all([
-    readFile("src/app/api/maintenance/github-webhooks/route.ts", "utf8"),
-    readFile(".github/workflows/process-github-webhooks.yml", "utf8"),
-    readFile(".github/scripts/maintenance/process-github-webhooks.sh", "utf8"),
-  ]);
-  assert.match(route, /validateMaintenanceSecret/);
-  assert.match(route, /drainGitHubWebhookDeliveries\(\{ supabase, limit: 25 \}\)/);
-  assert.match(workflow, /cron: "\*\/15 \* \* \* \*"/);
-  assert.match(workflow, /environment:\s+name: production/);
-  assert.match(script, /sleep 45/);
-  assert.match(script, /backoffs=\(0 45 90 180\)/);
-  assert.match(script, /\/api\/health/);
-  assert.match(script, /\/api\/maintenance\/github-webhooks/);
-  assert.match(script, /\.projection\.retryScheduled == 0/);
-  assert.match(route, /planning_github_projection_outbox/);
-  assert.match(route, /projectionTerminalFailed/);
+test("webhook recovery uses one Vercel Cron Job and no GitHub Actions worker", async () => {
+  const config = JSON.parse(await readFile("vercel.json", "utf8"));
+  assert.deepEqual(config.crons, [{
+    path: "/api/maintenance/github-webhooks",
+    schedule: "*/5 * * * *",
+  }]);
+  await assert.rejects(access(".github/workflows/process-github-webhooks.yml"), { code: "ENOENT" });
+  await assert.rejects(access(".github/scripts/maintenance/process-github-webhooks.sh"), { code: "ENOENT" });
 });
 
-test("maintenance health includes webhook-owned projection failures and outstanding work", async () => {
-  const countSupabase = {
+test("webhook recovery declares its Vercel Cron credential for operators", async () => {
+  const [environmentExample, deploymentGuide] = await Promise.all([
+    readFile(".env.example", "utf8"),
+    readFile("docs/vercel-deployment.md", "utf8"),
+  ]);
+  assert.match(environmentExample, /^CRON_SECRET=$/m);
+  assert.match(deploymentGuide, /^CRON_SECRET=$/m);
+});
+
+test("Cron authentication accepts only the configured bearer credential", async () => {
+  const previousSecret = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = "cron-test-secret";
+  try {
+    const auth = await loadTranspiledModule("src/lib/maintenance-auth.ts", {});
+    assert.equal(auth.hasCronSecret(), true);
+    assert.equal(auth.validateCronSecret("Bearer cron-test-secret"), true);
+    assert.equal(auth.validateCronSecret("bearer cron-test-secret"), true);
+    assert.equal(auth.validateCronSecret("cron-test-secret"), false);
+    assert.equal(auth.validateCronSecret("Bearer different-secret"), false);
+  } finally {
+    if (previousSecret === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previousSecret;
+  }
+});
+
+function maintenanceQueueSupabase({
+  planningTerminalReasons = [],
+  commentTerminalReasons = [],
+  projectionTerminalReasons = [],
+  outstanding = { planning: 2, comments: 4, projection: 6 },
+} = {}) {
+  const terminalReasons = {
+    github_planning_webhook_deliveries: planningTerminalReasons,
+    github_webhook_deliveries: commentTerminalReasons,
+    planning_github_projection_outbox: projectionTerminalReasons,
+  };
+  const outstandingByTable = {
+    github_planning_webhook_deliveries: outstanding.planning,
+    github_webhook_deliveries: outstanding.comments,
+    planning_github_projection_outbox: outstanding.projection,
+  };
+  return {
     from(table) {
-      const filters = [];
+      let selectedColumns = "";
       const builder = {
-        select: () => builder,
-        eq: (column, value) => { filters.push([column, value]); return builder; },
-        in: (column, value) => { filters.push([column, value]); return builder; },
+        select: (columns) => { selectedColumns = columns; return builder; },
+        eq: () => builder,
+        in: () => builder,
         then(resolve) {
-          const failed = filters.some(([column, value]) => column === "status" && value === "failed");
-          const count = table === "planning_github_projection_outbox"
-            ? failed ? 5 : 6
-            : table === "github_planning_webhook_deliveries"
-              ? failed ? 1 : 2
-              : failed ? 3 : 4;
-          return Promise.resolve({ count, error: null }).then(resolve);
+          const result = selectedColumns === "status_reason"
+            ? { data: terminalReasons[table], error: null }
+            : { count: outstandingByTable[table], error: null };
+          return Promise.resolve(result).then(resolve);
         },
       };
       return builder;
     },
   };
-  const deliveries = {
-    projection: { claimed: 1, completed: 1, retryScheduled: 0, failed: 0 },
-    planning: { claimed: 0, processed: 0, ignored: 0, retryScheduled: 0, failed: 0, skipped: 0 },
-    comments: { claimed: 0, processed: 0, ignored: 0, retryScheduled: 0, failed: 0, skipped: 0 },
-  };
-  const route = await loadTranspiledModule("src/app/api/maintenance/github-webhooks/route.ts", {
-    "next/server": { NextResponse: { json: (body) => ({ body, status: 200 }) } },
+}
+
+async function loadCronMaintenanceRoute({ supabase, deliveries }) {
+  return loadTranspiledModule("src/app/api/maintenance/github-webhooks/route.ts", {
+    "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
     "@/lib/api-response": {
       apiError: (message, status) => ({ body: { message }, status }),
       supabaseUnavailable: () => ({ status: 503 }),
@@ -133,18 +159,112 @@ test("maintenance health includes webhook-owned projection failures and outstand
       drainGitHubWebhookDeliveries: async () => deliveries,
     },
     "@/lib/maintenance-auth": {
-      FOUNDEROPS_MAINTENANCE_SECRET_HEADER: "x-founderops-maintenance-secret",
-      validateMaintenanceSecret: () => true,
+      hasCronSecret: () => true,
+      validateCronSecret: () => true,
     },
     "@/lib/supabase-service-role": {
-      getServerServiceRoleSupabase: () => countSupabase,
+      getServerServiceRoleSupabase: () => supabase,
     },
   });
+}
 
-  const response = await route.POST({ headers: new Headers() });
-  assert.equal(response.status, 200);
+function emptyDeliveries({ projectionFailed = 0 } = {}) {
+  return {
+    projection: { claimed: projectionFailed, completed: 0, retryScheduled: 0, failed: projectionFailed },
+    planning: { claimed: 0, processed: 0, ignored: 0, retryScheduled: 0, failed: 0, skipped: 0 },
+    comments: { claimed: 0, processed: 0, ignored: 0, retryScheduled: 0, failed: 0, skipped: 0 },
+  };
+}
+
+test("Cron maintenance exposes only grouped terminal failure reasons and fails visibly", async () => {
+  const route = await loadCronMaintenanceRoute({
+    supabase: maintenanceQueueSupabase({
+      planningTerminalReasons: [{ status_reason: "ambiguous_task_mapping" }],
+      commentTerminalReasons: [
+        { status_reason: "processing_error" },
+        { status_reason: "processing_error" },
+        { status_reason: "source_record_missing" },
+      ],
+      projectionTerminalReasons: [
+        { status_reason: "github_sync_unavailable" },
+        { status_reason: "github_sync_unavailable" },
+        { status_reason: "github_sync_unavailable" },
+        { status_reason: "processing_error" },
+        { status_reason: "processing_error" },
+      ],
+    }),
+    deliveries: emptyDeliveries(),
+  });
+
+  const response = await route.GET({ headers: new Headers({ authorization: "Bearer cron-test-secret" }) });
+  assert.equal(response.status, 503);
+  assert.equal(response.body.ok, false);
   assert.equal(response.body.projectionTerminalFailed, 5);
+  assert.equal(response.body.projectionDispatchFailed, 0);
   assert.equal(response.body.projectionOutstanding, 6);
   assert.equal(response.body.terminalFailed, 9);
   assert.equal(response.body.outstanding, 12);
+  assert.deepEqual(response.body.terminalFailureReasons, {
+    planning: [{ reason: "ambiguous_task_mapping", count: 1 }],
+    comments: [
+      { reason: "processing_error", count: 2 },
+      { reason: "source_record_missing", count: 1 },
+    ],
+    projection: [
+      { reason: "github_sync_unavailable", count: 3 },
+      { reason: "processing_error", count: 2 },
+    ],
+  });
+});
+
+test("Cron maintenance fails visibly when a projection dispatch cannot finalize", async () => {
+  const route = await loadCronMaintenanceRoute({
+    supabase: maintenanceQueueSupabase({ outstanding: { planning: 0, comments: 0, projection: 1 } }),
+    deliveries: emptyDeliveries({ projectionFailed: 1 }),
+  });
+
+  const response = await route.GET({ headers: new Headers({ authorization: "Bearer cron-test-secret" }) });
+  assert.equal(response.status, 503);
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.terminalFailed, 0);
+  assert.equal(response.body.projectionDispatchFailed, 1);
+  assert.deepEqual(response.body.terminalFailureReasons, {
+    planning: [],
+    comments: [],
+    projection: [],
+  });
+});
+
+test("Cron maintenance rejects missing configuration and invalid credentials", async () => {
+  const route = await loadTranspiledModule("src/app/api/maintenance/github-webhooks/route.ts", {
+    "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
+    "@/lib/api-response": {
+      apiError: (message, status) => ({ body: { message }, status }),
+      supabaseUnavailable: () => ({ status: 503 }),
+    },
+    "@/lib/github-webhook-drain": {},
+    "@/lib/maintenance-auth": {
+      hasCronSecret: () => false,
+      validateCronSecret: () => false,
+    },
+    "@/lib/supabase-service-role": {},
+  });
+  const unavailable = await route.GET({ headers: new Headers() });
+  assert.equal(unavailable.status, 503);
+
+  const protectedRoute = await loadTranspiledModule("src/app/api/maintenance/github-webhooks/route.ts", {
+    "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
+    "@/lib/api-response": {
+      apiError: (message, status) => ({ body: { message }, status }),
+      supabaseUnavailable: () => ({ status: 503 }),
+    },
+    "@/lib/github-webhook-drain": {},
+    "@/lib/maintenance-auth": {
+      hasCronSecret: () => true,
+      validateCronSecret: () => false,
+    },
+    "@/lib/supabase-service-role": {},
+  });
+  const unauthorized = await protectedRoute.GET({ headers: new Headers({ authorization: "Bearer wrong" }) });
+  assert.equal(unauthorized.status, 401);
 });

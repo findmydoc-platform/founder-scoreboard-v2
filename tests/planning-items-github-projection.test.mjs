@@ -98,6 +98,28 @@ test("GitHub failure is finalized as retryable without changing the Planning com
   assert.equal(result.retryScheduled, 1);
 });
 
+test("dispatcher reports a failed finalization instead of claiming completion", async () => {
+  executionResult = { ...executionResult, status: "synced" };
+  const supabase = {
+    rpc: async (name) => {
+      if (name === "claim_planning_github_projection_requests") {
+        return { data: [claimedRequest()], error: null };
+      }
+      if (name === "finalize_planning_github_projection_request") {
+        return { data: null, error: new Error("finalization unavailable") };
+      }
+      throw new Error(`unexpected rpc ${name}`);
+    },
+  };
+
+  const result = await projection.dispatchPlanningGitHubProjections({ supabase });
+
+  assert.equal(result.claimed, 1);
+  assert.equal(result.completed, 0);
+  assert.equal(result.retryScheduled, 0);
+  assert.equal(result.failed, 1);
+});
+
 test("schema makes enqueue idempotent and orders reconcile with lifecycle delivery", async () => {
   const migration = await readFile(
     new URL("../supabase/migrations/20260812183500_durable_planning_github_projection.sql", import.meta.url),

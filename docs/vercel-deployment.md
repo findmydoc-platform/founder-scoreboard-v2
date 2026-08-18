@@ -59,6 +59,7 @@ GITHUB_APP_CLIENT_SECRET=
 GITHUB_APP_PRIVATE_KEY=
 GITHUB_APP_INSTALLATION_ID=
 GITHUB_APP_WEBHOOK_SECRET=
+CRON_SECRET=
 GITHUB_TOKEN_ENCRYPTION_KEY=
 GOOGLE_CHAT_WEBHOOK_URL=
 GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
@@ -177,7 +178,7 @@ Before production GitHub features work, configure the GitHub App owned by `findm
 - Configure a separate organization webhook at the same URL with the same secret, `application/json`, and SSL verification, and subscribe it only to Projects v2 item events. GitHub does not expose `projects_v2_item` to GitHub App webhooks.
 - Add a platform firewall or rate-limit rule for `/api/github/webhooks` before enabling public delivery.
 - The webhook endpoint stores only normalized trigger metadata plus a payload hash. Authorized human changes run through FounderOps permissions and are projected back immediately through the GitHub App; denied changes are restored from FounderOps desired state. See `docs/github-webhook-intake.md` for the ownership matrix, locks, activation, and failed-delivery recovery.
-- Configure the same `FOUNDEROPS_MAINTENANCE_SECRET` in Vercel Production and the GitHub `production` environment together with `APP_URL`. The scheduled `process-github-webhooks.yml` workflow recovers retryable and stale post-receipt processing without a manual sync.
+- Configure a high-entropy `CRON_SECRET` in Vercel Production. The Vercel Cron Job invokes `GET /api/maintenance/github-webhooks` every five minutes with that bearer credential, recovering retryable and stale post-receipt processing without a manual sync or GitHub Actions workflow.
 - Run the additive Supabase migration that creates `github_app_user_tokens` before enabling the connect button for users.
 
 ## Planning Trash Maintenance
