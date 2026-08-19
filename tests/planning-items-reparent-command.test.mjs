@@ -160,3 +160,20 @@ test("stale referenced parent is a stable conflict and Team commits use one idem
   assert.equal(call[1].p_changed_field, "parentTaskId");
   assert.match(call[1].p_request_hash, /^[a-f0-9]{64}$/);
 });
+
+test("Team reparent preserves a late inactive-token decision", async () => {
+  const model = await loadModel();
+  const current = fixture({ commitError: { code: "P0004", message: "planning items token is inactive" } });
+  const tokenActor = {
+    profileId: "ceo",
+    platformRole: "ceo",
+    credential: { kind: "planningToken", tokenId: "token-one", scopes: ["write:planning-items:update"] },
+  };
+  const result = await model.createPlanningReparentPlanningItems(current.client, "any").run({
+    actor: tokenActor,
+    mode: "commit",
+    command: model.changePlanningParentCommand("deliverable-one", "parent-new", "2026-08-12T10:00:00.000Z"),
+    idempotencyKey: "00000000-0000-4000-8000-000000000306",
+  });
+  assert.deepEqual(result.error, { code: "forbidden", reason: "planningTokenInactive" });
+});

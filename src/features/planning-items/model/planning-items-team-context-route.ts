@@ -10,7 +10,11 @@ export async function handleTeamPlanningItemsContext(
 ) {
   return handlePlanningItemsRequest(
     request,
-    "read:planning-context",
+    {
+      operation: "planningContext.read",
+      mode: "read",
+      requiredScopes: ["read:planning-context"],
+    },
     "Planning-Kontext konnte nicht geladen werden.",
     async (permission) => {
       const context = await buildPlanningItemsContext(permission.supabase, permission.profile);

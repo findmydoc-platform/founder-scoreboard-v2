@@ -68,6 +68,7 @@ async function loadTeamCreateRoute({
         }),
         parsePlanningItemCreatePayload: () => ({ ok: true, items: [{ itemType: "epic", title: "Preview" }], githubSyncMode: null }),
         planningCreateError,
+        planningCreateTokenBecameInactive: (error) => error.code === "forbidden" && error.reason === "planningTokenInactive",
         planningCreateTransactionFromResult: () => null,
         planningItemCreateCommand: () => ({ kind: "createItems", items: [] }),
         planningItemCreateRequiresOperationalLead: () => false,
@@ -79,6 +80,11 @@ async function loadTeamCreateRoute({
         handlePlanningItemsRequest: async (_request, _scope, _fallback, handler) => handler(permission),
         planningItemsError: (error, status) => ({ body: { ok: false, error }, status }),
         planningItemsJson: (body, status = 200) => ({ body, status }),
+        planningItemsTokenInactiveError: () => ({
+          body: { ok: false, code: "TOKEN_INACTIVE", error: "Planning-API-Token ist nicht mehr aktiv." },
+          status: 401,
+          headers: { "WWW-Authenticate": 'Bearer error="invalid_token"' },
+        }),
       },
     },
   );
@@ -328,4 +334,17 @@ test("Team create error mapping preserves public authentication and schema statu
     message: "Planning-API-Schema ist noch nicht verfügbar.",
     status: 503,
   });
+});
+
+test("Team create preserves a late inactive-token response", async () => {
+  const { route } = await loadTeamCreateRoute({
+    runResult: { ok: false, error: { code: "forbidden", reason: "planningTokenInactive" } },
+  });
+  const response = await route.handleTeamPlanningItemsCreate({
+    headers: new Headers({ "idempotency-key": "00000000-0000-4000-8000-000000000000" }),
+    json: async () => ({ items: [{ itemType: "epic", title: "Create" }] }),
+  });
+  assert.equal(response.status, 401);
+  assert.equal(response.body.code, "TOKEN_INACTIVE");
+  assert.equal(response.headers["WWW-Authenticate"], 'Bearer error="invalid_token"');
 });

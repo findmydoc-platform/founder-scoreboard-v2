@@ -6,6 +6,7 @@ import {
   createTeamCreatePlanningItems,
   parsePlanningItemCreatePayload,
   planningCreateError,
+  planningCreateTokenBecameInactive,
   planningCreateTransactionFromResult,
   planningItemCreateCommand,
   planningItemCreateRequiresOperationalLead,
@@ -15,6 +16,7 @@ import {
   handlePlanningItemsRequest,
   planningItemsError,
   planningItemsJson,
+  planningItemsTokenInactiveError,
 } from "@/features/planning-items/model/planning-items-route";
 function parseCreatePayload(payload: unknown) {
   return parsePlanningItemCreatePayload(payload);
@@ -23,16 +25,28 @@ function parseCreatePayload(payload: unknown) {
 export async function handleTeamPlanningItemsCreatePreview(
   request: NextRequest,
 ) {
+  let parsed: ReturnType<typeof parseCreatePayload> | undefined;
+  const parseRequest = async () => {
+    parsed ??= parseCreatePayload(await request.json().catch(() => null));
+    return parsed;
+  };
   return handlePlanningItemsRequest(
     request,
-    "write:planning-items:create",
+    {
+      operation: "planningItems.create",
+      mode: "preview",
+      requiredScopes: ["write:planning-items:create"],
+      resolveAdditionalScopes: async () => {
+        const payload = await parseRequest();
+        return payload.ok && payload.githubSyncMode
+          ? ["write:planning-items:github-sync"]
+          : [];
+      },
+    },
     "Planning-Items-Erstellung konnte nicht geprüft werden.",
     async (permission) => {
-      const parsed = parseCreatePayload(await request.json().catch(() => null));
+      const parsed = await parseRequest();
       if (!parsed.ok) return planningItemsError(parsed.error, 400);
-      if (parsed.githubSyncMode && !permission.scopes.includes("write:planning-items:github-sync")) {
-        return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);
-      }
       if (planningItemCreateRequiresOperationalLead(parsed.items)
         && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
         return planningItemsError("Nur CEO oder Deputy können Epics anlegen.", 403);
@@ -67,20 +81,32 @@ export async function handleTeamPlanningItemsCreatePreview(
 export async function handleTeamPlanningItemsCreate(
   request: NextRequest,
 ) {
+  let parsed: ReturnType<typeof parseCreatePayload> | undefined;
+  const parseRequest = async () => {
+    parsed ??= parseCreatePayload(await request.json().catch(() => null));
+    return parsed;
+  };
   return handlePlanningItemsRequest(
     request,
-    "write:planning-items:create",
+    {
+      operation: "planningItems.create",
+      mode: "commit",
+      requiredScopes: ["write:planning-items:create"],
+      resolveAdditionalScopes: async () => {
+        const payload = await parseRequest();
+        return payload.ok && payload.githubSyncMode
+          ? ["write:planning-items:github-sync"]
+          : [];
+      },
+    },
     "Planning-Items-Erstellung konnte nicht gespeichert werden.",
     async (permission) => {
+      const parsed = await parseRequest();
       const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
       if (!isUuid(idempotencyKey)) {
         return planningItemsError("Gültiger UUID-Idempotency-Key ist erforderlich.", 400);
       }
-      const parsed = parseCreatePayload(await request.json().catch(() => null));
       if (!parsed.ok) return planningItemsError(parsed.error, 400);
-      if (parsed.githubSyncMode && !permission.scopes.includes("write:planning-items:github-sync")) {
-        return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);
-      }
       if (planningItemCreateRequiresOperationalLead(parsed.items)
         && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
         return planningItemsError("Nur CEO oder Deputy können Epics anlegen.", 403);
@@ -110,6 +136,9 @@ export async function handleTeamPlanningItemsCreate(
         },
       });
       if (!result.ok) {
+        if (planningCreateTokenBecameInactive(result.error)) {
+          return planningItemsTokenInactiveError();
+        }
         const mapped = planningCreateError(result.error);
         if (mapped.issues) {
           return planningItemsJson({ ok: false, error: mapped.message, items: previewItems }, mapped.status);

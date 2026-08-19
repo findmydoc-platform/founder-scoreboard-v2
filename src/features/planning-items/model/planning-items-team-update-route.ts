@@ -32,6 +32,7 @@ import {
   handlePlanningItemsRequest,
   planningItemsError,
   planningItemsJson,
+  planningItemsTokenInactiveError,
 } from "@/features/planning-items/model/planning-items-route";
 import {
   dispatchAndLoadPlanningGitHubProjections,
@@ -99,7 +100,23 @@ export async function handleTeamPlanningItemUpdate(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  return handlePlanningItemsRequest(request, "write:planning-items:update", "Planning-Items-Update konnte nicht gespeichert werden.", async (permission) => {
+  let parsed: ReturnType<typeof parsePlanningItemPatchPayload> | undefined;
+  const parseRequest = async () => {
+    parsed ??= parsePlanningItemPatchPayload(await request.json().catch(() => null));
+    return parsed;
+  };
+  return handlePlanningItemsRequest(request, {
+    operation: "planningItems.update",
+    mode: "commit",
+    requiredScopes: ["write:planning-items:update"],
+    resolveAdditionalScopes: async () => {
+      const payload = await parseRequest();
+      return payload.ok && payload.githubSyncMode
+        ? ["write:planning-items:github-sync"]
+        : [];
+    },
+  }, "Planning-Items-Update konnte nicht gespeichert werden.", async (permission) => {
+    const parsed = await parseRequest();
     const { id } = await context.params;
     const itemId = id.trim();
     if (!itemId) return planningItemsError("Planungselement-ID ist erforderlich.", 400);
@@ -107,14 +124,9 @@ export async function handleTeamPlanningItemUpdate(
     const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
     if (!isUuid(idempotencyKey)) return planningItemsError("Gültiger UUID-Idempotency-Key ist erforderlich.", 400);
 
-    const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
     const reparentFields = ["parentTaskId"].filter((field) => Object.hasOwn(parsed.raw, field));
     const reparentField = reparentFields[0];
-    if (parsed.githubSyncMode
-      && !permission.scopes.includes("write:planning-items:github-sync")) {
-      return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);
-    }
 
     const loadStoredRequest = () => permission.supabase
       .from("team_planning_item_update_requests")
@@ -215,6 +227,9 @@ export async function handleTeamPlanningItemUpdate(
         },
       });
       if (!result.ok) {
+        if (result.error.code === "forbidden" && result.error.reason === "planningTokenInactive") {
+          return planningItemsTokenInactiveError();
+        }
         if (result.error.code === "conflict" && result.error.reason === "idempotency") {
           return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
         }
@@ -295,6 +310,9 @@ export async function handleTeamPlanningItemUpdate(
       requestMetadata: { requestIp: metadata.request_ip || undefined, userAgent: metadata.user_agent || undefined },
     });
     if (!reviseResult.ok) {
+      if (reviseResult.error.code === "forbidden" && reviseResult.error.reason === "planningTokenInactive") {
+        return planningItemsTokenInactiveError();
+      }
       if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "idempotency") return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
       if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision") return planningItemsError("Planungselement wurde zwischenzeitlich geändert. Bitte Kontext erneut laden.", 409);
       if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "state") return planningItemsError("GitHub-Sync ist für dieses Planungselement im aktuellen Zustand nicht möglich.", 409);
@@ -314,7 +332,11 @@ export async function handleTeamPlanningItemDelete(
 ) {
   return handlePlanningItemsRequest(
     request,
-    "write:planning-items:delete-empty",
+    {
+      operation: "planningItems.deleteEmpty",
+      mode: "commit",
+      requiredScopes: ["write:planning-items:delete-empty"],
+    },
     "Planning-Items-Löschung konnte nicht gespeichert werden.",
     async (permission) => {
       const { id } = await context.params;
@@ -367,6 +389,9 @@ export async function handleTeamPlanningItemDelete(
         },
       });
       if (!result.ok) {
+        if (result.error.code === "forbidden" && result.error.reason === "planningTokenInactive") {
+          return planningItemsTokenInactiveError();
+        }
         const mapped = emptyEpicDeleteError(result.error);
         if (mapped.code && mapped.children) {
           return planningItemsJson({ ok: false, code: "EPIC_NOT_EMPTY", error: mapped.message, children: mapped.children }, mapped.status);

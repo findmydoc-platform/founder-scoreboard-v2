@@ -1053,6 +1053,7 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
     if (defaultToken.tokenRecord.scopes.includes("write:planning-items:github-sync")) {
       throw new Error("New Planning API token unexpectedly received the GitHub sync scope by default.");
     }
+    const deniedStartedAt = Date.now() - 1_000;
     const denied = await apiRequest(
       `/api/team/planning-items/v2/items/${taskId}/github-sync`,
       defaultToken.token,
@@ -1067,6 +1068,31 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
       },
     );
     assertStatus(denied, 403, "Planning API GitHub sync without scope");
+    const deniedBody = await denied.json();
+    if (
+      deniedBody.code !== "INSUFFICIENT_SCOPE"
+      || deniedBody._meta?.operation !== "planningItems.githubSync"
+      || deniedBody._meta?.mode !== "commit"
+      || deniedBody._meta?.access?.decision !== "denied"
+      || !deniedBody._meta?.access?.missingScopes?.includes("write:planning-items:github-sync")
+      || !deniedBody._meta?.access?.token?.expiresAt
+      || !Number.isInteger(deniedBody._meta?.access?.token?.remainingSeconds)
+      || JSON.stringify(deniedBody).includes(defaultToken.token)
+    ) {
+      throw new Error("Planning API scope denial did not return the safe access receipt.");
+    }
+    const tokenList = await apiRequest(
+      "/api/team/planning-items/v2/tokens",
+      sessionToken,
+      "sebastian",
+    );
+    assertStatus(tokenList, 200, "Planning API token usage receipt");
+    const usedToken = (await tokenList.json()).tokens?.find(
+      (token) => token.id === defaultToken.tokenRecord.id,
+    );
+    if (!usedToken?.lastUsedAt || Date.parse(usedToken.lastUsedAt) < deniedStartedAt) {
+      throw new Error("Planning API scope denial did not update token usage metadata.");
+    }
 
     const enabledToken = await issueToken(true);
     if (!enabledToken.tokenRecord.scopes.includes("write:planning-items:github-sync")) {
@@ -1086,6 +1112,13 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
       },
     );
     assertStatus(ineligible, 409, "Planning API GitHub sync preflight");
+    const ineligibleBody = await ineligible.json();
+    if (
+      ineligibleBody._meta?.access?.decision !== "allowed"
+      || !ineligibleBody._meta?.access?.token?.grantedScopes?.includes("write:planning-items:github-sync")
+    ) {
+      throw new Error("Planning API authorized failure did not retain access metadata.");
+    }
   } finally {
     for (const tokenId of issuedTokenIds.reverse()) {
       const response = await apiRequest(

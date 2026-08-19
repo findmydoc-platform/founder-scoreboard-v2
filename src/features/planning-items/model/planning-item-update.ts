@@ -990,7 +990,8 @@ function teamReviseProviderError(error: unknown): PlanningError {
   const code = error && typeof error === "object" && "code" in error ? String(error.code || "") : "";
   if (code === "P0001") return { code: "conflict", reason: "revision" };
   if (code === "P0003") return { code: "conflict", reason: "idempotency" };
-  if (["P0004", "P0005", "P0006", "P0007"].includes(code)) return { code: "forbidden", reason: "planningTokenRejected" };
+  if (code === "P0004") return { code: "forbidden", reason: "planningTokenInactive" };
+  if (["P0005", "P0006", "P0007"].includes(code)) return { code: "forbidden", reason: "planningTokenRejected" };
   if (["P0008", "P0010"].includes(code)) return { code: "conflict", reason: "state" };
   if (["P0014", "P0015"].includes(code)) return { code: "conflict", reason: "state" };
   if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
