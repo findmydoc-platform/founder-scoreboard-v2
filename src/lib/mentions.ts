@@ -46,7 +46,7 @@ function resolveMentionProfile(token: string, profiles: MentionProfile[]) {
   return profileMatches.length === 1 ? profileMatches[0] : null;
 }
 
-export function mentionedProfileIds(comment: string, profiles: MentionProfile[], actorProfileId = "") {
+export function mentionedProfileIds(comment: string, profiles: MentionProfile[]) {
   const tokens = new Set<string>();
   mapMarkdownText(comment, (segment) => {
     for (const match of segment.matchAll(/@([\p{L}\p{N}._-]{2,40})/gu)) {
@@ -60,7 +60,7 @@ export function mentionedProfileIds(comment: string, profiles: MentionProfile[],
   const matches = new Set<string>();
   for (const token of tokens) {
     const profile = resolveMentionProfile(token, profiles);
-    if (profile?.id && profile.id !== actorProfileId) matches.add(profile.id);
+    if (profile?.id) matches.add(profile.id);
   }
   return [...matches];
 }
@@ -73,7 +73,7 @@ export function githubMentionContext(comment: string, profiles: MentionProfile[]
       const token = (match[2] || "").replace(/[.,:;!?)}\]]+$/u, "");
       if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u.test(token)) continue;
       const profile = exactGitHubProfile(token, profiles);
-      if (profile?.id && profile.id !== actorProfileId) recipients.add(profile.id);
+      if (profile?.id) recipients.add(profile.id);
     }
     return segment;
   });
