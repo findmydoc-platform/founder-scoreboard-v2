@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { TaskReviewSummary } from "@/features/reviews/molecules/task-review-summary";
 import { TaskReviewRail } from "@/features/reviews/organisms/task-review-rail";
 import { isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
@@ -244,6 +244,11 @@ export function TaskDetailSurface({
     }
     onRequestDiscardAction(applyTabChange, true);
   };
+  const openRequestedComment = useEffectEvent(() => changeTab("activity"));
+  useEffect(() => {
+    if (!requestedCommentTarget) return;
+    openRequestedComment();
+  }, [requestedCommentTarget]);
   const jumpToReviewSection = (targetId: string) => {
     const revealTarget = () => {
       const target = document.getElementById(targetId);

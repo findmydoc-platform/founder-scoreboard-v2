@@ -116,7 +116,9 @@ test("the open app refreshes notifications and exact comment targets remain expl
   assert.match(headerData, /targetPath: event\.targetPath \|\| ""/);
   assert.match(notificationCommands, /if \(event\.targetPath\)[\s\S]*router\.push\(target\.href\)/);
   assert.match(surface, /requestedCommentTarget \? Math\.max\(activityCount, 1\) : activityCount/);
+  assert.match(surface, /useEffectEvent\(\(\) => changeTab\("activity"\)\)[\s\S]*openRequestedComment\(\)/);
   assert.match(timeline, /taskCommentElementId\(requestedCommentTarget\)/);
+  assert.match(timeline, /setHighlightedTarget\(requestedCommentTarget\)[\s\S]*scrollIntoView/);
   assert.match(timeline, /scrollIntoView/);
   assert.match(timeline, /GitHub-Kommentar wurde inzwischen gelöscht/);
   assert.match(settings, /In-App-Notifications sind immer aktiv/);

@@ -163,9 +163,13 @@ export function TaskCommentTimeline({
     if (!requestedCommentTarget || !requestedCommentExists) return;
     const target = document.getElementById(taskCommentElementId(requestedCommentTarget));
     if (!target) return;
+    const frame = window.requestAnimationFrame(() => setHighlightedTarget(requestedCommentTarget));
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     const timeout = window.setTimeout(() => setHighlightedTarget(""), 4000);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
   }, [requestedCommentExists, requestedCommentTarget]);
 
   return (
