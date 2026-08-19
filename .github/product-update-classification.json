@@ -1,4 +1,4 @@
 {
   "classification": "bug-fix",
-  "reason": "Restores expected FounderOps mention notifications for local and synchronized GitHub comments, including exact comment navigation, without adding or expanding product functionality."
+  "reason": "Fixes same-task comment notification navigation so the existing activity tab opens and scrolls to the highlighted comment without adding or expanding product functionality."
 }
