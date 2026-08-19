@@ -141,7 +141,7 @@ export function NotificationsOverview({
           <div className="max-h-[calc(100dvh-18rem)] overflow-auto overscroll-contain">
             <div className="min-w-0">
               {filteredPersonalNotifications.map((event) => {
-                const actorName = profileName(data.profiles, event.actorProfileId);
+                const actorName = profileName(data.profiles, event.actorProfileId) || event.actorLabel;
                 const showTypeBadge = shouldShowTypeBadge(event.type);
                 const task = event.entityType.trim().toLowerCase() === "task"
                   ? data.tasks.find((item) => item.id === event.entityId) || null

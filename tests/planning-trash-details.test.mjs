@@ -246,6 +246,14 @@ test("notifications keep rejected initiative details read-only and return revisi
   const commands = await read("src/features/planning/hooks/use-notification-commands.ts");
 
   assert.equal(notificationTarget({ entityType: "task", entityId: "task/1" }).href, "/tasks/task%2F1");
+  assert.equal(
+    notificationTarget({ entityType: "task", entityId: "task-1", targetPath: "/tasks/task-1?comment=github:42" }).href,
+    "/tasks/task-1?comment=github:42",
+  );
+  assert.equal(
+    notificationTarget({ entityType: "task", entityId: "task-1", targetPath: "//outside.test/path" }).href,
+    "/tasks/task-1",
+  );
   assert.equal(notificationTarget({ entityType: "initiative", entityId: "initiative/1" }).href, "/initiatives/initiative%2F1");
   assert.deepEqual(
     notificationTarget({ type: "planning_item.returned", entityType: "initiative", entityId: "initiative/1" }),

@@ -16,13 +16,21 @@ function githubLoginKey(value: string) {
   return value.trim().toLowerCase();
 }
 
+function exactGitHubProfile(login: string, profiles: MentionProfile[]) {
+  const key = githubLoginKey(login);
+  const matches = profiles.filter((profile) => (
+    profile.id
+    && profile.githubLogin
+    && githubLoginKey(profile.githubLogin) === key
+  ));
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function resolveMentionProfile(token: string, profiles: MentionProfile[]) {
   const tokenKey = mentionKey(token);
   const tokenGitHubLoginKey = githubLoginKey(token);
   const exactGitHubLoginMatches = profiles.filter((profile) => (
-    profile.id
-    && profile.githubLogin
-    && githubLoginKey(profile.githubLogin) === tokenGitHubLoginKey
+    profile.id && profile.githubLogin && githubLoginKey(profile.githubLogin) === tokenGitHubLoginKey
   ));
   if (exactGitHubLoginMatches.length === 1) return exactGitHubLoginMatches[0];
   if (exactGitHubLoginMatches.length > 1) return null;
@@ -55,6 +63,21 @@ export function mentionedProfileIds(comment: string, profiles: MentionProfile[],
     if (profile?.id && profile.id !== actorProfileId) matches.add(profile.id);
   }
   return [...matches];
+}
+
+export function githubMentionContext(comment: string, profiles: MentionProfile[], authorLogin: string) {
+  const actorProfileId = exactGitHubProfile(authorLogin, profiles)?.id || "";
+  const recipients = new Set<string>();
+  mapMarkdownText(comment, (segment) => {
+    for (const match of segment.matchAll(/(^|[^A-Za-z0-9])@([A-Za-z0-9._-]{1,40})(?![A-Za-z0-9._-])/g)) {
+      const token = (match[2] || "").replace(/[.,:;!?)}\]]+$/u, "");
+      if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u.test(token)) continue;
+      const profile = exactGitHubProfile(token, profiles);
+      if (profile?.id && profile.id !== actorProfileId) recipients.add(profile.id);
+    }
+    return segment;
+  });
+  return { actorProfileId, recipientProfileIds: [...recipients] };
 }
 
 function fencedCodeEnd(value: string, index: number) {
@@ -109,6 +132,11 @@ function markdownLinkEnd(value: string, index: number) {
 function markdownProtectedEnd(value: string, index: number) {
   const fenceEnd = fencedCodeEnd(value, index);
   if (fenceEnd) return fenceEnd;
+
+  if ((index === 0 || value[index - 1] === "\n") && /^[ \t]{0,3}>/u.test(value.slice(index))) {
+    const lineEnd = value.indexOf("\n", index);
+    return lineEnd < 0 ? value.length : lineEnd + 1;
+  }
 
   if (value[index] === "`") {
     let markerEnd = index + 1;

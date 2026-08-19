@@ -163,6 +163,14 @@ export function useNotificationCommands({
 
   const openNotification = (event: HeaderNotification) => {
     const target = notificationTarget(event);
+    if (event.targetPath) {
+      setShowNotifications(false);
+      void navigateAfterNotificationStatusUpdate(
+        () => updateNotificationStatus(event.id, "seen"),
+        () => router.push(target.href),
+      );
+      return;
+    }
     if (target.taskId) {
       const task = data.tasks.find((item) => item.id === event.entityId);
       if (!task || !taskOverlayWorkspaces.has(workspace)) {

@@ -197,11 +197,13 @@ type NotificationRow = {
   id: number;
   type: string;
   actor_profile_id: string | null;
+  actor_label: string | null;
   recipient_profile_id: string | null;
   entity_type: string;
   entity_id: string;
   title: string;
   body: string | null;
+  target_path: string | null;
   status: NotificationEvent["status"];
   seen_at: string | null;
   dismissed_at: string | null;
@@ -215,11 +217,13 @@ function mapRow(row: NotificationRow): NotificationEvent {
     id: row.id,
     type: row.type,
     actorProfileId: row.actor_profile_id || "",
+    actorLabel: row.actor_label || "",
     recipientProfileId: row.recipient_profile_id || "",
     entityType: row.entity_type,
     entityId: row.entity_id,
     title: row.title,
     body: row.body || "",
+    targetPath: row.target_path || "",
     status: row.status,
     seenAt: row.seen_at || "",
     dismissedAt: row.dismissed_at || "",
@@ -287,7 +291,7 @@ export async function reconcileNotificationEvents(supabase: SupabaseClient, opti
   while (true) {
     let query = supabase
       .from("notification_events")
-      .select("id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,status,seen_at,dismissed_at,resolved_at,resolution_reason,created_at")
+      .select("id,type,actor_profile_id,actor_label,recipient_profile_id,entity_type,entity_id,title,body,target_path,status,seen_at,dismissed_at,resolved_at,resolution_reason,created_at")
       .eq("status", "pending")
       .gt("id", cursor)
       .order("id", { ascending: true })

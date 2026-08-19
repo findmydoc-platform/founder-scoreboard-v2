@@ -7,6 +7,7 @@ import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-com
 import { TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
 import type { TaskCommentTimelineItem } from "@/features/tasks/molecules/task-comment-timeline";
 import { isUsefulActivity } from "@/features/tasks/model/task-comment-timeline-policy";
+import { githubTaskCommentTarget, localTaskCommentTarget } from "@/features/tasks/model/task-comment-target";
 import type { Profile, Sprint, Task, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
 
 type Props = {
@@ -17,6 +18,7 @@ type Props = {
   tasks?: Task[];
   sprints?: Sprint[];
   currentProfileId?: string;
+  requestedCommentTarget?: string;
   error?: string;
   loading?: boolean;
   unavailable?: boolean;
@@ -47,7 +49,7 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
       htmlUrl: "",
     })),
     ...comments.map((comment) => ({
-      id: `comment-${comment.id}`,
+      id: localTaskCommentTarget(comment.id),
       type: "comment" as const,
       createdAt: comment.createdAt,
       message: "",
@@ -60,7 +62,7 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
       githubCommentUrl: comment.githubCommentUrl,
     })),
     ...externalComments.map((comment) => ({
-      id: `github-comment-${comment.id}`,
+      id: githubTaskCommentTarget(comment.externalId),
       type: "github-comment" as const,
       createdAt: comment.createdAt,
       message: "",
@@ -83,6 +85,7 @@ export function TaskCommentThread({
   tasks = [],
   sprints = [],
   currentProfileId = "",
+  requestedCommentTarget = "",
   error = "",
   loading = false,
   unavailable = false,
@@ -169,6 +172,7 @@ export function TaskCommentThread({
         profiles={profiles}
         labelsById={labelsById}
         currentProfileId={currentProfileId}
+        requestedCommentTarget={requestedCommentTarget}
         error={error}
         loading={loading}
         unavailable={unavailable}

@@ -31,6 +31,7 @@
     "verify:score-objection": "node scripts/verify-score-objection-transaction.mjs",
     "verify:founderops-settings": "node scripts/verify-founderops-settings-transaction.mjs",
     "verify:notification-lifecycle": "node scripts/verify-notification-lifecycle.mjs",
+    "verify:comment-mentions": "node scripts/verify-comment-mention-notifications.mjs",
     "verify:task-review": "node scripts/verify-task-review-transaction.mjs",
     "verify:planning-approval": "node scripts/verify-planning-approval-transaction.mjs",
     "verify:planning-reparent": "node scripts/verify-planning-reparent-transaction.mjs",

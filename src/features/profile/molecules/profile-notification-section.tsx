@@ -17,11 +17,11 @@ export function NotificationSettingsSection({
   const enabledEvents = googleChatDigestEventTypes.filter((eventType) => draft.notificationEvents[eventType] !== false);
 
   return (
-    <SettingsPane eyebrow="Zustellung" title="Benachrichtigungen" description="Google-Chat-Hinweise bleiben persönlich, aber bewusst leise konfiguriert.">
+    <SettingsPane eyebrow="Zustellung" title="Benachrichtigungen" description="In-App-Notifications sind immer aktiv. Hier steuerst du nur Hinweise in Google Chat.">
       <SettingsRow label="Google-Chat-Hinweise" description={draft.notificationsEnabled ? `${enabledEvents.length} Ereignisse aktiv` : "Alle Ereignisse pausiert"}>
         <ToggleSwitch checked={draft.notificationsEnabled} disabled={pending} label="Google-Chat-Hinweise aktiv" onChange={onMasterChange} />
       </SettingsRow>
-      <SettingsRow label="Ereignisse" description="Nur sichtbar einstellen, was wirklich relevant ist." align="start">
+      <SettingsRow label="Google-Chat-Ereignisse" description="Wähle aus, welche Ereignisse zusätzlich in Google Chat erscheinen." align="start">
         <div className={classNames("grid gap-2 text-left md:min-w-96", !draft.notificationsEnabled && "opacity-50")}>
           {googleChatDigestEventTypes.map((eventType) => (
             <div key={eventType} className="flex min-h-10 items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3">

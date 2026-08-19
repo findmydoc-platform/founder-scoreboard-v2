@@ -332,11 +332,13 @@ export type NotificationEvent = {
   id: number;
   type: string;
   actorProfileId: string;
+  actorLabel?: string;
   recipientProfileId: string;
   entityType: string;
   entityId: string;
   title: string;
   body: string;
+  targetPath?: string;
   status: "pending" | "sent" | "failed" | "dismissed" | "resolved";
   seenAt: string;
   dismissedAt: string;
@@ -437,7 +439,7 @@ export type HeaderQuickLink = Pick<FmdTool, "id" | "name" | "category" | "url" |
 
 export type HeaderCalendarEvent = Pick<FounderEvent, "id" | "title" | "category" | "startsAt" | "endsAt" | "location" | "status">;
 
-export type HeaderNotification = Pick<NotificationEvent, "id" | "type" | "actorProfileId" | "recipientProfileId" | "entityType" | "entityId" | "title" | "body" | "createdAt">;
+export type HeaderNotification = Pick<NotificationEvent, "id" | "type" | "actorProfileId" | "actorLabel" | "recipientProfileId" | "entityType" | "entityId" | "title" | "body" | "targetPath" | "createdAt">;
 
 export type HeaderDataSlot<T> = {
   state: "idle" | "loading" | "ready" | "error";

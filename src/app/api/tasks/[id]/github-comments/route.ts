@@ -3,6 +3,8 @@ import { requireTeamMember } from "@/lib/authz";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
+import { resolveGitHubCommentMentionSnapshot } from "@/lib/github-comment-mention-snapshot";
+import { importGitHubTaskCommentsWithMentions } from "@/lib/github-comment-mention-import";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
@@ -101,39 +103,70 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   } else {
     importedEvidenceLink = "";
   }
-  const externalRows = githubComments
-    .filter((comment) => comment.body?.trim() && !isAppMirroredComment(comment.body))
-    .map((comment) => ({
-      task_id: id,
-      source: "github",
-      external_id: String(comment.id),
-      author_login: comment.user?.login || "github-user",
-      author_avatar_url: comment.user?.avatar_url || null,
-      body: comment.body.trim(),
-      html_url: comment.html_url || null,
-      created_at: comment.created_at,
-      imported_at: new Date().toISOString(),
-    }));
-
-  let newExternalRows = externalRows;
-  if (externalRows.length) {
-    const { data: existingRows, error: existingError } = await supabase
+  const { data: profiles, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id,name,github_login");
+  if (profilesError) return apiError(profilesError.message, 500);
+  const mentionProfiles = (profiles || []).map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    githubLogin: profile.github_login,
+  }));
+  const importableComments = githubComments.filter((comment) => comment.body?.trim() && !isAppMirroredComment(comment.body));
+  const externalIds = importableComments.map((comment) => String(comment.id));
+  let existingCommentRows: Array<{
+    external_id: string;
+    author_login: string;
+    body: string;
+    source_updated_at: string;
+    mention_recipient_profile_ids: string[];
+    mention_recipients_initialized: boolean;
+  }> = [];
+  if (externalIds.length) {
+    const { data: existingComments, error: existingCommentsError } = await supabase
       .from("task_external_comments")
-      .select("external_id")
-      .eq("task_id", id)
+      .select("external_id,author_login,body,source_updated_at,mention_recipient_profile_ids,mention_recipients_initialized")
       .eq("source", "github")
-      .in("external_id", externalRows.map((row) => row.external_id));
-
-    if (existingError) return apiError(existingError.message, 500);
-
-    const existingIds = new Set((existingRows || []).map((row) => row.external_id));
-    newExternalRows = externalRows.filter((row) => !existingIds.has(row.external_id));
-
-    const { error: upsertError } = await supabase
-      .from("task_external_comments")
-      .upsert(externalRows, { onConflict: "source,external_id" });
-    if (upsertError) return apiError(upsertError.message, 500);
+      .in("external_id", externalIds);
+    if (existingCommentsError) return apiError(existingCommentsError.message, 500);
+    existingCommentRows = existingComments || [];
   }
+  const existingCommentsByExternalId = new Map(existingCommentRows.map((comment) => [comment.external_id, comment]));
+  const importedAt = new Date().toISOString();
+  const externalRows = importableComments
+    .map((comment) => {
+      const authorLogin = comment.user?.login || "github-user";
+      const existing = existingCommentsByExternalId.get(String(comment.id));
+      const mentionSnapshot = resolveGitHubCommentMentionSnapshot({
+        authorLogin,
+        body: comment.body,
+        profiles: mentionProfiles,
+        existing: existing ? {
+          authorLogin: existing.author_login,
+          body: existing.body,
+          sourceUpdatedAt: existing.source_updated_at,
+          mentionRecipientProfileIds: existing.mention_recipient_profile_ids || [],
+          mentionRecipientsInitialized: existing.mention_recipients_initialized,
+        } : undefined,
+      });
+      return {
+        externalId: String(comment.id),
+        authorLogin,
+        authorAvatarUrl: comment.user?.avatar_url || "",
+        actorProfileId: mentionSnapshot.actorProfileId,
+        mentionRecipientProfileIds: mentionSnapshot.mentionRecipientProfileIds,
+        baselineMentionRecipientProfileIds: mentionSnapshot.baselineMentionRecipientProfileIds,
+        baselineSourceUpdatedAt: mentionSnapshot.baselineSourceUpdatedAt,
+        body: comment.body.trim(),
+        htmlUrl: comment.html_url || "",
+        createdAt: comment.created_at,
+        sourceUpdatedAt: comment.updated_at || comment.created_at,
+        importedAt,
+      };
+    });
+
+  const { data: importResult, error: importError } = await importGitHubTaskCommentsWithMentions(supabase, id, externalRows);
+  if (importError) return apiError(importError.message, 500);
 
   const { data: importedComments, error: importedError } = await supabase
     .from("task_external_comments")
@@ -145,7 +178,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   return NextResponse.json({
     ok: true,
-    imported: newExternalRows.length,
+    imported: Number(importResult?.imported || 0),
     evidenceLink: importedEvidenceLink,
     comments: (importedComments || []).map((comment) => ({
       id: comment.id,

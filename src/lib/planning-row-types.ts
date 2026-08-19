@@ -365,11 +365,13 @@ export type DbNotificationEvent = {
   id: number;
   type: string;
   actor_profile_id: string | null;
+  actor_label: string | null;
   recipient_profile_id: string | null;
   entity_type: string;
   entity_id: string;
   title: string;
   body: string | null;
+  target_path: string | null;
   status: NotificationEvent["status"];
   seen_at: string | null;
   dismissed_at: string | null;

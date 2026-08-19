@@ -324,7 +324,7 @@ test("github issue sync and comment delivery keep independent state", async () =
   assert.match(taskRoutePolicy, /rejectClientGitHubSyncStatusUpdate/);
   assert.match(taskRoutePolicy, /github_issue_sync_status = "not_synced"/);
   assert.doesNotMatch(commentsRoute, /github_issue_sync_status|github_issue_sync_error/);
-  assert.match(commentsRoute, /create_task_comment_with_github_delivery/);
+  assert.match(commentsRoute, /create_task_comment_with_notifications/);
   assert.match(commentsRoute, /deliverPendingGitHubComments/);
   assert.match(deliveryMigration, /waiting_for_author_connection/);
   assert.match(blockersRoute, /github_issue_sync_status: "not_synced"/);
@@ -600,7 +600,7 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(githubAppMigration, /enable row level security/);
   assert.match(githubAppMigration, /grant all on table github_app_user_tokens to service_role/);
   assert.doesNotMatch(githubAppMigration, /create policy [^\n]*github_app_user_tokens/i);
-  assert.match(commentsRoute, /create_task_comment_with_github_delivery/);
+  assert.match(commentsRoute, /create_task_comment_with_notifications/);
   assert.match(commentsRoute, /deliverPendingGitHubComments/);
   assert.doesNotMatch(commentsRoute, /getGitHubUserTokenForProfile|githubIssueSyncError/);
   assert.match(commentDelivery, /eq\("id", delivery\.author_profile_id\)/);
@@ -639,6 +639,8 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   ])).join("\n");
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const githubCommentsRoute = await readFile("src/app/api/tasks/[id]/github-comments/route.ts", "utf8");
+  const githubCommentMentionAdapter = await readFile("src/lib/github-comment-mention-import.ts", "utf8");
+  const githubCommentMentionSnapshot = await readFile("src/lib/github-comment-mention-snapshot.ts", "utf8");
   const githubAssetsRoute = await readFile("src/app/api/github-assets/route.ts", "utf8");
   const attachmentRoute = await readFile("src/app/api/tasks/[id]/attachments/route.ts", "utf8");
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
@@ -677,10 +679,11 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(data, /task_audit_timeline/);
   assert.doesNotMatch(data, /from\("task_activity"\)/);
   assert.match(data, /events,/);
-  assert.match(commentsRoute, /task.comment/);
+  assert.match(commentsRoute, /p_comment_recipient_profile_ids/);
   assert.match(commentsRoute, /mentionedProfileIds/);
-  assert.match(commentsRoute, /task.mention/);
-  assert.match(commentsRoute, /Du wurdest erwähnt/);
+  assert.match(commentsRoute, /p_mention_recipient_profile_ids/);
+  assert.match(migration, /task\.mention:founderops:/);
+  assert.match(migration, /Du wurdest erwähnt/);
   assert.match(mentions, /githubLogin/);
   assert.match(notificationPolicy, /task\.mention/);
   assert.match(notificationPolicy, /Erwähnung/);
@@ -698,9 +701,9 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.doesNotMatch(githubCommentsRoute, /Nachweis aus externer Ablage importiert|GitHub-Kommentare importiert|task_activity/);
   assert.match(githubCommentsRoute, /evidenceLink/);
   assert.match(githubCommentsRoute, /isAppMirroredComment/);
-  assert.match(githubCommentsRoute, /task_external_comments/);
-  assert.match(githubCommentsRoute, /source,external_id/);
-  assert.doesNotMatch(githubCommentsRoute, /events/);
+  assert.match(githubCommentsRoute, /importGitHubTaskCommentsWithMentions/);
+  assert.match(githubCommentMentionAdapter, /import_github_task_comments_with_mentions/);
+  assert.match(githubCommentMentionSnapshot, /githubMentionContext/);
   assert.match(blockersRoute, /task.blocker_reported/);
   assert.match(taskMutationContract, /Status geändert/);
   assert.match(taskRoute, /activityMessages/);

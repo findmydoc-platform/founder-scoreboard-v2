@@ -60,6 +60,7 @@ type TaskDetailSurfaceProps = {
   pending: boolean;
   error?: string;
   detailDataError?: string;
+  requestedCommentTarget?: string;
   detailDataLoading?: boolean;
   commentImportNotice?: string;
   commentImportPending?: boolean;
@@ -101,6 +102,7 @@ export function TaskDetailSurface({
   pending,
   error = "",
   detailDataError = "",
+  requestedCommentTarget = "",
   detailDataLoading = false,
   commentImportNotice = "",
   commentImportPending = false,
@@ -123,7 +125,7 @@ export function TaskDetailSurface({
   onRemoveRelation,
   onDecideApproval,
 }: TaskDetailSurfaceProps) {
-  const [activeTab, setActiveTab] = useState<TaskDetailTabId>("overview");
+  const [activeTab, setActiveTab] = useState<TaskDetailTabId>(requestedCommentTarget ? "activity" : "overview");
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
   const [reviewDraftDirty, setReviewDraftDirty] = useState(false);
   const controller = useTaskDetailController({
@@ -195,7 +197,7 @@ export function TaskDetailSurface({
   const relationshipCount = uniqueRelationshipCount(relationshipGroups);
   const activityCount = visibleTaskActivityCount({ comments, externalComments, activities });
   const availableTabs = taskDetailAvailableTabs({
-    activityCount,
+    activityCount: requestedCommentTarget ? Math.max(activityCount, 1) : activityCount,
     activityKnown: detailDataKnown,
     canAddRelationship: relationshipAccess.allowedRelationTypes.length > 0,
     canComment: controller.permissions.canComment,
@@ -361,6 +363,7 @@ export function TaskDetailSurface({
         tasks={allTasks}
         sprints={sprints}
         currentProfileId={currentProfile?.id || ""}
+        requestedCommentTarget={requestedCommentTarget}
         loading={detailDataLoading}
         unavailable={detailDataUnavailable}
         pending={pending}
