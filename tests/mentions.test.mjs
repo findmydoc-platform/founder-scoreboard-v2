@@ -87,7 +87,7 @@ test("does not notify profiles mentioned inside Markdown block quotes", () => {
   );
 });
 
-test("resolves GitHub mentions only through unique GitHub logins and excludes the author", () => {
+test("resolves GitHub mentions only through unique GitHub logins and includes self-mentions", () => {
   const githubProfiles = [
     ...profiles,
     { id: "duplicate", name: "Duplicate", githubLogin: "MehmetVolkan" },
@@ -99,7 +99,14 @@ test("resolves GitHub mentions only through unique GitHub logins and excludes th
       githubProfiles,
       "SebastianSchuetze",
     ),
-    { actorProfileId: "sebastian", recipientProfileIds: [] },
+    { actorProfileId: "sebastian", recipientProfileIds: ["sebastian"] },
+  );
+});
+
+test("keeps a local self-mention as a notification recipient", () => {
+  assert.deepEqual(
+    mentionedProfileIds("Reminder für @sebastian", profiles),
+    ["sebastian"],
   );
 });
 
@@ -123,7 +130,7 @@ test("recognizes GitHub username punctuation without accepting invalid login sha
 
 test("keeps app notification matching aligned with canonical GitHub logins", () => {
   assert.deepEqual(
-    mentionedProfileIds("Ping @SebastianSchuetze", profiles, "volkan"),
+    mentionedProfileIds("Ping @SebastianSchuetze", profiles),
     ["sebastian"],
   );
 });
@@ -147,7 +154,7 @@ test("prefers an exact GitHub login over another profile's id or name", () => {
   ];
 
   assert.deepEqual(
-    mentionedProfileIds("Ping @SebastianSchuetze", collidingProfiles, "volkan"),
+    mentionedProfileIds("Ping @SebastianSchuetze", collidingProfiles),
     ["sebastian"],
   );
 });

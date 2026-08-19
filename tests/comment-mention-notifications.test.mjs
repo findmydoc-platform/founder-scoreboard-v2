@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
+import { listSupabaseMigrations } from "../scripts/lib/supabase-migrations.mjs";
 
 const migrationPath = "supabase/migrations/20260819132108_comment_mention_notifications.sql";
 
@@ -34,6 +35,22 @@ test("GitHub imports atomically upsert comments and deduplicated mention events"
   assert.match(migration, /p_comment_updated_at < v_existing\.source_updated_at/);
   assert.match(migration, /task\.mention:github:/);
   assert.match(migration, /\?comment=github:/);
+});
+
+test("the forward migration permits self-mentions without enabling ordinary self-comment notifications", async () => {
+  const migrations = await listSupabaseMigrations();
+  const migration = migrations.find((entry) => entry.name === "allow_self_mention_notifications")?.sql || "";
+  const localMentionInsert = migration.match(/'task\.mention'[\s\S]*?on conflict \(dedupe_key\)[\s\S]*?do nothing;/u)?.[0] || "";
+  const localCommentInsert = migration.match(/'task\.comment'[\s\S]*?on conflict \(dedupe_key\)[\s\S]*?do nothing;/u)?.[0] || "";
+  const githubMentionInserts = [...migration.matchAll(/'task\.mention'[\s\S]*?from unnest\(v_current_recipient_profile_ids\)[\s\S]*?do nothing;/gu)];
+
+  assert.match(migration, /create or replace function public\.create_task_comment_with_notifications/);
+  assert.doesNotMatch(localMentionInsert, /recipient_id is distinct from nullif\(p_profile_id/);
+  assert.match(localCommentInsert, /recipient_id is distinct from nullif\(p_profile_id/);
+  assert.equal(githubMentionInserts.length, 2);
+  for (const [insert] of githubMentionInserts) {
+    assert.doesNotMatch(insert, /recipient_id is distinct from (?:v_actor_profile_id|nullif\(trim\(coalesce\(p_actor_profile_id)/);
+  }
 });
 
 test("the manual import adapter passes resolved mention snapshots to the atomic RPC", async () => {

@@ -45,7 +45,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       name: profile.name,
       githubLogin: profile.github_login,
     })),
-    actorProfileId,
   ));
   const commentRecipients = new Set<string>();
   const assignee = task.assignee || task.owner;

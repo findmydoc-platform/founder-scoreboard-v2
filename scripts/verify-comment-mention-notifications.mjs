@@ -54,6 +54,23 @@ try {
     throw new Error("Local comment and mention notification were not created together.");
   }
 
+  await client.query(
+    `select public.create_task_comment_with_notifications($1, $2, $3, true, $4::text[], '{}'::text[])`,
+    [localTaskId, actorProfileId, "Self reminder", [actorProfileId]],
+  );
+  const localSelfMention = await client.query(
+    `select count(*)::integer as count
+     from public.notification_events
+     where entity_id = $1
+       and type = 'task.mention'
+       and actor_profile_id = $2
+       and recipient_profile_id = $2`,
+    [localTaskId, actorProfileId],
+  );
+  if (localSelfMention.rows[0]?.count !== 1) {
+    throw new Error("A local self-mention did not create exactly one notification.");
+  }
+
   await client.query("savepoint invalid_local_recipient");
   try {
     await client.query(
@@ -69,7 +86,7 @@ try {
     "select count(*)::integer as count from public.task_comments where task_id = $1",
     [localTaskId],
   );
-  if (localAfterFailure.rows[0]?.count !== 1) {
+  if (localAfterFailure.rows[0]?.count !== 2) {
     throw new Error("A failed local notification left an orphan comment.");
   }
 
@@ -196,6 +213,37 @@ try {
     || !durableMention.rows[0]?.target_path?.includes(`comment=github:${externalId}`)
   ) {
     throw new Error("GitHub mention deduplication or durable target contract failed.");
+  }
+
+  const githubSelfExternalId = String(suffix + 1);
+  const githubSelfComment = {
+    ...baseComment,
+    externalId: githubSelfExternalId,
+    authorLogin: "verification-actor",
+    actorProfileId,
+    mentionRecipientProfileIds: [actorProfileId, actorProfileId],
+    body: "GitHub self reminder @verification-actor",
+    createdAt: new Date(watermark.getTime() + 3_000).toISOString(),
+    sourceUpdatedAt: new Date(watermark.getTime() + 3_000).toISOString(),
+  };
+  await client.query(
+    "select public.import_github_task_comments_with_mentions($1, $2::jsonb)",
+    [githubTaskId, JSON.stringify([githubSelfComment])],
+  );
+  await client.query(
+    "select public.import_github_task_comments_with_mentions($1, $2::jsonb)",
+    [githubTaskId, JSON.stringify([githubSelfComment])],
+  );
+  const githubSelfMention = await client.query(
+    `select count(*)::integer as count
+     from public.notification_events
+     where dedupe_key = $1
+       and actor_profile_id = $2
+       and recipient_profile_id = $2`,
+    [`task.mention:github:${githubSelfExternalId}:${actorProfileId}`, actorProfileId],
+  );
+  if (githubSelfMention.rows[0]?.count !== 1) {
+    throw new Error("A synchronized GitHub self-mention did not create exactly one notification.");
   }
 
   console.log("Comment mention notification verification passed; all test data will be rolled back.");
