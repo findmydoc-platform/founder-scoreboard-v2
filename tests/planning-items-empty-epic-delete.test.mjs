@@ -252,6 +252,18 @@ test("role, token scope, revision, idempotency, and replay boundaries fail close
   assert.equal(replay.replayed, true);
   assert.equal(replayFixture.rpcCalls.length, 0);
 
+  const inactiveFixture = fixture({
+    item: source,
+    rpcResult: { data: null, error: { code: "P0004", message: "planning items token is inactive" } },
+  });
+  const inactive = await model.createEmptyEpicDeletePlanningItems(inactiveFixture.client).run({
+    actor: authorizedToken,
+    mode: "commit",
+    command,
+    idempotencyKey: "22222222-2222-4222-8222-222222222223",
+  });
+  assert.deepEqual(inactive.error, { code: "forbidden", reason: "planningTokenInactive" });
+
   const conflictFixture = fixture({
     item: null,
     stored: { request_hash: "different", contract_version: 2, response: { itemType: "epic", item: source } },

@@ -38,6 +38,33 @@ Create, update, and delete commits require a UUID `Idempotency-Key`. Repeating t
 Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
 ```
 
+## Access metadata
+
+Every response produced after an active personal token has been recognized includes an additive `_meta` object. It identifies the requested operation and mode, the safe token hint, granted and required scopes, any missing scopes, and the remaining token lifetime. `expiresAt` is authoritative; `remainingSeconds` is calculated from the same database timestamp in `evaluatedAt` and is never negative.
+
+```json
+{
+  "_meta": {
+    "operation": "planningItems.update",
+    "mode": "preview",
+    "access": {
+      "evaluatedAt": "2026-08-19T10:00:00Z",
+      "decision": "allowed",
+      "token": {
+        "hint": "…a8F31x",
+        "grantedScopes": ["write:planning-items:update"],
+        "expiresAt": "2026-09-03T10:00:00Z",
+        "remainingSeconds": 1296000
+      },
+      "requiredScopes": ["write:planning-items:update"],
+      "missingScopes": []
+    }
+  }
+}
+```
+
+A valid token without all required scopes receives `403 Forbidden`, `code: "INSUFFICIENT_SCOPE"`, `decision: "denied"`, and a `WWW-Authenticate` challenge. Preview or commit execution does not start. Missing credentials receive `401` with `TOKEN_REQUIRED`; unknown, revoked, and expired tokens remain intentionally indistinguishable as `TOKEN_INACTIVE` and expose no token metadata. Token-management endpoints are session-authorized and do not use this bearer-token receipt.
+
 ## Endpoints
 
 - `GET /api/team/planning-items/v2/context` — reads non-sensitive canonical planning context.

@@ -84,8 +84,9 @@ const syncModel = await loadTranspiledModule(
   },
 );
 
-let standaloneScope = "";
+let standaloneAccessRequest = null;
 let standaloneMode = "accepted";
+let standaloneEnqueueError = null;
 let scheduledAfter = null;
 const standaloneRoute = await loadTranspiledModule(
   "src/features/planning-items/model/planning-items-team-github-sync-route.ts",
@@ -141,8 +142,8 @@ const standaloneRoute = await loadTranspiledModule(
       ]),
     },
     "@/features/planning-items/model/planning-items-route": {
-      handlePlanningItemsRequest: async (_request, scope, _fallback, handler) => {
-        standaloneScope = scope;
+      handlePlanningItemsRequest: async (_request, accessRequest, _fallback, handler) => {
+        standaloneAccessRequest = accessRequest;
         return handler({
           supabase: {},
           profile: { id: "profile-1" },
@@ -162,18 +163,27 @@ const standaloneRoute = await loadTranspiledModule(
           return body;
         },
       }),
-    },
-    "@/features/planning-items/model/planning-items-github-projection": {
-      enqueueTeamPlanningGitHubProjection: async ({ itemId }) => ({
-        ok: true,
-        value: {
-          operationId: "team-sync:token-1:key-1",
-          itemId,
-          itemType: "sub_issue",
-          githubSync: { status: "accepted" },
-          replayed: false,
+      planningItemsTokenInactiveError: () => ({
+        status: 401,
+        headers: new Headers({ "WWW-Authenticate": 'Bearer error="invalid_token"' }),
+        async json() {
+          return { ok: false, code: "TOKEN_INACTIVE", error: "Planning-API-Token ist nicht mehr aktiv." };
         },
       }),
+    },
+    "@/features/planning-items/model/planning-items-github-projection": {
+      enqueueTeamPlanningGitHubProjection: async ({ itemId }) => standaloneEnqueueError
+        ? { ok: false, error: standaloneEnqueueError }
+        : {
+            ok: true,
+            value: {
+              operationId: "team-sync:token-1:key-1",
+              itemId,
+              itemType: "sub_issue",
+              githubSync: { status: "accepted" },
+              replayed: false,
+            },
+          },
       dispatchAndLoadPlanningGitHubProjections: async () => new Map([
         ["task-1", standaloneMode === "failed"
           ? {
@@ -433,6 +443,7 @@ test("wait execution reports local ineligibility before installation-token failu
 
 test("standalone async sync requires the new scope and returns 202 without an idempotency key", async () => {
   standaloneMode = "accepted";
+  standaloneEnqueueError = null;
   scheduledAfter = null;
   const response = await standaloneRoute.handleTeamPlanningItemGitHubSync({
     json: async () => ({
@@ -444,10 +455,31 @@ test("standalone async sync requires the new scope and returns 202 without an id
   });
   const body = await response.json();
 
-  assert.equal(standaloneScope, "write:planning-items:github-sync");
+  assert.deepEqual(standaloneAccessRequest, {
+    operation: "planningItems.githubSync",
+    mode: "commit",
+    requiredScopes: ["write:planning-items:github-sync"],
+  });
   assert.equal(response.status, 202);
   assert.equal(body.githubSync.status, "accepted");
   assert.equal(typeof scheduledAfter, "function");
+});
+
+test("standalone sync preserves a late inactive-token response", async () => {
+  standaloneEnqueueError = { code: "P0004", message: "planning items token is inactive" };
+  const response = await standaloneRoute.handleTeamPlanningItemGitHubSync({
+    json: async () => ({
+      githubSyncMode: "async",
+      createIfMissing: true,
+    }),
+  }, {
+    params: Promise.resolve({ id: "task-1" }),
+  });
+  const body = await response.json();
+  assert.equal(response.status, 401);
+  assert.equal(body.code, "TOKEN_INACTIVE");
+  assert.equal(response.headers.get("www-authenticate"), 'Bearer error="invalid_token"');
+  standaloneEnqueueError = null;
 });
 
 test("standalone wait sync preserves GitHub failure status", async () => {

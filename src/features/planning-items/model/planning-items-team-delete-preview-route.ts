@@ -20,7 +20,11 @@ export async function handleTeamPlanningItemDeletePreview(
 ) {
   return handlePlanningItemsRequest(
     request,
-    "write:planning-items:delete-empty",
+    {
+      operation: "planningItems.deleteEmpty",
+      mode: "preview",
+      requiredScopes: ["write:planning-items:delete-empty"],
+    },
     "Planning-Items-Löschung konnte nicht geprüft werden.",
     async (permission) => {
       const { id } = await context.params;

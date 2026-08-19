@@ -11,7 +11,7 @@
       "get": {
         "operationId": "getPlanningItemsContextV2",
         "security": [{ "BearerAuth": [] }],
-        "responses": { "200": { "description": "Canonical planning context without legacy aliases", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContextResponse" } } } } }
+        "responses": { "200": { "description": "Canonical planning context without legacy aliases", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContextResponse" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } }
       }
     },
     "/api/team/planning-items/v2/items/preview": {
@@ -19,7 +19,7 @@
         "operationId": "previewPlanningItemsCreateV2",
         "security": [{ "BearerAuth": [] }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePayload" } } } },
-        "responses": { "200": { "description": "Normalized create preview" }, "400": { "$ref": "#/components/responses/BadRequest" } }
+        "responses": { "200": { "$ref": "#/components/responses/Authorized" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } }
       }
     },
     "/api/team/planning-items/v2/items": {
@@ -28,7 +28,7 @@
         "security": [{ "BearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePayload" } } } },
-        "responses": { "200": { "description": "Created planning items or a v2 idempotent replay" }, "409": { "$ref": "#/components/responses/Conflict" } }
+        "responses": { "200": { "$ref": "#/components/responses/Authorized" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "409": { "$ref": "#/components/responses/Conflict" } }
       }
     },
     "/api/team/planning-items/v2/items/{id}/preview": {
@@ -37,7 +37,7 @@
         "security": [{ "BearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/ItemId" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PatchPayload" } } } },
-        "responses": { "200": { "description": "Normalized partial update preview" }, "409": { "$ref": "#/components/responses/Conflict" } }
+        "responses": { "200": { "$ref": "#/components/responses/Authorized" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
       }
     },
     "/api/team/planning-items/v2/items/{id}/delete/preview": {
@@ -46,7 +46,7 @@
         "security": [{ "BearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/ItemId" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePayload" } } } },
-        "responses": { "200": { "description": "Delete preview", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePreviewResponse" } } } }, "409": { "$ref": "#/components/responses/Conflict" } }
+        "responses": { "200": { "description": "Delete preview", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePreviewResponse" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
       }
     },
     "/api/team/planning-items/v2/items/{id}": {
@@ -55,14 +55,14 @@
         "security": [{ "BearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/ItemId" }, { "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PatchPayload" } } } },
-        "responses": { "200": { "description": "Updated planning item or a v2 idempotent replay" }, "409": { "$ref": "#/components/responses/Conflict" } }
+        "responses": { "200": { "$ref": "#/components/responses/Authorized" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
       },
       "delete": {
         "operationId": "deleteEmptyEpicV2",
         "security": [{ "BearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/ItemId" }, { "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePayload" } } } },
-        "responses": { "200": { "description": "Deleted empty Epic or a v2 idempotent replay" }, "409": { "$ref": "#/components/responses/DeleteConflict" } }
+        "responses": { "200": { "$ref": "#/components/responses/Authorized" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/DeleteConflict" } }
       }
     },
     "/api/team/planning-items/v2/items/{id}/github-sync": {
@@ -71,7 +71,7 @@
         "security": [{ "BearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/ItemId" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GitHubSyncRequest" } } } },
-        "responses": { "200": { "description": "Wait-mode GitHub sync completed" }, "202": { "description": "Async GitHub sync accepted" }, "409": { "description": "The planning item is not eligible for GitHub sync" }, "503": { "description": "GitHub sync is temporarily unavailable" } }
+        "responses": { "200": { "$ref": "#/components/responses/Authorized" }, "202": { "$ref": "#/components/responses/Authorized" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Authorized" }, "503": { "$ref": "#/components/responses/Authorized" } }
       }
     }
   },
@@ -82,11 +82,27 @@
       "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" } }
     },
     "responses": {
-      "BadRequest": { "description": "Invalid canonical request" },
-      "Conflict": { "description": "Stale version, state conflict, or incompatible idempotency replay" },
-      "DeleteConflict": { "description": "The Epic is non-empty, the version is stale, or the idempotency key conflicts", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/EpicNotEmptyResponse" }, { "$ref": "#/components/schemas/ErrorResponse" }] } } } }
+      "Authorized": { "description": "Response after successful token recognition", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthorizedResponse" } } } },
+      "BadRequest": { "description": "Invalid canonical request after successful token recognition", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthorizedErrorResponse" } } } },
+      "Unauthorized": { "description": "Missing or inactive Planning API token. These responses intentionally omit access metadata.", "headers": { "WWW-Authenticate": { "required": true, "schema": { "type": "string", "enum": ["Bearer", "Bearer error=\"invalid_token\""] } } }, "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/TokenRequiredResponse" }, { "$ref": "#/components/schemas/TokenInactiveResponse" }] } } } },
+      "Forbidden": { "description": "Missing scope, forbidden token profile, or domain authorization failure.", "headers": { "WWW-Authenticate": { "schema": { "type": "string" } } }, "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/InsufficientScopeResponse" }, { "$ref": "#/components/schemas/TokenProfileForbiddenResponse" }, { "$ref": "#/components/schemas/AuthorizedErrorResponse" }] } } } },
+      "NotFound": { "description": "Planning item not found after successful token recognition", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthorizedErrorResponse" } } } },
+      "Conflict": { "description": "Stale version, state conflict, or incompatible idempotency replay", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthorizedErrorResponse" } } } },
+      "DeleteConflict": { "description": "The Epic is non-empty, the version is stale, or the idempotency key conflicts", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/EpicNotEmptyResponse" }, { "$ref": "#/components/schemas/AuthorizedErrorResponse" }] } } } }
     },
     "schemas": {
+      "PlanningItemScope": { "type": "string", "enum": ["read:planning-context", "write:planning-items:create", "write:planning-items:update", "write:planning-items:delete-empty", "write:planning-items:github-sync"] },
+      "AccessTokenReceipt": { "type": "object", "additionalProperties": false, "required": ["hint", "grantedScopes", "expiresAt", "remainingSeconds"], "properties": { "hint": { "type": "string" }, "grantedScopes": { "type": "array", "items": { "$ref": "#/components/schemas/PlanningItemScope" }, "uniqueItems": true }, "expiresAt": { "type": "string", "format": "date-time" }, "remainingSeconds": { "type": "integer", "minimum": 0 } } },
+      "AccessDecision": { "type": "object", "additionalProperties": false, "required": ["evaluatedAt", "decision", "token", "requiredScopes", "missingScopes"], "properties": { "evaluatedAt": { "type": "string", "format": "date-time" }, "decision": { "type": "string", "enum": ["allowed", "denied"] }, "token": { "$ref": "#/components/schemas/AccessTokenReceipt" }, "requiredScopes": { "type": "array", "items": { "$ref": "#/components/schemas/PlanningItemScope" }, "minItems": 1, "uniqueItems": true }, "missingScopes": { "type": "array", "items": { "$ref": "#/components/schemas/PlanningItemScope" }, "uniqueItems": true } } },
+      "AccessMetadata": { "type": "object", "additionalProperties": false, "required": ["operation", "mode", "access"], "properties": { "operation": { "type": "string", "enum": ["planningContext.read", "planningItems.create", "planningItems.update", "planningItems.deleteEmpty", "planningItems.githubSync"] }, "mode": { "type": "string", "enum": ["read", "preview", "commit"] }, "access": { "$ref": "#/components/schemas/AccessDecision" } } },
+      "AllowedAccessMetadata": { "allOf": [{ "$ref": "#/components/schemas/AccessMetadata" }, { "type": "object", "properties": { "access": { "type": "object", "properties": { "decision": { "const": "allowed" }, "missingScopes": { "maxItems": 0 } } } } }] },
+      "DeniedAccessMetadata": { "allOf": [{ "$ref": "#/components/schemas/AccessMetadata" }, { "type": "object", "properties": { "access": { "type": "object", "properties": { "decision": { "const": "denied" }, "missingScopes": { "minItems": 1 } } } } }] },
+      "AuthorizedResponse": { "type": "object", "required": ["_meta"], "properties": { "_meta": { "$ref": "#/components/schemas/AllowedAccessMetadata" } } },
+      "AuthorizedErrorResponse": { "type": "object", "required": ["ok", "error", "_meta"], "properties": { "ok": { "const": false }, "error": { "type": "string" }, "_meta": { "$ref": "#/components/schemas/AllowedAccessMetadata" } } },
+      "TokenRequiredResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "code", "error"], "properties": { "ok": { "const": false }, "code": { "const": "TOKEN_REQUIRED" }, "error": { "type": "string" } } },
+      "TokenInactiveResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "code", "error"], "properties": { "ok": { "const": false }, "code": { "const": "TOKEN_INACTIVE" }, "error": { "type": "string" } } },
+      "TokenProfileForbiddenResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "code", "error"], "properties": { "ok": { "const": false }, "code": { "const": "TOKEN_PROFILE_FORBIDDEN" }, "error": { "type": "string" } } },
+      "InsufficientScopeResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "code", "error", "_meta"], "properties": { "ok": { "const": false }, "code": { "const": "INSUFFICIENT_SCOPE" }, "error": { "type": "string" }, "_meta": { "$ref": "#/components/schemas/DeniedAccessMetadata" } } },
       "CreatePayload": {
         "type": "object",
         "additionalProperties": false,
@@ -134,9 +150,8 @@
       },
       "DeletePayload": { "type": "object", "additionalProperties": false, "required": ["expectedUpdatedAt"], "properties": { "expectedUpdatedAt": { "type": "string", "format": "date-time" } } },
       "EpicChildCounts": { "type": "object", "additionalProperties": false, "required": ["initiatives", "tasks"], "properties": { "initiatives": { "type": "integer", "minimum": 0 }, "tasks": { "type": "integer", "minimum": 0 } } },
-      "DeletePreviewResponse": { "type": "object", "required": ["ok", "valid", "canDelete", "itemId", "itemType", "currentItem", "children", "warnings"], "properties": { "ok": { "const": true }, "valid": { "type": "boolean" }, "canDelete": { "type": "boolean" }, "itemId": { "type": "string" }, "itemType": { "const": "epic" }, "currentItem": { "type": "object" }, "children": { "$ref": "#/components/schemas/EpicChildCounts" }, "code": { "type": ["string", "null"], "enum": ["EPIC_NOT_EMPTY", null] }, "error": { "type": "string" }, "warnings": { "type": "array", "items": { "type": "string" } } } },
-      "EpicNotEmptyResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "code", "error", "children"], "properties": { "ok": { "const": false }, "code": { "const": "EPIC_NOT_EMPTY" }, "error": { "type": "string" }, "children": { "$ref": "#/components/schemas/EpicChildCounts" } } },
-      "ErrorResponse": { "type": "object", "required": ["ok", "error"], "properties": { "ok": { "const": false }, "error": { "type": "string" } } },
+      "DeletePreviewResponse": { "type": "object", "required": ["ok", "valid", "canDelete", "itemId", "itemType", "currentItem", "children", "warnings", "_meta"], "properties": { "ok": { "const": true }, "valid": { "type": "boolean" }, "canDelete": { "type": "boolean" }, "itemId": { "type": "string" }, "itemType": { "const": "epic" }, "currentItem": { "type": "object" }, "children": { "$ref": "#/components/schemas/EpicChildCounts" }, "code": { "type": ["string", "null"], "enum": ["EPIC_NOT_EMPTY", null] }, "error": { "type": "string" }, "warnings": { "type": "array", "items": { "type": "string" } }, "_meta": { "$ref": "#/components/schemas/AccessMetadata" } } },
+      "EpicNotEmptyResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "code", "error", "children", "_meta"], "properties": { "ok": { "const": false }, "code": { "const": "EPIC_NOT_EMPTY" }, "error": { "type": "string" }, "children": { "$ref": "#/components/schemas/EpicChildCounts" }, "_meta": { "$ref": "#/components/schemas/AccessMetadata" } } },
       "AcceptanceCriteria": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
       "NullableAcceptanceCriteria": { "oneOf": [{ "$ref": "#/components/schemas/AcceptanceCriteria" }, { "type": "null" }] },
       "ProfileIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
@@ -147,7 +162,7 @@
       "GitHubSyncMode": { "type": "string", "enum": ["async", "wait"] },
       "GitHubSyncCommand": { "type": "object", "additionalProperties": false, "required": ["createIfMissing"], "properties": { "createIfMissing": { "type": "boolean" } } },
       "GitHubSyncRequest": { "type": "object", "additionalProperties": false, "required": ["githubSyncMode", "createIfMissing"], "properties": { "githubSyncMode": { "$ref": "#/components/schemas/GitHubSyncMode" }, "createIfMissing": { "type": "boolean" } } },
-      "ContextResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "context"], "properties": { "ok": { "const": true }, "context": { "type": "object", "required": ["actor", "constraints", "profiles", "items", "epics", "initiatives", "tasks", "sprints"], "not": { "required": ["milestones"] } } } }
+      "ContextResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "context", "_meta"], "properties": { "ok": { "const": true }, "context": { "type": "object", "required": ["actor", "constraints", "profiles", "items", "epics", "initiatives", "tasks", "sprints"], "not": { "required": ["milestones"] } }, "_meta": { "$ref": "#/components/schemas/AccessMetadata" } } }
     }
   }
 }

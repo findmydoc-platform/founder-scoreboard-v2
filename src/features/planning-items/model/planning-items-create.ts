@@ -782,6 +782,10 @@ export function planningCreateError(error: PlanningError) {
   return { message: "Planning-Items-Erstellung konnte nicht gespeichert werden.", status: 500 };
 }
 
+export function planningCreateTokenBecameInactive(error: PlanningError) {
+  return error.code === "forbidden" && error.reason === "planningTokenInactive";
+}
+
 export type BrowserCreateWriter =
   | Readonly<{
     kind: "strategic";

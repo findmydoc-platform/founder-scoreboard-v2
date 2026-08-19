@@ -273,7 +273,7 @@ async function mappedProviderError(
   if (code === "P0001") return { ok: false, error: { code: "conflict", reason: "revision" } };
   if (code === "P0002") return { ok: false, error: { code: "notFound", entity: { kind: "epic", id: request.plan.itemId } } };
   if (code === "P0003") return { ok: false, error: { code: "conflict", reason: "idempotency" } };
-  if (code === "P0004") return { ok: false, error: { code: "forbidden", reason: "emptyEpicDeleteTokenInactive" } };
+  if (code === "P0004") return { ok: false, error: { code: "forbidden", reason: "planningTokenInactive" } };
   if (code === "P0005" || code === "P0006") {
     return { ok: false, error: { code: "forbidden", reason: "emptyEpicDeleteAuthorizationChanged" } };
   }
@@ -423,7 +423,7 @@ export function emptyEpicDeleteError(error: PlanningError): Readonly<{
 }> {
   if (error.code === "invalidCommand") return { message: "Planning-Items-Anfrage ist ungültig.", status: 400 };
   if (error.code === "forbidden") {
-    if (error.reason === "emptyEpicDeleteTokenInactive") {
+  if (error.reason === "planningTokenInactive") {
       return { message: "Planning-API-Token ist nicht mehr aktiv.", status: 401 };
     }
     if (error.reason === "emptyEpicDeleteAuthorizationChanged" || error.reason === "emptyEpicDeleteScopeRequired") {

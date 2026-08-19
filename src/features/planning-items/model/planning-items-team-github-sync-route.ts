@@ -14,6 +14,7 @@ import {
   handlePlanningItemsRequest,
   planningItemsError,
   planningItemsJson,
+  planningItemsTokenInactiveError,
 } from "@/features/planning-items/model/planning-items-route";
 import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
 import {
@@ -37,7 +38,11 @@ export async function handleTeamPlanningItemGitHubSync(
 ) {
   return handlePlanningItemsRequest(
     request,
-    "write:planning-items:github-sync",
+    {
+      operation: "planningItems.githubSync",
+      mode: "commit",
+      requiredScopes: ["write:planning-items:github-sync"],
+    },
     "GitHub-Sync konnte nicht ausgeführt werden.",
     async (permission) => {
       const payload = await request.json().catch(() => null);
@@ -79,6 +84,7 @@ export async function handleTeamPlanningItemGitHubSync(
       });
       if (!enqueued.ok) {
         const code = String((enqueued.error as { code?: unknown }).code || "");
+        if (code === "P0004") return planningItemsTokenInactiveError();
         if (code === "P0003") {
           return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
         }

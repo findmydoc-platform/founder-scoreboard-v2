@@ -2,11 +2,11 @@ import { createHash, randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type { AuthenticatedProfile } from "@/lib/types";
 import { getServerSupabase } from "@/lib/supabase";
-import type {
-  TeamPlanningItemScope,
-  TeamPlanningItemTokenRecord,
+import {
+  TEAM_PLANNING_ITEM_SCOPES,
+  type TeamPlanningItemScope,
+  type TeamPlanningItemTokenRecord,
 } from "@/features/planning-items/model/planning-items-contract";
-
 type TokenRow = {
   id: string;
   profile_id: string;
@@ -22,9 +22,21 @@ type TokenRow = {
 
 type AuthenticatedTokenPayload = {
   tokenId: string;
+  tokenHint: string;
   scopes: TeamPlanningItemScope[];
+  scopeGranted: boolean;
+  expiresAt: string;
+  evaluatedAt: string;
+  remainingSeconds: number;
   profile: AuthenticatedProfile;
 };
+
+export type TeamPlanningItemsAuthErrorCode =
+  | "TOKEN_REQUIRED"
+  | "TOKEN_INACTIVE"
+  | "INSUFFICIENT_SCOPE"
+  | "TOKEN_PROFILE_FORBIDDEN"
+  | "AUTHORIZATION_UNAVAILABLE";
 
 export type TeamPlanningItemsAuthResult =
   | {
@@ -32,16 +44,26 @@ export type TeamPlanningItemsAuthResult =
     supabase: NonNullable<ReturnType<typeof getServerSupabase>>;
     profile: AuthenticatedProfile;
     tokenId: string;
+    tokenHint: string;
     scopes: TeamPlanningItemScope[];
+    scopeGranted: boolean;
+    expiresAt: string;
+    evaluatedAt: string;
+    remainingSeconds: number;
   }
-  | { ok: false; status: 401 | 403 | 500 | 501 | 503; error: string };
+  | {
+    ok: false;
+    status: 401 | 403 | 500 | 501 | 503;
+    code: TeamPlanningItemsAuthErrorCode;
+    error: string;
+  };
 
 const tokenPrefix = "fmd_ti_";
 
 function bearerToken(request: NextRequest) {
   const header = request.headers.get("authorization") || "";
-  if (!header.startsWith("Bearer ")) return "";
-  return header.slice("Bearer ".length).trim();
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || "";
 }
 
 export function hashTeamPlanningItemsToken(token: string) {
@@ -77,10 +99,32 @@ export async function requireTeamPlanningItemScope(
   scope: TeamPlanningItemScope,
 ): Promise<TeamPlanningItemsAuthResult> {
   const supabase = getServerSupabase();
-  if (!supabase) return { ok: false, status: 501, error: "Supabase ist für die Team-Planungs-API erforderlich." };
+  if (!supabase) {
+    return {
+      ok: false,
+      status: 501,
+      code: "AUTHORIZATION_UNAVAILABLE",
+      error: "Supabase ist für die Team-Planungs-API erforderlich.",
+    };
+  }
 
   const token = bearerToken(request);
-  if (!token.startsWith(tokenPrefix)) return { ok: false, status: 401, error: "Planning-API-Token ist erforderlich." };
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      code: "TOKEN_REQUIRED",
+      error: "Planning-API-Token ist erforderlich.",
+    };
+  }
+  if (!token.startsWith(tokenPrefix)) {
+    return {
+      ok: false,
+      status: 401,
+      code: "TOKEN_INACTIVE",
+      error: "Planning-API-Token ist ungültig oder abgelaufen.",
+    };
+  }
 
   const tokenHash = hashTeamPlanningItemsToken(token);
   const { data, error } = await supabase.rpc("authenticate_team_planning_items_token", {
@@ -88,24 +132,77 @@ export async function requireTeamPlanningItemScope(
     p_scope: scope,
   });
 
-  if (error?.code === "P0004") return { ok: false, status: 401, error: "Planning-API-Token ist ungültig oder abgelaufen." };
-  if (error?.code === "P0005") return { ok: false, status: 403, error: "Planning-API-Token hat nicht den erforderlichen Scope." };
-  if (error?.code === "P0006") return { ok: false, status: 403, error: "Planning-API-Token ist keinem operativen FounderOps-Profil zugeordnet." };
-  if (error?.code === "PGRST202" || error?.code === "42883") {
-    return { ok: false, status: 503, error: "Planning-API-Schema ist noch nicht verfügbar." };
+  if (error?.code === "P0004") {
+    return {
+      ok: false,
+      status: 401,
+      code: "TOKEN_INACTIVE",
+      error: "Planning-API-Token ist ungültig oder abgelaufen.",
+    };
   }
-  if (error) return { ok: false, status: 500, error: "Planning-API-Token konnte nicht geprüft werden." };
+  if (error?.code === "P0005") {
+    return {
+      ok: false,
+      status: 403,
+      code: "INSUFFICIENT_SCOPE",
+      error: "Planning-API-Token hat nicht den erforderlichen Scope.",
+    };
+  }
+  if (error?.code === "P0006") {
+    return {
+      ok: false,
+      status: 403,
+      code: "TOKEN_PROFILE_FORBIDDEN",
+      error: "Planning-API-Token ist keinem operativen FounderOps-Profil zugeordnet.",
+    };
+  }
+  if (error?.code === "PGRST202" || error?.code === "42883") {
+    return {
+      ok: false,
+      status: 503,
+      code: "AUTHORIZATION_UNAVAILABLE",
+      error: "Planning-API-Schema ist noch nicht verfügbar.",
+    };
+  }
+  if (error) {
+    return {
+      ok: false,
+      status: 500,
+      code: "AUTHORIZATION_UNAVAILABLE",
+      error: "Planning-API-Token konnte nicht geprüft werden.",
+    };
+  }
 
   const authenticated = data as AuthenticatedTokenPayload | null;
-  if (!authenticated?.tokenId || !authenticated.profile) {
-    return { ok: false, status: 401, error: "Planning-API-Token ist ungültig oder abgelaufen." };
+  if (
+    !authenticated?.tokenId
+    || !authenticated.tokenHint
+    || !authenticated.profile
+    || !Array.isArray(authenticated.scopes)
+    || authenticated.scopes.some((grantedScope) => !TEAM_PLANNING_ITEM_SCOPES.includes(grantedScope))
+    || typeof authenticated.scopeGranted !== "boolean"
+    || !authenticated.expiresAt
+    || !authenticated.evaluatedAt
+    || !Number.isFinite(authenticated.remainingSeconds)
+  ) {
+    return {
+      ok: false,
+      status: 500,
+      code: "AUTHORIZATION_UNAVAILABLE",
+      error: "Planning-API-Token konnte nicht geprüft werden.",
+    };
   }
 
   return {
     ok: true,
     supabase,
     tokenId: authenticated.tokenId,
+    tokenHint: authenticated.tokenHint,
     scopes: authenticated.scopes,
+    scopeGranted: authenticated.scopeGranted,
+    expiresAt: authenticated.expiresAt,
+    evaluatedAt: authenticated.evaluatedAt,
+    remainingSeconds: Math.max(0, Math.floor(authenticated.remainingSeconds)),
     profile: authenticated.profile,
   };
 }

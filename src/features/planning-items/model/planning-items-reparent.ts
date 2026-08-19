@@ -197,7 +197,8 @@ function providerError(code: string, message: string, plan: PlanningReparentComm
   if (code === "P0002") return { ok: false, error: { code: "notFound", entity: { kind: plan.itemKind, id: plan.itemId } } };
   if (code === "P0003") return { ok: false, error: conflict("trashed") };
   if (code === "P0013") return { ok: false, error: { code: "conflict", reason: "idempotency" } };
-  if (code === "P0004" || code === "P0005") return { ok: false, error: { code: "forbidden", reason: "reparentTokenInactiveOrMissingScope" } };
+  if (code === "P0004") return { ok: false, error: { code: "forbidden", reason: "planningTokenInactive" } };
+  if (code === "P0005") return { ok: false, error: { code: "forbidden", reason: "reparentTokenMissingScope" } };
   if (code === "P0006") return { ok: false, error: { code: "forbidden", reason: "reparentAuthorizationChanged" } };
   if (code === "P0009") return { ok: false, error: conflict(message.includes("current parent") ? (message.includes("final") ? "parentReviewFinal" : "parentReviewLocked") : (message.includes("final") ? "reviewFinal" : "reviewLocked")) };
   if (code === "P0016") return { ok: false, error: conflict("completed") };

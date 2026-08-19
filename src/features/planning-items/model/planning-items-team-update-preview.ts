@@ -18,17 +18,28 @@ export async function handleTeamPlanningItemUpdatePreview(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  return handlePlanningItemsRequest(request, "write:planning-items:update", "Planning-Items-Update konnte nicht geprüft werden.", async (permission) => {
+  let parsed: ReturnType<typeof parsePlanningItemPatchPayload> | undefined;
+  const parseRequest = async () => {
+    parsed ??= parsePlanningItemPatchPayload(await request.json().catch(() => null));
+    return parsed;
+  };
+  return handlePlanningItemsRequest(request, {
+    operation: "planningItems.update",
+    mode: "preview",
+    requiredScopes: ["write:planning-items:update"],
+    resolveAdditionalScopes: async () => {
+      const payload = await parseRequest();
+      return payload.ok && payload.githubSyncMode
+        ? ["write:planning-items:github-sync"]
+        : [];
+    },
+  }, "Planning-Items-Update konnte nicht geprüft werden.", async (permission) => {
+    const parsed = await parseRequest();
     const { id } = await context.params;
     const itemId = id.trim();
     if (!itemId) return planningItemsError("Planungselement-ID ist erforderlich.", 400);
 
-    const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
-    if (parsed.githubSyncMode
-      && !permission.scopes.includes("write:planning-items:github-sync")) {
-      return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);
-    }
 
     const result = await buildPlanningItemUpdatePreview({
       actor: permission.profile,
