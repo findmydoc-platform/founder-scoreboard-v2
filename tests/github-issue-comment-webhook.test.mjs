@@ -5,6 +5,10 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 const markerPolicy = await loadTranspiledModule(
   "src/features/tasks/model/github-comment-delivery-policy.ts",
 );
+const mentions = await loadTranspiledModule("src/lib/mentions.ts");
+const mentionSnapshots = await loadTranspiledModule("src/lib/github-comment-mention-snapshot.ts", {
+  "@/lib/mentions": mentions,
+});
 
 class MockGitHubApiError extends Error {
   constructor(message, status) {
@@ -16,6 +20,8 @@ class MockGitHubApiError extends Error {
 const processor = await loadTranspiledModule("src/lib/github-issue-comment-webhook.ts", {
   "server-only": {},
   "@/features/tasks/model/github-comment-delivery-policy": markerPolicy,
+  "@/lib/mentions": mentions,
+  "@/lib/github-comment-mention-snapshot": mentionSnapshots,
   "./github-app": {
     getGitHubAppInstallationToken: async () => "installation-token",
   },
@@ -28,6 +34,125 @@ const processor = await loadTranspiledModule("src/lib/github-issue-comment-webho
       value === `https://api.github.com/repos/${repository}/issues/${issueNumber}`
     ),
   },
+});
+
+test("the Supabase adapter resolves current and baseline mentions into RPC parameters", async () => {
+  const rpcCalls = [];
+  const query = {
+    select() { return this; },
+    eq() { return this; },
+    async maybeSingle() {
+      return {
+        data: {
+          author_login: "outside-author",
+          body: "Existing @MehmetVolkan",
+          source_updated_at: "2026-08-16T12:00:00Z",
+          mention_recipient_profile_ids: [],
+          mention_recipients_initialized: false,
+        },
+        error: null,
+      };
+    },
+  };
+  const supabase = {
+    from(table) {
+      if (table === "profiles") {
+        return {
+          async select() {
+            return {
+              data: [
+                { id: "sebastian", name: "Sebastian", github_login: "SebastianSchuetze" },
+                { id: "volkan", name: "Volkan", github_login: "MehmetVolkan" },
+              ],
+              error: null,
+            };
+          },
+        };
+      }
+      assert.equal(table, "task_external_comments");
+      return query;
+    },
+    async rpc(name, params) {
+      rpcCalls.push({ name, params });
+      return { data: "applied", error: null };
+    },
+  };
+  const store = processor.createSupabaseGitHubIssueCommentWebhookStore(supabase);
+  await store.applyProjection("delivery-comment-1", "lock-token", {
+    operation: "upsert",
+    taskId: "task-1619",
+    commentUpdatedAt: "2026-08-16T12:17:41Z",
+    comment: {
+      taskId: "task-1619",
+      commentId: 5307392288,
+      commentUpdatedAt: "2026-08-16T12:17:41Z",
+      authorLogin: "SebastianSchuetze",
+      authorAvatarUrl: "",
+      body: "Current @MehmetVolkan.",
+      htmlUrl: "https://github.com/example/comment",
+      createdAt: "2026-08-16T12:17:41Z",
+      importedAt: "2026-08-16T12:18:00Z",
+    },
+  });
+
+  assert.equal(rpcCalls[0].name, "apply_github_issue_comment_webhook_projection_with_mentions");
+  assert.deepEqual(rpcCalls[0].params.p_mention_recipient_profile_ids, ["volkan"]);
+  assert.deepEqual(rpcCalls[0].params.p_baseline_mention_recipient_profile_ids, ["volkan"]);
+  assert.equal(rpcCalls[0].params.p_baseline_source_updated_at, "2026-08-16T12:00:00Z");
+});
+
+test("the Supabase adapter surfaces profile and RPC failures for bounded webhook retry", async () => {
+  function failingSupabase({ profileError = null, rpcError = null } = {}) {
+    const externalQuery = {
+      select() { return this; },
+      eq() { return this; },
+      async maybeSingle() { return { data: null, error: null }; },
+    };
+    return {
+      from(table) {
+        if (table === "profiles") {
+          return {
+            async select() {
+              return { data: [], error: profileError };
+            },
+          };
+        }
+        return externalQuery;
+      },
+      async rpc() {
+        return { data: null, error: rpcError };
+      },
+    };
+  }
+  const input = {
+    operation: "upsert",
+    taskId: "task-1619",
+    commentUpdatedAt: "2026-08-16T12:17:41Z",
+    comment: {
+      taskId: "task-1619",
+      commentId: 5307392288,
+      commentUpdatedAt: "2026-08-16T12:17:41Z",
+      authorLogin: "outside-author",
+      authorAvatarUrl: "",
+      body: "Hello @MehmetVolkan",
+      htmlUrl: "https://github.com/example/comment",
+      createdAt: "2026-08-16T12:17:41Z",
+      importedAt: "2026-08-16T12:18:00Z",
+    },
+  };
+
+  await assert.rejects(
+    () => processor.createSupabaseGitHubIssueCommentWebhookStore(
+      failingSupabase({ profileError: { message: "profiles unavailable" } }),
+    ).applyProjection("delivery", "lock", input),
+    /mention profiles could not be loaded: profiles unavailable/,
+  );
+  await assert.rejects(
+    () => processor.createSupabaseGitHubIssueCommentWebhookStore(
+      failingSupabase({ rpcError: { message: "rpc unavailable" } }),
+    ).applyProjection("delivery", "lock", input),
+    /projection could not be applied: rpc unavailable/,
+  );
 });
 
 function claimedDelivery(overrides = {}) {
@@ -159,6 +284,8 @@ test("a provider 404 on create or edit remains retryable and preserves projectio
   const absentProcessor = await loadTranspiledModule("src/lib/github-issue-comment-webhook.ts", {
     "server-only": {},
     "@/features/tasks/model/github-comment-delivery-policy": markerPolicy,
+    "@/lib/mentions": mentions,
+    "@/lib/github-comment-mention-snapshot": mentionSnapshots,
     "./github-app": {
       getGitHubAppInstallationToken: async () => "installation-token",
     },

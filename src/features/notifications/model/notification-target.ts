@@ -4,6 +4,7 @@ type NotificationTargetInput = {
   type?: string;
   entityType: string;
   entityId: string;
+  targetPath?: string;
 };
 
 export type NotificationTarget = {
@@ -15,6 +16,15 @@ export type NotificationTarget = {
 export function notificationTarget(event: NotificationTargetInput): NotificationTarget {
   const entityType = event.entityType.trim().toLowerCase();
   const entityId = event.entityId.trim();
+  const targetPath = event.targetPath?.trim() || "";
+
+  if (targetPath.startsWith("/") && !targetPath.startsWith("//")) {
+    return {
+      workspace: entityType === "task" ? "planning" : "notifications",
+      href: targetPath,
+      ...(entityType === "task" && entityId ? { taskId: entityId } : {}),
+    };
+  }
 
   if (entityType === "task" && entityId) {
     return {

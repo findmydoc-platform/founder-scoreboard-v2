@@ -29,6 +29,7 @@ type Props = {
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialDetailDataError?: string;
+  initialCommentTarget?: string;
   returnHref?: string;
   returnLabel?: string;
 };
@@ -42,6 +43,7 @@ export function TaskDetailPage({
   initialAuthUser = null,
   initialCurrentProfile = null,
   initialDetailDataError = "",
+  initialCommentTarget = "",
   returnHref = "/planning",
   returnLabel = "Zur Planung",
 }: Props) {
@@ -122,6 +124,7 @@ export function TaskDetailPage({
           pending={controller.isPending}
           error={controller.saveError}
           detailDataError={initialDetailDataError}
+          requestedCommentTarget={initialCommentTarget}
           onOverviewDirtyChange={setOverviewDirty}
           onRequestDiscardAction={discardGuard.request}
           commentImportNotice={controller.commentImportNotice}

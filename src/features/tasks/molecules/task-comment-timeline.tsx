@@ -21,10 +21,13 @@ import {
   Unlink2,
   UserRoundCog,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import { describeTaskActivity, type TaskActivityIconKey, type TaskActivityTone } from "@/features/tasks/model/task-activity-presentation";
+import { taskCommentElementId } from "@/features/tasks/model/task-comment-target";
 import type { GitHubCommentDeliveryStatus, Profile, TaskActivity } from "@/lib/types";
 import { UiEmptyState } from "@/shared/atoms/ui-primitives";
+import { classNames } from "@/shared/atoms/ui-primitives";
 
 export type TaskCommentTimelineItem =
   | {
@@ -137,6 +140,7 @@ type TaskCommentTimelineProps = {
   labelsById?: ReadonlyMap<string, string>;
   loading?: boolean;
   profiles: Profile[];
+  requestedCommentTarget?: string;
   unavailable?: boolean;
 };
 
@@ -148,9 +152,21 @@ export function TaskCommentTimeline({
   error = "",
   loading = false,
   unavailable = false,
+  requestedCommentTarget = "",
 }: TaskCommentTimelineProps) {
+  const [highlightedTarget, setHighlightedTarget] = useState(requestedCommentTarget);
   const profileName = (profileId: string) => profiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const profileById = (profileId: string) => profiles.find((profile) => profile.id === profileId);
+  const requestedCommentExists = items.some((item) => item.id === requestedCommentTarget);
+
+  useEffect(() => {
+    if (!requestedCommentTarget || !requestedCommentExists) return;
+    const target = document.getElementById(taskCommentElementId(requestedCommentTarget));
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timeout = window.setTimeout(() => setHighlightedTarget(""), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [requestedCommentExists, requestedCommentTarget]);
 
   return (
     <div className="mt-3 grid min-w-0 gap-2" aria-busy={loading}>
@@ -159,9 +175,14 @@ export function TaskCommentTimeline({
           {error}
         </div>
       ) : null}
+      {requestedCommentTarget.startsWith("github:") && !requestedCommentExists && !loading && !error && !unavailable ? (
+        <div role="status" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+          Der erwähnende GitHub-Kommentar wurde inzwischen gelöscht.
+        </div>
+      ) : null}
       {items.map((item) => (
         item.type === "comment" ? (
-          <article key={item.id} className="flex min-w-0 gap-3 overflow-hidden rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+          <article id={taskCommentElementId(item.id)} key={item.id} className={classNames("flex min-w-0 gap-3 overflow-hidden rounded-md border bg-slate-50 px-3 py-2 text-sm transition", highlightedTarget === item.id ? "border-blue-300 ring-4 ring-blue-100" : "border-slate-100")}>
             <ProfileAvatar profile={profileById(item.profileId)} />
             <div className="min-w-0 flex-1 overflow-hidden">
               <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
@@ -182,7 +203,7 @@ export function TaskCommentTimeline({
             </div>
           </article>
         ) : item.type === "github-comment" ? (
-          <article key={item.id} className="flex min-w-0 gap-3 overflow-hidden rounded-md border border-slate-100 bg-white px-3 py-2 text-sm">
+          <article id={taskCommentElementId(item.id)} key={item.id} className={classNames("flex min-w-0 gap-3 overflow-hidden rounded-md border bg-white px-3 py-2 text-sm transition", highlightedTarget === item.id ? "border-blue-300 ring-4 ring-blue-100" : "border-slate-100")}>
             <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
               {item.authorAvatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element

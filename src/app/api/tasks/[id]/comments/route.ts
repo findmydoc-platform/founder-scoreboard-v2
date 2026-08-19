@@ -4,7 +4,6 @@ import { requirePlanningContributor } from "@/lib/authz";
 import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
 import { mentionedProfileIds } from "@/lib/mentions";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { createNotificationPayload } from "@/lib/notification-catalog";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 type CommentPayload = {
@@ -33,13 +32,40 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
+  const { data: profiles, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id,name,github_login,platform_role");
+  if (profilesError) return apiError(profilesError.message, 500);
+
+  const actorProfileId = permission.profile?.id || "";
+  const mentionedRecipients = new Set(mentionedProfileIds(
+    comment,
+    (profiles || []).map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      githubLogin: profile.github_login,
+    })),
+    actorProfileId,
+  ));
+  const commentRecipients = new Set<string>();
+  const assignee = task.assignee || task.owner;
+  if (assignee && assignee !== actorProfileId && !mentionedRecipients.has(assignee)) commentRecipients.add(assignee);
+  (profiles || [])
+    .filter((profile) => ["ceo", "deputy"].includes(profile.platform_role))
+    .forEach((lead) => {
+      if (lead.id !== actorProfileId && !mentionedRecipients.has(lead.id)) commentRecipients.add(lead.id);
+    });
+
   const isStrategic = task.task_type === "epic" || task.task_type === "initiative";
   const { data: transaction, error: insertError } = await supabase.rpc(
-    isStrategic ? "create_task_comment_local" : "create_task_comment_with_github_delivery",
+    "create_task_comment_with_notifications",
     {
-    p_task_id: id,
-    p_profile_id: permission.profile?.id || "",
-    p_comment: comment,
+      p_task_id: id,
+      p_profile_id: actorProfileId,
+      p_comment: comment,
+      p_deliver_to_github: !isStrategic,
+      p_mention_recipient_profile_ids: [...mentionedRecipients],
+      p_comment_recipient_profile_ids: [...commentRecipients],
     },
   );
   const created = transaction?.comment as {
@@ -65,51 +91,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const deliveryStatus = isStrategic
     ? "not_applicable"
     : delivery?.data?.status || transaction?.deliveryStatus || "pending";
-
-  const { data: profiles } = await supabase.from("profiles").select("id,name,github_login,platform_role");
-  const mentionedRecipients = new Set(mentionedProfileIds(
-    comment,
-    (profiles || []).map((profile) => ({
-      id: profile.id,
-      name: profile.name,
-      githubLogin: profile.github_login,
-    })),
-    permission.profile?.id || "",
-  ));
-
-  const recipients = new Set<string>();
-  const assignee = task.assignee || task.owner;
-  if (assignee && assignee !== permission.profile?.id && !mentionedRecipients.has(assignee)) recipients.add(assignee);
-
-  const leads = (profiles || []).filter((profile) => ["ceo", "deputy"].includes(profile.platform_role));
-  leads?.forEach((lead) => {
-    if (lead.id !== permission.profile?.id && !mentionedRecipients.has(lead.id)) recipients.add(lead.id);
-  });
-
-  const notificationEvents = [
-    ...[...mentionedRecipients].map((recipientId) => createNotificationPayload("task.mention", {
-      actorProfileId: permission.profile?.id,
-      recipientProfileId: recipientId,
-      entityType: "task",
-      entityId: id,
-      title: `Du wurdest erwähnt: ${task.title}`,
-      body: comment,
-    })),
-    ...[...recipients].map((recipientId) => createNotificationPayload("task.comment", {
-      actorProfileId: permission.profile?.id,
-      recipientProfileId: recipientId,
-      entityType: "task",
-      entityId: id,
-      title: `Neuer Kommentar: ${task.title}`,
-      body: comment,
-    })),
-  ];
-
-  if (notificationEvents.length) {
-    await supabase.from("notification_events").insert(
-      notificationEvents,
-    );
-  }
 
   return NextResponse.json({
     ok: true,

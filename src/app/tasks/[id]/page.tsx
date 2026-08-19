@@ -6,6 +6,7 @@ import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { safeTaskDetailReturnTo } from "@/features/tasks/model/task-detail-return-navigation";
 import { PlanningTrashTaskDetailPage } from "@/features/planning-trash/templates/planning-trash-task-detail-page";
 import { taskDetailDegradationMessage } from "@/features/tasks/model/task-detail-planning-shell-projection";
+import { parseTaskCommentTarget } from "@/features/tasks/model/task-comment-target";
 import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
@@ -16,13 +17,14 @@ import type { AuthenticatedProfile } from "@/lib/types";
 
 type Props = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ returnTo?: string | string[] }>;
+  searchParams: Promise<{ returnTo?: string | string[]; comment?: string | string[] }>;
 };
 
 export default async function TaskPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { returnTo } = await searchParams;
+  const { returnTo, comment } = await searchParams;
   const safeReturnTo = safeTaskDetailReturnTo(returnTo);
+  const requestedCommentTarget = parseTaskCommentTarget(comment);
   let authProfile: AuthenticatedProfile | null = null;
   let authUser: User | null = null;
   const authRequired = requiresSupabaseAuth();
@@ -80,6 +82,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
       initialDetailDataError={taskDetailResult.status === "degraded"
         ? taskDetailDegradationMessage(taskDetailResult.unavailable)
         : ""}
+      initialCommentTarget={requestedCommentTarget}
       returnHref={safeReturnTo || "/planning"}
       returnLabel={safeReturnTo ? "Zurück zum Release" : "Zur Planung"}
     />

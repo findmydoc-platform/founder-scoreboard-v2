@@ -278,7 +278,7 @@ test("consumer-owned read models replace the global planning data loader", async
   assert.match(headerData, /HeaderNotification/);
   assert.match(headerData, /headerQuickLinkSelect = "id,name,category,url,preview_image_url"/);
   assert.match(headerData, /headerCalendarEventSelect = "id,title,category,starts_at,ends_at,location,status"/);
-  assert.match(headerData, /headerNotificationSelect = "id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,created_at"/);
+  assert.match(headerData, /headerNotificationSelect = "id,type,actor_profile_id,actor_label,recipient_profile_id,entity_type,entity_id,title,body,target_path,created_at"/);
   assert.match(headerData, /loadPlanningHeaderData/);
   assert.match(headerRoute, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
   assert.match(headerRoute, /parsePlanningHeaderSlots/);

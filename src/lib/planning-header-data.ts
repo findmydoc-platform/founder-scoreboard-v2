@@ -21,7 +21,7 @@ export const maxHeaderNotifications = 12;
 
 export const headerQuickLinkSelect = "id,name,category,url,preview_image_url";
 export const headerCalendarEventSelect = "id,title,category,starts_at,ends_at,location,status";
-export const headerNotificationSelect = "id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,created_at";
+export const headerNotificationSelect = "id,type,actor_profile_id,actor_label,recipient_profile_id,entity_type,entity_id,title,body,target_path,created_at";
 
 export const planningHeaderSlotKeys = ["quickLinks", "calendarEvents", "notifications"] as const;
 export type PlanningHeaderSlotKey = typeof planningHeaderSlotKeys[number];
@@ -59,11 +59,13 @@ type HeaderNotificationRow = {
   id: number;
   type: string;
   actor_profile_id: string | null;
+  actor_label: string | null;
   recipient_profile_id: string | null;
   entity_type: string;
   entity_id: string;
   title: string;
   body: string | null;
+  target_path: string | null;
   created_at: string;
 };
 
@@ -155,11 +157,13 @@ function normalizeHeaderNotifications(data: HeaderNotificationsData | undefined)
     id: event.id,
     type: event.type,
     actorProfileId: event.actorProfileId || "",
+    actorLabel: event.actorLabel || "",
     recipientProfileId: event.recipientProfileId || "",
     entityType: event.entityType,
     entityId: event.entityId,
     title: event.title,
     body: event.body || "",
+    targetPath: event.targetPath || "",
     createdAt: event.createdAt,
   }));
   return {
@@ -204,11 +208,13 @@ function mapHeaderNotification(row: HeaderNotificationRow): HeaderNotification {
     id: row.id,
     type: row.type,
     actorProfileId: row.actor_profile_id || "",
+    actorLabel: row.actor_label || "",
     recipientProfileId: row.recipient_profile_id || "",
     entityType: row.entity_type,
     entityId: row.entity_id,
     title: row.title,
     body: row.body || "",
+    targetPath: row.target_path || "",
     createdAt: row.created_at,
   };
 }
@@ -259,11 +265,13 @@ export function projectHeaderNotifications(
       id: event.id,
       type: event.type,
       actorProfileId: event.actorProfileId,
+      actorLabel: event.actorLabel,
       recipientProfileId: event.recipientProfileId,
       entityType: event.entityType,
       entityId: event.entityId,
       title: event.title,
       body: event.body,
+      targetPath: event.targetPath,
       createdAt: event.createdAt,
     })),
   };

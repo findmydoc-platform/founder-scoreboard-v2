@@ -1,7 +1,7 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { useCurrentWorkspaceModelRefresh } from "@/features/planning/hooks/use-workspace-model-refresh";
 import { usePlanningFocusMode } from "@/features/planning/hooks/use-planning-focus-mode";
@@ -85,6 +85,11 @@ export function usePlanningBootstrapState({
     currentProfileId: auth.serverCurrentProfile?.id || "",
   });
   const currentProfileId = requestContext.currentProfile?.id || "";
+  const notificationsWorkspaceRefreshRef = useRef<() => Promise<void>>(async () => undefined);
+  const refreshNotificationsWorkspace = useCallback(
+    () => notificationsWorkspaceRefreshRef.current(),
+    [],
+  );
   const headerData = usePlanningHeaderData({
     apiClient: requestContext.apiClient,
     authRequired,
@@ -93,6 +98,7 @@ export function usePlanningBootstrapState({
     currentProfileId,
     data,
     protectedDataLoaded: auth.protectedDataLoaded,
+    refreshNotificationsWorkspace,
     serverCurrentProfile: auth.serverCurrentProfile,
     setHeaderData: setBaseHeaderData,
     workspace,
@@ -116,6 +122,9 @@ export function usePlanningBootstrapState({
     source,
     workspace,
   });
+  useEffect(() => {
+    notificationsWorkspaceRefreshRef.current = dataRefresh.refreshCurrentWorkspaceModel;
+  }, [dataRefresh.refreshCurrentWorkspaceModel]);
   const focusMode = usePlanningFocusMode();
   const remoteChanges = usePlanningRemoteChanges({
     apiClient: requestContext.apiClient,

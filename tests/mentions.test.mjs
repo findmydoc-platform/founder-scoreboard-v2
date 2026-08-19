@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
-const { canonicalizeProfileMentionsForGitHub, mentionedProfileIds } = await loadTranspiledModule("src/lib/mentions.ts");
+const { canonicalizeProfileMentionsForGitHub, githubMentionContext, mentionedProfileIds } = await loadTranspiledModule("src/lib/mentions.ts");
 
 const profiles = [
   { id: "sebastian", name: "Sebastian Schütze", githubLogin: "SebastianSchuetze" },
@@ -77,6 +77,47 @@ test("does not notify profiles mentioned inside Markdown code, links, autolinks,
   assert.deepEqual(
     mentionedProfileIds(comment, profiles),
     ["volkan"],
+  );
+});
+
+test("does not notify profiles mentioned inside Markdown block quotes", () => {
+  assert.deepEqual(
+    mentionedProfileIds("> Previous @sebastian\n\nCurrent @volkan", profiles),
+    ["volkan"],
+  );
+});
+
+test("resolves GitHub mentions only through unique GitHub logins and excludes the author", () => {
+  const githubProfiles = [
+    ...profiles,
+    { id: "duplicate", name: "Duplicate", githubLogin: "MehmetVolkan" },
+    { id: "name-only", name: "Outside", githubLogin: "" },
+  ];
+  assert.deepEqual(
+    githubMentionContext(
+      "@SebastianSchuetze @MehmetVolkan @Outside @SebastianSchuetze",
+      githubProfiles,
+      "SebastianSchuetze",
+    ),
+    { actorProfileId: "sebastian", recipientProfileIds: [] },
+  );
+});
+
+test("recognizes GitHub username punctuation without accepting invalid login shapes", () => {
+  const githubProfiles = [
+    ...profiles,
+    { id: "one", name: "One", githubLogin: "x" },
+    { id: "hyphenated", name: "Hyphenated", githubLogin: "foo-bar" },
+    { id: "partial", name: "Partial", githubLogin: "foo" },
+  ];
+
+  assert.deepEqual(
+    githubMentionContext("Ping @MehmetVolkan. @x, and @foo-bar!", githubProfiles, "outside"),
+    { actorProfileId: "", recipientProfileIds: ["volkan", "one", "hyphenated"] },
+  );
+  assert.deepEqual(
+    githubMentionContext("Ignore @foo_bar @foo.bar @-foo @foo-", githubProfiles, "outside"),
+    { actorProfileId: "", recipientProfileIds: [] },
   );
 });
 

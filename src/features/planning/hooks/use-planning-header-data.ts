@@ -25,6 +25,7 @@ type UsePlanningHeaderDataOptions = {
   currentProfileId: string;
   data: PlanningShellState;
   protectedDataLoaded: boolean;
+  refreshNotificationsWorkspace?: () => Promise<void>;
   serverCurrentProfile: AuthenticatedProfile | null;
   setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   workspace: AppWorkspace;
@@ -38,12 +39,21 @@ export function usePlanningHeaderData({
   currentProfileId,
   data,
   protectedDataLoaded,
+  refreshNotificationsWorkspace,
   serverCurrentProfile,
   setHeaderData,
   workspace,
 }: UsePlanningHeaderDataOptions) {
   const [loadingSlots, setLoadingSlots] = useState<PlanningHeaderSlotKey[]>([]);
   const inFlightKeyRef = useRef("");
+  const notificationRefreshInFlightRef = useRef(false);
+  const dataRef = useRef(data);
+  const serverCurrentProfileRef = useRef(serverCurrentProfile);
+  const authUserId = authUser?.id || "";
+  useEffect(() => {
+    dataRef.current = data;
+    serverCurrentProfileRef.current = serverCurrentProfile;
+  }, [data, serverCurrentProfile]);
   const projectedHeaderData = useMemo(
     () => projectPlanningHeaderData(data, baseHeaderData, {
       currentProfileId,
@@ -63,13 +73,12 @@ export function usePlanningHeaderData({
   const idleSlotKey = idleSlots.join(",");
 
   useEffect(() => {
-    if (!authUser?.id) return;
+    if (!authUserId) return;
     if (authRequired && !protectedDataLoaded) return;
     if (!idleSlotKey) return;
 
     if (inFlightKeyRef.current === idleSlotKey) return;
 
-    const authUserId = authUser.id;
     const requestedSlots = idleSlotKey.split(",") as PlanningHeaderSlotKey[];
     inFlightKeyRef.current = idleSlotKey;
     const controller = new AbortController();
@@ -95,8 +104,8 @@ export function usePlanningHeaderData({
           const mergedHeaderData = mergePlanningHeaderData(current, nextHeaderData);
           setProtectedPlanningShellStateCache({
             authUserId,
-            currentProfile: serverCurrentProfile,
-            data,
+            currentProfile: serverCurrentProfileRef.current,
+            data: dataRef.current,
             headerData: mergedHeaderData,
           });
           return mergedHeaderData;
@@ -117,7 +126,59 @@ export function usePlanningHeaderData({
       if (inFlightKeyRef.current === idleSlotKey) inFlightKeyRef.current = "";
       setLoadingSlots([]);
     };
-  }, [apiClient, authRequired, authUser, data, idleSlotKey, protectedDataLoaded, serverCurrentProfile, setHeaderData]);
+  }, [apiClient, authRequired, authUserId, idleSlotKey, protectedDataLoaded, setHeaderData]);
+
+  useEffect(() => {
+    if (!authUserId) return;
+    if (authRequired && !protectedDataLoaded) return;
+
+    let active = true;
+    const controller = new AbortController();
+    const refreshNotifications = async () => {
+      if (!active || notificationRefreshInFlightRef.current) return;
+      notificationRefreshInFlightRef.current = true;
+      try {
+        if (workspace === "notifications" && refreshNotificationsWorkspace) {
+          await refreshNotificationsWorkspace();
+          return;
+        }
+        const { response, body } = await planningApi.requestPlanningHeaderData(apiClient, ["notifications"], {
+          signal: controller.signal,
+        });
+        if (!active || !response.ok || !body?.headerData) return;
+        const nextHeaderData = normalizePlanningHeaderData(body.headerData);
+        setHeaderData((current) => {
+          const mergedHeaderData = mergePlanningHeaderData(current, nextHeaderData);
+          setProtectedPlanningShellStateCache({
+            authUserId,
+            currentProfile: serverCurrentProfileRef.current,
+            data: dataRef.current,
+            headerData: mergedHeaderData,
+          });
+          return mergedHeaderData;
+        });
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          // Keep the last successfully loaded notification state; the next poll retries.
+        }
+      } finally {
+        notificationRefreshInFlightRef.current = false;
+      }
+    };
+    const interval = window.setInterval(refreshNotifications, 60_000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshNotifications();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      notificationRefreshInFlightRef.current = false;
+    };
+  }, [apiClient, authRequired, authUserId, protectedDataLoaded, refreshNotificationsWorkspace, setHeaderData, workspace]);
 
   return headerData;
 }

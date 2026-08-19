@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { githubCommentMarkerId } from "@/features/tasks/model/github-comment-delivery-policy";
+import { resolveGitHubCommentMentionSnapshot } from "@/lib/github-comment-mention-snapshot";
 import { getGitHubAppInstallationToken } from "./github-app";
 import { getGitHubIssueComment, isGitHubIssueApiUrl } from "./github";
 
@@ -170,7 +171,44 @@ export function createSupabaseGitHubIssueCommentWebhookStore(
 
     async applyProjection(deliveryId, lockToken, input) {
       const comment = input.comment;
-      const { data, error } = await supabase.rpc("apply_github_issue_comment_webhook_projection", {
+      let actorProfileId = "";
+      let mentionRecipientProfileIds: string[] = [];
+      let baselineMentionRecipientProfileIds: string[] = [];
+      let baselineSourceUpdatedAt: string | null = null;
+      if (input.operation === "upsert" && comment) {
+        const [{ data: profiles, error: profilesError }, { data: existingComment, error: existingCommentError }] = await Promise.all([
+          supabase.from("profiles").select("id,name,github_login"),
+          supabase
+            .from("task_external_comments")
+            .select("author_login,body,source_updated_at,mention_recipient_profile_ids,mention_recipients_initialized")
+            .eq("source", "github")
+            .eq("external_id", String(comment.commentId))
+            .maybeSingle(),
+        ]);
+        if (profilesError) throw new Error(`GitHub mention profiles could not be loaded: ${profilesError.message}`);
+        if (existingCommentError) throw new Error(`GitHub mention baseline could not be loaded: ${existingCommentError.message}`);
+        const mentionSnapshot = resolveGitHubCommentMentionSnapshot({
+          authorLogin: comment.authorLogin,
+          body: comment.body,
+          profiles: (profiles || []).map((profile) => ({
+            id: profile.id,
+            name: profile.name,
+            githubLogin: profile.github_login,
+          })),
+          existing: existingComment ? {
+            authorLogin: existingComment.author_login,
+            body: existingComment.body,
+            sourceUpdatedAt: existingComment.source_updated_at,
+            mentionRecipientProfileIds: existingComment.mention_recipient_profile_ids || [],
+            mentionRecipientsInitialized: existingComment.mention_recipients_initialized,
+          } : undefined,
+        });
+        actorProfileId = mentionSnapshot.actorProfileId;
+        mentionRecipientProfileIds = mentionSnapshot.mentionRecipientProfileIds;
+        baselineMentionRecipientProfileIds = mentionSnapshot.baselineMentionRecipientProfileIds;
+        baselineSourceUpdatedAt = mentionSnapshot.baselineSourceUpdatedAt;
+      }
+      const { data, error } = await supabase.rpc("apply_github_issue_comment_webhook_projection_with_mentions", {
         p_delivery_id: deliveryId,
         p_lock_token: lockToken,
         p_operation: input.operation,
@@ -182,6 +220,10 @@ export function createSupabaseGitHubIssueCommentWebhookStore(
         p_html_url: comment?.htmlUrl || null,
         p_created_at: comment?.createdAt || null,
         p_imported_at: comment?.importedAt || null,
+        p_actor_profile_id: actorProfileId || null,
+        p_mention_recipient_profile_ids: mentionRecipientProfileIds,
+        p_baseline_mention_recipient_profile_ids: baselineMentionRecipientProfileIds,
+        p_baseline_source_updated_at: baselineSourceUpdatedAt,
       });
       if (error) throw new Error(`GitHub Issue comment projection could not be applied: ${error.message}`);
       if (data !== "applied" && data !== "stale") {

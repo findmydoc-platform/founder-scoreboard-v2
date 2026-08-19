@@ -1,4 +1,4 @@
 {
   "classification": "bug-fix",
-  "reason": "Stabilizes standalone task-detail bootstrap state so tab changes cannot repeatedly reload GitHub connection status, without adding or expanding product functionality."
+  "reason": "Restores expected FounderOps mention notifications for local and synchronized GitHub comments, including exact comment navigation, without adding or expanding product functionality."
 }

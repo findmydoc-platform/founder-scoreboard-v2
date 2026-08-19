@@ -13,7 +13,7 @@ export function createSupabaseNotificationsReadModel(supabase: SupabaseClient): 
       if (!context.authorized) return { status: "forbidden" };
       const [state, eventResult, deliveryResult] = await Promise.all([
         loadPlanningItemsForReadModel(supabase),
-        supabase.from("notification_events").select("id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,status,seen_at,dismissed_at,resolved_at,resolution_reason,created_at").order("created_at", { ascending: false }).limit(500),
+        supabase.from("notification_events").select("id,type,actor_profile_id,actor_label,recipient_profile_id,entity_type,entity_id,title,body,target_path,status,seen_at,dismissed_at,resolved_at,resolution_reason,created_at").order("created_at", { ascending: false }).limit(500),
         supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,payload,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100),
       ]);
       if (!state || eventResult.error || deliveryResult.error) return { status: "unavailable" };
