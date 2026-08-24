@@ -15,17 +15,6 @@ export type ProfileSettingsDraft = {
   expandedInitiativeIds: string[];
 };
 
-export const profileColorOptions = [
-  { value: "#22c55e", label: "Mint" },
-  { value: "#3b82f6", label: "Blau" },
-  { value: "#f59e0b", label: "Gelb" },
-  { value: "#8b5cf6", label: "Lila" },
-  { value: "#ec4899", label: "Pink" },
-  { value: "#14b8a6", label: "Türkis" },
-  { value: "#ef4444", label: "Rot" },
-  { value: "#64748b", label: "Schiefer" },
-];
-
 function eventEnabled(data: PlanningShellState, profileId: string, eventType: string) {
   const preference = data.notificationPreferences.find((item) => item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType);
   return preference?.enabled !== false;
