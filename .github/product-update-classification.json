@@ -1,4 +1,4 @@
 {
-  "classification": "bug-fix",
-  "reason": "Fixes same-task comment notification navigation so the existing activity tab opens and scrolls to the highlighted comment without adding or expanding product functionality."
+  "classification": "minor-ux",
+  "reason": "Constrains the existing profile color setting to a shared 20-color palette and communicates availability without adding a new product workflow."
 }
