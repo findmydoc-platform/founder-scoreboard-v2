@@ -30,6 +30,7 @@
     "verify:sprint-finalization": "node scripts/verify-sprint-finalization-transaction.mjs",
     "verify:score-objection": "node scripts/verify-score-objection-transaction.mjs",
     "verify:founderops-settings": "node scripts/verify-founderops-settings-transaction.mjs",
+    "verify:profile-colors": "node scripts/verify-profile-color-allocation-transaction.mjs",
     "verify:notification-lifecycle": "node scripts/verify-notification-lifecycle.mjs",
     "verify:comment-mentions": "node scripts/verify-comment-mention-notifications.mjs",
     "verify:task-review": "node scripts/verify-task-review-transaction.mjs",

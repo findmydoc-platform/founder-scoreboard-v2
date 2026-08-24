@@ -1005,7 +1005,7 @@ async function verifyPlatformReleaseIngestModes(status) {
 async function verifyDirectProfileMutationDenied(supabase, userId) {
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id,role,platform_role")
+    .select("id,role,platform_role,profile_color")
     .eq("auth_user_id", userId)
     .single();
   if (profileError || !profile) throw new Error("Mapped local profile could not be read through RLS.");
@@ -1015,6 +1015,7 @@ async function verifyDirectProfileMutationDenied(supabase, userId) {
     .update({
       role: profile.role,
       platform_role: profile.platform_role,
+      profile_color: profile.profile_color,
     })
     .eq("id", profile.id)
     .select("id");

@@ -6,6 +6,7 @@ import type { DbNotificationPreference, DbProfile } from "@/lib/planning-row-typ
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import type { NotificationPreference, PlatformRole } from "@/lib/types";
 import { apiError, requireApiContext } from "@/lib/api-response";
+import { buildProfileColorPatch, mapProfileColorTransactionError } from "@/features/profile/model/profile-color-api";
 
 type UpdatePayload = {
   githubLogin?: string;
@@ -17,6 +18,7 @@ type UpdatePayload = {
   focus?: string;
   weeklyCapacity?: number;
   color?: string;
+  profileColorDuplicateMode?: boolean;
   googleChatUserId?: string;
   googleChatDmSpace?: string;
   notificationsEnabled?: boolean;
@@ -30,11 +32,6 @@ type ProfileAdminTransactionResult = {
 
 const platformRoles = new Set<PlatformRole>(["ceo", "founder", "deputy", "viewer"]);
 const allowedEventTypes = new Set<string>(googleChatDigestEventTypes);
-
-function cleanColor(value: unknown) {
-  if (typeof value !== "string") return undefined;
-  return /^#[0-9A-Fa-f]{6}$/.test(value) ? value : undefined;
-}
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(request, requireCEO);
@@ -60,11 +57,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (payload.orgRole !== undefined) update.org_role = cleanOptionalText(payload.orgRole, 80) || null;
   if (payload.focus !== undefined) update.focus = cleanOptionalText(payload.focus, 240) || null;
 
-  if (payload.color !== undefined) {
-    const color = cleanColor(payload.color);
-    if (!color) return apiError("Ungültige Profilfarbe.", 400);
-    update.profile_color = color;
-  }
+  const colorPatch = buildProfileColorPatch({
+    color: payload.color,
+    profileColorDuplicateMode: payload.profileColorDuplicateMode,
+  });
+  if (!colorPatch.ok) return apiError(colorPatch.error, colorPatch.status);
+  Object.assign(update, colorPatch.patch);
 
   if (payload.weeklyCapacity !== undefined) {
     const capacity = Number(payload.weeklyCapacity);
@@ -132,6 +130,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   });
 
   if (transactionError) {
+    const colorError = mapProfileColorTransactionError(transactionError);
+    if (colorError) return apiError(colorError.error, colorError.status);
     if (transactionError.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
     if (transactionError.code === "23514") return apiError("Genau ein CEO muss gesetzt bleiben.", 409);
     if (transactionError.code === "22023") return apiError("Profiländerung ist ungültig.", 400);

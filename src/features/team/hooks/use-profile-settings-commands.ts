@@ -2,6 +2,7 @@
 
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
+import { buildProfileColorPickerModel } from "@/features/profile/model/profile-color-policy";
 import type { NotificationPreference, Profile } from "@/lib/types";
 
 export function useProfileSettingsCommands({
@@ -14,6 +15,13 @@ export function useProfileSettingsCommands({
   const saveProfileSettings = async (profile: Profile, patch: Partial<Profile>, notificationEvents: Record<string, boolean>) => {
     setSaveError("");
     const previousData = data;
+    const profileColorDuplicateMode = patch.color !== undefined
+      ? buildProfileColorPickerModel({
+        currentColor: profile.color || "",
+        currentProfileId: profile.id,
+        profiles: data.profiles,
+      }).duplicateMode
+      : undefined;
     const changedNotificationEvents = Object.entries(notificationEvents).filter(([eventType, enabled]) => {
       const currentPreference = data.notificationPreferences.find((item) => item.profileId === profile.id && item.channel === "google_chat" && item.eventType === eventType);
       return (currentPreference?.enabled !== false) !== enabled;
@@ -65,6 +73,7 @@ export function useProfileSettingsCommands({
         focus: patch.focus,
         weeklyCapacity: patch.weeklyCapacity,
         color: patch.color,
+        profileColorDuplicateMode,
         googleChatUserId: patch.googleChatUserId,
         googleChatDmSpace: patch.googleChatDmSpace,
         notificationsEnabled: patch.notificationsEnabled,

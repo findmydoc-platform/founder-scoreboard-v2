@@ -6,6 +6,7 @@ import type { DbNotificationPreference, DbProfile, DbProfileUiPreference } from 
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { rootWorkspaceFromPreference } from "@/features/planning/model/workspace-preferences";
+import { buildProfileColorPatch, mapProfileColorTransactionError } from "@/features/profile/model/profile-color-api";
 import type { PlanningFilterPreferences, ViewMode } from "@/lib/types";
 
 type UiPreferencesPayload = Partial<{
@@ -30,6 +31,7 @@ type ProfileSettingsPayload = Partial<{
   googleChatDmSpace: string;
   focus: string;
   color: string;
+  profileColorDuplicateMode: boolean;
   notificationsEnabled: boolean;
   notificationEvents: Record<string, boolean>;
   uiPreferences: UiPreferencesPayload;
@@ -72,11 +74,6 @@ const defaultPlanningFilters: PlanningFilterPreferences = {
   sort: "priority",
   direction: "asc",
 };
-
-function cleanColor(value: unknown) {
-  if (typeof value !== "string") return undefined;
-  return /^#[0-9A-Fa-f]{6}$/.test(value) ? value : undefined;
-}
 
 function cleanBoolean(value: unknown) {
   return typeof value === "boolean" ? value : undefined;
@@ -144,11 +141,12 @@ export async function PATCH(request: NextRequest) {
 
   const profileUpdate: Record<string, string | boolean | null> = {};
   if (payload.focus !== undefined) profileUpdate.focus = cleanOptionalText(payload.focus, 240) || null;
-  if (payload.color !== undefined) {
-    const color = cleanColor(payload.color);
-    if (!color) return apiError("Ungültige Profilfarbe.", 400);
-    profileUpdate.profile_color = color;
-  }
+  const colorPatch = buildProfileColorPatch({
+    color: payload.color,
+    profileColorDuplicateMode: payload.profileColorDuplicateMode,
+  });
+  if (!colorPatch.ok) return apiError(colorPatch.error, colorPatch.status);
+  Object.assign(profileUpdate, colorPatch.patch);
   if (payload.notificationsEnabled !== undefined) {
     const value = cleanBoolean(payload.notificationsEnabled);
     if (value === undefined) return apiError("Benachrichtigungsstatus ist ungültig.", 400);
@@ -197,6 +195,8 @@ export async function PATCH(request: NextRequest) {
   });
 
   if (transactionError) {
+    const colorError = mapProfileColorTransactionError(transactionError);
+    if (colorError) return apiError(colorError.error, colorError.status);
     if (transactionError.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
     if (transactionError.code === "22023" || transactionError.code === "23514") {
       return apiError("Profileinstellungen sind ungültig.", 400);

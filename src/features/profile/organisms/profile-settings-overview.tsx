@@ -19,6 +19,12 @@ import {
   type ProfileSettingsDraft,
   type ProfileSettingsSectionId,
 } from "@/features/profile/model/profile-settings-view-model";
+import { ProfileColorConflictError } from "@/features/profile/model/profile-color-api";
+import {
+  buildProfileColorPickerModel,
+  buildProfileColorSavePatch,
+  restoreProfileColorAfterConflict,
+} from "@/features/profile/model/profile-color-policy";
 import type { OwnProfileSettingsPatch } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
@@ -73,7 +79,7 @@ function ProfileSettingsForm({
 }: Omit<ProfileSettingsOverviewProps, "currentProfile"> & { currentProfile: Profile; profileUiPreference: NonNullable<PlanningShellState["profileUiPreferences"][number]> | null }) {
   const initialDraft = buildInitialDraft({ currentProfile, data, profileUiPreference });
   const [draft, setDraft] = useState<ProfileSettingsDraft>(() => initialDraft);
-  const [savedSnapshot, setSavedSnapshot] = useState(() => serializeDraft(initialDraft));
+  const [savedDraft, setSavedDraft] = useState<ProfileSettingsDraft>(() => initialDraft);
   const [activeSection, setActiveSection] = useState<ProfileSettingsSectionId>("profile");
   const [advancedBoardOpen, setAdvancedBoardOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -88,7 +94,13 @@ function ProfileSettingsForm({
     return true;
   });
   const draftSnapshot = serializeDraft(draft);
+  const savedSnapshot = serializeDraft(savedDraft);
   const isDirty = draftSnapshot !== savedSnapshot;
+  const colorPicker = buildProfileColorPickerModel({
+    currentColor: draft.color,
+    currentProfileId: currentProfile.id,
+    profiles: data.profiles,
+  });
 
   const workspaceOptions = workspaceRoutes
     .filter(
@@ -137,22 +149,34 @@ function ProfileSettingsForm({
 
   const save = async () => {
     setMessage("");
-    const nextSnapshot = serializeDraft(draft);
-    await onSaveOwnProfileSettings({
-      profilePatch: {
-        focus: draft.focus,
-        color: draft.color,
-        notificationsEnabled: draft.notificationsEnabled,
-      },
-      notificationEvents: draft.notificationEvents,
-      uiPreferences: {
-        defaultWorkspace: draft.defaultWorkspace,
-        defaultTaskView: draft.defaultTaskView,
-        planningFilters: draft.planningFilters,
-        expandedInitiativeIds: draft.expandedInitiativeIds,
-      },
+    const colorPatch = buildProfileColorSavePatch({
+      draftColor: draft.color,
+      persistedColor: savedDraft.color,
+      duplicateMode: colorPicker.duplicateMode,
     });
-    setSavedSnapshot(nextSnapshot);
+    try {
+      await onSaveOwnProfileSettings({
+        profilePatch: {
+          focus: draft.focus,
+          ...(colorPatch.color ? { color: colorPatch.color } : {}),
+          notificationsEnabled: draft.notificationsEnabled,
+        },
+        profileColorDuplicateMode: colorPatch.profileColorDuplicateMode,
+        notificationEvents: draft.notificationEvents,
+        uiPreferences: {
+          defaultWorkspace: draft.defaultWorkspace,
+          defaultTaskView: draft.defaultTaskView,
+          planningFilters: draft.planningFilters,
+          expandedInitiativeIds: draft.expandedInitiativeIds,
+        },
+      });
+    } catch (error) {
+      if (error instanceof ProfileColorConflictError) {
+        setDraft((current) => restoreProfileColorAfterConflict(current, savedDraft.color));
+      }
+      return;
+    }
+    setSavedDraft(draft);
     setMessage(source === "supabase" ? "Gespeichert." : "Lokal gespeichert.");
   };
 
@@ -188,6 +212,7 @@ function ProfileSettingsForm({
           {activeSection === "profile" && (
             <ProfileIdentitySection
               currentProfile={currentProfile}
+              colorPicker={colorPicker}
               draft={draft}
               onColorChange={(color) => updateDraft("color", color)}
               onFocusChange={(focus) => updateDraft("focus", focus)}

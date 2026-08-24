@@ -2,10 +2,16 @@
 
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
+import {
+  ProfileColorConflictError,
+  profileColorConflictFeedback,
+  recoverProfileColorConflict,
+} from "@/features/profile/model/profile-color-api";
 import type { NotificationPreference, Profile, ProfileUiPreference } from "@/lib/types";
 
 export type OwnProfileSettingsPatch = {
   profilePatch?: Partial<Pick<Profile, "focus" | "color" | "notificationsEnabled">>;
+  profileColorDuplicateMode?: boolean;
   notificationEvents?: Record<string, boolean>;
   uiPreferences?: Pick<ProfileUiPreference, "defaultWorkspace" | "defaultTaskView" | "planningFilters" | "expandedInitiativeIds">;
 };
@@ -77,7 +83,8 @@ export function useOwnProfileSettingsCommands({
   setData,
   setSaveError,
   source,
-}: PlanningCommandContext) {
+  refreshCurrentWorkspaceModel,
+}: PlanningCommandContext & { refreshCurrentWorkspaceModel: () => Promise<boolean> }) {
   const saveOwnProfileSettings = async (patch: OwnProfileSettingsPatch) => {
     if (!currentProfile) return;
     setSaveError("");
@@ -100,6 +107,7 @@ export function useOwnProfileSettingsCommands({
     try {
       const { response, body } = await planningApi.updateOwnProfileSettingsRequest(apiClient, {
         ...(patch.profilePatch || {}),
+        profileColorDuplicateMode: patch.profileColorDuplicateMode,
         notificationEvents: patch.notificationEvents,
         uiPreferences: patch.uiPreferences
           ? {
@@ -110,7 +118,11 @@ export function useOwnProfileSettingsCommands({
           }
           : undefined,
       });
-      if (!response.ok) throw new Error(body?.error || "Profil konnte nicht gespeichert werden.");
+      if (!response.ok) {
+        const conflict = profileColorConflictFeedback(response.status);
+        if (conflict) throw new ProfileColorConflictError();
+        throw new Error(body?.error || "Profil konnte nicht gespeichert werden.");
+      }
 
       setData((current) => ({
         ...current,
@@ -124,6 +136,11 @@ export function useOwnProfileSettingsCommands({
       }));
     } catch (error) {
       setData(previousData);
+      if (error instanceof ProfileColorConflictError) {
+        const recoveredError = await recoverProfileColorConflict(refreshCurrentWorkspaceModel);
+        setSaveError(recoveredError.message);
+        throw recoveredError;
+      }
       setSaveError(error instanceof Error ? error.message : "Profil konnte nicht gespeichert werden.");
       throw error;
     }

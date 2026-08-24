@@ -861,7 +861,7 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   assert.match(route, /update_profile_admin_transaction/);
   assert.match(transactionMigration, /'profile\.update'/);
   assert.match(transactionMigration, /exactly one CEO is required/);
-  assert.match(route, /profile_color/);
+  assert.match(route, /buildProfileColorPatch/);
   assert.match(route, /google_chat_user_id/);
   assert.match(route, /google_chat_dm_space/);
   assert.match(route, /notifications_enabled/);

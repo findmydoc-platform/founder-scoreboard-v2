@@ -1,17 +1,19 @@
 import { Check } from "lucide-react";
 import type { ProfileSettingsDraft } from "@/features/profile/model/profile-settings-view-model";
-import { profileColorOptions } from "@/features/profile/model/profile-settings-view-model";
+import type { buildProfileColorPickerModel } from "@/features/profile/model/profile-color-policy";
 import { SettingsPane, SettingsRow } from "@/features/profile/molecules/profile-settings-layout";
 import type { Profile } from "@/lib/types";
-import { classNames, UiBadge, UiTextArea } from "@/shared/atoms/ui-primitives";
+import { classNames, UiBadge, UiNotice, UiTextArea } from "@/shared/atoms/ui-primitives";
 
 export function ProfileIdentitySection({
   currentProfile,
+  colorPicker,
   draft,
   onColorChange,
   onFocusChange,
 }: {
   currentProfile: Profile;
+  colorPicker: ReturnType<typeof buildProfileColorPickerModel>;
   draft: ProfileSettingsDraft;
   onColorChange: (color: string) => void;
   onFocusChange: (focus: string) => void;
@@ -39,25 +41,44 @@ export function ProfileIdentitySection({
           className="w-full md:min-w-96"
         />
       </SettingsRow>
-      <SettingsRow label="Profilfarbe" description="Farbe ist hier ein Signal, kein Dekor.">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:min-w-96" aria-label="Profilfarbe">
-          {profileColorOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onColorChange(option.value)}
-              className={classNames(
-                "flex h-10 items-center justify-between rounded-md border px-2 text-xs font-semibold transition",
-                draft.color === option.value ? "border-blue-400 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <span className="h-4 w-4 rounded-full" style={{ backgroundColor: option.value }} />
-                {option.label}
-              </span>
-              {draft.color === option.value && <Check size={13} />}
-            </button>
-          ))}
+      <SettingsRow label="Profilfarbe" description="20 feste Farben. Vergebene Farben bleiben sichtbar." align="start">
+        <div className="grid w-full gap-2 md:min-w-96">
+          {colorPicker.duplicateMode && (
+            <UiNotice tone="info" size="xs" role="status">
+              Alle 20 Farben sind vergeben. Du kannst jetzt bewusst eine bereits verwendete Farbe wählen.
+            </UiNotice>
+          )}
+          <div className="grid grid-cols-2 gap-2 xl:grid-cols-4" role="group" aria-label="Profilfarbe">
+            {colorPicker.options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                disabled={option.disabled}
+                aria-label={option.ariaLabel}
+                aria-pressed={option.selected}
+                onClick={() => onColorChange(option.value)}
+                className={classNames(
+                  "flex min-h-12 items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+                  option.selected && "border-blue-400 bg-blue-50 text-blue-800",
+                  !option.selected && !option.disabled && "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  option.disabled && "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400",
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="h-4 w-4 shrink-0 rounded-full ring-1 ring-black/10"
+                    style={{ backgroundColor: option.value }}
+                  />
+                  <span className="grid min-w-0 gap-0.5">
+                    <span>{option.label}</span>
+                    <span className="text-[10px] font-medium leading-none opacity-80">{option.statusLabel}</span>
+                  </span>
+                </span>
+                {option.selected && <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />}
+              </button>
+            ))}
+          </div>
         </div>
       </SettingsRow>
     </SettingsPane>

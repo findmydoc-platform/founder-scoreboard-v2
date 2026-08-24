@@ -51,11 +51,11 @@ export function useCurrentWorkspaceModelRefresh({
     });
   }, [authUser, headerData, serverCurrentProfile, setData, source]);
 
-  const refreshCurrentWorkspaceModel = useCallback(async () => {
-    if (source !== "supabase" || !authUser?.id) return;
+  const refreshCurrentWorkspaceModelWithResult = useCallback(async () => {
+    if (source !== "supabase" || !authUser?.id) return false;
     if (workspace === "planning" || workspace === "projects") {
       const { response, body } = await planningApi.requestPlanningWorkspaceData(apiClient, workspace);
-      if (!response.ok || !body?.model) return;
+      if (!response.ok || !body?.model) return false;
       const nextData = normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model));
       const nextHeaderData = mergePlanningHeaderData(headerData, normalizePlanningHeaderData(body.headerData));
       setProtectedPlanningShellStateCache({
@@ -67,11 +67,11 @@ export function useCurrentWorkspaceModelRefresh({
       setData(nextData);
       setHeaderData(nextHeaderData);
       setProtectedDataLoaded(true);
-      return;
+      return true;
     }
     if (isSupportingWorkspace(workspace)) {
       const { response, body } = await planningApi.requestSupportingWorkspaceData(apiClient, workspace);
-      if (!response.ok || !body?.model) return;
+      if (!response.ok || !body?.model) return false;
       const nextData = normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState(workspace, body.model));
       const nextHeaderData = mergePlanningHeaderData(headerData, normalizePlanningHeaderData(body.headerData));
       setProtectedPlanningShellStateCache({
@@ -83,11 +83,11 @@ export function useCurrentWorkspaceModelRefresh({
       setData(nextData);
       setHeaderData(nextHeaderData);
       setProtectedDataLoaded(true);
-      return;
+      return true;
     }
     if (workspace === "sprint") {
       const { response, body } = await planningApi.requestSprintWorkspaceData(apiClient);
-      if (!response.ok || !body?.model) return;
+      if (!response.ok || !body?.model) return false;
       const nextData = normalizePlanningShellState(sprintWorkspaceModelToPlanningShellState(body.model));
       const nextHeaderData = mergePlanningHeaderData(headerData, normalizePlanningHeaderData(body.headerData));
       setProtectedPlanningShellStateCache({
@@ -99,9 +99,14 @@ export function useCurrentWorkspaceModelRefresh({
       setData(nextData);
       setHeaderData(nextHeaderData);
       setProtectedDataLoaded(true);
-      return;
+      return true;
     }
+    return false;
   }, [apiClient, authUser, headerData, serverCurrentProfile, setData, setHeaderData, setProtectedDataLoaded, source, workspace]);
 
-  return { applyPlanningShellStateUpdate, refreshCurrentWorkspaceModel };
+  const refreshCurrentWorkspaceModel = useCallback(async () => {
+    await refreshCurrentWorkspaceModelWithResult();
+  }, [refreshCurrentWorkspaceModelWithResult]);
+
+  return { applyPlanningShellStateUpdate, refreshCurrentWorkspaceModel, refreshCurrentWorkspaceModelWithResult };
 }
