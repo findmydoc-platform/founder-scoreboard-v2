@@ -11,6 +11,7 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
   const [workweeks, setWorkweeks] = useState<PublishedTeamWorkweek[]>([]);
   const [pending, setPending] = useState(true);
   const [message, setMessage] = useState("");
+  const [hasLoadedSuccessfully, setHasLoadedSuccessfully] = useState(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -30,7 +31,10 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
       if (!response.ok || !body?.workweeks) {
         throw new Error(body?.error || "Veröffentlichte Grundwochen konnten nicht geladen werden.");
       }
-      if (mounted.current) setWorkweeks(body.workweeks);
+      if (mounted.current) {
+        setWorkweeks(body.workweeks);
+        setHasLoadedSuccessfully(true);
+      }
     } catch (error) {
       if (mounted.current) {
         setMessage(error instanceof Error ? error.message : "Veröffentlichte Grundwochen konnten nicht geladen werden.");
@@ -50,5 +54,5 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
     };
   }, [load]);
 
-  return { load, message, pending, workweeks };
+  return { hasLoadedSuccessfully, load, message, pending, workweeks };
 }
