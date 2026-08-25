@@ -2,12 +2,22 @@
 
 import { useState } from "react";
 import { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
-import { berlinTodayIso } from "../model/team-workweek-draft";
+import { berlinTodayIso, TEAM_WORKWEEK_DAYS } from "../model/team-workweek-draft";
 import { PrivateTeamWorkweekEditor } from "../organisms/private-team-workweek-editor";
 import { formatDate } from "@/lib/display";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Profile } from "@/lib/types";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
+
+function conflictWindows(windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>>) {
+  if (!windows.length) return "Keine Arbeitszeitfenster";
+  return TEAM_WORKWEEK_DAYS.flatMap((day) => {
+    const entries = windows.filter((window) => window.weekday === day.weekday);
+    if (!entries.length) return [];
+    const time = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+    return [`${day.label}: ${entries.map((entry) => `${time(entry.startMinute)}–${time(entry.endMinute)}`).join(", ")}`];
+  }).join(" · ");
+}
 
 export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: BrowserApiClient; profile: Profile }) {
   const [open, setOpen] = useState(false);
@@ -69,6 +79,32 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
           </div>
         </div>
         {state.message && !open && <UiNotice className="mt-4" tone={state.messageTone === "success" ? "success" : "warning"}>{state.message}</UiNotice>}
+        {state.conflict && !open && (
+          <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-labelledby="team-workweek-conflict-title">
+            <h3 id="team-workweek-conflict-title" className="text-sm font-semibold text-amber-950">FounderOps und Google wurden parallel geändert</h3>
+            <p className="mt-1 text-sm leading-6 text-amber-900">Der letzte bestätigte Teamstand bleibt aktiv. Prüfe beide Varianten und entscheide bewusst.</p>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <div className="rounded-lg border border-white/80 bg-white p-3">
+                <div className="text-sm font-semibold text-slate-950">Meine FounderOps-Variante</div>
+                <div className="mt-1 text-xs text-slate-600">Gültig ab {formatDate(state.conflict.founderops.effectiveFrom)}</div>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{conflictWindows(state.conflict.founderops.windows)}</p>
+                <UiButton className="mt-3 w-full sm:w-auto" variant="primary" onClick={() => void state.resolveConflict("founderops")}
+                  disabled={state.pending || (state.conflict.state === "resolving" && state.conflict.decision !== "founderops")}>
+                  FounderOps übernehmen
+                </UiButton>
+              </div>
+              <div className="rounded-lg border border-white/80 bg-white p-3">
+                <div className="text-sm font-semibold text-slate-950">Google-Variante</div>
+                <div className="mt-1 text-xs text-slate-600">Gültig ab {formatDate(state.conflict.google.effectiveFrom)}</div>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{conflictWindows(state.conflict.google.windows)}</p>
+                <UiButton className="mt-3 w-full sm:w-auto" variant="secondary" onClick={() => void state.resolveConflict("google")}
+                  disabled={state.pending || (state.conflict.state === "resolving" && state.conflict.decision !== "google")}>
+                  Google übernehmen
+                </UiButton>
+              </div>
+            </div>
+          </section>
+        )}
       </UiPanel>
       {open && <PrivateTeamWorkweekEditor apiClient={apiClient} profile={profile} state={state} onClose={() => setOpen(false)} />}
     </>

@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Keeps safe Google-to-FounderOps workweek reconciliation in an intermediate stacked pull request until the complete calendar workflow and product update ship together."
+  "reason": "Keeps owner-controlled parallel workweek conflict resolution in an intermediate stacked pull request until the complete calendar workflow and product update ship together."
 }

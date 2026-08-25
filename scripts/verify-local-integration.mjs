@@ -927,6 +927,12 @@ async function verifyUnmappedAuthReadBoundary(status) {
       }
     }
 
+    const { data: deniedConflicts, error: deniedConflictsError } = await unmapped
+      .from("team_workweek_google_conflicts").select("id").limit(1);
+    if (!deniedConflictsError || deniedConflictsError.code !== "42501" || deniedConflicts) {
+      throw new Error("Unmapped Auth user unexpectedly reached internal Google conflict snapshots.");
+    }
+
     const { data: deniedDraft, error: deniedDraftError } = await unmapped.rpc(
       "create_private_team_workweek_version",
       { p_effective_from: nextBerlinMondayIso(), p_windows: [] },
@@ -1485,6 +1491,139 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       throw new Error("A stale Google observation unexpectedly changed a superseded FounderOps week.");
     }
 
+    const conflictBoundary = new Date(`${googleDeletionEffectiveFrom}T00:00:00.000Z`);
+    conflictBoundary.setUTCDate(conflictBoundary.getUTCDate() + 7);
+    const conflictEffectiveFrom = conflictBoundary.toISOString().slice(0, 10);
+    const conflictFounderopsWindows = [{ weekday: 2, startMinute: 540, endMinute: 720 }];
+    const { data: conflictDraft, error: conflictDraftError } = await mapped.rpc("create_private_team_workweek_version", {
+      p_effective_from: conflictEffectiveFrom,
+      p_windows: conflictFounderopsWindows,
+    });
+    const { data: initialConflict, error: initialConflictError } = conflictDraftError
+      ? { data: null, error: conflictDraftError }
+      : await admin.rpc("create_team_workweek_google_conflict", {
+        p_owner_profile_id: "volkan",
+        p_base_publication_id: preparedGoogleDeletion.id,
+        p_base_publication_revision: preparedGoogleDeletion.publicationRevision,
+        p_founderops_version_id: conflictDraft.id,
+        p_google_effective_from: conflictEffectiveFrom,
+        p_google_windows: [{ weekday: 3, startMinute: 600, endMinute: 780 }],
+        p_google_observations: [],
+        p_google_fingerprint: "c".repeat(64),
+        p_founderops_fingerprint: "d".repeat(64),
+        p_observed_at: "2026-08-25T10:10:00.000Z",
+      });
+    const { data: newerConflictDraft, error: newerConflictDraftError } = initialConflictError
+      ? { data: null, error: initialConflictError }
+      : await mapped.rpc("create_private_team_workweek_version", {
+        p_effective_from: conflictEffectiveFrom,
+        p_windows: [{ weekday: 2, startMinute: 600, endMinute: 780 }],
+      });
+    const { error: intermediateDraftDecisionError } = newerConflictDraftError
+      ? { error: newerConflictDraftError }
+      : await admin.rpc("prepare_team_workweek_google_conflict_resolution", {
+        p_conflict_id: initialConflict.id,
+        p_owner_profile_id: "volkan",
+        p_conflict_revision: initialConflict.conflictRevision,
+        p_decision: "founderops",
+        p_google_observations: [],
+        p_google_fingerprint: "c".repeat(64),
+        p_founderops_fingerprint: "d".repeat(64),
+        p_resolution_fingerprint: "e".repeat(64),
+        p_observed_at: "2026-08-25T10:10:30.000Z",
+      });
+    const { data: capturedConflict, error: capturedConflictError } = newerConflictDraftError
+      ? { data: null, error: newerConflictDraftError }
+      : await admin.rpc("create_team_workweek_google_conflict", {
+        p_owner_profile_id: "volkan",
+        p_base_publication_id: preparedGoogleDeletion.id,
+        p_base_publication_revision: preparedGoogleDeletion.publicationRevision,
+        p_founderops_version_id: newerConflictDraft.id,
+        p_google_effective_from: conflictEffectiveFrom,
+        p_google_windows: [{ weekday: 3, startMinute: 600, endMinute: 780 }],
+        p_google_observations: [],
+        p_google_fingerprint: "c".repeat(64),
+        p_founderops_fingerprint: "d".repeat(64),
+        p_observed_at: "2026-08-25T10:10:45.000Z",
+      });
+    const { data: ownerConflict, error: ownerConflictError } = capturedConflictError
+      ? { data: null, error: capturedConflictError }
+      : await mapped.from("team_workweek_google_conflicts").select("id,state,google_windows").eq("id", capturedConflict.id).single();
+    const { data: foreignConflict, error: foreignConflictError } = await founder
+      .from("team_workweek_google_conflicts").select("id");
+    const { data: preparedConflictResolution, error: preparedConflictResolutionError } = capturedConflictError
+      ? { data: null, error: capturedConflictError }
+      : await admin.rpc("prepare_team_workweek_google_conflict_resolution", {
+        p_conflict_id: capturedConflict.id,
+        p_owner_profile_id: "volkan",
+        p_conflict_revision: capturedConflict.conflictRevision,
+        p_decision: "founderops",
+        p_google_observations: [],
+        p_google_fingerprint: "c".repeat(64),
+        p_founderops_fingerprint: "d".repeat(64),
+        p_resolution_fingerprint: "e".repeat(64),
+        p_observed_at: "2026-08-25T10:11:00.000Z",
+      });
+    const { data: conflictPublication, error: conflictPublicationError } = preparedConflictResolutionError
+      ? { data: null, error: preparedConflictResolutionError }
+      : await mapped.rpc("prepare_team_workweek_publication", { p_version_id: preparedConflictResolution.versionId });
+    if (conflictDraftError || !conflictDraft?.id || initialConflictError || !initialConflict?.id
+      || newerConflictDraftError || !newerConflictDraft?.id
+      || !intermediateDraftDecisionError || intermediateDraftDecisionError.code !== "P0004"
+      || capturedConflictError || !capturedConflict?.id
+      || !ownerConflictError || ownerConflictError.code !== "42501" || ownerConflict
+      || !foreignConflictError || foreignConflictError.code !== "42501" || foreignConflict
+      || preparedConflictResolutionError || !preparedConflictResolution?.versionId
+      || conflictPublicationError || conflictPublication?.series?.length !== 1 || conflictPublication?.transitions?.length !== 0) {
+      throw new Error("An owner-private parallel conflict did not prepare exactly one selected resolution.");
+    }
+    const { error: confirmConflictSeriesError } = await admin.rpc("confirm_team_workweek_google_series", {
+      p_series_id: conflictPublication.series[0].id,
+      p_etag: `"etag-${conflictPublication.series[0].id}"`,
+      p_founderops_revision: conflictPublication.publicationRevision,
+      p_observed_at: "2026-08-25T10:12:00.000Z",
+    });
+    const { data: publishedConflictResolution, error: publishedConflictResolutionError } = confirmConflictSeriesError
+      ? { data: null, error: confirmConflictSeriesError }
+      : await mapped.rpc("finalize_team_workweek_publication", { p_publication_id: conflictPublication.id });
+    const { error: completeConflictError } = publishedConflictResolutionError
+      ? { error: publishedConflictResolutionError }
+      : await admin.rpc("complete_team_workweek_google_conflict_resolution", {
+        p_conflict_id: capturedConflict.id,
+        p_owner_profile_id: "volkan",
+        p_conflict_revision: capturedConflict.conflictRevision,
+        p_resolved_at: "2026-08-25T10:13:00.000Z",
+      });
+    const { data: replayedConflictResolution, error: replayedConflictResolutionError } = completeConflictError
+      ? { data: null, error: completeConflictError }
+      : await admin.rpc("prepare_team_workweek_google_conflict_resolution", {
+        p_conflict_id: capturedConflict.id,
+        p_owner_profile_id: "volkan",
+        p_conflict_revision: capturedConflict.conflictRevision,
+        p_decision: "founderops",
+        p_google_observations: [],
+        p_google_fingerprint: "c".repeat(64),
+        p_founderops_fingerprint: "d".repeat(64),
+        p_resolution_fingerprint: "e".repeat(64),
+        p_observed_at: "2026-08-25T10:14:00.000Z",
+      });
+    const { error: staleConflictDecisionError } = await admin.rpc("prepare_team_workweek_google_conflict_resolution", {
+      p_conflict_id: capturedConflict.id,
+      p_owner_profile_id: "volkan",
+      p_conflict_revision: capturedConflict.conflictRevision,
+      p_decision: "google",
+      p_google_observations: [],
+      p_google_fingerprint: "c".repeat(64),
+      p_founderops_fingerprint: "d".repeat(64),
+      p_resolution_fingerprint: "f".repeat(64),
+      p_observed_at: "2026-08-25T10:14:00.000Z",
+    });
+    if (publishedConflictResolution?.status !== "published" || completeConflictError
+      || replayedConflictResolutionError || replayedConflictResolution?.versionId !== preparedConflictResolution.versionId
+      || !staleConflictDecisionError || staleConflictDecisionError.code !== "P0004") {
+      throw new Error("Conflict resolution was not publication-gated, replay-safe, and stale-decision protected.");
+    }
+
     await database.query("update public.profiles set platform_role='viewer' where id='sebastian'");
     const { data: demotedVersions, error: demotedVersionsError } = await founder
       .from("team_workweek_versions").select("id,status");
@@ -1498,7 +1637,7 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
     );
     if (demotedVersionsError || demotedVersions?.length
       || demotedWindowsError || demotedWindows?.length
-      || demotedPublicationsError || demotedPublications?.length !== 6 || demotedPublications.some((publication) => publication.status !== "published")
+      || demotedPublicationsError || demotedPublications?.length !== 7 || demotedPublications.some((publication) => publication.status !== "published")
       || !demotedWriteError || demotedWriteError.code !== "42501" || demotedWrite) {
       throw new Error("A profile demoted to viewer did not retain only published team-workweek access.");
     }
@@ -1517,15 +1656,19 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       .from("team_workweek_publications").select("id,status");
     const { data: viewerReconciliationStatus, error: viewerReconciliationStatusError } = await viewer
       .from("team_workweek_google_reconciliation_status").select("publication_id");
+    const { data: viewerConflicts, error: viewerConflictsError } = await viewer
+      .from("team_workweek_google_conflicts").select("id");
     if (viewerReadError || viewerRead?.length
-      || viewerPublicationsError || viewerPublications?.length !== 6
+      || viewerPublicationsError || viewerPublications?.length !== 7
       || viewerReconciliationStatusError || viewerReconciliationStatus?.length
+      || !viewerConflictsError || viewerConflictsError.code !== "42501" || viewerConflicts
       || !viewerPublications.some((publication) => publication.id === prepared.id)
       || !viewerPublications.some((publication) => publication.id === preparedLater.id)
       || !viewerPublications.some((publication) => publication.id === preparedEmpty.id)
       || !viewerPublications.some((publication) => publication.id === preparedAfterEmpty.id)
       || !viewerPublications.some((publication) => publication.id === preparedGoogleChange.id)
-      || !viewerPublications.some((publication) => publication.id === preparedGoogleDeletion.id)) {
+      || !viewerPublications.some((publication) => publication.id === preparedGoogleDeletion.id)
+      || !viewerPublications.some((publication) => publication.id === conflictPublication.id)) {
       throw new Error("Viewer did not receive the published version history while private drafts stayed hidden.");
     }
   } finally {
@@ -1535,6 +1678,7 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       "update public.team_workweek_publications set predecessor_publication_id=null, superseded_by_publication_id=null, effective_to=null where owner_profile_id = any($1::text[])",
       [ownerIds],
     );
+    await database.query("delete from public.team_workweek_google_conflicts where owner_profile_id = any($1::text[])", [ownerIds]);
     const cleanupPublications = await database.query(
       "select id, source_version_id from public.team_workweek_publications where owner_profile_id = any($1::text[]) order by publication_revision desc",
       [ownerIds],
