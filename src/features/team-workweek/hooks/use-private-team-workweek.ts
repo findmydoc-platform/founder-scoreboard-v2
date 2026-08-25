@@ -11,6 +11,7 @@ import {
   type TeamWorkweekWindow,
 } from "../model/team-workweek-draft";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
+import { TEAM_WORKWEEK_PUBLISHED_EVENT } from "./use-published-team-workweeks";
 
 function initialDraft(): PrivateTeamWorkweekDraft {
   return { effectiveFrom: nextMondayIso(), windows: emptyTeamWorkweekWindows() };
@@ -50,7 +51,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       const { response, body } = await apiClient.requestJson<{
         version?: PrivateTeamWorkweekVersion | null;
         error?: string;
-      }>("/api/team-workweek/private-draft", { cache: "no-store" });
+      }>("/api/team-workweek/private-draft", { cache: "no-store", useDevProfileOverride: false });
       if (!response.ok || body?.version === undefined) {
         throw new Error(body?.error || "Private Grundwoche konnte nicht geladen werden.");
       }
@@ -122,7 +123,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       const { response, body } = await apiClient.requestJson<{
         version?: Omit<PrivateTeamWorkweekVersion, "windows">;
         error?: string;
-      }>("/api/team-workweek/private-draft", { method: "POST", json: validation.draft });
+      }>("/api/team-workweek/private-draft", { method: "POST", json: validation.draft, useDevProfileOverride: false });
       if (!response.ok || !body?.version) {
         throw new Error(body?.error || "Private Grundwoche konnte nicht gespeichert werden.");
       }
@@ -137,6 +138,56 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       if (mounted.current) {
         setMessageTone("warning");
         setMessage(error instanceof Error ? error.message : "Private Grundwoche konnte nicht gespeichert werden.");
+      }
+      return false;
+    } finally {
+      if (mounted.current) setPending(false);
+    }
+  };
+
+  const publish = async () => {
+    if (!version || dirty) {
+      setMessageTone("warning");
+      setMessage(dirty ? "Speichere die private Version vor der Veröffentlichung." : "Bereite zuerst eine private Grundwoche vor.");
+      return false;
+    }
+    setPending(true);
+    setMessage("");
+    setErrors([]);
+    try {
+      const { response, body } = await apiClient.requestJson<{
+        publication?: {
+          status: "preparing" | "published";
+          syncState: "delayed" | "confirmed";
+          recovery: "retry" | "reconnect" | "identity_conflict" | null;
+        };
+        error?: string;
+      }>("/api/team-workweek/publish", {
+        method: "POST",
+        json: { versionId: version.id },
+        useDevProfileOverride: false,
+      });
+      if (!response.ok && response.status !== 202) {
+        throw new Error(body?.error || "Grundwoche konnte nicht veröffentlicht werden.");
+      }
+      if (body?.publication?.status !== "published") {
+        setMessageTone("warning");
+        setMessage(body?.publication?.recovery === "reconnect"
+          ? "Die Grundwoche bleibt privat. Verbinde Google erneut, bevor du sie veröffentlichst."
+          : body?.publication?.recovery === "identity_conflict"
+            ? "Die Grundwoche bleibt privat. Ein vorhandener Kalendereintrag gehört nicht zu dieser Veröffentlichung; der Konflikt muss zuerst geklärt werden."
+            : "Synchronisierung verzögert. Die Grundwoche bleibt privat und kann sicher erneut veröffentlicht werden.");
+        return false;
+      }
+      applyVersion(null);
+      setMessageTone("success");
+      setMessage("Grundwoche wurde mit Google synchronisiert und im Team veröffentlicht.");
+      window.dispatchEvent(new Event(TEAM_WORKWEEK_PUBLISHED_EVENT));
+      return true;
+    } catch (error) {
+      if (mounted.current) {
+        setMessageTone("warning");
+        setMessage(error instanceof Error ? error.message : "Grundwoche konnte nicht veröffentlicht werden.");
       }
       return false;
     } finally {
@@ -162,6 +213,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     removeWindow,
     reset,
     save,
+    publish,
     setEffectiveFrom,
     setWindow,
     version,

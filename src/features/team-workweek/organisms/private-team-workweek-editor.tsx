@@ -143,12 +143,20 @@ export function PrivateTeamWorkweekEditor({
             </div>
           </div>
 
-          <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-4 sm:px-6">
-            <p className="text-xs leading-5 text-slate-500">Speichern erzeugt nur eine neue private, unveränderliche Version.</p>
-            <div className="flex gap-2">
+          <footer className="flex flex-col items-stretch justify-between gap-3 border-t border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:px-6">
+            <p className="text-xs leading-5 text-slate-500">Speichern bleibt privat. Veröffentlichen schreibt zuerst sicher nach Google und gibt die Woche danach im Team frei.</p>
+            <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto">
               <UiButton size="lg" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
               <UiButton variant="primary" size="lg" data-autofocus onClick={() => void state.save()} disabled={state.pending || !state.dirty}>
-                {state.pending ? "Speichert …" : "Private Version speichern"}
+                {state.pending ? "Speichert …" : <><span className="sm:hidden">Speichern</span><span className="hidden sm:inline">Private Version speichern</span></>}
+              </UiButton>
+              <UiButton
+                variant="primary"
+                size="lg"
+                onClick={() => void state.publish().then((published) => published && onClose())}
+                disabled={state.pending || state.dirty || !state.version}
+              >
+                <span className="sm:hidden">Veröffentlichen</span><span className="hidden sm:inline">In Google & Team veröffentlichen</span>
               </UiButton>
             </div>
           </footer>

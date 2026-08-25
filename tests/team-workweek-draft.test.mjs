@@ -118,8 +118,10 @@ test("editor exposes the complete private workflow and protects unsaved changes"
   assert.match(editor, /TeamWorkweekDiscardDialog/);
   assert.match(hook, /beforeunload/);
   assert.match(hook, /validatePrivateTeamWorkweekDraft/);
+  assert.match(hook, /useDevProfileOverride: false/);
   assert.match(card, /Grundwoche vorbereiten/);
-  assert.match(card, /späteren Schritt im Team und in Google veröffentlicht/);
+  assert.match(card, /bestätigte Google-Synchronisierung/);
+  assert.match(editor, /In Google & Team veröffentlichen/);
   assert.match(team, /actualProfile\.platformRole/);
   assert.match(renderer, /actualProfile=\{actualProfile\}/);
 });
