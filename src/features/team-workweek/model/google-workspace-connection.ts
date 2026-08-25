@@ -8,6 +8,15 @@ export type GoogleWorkspaceConnectionStatus = Readonly<{
   accessTokenExpiresAt: string | null;
 }>;
 
+export type GoogleWorkspaceDisconnectView = Readonly<{
+  state: "idle" | "cleaning" | "cleanup_pending" | "revoke_pending" | "completed";
+  activePublicationCount: number;
+  futureSeriesCount: number;
+  pendingSeriesCount: number;
+  teamVisibilityWillBeDisabled: boolean;
+  connectionWillBeRevoked: boolean;
+}>;
+
 export function googleWorkspaceConnectionLabel(state: GoogleWorkspaceConnectionState) {
   if (state === "connected") return "Verbunden";
   if (state === "reconnect_required") return "Wiederverbindung erforderlich";

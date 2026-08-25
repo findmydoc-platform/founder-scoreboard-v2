@@ -927,10 +927,16 @@ async function verifyUnmappedAuthReadBoundary(status) {
       }
     }
 
-    const { data: deniedConflicts, error: deniedConflictsError } = await unmapped
-      .from("team_workweek_google_conflicts").select("id").limit(1);
-    if (!deniedConflictsError || deniedConflictsError.code !== "42501" || deniedConflicts) {
-      throw new Error("Unmapped Auth user unexpectedly reached internal Google conflict snapshots.");
+    for (const table of [
+      "team_workweek_google_conflicts",
+      "google_workspace_disconnect_operations",
+      "google_workspace_disconnect_series",
+    ]) {
+      const { data: deniedInternal, error: deniedInternalError } = await unmapped
+        .from(table).select("id").limit(1);
+      if (!deniedInternalError || deniedInternalError.code !== "42501" || deniedInternal) {
+        throw new Error(`Unmapped Auth user unexpectedly reached internal ${table} state.`);
+      }
     }
 
     const { data: deniedDraft, error: deniedDraftError } = await unmapped.rpc(
@@ -1671,6 +1677,171 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       || !viewerPublications.some((publication) => publication.id === conflictPublication.id)) {
       throw new Error("Viewer did not receive the published version history while private drafts stayed hidden.");
     }
+
+    const { data: directDisconnect, error: directDisconnectError } = await mapped.rpc(
+      "prepare_google_workspace_disconnect",
+      { p_owner_profile_id: "volkan" },
+    );
+    if (!directDisconnectError || directDisconnectError.code !== "42501" || directDisconnect) {
+      throw new Error("Owner JWT unexpectedly bypassed the confirmed disconnect API boundary.");
+    }
+    const disconnectRaceBoundary = new Date(`${effectiveFrom}T00:00:00.000Z`);
+    disconnectRaceBoundary.setUTCDate(disconnectRaceBoundary.getUTCDate() + 70);
+    const { data: disconnectRaceDraft, error: disconnectRaceDraftError } = await mapped.rpc(
+      "create_private_team_workweek_version",
+      {
+        p_effective_from: disconnectRaceBoundary.toISOString().slice(0, 10),
+        p_windows: [{ weekday: 4, startMinute: 600, endMinute: 720 }],
+      },
+    );
+    if (disconnectRaceDraftError || !disconnectRaceDraft?.id) {
+      throw new Error("Could not create the concurrency fixture before disconnect.");
+    }
+    const { data: blockedDisconnect, error: blockedDisconnectError } = await admin.rpc(
+      "prepare_google_workspace_disconnect",
+      { p_owner_profile_id: "volkan" },
+    );
+    if (!blockedDisconnectError || blockedDisconnectError.code !== "P0003" || blockedDisconnect) {
+      throw new Error("Disconnect unexpectedly bypassed an unresolved parallel-change conflict.");
+    }
+    await database.query("delete from public.team_workweek_google_conflicts where id=$1", [initialConflict.id]);
+    const { data: preparedDisconnect, error: preparedDisconnectError } = await admin.rpc(
+      "prepare_google_workspace_disconnect",
+      { p_owner_profile_id: "volkan" },
+    );
+    const { data: racedPublication, error: racedPublicationError } = preparedDisconnectError
+      ? { data: null, error: preparedDisconnectError }
+      : await mapped.rpc("prepare_team_workweek_publication", { p_version_id: disconnectRaceDraft.id });
+    const { data: privateDisconnectOperations, error: privateDisconnectOperationsError } = await founder
+      .from("google_workspace_disconnect_operations").select("id");
+    const { data: disconnectTargets, error: disconnectTargetsError } = preparedDisconnectError
+      ? { data: null, error: preparedDisconnectError }
+      : await admin.from("google_workspace_disconnect_series")
+        .select("id,expected_etag,state")
+        .eq("operation_id", preparedDisconnect.id)
+        .order("id", { ascending: true });
+    if (preparedDisconnectError || !preparedDisconnect?.id
+      || !racedPublicationError || racedPublicationError.code !== "P0003" || racedPublication
+      || !privateDisconnectOperationsError || privateDisconnectOperationsError.code !== "42501" || privateDisconnectOperations
+      || disconnectTargetsError || !disconnectTargets?.length) {
+      throw new Error(`Owner-confirmed Google disconnect did not create service-only exact cleanup targets (${JSON.stringify({
+        prepareCode: preparedDisconnectError?.code || null,
+        prepared: Boolean(preparedDisconnect?.id),
+        privateReadCode: privateDisconnectOperationsError?.code || null,
+        targetReadCode: disconnectTargetsError?.code || null,
+        targetCount: disconnectTargets?.length || 0,
+      })}).`);
+    }
+    for (const target of disconnectTargets) {
+      const { error } = await admin.rpc("confirm_google_workspace_disconnect_series", {
+        p_target_id: target.id,
+        p_expected_etag: target.expected_etag,
+        p_confirmed_etag: `"disconnect-${target.id}"`,
+        p_observed_at: "2026-08-25T10:20:00.000Z",
+      });
+      if (error) throw new Error("A confirmed future-series cleanup could not be persisted.");
+    }
+    const { data: finalizedDisconnect, error: finalizedDisconnectError } = await admin.rpc(
+      "finalize_google_workspace_disconnect",
+      {
+        p_operation_id: preparedDisconnect.id,
+        p_owner_profile_id: "volkan",
+        p_observed_at: "2026-08-25T10:21:00.000Z",
+      },
+    );
+    const { error: removedDisconnectConnectionError } = finalizedDisconnectError
+      ? { error: finalizedDisconnectError }
+      : await admin.from("google_workspace_connections").delete().eq("profile_id", "volkan");
+    const { error: completedDisconnectError } = removedDisconnectConnectionError
+      ? { error: removedDisconnectConnectionError }
+      : await admin.rpc("complete_google_workspace_disconnect", {
+        p_operation_id: preparedDisconnect.id,
+        p_owner_profile_id: "volkan",
+        p_completed_at: "2026-08-25T10:22:00.000Z",
+      });
+    const { data: inactiveOwnerPublications, error: inactiveOwnerPublicationsError } = await mapped
+      .from("team_workweek_publications").select("id,status,deactivation_reason");
+    const { data: hiddenViewerPublications, error: hiddenViewerPublicationsError } = await viewer
+      .from("team_workweek_publications").select("id,status");
+    const { data: retainedPrivateVersion, error: retainedPrivateVersionError } = finalizedDisconnect?.retainedVersionId
+      ? await mapped.from("team_workweek_versions").select("id,status").eq("id", finalizedDisconnect.retainedVersionId).single()
+      : { data: null, error: finalizedDisconnectError };
+    const disconnectReplayState = (await database.query(
+      "select (select count(*)::integer from public.google_workspace_connections where profile_id=$1) as connections, (select count(*)::integer from public.team_workweek_publications where owner_profile_id=$1 and status='published') as published, (select jsonb_agg(jsonb_build_object('state', state, 'requestedBy', requested_by) order by requested_at) from public.google_workspace_disconnect_operations where owner_profile_id=$1) as operations",
+      ["volkan"],
+    )).rows[0];
+    const retainedSnapshot = (await database.query(
+      "select publication.windows as published_windows, coalesce(jsonb_agg(jsonb_build_object('weekday', work_window.weekday, 'startMinute', work_window.start_minute, 'endMinute', work_window.end_minute) order by work_window.weekday, work_window.start_minute, work_window.end_minute, work_window.id) filter (where work_window.id is not null), '[]'::jsonb) as retained_windows from public.team_workweek_publications publication left join public.team_workweek_windows work_window on work_window.version_id=$2 where publication.id=$1 group by publication.windows",
+      [conflictPublication.id, finalizedDisconnect.retainedVersionId],
+    )).rows[0];
+    const { data: replayedDisconnect, error: replayedDisconnectError } = await admin.rpc(
+      "prepare_google_workspace_disconnect",
+      { p_owner_profile_id: "volkan" },
+    );
+    if (finalizedDisconnectError || finalizedDisconnect?.state !== "revoke_pending"
+      || removedDisconnectConnectionError || completedDisconnectError
+      || inactiveOwnerPublicationsError || inactiveOwnerPublications?.length !== 7
+      || inactiveOwnerPublications.some((publication) => publication.status !== "inactive" || publication.deactivation_reason !== "manual_disconnect")
+      || hiddenViewerPublicationsError || hiddenViewerPublications?.length
+      || retainedPrivateVersionError || retainedPrivateVersion?.id !== finalizedDisconnect.retainedVersionId
+      || JSON.stringify(retainedSnapshot?.published_windows) !== JSON.stringify(retainedSnapshot?.retained_windows)
+      || replayedDisconnectError || replayedDisconnect?.state !== "completed" || !replayedDisconnect?.replayed) {
+      throw new Error(`Disconnect did not preserve one private inactive configuration, hide the team week, and replay safely (${JSON.stringify({
+        finalizeCode: finalizedDisconnectError?.code || null,
+        finalizedState: finalizedDisconnect?.state || null,
+        connectionRemovalCode: removedDisconnectConnectionError?.code || null,
+        completeCode: completedDisconnectError?.code || null,
+        inactiveReadCode: inactiveOwnerPublicationsError?.code || null,
+        inactiveCount: inactiveOwnerPublications?.length || 0,
+        inactiveStates: [...new Set((inactiveOwnerPublications || []).map((row) => `${row.status}:${row.deactivation_reason}`))],
+        viewerReadCode: hiddenViewerPublicationsError?.code || null,
+        viewerCount: hiddenViewerPublications?.length || 0,
+        retainedReadCode: retainedPrivateVersionError?.code || null,
+        retainedMatches: retainedPrivateVersion?.id === finalizedDisconnect?.retainedVersionId,
+        retainedSnapshotMatches: JSON.stringify(retainedSnapshot?.published_windows) === JSON.stringify(retainedSnapshot?.retained_windows),
+        replayCode: replayedDisconnectError?.code || null,
+        replayState: replayedDisconnect?.state || null,
+        replayed: replayedDisconnect?.replayed || false,
+        replayPrerequisites: disconnectReplayState,
+      })}).`);
+    }
+
+    await database.query(
+      "update public.team_workweek_versions set effective_from=date '2026-08-17' where id=$1",
+      [finalizedDisconnect.retainedVersionId],
+    );
+
+    const { data: preparedRepublish, error: preparedRepublishError } = await mapped.rpc(
+      "prepare_team_workweek_publication",
+      { p_version_id: finalizedDisconnect.retainedVersionId },
+    );
+    const { data: viewerDuringRepublish, error: viewerDuringRepublishError } = await viewer
+      .from("team_workweek_publications").select("id,status");
+    if (preparedRepublishError || !preparedRepublish?.id || preparedRepublish.series?.length !== 1
+      || preparedRepublish.effectiveFrom !== effectiveFrom
+      || viewerDuringRepublishError || viewerDuringRepublish?.length) {
+      throw new Error("A retained private week was not kept private while explicit republishing prepared Google series.");
+    }
+    for (const series of preparedRepublish.series) {
+      const { error } = await admin.rpc("confirm_team_workweek_google_series", {
+        p_series_id: series.id,
+        p_etag: `"republish-${series.id}"`,
+        p_founderops_revision: preparedRepublish.publicationRevision,
+        p_observed_at: "2026-08-25T10:24:00.000Z",
+      });
+      if (error) throw new Error("An explicitly republished Google series could not be confirmed.");
+    }
+    const { data: finalizedRepublish, error: finalizedRepublishError } = await mapped.rpc(
+      "finalize_team_workweek_publication",
+      { p_publication_id: preparedRepublish.id },
+    );
+    const { data: viewerAfterRepublish, error: viewerAfterRepublishError } = await viewer
+      .from("team_workweek_publications").select("id,status");
+    if (finalizedRepublishError || finalizedRepublish?.status !== "published"
+      || viewerAfterRepublishError || viewerAfterRepublish?.length !== 1
+      || viewerAfterRepublish[0].id !== preparedRepublish.id) {
+      throw new Error("Only an explicit fully confirmed republish restored team visibility.");
+    }
   } finally {
     await founder?.auth.signOut({ scope: "local" }).catch(() => undefined);
     await viewer?.auth.signOut({ scope: "local" }).catch(() => undefined);
@@ -1678,6 +1849,7 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       "update public.team_workweek_publications set predecessor_publication_id=null, superseded_by_publication_id=null, effective_to=null where owner_profile_id = any($1::text[])",
       [ownerIds],
     );
+    await database.query("delete from public.google_workspace_disconnect_operations where owner_profile_id = any($1::text[])", [ownerIds]);
     await database.query("delete from public.team_workweek_google_conflicts where owner_profile_id = any($1::text[])", [ownerIds]);
     const cleanupPublications = await database.query(
       "select id, source_version_id from public.team_workweek_publications where owner_profile_id = any($1::text[]) order by publication_revision desc",

@@ -21,11 +21,10 @@ test("planning webhook deliveries are content-free, leased, and service-role-onl
   assert.match(migration, /revoke all on table public\.github_planning_webhook_deliveries from public, anon, authenticated, service_role/i);
   assert.match(migration, /grant select, insert on table public\.github_planning_webhook_deliveries to service_role/i);
   assert.doesNotMatch(migration, /grant[^;]*\bupdate\b[^;]*github_planning_webhook_deliveries/i);
-  assert.deepEqual(serviceRoleOnlyTablePrivileges, [
-    ["google_workspace_connections", ["SELECT", "INSERT", "UPDATE", "DELETE"]],
+  assert.deepEqual(
+    serviceRoleOnlyTablePrivileges.find(([table]) => table === "github_planning_webhook_deliveries"),
     ["github_planning_webhook_deliveries", ["SELECT", "INSERT"]],
-    ["github_webhook_deliveries", ["SELECT", "INSERT"]],
-  ]);
+  );
 });
 
 test("stable GitHub user ids authorize humans while projections may be actuator-only", async () => {

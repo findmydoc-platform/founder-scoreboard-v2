@@ -47,6 +47,7 @@ export class GoogleWorkspaceOAuthContractError extends Error {
     | "state_binding_mismatch"
     | "invalid_token_response"
     | "scope_mismatch"
+    | "provider_revoked"
     | "reconnect_required";
 
   constructor(
@@ -57,6 +58,7 @@ export class GoogleWorkspaceOAuthContractError extends Error {
       | "state_binding_mismatch"
       | "invalid_token_response"
       | "scope_mismatch"
+      | "provider_revoked"
       | "reconnect_required",
     message: string,
   ) {
