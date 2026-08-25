@@ -35,6 +35,7 @@ const publication = {
   publishedAt: null,
   lastSyncAt: null,
   series: [],
+  transitions: [],
 };
 
 const series = {
@@ -472,6 +473,71 @@ test("a failed replacement series prevents every predecessor transition in that 
   });
   assert.equal(result.recovery, "identity_conflict");
   assert.equal(transitionCalls, 0);
+});
+
+test("conflict resolution checks predecessor transitions before creating replacement series", async () => {
+  let seriesCalls = 0;
+  const prepared = {
+    ...publication,
+    publicationRevision: 2,
+    series: [{ ...series, state: "pending" }],
+    transitions: [transition],
+  };
+  const userSupabase = {
+    async rpc(name) {
+      if (name === "prepare_team_workweek_publication") return { data: prepared, error: null };
+      throw new Error(`Unexpected user RPC ${name}`);
+    },
+  };
+  const serviceSupabase = {
+    async rpc(name) {
+      if (name === "delay_team_workweek_publication") {
+        return {
+          data: { id: publication.id, status: "preparing", syncState: "delayed", publishedAt: null, lastSyncAt: null, publicationRevision: 2 },
+          error: null,
+        };
+      }
+      throw new Error(`Unexpected service RPC ${name}`);
+    },
+  };
+  const result = await publicationServer.publishTeamWorkweek({
+    serviceSupabase,
+    userSupabase,
+    versionId: publication.sourceVersionId,
+    transitionsFirst: true,
+    ensureSeries: async () => {
+      seriesCalls += 1;
+      return { state: "confirmed", etag: '"new"', observedAt: "2026-08-25T12:00:00.000Z" };
+    },
+    ensureTransition: async () => ({ state: "delayed", errorClass: "provider_identity_mismatch" }),
+  });
+  assert.equal(result.recovery, "identity_conflict");
+  assert.equal(seriesCalls, 0);
+});
+
+test("a preflight delay persists the existing reconnect contract without provider writes", async () => {
+  const calls = [];
+  const result = await publicationServer.delayTeamWorkweekPublication({
+    errorClass: "oauth_reconnect_required",
+    serviceSupabase: {
+      async rpc(name, args) {
+        calls.push({ name, args });
+        return {
+          data: { id: publication.id, status: "preparing", syncState: "delayed", publishedAt: null, lastSyncAt: null, publicationRevision: 1 },
+          error: null,
+        };
+      },
+    },
+    userSupabase: {
+      async rpc(name, args) {
+        calls.push({ name, args });
+        return { data: publication, error: null };
+      },
+    },
+    versionId: publication.sourceVersionId,
+  });
+  assert.equal(result.recovery, "reconnect");
+  assert.deepEqual(calls.map(({ name }) => name), ["prepare_team_workweek_publication", "delay_team_workweek_publication"]);
 });
 
 test("team visibility switches from the bounded predecessor to the prepared successor on Monday", () => {

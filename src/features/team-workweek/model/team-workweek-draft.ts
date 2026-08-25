@@ -40,6 +40,16 @@ export type OwnTeamWorkweekPublication = Readonly<{
   lastGoogleReconciliationAt: string | null;
 }>;
 
+export type TeamWorkweekConflict = Readonly<{
+  id: string;
+  conflictRevision: number;
+  state: "open" | "resolving";
+  decision: "founderops" | "google" | null;
+  observedAt: string;
+  founderops: Readonly<{ effectiveFrom: string; windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>> }>;
+  google: Readonly<{ effectiveFrom: string; windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>> }>;
+}>;
+
 export function emptyTeamWorkweekWindows(): TeamWorkweekWindows {
   return {
     monday: [],
