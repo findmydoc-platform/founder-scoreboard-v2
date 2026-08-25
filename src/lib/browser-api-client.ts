@@ -12,6 +12,7 @@ type BrowserApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
   headers?: HeadersInit;
   json?: unknown;
   jsonContentType?: boolean;
+  useDevProfileOverride?: boolean;
 };
 
 export type BrowserApiJsonResult<T> = {
@@ -46,7 +47,14 @@ export function createBrowserApiClient({
   }
 
   async function buildRequest(input: RequestInfo | URL, options: BrowserApiRequestOptions = {}) {
-    const { body: requestBody, headers: requestHeaders, json, jsonContentType, ...requestInit } = options;
+    const {
+      body: requestBody,
+      headers: requestHeaders,
+      json,
+      jsonContentType,
+      useDevProfileOverride = true,
+      ...requestInit
+    } = options;
     const session = await readSession();
     const headers = new Headers(requestHeaders);
     const method = (requestInit.method || "GET").toUpperCase();
@@ -66,7 +74,7 @@ export function createBrowserApiClient({
       headers.set("authorization", `Bearer ${session.access_token}`);
     }
 
-    if (devProfileOverrideEnabled && devProfileId && !headers.has("x-fmd-dev-profile-id")) {
+    if (useDevProfileOverride && devProfileOverrideEnabled && devProfileId && !headers.has("x-fmd-dev-profile-id")) {
       headers.set("x-fmd-dev-profile-id", devProfileId);
     }
 

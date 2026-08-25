@@ -184,6 +184,8 @@ test("server routes and vault keep OAuth tokens behind the service-role boundary
   assert.match(server, /\.delete\(\)[\s\S]*\.eq\("profile_id", profileId\)/);
   assert.match(card, /callbackError/);
   assert.match(hook, /googleWorkspaceConnectPath/);
+  assert.match(hook, /useDevProfileOverride: false/);
+  assert.match(browserApiClient, /useDevProfileOverride/);
   assert.match(card, /onClick=\{startConnect\}/);
   assert.doesNotMatch(browserApiClient, /GoogleWorkspace|google-workspace/);
   assert.match(card, /veröffentlicht keine Arbeitswoche/);

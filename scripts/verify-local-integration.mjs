@@ -915,6 +915,8 @@ async function verifyUnmappedAuthReadBoundary(status) {
       ["platform_releases", "version"],
       ["team_workweek_versions", "id"],
       ["team_workweek_windows", "id"],
+      ["team_workweek_publications", "id"],
+      ["team_workweek_google_series", "id"],
     ]) {
       const { data, error } = await unmapped.from(table).select(identityColumn).limit(1);
       if (error) throw new Error(`Unmapped Auth RLS read failed unexpectedly for ${table}.`);
@@ -1067,19 +1069,99 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       throw new Error("Owner RLS exposed a foreign founder's private team workweek.");
     }
 
+    const { data: prepared, error: prepareError } = await mapped.rpc(
+      "prepare_team_workweek_publication",
+      { p_version_id: first.id },
+    );
+    if (prepareError || prepared?.status !== "preparing" || prepared?.syncState !== "pending"
+      || prepared?.sourceVersionId !== first.id
+      || prepared?.series?.length !== firstWindows.length
+      || prepared.series.some((series) => !series.id || !series.googleEventId || series.calendarId !== "primary")) {
+      throw new Error("Owner could not prepare one durable Google series identity per workweek window.");
+    }
+    const { data: preparedAgain, error: prepareAgainError } = await mapped.rpc(
+      "prepare_team_workweek_publication",
+      { p_version_id: first.id },
+    );
+    if (prepareAgainError
+      || JSON.stringify(preparedAgain?.series) !== JSON.stringify(prepared?.series)) {
+      throw new Error("Repeated workweek publication did not preserve the durable Google series identities.");
+    }
+    const { error: prematureFinalizeError } = await mapped.rpc(
+      "finalize_team_workweek_publication",
+      { p_publication_id: prepared.id },
+    );
+    if (!prematureFinalizeError || prematureFinalizeError.code !== "P0003") {
+      throw new Error("A partial Google projection unexpectedly became team-visible.");
+    }
+    const { data: foreignSeries, error: foreignSeriesError } = await founder
+      .from("team_workweek_google_series").select("id");
+    if (foreignSeriesError || foreignSeries?.length) {
+      throw new Error("Provider projection identities leaked to another FounderOps profile.");
+    }
+    for (const series of prepared.series) {
+      const { error: confirmError } = await admin.rpc("confirm_team_workweek_google_series", {
+        p_series_id: series.id,
+        p_etag: `\"etag-${series.id}\"`,
+        p_founderops_revision: prepared.publicationRevision,
+        p_observed_at: "2026-08-25T09:00:00.000Z",
+      });
+      if (confirmError) throw new Error("Service role could not persist a confirmed Google series.");
+    }
+    const { data: published, error: publishError } = await mapped.rpc(
+      "finalize_team_workweek_publication",
+      { p_publication_id: prepared.id },
+    );
+    if (publishError || published?.status !== "published" || published?.syncState !== "confirmed") {
+      throw new Error("A fully confirmed workweek did not publish atomically for the team.");
+    }
+    const { data: reconciledDelay, error: reconciledDelayError } = await admin.rpc(
+      "delay_team_workweek_publication",
+      {
+        p_publication_id: prepared.id,
+        p_error_class: "provider_unavailable",
+        p_observed_at: "2026-08-25T09:01:00.000Z",
+      },
+    );
+    if (reconciledDelayError || reconciledDelay?.status !== "published" || reconciledDelay?.syncState !== "confirmed") {
+      throw new Error("A delayed parallel result did not reconcile to an already published workweek.");
+    }
+    const { data: unchangedDraft, error: unchangedDraftError } = await mapped
+      .from("team_workweek_versions")
+      .select("id,status,owner_profile_id")
+      .eq("id", first.id)
+      .single();
+    if (unchangedDraftError || unchangedDraft?.status !== "preparing" || unchangedDraft?.owner_profile_id !== "volkan") {
+      throw new Error("Publication mutated the immutable private source version.");
+    }
+    const { data: foreignPublished, error: foreignPublishedError } = await founder
+      .from("team_workweek_publications")
+      .select("id,source_version_id,owner_profile_id,status,windows")
+      .eq("id", prepared.id)
+      .maybeSingle();
+    if (foreignPublishedError || foreignPublished?.owner_profile_id !== "volkan"
+      || foreignPublished?.status !== "published"
+      || foreignPublished?.source_version_id !== first.id
+      || foreignPublished.windows?.length !== firstWindows.length) {
+      throw new Error("Published workweek did not become read-only team data.");
+    }
+
     await database.query("update public.profiles set platform_role='viewer' where id='sebastian'");
     const { data: demotedVersions, error: demotedVersionsError } = await founder
-      .from("team_workweek_versions").select("id");
+      .from("team_workweek_versions").select("id,status");
     const { data: demotedWindows, error: demotedWindowsError } = await founder
       .from("team_workweek_windows").select("id");
+    const { data: demotedPublications, error: demotedPublicationsError } = await founder
+      .from("team_workweek_publications").select("id,status");
     const { data: demotedWrite, error: demotedWriteError } = await founder.rpc(
       "create_private_team_workweek_version",
       { p_effective_from: effectiveFrom, p_windows: [] },
     );
     if (demotedVersionsError || demotedVersions?.length
       || demotedWindowsError || demotedWindows?.length
+      || demotedPublicationsError || demotedPublications?.length !== 1 || demotedPublications[0].status !== "published"
       || !demotedWriteError || demotedWriteError.code !== "42501" || demotedWrite) {
-      throw new Error("A profile demoted to viewer retained private team-workweek access.");
+      throw new Error("A profile demoted to viewer did not retain only published team-workweek access.");
     }
     await database.query("update public.profiles set platform_role='founder' where id='sebastian'");
 
@@ -1092,12 +1174,16 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       throw new Error("Viewer unexpectedly created a private team workweek.");
     }
     const { data: viewerRead, error: viewerReadError } = await viewer.from("team_workweek_versions").select("id");
-    if (viewerReadError || viewerRead?.length) {
-      throw new Error("Viewer unexpectedly read a private team workweek.");
+    const { data: viewerPublications, error: viewerPublicationsError } = await viewer
+      .from("team_workweek_publications").select("id,status");
+    if (viewerReadError || viewerRead?.length
+      || viewerPublicationsError || viewerPublications?.length !== 1 || viewerPublications[0].id !== prepared.id) {
+      throw new Error("Viewer did not receive exactly the published projection while private drafts stayed hidden.");
     }
   } finally {
     await founder?.auth.signOut({ scope: "local" }).catch(() => undefined);
     await viewer?.auth.signOut({ scope: "local" }).catch(() => undefined);
+    await database.query("delete from public.team_workweek_publications where owner_profile_id = any($1::text[])", [ownerIds]);
     await database.query("delete from public.team_workweek_versions where owner_profile_id = any($1::text[])", [ownerIds]);
     await database.query(
       "update public.profiles set auth_user_id=null, platform_role=case when id='sebastian' then 'founder' else platform_role end where id = any($1::text[])",

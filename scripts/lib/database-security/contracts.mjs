@@ -3,6 +3,8 @@ export const authenticatedFunctionAllowlist = Object.freeze([
   "public.current_platform_role()",
   "public.current_profile_id()",
   "public.current_profile_role()",
+  "public.finalize_team_workweek_publication(p_publication_id uuid)",
+  "public.prepare_team_workweek_publication(p_version_id uuid)",
 ]);
 
 export const tablePrivileges = Object.freeze([

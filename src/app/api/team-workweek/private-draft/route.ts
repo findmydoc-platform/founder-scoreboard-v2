@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase
     .from("team_workweek_versions")
     .select("id,effective_from,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
+    .eq("status", "preparing")
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(1)
@@ -37,14 +38,22 @@ export async function GET(request: NextRequest) {
     }>();
   if (error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
 
+  const publication = data ? await supabase
+    .from("team_workweek_publications")
+    .select("status")
+    .eq("source_version_id", data.id)
+    .maybeSingle<{ status: "preparing" | "published" }>() : null;
+  if (publication?.error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
+  const privateVersion = publication?.data?.status === "published" ? null : data;
+
   return NextResponse.json({
-    version: data ? {
-      id: data.id,
-      effectiveFrom: data.effective_from,
-      timezone: data.timezone,
-      status: data.status,
-      createdAt: data.created_at,
-      windows: inflateTeamWorkweekWindows(data.team_workweek_windows || []),
+    version: privateVersion ? {
+      id: privateVersion.id,
+      effectiveFrom: privateVersion.effective_from,
+      timezone: privateVersion.timezone,
+      status: privateVersion.status,
+      createdAt: privateVersion.created_at,
+      windows: inflateTeamWorkweekWindows(privateVersion.team_workweek_windows || []),
     } : null,
   });
 }
