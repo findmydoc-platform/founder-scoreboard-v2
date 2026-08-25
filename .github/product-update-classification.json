@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Adds the controlled disconnect and recovery step in an intermediate stacked pull request; the complete Google Calendar workflow and its product update ship together later in the stack."
+  "reason": "Adds the read-only team workweek view in an intermediate stacked pull request; the complete five-person starter and its product update ship together in #396 before production deployment."
 }

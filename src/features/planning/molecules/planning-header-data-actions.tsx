@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { HeaderEventCalendar } from "@/features/events/molecules/header-event-calendar";
 import { NotificationInbox } from "@/features/notifications/organisms/notification-inbox";
+import { HeaderTeamWorkweekAction } from "@/features/team-workweek/molecules/header-team-workweek-action";
 import { FmdToolQuickLinks } from "@/features/tools/molecules/fmd-tool-quick-links";
-import type { HeaderNotification, PlanningHeaderData } from "@/lib/types";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { HeaderNotification, PlanningHeaderData, Profile } from "@/lib/types";
 
 type PlanningHeaderDataActionsProps = {
   headerData: PlanningHeaderData;
@@ -12,6 +13,11 @@ type PlanningHeaderDataActionsProps = {
   onToggleNotifications?: () => void;
   onOpenNotification?: (event: HeaderNotification) => void;
   onDismissNotification?: (eventId: number) => void;
+  teamWorkweek?: Readonly<{
+    apiClient: BrowserApiClient;
+    onOpenTeam: () => void;
+    profiles: Profile[];
+  }>;
 };
 
 export function PlanningHeaderDataActions({
@@ -20,6 +26,7 @@ export function PlanningHeaderDataActions({
   onToggleNotifications,
   onOpenNotification,
   onDismissNotification,
+  teamWorkweek,
 }: PlanningHeaderDataActionsProps) {
   const [quickLinksOpen, setQuickLinksOpen] = useState(false);
   const [localNotificationsOpen, setLocalNotificationsOpen] = useState(false);
@@ -33,7 +40,13 @@ export function PlanningHeaderDataActions({
         open={quickLinksOpen}
         onToggle={() => setQuickLinksOpen((value) => !value)}
       />
-      <HeaderEventCalendar events={headerData.calendarEvents} />
+      {teamWorkweek ? (
+        <HeaderTeamWorkweekAction
+          apiClient={teamWorkweek.apiClient}
+          onOpenTeam={teamWorkweek.onOpenTeam}
+          profiles={teamWorkweek.profiles}
+        />
+      ) : null}
       <NotificationInbox
         notifications={headerData.notifications}
         open={notificationPopoverOpen}

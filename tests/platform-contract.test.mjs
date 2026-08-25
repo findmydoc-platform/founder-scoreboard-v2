@@ -36,17 +36,20 @@ test("working status stays ownership-bound while Sub-Issue final transitions are
   assert.match(statusControl, /isTaskStatusChange/);
 });
 
-test("header overlays close on outside click and escape", async () => {
+test("header overlays and modals close without leaking focus or background interaction", async () => {
   const notifications = await readFile("src/features/notifications/organisms/notification-inbox.tsx", "utf8");
-  const calendar = await readFile("src/features/events/molecules/header-event-calendar.tsx", "utf8");
+  const teamAction = await readFile("src/features/team-workweek/molecules/header-team-workweek-action.tsx", "utf8");
+  const teamDialog = await readFile("src/features/team-workweek/organisms/team-workweek-quick-view-dialog.tsx", "utf8");
+  const modalDialog = await readFile("src/shared/hooks/use-modal-dialog.ts", "utf8");
 
   assert.match(notifications, /rootRef/);
   assert.match(notifications, /pointerdown/);
   assert.match(notifications, /keydown/);
   assert.match(notifications, /href="\/notifications"/);
-  assert.match(calendar, /rootRef/);
-  assert.match(calendar, /pointerdown/);
-  assert.match(calendar, /Escape/);
+  assert.match(teamAction, /createPortal/);
+  assert.match(teamDialog, /useModalDialog/);
+  assert.match(teamDialog, /aria-modal="true"/);
+  assert.match(modalDialog, /Escape/);
 });
 
 test("deployment workflows keep validation, artifact creation, and production safety separate", async () => {
