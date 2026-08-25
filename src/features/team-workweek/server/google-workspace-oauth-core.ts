@@ -127,6 +127,7 @@ function stateSignature(encoded: string, key: Buffer) {
     Buffer.from("oauth-state-signing", "utf8"),
     32,
   ));
+  // codeql[js/insufficient-password-hash] OAuth state uses HMAC with a random 32-byte key; no password is hashed here.
   return createHmac("sha256", signingKey).update(encoded).digest("base64url");
 }
 
