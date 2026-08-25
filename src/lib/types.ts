@@ -454,6 +454,9 @@ export type HeaderNotificationsData = {
 };
 
 export type PlanningHeaderData = {
+  capabilities: {
+    teamWorkweekStarter: boolean;
+  };
   quickLinks: HeaderDataSlot<HeaderQuickLink[]>;
   calendarEvents: HeaderDataSlot<HeaderCalendarEvent[]>;
   notifications: HeaderDataSlot<HeaderNotificationsData>;

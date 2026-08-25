@@ -162,12 +162,15 @@ test("server routes and vault keep OAuth tokens behind the service-role boundary
   assert.match(migration, /revoke all on table public\.google_workspace_connections from service_role/);
   assert.match(migration, /grant select, insert, update, delete on table public\.google_workspace_connections to service_role/);
   assert.doesNotMatch(migration, /create policy/i);
-  assert.match(connect, /getServerPlanningAuth\(\["ceo", "founder", "deputy"\]\)/);
-  assert.match(callback, /getServerPlanningAuth\(\["ceo", "founder", "deputy"\]\)/);
+  assert.match(connect, /getServerPlanningAuth\(\["ceo", "founder"\]\)/);
+  assert.match(callback, /getServerPlanningAuth\(\["ceo", "founder"\]\)/);
+  assert.doesNotMatch(connect, /"deputy"/);
+  assert.doesNotMatch(callback, /"deputy"/);
   assert.doesNotMatch(connect, /"viewer"/);
   assert.doesNotMatch(callback, /"viewer"/);
   assert.match(callback, /verifyBoundGoogleWorkspaceState/);
-  assert.match(callback, /getServerServiceRoleSupabase/);
+  assert.match(callback, /requireTeamWorkweekStarterApiAccess/);
+  assert.match(callback, /rollout\.serviceSupabase/);
   assert.match(status, /requireApiContext\(request, requireTeamMember\)/);
   assert.match(status, /getServerServiceRoleSupabase/);
   assert.match(server, /GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY/);

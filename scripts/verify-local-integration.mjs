@@ -2468,7 +2468,12 @@ async function main() {
   const localEnv = parseEnvFile(readFileSync(resolve(root, ".env.local"), "utf8"));
   const app = spawn(nextCli, ["dev", "--hostname", "127.0.0.1", "--port", "3012"], {
     cwd: root,
-    env: { ...process.env, ...localEnv, APP_URL: appOrigin },
+    env: {
+      ...process.env,
+      ...localEnv,
+      APP_URL: appOrigin,
+      FOUNDEROPS_TEAM_WORKWEEK_STARTER_ENABLED: "true",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let serverOutput = "";

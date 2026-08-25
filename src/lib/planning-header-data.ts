@@ -32,6 +32,7 @@ export const emptyHeaderNotifications: HeaderNotificationsData = {
 };
 
 export const emptyPlanningHeaderData: PlanningHeaderData = {
+  capabilities: { teamWorkweekStarter: false },
   quickLinks: headerSlot("idle", []),
   calendarEvents: headerSlot("idle", []),
   notifications: headerSlot("idle", emptyHeaderNotifications),
@@ -175,6 +176,9 @@ function normalizeHeaderNotifications(data: HeaderNotificationsData | undefined)
 export function normalizePlanningHeaderData(value?: Partial<PlanningHeaderData> | null): PlanningHeaderData {
   const legacy = value as Partial<PlanningHeaderData> & { events?: HeaderCalendarEvent[] } | null | undefined;
   return {
+    capabilities: {
+      teamWorkweekStarter: legacy?.capabilities?.teamWorkweekStarter === true,
+    },
     quickLinks: normalizeHeaderSlot(legacy?.quickLinks, [], normalizeQuickLinks),
     calendarEvents: normalizeHeaderSlot(legacy?.calendarEvents ?? legacy?.events, [], normalizeCalendarEvents),
     notifications: normalizeHeaderSlot(legacy?.notifications, emptyHeaderNotifications, normalizeHeaderNotifications),
@@ -283,6 +287,7 @@ export function projectPlanningHeaderData(
   options: PlanningHeaderProjectionOptions = {},
 ): PlanningHeaderData {
   return {
+    capabilities: fallback.capabilities,
     quickLinks: options.fmdToolsLoaded ? readyHeaderSlot(projectHeaderQuickLinks(data.fmdTools)) : fallback.quickLinks,
     calendarEvents: options.eventsLoaded ? readyHeaderSlot(projectHeaderCalendarEvents(data.events)) : fallback.calendarEvents,
     notifications: options.notificationEventsLoaded
@@ -293,6 +298,7 @@ export function projectPlanningHeaderData(
 
 export function mergePlanningHeaderData(current: PlanningHeaderData, incoming: PlanningHeaderData): PlanningHeaderData {
   return {
+    capabilities: incoming.capabilities,
     quickLinks: incoming.quickLinks.state === "idle" ? current.quickLinks : incoming.quickLinks,
     calendarEvents: incoming.calendarEvents.state === "idle" ? current.calendarEvents : incoming.calendarEvents,
     notifications: incoming.notifications.state === "idle" ? current.notifications : incoming.notifications,
@@ -301,6 +307,7 @@ export function mergePlanningHeaderData(current: PlanningHeaderData, incoming: P
 
 export function markPlanningHeaderDataLoading(current: PlanningHeaderData, slots: readonly PlanningHeaderSlotKey[]): PlanningHeaderData {
   return {
+    capabilities: current.capabilities,
     quickLinks: slots.includes("quickLinks") ? loadingHeaderSlot(current.quickLinks) : current.quickLinks,
     calendarEvents: slots.includes("calendarEvents") ? loadingHeaderSlot(current.calendarEvents) : current.calendarEvents,
     notifications: slots.includes("notifications") ? loadingHeaderSlot(current.notifications) : current.notifications,
@@ -309,6 +316,7 @@ export function markPlanningHeaderDataLoading(current: PlanningHeaderData, slots
 
 export function markPlanningHeaderDataError(current: PlanningHeaderData, slots: readonly PlanningHeaderSlotKey[], error: string): PlanningHeaderData {
   return {
+    capabilities: current.capabilities,
     quickLinks: slots.includes("quickLinks") ? errorHeaderSlot(current.quickLinks, error) : current.quickLinks,
     calendarEvents: slots.includes("calendarEvents") ? errorHeaderSlot(current.calendarEvents, error) : current.calendarEvents,
     notifications: slots.includes("notifications") ? errorHeaderSlot(current.notifications, error) : current.notifications,
@@ -411,5 +419,12 @@ export async function loadPlanningHeaderData(
       : Promise.resolve(emptyPlanningHeaderData.notifications),
   ]);
 
-  return { quickLinks, calendarEvents, notifications };
+  return {
+    capabilities: {
+      teamWorkweekStarter: process.env.FOUNDEROPS_TEAM_WORKWEEK_STARTER_ENABLED === "true",
+    },
+    quickLinks,
+    calendarEvents,
+    notifications,
+  };
 }

@@ -64,6 +64,7 @@ GITHUB_TOKEN_ENCRYPTION_KEY=
 GOOGLE_WORKSPACE_CLIENT_ID=
 GOOGLE_WORKSPACE_CLIENT_SECRET=
 GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY=
+FOUNDEROPS_TEAM_WORKWEEK_STARTER_ENABLED=false
 GOOGLE_CHAT_WEBHOOK_URL=
 GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
 GOOGLE_CHAT_PRIVATE_KEY=
@@ -72,6 +73,8 @@ FOUNDEROPS_DELIVERY_SECRET=
 ```
 
 The FounderOps Google Workspace OAuth values belong only to Vercel Development and Production; do not expose them to Preview. `GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY` is a dedicated base64 value that decodes to exactly 32 bytes and must not reuse `GITHUB_TOKEN_ENCRYPTION_KEY`. Personal Google access and refresh tokens stay encrypted in the service-role-only Supabase vault and never belong in Vercel or Keeper.
+
+`FOUNDEROPS_TEAM_WORKWEEK_STARTER_ENABLED` is a server-side, fail-closed rollout switch. Keep it `false` until the five CEO/Founder profiles and the complete local acceptance evidence are approved. With the switch disabled, FounderOps hides the team-workweek surfaces and rejects private-draft, publication, reconciliation, conflict, team-read, and OAuth entry points before any Google side effect. Changing the production value remains a separate operator approval. Disabling the switch does not delete workweek data, Google series, or OAuth connections.
 
 For operational in-app delivery, set `GOOGLE_CHAT_WEBHOOK_URL` to the incoming webhook of the renamed `FounderOps` Google Chat space and set `GOOGLE_CHAT_DELIVERY_ENABLED=true` only after a controlled test. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase, and stay out of the release channel.
 

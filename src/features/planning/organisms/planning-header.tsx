@@ -10,6 +10,7 @@ import { testProfilePersona, testProfilePersonas } from "@/features/planning/mod
 import { AuthControl } from "@/features/settings/organisms/auth-control";
 import { GitHubSyncTrigger } from "@/features/tasks/molecules/github-sync-trigger";
 import { projectGitHubSyncQueue } from "@/features/tasks/model/github-sync-queue";
+import { isStarterPlatformRole } from "@/features/team-workweek/model/team-workweek-rollout";
 import { PlanningHelpMenu } from "@/features/planning/molecules/planning-help-menu";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { ViewMode } from "@/lib/types";
@@ -21,6 +22,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     authBusy,
     authNotice,
     authUser,
+    currentProfile,
     data,
     devProfileId,
     devRoleSwitchAvailable,
@@ -63,6 +65,8 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     workspace,
   } = controller;
   const githubSyncQueue = projectGitHubSyncQueue(data.tasks, data.taskComments);
+  const teamWorkweekStarterEnabled = headerData.capabilities.teamWorkweekStarter
+    && isStarterPlatformRole(currentProfile?.platformRole);
   const title = workspace === "planning" ? data.project.name : workspaceLabels[workspace];
   const description = workspace === "planning"
     ? `${workspaceDescriptions.planning} Zeitraum: ${data.project.range}.`
@@ -192,11 +196,11 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             onToggleNotifications={() => showNotifications ? setShowNotifications(false) : openNotificationInbox()}
             onOpenNotification={openNotification}
             onDismissNotification={dismissNotification}
-            teamWorkweek={{
+            teamWorkweek={teamWorkweekStarterEnabled ? {
               apiClient: controller.apiClient,
               onOpenTeam: () => setWorkspace("team"),
               profiles: data.profiles,
-            }}
+            } : undefined}
           />
           <PlanningHelpMenu />
           <GitHubSyncTrigger

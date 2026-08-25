@@ -132,6 +132,7 @@ test("editor exposes the complete private workflow and protects unsaved changes"
   assert.match(card, /Grundwoche vorbereiten/);
   assert.match(card, /bestätigte Google-Synchronisierung/);
   assert.match(editor, /In Google & Team veröffentlichen/);
-  assert.match(team, /actualProfile\.platformRole/);
+  assert.match(team, /teamWorkweekStarterEnabled && actualProfile/);
   assert.match(renderer, /actualProfile=\{actualProfile\}/);
+  assert.match(renderer, /isStarterPlatformRole\(currentProfile\?\.platformRole\)/);
 });

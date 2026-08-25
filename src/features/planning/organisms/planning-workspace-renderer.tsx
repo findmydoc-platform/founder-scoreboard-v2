@@ -12,6 +12,7 @@ import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
+import { isStarterPlatformRole } from "@/features/team-workweek/model/team-workweek-rollout";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
@@ -58,6 +59,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     githubSyncNotice,
     githubSyncQueueOpen,
     githubUserConnected,
+    headerData,
     isPending,
     lockSprint,
     notificationDispatchMessage,
@@ -193,6 +195,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           tasks={data.tasks}
           pending={isPending}
           canManageTeam={currentProfile?.platformRole === "ceo"}
+          teamWorkweekStarterEnabled={headerData.capabilities.teamWorkweekStarter && isStarterPlatformRole(currentProfile?.platformRole)}
           onSaveProfileSettings={saveProfileSettings}
         />
       )}
