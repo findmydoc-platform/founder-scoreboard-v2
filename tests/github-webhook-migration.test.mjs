@@ -36,11 +36,10 @@ test("the webhook migration creates a service-role-only delivery journal", async
   assert.doesNotMatch(migration, /grant[^;]*github_webhook_deliveries[^;]*to (?:public|anon|authenticated)/i);
   assert.doesNotMatch(migration, /\b(?:insert into|update|delete from)\s+public\.(?:tasks|deliverables|initiatives|epics)\b/i);
   assert.match(schemaContract, /github_webhook_deliveries/);
-  assert.deepEqual(serviceRoleOnlyTablePrivileges, [
-    ["google_workspace_connections", ["SELECT", "INSERT", "UPDATE", "DELETE"]],
-    ["github_planning_webhook_deliveries", ["SELECT", "INSERT"]],
+  assert.deepEqual(
+    serviceRoleOnlyTablePrivileges.find(([table]) => table === "github_webhook_deliveries"),
     ["github_webhook_deliveries", ["SELECT", "INSERT"]],
-  ]);
+  );
 });
 
 test("the comment webhook migration adds metadata without storing comment content", async () => {

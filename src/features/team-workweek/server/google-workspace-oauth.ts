@@ -80,7 +80,7 @@ export function buildGoogleWorkspaceAuthorizationUrl(input: {
   return googleWorkspaceAuthorizationUrl({ ...input, clientId });
 }
 
-async function googleTokenRequest(body: URLSearchParams) {
+async function googleTokenRequest(body: URLSearchParams, classifyInvalidGrant = false) {
   const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -89,8 +89,15 @@ async function googleTokenRequest(body: URLSearchParams) {
   });
   const payload = await response.json().catch(() => null) as unknown;
   if (!response.ok) {
+    const providerError = payload && typeof payload === "object" && "error" in payload
+      ? (payload as { error?: unknown }).error
+      : null;
     throw new GoogleWorkspaceOAuthContractError(
-      response.status === 400 || response.status === 401 ? "reconnect_required" : "invalid_token_response",
+      classifyInvalidGrant && providerError === "invalid_grant"
+        ? "provider_revoked"
+        : response.status === 400 || response.status === 401
+          ? "reconnect_required"
+          : "invalid_token_response",
       "Google OAuth konnte nicht abgeschlossen werden.",
     );
   }
@@ -210,7 +217,7 @@ export async function refreshGoogleWorkspaceAccessToken({
     client_secret: environment.clientSecret,
     refresh_token: refreshToken,
     grant_type: "refresh_token",
-  }));
+  }), true);
   const token = validateGoogleWorkspaceTokenResponse(payload, { requireRefreshToken: false, allowMissingScope: true });
   const refreshedAt = new Date(now).toISOString();
   const { error } = await supabase.from("google_workspace_connections").update({
@@ -251,7 +258,7 @@ export async function getGoogleWorkspaceAccessToken(
       const errorClass = error instanceof GoogleWorkspaceOAuthContractError
         ? error.code === "scope_mismatch"
           ? "oauth_scope_mismatch"
-          : error.code === "reconnect_required"
+          : error.code === "reconnect_required" || error.code === "provider_revoked"
             ? "oauth_reconnect_required"
             : "oauth_provider_unavailable"
         : "oauth_provider_unavailable";
