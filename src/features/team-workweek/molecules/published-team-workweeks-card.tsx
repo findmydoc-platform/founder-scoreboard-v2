@@ -38,9 +38,13 @@ export function PublishedTeamWorkweeksCard({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-950">{profileNames.get(workweek.ownerProfileId) || "Teammitglied"}</h3>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">Gültig ab {formatDate(workweek.effectiveFrom)} · {workweek.timezone}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    {workweek.phase === "prepared" ? "Vorbereitet für" : "Gültig ab"} {formatDate(workweek.effectiveFrom)} · {workweek.timezone}
+                  </p>
                 </div>
-                <UiBadge tone="emerald">Synchronisiert</UiBadge>
+                <UiBadge tone={workweek.phase === "prepared" ? "blue" : "emerald"}>
+                  {workweek.phase === "prepared" ? "Für Montag vorbereitet" : "Aktuell veröffentlicht"}
+                </UiBadge>
               </div>
               <dl className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {TEAM_WORKWEEK_DAYS.map((day) => (

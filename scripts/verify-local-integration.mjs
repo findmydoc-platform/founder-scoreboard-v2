@@ -917,6 +917,7 @@ async function verifyUnmappedAuthReadBoundary(status) {
       ["team_workweek_windows", "id"],
       ["team_workweek_publications", "id"],
       ["team_workweek_google_series", "id"],
+      ["team_workweek_google_series_transitions", "id"],
     ]) {
       const { data, error } = await unmapped.from(table).select(identityColumn).limit(1);
       if (error) throw new Error(`Unmapped Auth RLS read failed unexpectedly for ${table}.`);
@@ -1146,6 +1147,189 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       throw new Error("Published workweek did not become read-only team data.");
     }
 
+    const staleBoundaryPrepare = await mapped.rpc(
+      "prepare_team_workweek_publication",
+      { p_version_id: second.id },
+    );
+    if (!staleBoundaryPrepare.error || staleBoundaryPrepare.error.code !== "22023" || staleBoundaryPrepare.data) {
+      throw new Error("A later immutable draft unexpectedly reused an already published Monday boundary.");
+    }
+
+    const laterBoundary = new Date(`${effectiveFrom}T00:00:00.000Z`);
+    laterBoundary.setUTCDate(laterBoundary.getUTCDate() + 14);
+    const laterEffectiveFrom = laterBoundary.toISOString().slice(0, 10);
+    const laterWindows = [{ weekday: 2, startMinute: 600, endMinute: 840 }];
+    const { data: laterVersion, error: laterVersionError } = await mapped.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: laterEffectiveFrom, p_windows: laterWindows },
+    );
+    if (laterVersionError || !laterVersion?.id) {
+      throw new Error("Owner could not create an immutable version at a later Monday boundary.");
+    }
+    const { data: preparedLater, error: prepareLaterError } = await mapped.rpc(
+      "prepare_team_workweek_publication",
+      { p_version_id: laterVersion.id },
+    );
+    if (prepareLaterError
+      || preparedLater?.publicationRevision !== 2
+      || preparedLater?.series?.length !== laterWindows.length
+      || preparedLater?.transitions?.length !== firstWindows.length
+      || preparedLater.transitions.some((transition) => transition.recurrenceCount !== 2
+        || transition.expectedFounderopsRevision !== 1
+        || !transition.expectedEtag)) {
+      throw new Error("A later version did not prepare its own series and every predecessor transition.");
+    }
+    const { data: delayedLater, error: delayedLaterError } = await admin.rpc(
+      "delay_team_workweek_publication",
+      {
+        p_publication_id: preparedLater.id,
+        p_error_class: "provider_unavailable",
+        p_observed_at: "2026-08-25T10:00:00.000Z",
+      },
+    );
+    const { data: stillCurrent, error: stillCurrentError } = await founder
+      .from("team_workweek_publications")
+      .select("id,status,effective_to")
+      .eq("id", prepared.id)
+      .single();
+    if (delayedLaterError || delayedLater?.syncState !== "delayed"
+      || stillCurrentError || stillCurrent?.status !== "published" || stillCurrent.effective_to !== null) {
+      throw new Error("A delayed later version changed the previously published team state.");
+    }
+    const staleTransition = preparedLater.transitions[0];
+    const { error: staleTransitionError } = await admin.rpc("confirm_team_workweek_google_series_transition", {
+      p_transition_id: staleTransition.id,
+      p_etag: '"unexpected"',
+      p_expected_founderops_revision: 2,
+      p_observed_at: "2026-08-25T10:01:00.000Z",
+    });
+    if (!staleTransitionError || staleTransitionError.code !== "22023") {
+      throw new Error("A stale FounderOps predecessor revision unexpectedly overwrote transition state.");
+    }
+    for (const series of preparedLater.series) {
+      const { error: confirmError } = await admin.rpc("confirm_team_workweek_google_series", {
+        p_series_id: series.id,
+        p_etag: `"etag-${series.id}"`,
+        p_founderops_revision: preparedLater.publicationRevision,
+        p_observed_at: "2026-08-25T10:02:00.000Z",
+      });
+      if (confirmError) throw new Error("Service role could not confirm a later Google series.");
+    }
+    const { error: transitionGateError } = await mapped.rpc(
+      "finalize_team_workweek_publication",
+      { p_publication_id: preparedLater.id },
+    );
+    if (!transitionGateError || transitionGateError.code !== "P0003") {
+      throw new Error("A later version became team-visible before predecessor series were ended.");
+    }
+    for (const transition of preparedLater.transitions) {
+      const { error: confirmError } = await admin.rpc("confirm_team_workweek_google_series_transition", {
+        p_transition_id: transition.id,
+        p_etag: `"transition-etag-${transition.id}"`,
+        p_expected_founderops_revision: transition.expectedFounderopsRevision,
+        p_observed_at: "2026-08-25T10:03:00.000Z",
+      });
+      if (confirmError) throw new Error("Service role could not confirm a predecessor series transition.");
+    }
+    const { data: publishedLater, error: publishedLaterError } = await mapped.rpc(
+      "finalize_team_workweek_publication",
+      { p_publication_id: preparedLater.id },
+    );
+    const expectedPreviousEnd = new Date(`${laterEffectiveFrom}T00:00:00.000Z`);
+    expectedPreviousEnd.setUTCDate(expectedPreviousEnd.getUTCDate() - 1);
+    const { data: versionHistory, error: versionHistoryError } = await mapped
+      .from("team_workweek_publications")
+      .select("id,effective_from,effective_to,superseded_by_publication_id,publication_revision,status")
+      .order("publication_revision", { ascending: true });
+    if (publishedLaterError || publishedLater?.status !== "published"
+      || versionHistoryError || versionHistory?.length !== 2
+      || versionHistory[0].effective_to !== expectedPreviousEnd.toISOString().slice(0, 10)
+      || versionHistory[0].superseded_by_publication_id !== preparedLater.id
+      || versionHistory[1].publication_revision !== 2
+      || versionHistory[1].effective_to !== null) {
+      throw new Error("Sequential workweek publication did not preserve an immutable Monday-bounded history.");
+    }
+    const { data: foreignTransitions, error: foreignTransitionsError } = await founder
+      .from("team_workweek_google_series_transitions").select("id");
+    if (foreignTransitionsError || foreignTransitions?.length) {
+      throw new Error("Provider transition identities leaked to another FounderOps profile.");
+    }
+
+    const emptyBoundary = new Date(`${laterEffectiveFrom}T00:00:00.000Z`);
+    emptyBoundary.setUTCDate(emptyBoundary.getUTCDate() + 7);
+    const emptyEffectiveFrom = emptyBoundary.toISOString().slice(0, 10);
+    const { data: emptyVersion, error: emptyVersionError } = await mapped.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: emptyEffectiveFrom, p_windows: [] },
+    );
+    const { data: preparedEmpty, error: preparedEmptyError } = emptyVersionError ? { data: null, error: emptyVersionError } : await mapped.rpc(
+      "prepare_team_workweek_publication",
+      { p_version_id: emptyVersion.id },
+    );
+    if (preparedEmptyError || preparedEmpty?.publicationRevision !== 3
+      || preparedEmpty?.series?.length !== 0 || preparedEmpty?.transitions?.length !== laterWindows.length) {
+      throw new Error("An empty workweek version did not preserve the predecessor transition contract.");
+    }
+    for (const transition of preparedEmpty.transitions) {
+      const { error: confirmError } = await admin.rpc("confirm_team_workweek_google_series_transition", {
+        p_transition_id: transition.id,
+        p_etag: `"transition-etag-${transition.id}"`,
+        p_expected_founderops_revision: transition.expectedFounderopsRevision,
+        p_observed_at: "2026-08-25T10:04:00.000Z",
+      });
+      if (confirmError) throw new Error("Service role could not end the series before an empty workweek.");
+    }
+    const { data: publishedEmpty, error: publishedEmptyError } = await mapped.rpc(
+      "finalize_team_workweek_publication",
+      { p_publication_id: preparedEmpty.id },
+    );
+    if (publishedEmptyError || publishedEmpty?.status !== "published") {
+      throw new Error("A fully confirmed empty workweek did not publish.");
+    }
+
+    const afterEmptyBoundary = new Date(`${emptyEffectiveFrom}T00:00:00.000Z`);
+    afterEmptyBoundary.setUTCDate(afterEmptyBoundary.getUTCDate() + 7);
+    const afterEmptyEffectiveFrom = afterEmptyBoundary.toISOString().slice(0, 10);
+    const afterEmptyWindows = [{ weekday: 4, startMinute: 540, endMinute: 720 }];
+    const { data: afterEmptyVersion, error: afterEmptyVersionError } = await mapped.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: afterEmptyEffectiveFrom, p_windows: afterEmptyWindows },
+    );
+    const { data: preparedAfterEmpty, error: preparedAfterEmptyError } = afterEmptyVersionError ? { data: null, error: afterEmptyVersionError } : await mapped.rpc(
+      "prepare_team_workweek_publication",
+      { p_version_id: afterEmptyVersion.id },
+    );
+    if (preparedAfterEmptyError || preparedAfterEmpty?.publicationRevision !== 4
+      || preparedAfterEmpty?.series?.length !== afterEmptyWindows.length || preparedAfterEmpty?.transitions?.length !== 0) {
+      throw new Error("A successor to an empty workweek did not preserve an empty provider transition set.");
+    }
+    for (const series of preparedAfterEmpty.series) {
+      const { error: confirmError } = await admin.rpc("confirm_team_workweek_google_series", {
+        p_series_id: series.id,
+        p_etag: `"etag-${series.id}"`,
+        p_founderops_revision: preparedAfterEmpty.publicationRevision,
+        p_observed_at: "2026-08-25T10:05:00.000Z",
+      });
+      if (confirmError) throw new Error("Service role could not confirm the successor to an empty workweek.");
+    }
+    const { data: publishedAfterEmpty, error: publishedAfterEmptyError } = await mapped.rpc(
+      "finalize_team_workweek_publication",
+      { p_publication_id: preparedAfterEmpty.id },
+    );
+    const expectedEmptyEnd = new Date(`${afterEmptyEffectiveFrom}T00:00:00.000Z`);
+    expectedEmptyEnd.setUTCDate(expectedEmptyEnd.getUTCDate() - 1);
+    const { data: emptyHistory, error: emptyHistoryError } = await mapped
+      .from("team_workweek_publications")
+      .select("id,effective_to,superseded_by_publication_id,publication_revision")
+      .order("publication_revision", { ascending: true });
+    if (publishedAfterEmptyError || publishedAfterEmpty?.status !== "published"
+      || emptyHistoryError || emptyHistory?.length !== 4
+      || emptyHistory[2].effective_to !== expectedEmptyEnd.toISOString().slice(0, 10)
+      || emptyHistory[2].superseded_by_publication_id !== preparedAfterEmpty.id
+      || emptyHistory[3].publication_revision !== 4) {
+      throw new Error("A successor to an empty workweek left an overlapping open validity interval.");
+    }
+
     await database.query("update public.profiles set platform_role='viewer' where id='sebastian'");
     const { data: demotedVersions, error: demotedVersionsError } = await founder
       .from("team_workweek_versions").select("id,status");
@@ -1159,7 +1343,7 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
     );
     if (demotedVersionsError || demotedVersions?.length
       || demotedWindowsError || demotedWindows?.length
-      || demotedPublicationsError || demotedPublications?.length !== 1 || demotedPublications[0].status !== "published"
+      || demotedPublicationsError || demotedPublications?.length !== 4 || demotedPublications.some((publication) => publication.status !== "published")
       || !demotedWriteError || demotedWriteError.code !== "42501" || demotedWrite) {
       throw new Error("A profile demoted to viewer did not retain only published team-workweek access.");
     }
@@ -1177,8 +1361,12 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
     const { data: viewerPublications, error: viewerPublicationsError } = await viewer
       .from("team_workweek_publications").select("id,status");
     if (viewerReadError || viewerRead?.length
-      || viewerPublicationsError || viewerPublications?.length !== 1 || viewerPublications[0].id !== prepared.id) {
-      throw new Error("Viewer did not receive exactly the published projection while private drafts stayed hidden.");
+      || viewerPublicationsError || viewerPublications?.length !== 4
+      || !viewerPublications.some((publication) => publication.id === prepared.id)
+      || !viewerPublications.some((publication) => publication.id === preparedLater.id)
+      || !viewerPublications.some((publication) => publication.id === preparedEmpty.id)
+      || !viewerPublications.some((publication) => publication.id === preparedAfterEmpty.id)) {
+      throw new Error("Viewer did not receive the published version history while private drafts stayed hidden.");
     }
   } finally {
     await founder?.auth.signOut({ scope: "local" }).catch(() => undefined);

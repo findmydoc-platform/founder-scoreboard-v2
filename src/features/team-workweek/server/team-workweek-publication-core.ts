@@ -1,4 +1,5 @@
 export const FOUNDEROPS_WORKWEEK_PROPERTY_KEY = "founderopsWorkweekSeriesId";
+export const FOUNDEROPS_WORKWEEK_TRANSITION_PROPERTY_KEY = "founderopsWorkweekTransitionId";
 
 export type PreparedWorkweekSeries = Readonly<{
   id: string;
@@ -11,6 +12,18 @@ export type PreparedWorkweekSeries = Readonly<{
   endMinute: number;
 }>;
 
+export type PreparedWorkweekSeriesTransition = Readonly<{
+  id: string;
+  calendarId: "primary";
+  googleEventId: string;
+  predecessorSeriesId: string;
+  state: "pending" | "confirmed";
+  expectedEtag: string;
+  expectedFounderopsRevision: number;
+  recurrenceCount: number;
+  confirmedEtag: string | null;
+}>;
+
 export type PreparedWorkweekPublication = Readonly<{
   id: string;
   sourceVersionId: string;
@@ -18,11 +31,12 @@ export type PreparedWorkweekPublication = Readonly<{
   effectiveFrom: string;
   timezone: "Europe/Berlin";
   status: "preparing" | "published";
-  syncState: "pending" | "confirmed";
+  syncState: "pending" | "delayed" | "confirmed";
   publicationRevision: number;
   publishedAt: string | null;
   lastSyncAt: string | null;
   series: PreparedWorkweekSeries[];
+  transitions: PreparedWorkweekSeriesTransition[];
 }>;
 
 export type GoogleWorkweekSeriesResult =
@@ -45,6 +59,14 @@ export function googleWorkweekRecovery(
 type GoogleCalendarEvent = Readonly<{
   id?: unknown;
   etag?: unknown;
+  summary?: unknown;
+  description?: unknown;
+  start?: unknown;
+  end?: unknown;
+  recurrence?: unknown;
+  transparency?: unknown;
+  visibility?: unknown;
+  reminders?: unknown;
   extendedProperties?: Readonly<{ private?: Readonly<Record<string, unknown>> }>;
 }>;
 
@@ -92,6 +114,14 @@ export function googleWorkweekSeriesEvent(
 
 function eventEndpoint(series: PreparedWorkweekSeries) {
   return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(series.calendarId)}/events/${encodeURIComponent(series.googleEventId)}`;
+}
+
+function transitionEventEndpoint(transition: PreparedWorkweekSeriesTransition, update = false) {
+  const endpoint = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(transition.calendarId)}/events/${encodeURIComponent(transition.googleEventId)}`;
+  if (!update) return endpoint;
+  const url = new URL(endpoint);
+  url.searchParams.set("sendUpdates", "none");
+  return url.toString();
 }
 
 function collectionEndpoint(series: PreparedWorkweekSeries) {
@@ -199,6 +229,140 @@ export async function ensureGoogleWorkweekSeries({
       return { state: "confirmed", etag: recovered.etag, observedAt: now().toISOString() };
     }
     if (response.status === 409 && recovered.state === "absent") {
+      return { state: "delayed", errorClass: "provider_identity_mismatch" };
+    }
+    return recovered.state === "delayed"
+      ? recovered
+      : { state: "delayed", errorClass: "provider_unavailable" };
+  }
+  return { state: "delayed", errorClass: "provider_unavailable" };
+}
+
+function transitionRecurrence(transition: PreparedWorkweekSeriesTransition) {
+  return `RRULE:FREQ=WEEKLY;COUNT=${transition.recurrenceCount}`;
+}
+
+function transitionObservation(event: GoogleCalendarEvent | null, transition: PreparedWorkweekSeriesTransition) {
+  const etag = typeof event?.etag === "string" ? event.etag.trim() : "";
+  const privateProperties = event?.extendedProperties?.private;
+  const marker = privateProperties?.[FOUNDEROPS_WORKWEEK_PROPERTY_KEY];
+  const revision = privateProperties?.founderopsWorkweekRevision;
+  const transitionMarker = privateProperties?.[FOUNDEROPS_WORKWEEK_TRANSITION_PROPERTY_KEY];
+  const recurrence = Array.isArray(event?.recurrence) ? event.recurrence : [];
+  const identityMatches = event?.id === transition.googleEventId
+    && marker === transition.predecessorSeriesId
+    && revision === String(transition.expectedFounderopsRevision)
+    && etag;
+
+  if (!identityMatches) return { state: "conflict" as const };
+  if (transitionMarker === transition.id && recurrence.length === 1 && recurrence[0] === transitionRecurrence(transition)) {
+    return { state: "confirmed" as const, etag };
+  }
+  if (transitionMarker !== undefined || etag !== transition.expectedEtag) {
+    return { state: "conflict" as const };
+  }
+  return { state: "ready" as const, event, etag };
+}
+
+async function observeTransition(
+  fetchImpl: typeof fetch,
+  accessToken: string,
+  transition: PreparedWorkweekSeriesTransition,
+) {
+  try {
+    const response = await fetchImpl(transitionEventEndpoint(transition), {
+      headers: { authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (response.status === 401 || response.status === 403) {
+      return { state: "delayed" as const, errorClass: "oauth_reconnect_required" as const };
+    }
+    if (response.status === 404) {
+      return { state: "delayed" as const, errorClass: "provider_identity_mismatch" as const };
+    }
+    if (!response.ok) return { state: "delayed" as const, errorClass: "provider_unavailable" as const };
+    const observation = transitionObservation(await readEvent(response), transition);
+    return observation.state === "conflict"
+      ? { state: "delayed" as const, errorClass: "provider_identity_mismatch" as const }
+      : observation;
+  } catch {
+    return { state: "delayed" as const, errorClass: "provider_unavailable" as const };
+  }
+}
+
+function transitionedEvent(event: GoogleCalendarEvent, transition: PreparedWorkweekSeriesTransition) {
+  return {
+    summary: event.summary,
+    description: event.description,
+    start: event.start,
+    end: event.end,
+    recurrence: [transitionRecurrence(transition)],
+    transparency: event.transparency,
+    visibility: event.visibility,
+    reminders: event.reminders,
+    extendedProperties: {
+      ...event.extendedProperties,
+      private: {
+        ...event.extendedProperties?.private,
+        [FOUNDEROPS_WORKWEEK_TRANSITION_PROPERTY_KEY]: transition.id,
+      },
+    },
+  };
+}
+
+export async function ensureGoogleWorkweekSeriesTransition({
+  accessToken,
+  fetchImpl = fetch,
+  now = () => new Date(),
+  transition,
+}: {
+  accessToken: string;
+  fetchImpl?: typeof fetch;
+  now?: () => Date;
+  transition: PreparedWorkweekSeriesTransition;
+}): Promise<GoogleWorkweekSeriesResult> {
+  const observed = await observeTransition(fetchImpl, accessToken, transition);
+  if (observed.state === "confirmed") {
+    return { state: "confirmed", etag: observed.etag, observedAt: now().toISOString() };
+  }
+  if (observed.state === "delayed") return observed;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(transitionEventEndpoint(transition, true), {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+        "if-match": transition.expectedEtag,
+      },
+      body: JSON.stringify(transitionedEvent(observed.event, transition)),
+      cache: "no-store",
+    });
+  } catch {
+    const recovered = await observeTransition(fetchImpl, accessToken, transition);
+    return recovered.state === "confirmed"
+      ? { state: "confirmed", etag: recovered.etag, observedAt: now().toISOString() }
+      : recovered.state === "delayed"
+        ? recovered
+        : { state: "delayed", errorClass: "provider_unavailable" };
+  }
+
+  if (response.ok) {
+    const confirmation = transitionObservation(await readEvent(response), transition);
+    return confirmation.state === "confirmed"
+      ? { state: "confirmed", etag: confirmation.etag, observedAt: now().toISOString() }
+      : { state: "delayed", errorClass: "provider_identity_mismatch" };
+  }
+  if (response.status === 401 || response.status === 403) {
+    return { state: "delayed", errorClass: "oauth_reconnect_required" };
+  }
+  if (response.status === 412 || response.status >= 500) {
+    const recovered = await observeTransition(fetchImpl, accessToken, transition);
+    if (recovered.state === "confirmed") {
+      return { state: "confirmed", etag: recovered.etag, observedAt: now().toISOString() };
+    }
+    if (response.status === 412) {
       return { state: "delayed", errorClass: "provider_identity_mismatch" };
     }
     return recovered.state === "delayed"
