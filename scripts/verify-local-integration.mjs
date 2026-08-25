@@ -49,6 +49,19 @@ function assertStatus(response, expected, label) {
   if (response.status !== expected) throw new Error(`${label}: expected ${expected}, received ${response.status}.`);
 }
 
+function nextBerlinMondayIso(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  const current = new Date(`${parts.year}-${parts.month}-${parts.day}T00:00:00.000Z`);
+  const weekday = current.getUTCDay() || 7;
+  current.setUTCDate(current.getUTCDate() + (weekday === 1 ? 7 : 8 - weekday));
+  return current.toISOString().slice(0, 10);
+}
+
 async function apiRequest(path, token, profileId, init = {}) {
   const headers = new Headers(init.headers);
   if (token) headers.set("authorization", `Bearer ${token}`);
@@ -896,18 +909,204 @@ async function verifyUnmappedAuthReadBoundary(status) {
       throw new Error("Temporary unmapped local Auth user could not sign in.");
     }
 
-    for (const [table, identityColumn] of [["profiles", "id"], ["tasks", "id"], ["platform_releases", "version"]]) {
+    for (const [table, identityColumn] of [
+      ["profiles", "id"],
+      ["tasks", "id"],
+      ["platform_releases", "version"],
+      ["team_workweek_versions", "id"],
+      ["team_workweek_windows", "id"],
+    ]) {
       const { data, error } = await unmapped.from(table).select(identityColumn).limit(1);
       if (error) throw new Error(`Unmapped Auth RLS read failed unexpectedly for ${table}.`);
       if (data?.length) {
         throw new Error(`Unmapped Auth user unexpectedly read team data from ${table}.`);
       }
     }
+
+    const { data: deniedDraft, error: deniedDraftError } = await unmapped.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: nextBerlinMondayIso(), p_windows: [] },
+    );
+    if (!deniedDraftError || deniedDraftError.code !== "42501" || deniedDraft) {
+      throw new Error("Unmapped Auth user unexpectedly created a private team workweek.");
+    }
   } finally {
     await unmapped.auth.signOut({ scope: "local" }).catch(() => undefined);
     if (userId) {
       const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
       if (deleteError) throw new Error("Temporary unmapped local Auth user could not be removed.");
+    }
+  }
+}
+
+async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
+  const adminKey = status.SERVICE_ROLE_KEY || status.SECRET_KEY;
+  if (!adminKey) throw new Error("Local Supabase status did not expose an admin key.");
+  const admin = createClient(status.API_URL, adminKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const database = new pg.Client({ connectionString: status.DB_URL });
+  const temporaryUsers = [];
+  const ownerIds = ["volkan", "sebastian"];
+  const effectiveFrom = nextBerlinMondayIso();
+  await database.connect();
+
+  async function createMappedClient(profileId, label) {
+    const email = `${label}-${Date.now()}-${randomUUID()}@example.test`;
+    const password = `Local-${randomUUID()}!`;
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (createError || !created.user) {
+      throw new Error(`Could not create the temporary ${label} Auth user: ${createError?.message || "missing user"}.`);
+    }
+    temporaryUsers.push(created.user.id);
+    await database.query("update public.profiles set auth_user_id=$1 where id=$2", [created.user.id, profileId]);
+    const client = createClient(status.API_URL, status.ANON_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data: signIn, error: signInError } = await client.auth.signInWithPassword({ email, password });
+    if (signInError || !signIn.session) throw new Error(`Temporary ${label} Auth user could not sign in.`);
+    return client;
+  }
+
+  let founder;
+  let viewer;
+  try {
+    const firstWindows = [
+      { weekday: 1, startMinute: 540, endMinute: 720 },
+      { weekday: 1, startMinute: 780, endMinute: 1020 },
+      { weekday: 3, startMinute: 600, endMinute: 900 },
+    ];
+    const { data: first, error: firstError } = await mapped.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: effectiveFrom, p_windows: firstWindows },
+    );
+    if (firstError || !first?.id || first.status !== "preparing") {
+      throw new Error("Mapped owner could not create a private team workweek version.");
+    }
+    const { data: second, error: secondError } = await mapped.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: effectiveFrom, p_windows: [] },
+    );
+    if (secondError || !second?.id || second.id === first.id) {
+      throw new Error("Saving a private team workweek did not create a new immutable version.");
+    }
+
+    const { data: ownerVersions, error: ownerReadError } = await mapped
+      .from("team_workweek_versions")
+      .select("id,owner_profile_id,team_workweek_windows(weekday,start_minute,end_minute)")
+      .order("created_at", { ascending: true });
+    if (ownerReadError || ownerVersions?.length !== 2
+      || ownerVersions.some((version) => version.owner_profile_id !== "volkan")
+      || ownerVersions[0].team_workweek_windows?.length !== firstWindows.length
+      || ownerVersions[1].team_workweek_windows?.length !== 0) {
+      throw new Error("Owner-only reads did not preserve both private team-workweek versions.");
+    }
+
+    const { error: insertError } = await mapped.from("team_workweek_versions").insert({
+      owner_profile_id: "volkan",
+      effective_from: effectiveFrom,
+    });
+    const { error: updateError } = await mapped.from("team_workweek_versions")
+      .update({ effective_from: effectiveFrom }).eq("id", first.id);
+    const { error: deleteError } = await mapped.from("team_workweek_versions").delete().eq("id", first.id);
+    if (!insertError || insertError.code !== "42501"
+      || !updateError || updateError.code !== "42501"
+      || !deleteError || deleteError.code !== "42501") {
+      throw new Error("Authenticated users unexpectedly bypassed the immutable workweek RPC boundary.");
+    }
+
+    const { error: overlapError } = await mapped.rpc("create_private_team_workweek_version", {
+      p_effective_from: effectiveFrom,
+      p_windows: [
+        { weekday: 2, startMinute: 540, endMinute: 720 },
+        { weekday: 2, startMinute: 600, endMinute: 780 },
+      ],
+    });
+    if (!overlapError || overlapError.code !== "22023") {
+      throw new Error("Overlapping private team-workweek windows were unexpectedly accepted.");
+    }
+    for (const malformedWindows of [
+      [{ weekday: 1, startMinute: 540 }],
+      [{}],
+      [{ weekday: 1, startMinute: null, endMinute: 720 }],
+    ]) {
+      const { error } = await mapped.rpc("create_private_team_workweek_version", {
+        p_effective_from: effectiveFrom,
+        p_windows: malformedWindows,
+      });
+      if (!error || error.code !== "22023") {
+        throw new Error("Malformed private team-workweek windows did not preserve the input-error contract.");
+      }
+    }
+    const { data: ownerAfterMalformed, error: ownerAfterMalformedError } = await mapped
+      .from("team_workweek_versions").select("id");
+    if (ownerAfterMalformedError || ownerAfterMalformed?.length !== 2) {
+      throw new Error("Rejected workweek input left a partial version behind.");
+    }
+
+    founder = await createMappedClient("sebastian", "foreign-founder-workweek");
+    const { data: foreignBefore, error: foreignBeforeError } = await founder
+      .from("team_workweek_versions").select("id");
+    if (foreignBeforeError || foreignBefore?.length) {
+      throw new Error("Foreign founder unexpectedly read another profile's private team workweek.");
+    }
+    const { data: foreignVersion, error: foreignCreateError } = await founder.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: effectiveFrom, p_windows: [{ weekday: 5, startMinute: 600, endMinute: 720 }] },
+    );
+    if (foreignCreateError || !foreignVersion?.id) {
+      throw new Error("Foreign founder could not create their own private team workweek.");
+    }
+    const { data: ownerAfterForeign, error: ownerAfterForeignError } = await mapped
+      .from("team_workweek_versions").select("id");
+    if (ownerAfterForeignError || ownerAfterForeign?.length !== 2) {
+      throw new Error("Owner RLS exposed a foreign founder's private team workweek.");
+    }
+
+    await database.query("update public.profiles set platform_role='viewer' where id='sebastian'");
+    const { data: demotedVersions, error: demotedVersionsError } = await founder
+      .from("team_workweek_versions").select("id");
+    const { data: demotedWindows, error: demotedWindowsError } = await founder
+      .from("team_workweek_windows").select("id");
+    const { data: demotedWrite, error: demotedWriteError } = await founder.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: effectiveFrom, p_windows: [] },
+    );
+    if (demotedVersionsError || demotedVersions?.length
+      || demotedWindowsError || demotedWindows?.length
+      || !demotedWriteError || demotedWriteError.code !== "42501" || demotedWrite) {
+      throw new Error("A profile demoted to viewer retained private team-workweek access.");
+    }
+    await database.query("update public.profiles set platform_role='founder' where id='sebastian'");
+
+    viewer = await createMappedClient("local-viewer", "viewer-workweek");
+    const { data: viewerVersion, error: viewerCreateError } = await viewer.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: effectiveFrom, p_windows: [] },
+    );
+    if (!viewerCreateError || viewerCreateError.code !== "42501" || viewerVersion) {
+      throw new Error("Viewer unexpectedly created a private team workweek.");
+    }
+    const { data: viewerRead, error: viewerReadError } = await viewer.from("team_workweek_versions").select("id");
+    if (viewerReadError || viewerRead?.length) {
+      throw new Error("Viewer unexpectedly read a private team workweek.");
+    }
+  } finally {
+    await founder?.auth.signOut({ scope: "local" }).catch(() => undefined);
+    await viewer?.auth.signOut({ scope: "local" }).catch(() => undefined);
+    await database.query("delete from public.team_workweek_versions where owner_profile_id = any($1::text[])", [ownerIds]);
+    await database.query(
+      "update public.profiles set auth_user_id=null, platform_role=case when id='sebastian' then 'founder' else platform_role end where id = any($1::text[])",
+      [["sebastian", "local-viewer"]],
+    );
+    await database.end();
+    for (const userId of temporaryUsers) {
+      const { error } = await admin.auth.admin.deleteUser(userId);
+      if (error) throw new Error("Temporary workweek Auth user could not be removed.");
     }
   }
 }
@@ -1536,6 +1735,7 @@ async function main() {
     const token = signInData.session.access_token;
     await verifyDirectProfileMutationDenied(supabase, signInData.user.id);
     await verifyPlatformReleaseAccessBoundary(status, supabase);
+    await verifyPrivateTeamWorkweekAccessBoundary(status, supabase);
     await verifyPlatformReleaseIngestModes(status);
     await verifyPlanningApiGitHubSyncScope(token, source.tasks[0].id);
     await verifyEmptyEpicDeleteRoutes(token);
@@ -1550,6 +1750,71 @@ async function main() {
       ["local-deputy", "deputy"],
       ["local-viewer", "viewer"],
     ];
+
+    const unauthenticatedWorkweekRead = await apiRequest("/api/team-workweek/private-draft", "", "");
+    assertStatus(unauthenticatedWorkweekRead, 401, "Unauthenticated private workweek read");
+    const unauthenticatedWorkweekWrite = await apiRequest("/api/team-workweek/private-draft", "", "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assertStatus(unauthenticatedWorkweekWrite, 401, "Unauthenticated private workweek write");
+
+    const workweekPayload = {
+      effectiveFrom: nextBerlinMondayIso(),
+      windows: {
+        monday: [{ start: "09:00", end: "12:00" }, { start: "13:00", end: "17:00" }],
+        tuesday: [],
+        wednesday: [{ start: "10:00", end: "15:00" }],
+        thursday: [],
+        friday: [],
+        saturday: [],
+        sunday: [],
+      },
+    };
+    const workweekCreate = await apiRequest("/api/team-workweek/private-draft", token, "sebastian", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(workweekPayload),
+    });
+    assertStatus(workweekCreate, 201, "Session-owned private workweek write");
+    const workweekCreateBody = await workweekCreate.json();
+    const { data: sessionOwnedVersions, error: sessionOwnedError } = await supabase
+      .from("team_workweek_versions")
+      .select("id,owner_profile_id")
+      .eq("id", workweekCreateBody.version?.id);
+    if (sessionOwnedError || sessionOwnedVersions?.length !== 1 || sessionOwnedVersions[0].owner_profile_id !== "volkan") {
+      throw new Error("Private workweek owner was not derived from the authenticated session.");
+    }
+    const workweekRead = await apiRequest("/api/team-workweek/private-draft", token, "");
+    assertStatus(workweekRead, 200, "Owner private workweek read");
+    const workweekReadBody = await workweekRead.json();
+    if (workweekReadBody.version?.id !== workweekCreateBody.version?.id
+      || workweekReadBody.version?.windows?.monday?.length !== 2) {
+      throw new Error("Private workweek API did not return the latest owner version.");
+    }
+    const injectedOwnerWorkweek = await apiRequest("/api/team-workweek/private-draft", token, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...workweekPayload, profileId: "sebastian" }),
+    });
+    assertStatus(injectedOwnerWorkweek, 400, "Private workweek owner injection");
+    const malformedWorkweek = await apiRequest("/api/team-workweek/private-draft", token, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...workweekPayload,
+        windows: { ...workweekPayload.windows, monday: [{ start: "09:00" }] },
+      }),
+    });
+    assertStatus(malformedWorkweek, 400, "Malformed private workweek input");
+    const viewerWorkweek = await apiRequest("/api/team-workweek/private-draft", token, "local-viewer", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(workweekPayload),
+    });
+    assertStatus(viewerWorkweek, 403, "Viewer private workweek write authorization");
+
     for (const [profileId, role] of expectedProfiles) {
       const response = await apiRequest("/api/planning-board-data", token, profileId);
       assertStatus(response, 200, `${role} planning data`);

@@ -24,6 +24,18 @@
     "health": false
   },
   {
+    "name": "team_workweek_versions",
+    "table": "team_workweek_versions",
+    "select": "id,owner_profile_id,effective_from,timezone,status,created_at",
+    "health": false
+  },
+  {
+    "name": "team_workweek_windows",
+    "table": "team_workweek_windows",
+    "select": "id,version_id,weekday,start_minute,end_minute",
+    "health": false
+  },
+  {
     "name": "github_webhook_deliveries",
     "table": "github_webhook_deliveries",
     "select": "delivery_id,event_name,action,installation_id,repository_id,repository_full_name,issue_id,issue_node_id,issue_number,issue_updated_at,comment_id,comment_node_id,comment_updated_at,sender_id,sender_login,payload_sha256,status,status_reason,processing_version,attempts,available_at,locked_at,lock_token,processed_at,last_error,archived_at,archive_reason,received_at,updated_at",
