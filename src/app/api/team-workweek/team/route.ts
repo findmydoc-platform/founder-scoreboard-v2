@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { inflateTeamWorkweekWindows } from "@/features/team-workweek/model/team-workweek-draft";
+import { berlinTodayIso, inflateTeamWorkweekWindows } from "@/features/team-workweek/model/team-workweek-draft";
+import { selectVisibleTeamWorkweeks } from "@/features/team-workweek/model/published-team-workweek";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { bearerToken, requireTeamMember } from "@/lib/authz";
 import { getSupabaseForToken } from "@/lib/supabase";
@@ -10,9 +11,11 @@ type PublishedVersionRow = Readonly<{
   id: string;
   owner_profile_id: string;
   effective_from: string;
+  effective_to: string | null;
   timezone: "Europe/Berlin";
   published_at: string;
   last_sync_at: string;
+  publication_revision: number;
   windows: Array<{ weekday: number; startMinute: number; endMinute: number }>;
 }>;
 
@@ -25,7 +28,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("team_workweek_publications")
-    .select("id,owner_profile_id,effective_from,timezone,published_at,last_sync_at,publication_revision,windows")
+    .select("id,owner_profile_id,effective_from,effective_to,timezone,published_at,last_sync_at,publication_revision,windows")
     .eq("status", "published")
     .order("effective_from", { ascending: false })
     .order("publication_revision", { ascending: false })
@@ -33,19 +36,24 @@ export async function GET(request: NextRequest) {
     .returns<PublishedVersionRow[]>();
   if (error) return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
 
-  const latestByOwner = new Map<string, PublishedVersionRow>();
-  for (const row of data || []) {
-    if (!latestByOwner.has(row.owner_profile_id)) latestByOwner.set(row.owner_profile_id, row);
-  }
+  const visible = selectVisibleTeamWorkweeks((data || []).map((row) => ({
+    ownerProfileId: row.owner_profile_id,
+    effectiveFrom: row.effective_from,
+    effectiveTo: row.effective_to,
+    publicationRevision: row.publication_revision,
+    row,
+  })), berlinTodayIso());
 
   return NextResponse.json({
-    workweeks: [...latestByOwner.values()].map((row) => ({
+    workweeks: visible.map(({ row, phase }) => ({
       id: row.id,
       ownerProfileId: row.owner_profile_id,
       effectiveFrom: row.effective_from,
       timezone: row.timezone,
       publishedAt: row.published_at,
       lastSyncAt: row.last_sync_at,
+      publicationRevision: row.publication_revision,
+      phase,
       windows: inflateTeamWorkweekWindows((row.windows || []).map((window) => ({
         weekday: window.weekday,
         start_minute: window.startMinute,

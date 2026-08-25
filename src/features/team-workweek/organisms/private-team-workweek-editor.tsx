@@ -3,7 +3,8 @@
 import { Clock3, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import type { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
-import { TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE, nextMondayIso } from "../model/team-workweek-draft";
+import { TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
+import { formatDate } from "@/lib/display";
 import { GoogleWorkspaceConnectionCard } from "../molecules/google-workspace-connection-card";
 import { TeamWorkweekDiscardDialog } from "../molecules/team-workweek-discard-dialog";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -38,7 +39,7 @@ export function PrivateTeamWorkweekEditor({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 id="private-workweek-editor-title" className="text-lg font-semibold text-slate-950">Private Grundwoche</h2>
-                <UiBadge tone="amber">In Vorbereitung</UiBadge>
+                <UiBadge tone="amber">{state.publication?.syncState === "delayed" ? "Synchronisierung verzögert" : "In Vorbereitung"}</UiBadge>
               </div>
               <p className="mt-1 text-sm leading-6 text-slate-500">Neue Version für {profile.name} · {TEAM_WORKWEEK_TIMEZONE}</p>
             </div>
@@ -56,7 +57,9 @@ export function PrivateTeamWorkweekEditor({
                   </div>
                   <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
                     <div className="text-xs font-semibold text-slate-500">Teamfreigabe</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900">Privat · nicht veröffentlicht</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {state.publication?.syncState === "delayed" ? "Privat · bisherige Teamversion bleibt sichtbar" : "Privat · nicht veröffentlicht"}
+                    </div>
                   </div>
                 </div>
               </section>
@@ -65,7 +68,7 @@ export function PrivateTeamWorkweekEditor({
 
               <section className="rounded-lg border border-slate-200 bg-white p-4" aria-labelledby="workweek-validity-title">
                 <h3 id="workweek-validity-title" className="text-sm font-semibold text-slate-950">Gültigkeitsbeginn</h3>
-                <p className="mt-1 text-sm leading-6 text-slate-500">Montag in Europe/Berlin, frühestens {nextMondayIso()}.</p>
+                <p className="mt-1 text-sm leading-6 text-slate-500">Montag in Europe/Berlin, frühestens {formatDate(state.minimumEffectiveFrom)}</p>
                 <CustomDatePicker
                   value={state.draft.effectiveFrom}
                   onChange={state.setEffectiveFrom}

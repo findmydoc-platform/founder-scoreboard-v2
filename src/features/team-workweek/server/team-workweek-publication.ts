@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ensureGoogleWorkweekSeries,
+  ensureGoogleWorkweekSeriesTransition,
   googleWorkweekRecovery,
   type GoogleWorkweekSeriesResult,
   type PreparedWorkweekPublication,
@@ -47,6 +48,9 @@ function publicationError(error: { code?: string } | null | undefined) {
   if (error?.code === "P0003") {
     return new TeamWorkweekPublicationError("conflict", "Google-Synchronisierung ist noch nicht vollständig bestätigt.");
   }
+  if (error?.code === "P0004") {
+    return new TeamWorkweekPublicationError("conflict", "Die veröffentlichte Grundwoche wurde zwischenzeitlich geändert.");
+  }
   if (error?.code === "22023") {
     return new TeamWorkweekPublicationError("invalid_request", "Grundwoche ist ungültig.");
   }
@@ -62,6 +66,7 @@ function isPreparedPublication(value: unknown): value is PreparedWorkweekPublica
     && typeof input.effectiveFrom === "string"
     && input.timezone === "Europe/Berlin"
     && (input.status === "preparing" || input.status === "published")
+    && (input.syncState === "pending" || input.syncState === "delayed" || input.syncState === "confirmed")
     && Number.isInteger(input.publicationRevision)
     && (input.publishedAt === null || typeof input.publishedAt === "string")
     && (input.lastSyncAt === null || typeof input.lastSyncAt === "string")
@@ -75,6 +80,18 @@ function isPreparedPublication(value: unknown): value is PreparedWorkweekPublica
       && Number.isInteger(series.weekday)
       && Number.isInteger(series.startMinute)
       && Number.isInteger(series.endMinute),
+    ))
+    && Array.isArray(input.transitions)
+    && input.transitions.every((transition) => Boolean(
+      transition
+      && typeof transition.id === "string"
+      && transition.calendarId === "primary"
+      && typeof transition.googleEventId === "string"
+      && typeof transition.predecessorSeriesId === "string"
+      && (transition.state === "pending" || transition.state === "confirmed")
+      && typeof transition.expectedEtag === "string"
+      && Number.isInteger(transition.expectedFounderopsRevision)
+      && Number.isInteger(transition.recurrenceCount),
     ));
 }
 
@@ -118,12 +135,14 @@ export async function publishTeamWorkweek({
   userSupabase,
   versionId,
   ensureSeries = ensureGoogleWorkweekSeries,
+  ensureTransition = ensureGoogleWorkweekSeriesTransition,
   now = () => new Date(),
 }: {
   serviceSupabase: SupabaseClient;
   userSupabase: SupabaseClient;
   versionId: string;
   ensureSeries?: typeof ensureGoogleWorkweekSeries;
+  ensureTransition?: typeof ensureGoogleWorkweekSeriesTransition;
   now?: () => Date;
 }): Promise<PublicationResult> {
   const preparedResponse = await userSupabase.rpc("prepare_team_workweek_publication", {
@@ -177,6 +196,35 @@ export async function publishTeamWorkweek({
       p_series_id: series.id,
       p_etag: result.etag,
       p_founderops_revision: publication.publicationRevision,
+      p_observed_at: result.observedAt,
+    });
+    if (confirmation.error) {
+      const observedAt = now().toISOString();
+      return await markDelayed(serviceSupabase, publication.id, "storage_failed", observedAt);
+    }
+  }
+
+  if (delayed) {
+    const observedAt = now().toISOString();
+    return await markDelayed(serviceSupabase, publication.id, delayed.errorClass, observedAt);
+  }
+
+  for (const transition of publication.transitions) {
+    if (transition.state === "confirmed") continue;
+    let result: GoogleWorkweekSeriesResult;
+    try {
+      result = await ensureTransition({ accessToken, transition, now });
+    } catch {
+      result = { state: "delayed", errorClass: "provider_unavailable" };
+    }
+    if (result.state === "delayed") {
+      delayed ??= result;
+      continue;
+    }
+    const confirmation = await serviceSupabase.rpc("confirm_team_workweek_google_series_transition", {
+      p_transition_id: transition.id,
+      p_etag: result.etag,
+      p_expected_founderops_revision: transition.expectedFounderopsRevision,
       p_observed_at: result.observedAt,
     });
     if (confirmation.error) {
