@@ -37,6 +37,7 @@ type PlanningWorkspaceRendererProps = {
 
 export function PlanningWorkspaceRenderer({ controller, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningWorkspaceRendererProps) {
   const {
+    actualProfile,
     authBusy,
     canManageTaskMeta,
     createFounderEvent,
@@ -186,12 +187,12 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
       )}
       {workspace === "team" && (
         <TeamOverview
+          actualProfile={actualProfile}
           apiClient={apiClient}
           data={data}
           tasks={data.tasks}
           pending={isPending}
           canManageTeam={currentProfile?.platformRole === "ceo"}
-          currentProfile={currentProfile}
           onSaveProfileSettings={saveProfileSettings}
         />
       )}

@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Keeps this intermediate stacked pull request non-releasable until the complete calendar workflow and its product update ship together."
+  "reason": "Keeps the private workweek editor in an intermediate stacked pull request until the complete calendar workflow and product update ship together."
 }

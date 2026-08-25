@@ -7,6 +7,7 @@ import { TeamRoleSummary } from "@/features/team/molecules/team-role-summary";
 import { deputyLabel, teamMemberStats } from "@/features/team/model/team-profile-view-model";
 import { TeamProfileEditDialog } from "@/features/team/organisms/team-profile-edit-dialog";
 import { GoogleWorkspaceConnectionCard } from "@/features/team-workweek/molecules/google-workspace-connection-card";
+import { PrivateTeamWorkweekCard } from "@/features/team-workweek/molecules/private-team-workweek-card";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningShellState, Profile, Task } from "@/lib/types";
 
@@ -16,7 +17,7 @@ export function TeamOverview({
   pending,
   canManageTeam,
   apiClient,
-  currentProfile,
+  actualProfile,
   onSaveProfileSettings,
 }: {
   data: PlanningShellState;
@@ -24,7 +25,7 @@ export function TeamOverview({
   pending: boolean;
   canManageTeam: boolean;
   apiClient: BrowserApiClient;
-  currentProfile: Profile | null;
+  actualProfile: Profile | null;
   onSaveProfileSettings: (profile: Profile, patch: Partial<Profile>, eventPatch: Record<string, boolean>) => Promise<void>;
 }) {
   const { closeProfileDialog, editingProfile, openProfileDialog } = useTeamProfileDialog(data.profiles);
@@ -52,7 +53,11 @@ export function TeamOverview({
     <div className="grid gap-4">
       <TeamRoleSummary profiles={data.profiles} today={today} />
 
-      {currentProfile && <GoogleWorkspaceConnectionCard apiClient={apiClient} profile={currentProfile} />}
+      {actualProfile && (
+        actualProfile.platformRole === "viewer"
+          ? <GoogleWorkspaceConnectionCard apiClient={apiClient} profile={actualProfile} />
+          : <PrivateTeamWorkweekCard apiClient={apiClient} profile={actualProfile} />
+      )}
 
       <div className="grid gap-2">
         {data.profiles.map((profile) => (
