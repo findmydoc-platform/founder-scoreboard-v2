@@ -19,9 +19,21 @@ type PublicationRow = Readonly<{
   publication_revision: number;
   published_at: string | null;
   last_sync_at: string | null;
+  team_workweek_google_reconciliation_status: Readonly<{
+    state: "confirmed" | "pending" | "delayed" | "conflict";
+    last_observed_at: string | null;
+  }> | Array<Readonly<{
+    state: "confirmed" | "pending" | "delayed" | "conflict";
+    last_observed_at: string | null;
+  }>> | null;
 }>;
 
 function publicationPayload(row: PublicationRow | null) {
+  const reconciliation = row
+    ? Array.isArray(row.team_workweek_google_reconciliation_status)
+      ? row.team_workweek_google_reconciliation_status[0]
+      : row.team_workweek_google_reconciliation_status
+    : null;
   return row ? {
     id: row.id,
     effectiveFrom: row.effective_from,
@@ -30,6 +42,8 @@ function publicationPayload(row: PublicationRow | null) {
     publicationRevision: row.publication_revision,
     publishedAt: row.published_at,
     lastSyncAt: row.last_sync_at,
+    googleReconciliationState: reconciliation?.state || "confirmed",
+    lastGoogleReconciliationAt: reconciliation?.last_observed_at || null,
   } : null;
 }
 
@@ -48,6 +62,7 @@ export async function GET(request: NextRequest) {
     .from("team_workweek_versions")
     .select("id,owner_profile_id,effective_from,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
     .eq("status", "preparing")
+    .eq("origin", "owner")
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(1)
@@ -64,7 +79,7 @@ export async function GET(request: NextRequest) {
 
   const publication = data ? await supabase
     .from("team_workweek_publications")
-    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at")
+    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)")
     .eq("source_version_id", data.id)
     .maybeSingle<PublicationRow>() : null;
   if (publication?.error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
@@ -72,7 +87,7 @@ export async function GET(request: NextRequest) {
   const ownerProfileId = context.permission.profile?.id || data?.owner_profile_id || null;
   const latestPublishedResponse = ownerProfileId ? await supabase
     .from("team_workweek_publications")
-    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at")
+    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)")
     .eq("owner_profile_id", ownerProfileId)
     .eq("status", "published")
     .order("effective_from", { ascending: false })
@@ -111,8 +126,17 @@ export async function POST(request: NextRequest) {
     p_windows: flattenTeamWorkweekWindows(validation.draft.windows),
   });
   if (error) {
-    const status = error.code === "22023" ? 400 : error.code === "42501" ? 403 : 503;
-    return apiError(status === 400 ? "Grundwoche ist ungültig." : status === 403 ? "Keine Berechtigung für diese Grundwoche." : "Grundwoche konnte nicht gespeichert werden.", status);
+    const status = error.code === "22023" ? 400 : error.code === "42501" ? 403 : error.code === "P0003" ? 409 : 503;
+    return apiError(
+      status === 400
+        ? "Grundwoche ist ungültig."
+        : status === 403
+          ? "Keine Berechtigung für diese Grundwoche."
+          : status === 409
+            ? "Google-Abgleich zuerst abschließen."
+            : "Grundwoche konnte nicht gespeichert werden.",
+      status,
+    );
   }
 
   return NextResponse.json({ version: data }, { status: 201 });
