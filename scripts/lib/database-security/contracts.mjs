@@ -23,6 +23,7 @@ export const highRiskAuthenticatedTablePrivileges = Object.freeze([
 ]);
 
 export const serviceRoleOnlyTablePrivileges = Object.freeze([
+  ["google_workspace_connections", Object.freeze(["SELECT", "INSERT", "UPDATE", "DELETE"])],
   ["github_planning_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
   ["github_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
 ]);

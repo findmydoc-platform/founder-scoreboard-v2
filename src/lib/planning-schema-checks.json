@@ -18,6 +18,12 @@
     "health": false
   },
   {
+    "name": "google_workspace_connections",
+    "table": "google_workspace_connections",
+    "select": "profile_id,access_token_expires_at,refresh_token_expires_at,oauth_scopes,token_type,primary_calendar_id,connected_at,refreshed_at,last_used_at,revoked_at,last_error_class,updated_at",
+    "health": false
+  },
+  {
     "name": "github_webhook_deliveries",
     "table": "github_webhook_deliveries",
     "select": "delivery_id,event_name,action,installation_id,repository_id,repository_full_name,issue_id,issue_node_id,issue_number,issue_updated_at,comment_id,comment_node_id,comment_updated_at,sender_id,sender_login,payload_sha256,status,status_reason,processing_version,attempts,available_at,locked_at,lock_token,processed_at,last_error,archived_at,archive_reason,received_at,updated_at",

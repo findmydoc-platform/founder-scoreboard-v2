@@ -186,10 +186,12 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
       )}
       {workspace === "team" && (
         <TeamOverview
+          apiClient={apiClient}
           data={data}
           tasks={data.tasks}
           pending={isPending}
           canManageTeam={currentProfile?.platformRole === "ceo"}
+          currentProfile={currentProfile}
           onSaveProfileSettings={saveProfileSettings}
         />
       )}

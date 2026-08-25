@@ -37,6 +37,7 @@ test("the webhook migration creates a service-role-only delivery journal", async
   assert.doesNotMatch(migration, /\b(?:insert into|update|delete from)\s+public\.(?:tasks|deliverables|initiatives|epics)\b/i);
   assert.match(schemaContract, /github_webhook_deliveries/);
   assert.deepEqual(serviceRoleOnlyTablePrivileges, [
+    ["google_workspace_connections", ["SELECT", "INSERT", "UPDATE", "DELETE"]],
     ["github_planning_webhook_deliveries", ["SELECT", "INSERT"]],
     ["github_webhook_deliveries", ["SELECT", "INSERT"]],
   ]);
