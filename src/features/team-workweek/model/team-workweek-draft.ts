@@ -36,6 +36,8 @@ export type OwnTeamWorkweekPublication = Readonly<{
   publicationRevision: number;
   publishedAt: string | null;
   lastSyncAt: string | null;
+  googleReconciliationState: "confirmed" | "pending" | "delayed" | "conflict";
+  lastGoogleReconciliationAt: string | null;
 }>;
 
 export function emptyTeamWorkweekWindows(): TeamWorkweekWindows {

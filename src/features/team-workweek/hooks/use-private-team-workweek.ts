@@ -197,6 +197,8 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
             publicationRevision: body.publication.publicationRevision,
             publishedAt: body.publication.publishedAt,
             lastSyncAt: body.publication.lastSyncAt,
+            googleReconciliationState: "confirmed",
+            lastGoogleReconciliationAt: null,
           });
         }
         const lastSuccessfulSync = latestPublished?.lastSyncAt
@@ -226,6 +228,63 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     }
   };
 
+  const reconcile = async () => {
+    if (!latestPublished) {
+      setMessageTone("warning");
+      setMessage("Veröffentliche zuerst eine Grundwoche, bevor du Google abgleichst.");
+      return false;
+    }
+    setPending(true);
+    setMessage("");
+    try {
+      const { response, body } = await apiClient.requestJson<{
+        reconciliation?: {
+          state: "unchanged" | "updated" | "delayed" | "conflict";
+          lastSuccessfulSyncAt: string | null;
+          recovery: "retry" | "reconnect" | "resolve_conflict" | null;
+        };
+        error?: string;
+      }>("/api/team-workweek/reconcile", {
+        method: "POST",
+        json: {},
+        useDevProfileOverride: false,
+      });
+      if ((!response.ok && response.status !== 202 && response.status !== 409) || !body?.reconciliation) {
+        throw new Error(body?.error || "Google-Abgleich konnte nicht abgeschlossen werden.");
+      }
+      await load();
+      if (body.reconciliation.state === "updated") {
+        setMessageTone("success");
+        setMessage("Google-Änderung wurde als neue Wochenversion ab dem nächsten Montag bestätigt.");
+        window.dispatchEvent(new Event(TEAM_WORKWEEK_PUBLISHED_EVENT));
+        return true;
+      }
+      if (body.reconciliation.state === "unchanged") {
+        setMessageTone("success");
+        setMessage("Google und FounderOps sind auf demselben bestätigten Stand.");
+        return true;
+      }
+      const lastSuccessfulSync = body.reconciliation.lastSuccessfulSyncAt
+        ? ` Letzter erfolgreicher Sync: ${new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(body.reconciliation.lastSuccessfulSyncAt))}.`
+        : "";
+      setMessageTone("warning");
+      setMessage(body.reconciliation.recovery === "reconnect"
+        ? `Synchronisierung verzögert. Verbinde Google erneut; der letzte Teamstand bleibt aktiv.${lastSuccessfulSync}`
+        : body.reconciliation.recovery === "resolve_conflict"
+          ? `Google-Änderung ist nicht eindeutig. Der letzte Teamstand bleibt aktiv, bis der Konflikt geprüft wurde.${lastSuccessfulSync}`
+          : `Synchronisierung verzögert. Der letzte Teamstand bleibt aktiv und der Abgleich kann sicher wiederholt werden.${lastSuccessfulSync}`);
+      return false;
+    } catch (error) {
+      if (mounted.current) {
+        setMessageTone("warning");
+        setMessage(error instanceof Error ? error.message : "Google-Abgleich konnte nicht abgeschlossen werden.");
+      }
+      return false;
+    } finally {
+      if (mounted.current) setPending(false);
+    }
+  };
+
   const reset = () => {
     setDraft(baseline);
     setErrors([]);
@@ -243,6 +302,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     minimumEffectiveFrom,
     pending,
     publication,
+    reconcile,
     removeWindow,
     reset,
     save,
