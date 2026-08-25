@@ -2,6 +2,7 @@ import {
   createCipheriv,
   createDecipheriv,
   createHmac,
+  hkdfSync,
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
@@ -119,7 +120,14 @@ function encodedState(payload: GoogleWorkspaceOAuthState) {
 }
 
 function stateSignature(encoded: string, key: Buffer) {
-  return createHmac("sha256", key).update(`founderops-google-workspace-state:v1:${encoded}`).digest("base64url");
+  const signingKey = Buffer.from(hkdfSync(
+    "sha256",
+    key,
+    Buffer.from("founderops-google-workspace-state:v1", "utf8"),
+    Buffer.from("oauth-state-signing", "utf8"),
+    32,
+  ));
+  return createHmac("sha256", signingKey).update(encoded).digest("base64url");
 }
 
 export function createGoogleWorkspaceOAuthState({

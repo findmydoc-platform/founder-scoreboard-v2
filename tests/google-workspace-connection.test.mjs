@@ -23,6 +23,8 @@ test("Google Workspace tokens use an independent authenticated 32-byte encryptio
 });
 
 test("OAuth state is signed, short-lived, redirect-safe, and bound to user plus profile", () => {
+  const source = readFileSync("src/features/team-workweek/server/google-workspace-oauth-core.ts", "utf8");
+  assert.match(source, /hkdfSync\([\s\S]*oauth-state-signing/);
   const now = Date.parse("2026-08-25T08:00:00.000Z");
   const stateValue = core.createGoogleWorkspaceOAuthState({
     userId: "user-1",
