@@ -1,4 +1,5 @@
 export const authenticatedFunctionAllowlist = Object.freeze([
+  "public.create_private_team_workweek_version(p_effective_from date, p_windows jsonb)",
   "public.current_platform_role()",
   "public.current_profile_id()",
   "public.current_profile_role()",
