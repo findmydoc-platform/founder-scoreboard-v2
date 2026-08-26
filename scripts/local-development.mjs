@@ -400,6 +400,36 @@ async function seedPlanningDatabase(status) {
       weekly_capacity: profile.weeklyCapacity,
       profile_color: profile.color || "#64748b",
     })));
+    await upsertRows(client, "founder_events", [
+      "id",
+      "title",
+      "category",
+      "starts_at",
+      "ends_at",
+      "location",
+      "description",
+      "audience_mode",
+      "participant_profile_ids",
+      "reminder_days_before",
+      "status",
+      "created_by",
+    ], source.founderEvents.map((event) => ({
+      id: event.id,
+      title: event.title,
+      category: event.category,
+      starts_at: event.startsAt,
+      ends_at: nullable(event.endsAt),
+      location: event.location || "",
+      description: event.description || "",
+      audience_mode: event.audienceMode,
+      participant_profile_ids: event.participantProfileIds,
+      reminder_days_before: event.reminderDaysBefore,
+      status: event.status,
+      created_by: event.createdBy,
+    })));
+    await client.query(
+      "select setval(pg_get_serial_sequence('founder_events','id'), greatest(coalesce((select max(id) from founder_events), 1), 1), true)",
+    );
     await client.query("delete from notification_events where entity_type='platform_release'");
     await client.query("delete from platform_releases");
     for (const manifest of localPlatformReleaseManifests()) {
@@ -553,7 +583,7 @@ async function seedPlanningDatabase(status) {
       }
     }
     await client.query("commit");
-    console.log(`Seeded local planning data: ${source.profiles.length} profiles, ${(source.epics || []).length} epics, ${source.initiatives.length} initiatives, ${tasks.length} delivery items.`);
+    console.log(`Seeded local planning data: ${source.profiles.length} profiles, ${(source.epics || []).length} epics, ${source.initiatives.length} initiatives, ${tasks.length} delivery items, ${source.founderEvents.length} founder events.`);
   } catch (error) {
     await client.query("rollback");
     throw error;

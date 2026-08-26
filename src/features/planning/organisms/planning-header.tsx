@@ -12,6 +12,7 @@ import { GitHubSyncTrigger } from "@/features/tasks/molecules/github-sync-trigge
 import { projectGitHubSyncQueue } from "@/features/tasks/model/github-sync-queue";
 import { PlanningHelpMenu } from "@/features/planning/molecules/planning-help-menu";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
+import { isTeamWorkweekStarterProfile } from "@/features/team-workweek/model/team-workweek-matrix";
 import type { ViewMode } from "@/lib/types";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 
@@ -22,6 +23,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     authNotice,
     authUser,
     data,
+    currentProfile,
     devProfileId,
     devRoleSwitchAvailable,
     dismissNotification,
@@ -63,6 +65,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     workspace,
   } = controller;
   const githubSyncQueue = projectGitHubSyncQueue(data.tasks, data.taskComments);
+  const teamWorkweekAvailable = isTeamWorkweekStarterProfile(data.profiles, currentProfile);
   const title = workspace === "planning" ? data.project.name : workspaceLabels[workspace];
   const description = workspace === "planning"
     ? `${workspaceDescriptions.planning} Zeitraum: ${data.project.range}.`
@@ -192,8 +195,8 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             onToggleNotifications={() => showNotifications ? setShowNotifications(false) : openNotificationInbox()}
             onOpenNotification={openNotification}
             onDismissNotification={dismissNotification}
-            teamWorkweek={{
-              apiClient: controller.apiClient,
+            calendar={{
+              apiClient: teamWorkweekAvailable ? controller.apiClient : undefined,
               onOpenTeam: () => setWorkspace("team"),
               profiles: data.profiles,
             }}

@@ -220,7 +220,7 @@ test("modal dialogs trap focus close on Escape and restore the trigger", async (
   assert.match(modalHook, /event\.key === "Escape"/);
   assert.match(modalHook, /event\.key !== "Tab"/);
   assert.match(modalHook, /returnTarget\?\.isConnected/);
-  assert.match(modalHook, /returnTarget\.focus\(\)/);
+  assert.match(modalHook, /returnTarget\.focus\(\{ preventScroll: true \}\)/);
 
   for (const file of dialogFiles) {
     const source = await readFile(file, "utf8");

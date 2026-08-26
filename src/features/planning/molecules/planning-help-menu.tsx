@@ -8,7 +8,10 @@ import { selectActiveProductUpdates } from "@/features/product-updates/model/pro
 export function PlanningHelpMenu() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const hasActiveProductUpdates = selectActiveProductUpdates(productUpdates).length > 0;
+  const hasActiveProductUpdates = selectActiveProductUpdates(
+    productUpdates,
+    new Date(),
+  ).length > 0;
 
   useEffect(() => {
     const openHelpMenu = () => setOpen(true);

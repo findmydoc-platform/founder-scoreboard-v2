@@ -39,7 +39,11 @@ function formatReleaseDate(value: string) {
     .format(new Date(`${value}T12:00:00Z`));
 }
 
-export function ProductUpdatesProvider({ profileId }: { profileId: string | null }) {
+export function ProductUpdatesProvider({
+  profileId,
+}: {
+  profileId: string | null;
+}) {
   const [visibleUpdates, setVisibleUpdates] = useState<ProductUpdateDefinition[]>([]);
   const [slideIndex, setSlideIndex] = useState(0);
   const [open, setOpen] = useState(false);
@@ -64,14 +68,20 @@ export function ProductUpdatesProvider({ profileId }: { profileId: string | null
   }, []);
 
   useEffect(() => {
-    const unseen = selectUnseenProductUpdates(productUpdates, readSeenUpdateIds(profileId));
+    const unseen = selectUnseenProductUpdates(
+      productUpdates,
+      readSeenUpdateIds(profileId),
+      new Date(),
+    );
     if (!unseen.length) return;
     const frame = window.requestAnimationFrame(() => showUpdates(unseen));
     return () => window.cancelAnimationFrame(frame);
   }, [profileId, showUpdates]);
 
   useEffect(() => {
-    const openProductUpdates = () => showUpdates(selectActiveProductUpdates(productUpdates));
+    const openProductUpdates = () => showUpdates(
+      selectActiveProductUpdates(productUpdates, new Date()),
+    );
     window.addEventListener("fmd:open-product-updates", openProductUpdates);
     return () => window.removeEventListener("fmd:open-product-updates", openProductUpdates);
   }, [showUpdates]);

@@ -397,6 +397,53 @@
       "sortOrder": 70
     }
   ],
+  "founderEvents": [
+    {
+      "id": 900001,
+      "title": "Founder Weekly",
+      "category": "company",
+      "startsAt": "2026-08-24T11:00:00+02:00",
+      "endsAt": "2026-08-24T11:45:00+02:00",
+      "location": "Google Meet",
+      "description": "Synthetic local event for calendar development and acceptance testing.",
+      "audienceMode": "all",
+      "participantProfileIds": [],
+      "reminderDaysBefore": 1,
+      "status": "planned",
+      "createdBy": "volkan"
+    },
+    {
+      "id": 900002,
+      "title": "Investor Call",
+      "category": "company",
+      "startsAt": "2026-08-26T16:00:00+02:00",
+      "endsAt": "2026-08-26T16:30:00+02:00",
+      "location": "Google Meet",
+      "description": "Synthetic local event for calendar development and acceptance testing.",
+      "audienceMode": "selected",
+      "participantProfileIds": [
+        "volkan",
+        "sebastian"
+      ],
+      "reminderDaysBefore": 1,
+      "status": "planned",
+      "createdBy": "volkan"
+    },
+    {
+      "id": 900003,
+      "title": "Product Review",
+      "category": "deadline",
+      "startsAt": "2026-08-28T10:00:00+02:00",
+      "endsAt": "2026-08-28T11:00:00+02:00",
+      "location": "FounderOps",
+      "description": "Synthetic local event for calendar development and acceptance testing.",
+      "audienceMode": "all",
+      "participantProfileIds": [],
+      "reminderDaysBefore": 1,
+      "status": "planned",
+      "createdBy": "volkan"
+    }
+  ],
   "meetings": [
     {
       "id": 1,

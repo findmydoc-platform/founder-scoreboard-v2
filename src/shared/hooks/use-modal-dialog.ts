@@ -16,10 +16,14 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({
   open,
   onClose,
   closeDisabled = false,
+  manageEnvironment = true,
+  restoreFocusRef,
 }: {
   open: boolean;
   onClose: () => void;
   closeDisabled?: boolean;
+  manageEnvironment?: boolean;
+  restoreFocusRef?: RefObject<HTMLElement | null>;
 }): RefObject<T | null> {
   const dialogRef = useRef<T | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -34,20 +38,21 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({
   useEffect(() => {
     if (!open) return;
 
-    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    returnFocusRef.current = restoreFocusRef?.current
+      || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     const dialog = dialogRef.current;
-    if (dialog) registerModal(dialog);
+    if (dialog && manageEnvironment) registerModal(dialog);
 
     const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) || [])
       .filter((element) => !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true");
 
     window.requestAnimationFrame(() => {
       const preferred = dialog?.querySelector<HTMLElement>("[data-autofocus]");
-      (preferred || focusable()[0] || dialog)?.focus();
+      (preferred || focusable()[0] || dialog)?.focus({ preventScroll: true });
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isTopModal(dialog)) return;
+      if (manageEnvironment && !isTopModal(dialog)) return;
       if (event.key === "Escape" && !closeDisabledRef.current) {
         if (dialog?.querySelector("[aria-expanded='true']")) return;
         event.preventDefault();
@@ -78,23 +83,23 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({
     document.addEventListener("keydown", handleKeyDown, true);
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
-      const { nextTopModal, wasTopModal } = dialog
+      const { nextTopModal, wasTopModal } = dialog && manageEnvironment
         ? unregisterModal(dialog)
-        : { nextTopModal: null, wasTopModal: false };
+        : { nextTopModal: null, wasTopModal: true };
       if (!wasTopModal) return;
       const returnTarget = returnFocusRef.current;
       window.requestAnimationFrame(() => {
         if (returnTarget?.isConnected && !returnTarget.closest("[inert]")) {
-          returnTarget.focus();
+          returnTarget.focus({ preventScroll: true });
           return;
         }
         if (!nextTopModal?.isConnected || nextTopModal.inert) return;
         const previousPreferred = nextTopModal.querySelector<HTMLElement>("[data-autofocus]");
         const previousFocusable = nextTopModal.querySelector<HTMLElement>(focusableSelector);
-        (previousPreferred || previousFocusable || nextTopModal).focus();
+        (previousPreferred || previousFocusable || nextTopModal).focus({ preventScroll: true });
       });
     };
-  }, [open]);
+  }, [manageEnvironment, open, restoreFocusRef]);
 
   return dialogRef;
 }

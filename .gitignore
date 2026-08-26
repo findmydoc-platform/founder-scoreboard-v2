@@ -13,6 +13,10 @@
 # testing
 /coverage
 
+# local visual QA artifacts
+/design-qa.md
+/output/
+
 # next.js
 /.next/
 /out/

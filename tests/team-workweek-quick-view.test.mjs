@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const matrixModel = await import("../src/features/team-workweek/model/team-workweek-matrix.ts");
-const requestModel = await import("../src/features/team-workweek/model/latest-team-workweek-request.ts");
 const viewStateModel = await import("../src/features/team-workweek/model/team-workweek-view-state.ts");
 
 const profiles = [
@@ -20,16 +19,6 @@ function workweek(ownerProfileId, phase, id) {
   return { id, ownerProfileId, phase };
 }
 
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, reject, resolve };
-}
-
 test("the starter matrix keeps all five operating profiles and only their active publication", () => {
   const current = workweek("founder-1", "current", "current-1");
   const rows = matrixModel.projectActiveTeamWorkweekRows(profiles, [
@@ -44,34 +33,6 @@ test("the starter matrix keeps all five operating profiles and only their active
   assert.equal(rows.find(({ profile }) => profile.id === "founder-2")?.workweek, null);
 });
 
-test("only the latest quick-view request can update visible data, errors, and pending state", async () => {
-  const first = deferred();
-  const second = deferred();
-  const requests = [first.promise, second.promise];
-  const outcomes = [];
-  const runner = requestModel.createLatestTeamWorkweekRequestRunner({
-    load: () => requests.shift(),
-    onError: (error) => outcomes.push(["error", error.message]),
-    onSettled: () => outcomes.push(["settled"]),
-    onStart: () => outcomes.push(["started"]),
-    onSuccess: (value) => outcomes.push(["success", value]),
-  });
-
-  const firstRun = runner.run();
-  const secondRun = runner.run();
-  second.resolve("fresh");
-  await secondRun;
-  first.reject(new Error("stale failure"));
-  await firstRun;
-
-  assert.deepEqual(outcomes, [
-    ["started"],
-    ["started"],
-    ["success", "fresh"],
-    ["settled"],
-  ]);
-});
-
 test("team detail distinguishes unknown, empty, current, and stale successful data", () => {
   const resolve = viewStateModel.resolvePublishedTeamWorkweekViewState;
 
@@ -82,40 +43,82 @@ test("team detail distinguishes unknown, empty, current, and stale successful da
   assert.equal(resolve({ hasLoadedSuccessfully: true, message: "offline", pending: false, workweekCount: 2 }), "stale-matrix");
 });
 
-test("the global quick view is read-only, modal, responsive, and owns one Team navigation", async () => {
+test("the shared header calendar is read-only, responsive, and owns one Team navigation", async () => {
   const [actions, action, dialog, hook, matrix, modalStack, team, route] = await Promise.all([
     readFile("src/features/planning/molecules/planning-header-data-actions.tsx", "utf8"),
-    readFile("src/features/team-workweek/molecules/header-team-workweek-action.tsx", "utf8"),
-    readFile("src/features/team-workweek/organisms/team-workweek-quick-view-dialog.tsx", "utf8"),
-    readFile("src/features/team-workweek/hooks/use-team-workweek-quick-view.ts", "utf8"),
+    readFile("src/features/planning/molecules/header-calendar-action.tsx", "utf8"),
+    readFile("src/features/planning/organisms/header-calendar-dialog.tsx", "utf8"),
+    readFile("src/features/planning/hooks/use-header-calendar.ts", "utf8"),
     readFile("src/features/team-workweek/molecules/team-workweek-matrix.tsx", "utf8"),
     readFile("src/shared/model/modal-stack.ts", "utf8"),
     readFile("src/features/team/organisms/team-overview.tsx", "utf8"),
     readFile("src/app/api/team-workweek/team/route.ts", "utf8"),
   ]);
 
-  assert.match(actions, /HeaderTeamWorkweekAction/);
-  assert.doesNotMatch(actions, /HeaderEventCalendar/);
-  assert.match(action, /aria-label="Team-Arbeitswoche öffnen"/);
+  assert.match(actions, /HeaderCalendarAction/);
+  assert.equal(actions.match(/HeaderCalendarAction/g)?.length, 2);
+  assert.match(action, /data-tour-id="header-calendar-action"/);
   assert.match(action, /pointer:coarse/);
   assert.match(action, /createPortal[\s\S]*document\.body/);
-  assert.match(hook, /requestJson[\s\S]*\/api\/team-workweek\/team/);
-  assert.match(hook, /setOpen\(true\)[\s\S]*void load\(\)/);
+  assert.match(action, /getBoundingClientRect/);
+  assert.match(action, /rect\.bottom \+ 8/);
+  assert.match(action, /const passiveCapture = \{ capture: true, passive: true \} as const/);
+  assert.match(action, /window\.addEventListener\("scroll", updateAnchor, passiveCapture\)/);
+  assert.doesNotMatch(action, /todayEventCount|9\+|unreadCount/);
+  assert.match(action, /currentWorkers\.map/);
+  assert.match(action, /Arbeitet jetzt/);
+  assert.match(hook, /requestJson[\s\S]*\/api\/team-workweek\/team\?from=\$\{range\.from\}&to=\$\{range\.to\}/);
+  assert.match(hook, /useEffect\(\(\) => \{[\s\S]*void loadVisibleRange\(\)/);
+  assert.match(hook, /TEAM_WORKWEEK_PUBLISHED_EVENT/);
   assert.match(dialog, /useModalDialog<HTMLDivElement>/);
-  assert.match(dialog, /aria-modal="true"/);
-  assert.match(dialog, /header className="flex shrink-0/);
+  assert.match(action, /restoreFocusRef=\{triggerRef\}/);
+  assert.match(action, /matchMedia\("\(min-width: 1024px\)"\)/);
+  assert.match(action, /desktopPopover=\{desktopPopover\}/);
+  assert.match(dialog, /manageEnvironment: !desktopPopover/);
+  assert.match(dialog, /aria-modal=\{desktopPopover \? undefined : "true"\}/);
+  assert.match(dialog, /role="tablist"/);
+  assert.match(dialog, /role="tabpanel"/);
+  assert.match(dialog, /"Termine"/);
+  assert.match(dialog, /"Arbeitswoche"/);
+  assert.match(dialog, /ArrowRight/);
+  assert.match(dialog, /PageUp/);
+  assert.match(dialog, /PageDown/);
   assert.match(dialog, /footer className="flex shrink-0/);
+  assert.match(dialog, /env\(safe-area-inset-top\)/);
+  assert.match(dialog, /env\(safe-area-inset-bottom\)/);
+  assert.match(dialog, /overscroll-contain/);
+  assert.match(dialog, /--header-calendar-top/);
+  assert.match(dialog, /lg:bg-transparent/);
+  assert.match(dialog, /FounderOps-Termine/);
+  assert.match(dialog, /Arbeitszeiten/);
+  assert.match(dialog, /workingNow \?/);
+  assert.match(dialog, /Aktualisierung verzögert/);
+  assert.doesNotMatch(dialog, /Nächste Events/);
   assert.match(modalStack, /element\.inert = true/);
   assert.match(modalStack, /document\.body\.style\.overflow = "hidden"/);
   assert.equal(dialog.match(/>Im Team öffnen</g)?.length, 1);
   assert.doesNotMatch(dialog, /bearbeiten|veröffentlichen|Google abgleichen/i);
   assert.match(matrix, /TEAM_WORKWEEK_DAYS\.map/);
   assert.match(matrix, /DataOverflow/);
-  assert.match(matrix, /minWidth=\{compact \? 900 : 1040\}/);
+  assert.match(matrix, /minWidth=\{compact \? 840 : 1040\}/);
+  assert.match(matrix, /w-40 border-r text-xs tracking-wide/);
+  assert.match(matrix, /role="tablist"/);
+  assert.match(matrix, /role="tabpanel"/);
+  assert.match(matrix, /aria-controls=\{tabPanelId\}/);
+  assert.match(matrix, /aria-label=\{day\.label\}/);
+  assert.match(matrix, /grid-cols-7/);
+  assert.match(matrix, /compact \? "lg:hidden" : "xl:hidden"/);
+  assert.match(matrix, /compact \? "hidden lg:block" : "hidden xl:block"/);
+  assert.match(matrix, /compact \? "sticky top-0 z-20 rounded-t-lg"/);
+  assert.match(matrix, /compact \? "sticky top-11 z-10"/);
+  assert.match(matrix, /ArrowRight/);
+  assert.match(matrix, /ArrowLeft/);
   assert.match(matrix, />Frei</);
   assert.match(team, /TeamRoleSummary/);
   assert.match(team, /PrivateTeamWorkweekCard[\s\S]*actualProfile/);
   assert.match(team, /PublishedTeamWorkweeksCard/);
   assert.match(route, /\.eq\("status", "published"\)/);
+  assert.match(route, /validateCalendarWorkweekRange/);
+  assert.match(route, /calendarWorkweeks/);
   assert.doesNotMatch(route, /google_event_id|refresh_token|access_token|calendar_id/);
 });

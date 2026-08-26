@@ -38,17 +38,18 @@ test("working status stays ownership-bound while Sub-Issue final transitions are
 
 test("header overlays and modals close without leaking focus or background interaction", async () => {
   const notifications = await readFile("src/features/notifications/organisms/notification-inbox.tsx", "utf8");
-  const teamAction = await readFile("src/features/team-workweek/molecules/header-team-workweek-action.tsx", "utf8");
-  const teamDialog = await readFile("src/features/team-workweek/organisms/team-workweek-quick-view-dialog.tsx", "utf8");
+  const calendarAction = await readFile("src/features/planning/molecules/header-calendar-action.tsx", "utf8");
+  const calendarDialog = await readFile("src/features/planning/organisms/header-calendar-dialog.tsx", "utf8");
   const modalDialog = await readFile("src/shared/hooks/use-modal-dialog.ts", "utf8");
 
   assert.match(notifications, /rootRef/);
   assert.match(notifications, /pointerdown/);
   assert.match(notifications, /keydown/);
   assert.match(notifications, /href="\/notifications"/);
-  assert.match(teamAction, /createPortal/);
-  assert.match(teamDialog, /useModalDialog/);
-  assert.match(teamDialog, /aria-modal="true"/);
+  assert.match(calendarAction, /createPortal/);
+  assert.match(calendarDialog, /useModalDialog/);
+  assert.match(calendarDialog, /manageEnvironment: !desktopPopover/);
+  assert.match(calendarDialog, /aria-modal=\{desktopPopover \? undefined : "true"\}/);
   assert.match(modalDialog, /Escape/);
 });
 

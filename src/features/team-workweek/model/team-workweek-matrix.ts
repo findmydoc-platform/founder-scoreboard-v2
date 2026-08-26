@@ -7,7 +7,15 @@ export type TeamWorkweekMatrixRow = Readonly<{
 }>;
 
 export function starterTeamProfiles(profiles: Profile[]) {
-  return profiles.filter((profile) => profile.platformRole === "ceo" || profile.platformRole === "founder");
+  return profiles
+    .filter((profile) => profile.platformRole === "ceo" || profile.platformRole === "founder")
+    .sort((left, right) => Number(right.platformRole === "ceo") - Number(left.platformRole === "ceo"));
+}
+
+export function isTeamWorkweekStarterProfile(profiles: Profile[], profile: Profile | null | undefined) {
+  if (!profile) return false;
+  const starterProfiles = starterTeamProfiles(profiles);
+  return starterProfiles.length === 5 && starterProfiles.some((candidate) => candidate.id === profile.id);
 }
 
 export function projectActiveTeamWorkweekRows(

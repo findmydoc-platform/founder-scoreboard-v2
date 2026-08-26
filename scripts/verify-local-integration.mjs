@@ -151,6 +151,47 @@ async function verifySeedConvergence(status, source) {
     if (row.github_project_number !== source.project.githubProjectNumber) {
       throw new Error("Local seed did not persist the GitHub Project number.");
     }
+    const founderEvents = await verifier.query(
+      "select id,title,category,starts_at,ends_at,location,description,audience_mode,participant_profile_ids,reminder_days_before,status,created_by from founder_events where id = any($1::bigint[]) order by id",
+      [source.founderEvents.map((event) => event.id)],
+    );
+    if (founderEvents.rowCount !== source.founderEvents.length) {
+      throw new Error("Local seed did not persist all FounderOps events.");
+    }
+    for (const [index, event] of source.founderEvents.entries()) {
+      const row = founderEvents.rows[index];
+      const expected = {
+        id: String(event.id),
+        title: event.title,
+        category: event.category,
+        startsAt: new Date(event.startsAt).toISOString(),
+        endsAt: event.endsAt ? new Date(event.endsAt).toISOString() : null,
+        location: event.location,
+        description: event.description,
+        audienceMode: event.audienceMode,
+        participantProfileIds: event.participantProfileIds,
+        reminderDaysBefore: event.reminderDaysBefore,
+        status: event.status,
+        createdBy: event.createdBy,
+      };
+      const actual = {
+        id: String(row.id),
+        title: row.title,
+        category: row.category,
+        startsAt: row.starts_at.toISOString(),
+        endsAt: row.ends_at?.toISOString() || null,
+        location: row.location,
+        description: row.description,
+        audienceMode: row.audience_mode,
+        participantProfileIds: row.participant_profile_ids,
+        reminderDaysBefore: row.reminder_days_before,
+        status: row.status,
+        createdBy: row.created_by,
+      };
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+        throw new Error(`Local seed did not converge FounderOps event ${event.id}.`);
+      }
+    }
   } finally {
     await verifier.end();
   }
@@ -1019,7 +1060,15 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       || ownerVersions.some((version) => version.owner_profile_id !== "volkan")
       || ownerVersions[0].team_workweek_windows?.length !== firstWindows.length
       || ownerVersions[1].team_workweek_windows?.length !== 0) {
-      throw new Error("Owner-only reads did not preserve both private team-workweek versions.");
+      throw new Error(`Owner-only reads did not preserve both private team-workweek versions (${JSON.stringify({
+        code: ownerReadError?.code || null,
+        count: ownerVersions?.length || 0,
+        versions: ownerVersions?.map((version) => ({
+          id: version.id,
+          ownerProfileId: version.owner_profile_id,
+          windowCount: version.team_workweek_windows?.length || 0,
+        })) || [],
+      })}).`);
     }
 
     const { error: insertError } = await mapped.from("team_workweek_versions").insert({
@@ -2468,7 +2517,11 @@ async function main() {
   const localEnv = parseEnvFile(readFileSync(resolve(root, ".env.local"), "utf8"));
   const app = spawn(nextCli, ["dev", "--hostname", "127.0.0.1", "--port", "3012"], {
     cwd: root,
-    env: { ...process.env, ...localEnv, APP_URL: appOrigin },
+    env: {
+      ...process.env,
+      ...localEnv,
+      APP_URL: appOrigin,
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let serverOutput = "";

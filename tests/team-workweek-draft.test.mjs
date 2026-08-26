@@ -14,6 +14,11 @@ test("the default is always the next Europe/Berlin Monday", () => {
   assert.equal(model.nextMondayIso(new Date("2026-03-29T00:30:00.000Z")), "2026-03-30");
 });
 
+test("the mobile workweek defaults to the current Europe/Berlin weekday", () => {
+  assert.equal(model.currentTeamWorkweekDayKey(new Date("2026-08-24T10:00:00.000Z")), "monday");
+  assert.equal(model.currentTeamWorkweekDayKey(new Date("2026-08-30T10:00:00.000Z")), "sunday");
+});
+
 test("later versions default to the first Monday after the latest published boundary", () => {
   assert.equal(model.nextVersionMondayIso(null, new Date("2026-08-25T10:00:00.000Z")), "2026-08-31");
   assert.equal(model.nextVersionMondayIso("2026-08-31", new Date("2026-08-25T10:00:00.000Z")), "2026-09-07");
@@ -118,12 +123,13 @@ test("editor exposes the complete private workflow and protects unsaved changes"
   const card = readFileSync("src/features/team-workweek/molecules/private-team-workweek-card.tsx", "utf8");
   const team = readFileSync("src/features/team/organisms/team-overview.tsx", "utf8");
   const renderer = readFileSync("src/features/planning/organisms/planning-workspace-renderer.tsx", "utf8");
-  assert.match(editor, /Identität & Teamfreigabe/);
-  assert.match(editor, /GoogleWorkspaceConnectionCard/);
   assert.match(editor, /Privat · nicht veröffentlicht/);
+  assert.match(editor, /GoogleWorkspaceConnectionCard/);
   assert.match(editor, /Gültigkeitsbeginn/);
   assert.match(editor, /TEAM_WORKWEEK_DAYS\.map/);
   assert.match(editor, /type="time"/);
+  assert.match(editor, /aria-label=\{state\.draft\.windows\[day\.key\]\.length \? `\$\{day\.label\}: weiteres Fenster hinzufügen` : `\$\{day\.label\}: Fenster hinzufügen`\}/);
+  assert.match(editor, /size="iconMd"/);
   assert.match(editor, /useModalDialog/);
   assert.match(editor, /TeamWorkweekDiscardDialog/);
   assert.match(hook, /beforeunload/);
@@ -132,6 +138,7 @@ test("editor exposes the complete private workflow and protects unsaved changes"
   assert.match(card, /Grundwoche vorbereiten/);
   assert.match(card, /bestätigte Google-Synchronisierung/);
   assert.match(editor, /In Google & Team veröffentlichen/);
-  assert.match(team, /actualProfile\.platformRole/);
+  assert.match(team, /teamWorkweekAvailable && actualProfile/);
   assert.match(renderer, /actualProfile=\{actualProfile\}/);
+  assert.match(renderer, /isTeamWorkweekStarterProfile\(data\.profiles, currentProfile\)/);
 });

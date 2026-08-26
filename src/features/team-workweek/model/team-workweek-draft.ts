@@ -1,16 +1,26 @@
 export const TEAM_WORKWEEK_TIMEZONE = "Europe/Berlin";
 
 export const TEAM_WORKWEEK_DAYS = [
-  { weekday: 1, key: "monday", label: "Montag" },
-  { weekday: 2, key: "tuesday", label: "Dienstag" },
-  { weekday: 3, key: "wednesday", label: "Mittwoch" },
-  { weekday: 4, key: "thursday", label: "Donnerstag" },
-  { weekday: 5, key: "friday", label: "Freitag" },
-  { weekday: 6, key: "saturday", label: "Samstag" },
-  { weekday: 7, key: "sunday", label: "Sonntag" },
+  { weekday: 1, key: "monday", label: "Montag", shortLabel: "Mo" },
+  { weekday: 2, key: "tuesday", label: "Dienstag", shortLabel: "Di" },
+  { weekday: 3, key: "wednesday", label: "Mittwoch", shortLabel: "Mi" },
+  { weekday: 4, key: "thursday", label: "Donnerstag", shortLabel: "Do" },
+  { weekday: 5, key: "friday", label: "Freitag", shortLabel: "Fr" },
+  { weekday: 6, key: "saturday", label: "Samstag", shortLabel: "Sa" },
+  { weekday: 7, key: "sunday", label: "Sonntag", shortLabel: "So" },
 ] as const;
 
 export type TeamWorkweekDayKey = typeof TEAM_WORKWEEK_DAYS[number]["key"];
+
+export function currentTeamWorkweekDayKey(now = new Date()): TeamWorkweekDayKey {
+  const shortLabel = new Intl.DateTimeFormat("de-DE", {
+    timeZone: TEAM_WORKWEEK_TIMEZONE,
+    weekday: "short",
+  }).format(now).replace(".", "").toLocaleLowerCase("de-DE");
+
+  return TEAM_WORKWEEK_DAYS.find((day) => day.shortLabel.toLocaleLowerCase("de-DE") === shortLabel)?.key
+    ?? TEAM_WORKWEEK_DAYS[0].key;
+}
 export type TeamWorkweekWindow = Readonly<{ start: string; end: string }>;
 export type TeamWorkweekWindows = Record<TeamWorkweekDayKey, TeamWorkweekWindow[]>;
 

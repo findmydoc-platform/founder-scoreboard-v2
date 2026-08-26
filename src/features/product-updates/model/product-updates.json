@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-08-25-team-workweek",
+    "releasedAt": "2026-08-25",
+    "expiresAt": "2026-09-24",
+    "featureTourId": "team-workweek-v1",
+    "title": "Termine und Arbeitswoche in einem Kalender",
+    "summary": "Der Kalender im Kopfbereich verbindet FounderOps-Termine mit den veröffentlichten Arbeitszeiten des Gründerteams. Die Verwaltung bleibt in den jeweiligen Arbeitsbereichen.",
+    "slides": [
+      {
+        "id": "team-workweek-overview",
+        "title": "Tagesplanung und Teamverfügbarkeit zusammen sehen",
+        "description": "Unter Termine siehst du FounderOps-Events und die Arbeitszeiten des ausgewählten Tages. Die Arbeitswoche zeigt alle sieben Tage; deine eigene Regelwoche bearbeitest du weiterhin im Team-Bereich.",
+        "image": {
+          "src": "/product-updates/2026-08-25-team-workweek/team-workweek.png",
+          "alt": "FounderOps-Kalender mit den Tabs Termine und Arbeitswoche, Monatsansicht, Tagesereignissen und Arbeitszeiten",
+          "width": 1440,
+          "height": 810
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-08-18-github-issue-webhook-sync",
     "releasedAt": "2026-08-18",
     "expiresAt": "2026-09-17",
