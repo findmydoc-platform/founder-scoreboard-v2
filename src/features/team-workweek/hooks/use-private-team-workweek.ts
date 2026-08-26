@@ -9,6 +9,7 @@ import {
   type PrivateTeamWorkweekDraft,
   type PrivateTeamWorkweekVersion,
   type TeamWorkweekDayKey,
+  type TeamWorkweekConflict,
   type TeamWorkweekWindow,
 } from "../model/team-workweek-draft";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -23,6 +24,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   const [version, setVersion] = useState<PrivateTeamWorkweekVersion | null>(null);
   const [publication, setPublication] = useState<OwnTeamWorkweekPublication | null>(null);
   const [latestPublished, setLatestPublished] = useState<OwnTeamWorkweekPublication | null>(null);
+  const [conflict, setConflict] = useState<TeamWorkweekConflict | null>(null);
   const [minimumEffectiveFrom, setMinimumEffectiveFrom] = useState(() => nextMondayIso());
   const [draft, setDraft] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
   const [baseline, setBaseline] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
@@ -68,6 +70,14 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         setMinimumEffectiveFrom(body.minimumEffectiveFrom);
         applyVersion(body.version, body.minimumEffectiveFrom);
       }
+      const conflictResponse = await apiClient.requestJson<{ conflict?: TeamWorkweekConflict | null; error?: string }>(
+        "/api/team-workweek/conflict",
+        { cache: "no-store", useDevProfileOverride: false },
+      );
+      if (!conflictResponse.response.ok || conflictResponse.body?.conflict === undefined) {
+        throw new Error(conflictResponse.body?.error || "Synchronisationskonflikt konnte nicht geladen werden.");
+      }
+      if (mounted.current) setConflict(conflictResponse.body.conflict || null);
     } catch (error) {
       if (mounted.current) {
         setMessageTone("warning");
@@ -178,6 +188,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
           lastSyncAt: string | null;
           recovery: "retry" | "reconnect" | "identity_conflict" | null;
         };
+        conflict?: { id: string; conflictRevision: number };
         error?: string;
       }>("/api/team-workweek/publish", {
         method: "POST",
@@ -185,6 +196,12 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         useDevProfileOverride: false,
       });
       if (!response.ok && response.status !== 202) {
+        if (response.status === 409 && body?.conflict) {
+          await load();
+          setMessageTone("warning");
+          setMessage("FounderOps und Google wurden parallel geändert. Wähle unten bewusst eine Variante.");
+          return false;
+        }
         throw new Error(body?.error || "Grundwoche konnte nicht veröffentlicht werden.");
       }
       if (body?.publication?.status !== "published") {
@@ -221,6 +238,45 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       if (mounted.current) {
         setMessageTone("warning");
         setMessage(error instanceof Error ? error.message : "Grundwoche konnte nicht veröffentlicht werden.");
+      }
+      return false;
+    } finally {
+      if (mounted.current) setPending(false);
+    }
+  };
+
+  const resolveConflict = async (decision: "founderops" | "google") => {
+    if (!conflict) return false;
+    setPending(true);
+    setMessage("");
+    try {
+      const { response, body } = await apiClient.requestJson<{
+        publication?: { status: "preparing" | "published"; recovery: string | null };
+        error?: string;
+      }>("/api/team-workweek/conflict", {
+        method: "POST",
+        json: { conflictId: conflict.id, conflictRevision: conflict.conflictRevision, decision },
+        useDevProfileOverride: false,
+      });
+      if ((!response.ok && response.status !== 202) || !body?.publication) {
+        throw new Error(body?.error || "Konfliktentscheidung konnte nicht bestätigt werden.");
+      }
+      await load();
+      if (body.publication.status !== "published") {
+        setMessageTone("warning");
+        setMessage("Die gewählte Variante bleibt in Vorbereitung. Der letzte bestätigte Teamstand bleibt aktiv; du kannst sicher erneut versuchen.");
+        return false;
+      }
+      setMessageTone("success");
+      setMessage(decision === "founderops"
+        ? "Deine FounderOps-Variante wurde erneut geprüft und auf beiden Seiten bestätigt."
+        : "Die Google-Variante wurde erneut geprüft und auf beiden Seiten bestätigt.");
+      window.dispatchEvent(new Event(TEAM_WORKWEEK_PUBLISHED_EVENT));
+      return true;
+    } catch (error) {
+      if (mounted.current) {
+        setMessageTone("warning");
+        setMessage(error instanceof Error ? error.message : "Konfliktentscheidung konnte nicht bestätigt werden.");
       }
       return false;
     } finally {
@@ -293,6 +349,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
 
   return {
     addWindow,
+    conflict,
     dirty,
     draft,
     errors,
@@ -303,6 +360,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     pending,
     publication,
     reconcile,
+    resolveConflict,
     removeWindow,
     reset,
     save,

@@ -26,7 +26,7 @@ export class TeamWorkweekPublicationError extends Error {
   }
 }
 
-type PublicationResult = Readonly<{
+export type TeamWorkweekPublicationResult = Readonly<{
   id: string;
   status: "preparing" | "published";
   syncState: "delayed" | "confirmed";
@@ -36,7 +36,7 @@ type PublicationResult = Readonly<{
   recovery: "retry" | "reconnect" | "identity_conflict" | null;
 }>;
 
-type PublicationDelayClass = Extract<GoogleWorkweekSeriesResult, { state: "delayed" }>["errorClass"] | "storage_failed";
+export type TeamWorkweekPublicationDelayClass = Extract<GoogleWorkweekSeriesResult, { state: "delayed" }>["errorClass"] | "storage_failed";
 
 function publicationError(error: { code?: string } | null | undefined) {
   if (error?.code === "42501") {
@@ -95,30 +95,30 @@ function isPreparedPublication(value: unknown): value is PreparedWorkweekPublica
     ));
 }
 
-function isPublicationResult(value: unknown): value is PublicationResult {
+function isPublicationResult(value: unknown): value is TeamWorkweekPublicationResult {
   if (!value || typeof value !== "object") return false;
-  const input = value as Partial<PublicationResult>;
+  const input = value as Partial<TeamWorkweekPublicationResult>;
   return typeof input.id === "string"
     && (input.status === "preparing" || input.status === "published")
     && (input.syncState === "delayed" || input.syncState === "confirmed")
     && Number.isInteger(input.publicationRevision);
 }
 
-function recoveryFor(errorClass: PublicationDelayClass): PublicationResult["recovery"] {
+function recoveryFor(errorClass: TeamWorkweekPublicationDelayClass): TeamWorkweekPublicationResult["recovery"] {
   return errorClass === "storage_failed" ? "retry" : googleWorkweekRecovery(errorClass);
 }
 
-function resultWithRecovery(value: unknown, recovery: PublicationResult["recovery"]) {
+function resultWithRecovery(value: unknown, recovery: TeamWorkweekPublicationResult["recovery"]) {
   if (!isPublicationResult(value)) {
     throw new TeamWorkweekPublicationError("unavailable", "Veröffentlichungsstatus konnte nicht bestätigt werden.");
   }
-  return { ...value, recovery: value.status === "published" ? null : recovery } satisfies PublicationResult;
+  return { ...value, recovery: value.status === "published" ? null : recovery } satisfies TeamWorkweekPublicationResult;
 }
 
 async function markDelayed(
   serviceSupabase: SupabaseClient,
   publicationId: string,
-  errorClass: PublicationDelayClass,
+  errorClass: TeamWorkweekPublicationDelayClass,
   observedAt: string,
 ) {
   const { data, error } = await serviceSupabase.rpc("delay_team_workweek_publication", {
@@ -137,6 +137,7 @@ export async function publishTeamWorkweek({
   ensureSeries = ensureGoogleWorkweekSeries,
   ensureTransition = ensureGoogleWorkweekSeriesTransition,
   now = () => new Date(),
+  transitionsFirst = false,
 }: {
   serviceSupabase: SupabaseClient;
   userSupabase: SupabaseClient;
@@ -144,7 +145,8 @@ export async function publishTeamWorkweek({
   ensureSeries?: typeof ensureGoogleWorkweekSeries;
   ensureTransition?: typeof ensureGoogleWorkweekSeriesTransition;
   now?: () => Date;
-}): Promise<PublicationResult> {
+  transitionsFirst?: boolean;
+}): Promise<TeamWorkweekPublicationResult> {
   const preparedResponse = await userSupabase.rpc("prepare_team_workweek_publication", {
     p_version_id: versionId,
   });
@@ -179,63 +181,60 @@ export async function publishTeamWorkweek({
     );
   }
 
-  let delayed: Extract<GoogleWorkweekSeriesResult, { state: "delayed" }> | null = null;
-  for (const series of publication.series) {
-    if (series.state === "confirmed") continue;
-    let result: GoogleWorkweekSeriesResult;
-    try {
-      result = await ensureSeries({ accessToken, publication, series, now });
-    } catch {
-      result = { state: "delayed", errorClass: "provider_unavailable" };
+  const syncSeries = async () => {
+    let delayed: Extract<GoogleWorkweekSeriesResult, { state: "delayed" }> | null = null;
+    for (const series of publication.series) {
+      if (series.state === "confirmed") continue;
+      let result: GoogleWorkweekSeriesResult;
+      try {
+        result = await ensureSeries({ accessToken, publication, series, now });
+      } catch {
+        result = { state: "delayed", errorClass: "provider_unavailable" };
+      }
+      if (result.state === "delayed") {
+        delayed ??= result;
+        continue;
+      }
+      const confirmation = await serviceSupabase.rpc("confirm_team_workweek_google_series", {
+        p_series_id: series.id,
+        p_etag: result.etag,
+        p_founderops_revision: publication.publicationRevision,
+        p_observed_at: result.observedAt,
+      });
+      if (confirmation.error) return "storage_failed" as const;
     }
-    if (result.state === "delayed") {
-      delayed ??= result;
-      continue;
-    }
-    const confirmation = await serviceSupabase.rpc("confirm_team_workweek_google_series", {
-      p_series_id: series.id,
-      p_etag: result.etag,
-      p_founderops_revision: publication.publicationRevision,
-      p_observed_at: result.observedAt,
-    });
-    if (confirmation.error) {
-      const observedAt = now().toISOString();
-      return await markDelayed(serviceSupabase, publication.id, "storage_failed", observedAt);
-    }
-  }
+    return delayed?.errorClass || null;
+  };
 
-  if (delayed) {
-    const observedAt = now().toISOString();
-    return await markDelayed(serviceSupabase, publication.id, delayed.errorClass, observedAt);
-  }
+  const syncTransitions = async () => {
+    let delayed: Extract<GoogleWorkweekSeriesResult, { state: "delayed" }> | null = null;
+    for (const transition of publication.transitions) {
+      if (transition.state === "confirmed") continue;
+      let result: GoogleWorkweekSeriesResult;
+      try {
+        result = await ensureTransition({ accessToken, transition, now });
+      } catch {
+        result = { state: "delayed", errorClass: "provider_unavailable" };
+      }
+      if (result.state === "delayed") {
+        delayed ??= result;
+        continue;
+      }
+      const confirmation = await serviceSupabase.rpc("confirm_team_workweek_google_series_transition", {
+        p_transition_id: transition.id,
+        p_etag: result.etag,
+        p_expected_founderops_revision: transition.expectedFounderopsRevision,
+        p_observed_at: result.observedAt,
+      });
+      if (confirmation.error) return "storage_failed" as const;
+    }
+    return delayed?.errorClass || null;
+  };
 
-  for (const transition of publication.transitions) {
-    if (transition.state === "confirmed") continue;
-    let result: GoogleWorkweekSeriesResult;
-    try {
-      result = await ensureTransition({ accessToken, transition, now });
-    } catch {
-      result = { state: "delayed", errorClass: "provider_unavailable" };
-    }
-    if (result.state === "delayed") {
-      delayed ??= result;
-      continue;
-    }
-    const confirmation = await serviceSupabase.rpc("confirm_team_workweek_google_series_transition", {
-      p_transition_id: transition.id,
-      p_etag: result.etag,
-      p_expected_founderops_revision: transition.expectedFounderopsRevision,
-      p_observed_at: result.observedAt,
-    });
-    if (confirmation.error) {
-      const observedAt = now().toISOString();
-      return await markDelayed(serviceSupabase, publication.id, "storage_failed", observedAt);
-    }
-  }
-
-  if (delayed) {
-    const observedAt = now().toISOString();
-    return await markDelayed(serviceSupabase, publication.id, delayed.errorClass, observedAt);
+  const stages = transitionsFirst ? [syncTransitions, syncSeries] : [syncSeries, syncTransitions];
+  for (const sync of stages) {
+    const errorClass = await sync();
+    if (errorClass) return await markDelayed(serviceSupabase, publication.id, errorClass, now().toISOString());
   }
 
   const finalized = await userSupabase.rpc("finalize_team_workweek_publication", {
@@ -246,4 +245,38 @@ export async function publishTeamWorkweek({
     throw new TeamWorkweekPublicationError("unavailable", "Grundwoche konnte nicht veröffentlicht werden.");
   }
   return { ...finalized.data, recovery: null };
+}
+
+export async function delayTeamWorkweekPublication({
+  errorClass,
+  now = () => new Date(),
+  serviceSupabase,
+  userSupabase,
+  versionId,
+}: {
+  errorClass: Exclude<TeamWorkweekPublicationDelayClass, "storage_failed" | "provider_identity_mismatch">;
+  now?: () => Date;
+  serviceSupabase: SupabaseClient;
+  userSupabase: SupabaseClient;
+  versionId: string;
+}): Promise<TeamWorkweekPublicationResult> {
+  const preparedResponse = await userSupabase.rpc("prepare_team_workweek_publication", {
+    p_version_id: versionId,
+  });
+  if (preparedResponse.error) throw publicationError(preparedResponse.error);
+  if (!isPreparedPublication(preparedResponse.data)) {
+    throw new TeamWorkweekPublicationError("unavailable", "Grundwoche konnte nicht vorbereitet werden.");
+  }
+  if (preparedResponse.data.status === "published") {
+    return {
+      id: preparedResponse.data.id,
+      status: "published",
+      syncState: "confirmed",
+      publishedAt: preparedResponse.data.publishedAt,
+      lastSyncAt: preparedResponse.data.lastSyncAt,
+      publicationRevision: preparedResponse.data.publicationRevision,
+      recovery: null,
+    };
+  }
+  return await markDelayed(serviceSupabase, preparedResponse.data.id, errorClass, now().toISOString());
 }
