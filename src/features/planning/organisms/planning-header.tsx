@@ -192,6 +192,11 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             onToggleNotifications={() => showNotifications ? setShowNotifications(false) : openNotificationInbox()}
             onOpenNotification={openNotification}
             onDismissNotification={dismissNotification}
+            teamWorkweek={{
+              apiClient: controller.apiClient,
+              onOpenTeam: () => setWorkspace("team"),
+              profiles: data.profiles,
+            }}
           />
           <PlanningHelpMenu />
           <GitHubSyncTrigger
