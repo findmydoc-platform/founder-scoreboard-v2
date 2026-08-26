@@ -916,6 +916,7 @@ async function verifyUnmappedAuthReadBoundary(status) {
       ["team_workweek_versions", "id"],
       ["team_workweek_windows", "id"],
       ["team_workweek_publications", "id"],
+      ["team_workweek_google_reconciliation_status", "publication_id"],
       ["team_workweek_google_series", "id"],
       ["team_workweek_google_series_transitions", "id"],
     ]) {
@@ -988,7 +989,7 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       { p_effective_from: effectiveFrom, p_windows: firstWindows },
     );
     if (firstError || !first?.id || first.status !== "preparing") {
-      throw new Error("Mapped owner could not create a private team workweek version.");
+      throw new Error(`Mapped owner could not create a private team workweek version: ${firstError?.code || "missing_data"} ${firstError?.message || "missing result"}`);
     }
     const { data: second, error: secondError } = await mapped.rpc(
       "create_private_team_workweek_version",
@@ -1330,6 +1331,160 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
       throw new Error("A successor to an empty workweek left an overlapping open validity interval.");
     }
 
+    const { data: activeGoogleSeries, error: activeGoogleSeriesError } = await admin
+      .from("team_workweek_google_series")
+      .select("id,confirmed_etag,confirmed_founderops_revision")
+      .eq("publication_id", preparedAfterEmpty.id)
+      .single();
+    if (activeGoogleSeriesError || !activeGoogleSeries?.confirmed_etag || !activeGoogleSeries.confirmed_founderops_revision) {
+      throw new Error("The active workweek Google identity was not available for reconciliation.");
+    }
+    const changedGoogleEtag = `"google-change-${activeGoogleSeries.id}"`;
+    const googleChangeBoundary = new Date(`${afterEmptyEffectiveFrom}T00:00:00.000Z`);
+    googleChangeBoundary.setUTCDate(googleChangeBoundary.getUTCDate() + 7);
+    const googleChangeEffectiveFrom = googleChangeBoundary.toISOString().slice(0, 10);
+    const googleChangeWindows = [{ weekday: 4, startMinute: 600, endMinute: 780 }];
+    const googleChangeObservations = [{
+      seriesId: activeGoogleSeries.id,
+      priorEtag: activeGoogleSeries.confirmed_etag,
+      observedEtag: changedGoogleEtag,
+      founderopsRevision: activeGoogleSeries.confirmed_founderops_revision,
+      providerState: "active",
+    }];
+    const { data: googleChange, error: googleChangeError } = await admin.rpc(
+      "prepare_google_team_workweek_reconciliation",
+      {
+        p_owner_profile_id: "volkan",
+        p_source_publication_id: preparedAfterEmpty.id,
+        p_source_publication_revision: preparedAfterEmpty.publicationRevision,
+        p_effective_from: googleChangeEffectiveFrom,
+        p_observations: googleChangeObservations,
+        p_windows: googleChangeWindows,
+        p_fingerprint: "a".repeat(64),
+        p_observed_at: "2026-08-25T10:06:00.000Z",
+      },
+    );
+    const { data: googleChangeReplay, error: googleChangeReplayError } = googleChangeError
+      ? { data: null, error: googleChangeError }
+      : await admin.rpc("prepare_google_team_workweek_reconciliation", {
+        p_owner_profile_id: "volkan",
+        p_source_publication_id: preparedAfterEmpty.id,
+        p_source_publication_revision: preparedAfterEmpty.publicationRevision,
+        p_effective_from: googleChangeEffectiveFrom,
+        p_observations: googleChangeObservations,
+        p_windows: googleChangeWindows,
+        p_fingerprint: "a".repeat(64),
+        p_observed_at: "2026-08-25T10:06:00.000Z",
+      });
+    const { data: preparedGoogleChange, error: preparedGoogleChangeError } = googleChangeReplayError
+      ? { data: null, error: googleChangeReplayError }
+      : await mapped.rpc("prepare_team_workweek_publication", { p_version_id: googleChange.versionId });
+    if (googleChangeError || !googleChange?.versionId
+      || googleChangeReplayError || googleChangeReplay?.versionId !== googleChange.versionId || googleChangeReplay?.replayed !== true
+      || preparedGoogleChangeError || preparedGoogleChange?.publicationRevision !== 5
+      || preparedGoogleChange?.series?.length !== 1 || preparedGoogleChange?.transitions?.length !== 1
+      || preparedGoogleChange.transitions[0].expectedEtag !== changedGoogleEtag) {
+      throw new Error("A validated Google series change did not prepare one replay-safe Monday version.");
+    }
+    const { data: ownerReconciliationStatus, error: ownerReconciliationStatusError } = await mapped
+      .from("team_workweek_google_reconciliation_status")
+      .select("publication_id,state,last_error_class")
+      .eq("publication_id", preparedAfterEmpty.id)
+      .single();
+    const { data: foreignReconciliationStatus, error: foreignReconciliationStatusError } = await founder
+      .from("team_workweek_google_reconciliation_status")
+      .select("publication_id")
+      .eq("publication_id", preparedAfterEmpty.id);
+    const { data: blockedOwnerDraft, error: blockedOwnerDraftError } = await mapped.rpc(
+      "create_private_team_workweek_version",
+      { p_effective_from: googleChangeEffectiveFrom, p_windows: googleChangeWindows },
+    );
+    if (ownerReconciliationStatusError || ownerReconciliationStatus?.state !== "pending"
+      || ownerReconciliationStatus.last_error_class !== null
+      || foreignReconciliationStatusError || foreignReconciliationStatus?.length
+      || !blockedOwnerDraftError || blockedOwnerDraftError.code !== "P0003" || blockedOwnerDraft) {
+      throw new Error("Pending Google reconciliation state was exposed across owners or accepted a competing owner draft.");
+    }
+    for (const series of preparedGoogleChange.series) {
+      const { error } = await admin.rpc("confirm_team_workweek_google_series", {
+        p_series_id: series.id,
+        p_etag: `"etag-${series.id}"`,
+        p_founderops_revision: preparedGoogleChange.publicationRevision,
+        p_observed_at: "2026-08-25T10:07:00.000Z",
+      });
+      if (error) throw new Error("Google-reconciled replacement series could not be confirmed.");
+    }
+    for (const transition of preparedGoogleChange.transitions) {
+      const { error } = await admin.rpc("confirm_team_workweek_google_series_transition", {
+        p_transition_id: transition.id,
+        p_etag: `"transition-${transition.id}"`,
+        p_expected_founderops_revision: transition.expectedFounderopsRevision,
+        p_observed_at: "2026-08-25T10:07:00.000Z",
+      });
+      if (error) throw new Error("Google-reconciled predecessor transition could not be confirmed.");
+    }
+    const { data: publishedGoogleChange, error: publishedGoogleChangeError } = await mapped.rpc(
+      "finalize_team_workweek_publication",
+      { p_publication_id: preparedGoogleChange.id },
+    );
+    if (publishedGoogleChangeError || publishedGoogleChange?.status !== "published") {
+      throw new Error("A fully confirmed Google-only change did not become the next team version.");
+    }
+
+    const { data: changedReplacementSeries, error: changedReplacementSeriesError } = await admin
+      .from("team_workweek_google_series")
+      .select("id,confirmed_etag,confirmed_founderops_revision")
+      .eq("publication_id", preparedGoogleChange.id)
+      .single();
+    const googleDeletionBoundary = new Date(`${googleChangeEffectiveFrom}T00:00:00.000Z`);
+    googleDeletionBoundary.setUTCDate(googleDeletionBoundary.getUTCDate() + 7);
+    const googleDeletionEffectiveFrom = googleDeletionBoundary.toISOString().slice(0, 10);
+    const googleDeletionObservations = changedReplacementSeries ? [{
+      seriesId: changedReplacementSeries.id,
+      priorEtag: changedReplacementSeries.confirmed_etag,
+      observedEtag: changedReplacementSeries.confirmed_etag,
+      founderopsRevision: changedReplacementSeries.confirmed_founderops_revision,
+      providerState: "deleted",
+    }] : [];
+    const { data: googleDeletion, error: googleDeletionError } = changedReplacementSeriesError
+      ? { data: null, error: changedReplacementSeriesError }
+      : await admin.rpc("prepare_google_team_workweek_reconciliation", {
+        p_owner_profile_id: "volkan",
+        p_source_publication_id: preparedGoogleChange.id,
+        p_source_publication_revision: preparedGoogleChange.publicationRevision,
+        p_effective_from: googleDeletionEffectiveFrom,
+        p_observations: googleDeletionObservations,
+        p_windows: [],
+        p_fingerprint: "b".repeat(64),
+        p_observed_at: "2026-08-25T10:08:00.000Z",
+      });
+    const { data: preparedGoogleDeletion, error: preparedGoogleDeletionError } = googleDeletionError
+      ? { data: null, error: googleDeletionError }
+      : await mapped.rpc("prepare_team_workweek_publication", { p_version_id: googleDeletion.versionId });
+    if (googleDeletionError || !googleDeletion?.versionId
+      || preparedGoogleDeletionError || preparedGoogleDeletion?.publicationRevision !== 6
+      || preparedGoogleDeletion?.series?.length !== 0 || preparedGoogleDeletion?.transitions?.length !== 1
+      || preparedGoogleDeletion.transitions[0].state !== "confirmed") {
+      throw new Error("A known full-series deletion was not accepted without recreating or rewriting the deleted series.");
+    }
+    const { data: publishedGoogleDeletion, error: publishedGoogleDeletionError } = await mapped.rpc(
+      "finalize_team_workweek_publication",
+      { p_publication_id: preparedGoogleDeletion.id },
+    );
+    if (publishedGoogleDeletionError || publishedGoogleDeletion?.status !== "published") {
+      throw new Error("A confirmed Google series deletion did not publish the empty successor week.");
+    }
+
+    const { error: staleGoogleObservationError } = await admin.rpc("confirm_google_team_workweek_observation", {
+      p_publication_id: preparedGoogleChange.id,
+      p_publication_revision: preparedGoogleChange.publicationRevision,
+      p_observations: googleDeletionObservations,
+      p_observed_at: "2026-08-25T10:09:00.000Z",
+    });
+    if (!staleGoogleObservationError || staleGoogleObservationError.code !== "P0004") {
+      throw new Error("A stale Google observation unexpectedly changed a superseded FounderOps week.");
+    }
+
     await database.query("update public.profiles set platform_role='viewer' where id='sebastian'");
     const { data: demotedVersions, error: demotedVersionsError } = await founder
       .from("team_workweek_versions").select("id,status");
@@ -1343,7 +1498,7 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
     );
     if (demotedVersionsError || demotedVersions?.length
       || demotedWindowsError || demotedWindows?.length
-      || demotedPublicationsError || demotedPublications?.length !== 4 || demotedPublications.some((publication) => publication.status !== "published")
+      || demotedPublicationsError || demotedPublications?.length !== 6 || demotedPublications.some((publication) => publication.status !== "published")
       || !demotedWriteError || demotedWriteError.code !== "42501" || demotedWrite) {
       throw new Error("A profile demoted to viewer did not retain only published team-workweek access.");
     }
@@ -1360,18 +1515,34 @@ async function verifyPrivateTeamWorkweekAccessBoundary(status, mapped) {
     const { data: viewerRead, error: viewerReadError } = await viewer.from("team_workweek_versions").select("id");
     const { data: viewerPublications, error: viewerPublicationsError } = await viewer
       .from("team_workweek_publications").select("id,status");
+    const { data: viewerReconciliationStatus, error: viewerReconciliationStatusError } = await viewer
+      .from("team_workweek_google_reconciliation_status").select("publication_id");
     if (viewerReadError || viewerRead?.length
-      || viewerPublicationsError || viewerPublications?.length !== 4
+      || viewerPublicationsError || viewerPublications?.length !== 6
+      || viewerReconciliationStatusError || viewerReconciliationStatus?.length
       || !viewerPublications.some((publication) => publication.id === prepared.id)
       || !viewerPublications.some((publication) => publication.id === preparedLater.id)
       || !viewerPublications.some((publication) => publication.id === preparedEmpty.id)
-      || !viewerPublications.some((publication) => publication.id === preparedAfterEmpty.id)) {
+      || !viewerPublications.some((publication) => publication.id === preparedAfterEmpty.id)
+      || !viewerPublications.some((publication) => publication.id === preparedGoogleChange.id)
+      || !viewerPublications.some((publication) => publication.id === preparedGoogleDeletion.id)) {
       throw new Error("Viewer did not receive the published version history while private drafts stayed hidden.");
     }
   } finally {
     await founder?.auth.signOut({ scope: "local" }).catch(() => undefined);
     await viewer?.auth.signOut({ scope: "local" }).catch(() => undefined);
-    await database.query("delete from public.team_workweek_publications where owner_profile_id = any($1::text[])", [ownerIds]);
+    await database.query(
+      "update public.team_workweek_publications set predecessor_publication_id=null, superseded_by_publication_id=null, effective_to=null where owner_profile_id = any($1::text[])",
+      [ownerIds],
+    );
+    const cleanupPublications = await database.query(
+      "select id, source_version_id from public.team_workweek_publications where owner_profile_id = any($1::text[]) order by publication_revision desc",
+      [ownerIds],
+    );
+    for (const publication of cleanupPublications.rows) {
+      await database.query("delete from public.team_workweek_publications where id=$1", [publication.id]);
+      await database.query("delete from public.team_workweek_versions where id=$1", [publication.source_version_id]);
+    }
     await database.query("delete from public.team_workweek_versions where owner_profile_id = any($1::text[])", [ownerIds]);
     await database.query(
       "update public.profiles set auth_user_id=null, platform_role=case when id='sebastian' then 'founder' else platform_role end where id = any($1::text[])",

@@ -13,16 +13,21 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
   const [open, setOpen] = useState(false);
   const state = usePrivateTeamWorkweek(apiClient);
   const syncDelayed = state.publication?.syncState === "delayed";
+  const reconciliationState = state.latestPublished?.googleReconciliationState;
   const latestIsPrepared = Boolean(state.latestPublished && state.latestPublished.effectiveFrom > berlinTodayIso());
   const badge = syncDelayed
     ? { tone: "amber" as const, label: "Synchronisierung verzögert" }
-    : state.version
-      ? { tone: "amber" as const, label: "In Vorbereitung" }
-      : latestIsPrepared
-        ? { tone: "blue" as const, label: "Für Montag vorbereitet" }
-        : state.latestPublished
-          ? { tone: "emerald" as const, label: "Veröffentlicht" }
-          : { tone: "slate" as const, label: "Noch nicht vorbereitet" };
+    : reconciliationState === "conflict"
+      ? { tone: "amber" as const, label: "Google-Konflikt" }
+      : reconciliationState === "delayed"
+        ? { tone: "amber" as const, label: "Synchronisierung verzögert" }
+        : state.version
+          ? { tone: "amber" as const, label: "In Vorbereitung" }
+          : latestIsPrepared
+            ? { tone: "blue" as const, label: "Für Montag vorbereitet" }
+            : state.latestPublished
+              ? { tone: "emerald" as const, label: "Veröffentlicht" }
+              : { tone: "slate" as const, label: "Noch nicht vorbereitet" };
 
   return (
     <>
@@ -45,10 +50,23 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
                 {state.latestPublished.lastSyncAt ? ` · letzter erfolgreicher Sync ${formatDate(state.latestPublished.lastSyncAt.slice(0, 10))}` : ""}
               </p>
             )}
+            {reconciliationState === "conflict" && !state.version && (
+              <p className="mt-2 text-xs font-semibold text-amber-700">Eine Google-Serienänderung ist nicht eindeutig. Der bestätigte Teamstand bleibt aktiv.</p>
+            )}
+            {reconciliationState === "delayed" && !state.version && (
+              <p className="mt-2 text-xs font-semibold text-amber-700">Der Google-Abgleich ist verzögert. Der bestätigte Teamstand bleibt aktiv.</p>
+            )}
           </div>
-          <UiButton variant="primary" size="lg" onClick={() => setOpen(true)} disabled={state.pending && !state.version}>
-            {state.version ? "Grundwoche weiterführen" : state.latestPublished ? "Neue Version vorbereiten" : "Grundwoche vorbereiten"}
-          </UiButton>
+          <div className="flex flex-col gap-2 sm:items-end">
+            {state.latestPublished && !state.version && (
+              <UiButton variant="secondary" size="lg" onClick={() => void state.reconcile()} disabled={state.pending}>
+                Google abgleichen
+              </UiButton>
+            )}
+            <UiButton variant="primary" size="lg" onClick={() => setOpen(true)} disabled={state.pending && !state.version}>
+              {state.version ? "Grundwoche weiterführen" : state.latestPublished ? "Neue Version vorbereiten" : "Grundwoche vorbereiten"}
+            </UiButton>
+          </div>
         </div>
         {state.message && !open && <UiNotice className="mt-4" tone={state.messageTone === "success" ? "success" : "warning"}>{state.message}</UiNotice>}
       </UiPanel>
