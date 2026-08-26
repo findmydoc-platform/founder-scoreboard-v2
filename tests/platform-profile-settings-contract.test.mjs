@@ -159,7 +159,7 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   assert.match(provider, /MutationObserver/);
   assert.match(provider, /findVisibleTourElement/);
   assert.match(provider, /getClientRects\(\)\.length > 0/);
-  assert.match(provider, /selectNextFeatureTour\(featureTours, workspace/);
+  assert.match(provider, /selectNextFeatureTour\([\s\S]*availableTours,[\s\S]*workspace/);
   assert.doesNotMatch(provider, /targetWorkspace/);
   assert.match(provider, /waitForElement\(initialSelector\)/);
   assert.match(provider, /waitForElement\(activeTour\.requiredSelectors\[1\]\)/);

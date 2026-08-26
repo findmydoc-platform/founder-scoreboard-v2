@@ -3,6 +3,7 @@ import {
   reconcileTeamWorkweek,
   TeamWorkweekReconciliationError,
 } from "@/features/team-workweek/server/team-workweek-reconciliation";
+import { requireTeamWorkweekStarterApiAccess } from "@/features/team-workweek/server/team-workweek-rollout-api";
 import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
 import { bearerToken, requirePlanningContributor } from "@/lib/authz";
 import { getSupabaseForToken } from "@/lib/supabase";
@@ -14,6 +15,11 @@ export async function POST(request: NextRequest) {
   const context = await requireApiContext(request, requirePlanningContributor);
   if (!context.ok) return context.response;
   const ownerProfileId = context.permission.profile?.id || null;
+  const rollout = await requireTeamWorkweekStarterApiAccess({
+    actorProfileId: ownerProfileId || "",
+    actorRole: context.permission.profile?.platformRole,
+  });
+  if (!rollout.ok) return rollout.response;
   const token = bearerToken(request);
   const userSupabase = token ? getSupabaseForToken(token) : null;
   const serviceSupabase = getServerServiceRoleSupabase();

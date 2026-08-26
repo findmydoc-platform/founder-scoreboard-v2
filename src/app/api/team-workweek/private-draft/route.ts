@@ -5,6 +5,7 @@ import {
   nextVersionMondayIso,
   validatePrivateTeamWorkweekDraft,
 } from "@/features/team-workweek/model/team-workweek-draft";
+import { requireTeamWorkweekStarterApiAccess } from "@/features/team-workweek/server/team-workweek-rollout-api";
 import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
 import { bearerToken, requirePlanningContributor } from "@/lib/authz";
 import { getSupabaseForToken } from "@/lib/supabase";
@@ -55,6 +56,11 @@ function authenticatedClient(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const context = await requireApiContext(request, requirePlanningContributor);
   if (!context.ok) return context.response;
+  const rollout = await requireTeamWorkweekStarterApiAccess({
+    actorProfileId: context.permission.profile?.id || "",
+    actorRole: context.permission.profile?.platformRole,
+  });
+  if (!rollout.ok) return rollout.response;
   const supabase = authenticatedClient(request);
   if (!supabase) return apiError("Anmeldung erforderlich.", 401);
 
@@ -115,6 +121,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const context = await requireApiContext(request, requirePlanningContributor);
   if (!context.ok) return context.response;
+  const rollout = await requireTeamWorkweekStarterApiAccess({
+    actorProfileId: context.permission.profile?.id || "",
+    actorRole: context.permission.profile?.platformRole,
+  });
+  if (!rollout.ok) return rollout.response;
   const supabase = authenticatedClient(request);
   if (!supabase) return apiError("Anmeldung erforderlich.", 401);
 

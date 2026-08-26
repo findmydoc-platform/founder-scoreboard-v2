@@ -126,13 +126,19 @@ export function FeatureTourProvider({
   source,
   workspace,
 }: FeatureTourProviderProps) {
+  const availableTours = featureTours;
   const nextTour = useMemo(() => {
     if (!currentProfile) return undefined;
-    return selectNextFeatureTour(featureTours, workspace, currentProfile.id, data.profileFeatureTourAcknowledgements);
-  }, [currentProfile, data.profileFeatureTourAcknowledgements, workspace]);
+    return selectNextFeatureTour(
+      availableTours,
+      workspace,
+      currentProfile.id,
+      data.profileFeatureTourAcknowledgements,
+    );
+  }, [availableTours, currentProfile, data.profileFeatureTourAcknowledgements, workspace]);
   const [requestedTourId, setRequestedTourId] = useState<string | null>(null);
   const tour: FeatureTourDefinition | undefined = requestedTourId
-    ? featureTours.find((definition) => definition.id === requestedTourId)
+    ? availableTours.find((definition) => definition.id === requestedTourId)
     : nextTour;
   const [tourRequested, setTourRequested] = useState(false);
   const [resumeStepIndex, setResumeStepIndex] = useState(0);
@@ -154,7 +160,7 @@ export function FeatureTourProvider({
       clearFeatureTourResume();
       return;
     }
-    const resumedTour = featureTours.find((definition) => definition.id === resume.tourId);
+    const resumedTour = availableTours.find((definition) => definition.id === resume.tourId);
     if (!resumedTour || !resumedTour.steps[resume.stepIndex]) {
       clearFeatureTourResume();
       return;
@@ -168,14 +174,14 @@ export function FeatureTourProvider({
       setTourRequested(true);
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [setView, workspace]);
+  }, [availableTours, setView, workspace]);
 
   useEffect(() => {
     const startFeatureTour = (event: Event) => {
       const detail = event instanceof CustomEvent ? event.detail as { tourId?: unknown } | undefined : undefined;
       const explicitTourId = typeof detail?.tourId === "string" ? detail.tourId : "";
       const selectedTour: FeatureTourDefinition | undefined = explicitTourId
-        ? featureTours.find((definition) => definition.id === explicitTourId)
+        ? availableTours.find((definition) => definition.id === explicitTourId)
         : nextTour;
       if (!selectedTour) {
         setTourRequested(false);
@@ -194,7 +200,7 @@ export function FeatureTourProvider({
     };
     window.addEventListener("fmd:start-feature-tour", startFeatureTour);
     return () => window.removeEventListener("fmd:start-feature-tour", startFeatureTour);
-  }, [nextTour]);
+  }, [availableTours, nextTour]);
 
   useEffect(() => {
     if (tourStatus?.kind !== "error") return;

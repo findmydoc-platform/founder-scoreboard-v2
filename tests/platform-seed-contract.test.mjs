@@ -45,6 +45,16 @@ test("local seed covers planning roles and stable core data", async () => {
   assert.equal(simulatedRollupChildren.filter((task) => task.status === "Erledigt").length, 3);
   assert.ok(simulatedRollupChildren.every((task) => task.taskType === "sub_issue" && task.scoreRelevant === false));
   assert.equal(source.fmdTools.length, 11);
+  assert.equal(source.founderEvents.length, 3);
+  assert.equal(new Set(source.founderEvents.map((event) => event.id)).size, source.founderEvents.length);
+  assert.ok(source.founderEvents.every((event) => event.id >= 900000));
+  assert.ok(source.founderEvents.every((event) => event.status === "planned"));
+  assert.ok(source.founderEvents.every((event) => profileById.has(event.createdBy)));
+  assert.ok(source.founderEvents.every((event) => (
+    event.audienceMode === "all"
+      ? event.participantProfileIds.length === 0
+      : event.participantProfileIds.length > 0 && event.participantProfileIds.every((profileId) => profileById.has(profileId))
+  )));
   assert.equal(profileById.get("volkan")?.platformRole, "ceo");
   assert.equal(profileById.get("local-deputy")?.platformRole, "deputy");
   assert.equal(profileById.get("local-deputy")?.deputyFor, "volkan");

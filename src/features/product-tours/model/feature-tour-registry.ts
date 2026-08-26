@@ -41,8 +41,36 @@ export const planningApiV2TourId = "planning-api-v2";
 export const mobileResponsiveWorkspacesTourId = "mobile-responsive-workspaces-v1";
 export const platformReleasesTourId = "platform-releases-v1";
 export const githubIssueWebhookSyncTourId = "github-issue-webhook-sync-v1";
+export const teamWorkweekTourId = "team-workweek-v1";
 
-export const featureTours = [
+export const featureTours: readonly FeatureTourDefinition[] = [
+  {
+    id: teamWorkweekTourId,
+    productUpdateId: "2026-08-25-team-workweek",
+    startWorkspace: "planning",
+    requiredSelectors: ["[data-tour-id='header-calendar-action']"],
+    steps: [
+      {
+        element: "[data-tour-id='header-calendar-action']",
+        popover: {
+          title: "Gemeinsamen Kalender öffnen",
+          description: "Termine zeigt FounderOps-Events und die veröffentlichten Arbeitszeiten des ausgewählten Tages in einer Ansicht.",
+          side: "bottom",
+          align: "end",
+        },
+      },
+      {
+        element: "[data-tour-id='header-calendar-action']",
+        popover: {
+          title: "Arbeitswoche vergleichen",
+          description: "Freigegebene Gründerprofile wechseln zum Tab Arbeitswoche. Die eigene Regelwoche bleibt ausschließlich im Team-Bereich bearbeitbar.",
+          side: "bottom",
+          align: "end",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: githubIssueWebhookSyncTourId,
     productUpdateId: "2026-08-18-github-issue-webhook-sync",

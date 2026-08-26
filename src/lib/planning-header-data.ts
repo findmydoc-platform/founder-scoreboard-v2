@@ -411,5 +411,9 @@ export async function loadPlanningHeaderData(
       : Promise.resolve(emptyPlanningHeaderData.notifications),
   ]);
 
-  return { quickLinks, calendarEvents, notifications };
+  return {
+    quickLinks,
+    calendarEvents,
+    notifications,
+  };
 }

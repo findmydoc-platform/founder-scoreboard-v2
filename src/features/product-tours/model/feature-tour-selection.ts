@@ -23,6 +23,7 @@ export function selectNextFeatureTour(
   acknowledgements: ProfileFeatureTourAcknowledgement[],
 ) {
   return tours.find((tour) =>
-    tourAppliesToWorkspace(tour, workspace) && !profileHasSeenTour(acknowledgements, profileId, tour.id)
+    tourAppliesToWorkspace(tour, workspace)
+    && !profileHasSeenTour(acknowledgements, profileId, tour.id)
   );
 }
