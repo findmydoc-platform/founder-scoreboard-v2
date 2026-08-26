@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import {
   flattenTeamWorkweekWindows,
   inflateTeamWorkweekWindows,
+  nextVersionMondayIso,
   validatePrivateTeamWorkweekDraft,
 } from "@/features/team-workweek/model/team-workweek-draft";
 import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
@@ -9,6 +10,28 @@ import { bearerToken, requirePlanningContributor } from "@/lib/authz";
 import { getSupabaseForToken } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
+
+type PublicationRow = Readonly<{
+  id: string;
+  effective_from: string;
+  status: "preparing" | "published";
+  sync_state: "pending" | "delayed" | "confirmed";
+  publication_revision: number;
+  published_at: string | null;
+  last_sync_at: string | null;
+}>;
+
+function publicationPayload(row: PublicationRow | null) {
+  return row ? {
+    id: row.id,
+    effectiveFrom: row.effective_from,
+    status: row.status,
+    syncState: row.sync_state,
+    publicationRevision: row.publication_revision,
+    publishedAt: row.published_at,
+    lastSyncAt: row.last_sync_at,
+  } : null;
+}
 
 function authenticatedClient(request: NextRequest) {
   const token = bearerToken(request);
@@ -23,13 +46,14 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("team_workweek_versions")
-    .select("id,effective_from,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
+    .select("id,owner_profile_id,effective_from,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
     .eq("status", "preparing")
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(1)
     .maybeSingle<{
       id: string;
+      owner_profile_id: string;
       effective_from: string;
       timezone: "Europe/Berlin";
       status: "preparing";
@@ -40,11 +64,23 @@ export async function GET(request: NextRequest) {
 
   const publication = data ? await supabase
     .from("team_workweek_publications")
-    .select("status")
+    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at")
     .eq("source_version_id", data.id)
-    .maybeSingle<{ status: "preparing" | "published" }>() : null;
+    .maybeSingle<PublicationRow>() : null;
   if (publication?.error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
   const privateVersion = publication?.data?.status === "published" ? null : data;
+  const ownerProfileId = context.permission.profile?.id || data?.owner_profile_id || null;
+  const latestPublishedResponse = ownerProfileId ? await supabase
+    .from("team_workweek_publications")
+    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at")
+    .eq("owner_profile_id", ownerProfileId)
+    .eq("status", "published")
+    .order("effective_from", { ascending: false })
+    .order("publication_revision", { ascending: false })
+    .limit(1)
+    .maybeSingle<PublicationRow>() : null;
+  if (latestPublishedResponse?.error) return apiError("Veröffentlichungsstatus konnte nicht geladen werden.", 503);
+  const latestPublished = latestPublishedResponse?.data || null;
 
   return NextResponse.json({
     version: privateVersion ? {
@@ -55,6 +91,9 @@ export async function GET(request: NextRequest) {
       createdAt: privateVersion.created_at,
       windows: inflateTeamWorkweekWindows(privateVersion.team_workweek_windows || []),
     } : null,
+    publication: privateVersion ? publicationPayload(publication?.data || null) : null,
+    latestPublished: publicationPayload(latestPublished),
+    minimumEffectiveFrom: nextVersionMondayIso(latestPublished?.effective_from || null),
   });
 }
 

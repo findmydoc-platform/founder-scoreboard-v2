@@ -14,6 +14,16 @@ test("the default is always the next Europe/Berlin Monday", () => {
   assert.equal(model.nextMondayIso(new Date("2026-03-29T00:30:00.000Z")), "2026-03-30");
 });
 
+test("later versions default to the first Monday after the latest published boundary", () => {
+  assert.equal(model.nextVersionMondayIso(null, new Date("2026-08-25T10:00:00.000Z")), "2026-08-31");
+  assert.equal(model.nextVersionMondayIso("2026-08-31", new Date("2026-08-25T10:00:00.000Z")), "2026-09-07");
+  assert.equal(model.nextVersionMondayIso("2026-09-14", new Date("2026-08-25T10:00:00.000Z")), "2026-09-21");
+  assert.equal(
+    model.validatePrivateTeamWorkweekDraft(draft("2026-09-07"), new Date("2026-08-25T10:00:00.000Z"), "2026-09-14").ok,
+    false,
+  );
+});
+
 test("free days and multiple non-overlapping windows form a valid private draft", () => {
   const value = draft();
   value.windows.monday = [
@@ -98,7 +108,7 @@ test("API uses the bearer session for RLS and accepts no profile or calendar tar
   assert.match(route, /bearerToken\(request\)/);
   assert.match(route, /getSupabaseForToken\(token\)/);
   assert.match(route, /create_private_team_workweek_version/);
-  assert.doesNotMatch(route, /getServerServiceRoleSupabase|owner_profile_id|profileId|calendarId/);
+  assert.doesNotMatch(route, /getServerServiceRoleSupabase|p_owner_profile_id|input\.profileId|input\.calendarId/);
   assert.doesNotMatch(route, /googleapis|google-workspace/);
 });
 

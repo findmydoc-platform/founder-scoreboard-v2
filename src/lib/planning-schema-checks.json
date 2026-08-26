@@ -38,13 +38,19 @@
   {
     "name": "team_workweek_publications",
     "table": "team_workweek_publications",
-    "select": "id,source_version_id,owner_profile_id,effective_from,timezone,windows,status,publication_revision,publication_requested_at,published_at,last_sync_at,sync_state,created_at",
+    "select": "id,source_version_id,owner_profile_id,effective_from,effective_to,predecessor_publication_id,superseded_by_publication_id,timezone,windows,status,publication_revision,publication_requested_at,published_at,last_sync_at,sync_state,created_at",
     "health": false
   },
   {
     "name": "team_workweek_google_series",
     "table": "team_workweek_google_series",
     "select": "id,publication_id,source_window_id,owner_profile_id,calendar_id,google_event_id,private_property_key,state,confirmed_etag,confirmed_founderops_revision,last_observed_at,last_confirmed_at,last_error_class,created_at,updated_at",
+    "health": false
+  },
+  {
+    "name": "team_workweek_google_series_transitions",
+    "table": "team_workweek_google_series_transitions",
+    "select": "id,activation_publication_id,predecessor_series_id,owner_profile_id,expected_etag,expected_founderops_revision,recurrence_count,state,confirmed_etag,last_observed_at,last_confirmed_at,last_error_class,created_at,updated_at",
     "health": false
   },
   {

@@ -28,6 +28,16 @@ export type PrivateTeamWorkweekDraft = Readonly<{
   windows: TeamWorkweekWindows;
 }>;
 
+export type OwnTeamWorkweekPublication = Readonly<{
+  id: string;
+  effectiveFrom: string;
+  status: "preparing" | "published";
+  syncState: "pending" | "delayed" | "confirmed";
+  publicationRevision: number;
+  publishedAt: string | null;
+  lastSyncAt: string | null;
+}>;
+
 export function emptyTeamWorkweekWindows(): TeamWorkweekWindows {
   return {
     monday: [],
@@ -51,6 +61,11 @@ function berlinDateParts(now: Date) {
   return Object.fromEntries(parts.map((part) => [part.type, part.value])) as Record<string, string>;
 }
 
+export function berlinTodayIso(now = new Date()) {
+  const parts = berlinDateParts(now);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 export function nextMondayIso(now = new Date()) {
   const parts = berlinDateParts(now);
   const current = new Date(`${parts.year}-${parts.month}-${parts.day}T00:00:00.000Z`);
@@ -58,6 +73,22 @@ export function nextMondayIso(now = new Date()) {
   const daysUntilNextMonday = isoWeekday === 1 ? 7 : 8 - isoWeekday;
   current.setUTCDate(current.getUTCDate() + daysUntilNextMonday);
   return current.toISOString().slice(0, 10);
+}
+
+export function mondayAfterIso(value: string) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.getUTCDay() !== 1 || date.toISOString().slice(0, 10) !== value) {
+    throw new RangeError("Team workweek boundary must be an ISO Monday.");
+  }
+  date.setUTCDate(date.getUTCDate() + 7);
+  return date.toISOString().slice(0, 10);
+}
+
+export function nextVersionMondayIso(latestPublishedEffectiveFrom: string | null, now = new Date()) {
+  const nextMonday = nextMondayIso(now);
+  if (!latestPublishedEffectiveFrom) return nextMonday;
+  const afterLatest = mondayAfterIso(latestPublishedEffectiveFrom);
+  return afterLatest > nextMonday ? afterLatest : nextMonday;
 }
 
 function minuteForClock(value: string) {
@@ -81,14 +112,18 @@ function isMonday(value: string) {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value && parsed.getUTCDay() === 1;
 }
 
-export function validatePrivateTeamWorkweekDraft(value: unknown, now = new Date()) {
+export function validatePrivateTeamWorkweekDraft(
+  value: unknown,
+  now = new Date(),
+  minimumEffectiveFrom = nextMondayIso(now),
+) {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const errors: string[] = [];
   if (Object.keys(input).some((key) => !["effectiveFrom", "windows"].includes(key))) {
     errors.push("Die Anfrage enthält nicht unterstützte Felder.");
   }
   const effectiveFrom = typeof input.effectiveFrom === "string" ? input.effectiveFrom.trim() : "";
-  const earliest = nextMondayIso(now);
+  const earliest = minimumEffectiveFrom > nextMondayIso(now) ? minimumEffectiveFrom : nextMondayIso(now);
   if (!isMonday(effectiveFrom)) {
     errors.push("Der Gültigkeitsbeginn muss ein Montag sein.");
   } else if (effectiveFrom < earliest) {
