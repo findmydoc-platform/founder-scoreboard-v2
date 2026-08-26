@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useGoogleWorkspaceConnection } from "../hooks/use-google-workspace-connection";
+import { GoogleWorkspaceDisconnectDialog } from "./google-workspace-disconnect-dialog";
 import { googleWorkspaceConnectionLabel } from "../model/google-workspace-connection";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Profile } from "@/lib/types";
@@ -13,13 +15,30 @@ export function GoogleWorkspaceConnectionCard({
   apiClient: BrowserApiClient;
   profile: Profile;
 }) {
-  const { callbackError, connection, load, message, pending, startConnect } = useGoogleWorkspaceConnection(apiClient);
+  const canConnect = profile.platformRole !== "viewer";
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
+  const {
+    callbackError,
+    connection,
+    disconnectConnection,
+    disconnectView,
+    load,
+    message,
+    pending,
+    startConnect,
+  } = useGoogleWorkspaceConnection(apiClient, canConnect);
   const connected = connection.state === "connected";
   const reconnect = connection.state === "reconnect_required";
-  const canConnect = profile.platformRole !== "viewer";
+  const cleanupPending = disconnectView.state === "cleanup_pending" || disconnectView.pendingSeriesCount > 0;
+
+  const confirmDisconnect = async () => {
+    await disconnectConnection();
+    setDisconnectOpen(false);
+  };
 
   return (
-    <UiPanel aria-labelledby="google-workspace-connection-title">
+    <>
+      <UiPanel aria-labelledby="google-workspace-connection-title">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -50,6 +69,16 @@ export function GoogleWorkspaceConnectionCard({
               {reconnect ? "Neu verbinden" : "Google verbinden"}
             </UiButton>
           )}
+          {canConnect && connected && cleanupPending && (
+            <UiButton variant="primary" size="lg" disabled={pending} onClick={() => void disconnectConnection()}>
+              Bereinigung fortsetzen
+            </UiButton>
+          )}
+          {canConnect && connected && !cleanupPending && (
+            <UiButton variant="secondary" size="lg" disabled={pending} onClick={() => setDisconnectOpen(true)}>
+              Verbindung trennen
+            </UiButton>
+          )}
         </div>
       </div>
       <div className="mt-4" aria-live="polite">
@@ -57,6 +86,10 @@ export function GoogleWorkspaceConnectionCard({
           <UiNotice tone="neutral">Viewer können den Verbindungsstatus lesen, aber keine persönliche Google-Verbindung ändern.</UiNotice>
         ) : message || callbackError ? (
           <UiNotice tone="warning">{message || callbackError}</UiNotice>
+        ) : cleanupPending ? (
+          <UiNotice tone="warning">
+            Die Teamfreigabe ist inaktiv. {disconnectView.pendingSeriesCount} markierte Google-Serie{disconnectView.pendingSeriesCount === 1 ? " wartet" : "n warten"} noch auf bestätigte Bereinigung.
+          </UiNotice>
         ) : reconnect ? (
           <UiNotice tone="warning">
             Die Freigabe ist abgelaufen oder wurde widerrufen. Verbinde Google erneut, bevor FounderOps Kalendereinträge synchronisiert.
@@ -71,6 +104,14 @@ export function GoogleWorkspaceConnectionCard({
           </UiNotice>
         )}
       </div>
-    </UiPanel>
+      </UiPanel>
+      <GoogleWorkspaceDisconnectDialog
+        disconnect={disconnectView}
+        open={disconnectOpen}
+        pending={pending}
+        onCancel={() => setDisconnectOpen(false)}
+        onConfirm={() => void confirmDisconnect()}
+      />
+    </>
   );
 }

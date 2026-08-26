@@ -38,7 +38,7 @@
   {
     "name": "team_workweek_publications",
     "table": "team_workweek_publications",
-    "select": "id,source_version_id,owner_profile_id,effective_from,effective_to,predecessor_publication_id,superseded_by_publication_id,timezone,windows,status,publication_revision,publication_requested_at,published_at,last_sync_at,sync_state,created_at",
+    "select": "id,source_version_id,owner_profile_id,effective_from,effective_to,predecessor_publication_id,superseded_by_publication_id,timezone,windows,status,publication_revision,publication_requested_at,published_at,last_sync_at,sync_state,deactivated_at,deactivation_reason,created_at",
     "health": false
   },
   {
@@ -56,13 +56,25 @@
   {
     "name": "team_workweek_google_series",
     "table": "team_workweek_google_series",
-    "select": "id,publication_id,source_window_id,owner_profile_id,calendar_id,google_event_id,private_property_key,state,confirmed_etag,confirmed_founderops_revision,provider_state,provider_deleted_at,last_observed_at,last_confirmed_at,last_error_class,created_at,updated_at",
+    "select": "id,publication_id,source_window_id,owner_profile_id,calendar_id,google_event_id,private_property_key,state,confirmed_etag,confirmed_founderops_revision,provider_state,provider_deleted_at,future_cleanup_state,future_cleanup_confirmed_at,last_observed_at,last_confirmed_at,last_error_class,created_at,updated_at",
     "health": false
   },
   {
     "name": "team_workweek_google_series_transitions",
     "table": "team_workweek_google_series_transitions",
     "select": "id,activation_publication_id,predecessor_series_id,owner_profile_id,expected_etag,expected_founderops_revision,recurrence_count,state,confirmed_etag,last_observed_at,last_confirmed_at,last_error_class,created_at,updated_at",
+    "health": false
+  },
+  {
+    "name": "google_workspace_disconnect_operations",
+    "table": "google_workspace_disconnect_operations",
+    "select": "id,owner_profile_id,requested_by,revoke_connection,cutoff_date,state,revision,retained_version_id,requested_at,deactivated_at,completed_at,last_error_class,updated_at",
+    "health": false
+  },
+  {
+    "name": "google_workspace_disconnect_series",
+    "table": "google_workspace_disconnect_series",
+    "select": "id,operation_id,series_id,calendar_id,google_event_id,expected_etag,expected_founderops_revision,cleanup_action,recurrence_count,state,confirmed_etag,last_error_class,last_observed_at,created_at,updated_at",
     "health": false
   },
   {
