@@ -8,6 +8,7 @@ import { deputyLabel, teamMemberStats } from "@/features/team/model/team-profile
 import { TeamProfileEditDialog } from "@/features/team/organisms/team-profile-edit-dialog";
 import { GoogleWorkspaceConnectionCard } from "@/features/team-workweek/molecules/google-workspace-connection-card";
 import { PrivateTeamWorkweekCard } from "@/features/team-workweek/molecules/private-team-workweek-card";
+import { PublishedTeamWorkweeksCard } from "@/features/team-workweek/molecules/published-team-workweeks-card";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningShellState, Profile, Task } from "@/lib/types";
 
@@ -58,6 +59,8 @@ export function TeamOverview({
           ? <GoogleWorkspaceConnectionCard apiClient={apiClient} profile={actualProfile} />
           : <PrivateTeamWorkweekCard apiClient={apiClient} profile={actualProfile} />
       )}
+
+      <PublishedTeamWorkweeksCard apiClient={apiClient} profiles={data.profiles} />
 
       <div className="grid gap-2">
         {data.profiles.map((profile) => (

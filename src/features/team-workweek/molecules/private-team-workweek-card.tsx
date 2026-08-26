@@ -22,7 +22,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
               <UiBadge tone={state.version ? "amber" : "slate"}>{state.version ? "In Vorbereitung" : "Noch nicht vorbereitet"}</UiBadge>
             </div>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              Private Grundwoche für {profile.name}. Sie wird erst in einem späteren Schritt im Team und in Google veröffentlicht.
+              Private Grundwoche für {profile.name}. Erst eine bestätigte Google-Synchronisierung macht sie im Team sichtbar.
             </p>
             {state.version && (
               <p className="mt-2 text-xs font-semibold text-slate-600">Gültig ab {formatDate(state.version.effectiveFrom)} · {state.version.timezone}</p>

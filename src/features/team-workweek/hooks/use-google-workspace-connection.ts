@@ -51,7 +51,7 @@ export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient) {
       const { response, body } = await apiClient.requestJson<{
         connection?: GoogleWorkspaceConnectionStatus;
         error?: string;
-      }>("/api/google-workspace/status", { cache: "no-store" });
+      }>("/api/google-workspace/status", { cache: "no-store", useDevProfileOverride: false });
       if (!response.ok || !body?.connection) {
         throw new Error(body?.error || "Google-Verbindungsstatus konnte nicht geladen werden.");
       }
