@@ -36,6 +36,7 @@ tmp-next-*.log
 
 # local browser profiles
 .playwright-mcp/
+.playwright-cli/
 .chrome-profile/
 .chrome-smoke-profile/
 .codex-splitwise-extracted/

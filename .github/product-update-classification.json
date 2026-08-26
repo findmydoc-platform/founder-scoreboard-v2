@@ -1,4 +1,4 @@
 {
-  "classification": "minor-ux",
-  "reason": "Constrains the existing profile color setting to a shared 20-color palette and communicates availability without adding a new product workflow."
+  "classification": "maintenance",
+  "reason": "Keeps this intermediate stacked pull request non-releasable until the complete calendar workflow and its product update ship together."
 }

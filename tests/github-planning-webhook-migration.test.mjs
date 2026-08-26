@@ -22,6 +22,7 @@ test("planning webhook deliveries are content-free, leased, and service-role-onl
   assert.match(migration, /grant select, insert on table public\.github_planning_webhook_deliveries to service_role/i);
   assert.doesNotMatch(migration, /grant[^;]*\bupdate\b[^;]*github_planning_webhook_deliveries/i);
   assert.deepEqual(serviceRoleOnlyTablePrivileges, [
+    ["google_workspace_connections", ["SELECT", "INSERT", "UPDATE", "DELETE"]],
     ["github_planning_webhook_deliveries", ["SELECT", "INSERT"]],
     ["github_webhook_deliveries", ["SELECT", "INSERT"]],
   ]);
