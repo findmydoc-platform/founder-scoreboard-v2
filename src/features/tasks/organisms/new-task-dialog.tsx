@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
+import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
 import { taskCreationTitleError, withSubIssueParentHierarchy } from "@/features/tasks/model/task-creation-draft";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import {
@@ -799,8 +800,9 @@ export function NewTaskDialog({
       >
         <header className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-blue-700">
-              Item erstellen <span aria-hidden="true" className="px-1 text-slate-300">·</span> {draft.taskType === "sub_issue" ? "Sub-Issue" : draft.taskType === "initiative" ? "Initiative" : draft.taskType === "epic" ? "Epic" : "Deliverable"}
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-blue-700">
+              <TaskTypeIcon taskType={draft.taskType} size={15} />
+              <span>Item erstellen <span aria-hidden="true" className="px-1 text-slate-300">·</span> {draft.taskType === "sub_issue" ? "Sub-Issue" : draft.taskType === "initiative" ? "Initiative" : draft.taskType === "epic" ? "Epic" : "Deliverable"}</span>
             </div>
             <h2 id={titleId} className="mt-1 text-xl font-semibold text-slate-950">{title}</h2>
             <p id={descriptionId} className="mt-1 text-sm text-slate-500">{description}</p>

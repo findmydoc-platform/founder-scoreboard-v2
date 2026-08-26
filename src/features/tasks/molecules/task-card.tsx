@@ -13,6 +13,7 @@ import {
 import { useId, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { TaskChildProgress } from "@/features/tasks/atoms/task-child-progress";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
+import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
 import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
 import { directChildPluralLabel, taskChildProgress } from "@/features/tasks/model/task-card-presentation";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
@@ -406,6 +407,7 @@ export function TaskCard({
         showIcon={false}
         className="min-w-0 max-w-full text-left text-sm font-semibold leading-snug text-slate-900 hover:text-blue-700"
       >
+        <TaskTypeIcon taskType={task.taskType} size={15} className="mt-0.5" />
         <span className="min-w-0 break-words [overflow-wrap:anywhere]">{task.title}</span>
       </TaskReferenceLink>
       {showParentContext && directParentType && (

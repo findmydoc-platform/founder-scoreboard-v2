@@ -3,6 +3,7 @@
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames } from "@/shared/atoms/ui-primitives";
 import { planningLevels, type PlanningLevel } from "@/features/planning/model/planning-level";
+import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
 import type { Task } from "@/lib/types";
 
 type PlanningLevelSelectProps = {
@@ -23,6 +24,7 @@ export function PlanningLevelSelect({
   const options = planningLevels.map((level) => ({
     value: level.value,
     label: `${level.label} · ${tasks.filter((task) => task.taskType === level.value).length}`,
+    icon: <TaskTypeIcon taskType={level.value} size={16} />,
   }));
 
   return (
