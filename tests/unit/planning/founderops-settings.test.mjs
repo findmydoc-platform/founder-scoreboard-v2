@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const settingsState = await loadTranspiledModule(
+const settingsState = await importTestModule(
   "src/features/settings/model/founderops-settings-state.ts",
   {
     "@/lib/sprint-review-window": {

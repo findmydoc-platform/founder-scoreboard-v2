@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const markerPolicy = await loadTranspiledModule(
+const markerPolicy = await importTestModule(
   "src/features/tasks/model/github-comment-delivery-policy.ts",
 );
-const mentions = await loadTranspiledModule("src/lib/mentions.ts");
-const mentionSnapshots = await loadTranspiledModule("src/lib/github-comment-mention-snapshot.ts", {
+const mentions = await importTestModule("src/lib/mentions.ts");
+const mentionSnapshots = await importTestModule("src/lib/github-comment-mention-snapshot.ts", {
   "@/lib/mentions": mentions,
 });
 
@@ -17,7 +17,7 @@ class MockGitHubApiError extends Error {
   }
 }
 
-const processor = await loadTranspiledModule("src/lib/github-issue-comment-webhook.ts", {
+const processor = await importTestModule("src/lib/github-issue-comment-webhook.ts", {
   "server-only": {},
   "@/features/tasks/model/github-comment-delivery-policy": markerPolicy,
   "@/lib/mentions": mentions,
@@ -281,7 +281,7 @@ test("a verified deleted event removes the external projection without a provide
 });
 
 test("a provider 404 on create or edit remains retryable and preserves projection", async () => {
-  const absentProcessor = await loadTranspiledModule("src/lib/github-issue-comment-webhook.ts", {
+  const absentProcessor = await importTestModule("src/lib/github-issue-comment-webhook.ts", {
     "server-only": {},
     "@/features/tasks/model/github-comment-delivery-policy": markerPolicy,
     "@/lib/mentions": mentions,

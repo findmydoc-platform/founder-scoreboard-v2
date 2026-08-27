@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "session" } };
 const checklist = {
@@ -11,15 +11,15 @@ const checklist = {
 };
 
 async function loadModel() {
-  const storeContract = await loadTranspiledModule("src/features/planning-items/model/planning-items-store.ts");
-  const runner = await loadTranspiledModule("src/features/planning-items/model/planning-items-runner.ts");
-  const supabaseStore = await loadTranspiledModule(
+  const storeContract = await importTestModule("src/features/planning-items/model/planning-items-store.ts");
+  const runner = await importTestModule("src/features/planning-items/model/planning-items-runner.ts");
+  const supabaseStore = await importTestModule(
     "src/features/planning-items/model/planning-items-store-supabase.ts",
     { "server-only": {}, "./planning-items-store": storeContract },
   );
-  const reviewState = await loadTranspiledModule("src/features/reviews/model/task-review-state.ts");
-  const notificationCatalog = await loadTranspiledModule("src/lib/notification-catalog.ts");
-  return loadTranspiledModule("src/features/planning-items/model/planning-items-review.ts", {
+  const reviewState = await importTestModule("src/features/reviews/model/task-review-state.ts");
+  const notificationCatalog = await importTestModule("src/lib/notification-catalog.ts");
+  return importTestModule("src/features/planning-items/model/planning-items-review.ts", {
     "server-only": {},
     "@/features/reviews/model/task-review-state": reviewState,
     "@/lib/notification-catalog": notificationCatalog,

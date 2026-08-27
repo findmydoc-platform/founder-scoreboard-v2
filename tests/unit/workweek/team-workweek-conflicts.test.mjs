@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const reconciliationCore = await import("../../../src/features/team-workweek/server/team-workweek-reconciliation-core.ts");
 const oauthCore = await import("../../../src/features/team-workweek/server/google-workspace-oauth-core.ts");
 const workweekModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
 
-const conflicts = await loadTranspiledModule(
+const conflicts = await importTestModule(
   "src/features/team-workweek/server/team-workweek-conflicts.ts",
   {
     "server-only": {},

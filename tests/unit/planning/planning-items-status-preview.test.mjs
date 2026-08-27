@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const contract = await loadTranspiledModule("src/features/planning-items/model/planning-items-contract.ts");
-const deliverableSchedule = await loadTranspiledModule("src/features/planning-items/model/deliverable-schedule.ts");
-const status = await loadTranspiledModule("src/lib/status.ts");
+const contract = await importTestModule("src/features/planning-items/model/planning-items-contract.ts");
+const deliverableSchedule = await importTestModule("src/features/planning-items/model/deliverable-schedule.ts");
+const status = await importTestModule("src/lib/status.ts");
 const isOperationalLeadRole = (role) => role === "ceo" || role === "deputy";
 const reviewState = {
   isReviewStateLocked: (reviewStatus, scoreFinal) => (reviewStatus === "requested" && !scoreFinal) || (reviewStatus === "accepted" && scoreFinal),
@@ -12,7 +12,7 @@ const reviewState = {
   isTaskReviewFinal: (task) => task.reviewStatus === "accepted" && task.scoreFinal,
   isTaskReviewLocked: (task) => (task.reviewStatus === "requested" && !task.scoreFinal) || (task.reviewStatus === "accepted" && task.scoreFinal),
 };
-const permissions = await loadTranspiledModule(
+const permissions = await importTestModule(
   "src/features/tasks/model/task-detail-permissions.ts",
   {
     "@/lib/platform": { isOperationalLeadRole },
@@ -23,7 +23,7 @@ const permissions = await loadTranspiledModule(
     "@/lib/status": status,
   },
 );
-const routeHelpers = await loadTranspiledModule(
+const routeHelpers = await importTestModule(
   "src/features/tasks/model/task-route-update-helpers.ts",
   {
     "@/features/tasks/model/task-mutation-contract": {
@@ -32,7 +32,7 @@ const routeHelpers = await loadTranspiledModule(
     "@/lib/status": status,
   },
 );
-const normalization = await loadTranspiledModule(
+const normalization = await importTestModule(
   "src/features/planning-items/model/planning-item-normalization.ts",
   {
     "@/lib/api-input": { cleanText: (value, maxLength) => String(value || "").trim().slice(0, maxLength) },
@@ -40,7 +40,7 @@ const normalization = await loadTranspiledModule(
     "@/features/planning-items/model/planning-items-contract": contract,
   },
 );
-const updates = await loadTranspiledModule(
+const updates = await importTestModule(
   "src/features/planning-items/model/planning-item-update.ts",
   {
     "@/lib/planning-read-model": { ACTIVE_PACKAGES_TABLE: "active_packages", ACTIVE_TASKS_TABLE: "active_tasks" },

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const policy = await loadTranspiledModule("src/features/projects/model/epic-policy.ts");
+const policy = await importTestModule("src/features/projects/model/epic-policy.ts");
 
 test("Epic management is limited to operational leads", () => {
   assert.equal(policy.canManageEpics("ceo"), true);

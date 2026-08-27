@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const {
   PlanningShellStateUnavailableError,
   isPlanningShellStateUnavailableError,
-} = await loadTranspiledModule("src/lib/workspace-data-availability.ts");
+} = await importTestModule("src/lib/workspace-data-availability.ts");
 
 test("planning data outages use a dedicated expected error", () => {
   const error = new PlanningShellStateUnavailableError();

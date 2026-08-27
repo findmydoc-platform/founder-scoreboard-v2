@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadGitHub(githubJson) {
-  return loadTranspiledModule("src/lib/github.ts", {
+  return importTestModule("src/lib/github.ts", {
     "./github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const finalized = [];
 let executionResult = {
@@ -16,7 +16,7 @@ let executionResult = {
   warnings: [],
 };
 
-const projection = await loadTranspiledModule(
+const projection = await importTestModule(
   "src/features/planning-items/model/planning-items-github-projection.ts",
   {
     "server-only": {},

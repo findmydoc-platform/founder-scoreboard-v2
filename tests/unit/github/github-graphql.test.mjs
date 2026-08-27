@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadGraphql(result, requests = []) {
-  return loadTranspiledModule("src/lib/github-graphql.ts", {
+  return importTestModule("src/lib/github-graphql.ts", {
     "./github-http": {
       githubJson: async (url, options) => {
         requests.push({ url, options });

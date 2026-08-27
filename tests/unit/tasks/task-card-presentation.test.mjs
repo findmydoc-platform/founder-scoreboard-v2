@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("direct child progress counts only normalized completed children", async () => {
-  const presentation = await loadTranspiledModule("src/features/tasks/model/task-card-presentation.ts", {
+  const presentation = await importTestModule("src/features/tasks/model/task-card-presentation.ts", {
     "@/lib/status": {
       normalizeStatus: (status) => status === "done" ? "Erledigt" : status,
     },
@@ -25,7 +25,7 @@ test("direct child progress counts only normalized completed children", async ()
 });
 
 test("direct child labels follow the planning hierarchy", async () => {
-  const presentation = await loadTranspiledModule("src/features/tasks/model/task-card-presentation.ts", {
+  const presentation = await importTestModule("src/features/tasks/model/task-card-presentation.ts", {
     "@/lib/status": { normalizeStatus: (status) => status },
   });
 

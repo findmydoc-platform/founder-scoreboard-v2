@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const statusMock = { normalizeStatus: (status) => status };
 const platformMock = {
@@ -10,7 +10,7 @@ const platformMock = {
 };
 
 test("planning task view model combines fields with AND and quick values with OR", async () => {
-  const { buildPlanningTaskTableViewModel } = await loadTranspiledModule(
+  const { buildPlanningTaskTableViewModel } = await importTestModule(
     "src/features/planning/model/planning-task-table-view-model.ts",
     {
       "@/features/planning/model/planning-app-model": {
@@ -45,7 +45,7 @@ test("planning task view model combines fields with AND and quick values with OR
 });
 
 test("sprint task table filters review and score and sorts deterministically", async () => {
-  const { buildSprintTaskTableRows, DEFAULT_SPRINT_TASK_FILTERS } = await loadTranspiledModule(
+  const { buildSprintTaskTableRows, DEFAULT_SPRINT_TASK_FILTERS } = await importTestModule(
     "src/features/sprint/model/sprint-task-table-view-model.ts",
     { "@/lib/platform": platformMock, "@/lib/status": statusMock },
   );
@@ -59,7 +59,7 @@ test("sprint task table filters review and score and sorts deterministically", a
 });
 
 test("Founder Score view model filters attention signals and reports its own count", async () => {
-  const { buildSprintScoreTableViewModel, DEFAULT_SPRINT_SCORE_FILTERS } = await loadTranspiledModule(
+  const { buildSprintScoreTableViewModel, DEFAULT_SPRINT_SCORE_FILTERS } = await importTestModule(
     "src/features/sprint/model/sprint-score-table-view-model.ts",
   );
   const row = (name, overrides = {}) => ({
@@ -75,7 +75,7 @@ test("Founder Score view model filters attention signals and reports its own cou
 });
 
 test("weekly attendance view model combines founder and signal filters", async () => {
-  const { buildSprintAttendanceTableViewModel, DEFAULT_SPRINT_ATTENDANCE_FILTERS } = await loadTranspiledModule(
+  const { buildSprintAttendanceTableViewModel, DEFAULT_SPRINT_ATTENDANCE_FILTERS } = await importTestModule(
     "src/features/sprint/model/sprint-attendance-table-view-model.ts",
   );
   const meetings = [{ id: 1, title: "Weekly 1", meetingAt: "2026-07-10" }];
@@ -93,7 +93,7 @@ test("weekly attendance view model combines founder and signal filters", async (
 });
 
 test("task table view model applies a stable secondary order", async () => {
-  const { buildTaskTableViewModel } = await loadTranspiledModule(
+  const { buildTaskTableViewModel } = await importTestModule(
     "src/features/tasks/model/task-table-view-model.ts",
     {
       "@/lib/display": { taskAssigneeOptions: () => [] },

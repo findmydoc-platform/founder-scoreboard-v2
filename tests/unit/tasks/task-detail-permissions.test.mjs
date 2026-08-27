@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const { taskDetailPermissions, taskStatusOptionsForPermissions } = await loadTranspiledModule(
+const { taskDetailPermissions, taskStatusOptionsForPermissions } = await importTestModule(
   "src/features/tasks/model/task-detail-permissions.ts",
   {
     "@/lib/platform": {

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const draft = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
-const model = await loadTranspiledModule(
+const model = await importTestModule(
   "src/features/team-workweek/model/team-workweek-calendar.ts",
   { "./team-workweek-draft": draft },
 );

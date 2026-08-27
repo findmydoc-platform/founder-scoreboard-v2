@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const { mapTaskRow } = await loadTranspiledModule("src/lib/planning-task-mappers.ts", {
+const { mapTaskRow } = await importTestModule("src/lib/planning-task-mappers.ts", {
   "./planning-profile-mappers": {
     profileNameById: (_profiles, profileId) => profileId || "",
   },

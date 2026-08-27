@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const presentation = await loadTranspiledModule(
+const presentation = await importTestModule(
   "src/features/tasks/model/task-detail-presentation.ts",
   {
     "@/lib/status": {

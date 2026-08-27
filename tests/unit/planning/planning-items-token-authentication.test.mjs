@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const contract = await loadTranspiledModule(
+const contract = await importTestModule(
   "src/features/planning-items/model/planning-items-contract.ts",
 );
 
 async function loadTokenModule(rpcResult) {
-  return loadTranspiledModule(
+  return importTestModule(
     "src/features/planning-items/model/planning-items-token.ts",
     {
       "@/lib/supabase": {
@@ -105,7 +105,7 @@ test("Planning token authentication preserves scope and profile failure codes", 
 
 test("Planning token authentication distinguishes missing credentials from an unknown bearer", async () => {
   let rpcCalls = 0;
-  const token = await loadTranspiledModule(
+  const token = await importTestModule(
     "src/features/planning-items/model/planning-items-token.ts",
     {
       "@/lib/supabase": {

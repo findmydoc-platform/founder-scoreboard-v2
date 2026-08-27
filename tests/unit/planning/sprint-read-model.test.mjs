@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const { sprintWorkspaceReducer } = await loadTranspiledModule("src/features/sprint/model/sprint-read-model.ts");
+const { sprintWorkspaceReducer } = await importTestModule("src/features/sprint/model/sprint-read-model.ts");
 
 test("Sprint reducer keeps updates inside the focused slice", () => {
   const model = {

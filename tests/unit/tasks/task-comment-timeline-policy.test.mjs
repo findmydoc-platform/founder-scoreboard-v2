@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const policy = await loadTranspiledModule("src/features/tasks/model/task-comment-timeline-policy.ts");
+const policy = await importTestModule("src/features/tasks/model/task-comment-timeline-policy.ts");
 
 test("comment audit events stay hidden because the comment already appears in the timeline", () => {
   assert.equal(policy.isUsefulActivity({ action: "task.comment" }), false);

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const planningCalls = [];
 const commentCalls = [];
 const projectionCalls = [];
 
-const drain = await loadTranspiledModule("src/lib/github-webhook-drain.ts", {
+const drain = await importTestModule("src/lib/github-webhook-drain.ts", {
   "server-only": {},
   "@/features/planning-items/model/planning-items-github-projection": {
     dispatchPlanningGitHubProjections: async ({ limit }) => {
@@ -81,7 +81,7 @@ test("Cron authentication accepts only the configured bearer credential", async 
   const previousSecret = process.env.CRON_SECRET;
   process.env.CRON_SECRET = "cron-test-secret";
   try {
-    const auth = await loadTranspiledModule("src/lib/maintenance-auth.ts", {});
+    const auth = await importTestModule("src/lib/maintenance-auth.ts", {});
     assert.equal(auth.hasCronSecret(), true);
     assert.equal(auth.validateCronSecret("Bearer cron-test-secret"), true);
     assert.equal(auth.validateCronSecret("bearer cron-test-secret"), true);
@@ -148,7 +148,7 @@ function maintenanceQueueSupabase({
 }
 
 async function loadCronMaintenanceRoute({ supabase, deliveries }) {
-  return loadTranspiledModule("src/app/api/maintenance/github-webhooks/route.ts", {
+  return importTestModule("src/app/api/maintenance/github-webhooks/route.ts", {
     "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
     "@/lib/api-response": {
       apiError: (message, status) => ({ body: { message }, status }),
@@ -274,7 +274,7 @@ test("Cron maintenance fails visibly when a projection dispatch cannot finalize"
 });
 
 test("Cron maintenance rejects missing configuration and invalid credentials", async () => {
-  const route = await loadTranspiledModule("src/app/api/maintenance/github-webhooks/route.ts", {
+  const route = await importTestModule("src/app/api/maintenance/github-webhooks/route.ts", {
     "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
     "@/lib/api-response": {
       apiError: (message, status) => ({ body: { message }, status }),
@@ -290,7 +290,7 @@ test("Cron maintenance rejects missing configuration and invalid credentials", a
   const unavailable = await route.GET({ headers: new Headers() });
   assert.equal(unavailable.status, 503);
 
-  const protectedRoute = await loadTranspiledModule("src/app/api/maintenance/github-webhooks/route.ts", {
+  const protectedRoute = await importTestModule("src/app/api/maintenance/github-webhooks/route.ts", {
     "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
     "@/lib/api-response": {
       apiError: (message, status) => ({ body: { message }, status }),

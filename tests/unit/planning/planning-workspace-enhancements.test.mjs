@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadRevisionRoute({ apiContext, queryResult } = {}) {
   const calls = [];
@@ -15,7 +15,7 @@ async function loadRevisionRoute({ apiContext, queryResult } = {}) {
     },
   };
   let receivedGuard = null;
-  const route = await loadTranspiledModule("src/app/api/planning-revision/route.ts", {
+  const route = await importTestModule("src/app/api/planning-revision/route.ts", {
     "next/server": {
       NextResponse: {
         json: (body, init = {}) => ({ body, headers: init.headers || {}, status: init.status || 200 }),
@@ -40,7 +40,7 @@ async function loadRevisionRoute({ apiContext, queryResult } = {}) {
 }
 
 test("planning task revisions compare active count and newest server timestamp", async () => {
-  const revisions = await loadTranspiledModule("src/features/planning/model/planning-revision.ts");
+  const revisions = await importTestModule("src/features/planning/model/planning-revision.ts");
   const revision = revisions.planningTaskRevision([
     { id: "one", updatedAt: "2026-08-03T10:00:00.000Z" },
     { id: "two", updatedAt: "2026-08-03T12:00:00.000Z" },

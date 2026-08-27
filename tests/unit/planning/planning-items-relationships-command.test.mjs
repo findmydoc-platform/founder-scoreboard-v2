@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const actor = {
   profileId: "ceo",
@@ -9,13 +9,13 @@ const actor = {
 };
 
 async function loadModel() {
-  const storeContract = await loadTranspiledModule("src/features/planning-items/model/planning-items-store.ts");
-  const runner = await loadTranspiledModule("src/features/planning-items/model/planning-items-runner.ts");
-  const supabaseStore = await loadTranspiledModule(
+  const storeContract = await importTestModule("src/features/planning-items/model/planning-items-store.ts");
+  const runner = await importTestModule("src/features/planning-items/model/planning-items-runner.ts");
+  const supabaseStore = await importTestModule(
     "src/features/planning-items/model/planning-items-store-supabase.ts",
     { "server-only": {}, "./planning-items-store": storeContract },
   );
-  return loadTranspiledModule(
+  return importTestModule(
     "src/features/planning-items/model/planning-items-relationships.ts",
     {
       "server-only": {},
@@ -26,7 +26,7 @@ async function loadModel() {
 }
 
 async function loadRoute(run, payload) {
-  return loadTranspiledModule("src/app/api/tasks/[id]/relationships/route.ts", {
+  return importTestModule("src/app/api/tasks/[id]/relationships/route.ts", {
     "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
     "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }) },
     "@/lib/api-response": {

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const platform = await loadTranspiledModule("src/lib/platform.ts");
-const state = await loadTranspiledModule(
+const platform = await importTestModule("src/lib/platform.ts");
+const state = await importTestModule(
   "src/features/tasks/model/task-detail-state.ts",
   {
     "@/features/tasks/model/task-relationship-permissions": {
@@ -15,7 +15,7 @@ const state = await loadTranspiledModule(
     "@/lib/status": { normalizeStatus: (status) => status },
   },
 );
-const relationshipViewModel = await loadTranspiledModule(
+const relationshipViewModel = await importTestModule(
   "src/lib/relationship-view-model.ts",
   {
     "@/lib/platform": platform,

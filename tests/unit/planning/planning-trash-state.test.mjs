@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 function planningData() {
   return {
@@ -44,7 +44,7 @@ function planningData() {
 }
 
 test("planning trash state removes and restores the complete Deliverable subtree", async () => {
-  const { removePlanningRootFromData, restorePlanningRootToData } = await loadTranspiledModule(
+  const { removePlanningRootFromData, restorePlanningRootToData } = await importTestModule(
     "src/features/planning/model/planning-trash-state.ts",
   );
   const source = planningData();
@@ -74,7 +74,7 @@ test("planning trash state removes and restores the complete Deliverable subtree
 });
 
 test("planning trash state removes an Initiative and all assigned tasks", async () => {
-  const { removePlanningRootFromData, restorePlanningRootToData } = await loadTranspiledModule(
+  const { removePlanningRootFromData, restorePlanningRootToData } = await importTestModule(
     "src/features/planning/model/planning-trash-state.ts",
   );
   const source = planningData();

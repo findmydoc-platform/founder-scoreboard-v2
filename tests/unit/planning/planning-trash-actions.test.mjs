@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const trashPolicy = await loadTranspiledModule(
+const trashPolicy = await importTestModule(
   "src/features/planning/model/planning-trash-contract.ts",
   {
     "@/lib/platform": {

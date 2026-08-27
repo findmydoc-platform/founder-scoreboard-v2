@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const workspacePreferences = await loadTranspiledModule(
+const workspacePreferences = await importTestModule(
   "src/features/planning/model/workspace-preferences.ts",
 );
 
-const planningProfileMappers = await loadTranspiledModule(
+const planningProfileMappers = await importTestModule(
   "src/lib/planning-profile-mappers.ts",
 );
 
 const icon = () => null;
-const workspaceRoutes = await loadTranspiledModule(
+const workspaceRoutes = await importTestModule(
   "src/features/planning/model/workspace-routes.ts",
   {
     "lucide-react": {
@@ -30,7 +30,7 @@ const workspaceRoutes = await loadTranspiledModule(
   },
 );
 
-const profileSettingsModel = await loadTranspiledModule(
+const profileSettingsModel = await importTestModule(
   "src/features/profile/model/profile-settings-view-model.ts",
   {
     "@/lib/notification-policy": { googleChatDigestEventTypes: ["task.created"] },

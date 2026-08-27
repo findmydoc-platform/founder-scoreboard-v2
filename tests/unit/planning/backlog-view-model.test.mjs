@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const statusMock = {
   normalizeStatus: (status) => status,
@@ -129,10 +129,10 @@ function basePlanningShellState() {
 }
 
 test("backlog view model sorts by rank not priority and keeps sprint as assignment", async () => {
-  const planningState = await loadTranspiledModule("src/features/backlog/model/backlog-planning-state.ts", {
+  const planningState = await importTestModule("src/features/backlog/model/backlog-planning-state.ts", {
     "@/lib/status": statusMock,
   });
-  const { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS, filterBacklogItemsByQuery } = await loadTranspiledModule("src/features/backlog/model/backlog-view-model.ts", {
+  const { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS, filterBacklogItemsByQuery } = await importTestModule("src/features/backlog/model/backlog-view-model.ts", {
     "@/features/backlog/model/backlog-planning-state": planningState,
     "@/lib/planning-schedule": scheduleMock,
     "@/lib/status": statusMock,
@@ -141,7 +141,7 @@ test("backlog view model sorts by rank not priority and keeps sprint as assignme
       isProposedDeliverable: (task) => task.taskType === "deliverable" && task.approvalStatus === "proposed",
     },
   });
-  const { backlogTableColumns, backlogTableColumnCount, backlogTableMinWidth } = await loadTranspiledModule("src/features/backlog/model/backlog-table-layout.ts");
+  const { backlogTableColumns, backlogTableColumnCount, backlogTableMinWidth } = await importTestModule("src/features/backlog/model/backlog-table-layout.ts");
 
   const all = buildBacklogViewModel(basePlanningShellState(), "all");
   const ready = buildBacklogViewModel(basePlanningShellState(), "ready");

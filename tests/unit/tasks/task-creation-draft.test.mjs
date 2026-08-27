@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const {
   resolveTaskCreationHierarchy,
@@ -10,7 +10,7 @@ const {
   taskCreationTitleError,
   withSubIssueParentHierarchy,
   unsupportedSubIssueCreateField,
-} = await loadTranspiledModule("src/features/tasks/model/task-creation-draft.ts");
+} = await importTestModule("src/features/tasks/model/task-creation-draft.ts");
 
 const tasks = [
   {

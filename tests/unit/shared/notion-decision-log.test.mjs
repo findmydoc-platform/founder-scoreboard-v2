@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const {
   loadNotionDecisionLog,
@@ -8,7 +8,7 @@ const {
   NOTION_DECISION_LOG_REQUEST_TIMEOUT_MS,
   NOTION_DECISION_LOG_TOTAL_TIMEOUT_MS,
   safeDecisionLogUrl,
-} = await loadTranspiledModule("src/lib/notion-decision-log.ts", {
+} = await importTestModule("src/lib/notion-decision-log.ts", {
   "server-only": {},
 });
 
@@ -19,7 +19,7 @@ const {
   decisionLogFilterKey,
   decisionLogFormLabel,
   visibleDecisionLogEntries,
-} = await loadTranspiledModule("src/features/decision-log/model/decision-log-view-model.ts");
+} = await importTestModule("src/features/decision-log/model/decision-log-view-model.ts");
 
 function notionPage(overrides = {}) {
   return {

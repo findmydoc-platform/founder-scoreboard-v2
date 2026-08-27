@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const commandPath = "src/features/projects/hooks/use-initiative-commands.ts";
 
 let saveInitiativeRequest = async () => ({ response: { ok: true }, body: { task: null } });
 
-const { useInitiativeCommands } = await loadTranspiledModule(commandPath, {
+const { useInitiativeCommands } = await importTestModule(commandPath, {
   "@/features/planning/model/planning-api-client": {
     saveInitiativeRequest: (...args) => saveInitiativeRequest(...args),
     decideInitiativeApprovalRequest: async () => ({ response: { ok: true }, body: {} }),

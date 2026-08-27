@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const reviewState = await loadTranspiledModule(
+const reviewState = await importTestModule(
   "src/features/reviews/model/task-review-state.ts",
 );
 
@@ -52,7 +52,7 @@ test("review lock allows only optimistic concurrency and owner reassignment patc
 });
 
 test("planning review filters and My Reviews use the issue review state", async () => {
-  const { buildPlanningTaskTableViewModel } = await loadTranspiledModule(
+  const { buildPlanningTaskTableViewModel } = await importTestModule(
     "src/features/planning/model/planning-task-table-view-model.ts",
     {
       "@/features/planning/model/planning-app-model": {
@@ -100,8 +100,8 @@ test("planning review filters and My Reviews use the issue review state", async 
 });
 
 test("only accepted reviews contribute while both rework decisions stay open", async () => {
-  const platform = await loadTranspiledModule("src/lib/platform.ts");
-  const scoring = await loadTranspiledModule("src/lib/founderops-scoring.ts");
+  const platform = await importTestModule("src/lib/platform.ts");
+  const scoring = await importTestModule("src/lib/founderops-scoring.ts");
   const baseTask = {
     id: "task",
     taskType: "deliverable",
@@ -149,7 +149,7 @@ test("only accepted reviews contribute while both rework decisions stay open", a
 
 
 test("sprint review window starts after the Berlin sprint end and supports the CEO-configured duration", async () => {
-  const window = await loadTranspiledModule("src/lib/sprint-review-window.ts");
+  const window = await importTestModule("src/lib/sprint-review-window.ts");
   assert.equal(window.sprintEndsAt("2026-07-19"), "2026-07-19T21:59:59.999Z");
   assert.equal(window.sprintEndsAt("2026-03-29"), "2026-03-29T21:59:59.999Z");
   assert.equal(window.sprintEndsAt("2026-10-25"), "2026-10-25T22:59:59.999Z");

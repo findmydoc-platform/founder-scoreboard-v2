@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("GitHub sync advances the shared task revision used by the next edit", async () => {
-  const { rememberTaskServerRevision, taskServerRevision } = await loadTranspiledModule(
+  const { rememberTaskServerRevision, taskServerRevision } = await importTestModule(
     "src/features/tasks/model/task-server-revision.ts",
   );
   const store = { current: new Map() };

@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadModel() {
-  const storeContract = await loadTranspiledModule("src/features/planning-items/model/planning-items-store.ts");
-  const runner = await loadTranspiledModule("src/features/planning-items/model/planning-items-runner.ts");
-  const supabaseStore = await loadTranspiledModule("src/features/planning-items/model/planning-items-store-supabase.ts", {
+  const storeContract = await importTestModule("src/features/planning-items/model/planning-items-store.ts");
+  const runner = await importTestModule("src/features/planning-items/model/planning-items-runner.ts");
+  const supabaseStore = await importTestModule("src/features/planning-items/model/planning-items-store-supabase.ts", {
     "server-only": {},
     "./planning-items-store": storeContract,
   });
-  const approvalPolicy = await loadTranspiledModule("src/lib/approval-decision-policy.ts");
-  return loadTranspiledModule("src/features/planning-items/model/planning-items-approval.ts", {
+  const approvalPolicy = await importTestModule("src/lib/approval-decision-policy.ts");
+  return importTestModule("src/features/planning-items/model/planning-items-approval.ts", {
     "server-only": {},
     "@/lib/approval-decision-policy": approvalPolicy,
     "@/lib/planning-task-mappers": { mapTaskRow: (row) => ({

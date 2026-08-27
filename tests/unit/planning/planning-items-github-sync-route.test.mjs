@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const contract = await loadTranspiledModule(
+const contract = await importTestModule(
   "src/features/planning-items/model/planning-items-contract.ts",
 );
 
-const githubContract = await loadTranspiledModule(
+const githubContract = await importTestModule(
   "src/lib/github-sync/contract.ts",
 );
 
@@ -20,7 +20,7 @@ let standaloneEnqueueError = null;
 
 let scheduledAfter = null;
 
-const standaloneRoute = await loadTranspiledModule(
+const standaloneRoute = await importTestModule(
   "src/features/planning-items/model/planning-items-team-github-sync-route.ts",
   {
     "next/server": {

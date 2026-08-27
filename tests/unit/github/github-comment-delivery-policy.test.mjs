@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const policy = await loadTranspiledModule("src/features/tasks/model/github-comment-delivery-policy.ts");
+const policy = await importTestModule("src/features/tasks/model/github-comment-delivery-policy.ts");
 
 test("github comment delivery recognizes its durable marker before posting", () => {
   const existing = policy.findExistingGitHubComment([

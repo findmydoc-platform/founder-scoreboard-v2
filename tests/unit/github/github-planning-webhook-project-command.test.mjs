@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 let policyDecision = { kind: "update", patch: { title: "Changed title" } };
 
@@ -14,7 +14,7 @@ const domainRuns = [];
 
 const relationshipRuns = [];
 
-const processor = await loadTranspiledModule("src/lib/github-planning-webhook.ts", {
+const processor = await importTestModule("src/lib/github-planning-webhook.ts", {
   "server-only": {},
   "@/features/planning-items/model/planning-item-update": {
     parsePlanningItemPatchPayload: (raw) => ({

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const policy = await loadTranspiledModule(
+const policy = await importTestModule(
   "src/features/profile/model/profile-color-policy.ts",
 );
-const api = await loadTranspiledModule(
+const api = await importTestModule(
   "src/features/profile/model/profile-color-api.ts",
   {
     "@/features/profile/model/profile-color-policy": policy,

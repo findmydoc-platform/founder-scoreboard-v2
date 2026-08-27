@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const references = await loadTranspiledModule("src/lib/github-issue-reference.ts");
+const references = await importTestModule("src/lib/github-issue-reference.ts");
 
 function sourceTask(overrides = {}) {
   return {
@@ -23,7 +23,7 @@ function sourceTask(overrides = {}) {
 
 async function loadGitHub(target) {
   const requests = [];
-  const github = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+  const github = await importTestModule("src/lib/github-sync/issue-projection.ts", {
     "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const routeHelpers = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+const routeHelpers = await importTestModule("src/features/tasks/model/task-route-update-helpers.ts", {
   "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
   "@/lib/status": { normalizeStatus: (status) => status, taskStatuses: ["Offen"] },
 });

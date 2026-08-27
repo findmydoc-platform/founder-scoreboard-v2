@@ -4,7 +4,7 @@ import { createHmac } from "node:crypto";
 
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const webhookSecret = "test-webhook-secret";
 
@@ -18,7 +18,7 @@ const allowedRepositories = new Set([
   "findmydoc-platform/clinic-dashboard",
 ]);
 
-const webhook = await loadTranspiledModule("src/lib/github-webhook-intake.ts", {
+const webhook = await importTestModule("src/lib/github-webhook-intake.ts", {
   "server-only": {},
   "./github-repositories": {
     normalizeGitHubRepository: (value) => allowedRepositories.has(value) ? value : null,

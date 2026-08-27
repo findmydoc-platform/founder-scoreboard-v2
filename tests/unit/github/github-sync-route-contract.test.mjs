@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const contract = await loadTranspiledModule("src/lib/github-sync/contract.ts");
+const contract = await importTestModule("src/lib/github-sync/contract.ts");
 
 let payload;
 let tokenCalls;
@@ -28,7 +28,7 @@ function activeTaskSupabase() {
     },
   };
 }
-const route = await loadTranspiledModule(
+const route = await importTestModule(
   "src/app/api/tasks/[id]/sync-github/route.ts",
   {
     "next/server": {

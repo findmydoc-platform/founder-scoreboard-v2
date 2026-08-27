@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 class FakeElement {
   constructor(name) {
@@ -50,7 +50,7 @@ function createOverlayTree() {
   return { body, detail, github, main, overlayLayer };
 }
 
-const modalStack = await loadTranspiledModule("src/shared/model/modal-stack.ts");
+const modalStack = await importTestModule("src/shared/model/modal-stack.ts");
 
 test("a modal opened inside an inert background branch becomes the active top layer", () => {
   const { body, detail, github, main, overlayLayer } = createOverlayTree();

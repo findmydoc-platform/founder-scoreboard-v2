@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "session" } };
 const validPayload = {
@@ -12,19 +12,19 @@ const validPayload = {
 };
 
 async function loadModel() {
-  const storeContract = await loadTranspiledModule("src/features/planning-items/model/planning-items-store.ts");
-  const runner = await loadTranspiledModule("src/features/planning-items/model/planning-items-runner.ts");
-  const supabaseStore = await loadTranspiledModule("src/features/planning-items/model/planning-items-store-supabase.ts", {
+  const storeContract = await importTestModule("src/features/planning-items/model/planning-items-store.ts");
+  const runner = await importTestModule("src/features/planning-items/model/planning-items-runner.ts");
+  const supabaseStore = await importTestModule("src/features/planning-items/model/planning-items-store-supabase.ts", {
     "server-only": {}, "./planning-items-store": storeContract,
   });
-  return loadTranspiledModule("src/features/planning-items/model/planning-items-sprint-assignment.ts", {
+  return importTestModule("src/features/planning-items/model/planning-items-sprint-assignment.ts", {
     "./planning-items-runner": runner,
     "./planning-items-store-supabase": supabaseStore,
   });
 }
 
 async function loadRoute(run, apiContext) {
-  return loadTranspiledModule("src/app/api/tasks/bulk-sprint-assignment/route.ts", {
+  return importTestModule("src/app/api/tasks/bulk-sprint-assignment/route.ts", {
     "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
     "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }) },
     "@/lib/api-response": {

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const projectFieldContext = await loadTranspiledModule("src/lib/github-sync/project-field-context.ts");
+const projectFieldContext = await importTestModule("src/lib/github-sync/project-field-context.ts");
 
 const statusOptions = [
   ["status-todo", "Todo"],
@@ -125,7 +125,7 @@ const task = {
 };
 
 async function loadProjectProjection(handler) {
-  return loadTranspiledModule("src/lib/github-sync/project-projection.ts", {
+  return importTestModule("src/lib/github-sync/project-projection.ts", {
     "../github-graphql": { githubGraphql: handler },
     "../github-project-config": {
       validGitHubProjectOwner: (value) => typeof value === "string" && Boolean(value),

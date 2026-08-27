@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 function task() {
   return {
@@ -18,7 +18,7 @@ function task() {
 
 async function githubModule(assigneeStatus) {
   let patchBody;
-  const github = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+  const github = await importTestModule("src/lib/github-sync/issue-projection.ts", {
     "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: () => ({

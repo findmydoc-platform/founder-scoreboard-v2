@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const contract = await loadTranspiledModule("src/lib/github-sync/contract.ts");
+const contract = await importTestModule("src/lib/github-sync/contract.ts");
 
 function task(overrides = {}) {
   return {
@@ -71,7 +71,7 @@ function responseFor(result) {
 
 let commandSyncResponse = responseFor(successResult());
 const commandTransitions = [];
-const { useTaskGitHubSyncCommand } = await loadTranspiledModule(
+const { useTaskGitHubSyncCommand } = await importTestModule(
   "src/features/tasks/hooks/use-task-github-sync-command.ts",
   {
     react: {
@@ -175,7 +175,7 @@ const createdTask = task({
   githubIssueUrl: "",
   issueUrl: "",
 });
-const { useTaskCreateCommand } = await loadTranspiledModule(
+const { useTaskCreateCommand } = await importTestModule(
   "src/features/tasks/hooks/use-task-create-command.ts",
   {
     "@/features/planning/model/planning-app-model": {
@@ -262,7 +262,7 @@ for (const [name, result, expectedStatus, expectsError] of [
 let detailSyncResponse = responseFor(successResult());
 let detailStates = [];
 let detailTransitions = [];
-const { useTaskDetailWorkflow } = await loadTranspiledModule(
+const { useTaskDetailWorkflow } = await importTestModule(
   "src/features/tasks/hooks/use-task-detail-workflow.ts",
   {
     react: {

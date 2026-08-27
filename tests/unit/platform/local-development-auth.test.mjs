@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const {
   isLoopbackRequestHost,
   isLoopbackSupabaseUrl,
   isLocalLoginRequestAllowed,
   isLocalLoginSimulationEnabled,
-} = await loadTranspiledModule("src/lib/local-development-auth.ts");
+} = await importTestModule("src/lib/local-development-auth.ts");
 
 test("local login accepts only explicit development loopback configuration", () => {
   const environment = {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 let graphqlData;
 let dependencies = [];
@@ -11,7 +11,7 @@ const allowedRepositories = new Set([
   "findmydoc-platform/website",
 ]);
 
-const observation = await loadTranspiledModule("src/lib/github-sync/relationship-observation.ts", {
+const observation = await importTestModule("src/lib/github-sync/relationship-observation.ts", {
   "server-only": {},
   "../github": {
     listGitHubIssueBlockedBy: async (_issueNumber, _token, repository) => {

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const platform = await loadTranspiledModule("src/lib/platform.ts");
+const platform = await importTestModule("src/lib/platform.ts");
 
 test("only the CEO can configure the global GitHub Project", () => {
   assert.equal(platform.canConfigureFounderOpsGitHubProject({ platformRole: "ceo" }), true);

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("approval domain keeps client affordances and optimistic state aligned", async () => {
-  const approval = await loadTranspiledModule("src/features/planning/model/approval-domain.ts");
+  const approval = await importTestModule("src/features/planning/model/approval-domain.ts");
   const initiative = { approvalStatus: "proposed", approvalRevision: 2 };
   const deliverable = {
     taskType: "deliverable",
@@ -58,7 +58,7 @@ test("approval domain keeps client affordances and optimistic state aligned", as
 });
 
 test("github issue references preserve repository matching before reuse", async () => {
-  const references = await loadTranspiledModule("src/lib/github-issue-reference.ts");
+  const references = await importTestModule("src/lib/github-issue-reference.ts");
 
   assert.deepEqual(references.parseGitHubIssueUrl("https://github.com/findmydoc-platform/management/issues/42"), {
     repository: "findmydoc-platform/management",
@@ -73,7 +73,7 @@ test("github issue references preserve repository matching before reuse", async 
 });
 
 test("deliverables always use management while sub issues may choose an allowed repository", async () => {
-  const repositories = await loadTranspiledModule("src/lib/github-repositories.ts");
+  const repositories = await importTestModule("src/lib/github-repositories.ts");
 
   assert.deepEqual(repositories.resolveTaskGitHubRepository("deliverable", "findmydoc-platform/management"), {
     ok: true,

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function projectWithLabels(existingLabels, taskOverrides = {}) {
   let patchBody;
   let patchCalls = 0;
-  const issueProjection = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+  const issueProjection = await importTestModule("src/lib/github-sync/issue-projection.ts", {
     "../github-repositories": {
       splitGitHubRepository: () => ({
         owner: "findmydoc-platform",

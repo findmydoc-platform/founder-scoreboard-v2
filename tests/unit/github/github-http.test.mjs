@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const githubHttp = await loadTranspiledModule("src/lib/github-http.ts");
+const githubHttp = await importTestModule("src/lib/github-http.ts");
 
 async function withFetch(fetchImplementation, callback) {
   const originalFetch = globalThis.fetch;
