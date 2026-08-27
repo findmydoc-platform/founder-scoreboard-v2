@@ -33,6 +33,7 @@ export type TaskDetailOperationalHeaderProps = {
   titleId?: string;
   className?: string;
   actions?: ReactNode;
+  onOpenTask?: (taskId: string) => void;
   onUpdate: (patch: Partial<Task>) => void;
 };
 
@@ -294,16 +295,18 @@ export function TaskDetailOperationalHeader({
   titleId,
   className,
   actions,
+  onOpenTask,
   onUpdate,
 }: TaskDetailOperationalHeaderProps) {
   const generatedTitleId = useId();
   const resolvedTitleId = titleId || generatedTitleId;
-  const hierarchyLabel = task.taskType === "initiative"
-    ? parentTask?.title || "Ohne Epic"
+  const hierarchyTask = task.taskType === "deliverable" ? initiative || parentTask : parentTask;
+  const hierarchyFallback = task.taskType === "initiative"
+    ? "Ohne Epic"
     : task.taskType === "deliverable"
-      ? initiative?.title || parentTask?.title || "Ohne Initiative"
+      ? "Ohne Initiative"
       : task.taskType === "sub_issue"
-        ? parentTask?.title || "Parent fehlt"
+        ? "Parent fehlt"
         : "";
   const accountableAssignment = task.raciAssignments?.find((assignment) => assignment.role === "accountable");
   const initiativeAccountableAssignment = initiative?.raciAssignments?.find((assignment) => assignment.role === "accountable");
@@ -320,32 +323,39 @@ export function TaskDetailOperationalHeader({
 
   return (
     <header aria-labelledby={resolvedTitleId} className={classNames("bg-white", className)}>
-      <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <TaskTypeIndicator taskType={task.taskType} className={taskTypeColorClassName(task.taskType)} />
-            {task.taskType !== "epic" && hierarchyLabel && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="normal-case tracking-normal text-slate-600">
-                  {hierarchyLabel}
-                </span>
-              </>
-            )}
-            {accountableLabel && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="normal-case tracking-normal text-slate-600">
-                  Accountable: {accountableLabel}
-                </span>
-              </>
-            )}
-          </div>
-          <h1 id={resolvedTitleId} className="mt-2 max-w-5xl break-words text-2xl font-semibold leading-tight tracking-tight text-slate-950">
-            {task.title}
-          </h1>
+      <div className="grid min-w-0 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:col-start-1 sm:row-start-1">
+          <TaskTypeIndicator taskType={task.taskType} className={taskTypeColorClassName(task.taskType)} />
+          {task.taskType !== "epic" && (hierarchyTask || hierarchyFallback) && (
+            <span className="inline-flex min-w-0 max-w-full items-center gap-2 normal-case tracking-normal">
+              <span className="hidden sm:inline" aria-hidden="true">·</span>
+              {hierarchyTask ? (
+                <TaskReferenceLink
+                  task={hierarchyTask}
+                  onOpenTask={onOpenTask}
+                  showIcon={false}
+                  className="min-w-0 max-w-full text-slate-600"
+                >
+                  <span className="min-w-0 break-words">{hierarchyTask.title}</span>
+                </TaskReferenceLink>
+              ) : (
+                <span className="text-slate-600">{hierarchyFallback}</span>
+              )}
+            </span>
+          )}
+          {accountableLabel && (
+            <span className="inline-flex items-center gap-2 whitespace-nowrap normal-case tracking-normal">
+              <span className="hidden sm:inline" aria-hidden="true">·</span>
+              <span className="text-slate-600">
+                Accountable: {accountableLabel}
+              </span>
+            </span>
+          )}
         </div>
-        {actions}
+        <h1 id={resolvedTitleId} className="mt-2 min-w-0 w-full break-words text-2xl font-semibold leading-tight tracking-tight text-slate-950 sm:col-span-2 sm:row-start-2">
+          {task.title}
+        </h1>
+        {actions ? <div className="mt-4 min-w-0 sm:col-start-2 sm:row-start-1 sm:mt-0 sm:justify-self-end">{actions}</div> : null}
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-slate-200 py-3">

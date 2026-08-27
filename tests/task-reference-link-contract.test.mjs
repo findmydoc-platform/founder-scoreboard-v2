@@ -12,6 +12,7 @@ const primaryReferenceFiles = [
   "src/features/tasks/organisms/task-github-sync-queue.tsx",
   "src/features/notifications/organisms/notification-inbox.tsx",
   "src/features/notifications/organisms/notifications-overview.tsx",
+  "src/features/tasks/molecules/task-detail-operational-header.tsx",
   "src/features/tasks/molecules/task-detail-panel-sub-issues-section.tsx",
   "src/features/tasks/molecules/relationship-list.tsx",
 ];

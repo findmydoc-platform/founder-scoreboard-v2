@@ -146,6 +146,7 @@ export function TaskDetailPage({
             status: "Offen",
           })}
           onOpenTask={controller.openTaskPanel}
+          onOpenHierarchyTask={(parentTaskId) => router.push(`/tasks/${encodeURIComponent(parentTaskId)}`)}
           onSyncGitHub={(options) => controller.syncTaskToGitHub(task, options)}
           onReview={controller.reviewTask}
           onReopenReview={controller.reopenReviewTask}

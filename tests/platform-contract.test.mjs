@@ -64,7 +64,7 @@ test("deployment workflows keep validation, artifact creation, and production sa
   assert.equal(vercelJson.framework, "nextjs");
   assert.equal(vercelJson.installCommand, "pnpm install --frozen-lockfile");
   assert.equal(vercelJson.buildCommand, "pnpm run build");
-  assert.equal(packageJson.scripts.test, "node --test tests/*.test.mjs");
+  assert.equal(packageJson.scripts.test, "node --test tests/*.test.mjs && tsx --test tests/*.test.tsx");
   assert.equal(packageJson.scripts.lint, "eslint");
   assert.equal(packageJson.scripts.build, "next build");
   assert.equal(packageJson.scripts["verify:migrations"], "node scripts/verify-supabase-migrations.mjs");
