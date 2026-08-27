@@ -2,12 +2,12 @@
 
 import type { User } from "@supabase/supabase-js";
 import { useState, type ReactNode } from "react";
+import { usePlatformReleaseAuth } from "@/features/platform-releases/hooks/use-platform-release-auth";
 import { PlanningHeaderDataActions } from "@/features/planning/molecules/planning-header-data-actions";
 import { PlanningHelpMenu } from "@/features/planning/molecules/planning-help-menu";
 import { AppHeader } from "@/features/planning/organisms/app-header";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { AuthControl } from "@/features/settings/organisms/auth-control";
-import { getBrowserSupabase } from "@/lib/supabase";
 import type { PlanningHeaderData } from "@/lib/types";
 
 type Props = {
@@ -19,15 +19,7 @@ type Props = {
 
 export function PlatformReleasesShell({ authUser = null, children, currentPlatformRole = "", headerData }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [authBusy, setAuthBusy] = useState(false);
-  const signOut = async () => {
-    const supabase = getBrowserSupabase();
-    if (!supabase) return;
-    setAuthBusy(true);
-    const { error } = await supabase.auth.signOut({ scope: "global" });
-    setAuthBusy(false);
-    if (!error) window.location.assign("/");
-  };
+  const { busy: authBusy, signOut } = usePlatformReleaseAuth();
   return (
     <div className="min-h-screen bg-white text-slate-950">
       <AppSidebar

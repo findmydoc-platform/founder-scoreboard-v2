@@ -14,6 +14,16 @@ const config: StorybookConfig = {
       ...(viteConfig.resolve.alias as Record<string, string>),
       "@": path.resolve(dirname, "../src"),
     };
+    viteConfig.optimizeDeps ??= {};
+    viteConfig.optimizeDeps.include = [
+      ...(viteConfig.optimizeDeps.include || []),
+      "@storybook/react-dom-shim",
+      "@supabase/ssr",
+      "@supabase/supabase-js",
+      "react-markdown",
+      "remark-breaks",
+      "remark-gfm",
+    ];
     return viteConfig;
   },
 };
