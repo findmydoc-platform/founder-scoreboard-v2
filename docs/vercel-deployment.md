@@ -133,7 +133,9 @@ GitHub Actions executes the production flow in this order:
 
 The production migration ledger is initialized to this baseline and records every later applied migration. The deploy script fails closed when the baseline entry is missing, which prevents the current-schema baseline from being replayed over production.
 
-All later schema changes start with `pnpm run db:migration:new -- <clear_name>` and are committed under `supabase/migrations/`. Add the matching `tests/migrations/<migration-name>.test.mjs`, then run `pnpm run verify:migrations`, `pnpm run test:migrations`, and a fresh `pnpm run db:reset` before opening a pull request. Production rollback is forward-only by default: add a corrective migration. Backup restoration and migration-history repair require an explicitly approved incident procedure; the pipeline contains no automatic schema rollback.
+All later schema changes start with `pnpm run db:migration:new <clear_name>` and are committed under `supabase/migrations/`. Add `tests/migrations/<migration-name>.test.mjs` only for data transformations, deletion risk, non-additive structural changes, or authorization boundaries. Ordinary additive changes do not require a migration-specific test. Run `pnpm run verify:migrations`, `pnpm run test:migrations`, and a fresh `pnpm run db:reset` before opening a pull request. Production rollback is forward-only by default: add a corrective migration. Backup restoration and migration-history repair require an explicitly approved incident procedure; the pipeline contains no automatic schema rollback.
+
+Migration-specific tests have the same lifetime as the migration they exercise. Before a validated baseline squash, list the tests that the squash supersedes and explicitly propose removing them with the old migrations. Move durable RLS, permission, or data-integrity behavior into normal integration tests first. The baseline rebuild test remains and changes with the baseline.
 
 Configure all three production database secrets from the values shown under **Connect > Session pooler** in Supabase. To update the password from local `.env.local` without printing it, run from the repository root:
 

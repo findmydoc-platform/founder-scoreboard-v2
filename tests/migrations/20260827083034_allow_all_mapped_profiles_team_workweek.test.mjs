@@ -1,6 +1,5 @@
-import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import test from "node:test";
+import { expect, it } from "vitest";
 import {
   applyMigration,
   assertRowsPreserved,
@@ -36,12 +35,11 @@ async function asAuthenticated(client, authUserId, callback) {
   }
 }
 
-function expectDatabaseError(code, message) {
-  return (error) => {
-    assert.equal(error.code, code);
-    if (message) assert.match(error.message, message);
-    return true;
-  };
+async function expectDatabaseError(operation, code, message) {
+  await expect(operation()).rejects.toMatchObject({
+    code,
+    message: expect.stringMatching(message),
+  });
 }
 
 async function snapshots(client) {
@@ -74,7 +72,7 @@ async function snapshots(client) {
   };
 }
 
-test("all mapped roles can manage only their own workweek after the migration", {
+it("all mapped roles can manage only their own workweek after the migration", {
   timeout: 120_000,
 }, async () => {
   await resetLocalDatabaseTo(previousVersion);
@@ -132,12 +130,13 @@ test("all mapped roles can manage only their own workweek after the migration", 
       [publishedMonday],
     );
 
-    await assert.rejects(
+    await expectDatabaseError(
       () => asAuthenticated(client, teamMembers[3].authUserId, () => client.query(
         "select public.create_private_team_workweek_version($1, '[]'::jsonb)",
         [nextMonday],
       )),
-      expectDatabaseError("42501", /viewer cannot create/),
+      "42501",
+      /viewer cannot create/,
     );
 
     const before = await snapshots(client);
@@ -165,57 +164,60 @@ test("all mapped roles can manage only their own workweek after the migration", 
         );
         const versionId = created.rows[0].version.id;
         createdVersionIds.set(member.id, versionId);
-        assert.equal(created.rows[0].version.status, "preparing");
+        expect(created.rows[0].version.status).toBe("preparing");
 
         const privateVersions = await client.query(
           "select owner_profile_id from public.team_workweek_versions order by owner_profile_id",
         );
-        assert.ok(privateVersions.rows.length >= 1);
-        assert.ok(privateVersions.rows.every((row) => row.owner_profile_id === member.id));
+        expect(privateVersions.rows.length).toBeGreaterThanOrEqual(1);
+        expect(privateVersions.rows.every((row) => row.owner_profile_id === member.id)).toBe(true);
 
         const publishedTeamRows = await client.query(
           "select owner_profile_id from public.team_workweek_publications where status = 'published'",
         );
-        assert.deepEqual(publishedTeamRows.rows, [{ owner_profile_id: "migration-founder" }]);
+        expect(publishedTeamRows.rows).toEqual([{ owner_profile_id: "migration-founder" }]);
 
         const prepared = await client.query(
           "select public.prepare_team_workweek_publication($1) as publication",
           [versionId],
         );
-        assert.equal(prepared.rows[0].publication.ownerProfileId, member.id);
-        assert.equal(prepared.rows[0].publication.status, "preparing");
+        expect(prepared.rows[0].publication.ownerProfileId).toBe(member.id);
+        expect(prepared.rows[0].publication.status).toBe("preparing");
       });
     }
 
-    await assert.rejects(
+    await expectDatabaseError(
       () => asAuthenticated(client, teamMembers[3].authUserId, () => client.query(
         "select public.prepare_team_workweek_publication($1)",
         [createdVersionIds.get("migration-ceo")],
       )),
-      expectDatabaseError("P0002", /private team workweek version not found/),
+      "P0002",
+      /private team workweek version not found/,
     );
 
     await asAuthenticated(client, unmappedAuthUserId, async () => {
       const publishedRows = await client.query(
         "select id from public.team_workweek_publications where status = 'published'",
       );
-      assert.equal(publishedRows.rowCount, 0);
-      await assert.rejects(
+      expect(publishedRows.rowCount).toBe(0);
+      await expectDatabaseError(
         () => client.query(
           "select public.create_private_team_workweek_version($1, '[]'::jsonb)",
           [nextMonday],
         ),
-        expectDatabaseError("42501", /mapped team profile required/),
+        "42501",
+        /mapped team profile required/,
       );
     });
 
-    await assert.rejects(
+    await expectDatabaseError(
       () => asAuthenticated(client, teamMembers[3].authUserId, () => client.query(
         `insert into public.team_workweek_versions (owner_profile_id, effective_from)
          values ('migration-viewer', $1)`,
         [nextMonday],
       )),
-      expectDatabaseError("42501", /permission denied/),
+      "42501",
+      /permission denied/,
     );
   });
 });

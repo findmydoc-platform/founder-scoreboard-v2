@@ -1,5 +1,4 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import { expect, it } from "vitest";
 import {
   resetLocalDatabaseTo,
   withLocalDatabase,
@@ -7,7 +6,7 @@ import {
 
 const baselineVersion = "20260827064853";
 
-test("the current schema baseline rebuilds the database without widening access", {
+it("the current schema baseline rebuilds the database without widening access", {
   timeout: 120_000,
 }, async () => {
   await resetLocalDatabaseTo(baselineVersion);
@@ -16,7 +15,7 @@ test("the current schema baseline rebuilds the database without widening access"
     const ledger = await client.query(
       "select version from supabase_migrations.schema_migrations order by version",
     );
-    assert.deepEqual(ledger.rows, [{ version: baselineVersion }]);
+    expect(ledger.rows).toEqual([{ version: baselineVersion }]);
 
     await client.query(`
       insert into public.projects (id, name)
@@ -56,7 +55,7 @@ test("the current schema baseline rebuilds the database without widening access"
       from public.active_tasks
       where id = 'baseline-deliverable'
     `);
-    assert.deepEqual(activeTask.rows, [{
+    expect(activeTask.rows).toEqual([{
       id: "baseline-deliverable",
       project_id: "baseline-project",
       title: "Preserved baseline deliverable",
@@ -74,14 +73,14 @@ test("the current schema baseline rebuilds the database without widening access"
         and not relation.relrowsecurity
       order by relation.relname
     `);
-    assert.deepEqual(tablesWithoutRls.rows, []);
+    expect(tablesWithoutRls.rows).toEqual([]);
 
     const bucket = await client.query(`
       select id, name, public, file_size_limit::text, allowed_mime_types
       from storage.buckets
       where id = 'fmd-tool-previews'
     `);
-    assert.deepEqual(bucket.rows, [{
+    expect(bucket.rows).toEqual([{
       id: "fmd-tool-previews",
       name: "fmd-tool-previews",
       public: true,
@@ -97,7 +96,7 @@ test("the current schema baseline rebuilds the database without widening access"
         has_table_privilege('authenticated', 'public.tasks', 'update') as authenticated_update,
         has_table_privilege('service_role', 'public.tasks', 'insert') as service_role_insert
     `);
-    assert.deepEqual(taskPrivileges.rows[0], {
+    expect(taskPrivileges.rows[0]).toEqual({
       anon_select: false,
       authenticated_select: true,
       authenticated_insert: false,
