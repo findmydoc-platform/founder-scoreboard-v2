@@ -50,11 +50,16 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.match(surface, /TaskDetailPlanningSection/);
   assert.match(surface, /TaskDetailWorkflowStrips/);
   assert.match(surface, /TaskDetailHeaderActions/);
+  assert.match(surface, /onOpenHierarchyTask = onOpenTask/);
+  assert.match(surface, /onOpenTask=\{openHierarchyTask\}/);
   assert.doesNotMatch(surface, /Weitere Details/);
   assert.match(surface, /TaskCommentThread/);
   assert.match(operationalHeader, /Wartet auf/);
   assert.match(operationalHeader, /Andere warten hierauf/);
   assert.match(operationalHeader, /Accountable:/);
+  assert.match(operationalHeader, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  assert.match(operationalHeader, /sm:col-span-2 sm:row-start-2/);
+  assert.doesNotMatch(operationalHeader, /max-w-5xl/);
   assert.doesNotMatch(operationalHeader, /Parent:/);
   assert.match(overview, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
   assert.match(overview, /<LinkedPullRequestsSection compact/);
@@ -70,6 +75,7 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.match(headerActions, /GitHub Issue/);
   assert.match(headerActions, /Deliverable zurückziehen/);
   assert.match(planningSection, /Planung bearbeiten/);
+  assert.match(page, /onOpenHierarchyTask=\{\(parentTaskId\) => router\.push\(`/);
   assert.match(workflowStrips, /Wartet auf Freigabe/);
   assert.match(tabs, /role="tablist"/);
   assert.match(tabs, /aria-selected/);

@@ -74,6 +74,7 @@ type TaskDetailSurfaceProps = {
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => Promise<TaskActionResult>;
   onCreateSubIssue: () => void;
   onOpenTask: (taskId: string) => void;
+  onOpenHierarchyTask?: (taskId: string) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onReview: (task: Task, decision: ReviewDecision, score: number, checklist: TaskReviewChecklist, comment: string) => Promise<boolean> | boolean | void;
   onReopenReview: (task: Task) => void;
@@ -116,6 +117,7 @@ export function TaskDetailSurface({
   onReportBlocker,
   onCreateSubIssue,
   onOpenTask,
+  onOpenHierarchyTask = onOpenTask,
   onSyncGitHub,
   onReview,
   onReopenReview,
@@ -273,6 +275,12 @@ export function TaskDetailSurface({
       onOpenTask(taskId);
     });
   };
+  const openHierarchyTask = (taskId: string) => {
+    requestDiscardAction(() => {
+      if (controller.overviewEditing) controller.cancelOverview();
+      onOpenHierarchyTask(taskId);
+    });
+  };
 
   const panels = {
     overview: (
@@ -397,6 +405,7 @@ export function TaskDetailSurface({
       canManageTaskMeta={controller.permissions.canManageTaskMeta}
       pending={pending}
       titleId={surface === "modal" ? "task-detail-panel-title" : "task-detail-page-title"}
+      onOpenTask={openHierarchyTask}
       actions={(
         <TaskDetailHeaderActions
           task={task}

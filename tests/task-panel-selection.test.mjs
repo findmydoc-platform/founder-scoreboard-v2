@@ -28,6 +28,15 @@ test("task panel selection ignores duplicates and unavailable tasks", () => {
   assert.deepEqual(selection.normalizeTaskPanelHistory(["task-a", "missing", "task-b"], available), ["task-a", "task-b"]);
 });
 
+test("parent navigation replaces the current panel item and returns to the child", () => {
+  const available = new Set(["child", "parent"]);
+  const childHistory = selection.startTaskPanelHistory("child", available);
+  const parentHistory = selection.pushTaskPanelHistory(childHistory, "parent", available);
+
+  assert.equal(selection.currentTaskPanelId(parentHistory), "parent");
+  assert.deepEqual(selection.backTaskPanelHistory(parentHistory), ["child"]);
+});
+
 test("task references use the drawer only for unmodified primary clicks", () => {
   const base = { button: 0, altKey: false, ctrlKey: false, metaKey: false, shiftKey: false };
 

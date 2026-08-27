@@ -97,7 +97,6 @@ export function TaskDetailPlanningSection({
           <div className="flex min-w-0 items-center gap-3 text-sm">
             <CalendarDays size={17} className="shrink-0 text-slate-400" aria-hidden="true" />
             <span className="truncate font-semibold text-slate-900">{targetDate || "Kein Zieltermin"}</span>
-            {task.taskType === "initiative" ? <><span className="text-slate-300" aria-hidden="true">·</span><span className="truncate text-slate-600">{currentParent?.title || "Ohne Epic"}</span></> : null}
           </div>
           <UiButton type="button" size="sm" variant="ghost" className="text-blue-700 hover:bg-blue-50" aria-expanded={open} aria-controls="strategic-planning-controls" onClick={() => setOpen((current) => !current)}>
             <Pencil size={14} aria-hidden="true" />
@@ -134,8 +133,6 @@ export function TaskDetailPlanningSection({
           <span className="truncate font-semibold text-slate-900">{currentSprint?.name || "Kein Sprint"}</span>
           <span className="text-slate-300" aria-hidden="true">·</span>
           <span className="whitespace-nowrap text-slate-600">{compactDateRange(dateSource)}</span>
-          <span className="text-slate-300" aria-hidden="true">·</span>
-          <span className="truncate text-slate-600">{currentParent?.title || "Ohne Initiative"}</span>
         </div>
         <UiButton type="button" size="sm" variant="ghost" className="text-blue-700 hover:bg-blue-50" aria-expanded={open} aria-controls="task-detail-planning-controls" onClick={() => setOpen((current) => !current)}>
           <Pencil size={14} aria-hidden="true" />

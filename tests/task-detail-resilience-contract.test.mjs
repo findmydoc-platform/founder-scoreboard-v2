@@ -25,12 +25,14 @@ test("overview editing uses a stable baseline and a safe discard dialog", async 
   assert.match(overview, /öffnet in neuem Tab/);
   assert.doesNotMatch(surface, /window\.confirm/);
   assert.match(surface, /onRequestDiscardAction\(action, true\)/);
+  assert.match(surface, /const openHierarchyTask = \(taskId: string\) => \{[\s\S]*?requestDiscardAction\(\(\) => \{[\s\S]*?onOpenHierarchyTask\(taskId\)/);
   assert.match(dialog, /role="alertdialog"/);
   assert.match(dialog, /Weiter bearbeiten/);
   assert.match(dialog, /Änderungen verwerfen/);
   assert.match(guard, /pendingActionRef/);
   assert.match(page, /onRequestNavigation/);
   assert.match(panel, /onRequestFullPage/);
+  assert.match(page, /onOpenHierarchyTask=\{\(parentTaskId\) => router\.push\(`/);
   assert.match(sidebar, /onNavigate/);
 });
 
