@@ -131,13 +131,9 @@ GitHub Actions executes the production flow in this order:
 
 `supabase/migrations/20260827064853_current_schema_baseline.sql` is the immutable current-schema baseline. A fresh local database starts from it and then applies later timestamp migrations in order. Production must never replay the baseline over the existing schema.
 
-Before the squash is activated in production, follow `docs/supabase-migration-cutover.md`: back up roles, schema, data, and migration history; restore-test the encrypted archive; confirm normalized production-schema and data parity; and obtain separate production approval. Then mark every superseded version as reverted and only the new baseline version as applied.
+Before the squash is activated in production, follow `docs/supabase-migration-cutover.md`: back up roles, schema, data, and migration history; restore-test the encrypted archive; confirm the restorable schema, data, and migration-history evidence; and obtain separate production approval. Run the protected `Supabase Baseline Cutover` workflow to apply the baseline marker before it transactionally removes the exact 62 restore-verified ledger entries. The workflow briefly pauses writes to FounderOps tables in `public` with a shared lock, leaves reads and Auth available, compares application data immediately before and after, and can resume safely when the baseline marker is already present.
 
-```bash
-pnpm exec supabase migration repair --linked --status applied 20260827064853
-```
-
-The command changes only the migration ledger; it must run only in the approved cutover session, after superseded versions have been marked reverted. The deploy script fails closed while the ledger is absent or the new baseline version is missing. The subsequent production dry run must report zero pending migrations. Keep the encrypted pre-cutover backup and its Keeper-held key for 14 days, then delete both.
+The repair changes only the migration ledger. The deploy script fails closed while the baseline ledger is absent or inconsistent. The subsequent production dry run must report only `20260827083034_allow_all_mapped_profiles_team_workweek.sql` as pending. Keep the encrypted pre-cutover backup and its Keeper-held key for 14 days, then delete both.
 
 All later schema changes start with `pnpm run db:migration:new -- <clear_name>` and are committed under `supabase/migrations/`. Add the matching `tests/migrations/<migration-name>.test.mjs`, then run `pnpm run verify:migrations`, `pnpm run test:migrations`, and a fresh `pnpm run db:reset` before opening a pull request. Production rollback is forward-only by default: add a corrective migration. Backup restoration and migration-history repair require an explicitly approved incident procedure; the pipeline contains no automatic schema rollback.
 

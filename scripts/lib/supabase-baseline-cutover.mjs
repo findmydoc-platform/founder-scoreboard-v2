@@ -18,6 +18,13 @@ export function hashApplicationSnapshot(snapshot) {
   return sha256(JSON.stringify(snapshot));
 }
 
+export async function readLedgerVersions(client) {
+  const result = await client.query(
+    "select version from supabase_migrations.schema_migrations order by version",
+  );
+  return result.rows.map(({ version }) => String(version));
+}
+
 export function normalizeSchemaDump(sql) {
   return sql
     .replace(/^\s*\\(?:un)?restrict\s+.*$/gm, "")
@@ -42,26 +49,55 @@ export function buildLedgerCutoverPlan({
   if (!Number.isSafeInteger(expectedSupersededCount) || expectedSupersededCount < 1) {
     throw new Error("The expected superseded migration count must be a positive integer.");
   }
-  if (versions.includes(baselineVersion)) {
-    throw new Error(`Baseline ${baselineVersion} is already present in the production ledger.`);
-  }
-  const unexpected = versions.filter((version) => !/^\d{14}$/.test(version) || version >= baselineVersion);
+  const baselineApplied = versions.includes(baselineVersion);
+  const supersededVersions = versions.filter((version) => version !== baselineVersion);
+  const unexpected = supersededVersions.filter(
+    (version) => !/^\d{14}$/.test(version) || version >= baselineVersion,
+  );
   if (unexpected.length) {
     throw new Error(`Production ledger contains unexpected versions: ${unexpected.join(", ")}.`);
   }
-  if (versions.length !== expectedSupersededCount) {
+  if (baselineApplied && supersededVersions.length === 0) {
+    return { baselineApplied: true, supersededVersions: [] };
+  }
+  if (supersededVersions.length !== expectedSupersededCount) {
     throw new Error(
-      `Expected ${expectedSupersededCount} superseded migrations, found ${versions.length}.`,
+      `Expected ${expectedSupersededCount} superseded migrations, found ${supersededVersions.length}.`,
     );
   }
-  const ledgerSha256 = hashLedgerVersions(versions);
+  const ledgerSha256 = hashLedgerVersions(supersededVersions);
   if (ledgerSha256 !== expectedLedgerSha256) {
     throw new Error("Production migration ledger does not match the restore-tested backup.");
   }
-  return { ledgerSha256, supersededVersions: versions };
+  return { baselineApplied, ledgerSha256, supersededVersions };
 }
 
-export async function buildDatabaseSnapshot(client) {
+export async function lockApplicationTables(client, schemas) {
+  if (!Array.isArray(schemas) || !schemas.length) {
+    throw new Error("Application table locks require at least one schema.");
+  }
+  const result = await client.query(
+    `
+      select table_schema, table_name
+      from information_schema.tables
+      where table_type = 'BASE TABLE'
+        and table_schema = any($1::text[])
+      order by table_schema, table_name
+    `,
+    [schemas],
+  );
+  if (!result.rows.length) {
+    throw new Error("No application tables were found for the cutover lock.");
+  }
+  const relations = result.rows.map(
+    ({ table_schema: schema, table_name: table }) =>
+      `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`,
+  );
+  await client.query(`lock table ${relations.join(", ")} in share mode`);
+  return relations;
+}
+
+export async function buildDatabaseSnapshot(client, { schemas = APPLICATION_SCHEMAS } = {}) {
   const tablesResult = await client.query(
     `
       select table_schema, table_name
@@ -70,7 +106,7 @@ export async function buildDatabaseSnapshot(client) {
         and table_schema = any($1::text[])
       order by table_schema, table_name
     `,
-    [APPLICATION_SCHEMAS],
+    [schemas],
   );
 
   const tables = [];
@@ -100,7 +136,7 @@ export async function buildDatabaseSnapshot(client) {
       where sequence_schema = any($1::text[])
       order by sequence_schema, sequence_name
     `,
-    [APPLICATION_SCHEMAS],
+    [schemas],
   );
 
   const sequences = [];
@@ -115,10 +151,7 @@ export async function buildDatabaseSnapshot(client) {
     });
   }
 
-  const ledgerResult = await client.query(
-    "select version from supabase_migrations.schema_migrations order by version",
-  );
-  const ledgerVersions = ledgerResult.rows.map(({ version }) => String(version));
+  const ledgerVersions = await readLedgerVersions(client);
   const application = { sequences, tables };
 
   return {
