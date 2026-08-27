@@ -59,7 +59,7 @@
     "pg": "^8.22.0",
     "playwright": "1.62.1",
     "storybook": "10.5.7",
-    "supabase": "2.109.1",
+    "supabase": "2.115.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "8.2.1",
