@@ -30,15 +30,17 @@ The production cutover is a separate, explicitly approved operation. Immediately
 
 Never place database URLs, passwords, keys, or tokens in command arguments, repository files, logs, screenshots, issues, or pull requests. Use the approved operator environment and secret handoff instead.
 
+Run the manual `Supabase Baseline Cutover` workflow with operation `backup` and a newly generated public `age` recipient. The workflow uses the protected production environment, exports the split backup, records deterministic application and ledger snapshots, encrypts the archive before upload, and removes plaintext runner files. Download the encrypted artifact, place it in the restricted findmydoc Google Drive area, and complete the local restore gate before using the workflow's `repair` operation.
+
 Supabase documents the split dump and restore flow in [Backup and Restore using the CLI](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore).
 
 ## Production ledger cutover
 
 After the squash pull request is merged, the production deploy guard refuses to run until version `20260827064853` exists exactly once as applied in the production migration ledger. It therefore cannot execute the baseline accidentally.
 
-With separate production approval, the operator must mark all 62 superseded versions as reverted and mark only `20260827064853` as applied. `supabase migration repair` changes ledger state only; it does not execute the baseline SQL. The exact target and resulting ledger must be reviewed before the repair.
+With separate production approval, the operator must mark all 62 superseded versions as reverted and mark only `20260827064853` as applied. `supabase migration repair` changes ledger state only; it does not execute the baseline SQL. The exact target and resulting ledger must be reviewed before the repair. The workflow's `repair` operation additionally requires the restore-tested application, ledger, and manifest hashes and refuses a changed production snapshot.
 
-The next production migration dry run must report zero pending migrations. Before and after data checksums and row counts must still match. Only then may the protected production workflow continue with database-security and Auth verification.
+The next production migration dry run must report only `20260827083034_allow_all_mapped_profiles_team_workweek.sql` as pending. Before and after data checksums and row counts must still match. Only then may the protected production workflow apply that migration and continue with database-security and Auth verification.
 
 Keep the encrypted archive and Keeper key for 14 days after the verified cutover. Delete both at the end of that window and record completion in the maintenance issue.
 
