@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const draftModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
-const calendarModel = await loadTranspiledModule(
+const calendarModel = await importTestModule(
   "src/features/team-workweek/model/team-workweek-calendar.ts",
   { "./team-workweek-draft": draftModel },
 );
@@ -29,7 +29,7 @@ function supabaseQuery() {
   };
 }
 
-const route = await loadTranspiledModule(
+const route = await importTestModule(
   "src/app/api/team-workweek/team/route.ts",
   {
     "next/server": { NextResponse: { json: (value) => Response.json(value) } },

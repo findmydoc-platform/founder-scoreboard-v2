@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 class MockGitHubApiError extends Error {
   constructor(message, status) {
@@ -37,7 +37,7 @@ function supabaseFixture({ relationships = [], tasks = [] } = {}) {
 }
 
 async function loadDependencyProjection({ githubJson, githubRequest = async () => new Response(null, { status: 204 }) }) {
-  return loadTranspiledModule("src/lib/github-sync/dependency-projection.ts", {
+  return importTestModule("src/lib/github-sync/dependency-projection.ts", {
     "../github": {
       listGitHubIssueBlockedBy: async (issueNumber, token, repository) => {
         const [owner, repo] = repository.split("/");

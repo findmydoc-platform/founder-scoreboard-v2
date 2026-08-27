@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("platform role helpers keep operational lead boundary explicit", async () => {
-  const { isOperationalLeadRole } = await loadTranspiledModule("src/lib/platform.ts");
+  const { isOperationalLeadRole } = await importTestModule("src/lib/platform.ts");
 
   assert.equal(isOperationalLeadRole("ceo"), true);
   assert.equal(isOperationalLeadRole("deputy"), true);
@@ -15,7 +15,7 @@ test("platform role helpers keep operational lead boundary explicit", async () =
 });
 
 test("task assignment uses profile id before display name and legacy owner fallback", async () => {
-  const { taskBelongsToProfile } = await loadTranspiledModule("src/lib/platform.ts");
+  const { taskBelongsToProfile } = await importTestModule("src/lib/platform.ts");
   const sebastian = { id: "sebastian", name: "Sebastian" };
   const volkan = { id: "volkan", name: "Volkan" };
 

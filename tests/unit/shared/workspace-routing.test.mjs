@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const workspacePreferences = await loadTranspiledModule(
+const workspacePreferences = await importTestModule(
   "src/features/planning/model/workspace-preferences.ts",
 );
 
@@ -57,7 +57,7 @@ function recordingSupabase({ defaultWorkspace = "reviews", preferenceError = nul
 }
 
 async function loadPlanningAuthServer({ supabase, authzResult }) {
-  return loadTranspiledModule("src/lib/planning-auth-server.ts", {
+  return importTestModule("src/lib/planning-auth-server.ts", {
     "@/features/planning/model/workspace-routes": workspacePreferences,
     "./authz": {
       async requirePlatformRoleForUser() {

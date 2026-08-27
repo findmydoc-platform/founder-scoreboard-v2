@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadUpdateModel() {
-  const contract = await loadTranspiledModule(
+  const contract = await importTestModule(
     "src/features/planning-items/model/planning-items-contract.ts",
   );
-  const deliverableSchedule = await loadTranspiledModule(
+  const deliverableSchedule = await importTestModule(
     "src/features/planning-items/model/deliverable-schedule.ts",
   );
-  return loadTranspiledModule("src/features/planning-items/model/planning-item-update.ts", {
+  return importTestModule("src/features/planning-items/model/planning-item-update.ts", {
     "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
     "@/lib/github-repositories": { resolveTaskGitHubRepository: () => ({ ok: true, repository: "findmydoc-platform/management" }) },
     "@/lib/platform": { isOperationalLeadRole: () => true },

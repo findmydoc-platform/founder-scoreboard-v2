@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadCreate() {
-  const contract = await loadTranspiledModule("src/features/planning-items/model/planning-items-contract.ts");
-  const deliverableSchedule = await loadTranspiledModule(
+  const contract = await importTestModule("src/features/planning-items/model/planning-items-contract.ts");
+  const deliverableSchedule = await importTestModule(
     "src/features/planning-items/model/deliverable-schedule.ts",
   );
-  const reviewState = await loadTranspiledModule("src/features/reviews/model/task-review-state.ts");
-  const normalization = await loadTranspiledModule(
+  const reviewState = await importTestModule("src/features/reviews/model/task-review-state.ts");
+  const normalization = await importTestModule(
     "src/features/planning-items/model/planning-item-normalization.ts",
     {
       "@/lib/api-input": { cleanText: (value, maxLength) => String(value || "").trim().slice(0, maxLength) },
@@ -17,7 +17,7 @@ async function loadCreate() {
       "@/features/planning-items/model/deliverable-schedule": deliverableSchedule,
     },
   );
-  return loadTranspiledModule(
+  return importTestModule(
     "src/features/planning-items/model/planning-items-create.ts",
     {
       "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
@@ -52,7 +52,7 @@ async function loadTeamCreateRoute({
     ...actor,
     credential: { kind: "planningToken", tokenId: "token-1", scopes: ["write:planning-items:create"] },
   };
-  const route = await loadTranspiledModule(
+  const route = await importTestModule(
     "src/features/planning-items/model/planning-items-team-create-route.ts",
     {
       "next/server": { after: () => undefined },

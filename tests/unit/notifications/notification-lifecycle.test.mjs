@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const catalog = await loadTranspiledModule("src/lib/notification-catalog.ts");
+const catalog = await importTestModule("src/lib/notification-catalog.ts");
 const platform = {
   isOperationalLeadRole: (role) => role === "ceo" || role === "deputy",
 };
 const status = {
   normalizeStatus: (value) => value || "Offen",
 };
-const resolution = await loadTranspiledModule("src/lib/notification-resolution.ts", {
+const resolution = await importTestModule("src/lib/notification-resolution.ts", {
   "./notification-catalog": catalog,
   "./planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
   "./platform": platform,
   "./status": status,
 });
-const lifecycle = await loadTranspiledModule("src/lib/notification-lifecycle.ts", {
+const lifecycle = await importTestModule("src/lib/notification-lifecycle.ts", {
   "./platform": platform,
 });
 

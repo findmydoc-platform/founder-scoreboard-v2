@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("project header exposes ordered epic actions only to allowed roles", async () => {
-  const { usePlanningHeaderActions } = await loadTranspiledModule(
+  const { usePlanningHeaderActions } = await importTestModule(
     "src/features/planning/hooks/use-planning-header-actions.ts",
     {
       "@/features/planning/model/planning-level": {

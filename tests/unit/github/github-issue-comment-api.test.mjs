@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("the Issue comment loader uses the approved repository-scoped GitHub transport", async () => {
   let request = null;
-  const github = await loadTranspiledModule("src/lib/github.ts", {
+  const github = await importTestModule("src/lib/github.ts", {
     "./github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {

@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const contract = await loadTranspiledModule(
+const contract = await importTestModule(
   "src/features/planning-items/model/planning-items-contract.ts",
 );
-const deliverableSchedule = await loadTranspiledModule(
+const deliverableSchedule = await importTestModule(
   "src/features/planning-items/model/deliverable-schedule.ts",
 );
 
-const create = await loadTranspiledModule(
+const create = await importTestModule(
   "src/features/planning-items/model/planning-items-create.ts",
   {
     "@/lib/planning-read-model": {
@@ -37,7 +37,7 @@ const create = await loadTranspiledModule(
   },
 );
 
-const update = await loadTranspiledModule(
+const update = await importTestModule(
   "src/features/planning-items/model/planning-item-update.ts",
   {
     "@/lib/planning-read-model": {

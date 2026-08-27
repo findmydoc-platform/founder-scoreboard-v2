@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 function createSupabaseFixture(failedTable = "") {
   const calls = [];
@@ -39,7 +39,7 @@ function createSupabaseFixture(failedTable = "") {
   };
 }
 
-const { createSupabaseBacklogReadModel } = await loadTranspiledModule(
+const { createSupabaseBacklogReadModel } = await importTestModule(
   "src/features/backlog/server/backlog-read-model-supabase.ts",
   {
     "server-only": {},
@@ -62,7 +62,7 @@ const { createSupabaseBacklogReadModel } = await loadTranspiledModule(
   },
 );
 
-const { backlogModelReducer } = await loadTranspiledModule(
+const { backlogModelReducer } = await importTestModule(
   "src/features/backlog/model/backlog-read-model.ts",
 );
 

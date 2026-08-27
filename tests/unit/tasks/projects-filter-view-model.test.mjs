@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const mocks = {
   "@/lib/status": { normalizeStatus: (status) => status },
@@ -11,7 +11,7 @@ const mocks = {
 const emptyProjectRelations = { taskBlockers: [], taskRelations: [] };
 
 test("project hierarchy search finds epics and empty initiatives", async () => {
-  const { buildProjectsFilterViewModel } = await loadTranspiledModule(
+  const { buildProjectsFilterViewModel } = await importTestModule(
     "src/features/projects/model/projects-filter-view-model.ts",
     mocks,
   );
@@ -61,7 +61,7 @@ test("project hierarchy search finds epics and empty initiatives", async () => {
 });
 
 test("deliverable filters combine with AND and keep table sorting stable", async () => {
-  const { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS } = await loadTranspiledModule(
+  const { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS } = await importTestModule(
     "src/features/projects/model/projects-filter-view-model.ts",
     mocks,
   );
@@ -80,7 +80,7 @@ test("deliverable filters combine with AND and keep table sorting stable", async
 });
 
 test("project hierarchy distinguishes true empty data from orphan initiatives", async () => {
-  const { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS } = await loadTranspiledModule(
+  const { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS } = await importTestModule(
     "src/features/projects/model/projects-filter-view-model.ts",
     mocks,
   );

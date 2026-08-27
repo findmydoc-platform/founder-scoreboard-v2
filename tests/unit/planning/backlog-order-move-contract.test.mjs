@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const actor = {
   profileId: "ceo",
@@ -9,7 +9,7 @@ const actor = {
 };
 
 async function loadBacklogOrderRoute(run = async () => ({ ok: true, status: "committed", changes: [] })) {
-  return loadTranspiledModule("src/app/api/tasks/backlog-order/route.ts", {
+  return importTestModule("src/app/api/tasks/backlog-order/route.ts", {
     "next/server": {
       NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) },
     },
@@ -41,13 +41,13 @@ async function loadBacklogOrderRoute(run = async () => ({ ok: true, status: "com
 }
 
 async function loadBacklogMoveModule() {
-  const storeContract = await loadTranspiledModule("src/features/planning-items/model/planning-items-store.ts");
-  const runner = await loadTranspiledModule("src/features/planning-items/model/planning-items-runner.ts");
-  const supabaseStore = await loadTranspiledModule(
+  const storeContract = await importTestModule("src/features/planning-items/model/planning-items-store.ts");
+  const runner = await importTestModule("src/features/planning-items/model/planning-items-runner.ts");
+  const supabaseStore = await importTestModule(
     "src/features/planning-items/model/planning-items-store-supabase.ts",
     { "server-only": {}, "./planning-items-store": storeContract },
   );
-  return loadTranspiledModule(
+  return importTestModule(
     "src/features/planning-items/model/planning-items-backlog-move.ts",
     {
       "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },

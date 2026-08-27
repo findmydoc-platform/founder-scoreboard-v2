@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("REQUIRE_SUPABASE_AUTH disables auth only for explicit local development", async () => {
-  const supabase = await loadTranspiledModule("src/lib/supabase.ts", {
+  const supabase = await importTestModule("src/lib/supabase.ts", {
     "@supabase/ssr": { createBrowserClient: () => ({}) },
     "@supabase/supabase-js": { createClient: () => ({}) },
   });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const reconciliation = await import("../../../src/features/team-workweek/server/team-workweek-reconciliation-core.ts");
 const workweekModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
@@ -12,7 +12,7 @@ class MockTeamWorkweekPublicationError extends Error {
   }
 }
 
-const reconciliationServer = await loadTranspiledModule(
+const reconciliationServer = await importTestModule(
   "src/features/team-workweek/server/team-workweek-reconciliation.ts",
   {
     "server-only": {},

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const decisionPolicy = await loadTranspiledModule("src/lib/approval-decision-policy.ts");
-const approvalDomain = await loadTranspiledModule("src/features/planning/model/approval-domain.ts");
-const notificationCatalog = await loadTranspiledModule("src/lib/notification-catalog.ts");
+const decisionPolicy = await importTestModule("src/lib/approval-decision-policy.ts");
+const approvalDomain = await importTestModule("src/features/planning/model/approval-domain.ts");
+const notificationCatalog = await importTestModule("src/lib/notification-catalog.ts");
 
 test("approval decision notes are trimmed, conditionally required, and bounded", () => {
   assert.deepEqual(decisionPolicy.validateApprovalDecisionNote("approve", undefined), { ok: true, note: null });

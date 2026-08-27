@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const selection = await loadTranspiledModule("src/features/tasks/model/task-panel-selection.ts");
+const selection = await importTestModule("src/features/tasks/model/task-panel-selection.ts");
 
 test("task panel selection starts pushes navigates back and closes", () => {
   const available = new Set(["task-a", "task-b", "task-c"]);

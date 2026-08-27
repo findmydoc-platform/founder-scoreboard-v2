@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const publicationCore = await import("../../../src/features/team-workweek/server/team-workweek-publication-core.ts");
 const oauthCore = await import("../../../src/features/team-workweek/server/google-workspace-oauth-core.ts");
 const draftModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
-const disconnectCore = await loadTranspiledModule(
+const disconnectCore = await importTestModule(
   "src/features/team-workweek/server/google-workspace-disconnect-core.ts",
   { "./team-workweek-publication-core": publicationCore },
 );
@@ -226,7 +226,7 @@ function fakeClients(state) {
   };
 }
 
-const disconnectServer = await loadTranspiledModule(
+const disconnectServer = await importTestModule(
   "src/features/team-workweek/server/google-workspace-disconnect.ts",
   {
     "server-only": {},

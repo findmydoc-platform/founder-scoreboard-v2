@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadModel() {
-  const storeContract = await loadTranspiledModule("src/features/planning-items/model/planning-items-store.ts");
-  const runner = await loadTranspiledModule("src/features/planning-items/model/planning-items-runner.ts");
-  const supabaseStore = await loadTranspiledModule("src/features/planning-items/model/planning-items-store-supabase.ts", {
+  const storeContract = await importTestModule("src/features/planning-items/model/planning-items-store.ts");
+  const runner = await importTestModule("src/features/planning-items/model/planning-items-runner.ts");
+  const supabaseStore = await importTestModule("src/features/planning-items/model/planning-items-store-supabase.ts", {
     "server-only": {},
     "./planning-items-store": storeContract,
   });
-  return loadTranspiledModule("src/features/planning-items/model/planning-items-reparent.ts", {
+  return importTestModule("src/features/planning-items/model/planning-items-reparent.ts", {
     "server-only": {},
     "@/lib/planning-task-mappers": { mapTaskRow: (row) => ({
       id: row.id,

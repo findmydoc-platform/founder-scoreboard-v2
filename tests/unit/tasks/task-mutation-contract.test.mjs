@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const planningAppModelMock = {
   reviewOwnerForTask: () => "accountable",
@@ -19,7 +19,7 @@ const statusMock = {
 };
 
 test("review request payload omits protected score and review owner fields", async () => {
-  const { buildClientTaskUpdatePatch, taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+  const { buildClientTaskUpdatePatch, taskUpdateRequestPayload } = await importTestModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
     "@/lib/slug": slugMock,
   });
@@ -48,7 +48,7 @@ test("review request payload omits protected score and review owner fields", asy
 });
 
 test("review requests require an assigned review owner", async () => {
-  const { buildClientTaskUpdatePatch } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+  const { buildClientTaskUpdatePatch } = await importTestModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": {
       ...planningAppModelMock,
       reviewOwnerForTask: () => "",
@@ -68,7 +68,7 @@ test("review requests require an assigned review owner", async () => {
 });
 
 test("score and review owner payload fields remain available outside review requests", async () => {
-  const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+  const { taskUpdateRequestPayload } = await importTestModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
     "@/lib/slug": slugMock,
   });
@@ -85,7 +85,7 @@ test("score and review owner payload fields remain available outside review requ
 });
 
 test("task ownership uses only ownerId on the Browser wire contract", async () => {
-  const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+  const { taskUpdateRequestPayload } = await importTestModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
     "@/lib/slug": slugMock,
   });
@@ -98,7 +98,7 @@ test("task ownership uses only ownerId on the Browser wire contract", async () =
 });
 
 test("normal task updates omit the server-owned GitHub sync status", async () => {
-  const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+  const { taskUpdateRequestPayload } = await importTestModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
     "@/lib/slug": slugMock,
   });
@@ -113,7 +113,7 @@ test("normal task updates omit the server-owned GitHub sync status", async () =>
 });
 
 test("Browser task mutations serialize fixedDate activity", async () => {
-  const { activityMessages, taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+  const { activityMessages, taskUpdateRequestPayload } = await importTestModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
     "@/lib/slug": slugMock,
   });
@@ -126,7 +126,7 @@ test("Browser task mutations serialize fixedDate activity", async () => {
 });
 
 test("unchanged status payloads become true no-ops before route guards", async () => {
-  const { withoutUnchangedTaskStatus } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+  const { withoutUnchangedTaskStatus } = await importTestModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => false },
     "@/lib/status": statusMock,
   });
@@ -155,7 +155,7 @@ test("unchanged status payloads become true no-ops before route guards", async (
 });
 
 test("task brief fields stay together in the shared update payload", async () => {
-  const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+  const { taskUpdateRequestPayload } = await importTestModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
     "@/lib/slug": slugMock,
   });
@@ -180,7 +180,7 @@ test("task brief fields stay together in the shared update payload", async () =>
 });
 
 test("Sub-Issue context changes preserve stored work brief fields", async () => {
-  const { applyTaskBriefUpdateFields, validateTaskTypeUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+  const { applyTaskBriefUpdateFields, validateTaskTypeUpdateFields } = await importTestModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
     "@/lib/status": statusMock,
   });
@@ -210,11 +210,11 @@ test("Sub-Issue context changes preserve stored work brief fields", async () => 
 });
 
 test("Sub-Issue parent updates keep CAS, activity, and sync state together", async () => {
-  const { activityMessages, taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+  const { activityMessages, taskUpdateRequestPayload } = await importTestModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
     "@/lib/slug": slugMock,
   });
-  const { markTaskGitHubSyncDirty } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+  const { markTaskGitHubSyncDirty } = await importTestModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
     "@/lib/status": statusMock,
   });
@@ -238,7 +238,7 @@ test("Sub-Issue parent updates keep CAS, activity, and sync state together", asy
 });
 
 test("parent Deliverable options include Initiative and inactive approval context", async () => {
-  const { parentDeliverableOptions } = await loadTranspiledModule("src/features/tasks/model/task-form-options.ts", {
+  const { parentDeliverableOptions } = await importTestModule("src/features/tasks/model/task-form-options.ts", {
     "@/lib/display": {
       initiativeOptionLabel: (initiative) => initiative.title,
       taskAssigneeLabel: () => "Owner",
@@ -258,7 +258,7 @@ test("parent Deliverable options include Initiative and inactive approval contex
 });
 
 test("task route guard allows only the implicit score reset for review requests", async () => {
-  const { restrictedTaskUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+  const { restrictedTaskUpdateFields } = await importTestModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
     "@/lib/status": statusMock,
   });
@@ -270,7 +270,7 @@ test("task route guard allows only the implicit score reset for review requests"
 });
 
 test("generic task updates may request a review but cannot write review outcomes", async () => {
-  const { applyReviewStatusUpdate } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+  const { applyReviewStatusUpdate } = await importTestModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
     "@/lib/status": statusMock,
   });
@@ -292,7 +292,7 @@ test("generic task updates may request a review but cannot write review outcomes
 });
 
 test("task route guard limits role-based final transitions to Sub-Issues", async () => {
-  const { applyFinalStatusReopen, validateSubIssueStatusParentApproval, validateTaskStatusUpdate, validateTaskTypeUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+  const { applyFinalStatusReopen, validateSubIssueStatusParentApproval, validateTaskStatusUpdate, validateTaskTypeUpdateFields } = await importTestModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": {
       taskAssignedToProfile: (task, profile) => task.assignee === profile?.id,
     },
@@ -445,7 +445,7 @@ test("task route guard limits role-based final transitions to Sub-Issues", async
 });
 
 test("Sub-Issue response ignores legacy review fields", async () => {
-  const { buildTaskUpdateResponsePatch } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+  const { buildTaskUpdateResponsePatch } = await importTestModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
     "@/lib/slug": slugMock,
   });

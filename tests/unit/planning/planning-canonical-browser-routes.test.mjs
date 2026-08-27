@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("Initiative editing sends parent, strategy, and RACI in one request", async () => {
-  const client = await loadTranspiledModule("src/features/planning/model/planning-api-client.ts");
+  const client = await importTestModule("src/features/planning/model/planning-api-client.ts");
   const calls = [];
   const apiClient = {
     async requestJson(path, options) {

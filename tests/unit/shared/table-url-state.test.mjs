@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadUrlState() {
-  return loadTranspiledModule("src/shared/hooks/use-table-url-state.ts", {
+  return importTestModule("src/shared/hooks/use-table-url-state.ts", {
     "next/navigation": { usePathname: () => "/planning", useSearchParams: () => new URLSearchParams() },
   });
 }

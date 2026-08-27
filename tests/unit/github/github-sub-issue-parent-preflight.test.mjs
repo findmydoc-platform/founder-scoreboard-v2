@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const references = await loadTranspiledModule("src/lib/github-issue-reference.ts");
+const references = await importTestModule("src/lib/github-issue-reference.ts");
 
 function supabaseWithParent(data, error = null) {
   return {
@@ -27,7 +27,7 @@ function supabaseWithParent(data, error = null) {
 }
 
 async function loadPreflight(githubIssueLoader) {
-  return loadTranspiledModule("src/lib/github-sub-issue-parent.ts", {
+  return importTestModule("src/lib/github-sub-issue-parent.ts", {
     "./github": {
       getGitHubIssue: githubIssueLoader,
       githubRepoSlug: (value) => value || "findmydoc-platform/management",

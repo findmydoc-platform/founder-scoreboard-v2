@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const contract = await loadTranspiledModule(
+const contract = await importTestModule(
   "src/features/planning-items/model/planning-items-contract.ts",
 );
 
@@ -23,7 +23,7 @@ const basePermission = {
 
 async function captureAdapterAccess(path, exportName, mocks, request = {}) {
   let captured;
-  const route = await loadTranspiledModule(path, {
+  const route = await importTestModule(path, {
     ...mocks,
     "@/features/planning-items/model/planning-items-route": {
       handlePlanningItemsRequest: async (_request, accessRequest) => {

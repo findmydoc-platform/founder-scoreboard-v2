@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("api input helpers preserve required and optional text semantics", async () => {
-  const { auditRequestMetadata, cleanDate, cleanOptionalDate, cleanOptionalText, cleanText, cleanTime, isIsoDate } = await loadTranspiledModule("src/lib/api-input.ts");
+  const { auditRequestMetadata, cleanDate, cleanOptionalDate, cleanOptionalText, cleanText, cleanTime, isIsoDate } = await importTestModule("src/lib/api-input.ts");
 
   assert.equal(cleanText("  FounderOps  ", 20), "FounderOps");
   assert.equal(cleanText("  FounderOps  ", 7), "Founder");

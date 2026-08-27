@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("standalone header loads reconcile unless the caller already did", async () => {
   let reconciliationCalls = 0;
-  const headerData = await loadTranspiledModule("src/lib/planning-header-data.ts", {
+  const headerData = await importTestModule("src/lib/planning-header-data.ts", {
     "@/lib/notification-resolution": {
       reconcileNotificationEvents: async () => {
         reconciliationCalls += 1;

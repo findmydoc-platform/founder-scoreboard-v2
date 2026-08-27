@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 
 test("rejection notifications use the personal Google Chat delivery path", async () => {
-  const catalog = await loadTranspiledModule("src/lib/notification-catalog.ts");
+  const catalog = await importTestModule("src/lib/notification-catalog.ts");
   const definition = catalog.notificationDefinition("planning_item.rejected");
   assert.equal(definition.lifecycle, "informational");
   assert.equal(catalog.shouldSendToGoogleChatDigest("planning_item.rejected"), true);
@@ -15,7 +15,7 @@ test("GitHub lifecycle worker completes issue-less coverage without requesting a
   let tokenRequests = 0;
   let githubCalls = 0;
   const finalized = [];
-  const worker = await loadTranspiledModule("src/lib/planning-github-lifecycle.ts", {
+  const worker = await importTestModule("src/lib/planning-github-lifecycle.ts", {
     "server-only": {},
     "./github-app": {
       getGitHubAppInstallationToken: async () => {

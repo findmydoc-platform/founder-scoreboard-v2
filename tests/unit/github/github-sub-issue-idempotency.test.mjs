@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const parentRepository = "findmydoc-platform/management";
 const childRepository = "findmydoc-platform/clinic-dashboard";
@@ -41,7 +41,7 @@ function mutationData() {
 }
 
 async function loadGitHub(githubJson) {
-  return loadTranspiledModule("src/lib/github.ts", {
+  return importTestModule("src/lib/github.ts", {
     "./github-repositories": {
       requireAllowedGitHubRepository: (value) => value || parentRepository,
       splitGitHubRepository: (value) => {

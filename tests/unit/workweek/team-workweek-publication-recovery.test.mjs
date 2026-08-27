@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const publicationCore = await import("../../../src/features/team-workweek/server/team-workweek-publication-core.ts");
 
@@ -15,7 +15,7 @@ class MockGoogleWorkspaceOAuthContractError extends Error {
   }
 }
 
-const publicationServer = await loadTranspiledModule(
+const publicationServer = await importTestModule(
   "src/features/team-workweek/server/team-workweek-publication.ts",
   {
     "server-only": {},

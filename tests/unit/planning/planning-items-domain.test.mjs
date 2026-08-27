@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const domain = await loadTranspiledModule(
+const domain = await importTestModule(
   "src/features/planning-items/model/planning-item-domain.ts",
 );
-const actors = await loadTranspiledModule(
+const actors = await importTestModule(
   "src/features/planning-items/model/planning-actor-context-server.ts",
   {
     "server-only": {},
-    "./actor-context": await loadTranspiledModule(
+    "./actor-context": await importTestModule(
       "src/features/planning-items/model/actor-context.ts",
     ),
   },

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const presentation = await loadTranspiledModule("src/features/tasks/model/task-activity-presentation.ts");
+const presentation = await importTestModule("src/features/tasks/model/task-activity-presentation.ts");
 
 function activity(action, overrides = {}) {
   return {

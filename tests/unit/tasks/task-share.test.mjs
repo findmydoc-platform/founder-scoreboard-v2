@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("task share messages cover every issue type with a stable FounderOps link", async () => {
-  const share = await loadTranspiledModule("src/features/tasks/model/task-share-message.ts");
+  const share = await importTestModule("src/features/tasks/model/task-share-message.ts");
   const taskUrl = share.buildTaskShareUrl("deliverable-42", "https://founder-ops.findmydoc.eu");
   const message = share.buildTaskShareMessage({
     title: "Contact-404 beheben",
@@ -35,7 +35,7 @@ test("task share messages cover every issue type with a stable FounderOps link",
 });
 
 test("task share requests reflect proposal and active review states", async () => {
-  const share = await loadTranspiledModule("src/features/tasks/model/task-share-message.ts");
+  const share = await importTestModule("src/features/tasks/model/task-share-message.ts");
   const taskUrl = "https://founder-ops.findmydoc.eu/tasks/deliverable-42";
   const baseTask = {
     title: "Contact-404 beheben",

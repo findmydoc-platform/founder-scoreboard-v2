@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const runner = await loadTranspiledModule(
+const runner = await importTestModule(
   "src/features/planning-items/model/planning-items-runner.ts",
 );
 

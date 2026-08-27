@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("immediate lifecycle drains claim only the caller-provided root task set", async () => {
   const calls = [];
-  const worker = await loadTranspiledModule("src/lib/planning-github-lifecycle.ts", {
+  const worker = await importTestModule("src/lib/planning-github-lifecycle.ts", {
     "server-only": {},
     "./github-app": { getGitHubAppInstallationToken: async () => "token" },
     "./planning-github-lifecycle-github": {
@@ -39,7 +39,7 @@ test("immediate lifecycle drains claim only the caller-provided root task set", 
 
 test("maintenance lifecycle drains retain the global claim contract", async () => {
   const calls = [];
-  const worker = await loadTranspiledModule("src/lib/planning-github-lifecycle.ts", {
+  const worker = await importTestModule("src/lib/planning-github-lifecycle.ts", {
     "server-only": {},
     "./github-app": { getGitHubAppInstallationToken: async () => "token" },
     "./planning-github-lifecycle-github": {
@@ -60,7 +60,7 @@ test("maintenance lifecycle drains retain the global claim contract", async () =
 });
 
 test("immediate lifecycle completion remains false while scoped jobs are outstanding", async () => {
-  const trigger = await loadTranspiledModule("src/lib/planning-github-lifecycle-trigger.ts", {
+  const trigger = await importTestModule("src/lib/planning-github-lifecycle-trigger.ts", {
     "server-only": {},
     "@/lib/planning-github-lifecycle": {
       drainPlanningGitHubLifecycleJobs: async () => ({

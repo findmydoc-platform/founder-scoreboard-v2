@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const {
   featureTourRunOwnsClaim,
   shouldReleaseFeatureTourClaim,
-} = await loadTranspiledModule(
+} = await importTestModule(
   "src/features/product-tours/model/feature-tour-run-state.ts",
 );
 

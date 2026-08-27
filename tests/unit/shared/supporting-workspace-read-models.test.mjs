@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 function recordingSupabase(data = {}, failedTable = "") {
   const calls = [];
@@ -37,11 +37,11 @@ const sharedStubs = {
   "@/lib/planning-profile-mappers": { mapProfile: (row) => row },
 };
 
-const { createSupabaseEventsReadModel } = await loadTranspiledModule(
+const { createSupabaseEventsReadModel } = await importTestModule(
   "src/features/events/server/events-read-model-supabase.ts",
   sharedStubs,
 );
-const { createSupabaseToolsReadModel } = await loadTranspiledModule(
+const { createSupabaseToolsReadModel } = await importTestModule(
   "src/features/tools/server/tools-read-model-supabase.ts",
   sharedStubs,
 );

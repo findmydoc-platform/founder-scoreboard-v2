@@ -1,9 +1,9 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const failurePersistence = await loadTranspiledModule("src/lib/github-sync-failure-persistence.ts");
-const syncQueue = await loadTranspiledModule("src/features/tasks/model/github-sync-queue.ts", {
+const failurePersistence = await importTestModule("src/lib/github-sync-failure-persistence.ts");
+const syncQueue = await importTestModule("src/features/tasks/model/github-sync-queue.ts", {
   "@/lib/platform": { hasGitHubIssue: () => true },
 });
 

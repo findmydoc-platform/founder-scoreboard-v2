@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const storeContract = await loadTranspiledModule(
+const storeContract = await importTestModule(
   "src/features/planning-items/model/planning-items-store.ts",
 );
-const memoryAdapter = await loadTranspiledModule(
+const memoryAdapter = await importTestModule(
   "src/features/planning-items/model/planning-items-store-memory.ts",
   { "./planning-items-store": storeContract },
 );
-const supabaseAdapter = await loadTranspiledModule(
+const supabaseAdapter = await importTestModule(
   "src/features/planning-items/model/planning-items-store-supabase.ts",
   { "server-only": {}, "./planning-items-store": storeContract },
 );

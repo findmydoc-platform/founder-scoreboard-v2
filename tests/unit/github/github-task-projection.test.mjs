@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const contract = await loadTranspiledModule("src/lib/github-sync/contract.ts");
-const issueReferences = await loadTranspiledModule("src/lib/github-issue-reference.ts");
+const contract = await importTestModule("src/lib/github-sync/contract.ts");
+const issueReferences = await importTestModule("src/lib/github-issue-reference.ts");
 
 function baseTask(overrides = {}) {
   return {
@@ -86,7 +86,7 @@ async function projectionFixture(options = {}) {
   };
   let activeCheck = 0;
   let failurePersistenceCalls = 0;
-  const taskProjectionModule = await loadTranspiledModule("src/lib/github-sync/task-projection.ts", {
+  const taskProjectionModule = await importTestModule("src/lib/github-sync/task-projection.ts", {
     "../github-comment-delivery": {
       deliverPendingGitHubComments: async () => {
         calls.push("comments");

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 class MockGitHubApiError extends Error {
   constructor(message, status) {
@@ -32,7 +32,7 @@ async function loadGitHub({
 } = {}) {
   const requests = [];
   const task = sourceTask();
-  const github = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+  const github = await importTestModule("src/lib/github-sync/issue-projection.ts", {
     "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {

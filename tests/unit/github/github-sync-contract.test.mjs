@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const contract = await loadTranspiledModule("src/lib/github-sync/contract.ts");
+const contract = await importTestModule("src/lib/github-sync/contract.ts");
 
 const errorCases = [
   ["github_sync_unauthenticated", 401, false],

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 import {
   assertGoogleWorkspaceOAuthStateBinding,
   createGoogleWorkspaceOAuthState,
@@ -18,18 +18,18 @@ import {
 const publicationCore = await import("../../../src/features/team-workweek/server/team-workweek-publication-core.ts");
 const oauthCore = await import("../../../src/features/team-workweek/server/google-workspace-oauth-core.ts");
 const draftModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
-const { ensureGoogleWorkweekSeriesAbsent } = await loadTranspiledModule(
+const { ensureGoogleWorkweekSeriesAbsent } = await importTestModule(
   "src/features/team-workweek/server/google-workspace-disconnect-core.ts",
   { "./team-workweek-publication-core": publicationCore },
 );
-const oauthServer = await loadTranspiledModule(
+const oauthServer = await importTestModule(
   "src/features/team-workweek/server/google-workspace-oauth.ts",
   {
     "server-only": {},
     "./google-workspace-oauth-core": oauthCore,
   },
 );
-const disconnectServer = await loadTranspiledModule(
+const disconnectServer = await importTestModule(
   "src/features/team-workweek/server/google-workspace-disconnect.ts",
   {
     "server-only": {},

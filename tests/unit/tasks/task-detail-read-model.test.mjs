@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const taskDetailReadLimits = {
   ancestorDepth: 3,
@@ -116,7 +116,7 @@ const mapTaskRow = (row) => ({
   updatedAt: row.updated_at,
 });
 
-const { createSupabaseTaskDetailReadModel } = await loadTranspiledModule(
+const { createSupabaseTaskDetailReadModel } = await importTestModule(
   "src/features/tasks/server/task-detail-read-model-supabase.ts",
   {
     "server-only": {},

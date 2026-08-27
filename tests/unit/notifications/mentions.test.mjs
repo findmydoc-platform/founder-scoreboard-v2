@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const { canonicalizeProfileMentionsForGitHub, githubMentionContext, mentionedProfileIds } = await loadTranspiledModule("src/lib/mentions.ts");
+const { canonicalizeProfileMentionsForGitHub, githubMentionContext, mentionedProfileIds } = await importTestModule("src/lib/mentions.ts");
 
 const profiles = [
   { id: "sebastian", name: "Sebastian Schütze", githubLogin: "SebastianSchuetze" },

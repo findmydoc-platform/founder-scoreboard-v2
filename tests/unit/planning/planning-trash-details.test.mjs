@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const { requireActivePlanningItem } = await loadTranspiledModule(
+const { requireActivePlanningItem } = await importTestModule(
   "src/lib/planning-trash-mutation-guard.ts",
 );
 
@@ -31,7 +31,7 @@ test("central planning mutation guard distinguishes active, missing, and trashed
 });
 
 test("canonical trashed Initiatives retain strategy, RACI, parent, and direct children", async () => {
-  const trashDetail = await loadTranspiledModule(
+  const trashDetail = await importTestModule(
     "src/lib/planning-trash-detail.ts",
     {
       "@/lib/planning-task-mappers": {
@@ -139,7 +139,7 @@ test("canonical trashed Initiatives retain strategy, RACI, parent, and direct ch
 });
 
 test("notification targets keep rejected initiatives readable and returned items editable", async () => {
-  const { notificationTarget } = await loadTranspiledModule(
+  const { notificationTarget } = await importTestModule(
     "src/features/notifications/model/notification-target.ts",
   );
 

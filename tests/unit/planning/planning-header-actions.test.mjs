@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("planning creation labels and header actions follow the active level", async () => {
-  const planningLevel = await loadTranspiledModule("src/features/planning/model/planning-level.ts");
-  const { usePlanningHeaderActions } = await loadTranspiledModule(
+  const planningLevel = await importTestModule("src/features/planning/model/planning-level.ts");
+  const { usePlanningHeaderActions } = await importTestModule(
     "src/features/planning/hooks/use-planning-header-actions.ts",
     {
       "@/features/planning/model/planning-level": planningLevel,

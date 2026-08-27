@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const projectFieldContext = await loadTranspiledModule("src/lib/github-sync/project-field-context.ts");
+const projectFieldContext = await importTestModule("src/lib/github-sync/project-field-context.ts");
 
 function projectValidationData(overrides = {}) {
   return {
@@ -62,7 +62,7 @@ const projectConfig = {
 };
 
 test("GitHub Project validation requires all repositories and expected field types", async () => {
-  const loadValidation = (data) => loadTranspiledModule("src/lib/github-project.ts", {
+  const loadValidation = (data) => importTestModule("src/lib/github-project.ts", {
     "./github-graphql": { githubGraphql: async () => data },
     "./github-project-config": projectConfig,
   });
@@ -146,7 +146,7 @@ const task = {
 };
 
 async function loadProjectProjection(githubGraphql) {
-  return loadTranspiledModule("src/lib/github-sync/project-projection.ts", {
+  return importTestModule("src/lib/github-sync/project-projection.ts", {
     "../github-graphql": { githubGraphql },
     "../github-project-config": projectConfig,
     "../github-repositories": {

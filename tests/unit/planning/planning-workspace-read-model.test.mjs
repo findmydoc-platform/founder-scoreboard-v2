@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 function createSupabaseFixture(failedTable = "") {
   const calls = [];
@@ -67,7 +67,7 @@ const moduleStubs = {
   "@/lib/sprint-review-window": { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS: 48 },
 };
 
-const { loadPlanningWorkspaceModel } = await loadTranspiledModule(
+const { loadPlanningWorkspaceModel } = await importTestModule(
   "src/features/planning-items/server/planning-workspace-read-source.ts",
   moduleStubs,
 );

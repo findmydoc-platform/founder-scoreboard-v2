@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const manifestContract = await loadTranspiledModule("src/features/platform-releases/model/platform-release-manifest.ts");
-const notificationCatalog = await loadTranspiledModule("src/lib/notification-catalog.ts");
-const notificationTarget = await loadTranspiledModule("src/features/notifications/model/notification-target.ts");
-const taskDetailReturnNavigation = await loadTranspiledModule("src/features/tasks/model/task-detail-return-navigation.ts");
+const manifestContract = await importTestModule("src/features/platform-releases/model/platform-release-manifest.ts");
+const notificationCatalog = await importTestModule("src/lib/notification-catalog.ts");
+const notificationTarget = await importTestModule("src/features/notifications/model/notification-target.ts");
+const taskDetailReturnNavigation = await importTestModule("src/features/tasks/model/task-detail-return-navigation.ts");
 
 function fixture() {
   const manifest = {

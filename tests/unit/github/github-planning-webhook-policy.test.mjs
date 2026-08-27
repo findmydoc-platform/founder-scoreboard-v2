@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const projectFieldContext = await loadTranspiledModule("src/lib/github-sync/project-field-context.ts");
-const policy = await loadTranspiledModule("src/lib/github-planning-webhook-policy.ts", {
+const projectFieldContext = await importTestModule("src/lib/github-sync/project-field-context.ts");
+const policy = await importTestModule("src/lib/github-planning-webhook-policy.ts", {
   "./github-sync/project-field-context": projectFieldContext,
 });
 

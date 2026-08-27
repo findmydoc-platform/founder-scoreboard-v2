@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const schedule = await loadTranspiledModule(
+const schedule = await importTestModule(
   "src/features/planning-items/model/deliverable-schedule.ts",
 );
 

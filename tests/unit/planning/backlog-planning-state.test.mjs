@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const statusMock = {
   normalizeStatus: (status) => status,
@@ -30,7 +30,7 @@ function planningTask(overrides = {}) {
 }
 
 async function loadPlanningState() {
-  return loadTranspiledModule("src/features/backlog/model/backlog-planning-state.ts", {
+  return importTestModule("src/features/backlog/model/backlog-planning-state.ts", {
     "@/lib/status": statusMock,
   });
 }
@@ -175,7 +175,7 @@ test("bulk Sprint action state allows mixed no-op assignments and exposes every 
 
 test("backlog view model reports explicit readiness and sprint capacity over the full sprint duration", async () => {
   const planningState = await loadPlanningState();
-  const { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS } = await loadTranspiledModule("src/features/backlog/model/backlog-view-model.ts", {
+  const { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS } = await importTestModule("src/features/backlog/model/backlog-view-model.ts", {
     "@/features/backlog/model/backlog-planning-state": planningState,
     "@/features/planning/model/approval-domain": approvalMock,
     "@/lib/planning-schedule": scheduleMock,

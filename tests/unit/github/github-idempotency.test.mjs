@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 function task() {
   return {
@@ -17,7 +17,7 @@ function task() {
 }
 
 test("github issue creation reuses an issue with the durable FounderOps marker", async () => {
-  const { projectTaskGitHubIssue } = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+  const { projectTaskGitHubIssue } = await importTestModule("src/lib/github-sync/issue-projection.ts", {
     "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {
@@ -106,7 +106,7 @@ test("github issue creation reconciles a lost success response before another PO
   let created = false;
   let createCalls = 0;
   const requests = [];
-  const github = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+  const github = await importTestModule("src/lib/github-sync/issue-projection.ts", {
     "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {

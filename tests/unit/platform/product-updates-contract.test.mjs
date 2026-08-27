@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const productUpdateSelection = await loadTranspiledModule(
+const productUpdateSelection = await importTestModule(
   "src/features/product-updates/model/product-update-selection.ts",
   {},
 );
-const featureTourSelection = await loadTranspiledModule(
+const featureTourSelection = await importTestModule(
   "src/features/product-tours/model/feature-tour-selection.ts",
   {},
 );

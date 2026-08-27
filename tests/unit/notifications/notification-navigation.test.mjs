@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const { navigateAfterNotificationStatusUpdate } = await loadTranspiledModule(
+const { navigateAfterNotificationStatusUpdate } = await importTestModule(
   "src/features/notifications/model/notification-navigation.ts",
 );
 

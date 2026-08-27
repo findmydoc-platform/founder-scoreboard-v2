@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { test } from "vitest";
 
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const webhookSecret = "test-webhook-secret";
 
@@ -21,7 +21,7 @@ test("the route rejects unsafe transport shapes and maps receipt outcomes", asyn
   const store = { record: async () => "stored" };
   const projectionStore = { projection: true };
   const processedPlanningDeliveryIds = [];
-  const route = await loadTranspiledModule("src/app/api/github/webhooks/route.ts", {
+  const route = await importTestModule("src/app/api/github/webhooks/route.ts", {
     "next/server": {
       after: (callback) => afterCallbacks.push(callback),
       NextResponse: {
@@ -176,7 +176,7 @@ test("the proxy bypasses Supabase auth only for the exact webhook path", async (
   let getUserCalls = 0;
   const webhookResponse = { kind: "webhook-bypass" };
   const authenticatedResponse = { kind: "authenticated" };
-  const proxyModule = await loadTranspiledModule("src/proxy.ts", {
+  const proxyModule = await importTestModule("src/proxy.ts", {
     "next/server": {
       NextResponse: {
         next: () => webhookResponse,

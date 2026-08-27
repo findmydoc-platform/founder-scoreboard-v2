@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTranspiledModule } from "../../helpers/transpile-module.mjs";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const projectFieldContext = await loadTranspiledModule("src/lib/github-sync/project-field-context.ts");
+const projectFieldContext = await importTestModule("src/lib/github-sync/project-field-context.ts");
 
 let observationData;
 
-const observation = await loadTranspiledModule("src/lib/github-sync/project-observation.ts", {
+const observation = await importTestModule("src/lib/github-sync/project-observation.ts", {
   "server-only": {},
   "../github-graphql": { githubGraphql: async () => observationData },
   "../github-repositories": {
