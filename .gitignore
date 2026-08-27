@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/storybook-static
+/test-results
 
 # local visual QA artifacts
 /design-qa.md
