@@ -15,7 +15,7 @@ on:
         required: false
         type: string
       expected_application_sha256:
-        description: Restore-tested application snapshot SHA-256
+        description: Restore-tested backup snapshot SHA-256 for evidence
         required: false
         type: string
       expected_ledger_sha256:

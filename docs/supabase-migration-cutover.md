@@ -25,7 +25,7 @@ The production cutover is a separate, explicitly approved operation. Immediately
 2. Generate a SHA-256 manifest covering every dump.
 3. Package and encrypt the dumps and manifest with `age`. Store the encrypted archive only in the private findmydoc Google Drive area restricted to CEO and operators. Store the decryption key only in Keeper.
 4. Restore the archive into a disposable local Supabase/PostgreSQL 17 instance.
-5. Compare normalized schemas, table row counts, sequence values, and deterministic data checksums with the production snapshot. Every comparison must match.
+5. Verify that the schema and data dumps restore atomically. Compare the restored dump tables, sequence values, migration history, and deterministic checksums with the exported artifacts. The pre-dump production snapshot is supporting evidence, not an equality gate, because normal application writes may continue while the split export runs.
 6. Remove plaintext dumps and the disposable restore database immediately after verification.
 
 Never place database URLs, passwords, keys, or tokens in command arguments, repository files, logs, screenshots, issues, or pull requests. Use the approved operator environment and secret handoff instead.
@@ -38,7 +38,7 @@ Supabase documents the split dump and restore flow in [Backup and Restore using 
 
 After the squash pull request is merged, the production deploy guard refuses to run until version `20260827064853` exists exactly once as applied in the production migration ledger. It therefore cannot execute the baseline accidentally.
 
-With separate production approval, the operator must mark all 62 superseded versions as reverted and mark only `20260827064853` as applied. `supabase migration repair` changes ledger state only; it does not execute the baseline SQL. The exact target and resulting ledger must be reviewed before the repair. The workflow's `repair` operation additionally requires the restore-tested application, ledger, and manifest hashes and refuses a changed production snapshot.
+With separate production approval, the operator must mark only `20260827064853` as applied and then remove the exact 62 superseded versions from the ledger. `supabase migration repair` applies the baseline marker without executing its SQL. The workflow then deletes only the restore-verified historical ledger set inside its guarded transaction. Applying the baseline marker first keeps the operation resumable if the transactional cleanup fails. The workflow requires the restore-tested snapshot, ledger, and manifest hashes, takes a short shared lock that permits reads but pauses writes to FounderOps tables in `public`, and proves identical application checksums immediately before and after the ledger change. Auth and Storage system tables remain available and are outside the ledger mutation path.
 
 The next production migration dry run must report only `20260827083034_allow_all_mapped_profiles_team_workweek.sql` as pending. Before and after data checksums and row counts must still match. Only then may the protected production workflow apply that migration and continue with database-security and Auth verification.
 

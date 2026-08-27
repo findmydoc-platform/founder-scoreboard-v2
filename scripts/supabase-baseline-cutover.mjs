@@ -6,6 +6,8 @@ import { resolveProductionSchemaConnection } from "./lib/production-schema-conne
 import {
   buildDatabaseSnapshot,
   buildLedgerCutoverPlan,
+  lockApplicationTables,
+  readLedgerVersions,
 } from "./lib/supabase-baseline-cutover.mjs";
 import {
   listSupabaseMigrations,
@@ -85,7 +87,7 @@ async function repairLedger() {
     throw new Error(`BASELINE_CUTOVER_CONFIRMATION must equal repair-${productionBaseline.version}.`);
   }
 
-  const expectedApplicationSha256 = requiredEnv("EXPECTED_APPLICATION_SHA256");
+  const restoreApplicationSha256 = requiredEnv("EXPECTED_APPLICATION_SHA256");
   const expectedLedgerSha256 = requiredEnv("EXPECTED_LEDGER_SHA256");
   const expectedSupersededCount = Number(requiredEnv("EXPECTED_SUPERSEDED_COUNT"));
   const expectedPendingVersions = requiredEnv("EXPECTED_PENDING_VERSIONS")
@@ -109,43 +111,71 @@ async function repairLedger() {
     );
   }
 
-  const before = await withClient(buildDatabaseSnapshot);
-  if (before.applicationSha256 !== expectedApplicationSha256) {
-    throw new Error("Production data changed after the restore-tested backup; create and test a fresh backup.");
-  }
-  const plan = buildLedgerCutoverPlan({
+  const databaseUrl = "postgresql:///postgres?service=founderops-production";
+  const initialPlan = await withClient(async (client) => buildLedgerCutoverPlan({
     baselineVersion: productionBaseline.version,
     expectedLedgerSha256,
     expectedSupersededCount,
-    remoteVersions: before.ledgerVersions,
-  });
-
-  const databaseUrl = "postgresql:///postgres?service=founderops-production";
-  await runSupabase([
-    "migration",
-    "repair",
-    "--db-url",
-    databaseUrl,
-    "--status",
-    "reverted",
-    ...plan.supersededVersions,
-  ]);
-  await runSupabase([
-    "migration",
-    "repair",
-    "--db-url",
-    databaseUrl,
-    "--status",
-    "applied",
-    productionBaseline.version,
-  ]);
-
-  const after = await withClient(buildDatabaseSnapshot);
-  if (after.applicationSha256 !== before.applicationSha256) {
-    throw new Error("Application data changed during the ledger repair.");
+    remoteVersions: await readLedgerVersions(client),
+  }));
+  if (!initialPlan.baselineApplied) {
+    await runSupabase([
+      "migration",
+      "repair",
+      "--db-url",
+      databaseUrl,
+      "--status",
+      "applied",
+      productionBaseline.version,
+    ]);
   }
-  if (JSON.stringify(after.ledgerVersions) !== JSON.stringify([productionBaseline.version])) {
-    throw new Error("Production migration ledger does not contain exactly the baseline after repair.");
+
+  const client = new pg.Client(resolveConnection());
+  await client.connect();
+  let before;
+  let after;
+  try {
+    await client.query("begin");
+    const protectedSchemas = ["public"];
+    await lockApplicationTables(client, protectedSchemas);
+    before = await buildDatabaseSnapshot(client, { schemas: protectedSchemas });
+    const plan = buildLedgerCutoverPlan({
+      baselineVersion: productionBaseline.version,
+      expectedLedgerSha256,
+      expectedSupersededCount,
+      remoteVersions: before.ledgerVersions,
+    });
+    if (!plan.baselineApplied) {
+      throw new Error("The baseline marker was not visible inside the guarded cutover transaction.");
+    }
+    if (plan.supersededVersions.length) {
+      const reverted = await client.query(
+        `
+          delete from supabase_migrations.schema_migrations
+          where version = any($1::text[])
+          returning version
+        `,
+        [plan.supersededVersions],
+      );
+      const revertedVersions = reverted.rows.map(({ version }) => String(version)).sort();
+      if (JSON.stringify(revertedVersions) !== JSON.stringify(plan.supersededVersions)) {
+        throw new Error("The exact superseded migration set was not reverted.");
+      }
+    }
+
+    after = await buildDatabaseSnapshot(client, { schemas: protectedSchemas });
+    if (after.applicationSha256 !== before.applicationSha256) {
+      throw new Error("Application data changed during the ledger repair.");
+    }
+    if (JSON.stringify(after.ledgerVersions) !== JSON.stringify([productionBaseline.version])) {
+      throw new Error("Production migration ledger does not contain exactly the baseline after repair.");
+    }
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    await client.end();
   }
 
   const dryRun = await runSupabase([
@@ -173,6 +203,7 @@ async function repairLedger() {
   await writeFile(resolve(outputDirectory, "before-repair.json"), `${JSON.stringify(before, null, 2)}\n`, { mode: 0o600 });
   await writeFile(resolve(outputDirectory, "after-repair.json"), `${JSON.stringify(after, null, 2)}\n`, { mode: 0o600 });
   await writeFile(resolve(outputDirectory, "restore-manifest.sha256"), `${restoreManifestSha256}\n`, { mode: 0o600 });
+  await writeFile(resolve(outputDirectory, "restore-application.sha256"), `${restoreApplicationSha256}\n`, { mode: 0o600 });
   console.log(`Repaired the production ledger to baseline ${productionBaseline.version}; dry run is limited to ${expectedPendingVersions.join(", ")}.`);
 }
 
