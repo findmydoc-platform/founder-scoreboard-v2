@@ -1,6 +1,5 @@
-import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import test from "node:test";
+import { expect, it } from "vitest";
 import {
   applyMigration,
   resetLocalDatabaseTo,
@@ -13,15 +12,14 @@ const migrationFile = resolve(
   "supabase/migrations/20260827093325_add_deliverable_fixed_date.sql",
 );
 
-function expectDatabaseError(code, message) {
-  return (error) => {
-    assert.equal(error.code, code);
-    if (message) assert.match(error.message, message);
-    return true;
-  };
+async function expectDatabaseError(operation, code, message) {
+  await expect(operation()).rejects.toMatchObject({
+    code,
+    message: expect.stringMatching(message),
+  });
 }
 
-test("classifies legacy schedule values and enforces fixed-date persistence", {
+it("classifies legacy schedule values and enforces fixed-date persistence", {
   timeout: 120_000,
 }, async () => {
   await resetLocalDatabaseTo(previousVersion);
@@ -87,15 +85,15 @@ test("classifies legacy schedule values and enforces fixed-date persistence", {
       order by id
     `);
     const byId = new Map(tasks.rows.map((row) => [row.id, row]));
-    assert.equal(byId.get("valid-date").fixed_date, "2026-09-03");
-    assert.equal(byId.get("trashed-valid-date").fixed_date, "2026-09-04");
-    assert.equal(byId.get("boundary-date").fixed_date, null);
-    assert.equal(byId.get("sprint-reference").fixed_date, null);
-    assert.equal(byId.get("relative-value").fixed_date, null);
-    assert.equal(byId.get("legacy-period").fixed_date, null);
-    assert.equal(byId.get("sub-issue-date").fixed_date, null);
-    assert.equal(byId.get("unaffected-initiative").target_date, "2026-12-01");
-    assert.ok(tasks.rows.every((row) => row.start_date === null && row.end_date === null && row.deadline === null));
+    expect(byId.get("valid-date").fixed_date).toBe("2026-09-03");
+    expect(byId.get("trashed-valid-date").fixed_date).toBe("2026-09-04");
+    expect(byId.get("boundary-date").fixed_date).toBeNull();
+    expect(byId.get("sprint-reference").fixed_date).toBeNull();
+    expect(byId.get("relative-value").fixed_date).toBeNull();
+    expect(byId.get("legacy-period").fixed_date).toBeNull();
+    expect(byId.get("sub-issue-date").fixed_date).toBeNull();
+    expect(byId.get("unaffected-initiative").target_date).toBe("2026-12-01");
+    expect(tasks.rows.every((row) => row.start_date === null && row.end_date === null && row.deadline === null)).toBe(true);
 
     const audit = await client.query(`
       select entity_id, before_data, after_data
@@ -103,24 +101,26 @@ test("classifies legacy schedule values and enforces fixed-date persistence", {
       where action = 'task.schedule_legacy_normalized'
       order by entity_id
     `);
-    assert.equal(audit.rowCount, 7);
+    expect(audit.rowCount).toBe(7);
     const auditById = new Map(audit.rows.map((row) => [row.entity_id, row]));
-    assert.equal(auditById.get("valid-date").after_data.classification, "fixed_date_migrated");
-    assert.equal(auditById.get("boundary-date").after_data.classification, "sprint_boundary_date");
-    assert.equal(auditById.get("boundary-date").after_data.suggestedFixedDate, "2026-09-06");
-    assert.equal(auditById.get("sprint-reference").after_data.classification, "sprint_reference");
-    assert.equal(auditById.get("relative-value").after_data.classification, "relative_value");
-    assert.equal(auditById.get("legacy-period").after_data.classification, "legacy_period_removed");
-    assert.equal(auditById.get("sub-issue-date").after_data.classification, "non_deliverable_legacy_value");
-    assert.equal(auditById.get("trashed-valid-date").before_data.deadline, "2026-09-04");
+    expect(auditById.get("valid-date").after_data.classification).toBe("fixed_date_migrated");
+    expect(auditById.get("boundary-date").after_data.classification).toBe("sprint_boundary_date");
+    expect(auditById.get("boundary-date").after_data.suggestedFixedDate).toBe("2026-09-06");
+    expect(auditById.get("sprint-reference").after_data.classification).toBe("sprint_reference");
+    expect(auditById.get("relative-value").after_data.classification).toBe("relative_value");
+    expect(auditById.get("legacy-period").after_data.classification).toBe("legacy_period_removed");
+    expect(auditById.get("sub-issue-date").after_data.classification).toBe("non_deliverable_legacy_value");
+    expect(auditById.get("trashed-valid-date").before_data.deadline).toBe("2026-09-04");
 
-    await assert.rejects(
+    await expectDatabaseError(
       () => client.query("update public.tasks set deadline = 'Sprint 9' where id = 'valid-date'"),
-      expectDatabaseError("23514", /tasks_legacy_schedule_empty_check/),
+      "23514",
+      /tasks_legacy_schedule_empty_check/,
     );
-    await assert.rejects(
+    await expectDatabaseError(
       () => client.query("update public.tasks set fixed_date = '2026-09-05' where id = 'sub-issue-date'"),
-      expectDatabaseError("23514", /tasks_fixed_date_deliverable_check/),
+      "23514",
+      /tasks_fixed_date_deliverable_check/,
     );
 
     const created = await client.query(`
@@ -139,9 +139,9 @@ test("classifies legacy schedule values and enforces fixed-date persistence", {
         )
       ) as result
     `);
-    assert.equal(created.rows[0].result.task.fixed_date, "2026-09-05");
+    expect(created.rows[0].result.task.fixed_date).toBe("2026-09-05");
 
-    await assert.rejects(
+    await expectDatabaseError(
       () => client.query(`
         select public.create_task_transaction(
           jsonb_build_object(
@@ -158,7 +158,8 @@ test("classifies legacy schedule values and enforces fixed-date persistence", {
           )
         )
       `),
-      expectDatabaseError("22023", /unsupported columns/),
+      "22023",
+      /unsupported columns/,
     );
 
     const updatedAt = await client.query(
@@ -168,57 +169,82 @@ test("classifies legacy schedule values and enforces fixed-date persistence", {
       "select public.update_task_transaction($1, $2, $3::jsonb) as result",
       ["rpc-fixed-date", updatedAt.rows[0].updated_at, JSON.stringify({ fixed_date: "2026-09-06" })],
     );
-    assert.equal(updated.rows[0].result.task.fixed_date, "2026-09-06");
+    expect(updated.rows[0].result.task.fixed_date).toBe("2026-09-06");
 
-    const adapters = await client.query(`
-      select proname, pg_get_functiondef(oid) as definition
-      from pg_proc
-      where pronamespace = 'public'::regnamespace
-        and proname in (
-          'create_task_transaction',
-          'create_team_planning_items_transaction',
-          'lock_sprint_transaction',
-          'update_task_transaction',
-          'update_team_planning_item_transaction_without_completed_guard'
-        )
-      order by proname
-    `);
-    assert.equal(adapters.rowCount, 5);
-    for (const adapter of adapters.rows) {
-      assert.match(adapter.definition, /fixed_date/);
-      assert.doesNotMatch(adapter.definition, /\b(start_date|end_date|deadline)\b/);
-    }
-
-    const replayContracts = await client.query(`
-      select table_name, column_default
-      from information_schema.columns
-      where table_schema = 'public'
-        and column_name = 'contract_version'
-        and table_name in (
-          'team_task_intake_batches',
-          'team_planning_item_update_requests',
-          'team_planning_item_delete_requests'
-        )
-      order by table_name
-    `);
-    assert.equal(replayContracts.rowCount, 3);
-    assert.ok(replayContracts.rows.every((row) => row.column_default.includes("3")));
-    const replayChecks = await client.query(`
-      select pg_get_constraintdef(oid) as definition
-      from pg_constraint
-      where conname in (
-        'team_task_intake_batches_contract_version_check',
-        'team_planning_item_update_requests_contract_version_check',
-        'team_planning_item_delete_requests_contract_version_check'
+    await client.query(`
+      insert into public.team_task_intake_tokens (
+        id, profile_id, label, token_hash, token_hint, expires_at
+      ) values (
+        '40000000-0000-0000-0000-000000000001',
+        'migration-founder',
+        'Migration token',
+        repeat('a', 64),
+        'token123',
+        clock_timestamp() + interval '1 day'
       )
     `);
-    assert.equal(replayChecks.rowCount, 3);
-    assert.ok(replayChecks.rows.every((row) => /ARRAY\[1, 2, 3\]/.test(row.definition)));
+    const replayContracts = await client.query(`
+      with intake as (
+        insert into public.team_task_intake_batches (
+          token_id, profile_id, idempotency_key, request_hash, task_ids
+        ) values (
+          '40000000-0000-0000-0000-000000000001',
+          'migration-founder',
+          '40000000-0000-0000-0000-000000000002',
+          repeat('b', 64),
+          array['valid-date']
+        ) returning contract_version
+      ), updated as (
+        insert into public.team_planning_item_update_requests (
+          token_id, profile_id, item_type, item_id, expected_updated_at,
+          idempotency_key, request_hash, response
+        ) values (
+          '40000000-0000-0000-0000-000000000001',
+          'migration-founder',
+          'deliverable',
+          'valid-date',
+          clock_timestamp(),
+          '40000000-0000-0000-0000-000000000003',
+          repeat('c', 64),
+          '{}'::jsonb
+        ) returning contract_version
+      ), deleted as (
+        insert into public.team_planning_item_delete_requests (
+          token_id, profile_id, item_id, expected_updated_at,
+          idempotency_key, request_hash, response
+        ) values (
+          '40000000-0000-0000-0000-000000000001',
+          'migration-founder',
+          'valid-date',
+          clock_timestamp(),
+          '40000000-0000-0000-0000-000000000004',
+          repeat('d', 64),
+          '{}'::jsonb
+        ) returning contract_version
+      )
+      select
+        (select contract_version from intake) as intake,
+        (select contract_version from updated) as updated,
+        (select contract_version from deleted) as deleted
+    `);
+    expect(replayContracts.rows[0]).toEqual({ intake: 3, updated: 3, deleted: 3 });
+    await expect(client.query(`
+      insert into public.team_task_intake_batches (
+        token_id, profile_id, idempotency_key, request_hash, task_ids, contract_version
+      ) values (
+        '40000000-0000-0000-0000-000000000001',
+        'migration-founder',
+        '40000000-0000-0000-0000-000000000005',
+        repeat('e', 64),
+        array['valid-date'],
+        4
+      )
+    `)).rejects.toMatchObject({ code: "23514" });
 
     const activeProjection = await client.query(
       "select fixed_date::text as fixed_date from public.active_tasks where id = 'valid-date'",
     );
-    assert.deepEqual(activeProjection.rows, [{ fixed_date: "2026-09-03" }]);
+    expect(activeProjection.rows).toEqual([{ fixed_date: "2026-09-03" }]);
 
     await applyMigration(client, migrationFile);
     const auditAfterReplay = await client.query(`
@@ -226,6 +252,6 @@ test("classifies legacy schedule values and enforces fixed-date persistence", {
       from public.audit_log
       where action = 'task.schedule_legacy_normalized'
     `);
-    assert.equal(auditAfterReplay.rows[0].count, 7);
+    expect(auditAfterReplay.rows[0].count).toBe(7);
   });
 });

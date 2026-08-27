@@ -23,6 +23,9 @@ export default defineConfig({
           environment: "node",
           include: ["tests/unit/**/*.test.{mjs,ts,tsx}"],
           name: "unit",
+          sequence: {
+            groupOrder: 0,
+          },
         },
       }),
       defineProject({
@@ -36,7 +39,24 @@ export default defineConfig({
           pool: "forks",
           sequence: {
             concurrent: false,
+            groupOrder: 2,
           },
+        },
+      }),
+      defineProject({
+        resolve: sharedResolve,
+        test: {
+          environment: "node",
+          fileParallelism: false,
+          globalSetup: ["tests/setup/migration-global-setup.ts"],
+          include: ["tests/migrations/**/*.test.mjs"],
+          name: "migrations",
+          pool: "forks",
+          sequence: {
+            concurrent: false,
+            groupOrder: 3,
+          },
+          testTimeout: 120_000,
         },
       }),
       {
@@ -54,6 +74,9 @@ export default defineConfig({
             provider: playwright({}),
           },
           name: "storybook",
+          sequence: {
+            groupOrder: 1,
+          },
           setupFiles: [".storybook/vitest.setup.ts"],
         },
       },

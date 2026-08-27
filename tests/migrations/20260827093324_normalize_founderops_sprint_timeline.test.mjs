@@ -1,6 +1,5 @@
-import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import test from "node:test";
+import { expect, it } from "vitest";
 import {
   applyMigration,
   resetLocalDatabaseTo,
@@ -26,7 +25,7 @@ const canonicalTimeline = [
   ["Sprint 10", "2026-09-21", "2026-10-04"],
 ];
 
-test("normalizes the FounderOps sprint timeline without replacing related rows", {
+it("normalizes the FounderOps sprint timeline without replacing related rows", {
   timeout: 120_000,
 }, async () => {
   await resetLocalDatabaseTo(previousVersion);
@@ -100,12 +99,11 @@ test("normalizes the FounderOps sprint timeline without replacing related rows",
       where project_id = 'findmydoc-founder-execution'
       order by start_date
     `);
-    assert.deepEqual(
+    expect(
       sprints.rows.map(({ name, start_date: startDate, end_date: endDate }) => [name, startDate, endDate]),
-      canonicalTimeline,
-    );
-    assert.ok(sprints.rows.every((row) => row.review_due_matches));
-    assert.equal(sprints.rows.find((row) => row.name === "Sprint 3").status, "closed");
+    ).toEqual(canonicalTimeline);
+    expect(sprints.rows.every((row) => row.review_due_matches)).toBe(true);
+    expect(sprints.rows.find((row) => row.name === "Sprint 3").status).toBe("closed");
 
     const today = await client.query(
       "select ((clock_timestamp() at time zone 'Europe/Berlin')::date)::text as today",
@@ -115,7 +113,7 @@ test("normalizes the FounderOps sprint timeline without replacing related rows",
       startDate <= todayText && endDate >= todayText
     ));
     const active = sprints.rows.filter((row) => row.status === "active");
-    assert.equal(active.length, current.some(([name]) => name !== "Sprint 3") ? 1 : 0);
+    expect(active).toHaveLength(current.some(([name]) => name !== "Sprint 3") ? 1 : 0);
 
     const preserved = await client.query(`
       select
@@ -123,7 +121,7 @@ test("normalizes the FounderOps sprint timeline without replacing related rows",
         (select count(*)::integer from public.sprint_commitments where sprint_id = 'sprint-8') as commitments,
         (select start_date::text from public.sprints where id = 'unrelated-sprint') as unrelated_start
     `);
-    assert.deepEqual(preserved.rows[0], {
+    expect(preserved.rows[0]).toEqual({
       sprint_id: "sprint-8",
       commitments: 1,
       unrelated_start: "2027-01-01",
@@ -142,6 +140,6 @@ test("normalizes the FounderOps sprint timeline without replacing related rows",
       where project_id = 'findmydoc-founder-execution'
       order by id
     `);
-    assert.deepEqual(secondRun.rows, firstRun.rows);
+    expect(secondRun.rows).toEqual(firstRun.rows);
   });
 });

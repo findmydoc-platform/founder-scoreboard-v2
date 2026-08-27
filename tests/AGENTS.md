@@ -8,6 +8,8 @@
 - Test executable behavior and stable contracts. Do not use `AGENTS.md` or `SKILL.md` prose as a product behavior source.
 - Use direct tests of observable behavior. Do not assert source text, file layout, removed behavior, pipeline implementation, or script internals.
 - Cover unauthenticated, wrong-role, invalid-input, missing-record, empty-state, and external-failure paths when the edited code handles them.
-- Use the ordered migration helpers for schema-wide contracts. A focused migration regression test may read the migration it specifically owns.
+- Add a migration-specific test only for data transformations, deletion risk, non-additive structural changes, or authorization boundaries. Ordinary additive changes do not need one.
+- Keep a migration-specific test with its migration until the next validated baseline squash. Before squashing, name every superseded migration test, move durable data or authorization rules to normal integration tests, and explicitly propose removing the obsolete migration tests.
+- Use the ordered migration helpers for schema-wide contracts. A focused migration test may apply the migration it specifically owns, but must not assert SQL source text.
 - Add focused domain test files instead of growing large `platform-*` contract files by default.
 - Keep tests deterministic and isolated from production services. Use real UTF-8 for German fixtures.
