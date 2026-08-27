@@ -19,7 +19,6 @@ Useful local commands:
 pnpm run local:start
 pnpm run local:seed
 pnpm run local:reset
-pnpm run test:integration:local
 pnpm run local:stop
 ```
 
@@ -82,15 +81,9 @@ GOOGLE_CHAT_DELIVERY_ENABLED=false
 
 Der sichere Rollout steht in `docs/google-chat-rollout.md`. Vor der Aktivierung werden der deaktivierte Versandpfad und eine einzelne kontrollierte Testzustellung geprüft.
 
-## Supabase prüfen
+## Auth-Zuordnung prüfen
 
-Nach dem Eintragen der `.env.local` prüft dieser Befehl, ob die wichtigsten Tabellen erreichbar und befüllt sind:
-
-```bash
-pnpm run verify:supabase
-```
-
-Die Auth-Zuordnung prüft dieser Befehl:
+Nach dem Eintragen der `.env.local` prüft dieser Befehl die Auth-Zuordnung:
 
 ```bash
 pnpm run verify:auth
@@ -104,4 +97,4 @@ Die manuelle Browser-Abnahme steht in `docs/acceptance-checklist.md`.
 
 ## Health Check
 
-Die Route `/api/health` liefert eine kleine Basis-Readiness-Prüfung ohne Secrets. Sie prüft nur, ob Supabase konfiguriert ist, die App Supabase-Daten nutzt und die Core-Tabellen `profiles`, `packages` und `tasks` erreichbar sind. Tieferes Schema- und Auth-Verhalten wird über `verify:supabase` und `verify:auth` geprüft; Integrationen werden durch Verhaltenstests und kontrollierte manuelle Abnahme abgesichert.
+Die Route `/api/health` liefert eine kleine Basis-Readiness-Prüfung ohne Secrets. Sie prüft nur, ob Supabase konfiguriert ist, die App Supabase-Daten nutzt und die Core-Tabellen `profiles`, `packages` und `tasks` erreichbar sind. Auth-Verhalten wird über `verify:auth` geprüft; Integrationen werden durch fokussierte Verhaltenstests und kontrollierte manuelle Abnahme abgesichert.

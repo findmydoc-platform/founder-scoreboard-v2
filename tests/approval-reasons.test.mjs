@@ -93,10 +93,9 @@ test("approval routes and UI share the reason contract", async () => {
 });
 
 test("approval RPCs enforce proposed state, roles, CAS, notes, and atomic return notifications", async () => {
-  const [migration, schema, verification] = await Promise.all([
+  const [migration, schema] = await Promise.all([
     readSupabaseSchemaContract(),
     readSupabaseSchemaContract(),
-    readFile("scripts/verify-supabase.mjs", "utf8"),
   ]);
 
   for (const sql of [migration, schema]) {
@@ -123,9 +122,6 @@ test("approval RPCs enforce proposed state, roles, CAS, notes, and atomic return
   assert.match(migration, /drop function public\.decide_initiative_approval_transaction/);
   assert.match(migration, /drop function public\.decide_deliverable_approval_transaction/);
   assert.match(migration, /grant execute on function public\.mutate_planning_approval_command_transaction[^]*to service_role/);
-  assert.match(verification, /verifyApprovalDecisionRpcs/);
-  assert.match(verification, /prepare_planning_approval_command/);
-  assert.match(verification, /approval preparation did not validate its canonical input/);
 });
 
 test("returned planning items use the existing personal Google Chat delivery pipeline", () => {

@@ -174,7 +174,6 @@ test("execution workspace is retired while legacy storage remains compatible", a
   const taskSignalBadges = await readFile("src/features/tasks/molecules/task-attention-badges.tsx", "utf8");
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
   const taskTable = await readFile("src/features/tasks/organisms/task-table-view.tsx", "utf8");
-  const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const schema = await readSupabaseSchemaContract();
@@ -229,7 +228,6 @@ test("execution workspace is retired while legacy storage remains compatible", a
   assert.match(focusRoute, /Heute-Fokus ist auf drei Aufgaben begrenzt/);
   assert.match(focusRoute, /export async function DELETE/);
   assert.doesNotMatch(focusRoute, /task_activity|Fokus entfernt|Fokus aktualisiert/);
-  assert.match(verify, /planning-schema-checks\.json/);
   assert.doesNotMatch(health, /planning-schema-checks\.json/);
   assert.match(schemaChecks, /task_focus_items/);
   assert.doesNotMatch(schemaChecks, /decision_task_links/);
@@ -340,7 +338,6 @@ test("legacy decision storage stays removed while the productive Notion projecti
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const workspaceRoutes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const notionLoader = await readFile("src/lib/notion-decision-log.ts", "utf8");
-  const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const schema = await readSupabaseSchemaContract();
   const planningApiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
@@ -355,7 +352,6 @@ test("legacy decision storage stays removed while the productive Notion projecti
   assert.match(notionLoader, /import "server-only"/);
   assert.match(notionLoader, /NOTION_DECISION_LOG_TOKEN/);
   assert.doesNotMatch(planningApiClient, /createMeetingRequest|availabilityRequest|syncGoogleCalendarRequest|createDecisionRequest/);
-  assert.match(verify, /planning-schema-checks\.json/);
   assert.doesNotMatch(schemaChecks, /availability\.calendar_sync|meetings\.google_calendar_sync|profiles\.google_calendar|decision_task_links/);
   assert.match(schemaChecks, /meetings\.weekly_score/);
   assert.match(schema, /create table if not exists meetings/);

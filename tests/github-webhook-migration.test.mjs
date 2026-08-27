@@ -61,13 +61,12 @@ test("the comment webhook migration adds metadata without storing comment conten
 });
 
 test("runtime configuration and operations docs expose the Issue and comment intake boundary", async () => {
-  const [envExample, deployment, idempotency, intakeDoc, schemaChecks, verifier] = await Promise.all([
+  const [envExample, deployment, idempotency, intakeDoc, schemaChecks] = await Promise.all([
     readFile(".env.example", "utf8"),
     readFile("docs/vercel-deployment.md", "utf8"),
     readFile("docs/github-api-idempotency.md", "utf8"),
     readFile("docs/github-webhook-intake.md", "utf8"),
     readFile("src/lib/planning-schema-checks.json", "utf8"),
-    readFile("scripts/verify-supabase.mjs", "utf8"),
   ]);
 
   assert.match(envExample, /^GITHUB_APP_WEBHOOK_SECRET=$/m);
@@ -95,5 +94,4 @@ test("runtime configuration and operations docs expose the Issue and comment int
   assert.match(deliveryCheck.select, /comment_node_id/);
   assert.match(deliveryCheck.select, /comment_updated_at/);
   assert.equal(deliveryCheck.select.split(",").includes("payload"), false);
-  assert.match(verifier, /githubWebhookDeliveries: await count\("github_webhook_deliveries"\)/);
 });

@@ -7,5 +7,5 @@
 - Enable RLS on exposed tables and review grants, policies, functions, triggers, and views together as one access-control boundary.
 - Ask before drops, truncation, broad deletes, destructive updates, removing columns, disabling RLS, credential changes, or migration-ledger repair.
 - Read the ordered migration corpus through `scripts/lib/supabase-migrations.mjs` in tests and verifiers.
-- Run `pnpm run verify:migrations`, a disposable local `pnpm run db:reset`, and the relevant `verify:supabase` or `verify:auth` check.
+- Run `pnpm run verify:migrations`, a disposable local `pnpm run db:reset`, and `verify:auth` when the migration changes authentication or identity mapping.
 - Production schema changes run only through `.github/workflows/deploy-production.yml`.

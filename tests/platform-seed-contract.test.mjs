@@ -11,7 +11,6 @@ test("source.json is the single maintained local seed data source", async () => 
   const packageJson = await readFile("package.json", "utf8");
   const shared = await readFile("src/lib/seed/shared.ts", "utf8");
   const runner = await readFile("scripts/local-development.mjs", "utf8");
-  const verifier = await readFile("scripts/verify-local-integration.mjs", "utf8");
 
   assert.ok(existsSync("src/lib/seed/source.json"));
   assert.equal(existsSync("supabase/seed.sql"), false);
@@ -19,7 +18,6 @@ test("source.json is the single maintained local seed data source", async () => 
   assert.match(runner, /src\/lib\/seed\/source\.json/);
   assert.doesNotMatch(shared, /\bPackage\b|packageId|milestoneId|source\.packages/);
   assert.doesNotMatch(runner, /packageId|milestoneId|source\.packages/);
-  assert.doesNotMatch(verifier, /milestoneId|source\.packages/);
   assert.match(packageJson, /"local:seed": "node scripts\/local-development\.mjs seed"/);
 });
 
@@ -81,7 +79,7 @@ test("local database commands are loopback guarded and seed a real auth identity
   const runner = await readFile("scripts/local-development.mjs", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
 
-  for (const command of ["local:start", "local:reset", "local:seed", "local:stop", "dev:local", "test:integration:local"]) {
+  for (const command of ["local:start", "local:reset", "local:seed", "local:stop", "dev:local"]) {
     assert.match(packageJson, new RegExp(`"${command.replace(":", "\\:")}"`));
   }
   assert.match(runner, /assertLocalUrl\(status\.API_URL, "54321"/);

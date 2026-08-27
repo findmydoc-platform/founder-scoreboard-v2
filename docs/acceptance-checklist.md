@@ -7,7 +7,6 @@ Stand: 2026-05-25
 Diese Checks sollen bewusst mit echter CEO-Session im Browser laufen. Automatische Read-only-Prüfungen laufen über:
 
 ```bash
-pnpm run verify:supabase
 pnpm run verify:auth
 pnpm test
 pnpm run lint
@@ -25,7 +24,7 @@ pnpm run build
 Erwartung:
 - Datenquelle ist Supabase.
 - Ein Reload mit gültiger Session zeigt höchstens einen Ladezustand, aber keinen falschen Login-Screen.
-- `pnpm run verify:supabase` und `pnpm run verify:auth` bestätigen Schema, Profile und Rollen.
+- `pnpm run verify:auth` bestätigt Profile und Rollen.
 - Navigation zeigt Planung, Sprint & Score, Team, Einstellungen und Mein Profil über das Account-Menü.
 
 ## Planung und Task-Erstellung

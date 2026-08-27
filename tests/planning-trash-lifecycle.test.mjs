@@ -106,10 +106,7 @@ test("approval rejection keeps the 0061 decision rules while moving the tree to 
 });
 
 test("outbox claiming is ordered, leased, retryable, and service-role only", async () => {
-  const [migration, verification] = await Promise.all([
-    readSupabaseSchemaContract(),
-    read("scripts/verify-supabase.mjs"),
-  ]);
+  const migration = await readSupabaseSchemaContract();
 
   assert.match(migration, /create or replace function public\.claim_planning_github_lifecycle_jobs/);
   assert.match(migration, /create or replace function public\.claim_planning_github_lifecycle_jobs_for_root/);
@@ -124,8 +121,6 @@ test("outbox claiming is ordered, leased, retryable, and service-role only", asy
   assert.match(migration, /revoke all on function public\.claim_planning_github_lifecycle_jobs_for_root[^]*from public/);
   assert.match(migration, /grant all on function public\.claim_planning_github_lifecycle_jobs_for_root[^]*to service_role/);
   assert.match(migration, /grant all on function public\.finalize_planning_github_lifecycle_job[^]*to service_role/);
-  assert.match(verification, /verifyPlanningTrashLifecycleRpcs/);
-  assert.match(verification, /p_limit: 0/);
 });
 
 test("approval reopen uses the latest close event and its stored canonical target", async () => {

@@ -42,7 +42,6 @@ test("profile self-service API writes only whitelisted own-profile fields", asyn
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const ownCommands = await readFile("src/features/profile/hooks/use-own-profile-settings-commands.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
-  const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
 
   assert.match(route, /requireTeamMember/);
   assert.match(route, /blockedSelfServiceFields/);
@@ -63,7 +62,6 @@ test("profile self-service API writes only whitelisted own-profile fields", asyn
   assert.match(migration, /update_profile_settings_transaction/);
   assert.match(migration, /security definer/);
   assert.match(migration, /grant all on function public\.update_profile_settings_transaction[^]*to service_role/);
-  assert.match(verifySupabase, /verifyProfileWriteRpcs/);
 });
 
 test("CEO transfer and managed notification preferences use one transaction", async () => {
