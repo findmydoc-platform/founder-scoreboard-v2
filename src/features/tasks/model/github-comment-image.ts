@@ -3,10 +3,9 @@ export function isGitHubAssetUrl(value: string) {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase();
     return hostname === "github.com"
-      || hostname.endsWith("githubusercontent.com")
-      || hostname === "objects.githubusercontent.com"
-      || hostname.startsWith("github-production-user-asset-")
-      || hostname.endsWith(".s3.amazonaws.com");
+      || hostname === "githubusercontent.com"
+      || hostname.endsWith(".githubusercontent.com")
+      || /^github-production-user-asset-[a-z0-9-]+\.s3\.amazonaws\.com$/.test(hostname);
   } catch {
     return false;
   }

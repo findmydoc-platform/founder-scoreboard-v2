@@ -13,6 +13,8 @@ describe("GitHub comment image", () => {
 
   it.each([
     "https://example.com/asset.png",
+    "https://evilgithubusercontent.com/asset.png",
+    "https://github-production-user-asset-attacker.example.com/asset.png",
     "not a url",
   ])("does not proxy an unrelated image at %s", (url) => {
     expect(isGitHubAssetUrl(url)).toBe(false);
