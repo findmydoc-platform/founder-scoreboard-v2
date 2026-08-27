@@ -410,7 +410,7 @@ test("a resumed publication confirms reconciliation on the new published version
 
 test("reconciliation API binds the owner to the mapped session and accepts no target input", async () => {
   const route = await readFile("src/app/api/team-workweek/reconcile/route.ts", "utf8");
-  assert.match(route, /requireApiContext\(request, requirePlanningContributor\)/);
+  assert.match(route, /requireApiContext\(request, requireTeamMember\)/);
   assert.match(route, /context\.permission\.profile\?\.id/);
   assert.match(route, /Object\.keys\(payload\)\.length/);
   assert.match(route, /Google-Abgleich akzeptiert keine frei gewählten Ziele/);

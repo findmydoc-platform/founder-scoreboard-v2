@@ -127,3 +127,26 @@ test("authorization requires the stable Auth user id and ignores user metadata",
     [["eq", "auth_user_id", "linked-auth-user"]],
   ]);
 });
+
+test("the mapped-team-member role set accepts every FounderOps platform role", async () => {
+  const { requirePlatformRoleForUser } = await loadAuthz();
+  const allowedRoles = ["ceo", "founder", "deputy", "viewer"];
+
+  for (const role of allowedRoles) {
+    const client = profileQueryClient({
+      authProfile: {
+        id: `${role}-profile`,
+        name: `${role} profile`,
+        platform_role: role,
+        github_login: `${role}-login`,
+      },
+    });
+    const result = await requirePlatformRoleForUser(
+      client,
+      { id: `${role}-auth-user`, user_metadata: {} },
+      allowedRoles,
+    );
+    assert.equal(result.ok, true, `${role} must pass the mapped-team-member guard`);
+    assert.equal(result.profile?.platformRole, role);
+  }
+});

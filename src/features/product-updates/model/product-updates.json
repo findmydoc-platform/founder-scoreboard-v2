@@ -5,7 +5,7 @@
     "expiresAt": "2026-09-24",
     "featureTourId": "team-workweek-v1",
     "title": "Termine und Arbeitswoche in einem Kalender",
-    "summary": "Der Kalender im Kopfbereich verbindet FounderOps-Termine mit den veröffentlichten Arbeitszeiten des Gründerteams. Die Verwaltung bleibt in den jeweiligen Arbeitsbereichen.",
+    "summary": "Der Kalender im Kopfbereich verbindet FounderOps-Termine mit den veröffentlichten Arbeitszeiten der Teammitglieder. Die Verwaltung bleibt in den jeweiligen Arbeitsbereichen.",
     "slides": [
       {
         "id": "team-workweek-overview",

@@ -84,10 +84,9 @@ test("inflation restores every day and preserves ordered wall-clock windows", ()
 });
 
 
-
 test("API uses the bearer session for RLS and accepts no profile or calendar target", () => {
   const route = readFileSync("src/app/api/team-workweek/private-draft/route.ts", "utf8");
-  assert.match(route, /requireApiContext\(request, requirePlanningContributor\)/);
+  assert.match(route, /requireApiContext\(request, requireTeamMember\)/);
   assert.match(route, /bearerToken\(request\)/);
   assert.match(route, /getSupabaseForToken\(token\)/);
   assert.match(route, /create_private_team_workweek_version/);
@@ -116,7 +115,8 @@ test("editor exposes the complete private workflow and protects unsaved changes"
   assert.match(card, /Grundwoche vorbereiten/);
   assert.match(card, /bestätigte Google-Synchronisierung/);
   assert.match(editor, /In Google & Team veröffentlichen/);
-  assert.match(team, /teamWorkweekAvailable && actualProfile/);
+  assert.match(team, /actualProfile && \([\s\S]*<PrivateTeamWorkweekCard/);
+  assert.match(team, /actualProfile && <PublishedTeamWorkweeksCard/);
   assert.match(renderer, /actualProfile=\{actualProfile\}/);
-  assert.match(renderer, /isTeamWorkweekStarterProfile\(data\.profiles, currentProfile\)/);
+  assert.doesNotMatch(renderer, /isTeamWorkweekStarterProfile|teamWorkweekAvailable/);
 });

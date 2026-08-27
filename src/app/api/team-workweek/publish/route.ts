@@ -8,9 +8,8 @@ import {
   detectTeamWorkweekParallelConflict,
   TeamWorkweekConflictError,
 } from "@/features/team-workweek/server/team-workweek-conflicts";
-import { requireTeamWorkweekStarterApiAccess } from "@/features/team-workweek/server/team-workweek-rollout-api";
 import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
-import { bearerToken, requirePlanningContributor } from "@/lib/authz";
+import { bearerToken, requireTeamMember } from "@/lib/authz";
 import { getSupabaseForToken } from "@/lib/supabase";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
@@ -35,13 +34,8 @@ function publicationFailureResponse(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireApiContext(request, requirePlanningContributor);
+  const context = await requireApiContext(request, requireTeamMember);
   if (!context.ok) return context.response;
-  const rollout = await requireTeamWorkweekStarterApiAccess({
-    actorProfileId: context.permission.profile?.id || "",
-    actorRole: context.permission.profile?.platformRole,
-  });
-  if (!rollout.ok) return rollout.response;
   const token = bearerToken(request);
   const userSupabase = token ? getSupabaseForToken(token) : null;
   const serviceSupabase = getServerServiceRoleSupabase();

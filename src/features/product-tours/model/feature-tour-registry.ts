@@ -63,7 +63,7 @@ export const featureTours: readonly FeatureTourDefinition[] = [
         element: "[data-tour-id='header-calendar-action']",
         popover: {
           title: "Arbeitswoche vergleichen",
-          description: "Freigegebene Gründerprofile wechseln zum Tab Arbeitswoche. Die eigene Regelwoche bleibt ausschließlich im Team-Bereich bearbeitbar.",
+          description: "Alle Teammitglieder wechseln zum Tab Arbeitswoche. Die eigene Regelwoche bleibt ausschließlich im Team-Bereich bearbeitbar.",
           side: "bottom",
           align: "end",
           doneBtnText: "Verstanden",
