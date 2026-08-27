@@ -21,7 +21,7 @@ import {
   type CalendarTeamWorkweek,
 } from "@/features/team-workweek/model/team-workweek-calendar";
 import type { PublishedTeamWorkweek } from "@/features/team-workweek/model/published-team-workweek";
-import { starterTeamProfiles } from "@/features/team-workweek/model/team-workweek-matrix";
+import { teamWorkweekProfiles } from "@/features/team-workweek/model/team-workweek-matrix";
 import { TeamWorkweekMatrix } from "@/features/team-workweek/molecules/team-workweek-matrix";
 import type { HeaderCalendarEvent, HeaderDataSlot, Profile } from "@/lib/types";
 import { classNames, UiBadge, UiButton, UiEmptyState, UiNotice } from "@/shared/atoms/ui-primitives";
@@ -117,7 +117,7 @@ export function HeaderCalendarDialog({
   });
   const tabId = useId();
   const todayKey = berlinDateKey(now);
-  const starterProfiles = useMemo(() => starterTeamProfiles(profiles), [profiles]);
+  const visibleProfiles = useMemo(() => teamWorkweekProfiles(profiles), [profiles]);
   const days = useMemo(() => calendarGridForMonth(viewMonth), [viewMonth]);
   const eventsByDay = useMemo(() => eventsByCalendarDay(eventSlot.data), [eventSlot.data]);
   const selectedEvents = eventsByDay.get(selectedDate) || [];
@@ -125,7 +125,7 @@ export function HeaderCalendarDialog({
     calendarWorkweeks,
     dateKey: selectedDate,
     now,
-    profiles: starterProfiles,
+    profiles: visibleProfiles,
   });
   const anchorStyle = anchor ? {
     "--header-calendar-right": `${anchor.right}px`,
@@ -259,7 +259,7 @@ export function HeaderCalendarDialog({
                     const today = dateKey === todayKey;
                     const currentMonth = dateKey.startsWith(viewMonth.slice(0, 7));
                     const dayEvents = eventsByDay.get(dateKey) || [];
-                    const worktimes = projectCalendarWorktimes({ calendarWorkweeks, dateKey, now, profiles: starterProfiles });
+                    const worktimes = projectCalendarWorktimes({ calendarWorkweeks, dateKey, now, profiles: visibleProfiles });
                     const details = [
                       dayEvents.length ? `${dayEvents.length} Termin${dayEvents.length === 1 ? "" : "e"}` : "keine Termine",
                       showWorkweek ? `${worktimes.length} eingeplant` : null,

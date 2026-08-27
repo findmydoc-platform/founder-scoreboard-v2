@@ -18,7 +18,6 @@ export function TeamOverview({
   canManageTeam,
   apiClient,
   actualProfile,
-  teamWorkweekAvailable,
   onSaveProfileSettings,
 }: {
   data: PlanningShellState;
@@ -27,7 +26,6 @@ export function TeamOverview({
   canManageTeam: boolean;
   apiClient: BrowserApiClient;
   actualProfile: Profile | null;
-  teamWorkweekAvailable: boolean;
   onSaveProfileSettings: (profile: Profile, patch: Partial<Profile>, eventPatch: Record<string, boolean>) => Promise<void>;
 }) {
   const { closeProfileDialog, editingProfile, openProfileDialog } = useTeamProfileDialog(data.profiles);
@@ -55,9 +53,9 @@ export function TeamOverview({
     <div className="grid gap-4">
       <TeamRoleSummary profiles={data.profiles} today={today} />
 
-      {teamWorkweekAvailable && <PublishedTeamWorkweeksCard apiClient={apiClient} profiles={data.profiles} />}
+      {actualProfile && <PublishedTeamWorkweeksCard apiClient={apiClient} profiles={data.profiles} />}
 
-      {teamWorkweekAvailable && actualProfile && (
+      {actualProfile && (
         <PrivateTeamWorkweekCard apiClient={apiClient} profile={actualProfile} />
       )}
 

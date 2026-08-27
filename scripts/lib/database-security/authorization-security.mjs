@@ -1,10 +1,13 @@
 import {
+  mappedOwnerTeamWorkweekFunctions,
+  mappedOwnerTeamWorkweekReadPolicies,
   mappedTeamReadPolicies,
   planningContributorWritePolicies,
 } from "./contracts.mjs";
 import { addRows } from "./failures.mjs";
 
 const mappedTeamReadPolicyMap = new Map(mappedTeamReadPolicies);
+const mappedOwnerTeamWorkweekReadPolicyMap = new Map(mappedOwnerTeamWorkweekReadPolicies);
 const planningContributorWritePolicySet = new Set(
   planningContributorWritePolicies,
 );
@@ -125,6 +128,64 @@ export async function verifyAuthorizationSecurity(client, failures) {
       || /auth\.uid/i.test(policy.qual || "")
     ) {
       failures.push(`team read policy does not require a mapped profile: ${tableName}:${policyName}`);
+    }
+  }
+
+  const mappedOwnerPolicyRows = await client.query(
+    `select tablename, policyname, cmd, roles::text[] as roles, qual
+     from pg_policies
+     where schemaname = 'public'
+       and policyname = any($1::text[])
+     order by tablename, policyname`,
+    [[...mappedOwnerTeamWorkweekReadPolicyMap.keys()]],
+  );
+  const mappedOwnerPolicyByName = new Map(
+    mappedOwnerPolicyRows.rows.map((row) => [row.policyname, row]),
+  );
+  for (const [policyName, tableName] of mappedOwnerTeamWorkweekReadPolicyMap) {
+    const policy = mappedOwnerPolicyByName.get(policyName);
+    if (!policy) {
+      failures.push(`missing mapped-owner team-workweek read policy: ${tableName}:${policyName}`);
+      continue;
+    }
+    if (
+      policy.tablename !== tableName
+      || policy.cmd !== "SELECT"
+      || policy.roles.length !== 1
+      || policy.roles[0] !== "authenticated"
+      || !/owner_profile_id/i.test(policy.qual || "")
+      || !/current_profile_id\(\)/i.test(policy.qual || "")
+      || /auth\.uid|current_platform_role|current_profile_role/i.test(policy.qual || "")
+    ) {
+      failures.push(`team-workweek private read policy is not mapped-owner-only: ${tableName}:${policyName}`);
+    }
+  }
+
+  const mappedOwnerFunctionRows = await client.query(
+    `select procedure.proname as function_name,
+       pg_get_functiondef(procedure.oid) as definition
+     from pg_proc as procedure
+     join pg_namespace as schema
+       on schema.oid = procedure.pronamespace
+     where schema.nspname = 'public'
+       and procedure.proname = any($1::text[])
+     order by procedure.proname`,
+    [mappedOwnerTeamWorkweekFunctions],
+  );
+  const mappedOwnerFunctionByName = new Map(
+    mappedOwnerFunctionRows.rows.map((row) => [row.function_name, row]),
+  );
+  for (const functionName of mappedOwnerTeamWorkweekFunctions) {
+    const procedure = mappedOwnerFunctionByName.get(functionName);
+    if (!procedure) {
+      failures.push(`missing mapped-owner team-workweek function: ${functionName}`);
+      continue;
+    }
+    if (
+      !/profile\.auth_user_id\s*=\s*auth\.uid\(\)/i.test(procedure.definition)
+      || /current_platform_role|current_profile_role|platform_role|\bviewer\b/i.test(procedure.definition)
+    ) {
+      failures.push(`team-workweek function is not role-independent and auth-bound: ${functionName}`);
     }
   }
 

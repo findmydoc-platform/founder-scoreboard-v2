@@ -5,8 +5,8 @@ import {
   storeGoogleWorkspaceConnection,
   verifyBoundGoogleWorkspaceState,
 } from "@/features/team-workweek/server/google-workspace-oauth";
-import { requireTeamWorkweekStarterApiAccess } from "@/features/team-workweek/server/team-workweek-rollout-api";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
+import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";
 
@@ -17,22 +17,16 @@ export async function GET(request: NextRequest) {
 
   try {
     if (!code || !stateValue) throw new Error("Google Workspace callback is incomplete.");
-    const auth = await getServerPlanningAuth(["ceo", "founder"]);
+    const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
     if (!auth.ok || !auth.profile) throw new Error("FounderOps session is unavailable.");
-    const rollout = await requireTeamWorkweekStarterApiAccess({
-      actorProfileId: auth.profile.id,
-      actorRole: auth.profile.platformRole,
-    });
-    if (!rollout.ok) {
-      return NextResponse.redirect(new URL("/team?googleWorkspace=starter_disabled", request.url));
-    }
     const state = verifyBoundGoogleWorkspaceState(stateValue, {
       userId: auth.user.id,
       profileId: auth.profile.id,
     });
     next = state.next;
 
-    const supabase = rollout.serviceSupabase;
+    const supabase = getServerServiceRoleSupabase();
+    if (!supabase) throw new Error("FounderOps service is unavailable.");
     const redirectUri = new URL("/api/google-workspace/callback", request.url).toString();
     const token = await exchangeGoogleWorkspaceCode(code, redirectUri);
     await probeGoogleWorkspacePrimaryCalendar(token.accessToken);

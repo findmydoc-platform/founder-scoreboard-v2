@@ -10,7 +10,6 @@ const calendarModel = await loadTranspiledModule(
 const publishedModel = await import("../src/features/team-workweek/model/published-team-workweek.ts");
 
 let authResult;
-let rolloutResult;
 let rows;
 let queryStatuses;
 
@@ -37,9 +36,6 @@ const route = await loadTranspiledModule(
     "@/features/team-workweek/model/team-workweek-calendar": calendarModel,
     "@/features/team-workweek/model/team-workweek-draft": draftModel,
     "@/features/team-workweek/model/published-team-workweek": publishedModel,
-    "@/features/team-workweek/server/team-workweek-rollout-api": {
-      requireTeamWorkweekStarterApiAccess: async () => rolloutResult,
-    },
     "@/lib/api-response": {
       apiError,
       requireApiContext: async () => authResult,
@@ -63,7 +59,6 @@ test.beforeEach(() => {
     ok: true,
     permission: { profile: { id: "profile-1", platformRole: "founder" } },
   };
-  rolloutResult = { ok: true, serviceSupabase: {} };
   queryStatuses = [];
   rows = [];
 });

@@ -2,7 +2,6 @@ import { type NextRequest, NextResponse } from "next/server";
 import { validateCalendarWorkweekRange } from "@/features/team-workweek/model/team-workweek-calendar";
 import { berlinTodayIso, inflateTeamWorkweekWindows } from "@/features/team-workweek/model/team-workweek-draft";
 import { selectVisibleTeamWorkweeks } from "@/features/team-workweek/model/published-team-workweek";
-import { requireTeamWorkweekStarterApiAccess } from "@/features/team-workweek/server/team-workweek-rollout-api";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { bearerToken, requireTeamMember } from "@/lib/authz";
 import { getSupabaseForToken } from "@/lib/supabase";
@@ -24,11 +23,6 @@ type PublishedVersionRow = Readonly<{
 export async function GET(request: NextRequest) {
   const context = await requireApiContext(request, requireTeamMember);
   if (!context.ok) return context.response;
-  const rollout = await requireTeamWorkweekStarterApiAccess({
-    actorProfileId: context.permission.profile?.id || "",
-    actorRole: context.permission.profile?.platformRole,
-  });
-  if (!rollout.ok) return rollout.response;
   const requestedRange = validateCalendarWorkweekRange(
     request.nextUrl.searchParams.get("from"),
     request.nextUrl.searchParams.get("to"),

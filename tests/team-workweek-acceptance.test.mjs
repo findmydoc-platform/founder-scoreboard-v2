@@ -44,7 +44,7 @@ const disconnectServer = await loadTranspiledModule(
   },
 );
 
-const starterProfiles = ["anil", "oezen", "sebastian", "volkan", "youssef"];
+const teamProfiles = ["anil", "local-deputy", "local-viewer", "oezen", "sebastian", "volkan", "youssef"];
 const fixedDate = new Date("2026-08-25T09:15:00.000Z");
 const fixedClock = () => new Date(fixedDate);
 
@@ -275,7 +275,7 @@ function createProfileVaultHarness() {
   };
 }
 
-test("the five-profile starter completes the deterministic Google lifecycle without exposing private evidence", async () => {
+test("an arbitrary mapped team completes the deterministic Google lifecycle without exposing private evidence", async () => {
   const publicEvidence = [];
   const vault = createProfileVaultHarness();
   const previousEnvironment = {
@@ -288,7 +288,7 @@ test("the five-profile starter completes the deterministic Google lifecycle with
   process.env.GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 42).toString("base64");
 
   try {
-    for (const profileId of starterProfiles) {
+    for (const profileId of teamProfiles) {
       const token = controlledToken(profileId);
       await oauthServer.storeGoogleWorkspaceConnection({
         supabase: vault.serviceSupabase,
@@ -302,9 +302,9 @@ test("the five-profile starter completes the deterministic Google lifecycle with
       assert.notEqual(stored.encrypted_refresh_token, token.refreshToken);
       assert.deepEqual(stored.oauth_scopes, [GOOGLE_WORKSPACE_CALENDAR_SCOPE]);
     }
-    assert.equal(vault.connections.size, starterProfiles.length);
+    assert.equal(vault.connections.size, teamProfiles.length);
 
-    for (const [index, profileId] of starterProfiles.entries()) {
+    for (const [index, profileId] of teamProfiles.entries()) {
     const adapter = new ControlledGoogleCalendarAdapter();
     const fetchImpl = adapter.fetch.bind(adapter);
     const signingKey = Buffer.alloc(32, index + 1);
@@ -467,10 +467,10 @@ test("the five-profile starter completes the deterministic Google lifecycle with
     });
     }
 
-    assert.equal(publicEvidence.length, 5);
-    assert.deepEqual(vault.revokedProfiles, starterProfiles);
-    assert.equal(vault.connections.size, starterProfiles.length);
-    assert.deepEqual(Array.from(vault.connections.keys()).sort(), [...starterProfiles].sort());
+    assert.equal(publicEvidence.length, teamProfiles.length);
+    assert.deepEqual(vault.revokedProfiles, teamProfiles);
+    assert.equal(vault.connections.size, teamProfiles.length);
+    assert.deepEqual(Array.from(vault.connections.keys()).sort(), [...teamProfiles].sort());
     assert.ok(publicEvidence.every((entry) => entry.revoke === "confirmed"));
     assert.ok(publicEvidence.every((entry) => Object.values(entry).every(Boolean)));
     assert.doesNotMatch(JSON.stringify(publicEvidence), /token|authorization|Private calendar content/i);

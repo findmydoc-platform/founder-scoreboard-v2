@@ -29,7 +29,7 @@ export function useHeaderCalendar({
   const [now, setNow] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => berlinDateKey());
   const [viewMonth, setViewMonth] = useState(() => firstCalendarDayOfMonth(berlinDateKey()));
-  const [pending, setPending] = useState(Boolean(apiClient));
+  const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const [calendarWorkweeks, setCalendarWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
   const [workweeks, setWorkweeks] = useState<PublishedTeamWorkweek[]>([]);
@@ -69,16 +69,17 @@ export function useHeaderCalendar({
   }, [apiClient, viewMonth]);
 
   useEffect(() => {
+    if (!open) return;
     const frame = window.requestAnimationFrame(() => void loadVisibleRange());
     return () => window.cancelAnimationFrame(frame);
-  }, [loadVisibleRange]);
+  }, [loadVisibleRange, open]);
 
   useEffect(() => {
-    if (!apiClient) return;
+    if (!apiClient || !open) return;
     const reload = () => void loadVisibleRange();
     window.addEventListener(TEAM_WORKWEEK_PUBLISHED_EVENT, reload);
     return () => window.removeEventListener(TEAM_WORKWEEK_PUBLISHED_EVENT, reload);
-  }, [apiClient, loadVisibleRange]);
+  }, [apiClient, loadVisibleRange, open]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);

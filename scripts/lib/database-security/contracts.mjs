@@ -69,6 +69,21 @@ export const mappedTeamReadPolicies = Object.freeze([
   ["tasks_select_team", "tasks"],
 ]);
 
+export const mappedOwnerTeamWorkweekReadPolicies = Object.freeze([
+  ["team_workweek_versions_select_owner_private", "team_workweek_versions"],
+  ["team_workweek_windows_select_owner_private", "team_workweek_windows"],
+  ["team_workweek_publications_select_owner_or_published_team", "team_workweek_publications"],
+  ["team_workweek_google_series_select_owner_private", "team_workweek_google_series"],
+  ["team_workweek_google_series_transitions_select_owner_private", "team_workweek_google_series_transitions"],
+  ["team_workweek_google_reconciliation_status_select_owner_private", "team_workweek_google_reconciliation_status"],
+]);
+
+export const mappedOwnerTeamWorkweekFunctions = Object.freeze([
+  "create_private_team_workweek_version",
+  "prepare_team_workweek_publication",
+  "finalize_team_workweek_publication",
+]);
+
 export const planningContributorWritePolicies = Object.freeze([
   "decision_task_links_write_team",
   "task_external_comments_insert_members",

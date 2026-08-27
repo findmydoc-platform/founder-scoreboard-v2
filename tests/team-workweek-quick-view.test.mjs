@@ -19,7 +19,7 @@ function workweek(ownerProfileId, phase, id) {
   return { id, ownerProfileId, phase };
 }
 
-test("the starter matrix keeps all five operating profiles and only their active publication", () => {
+test("the matrix keeps every team profile and only each active publication", () => {
   const current = workweek("founder-1", "current", "current-1");
   const rows = matrixModel.projectActiveTeamWorkweekRows(profiles, [
     workweek("founder-1", "prepared", "prepared-1"),
@@ -27,10 +27,11 @@ test("the starter matrix keeps all five operating profiles and only their active
     workweek("deputy", "current", "current-deputy"),
   ]);
 
-  assert.deepEqual(rows.map(({ profile }) => profile.id), ["ceo", "founder-1", "founder-2", "founder-3", "founder-4"]);
-  assert.equal(rows.length, 5);
+  assert.deepEqual(rows.map(({ profile }) => profile.id), ["ceo", "founder-1", "founder-2", "founder-3", "founder-4", "deputy", "viewer"]);
+  assert.equal(rows.length, 7);
   assert.equal(rows.find(({ profile }) => profile.id === "founder-1")?.workweek, current);
   assert.equal(rows.find(({ profile }) => profile.id === "founder-2")?.workweek, null);
+  assert.equal(rows.find(({ profile }) => profile.id === "deputy")?.workweek?.id, "current-deputy");
 });
 
 test("team detail distinguishes unknown, empty, current, and stale successful data", () => {
@@ -65,10 +66,11 @@ test("the shared header calendar is read-only, responsive, and owns one Team nav
   assert.match(action, /const passiveCapture = \{ capture: true, passive: true \} as const/);
   assert.match(action, /window\.addEventListener\("scroll", updateAnchor, passiveCapture\)/);
   assert.doesNotMatch(action, /todayEventCount|9\+|unreadCount/);
-  assert.match(action, /currentWorkers\.map/);
-  assert.match(action, /Arbeitet jetzt/);
+  assert.match(action, /aria-label="Kalender öffnen"/);
+  assert.doesNotMatch(action, /currentWorkers|Arbeitet jetzt/);
   assert.match(hook, /requestJson[\s\S]*\/api\/team-workweek\/team\?from=\$\{range\.from\}&to=\$\{range\.to\}/);
-  assert.match(hook, /useEffect\(\(\) => \{[\s\S]*void loadVisibleRange\(\)/);
+  assert.match(hook, /useEffect\(\(\) => \{\s*if \(!open\) return;[\s\S]*requestAnimationFrame\(\(\) => void loadVisibleRange\(\)\)/);
+  assert.match(hook, /useState\(false\)/);
   assert.match(hook, /TEAM_WORKWEEK_PUBLISHED_EVENT/);
   assert.match(dialog, /useModalDialog<HTMLDivElement>/);
   assert.match(action, /restoreFocusRef=\{triggerRef\}/);

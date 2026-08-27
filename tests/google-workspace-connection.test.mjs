@@ -146,4 +146,3 @@ test("connection status exposes no token material and recognizes reconnect state
     revoked_at: "2026-08-25T08:15:00.000Z",
   }).state, "reconnect_required");
 });
-

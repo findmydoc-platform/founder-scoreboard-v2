@@ -18,7 +18,6 @@ export function GoogleWorkspaceConnectionCard({
   compact?: boolean;
   profile: Profile;
 }) {
-  const canConnect = profile.platformRole !== "viewer";
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const {
     callbackError,
@@ -29,7 +28,7 @@ export function GoogleWorkspaceConnectionCard({
     message,
     pending,
     startConnect,
-  } = useGoogleWorkspaceConnection(apiClient, canConnect);
+  } = useGoogleWorkspaceConnection(apiClient);
   const connected = connection.state === "connected";
   const reconnect = connection.state === "reconnect_required";
   const cleanupPending = disconnectView.state === "cleanup_pending" || disconnectView.pendingSeriesCount > 0;
@@ -64,7 +63,7 @@ export function GoogleWorkspaceConnectionCard({
                 Erneut prüfen
               </UiButton>
             )}
-            {canConnect && !connected && (
+            {!connected && (
               <UiButton
                 variant="emerald"
                 size={compact ? "iconMd" : "iconLg"}
@@ -76,12 +75,12 @@ export function GoogleWorkspaceConnectionCard({
                 <Link2 size={16} aria-hidden="true" />
               </UiButton>
             )}
-            {canConnect && connected && cleanupPending && (
+            {connected && cleanupPending && (
               <UiButton variant="primary" size={compact ? "sm" : "lg"} disabled={pending} onClick={() => void disconnectConnection()}>
                 Bereinigung fortsetzen
               </UiButton>
             )}
-            {canConnect && connected && !cleanupPending && (
+            {connected && !cleanupPending && (
               <UiButton
                 variant="red"
                 size={compact ? "iconMd" : "iconLg"}
@@ -95,10 +94,8 @@ export function GoogleWorkspaceConnectionCard({
             )}
           </div>
         </div>
-        {(!compact || !canConnect || message || callbackError || cleanupPending || reconnect) && <div className={compact ? "mt-2" : "mt-4"} aria-live="polite">
-          {!canConnect ? (
-            <UiNotice size={compact ? "compact" : "sm"} tone="neutral">Viewer können den Verbindungsstatus lesen, aber keine persönliche Google-Verbindung ändern.</UiNotice>
-          ) : message || callbackError ? (
+        {(!compact || message || callbackError || cleanupPending || reconnect) && <div className={compact ? "mt-2" : "mt-4"} aria-live="polite">
+          {message || callbackError ? (
             <UiNotice size={compact ? "compact" : "sm"} tone="warning">{message || callbackError}</UiNotice>
           ) : cleanupPending ? (
             <UiNotice size={compact ? "compact" : "sm"} tone="warning">

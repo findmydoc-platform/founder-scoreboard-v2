@@ -40,7 +40,7 @@ function subscribeToStaticLocation() {
   return () => undefined;
 }
 
-export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient, canManage: boolean) {
+export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient) {
   const mounted = useRef(true);
   const [connection, setConnection] = useState(EMPTY_CONNECTION);
   const [disconnectView, setDisconnectView] = useState(EMPTY_DISCONNECT);
@@ -63,12 +63,10 @@ export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient, canMan
         connection?: GoogleWorkspaceConnectionStatus;
         error?: string;
       }>("/api/google-workspace/status", { cache: "no-store", useDevProfileOverride: false });
-      const disconnectRequest = canManage
-        ? apiClient.requestJson<{ disconnect?: GoogleWorkspaceDisconnectView; error?: string }>(
-          "/api/google-workspace/disconnect",
-          { cache: "no-store", useDevProfileOverride: false },
-        )
-        : Promise.resolve(null);
+      const disconnectRequest = apiClient.requestJson<{ disconnect?: GoogleWorkspaceDisconnectView; error?: string }>(
+        "/api/google-workspace/disconnect",
+        { cache: "no-store", useDevProfileOverride: false },
+      );
       const [{ response, body }, disconnectResponse] = await Promise.all([statusRequest, disconnectRequest]);
       if (!response.ok || !body?.connection) {
         throw new Error(body?.error || "Google-Verbindungsstatus konnte nicht geladen werden.");
@@ -87,7 +85,7 @@ export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient, canMan
     } finally {
       if (mounted.current) setPending(false);
     }
-  }, [apiClient, canManage]);
+  }, [apiClient]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
