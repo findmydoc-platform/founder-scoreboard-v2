@@ -11,7 +11,6 @@ import type { PlanningCommandContext } from "@/features/planning/hooks/planning-
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import type { HeaderNotification, NotificationDelivery, PlanningHeaderData } from "@/lib/types";
 import { applyLocalNotificationAction, type NotificationUserAction } from "@/lib/notification-lifecycle";
-import { markPlanningHeaderDataError, markPlanningHeaderDataLoading, mergePlanningHeaderData, normalizePlanningHeaderData } from "@/lib/planning-header-data";
 
 type GoogleChatStatus = {
   webhookConfigured: boolean;
@@ -204,20 +203,6 @@ export function useNotificationCommands({
 
   const openNotificationInbox = () => {
     setShowNotifications(true);
-    setHeaderData((current) => markPlanningHeaderDataLoading(current, ["notifications"]));
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.requestPlanningHeaderData(apiClient, ["notifications"]);
-        if (!response.ok || !body?.headerData) {
-          throw new Error(body?.error || "Benachrichtigungen konnten nicht geladen werden.");
-        }
-        const next = normalizePlanningHeaderData(body.headerData);
-        setHeaderData((current) => mergePlanningHeaderData(current, next));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Benachrichtigungen konnten nicht geladen werden.";
-        setHeaderData((current) => markPlanningHeaderDataError(current, ["notifications"], message));
-      }
-    });
   };
 
   return {
