@@ -46,7 +46,7 @@ No entry may move into the Item UI through presentation work alone. It requires 
 There is no generic archived state for planning Items.
 
 - `src/lib/status.ts:4` defines only the active work statuses `Offen`, `In Arbeit`, `Review`, `Nacharbeit`, `Blockiert`, and `Erledigt`.
-- `supabase/migrations/20260713120959_production_baseline.sql:4793-4871` defines `active_tasks` by `trashed_at is null`; it has no archive predicate or archive metadata.
+- The `active_tasks` view in `supabase/migrations/20260827064853_current_schema_baseline.sql` filters by `trashed_at is null`; it has no archive predicate or archive metadata.
 - `src/features/tasks/molecules/task-detail-header-actions.tsx` exposes only the existing planning-trash action `Deliverable zurückziehen` through the Item action menu.
 - `src/features/planning/model/planning-trash-contract.ts:45-61` limits withdrawal to eligible draft/proposed roots and the existing proposer/operational-lead policy.
 - `src/app/api/tasks/[id]/withdraw/route.ts` and `src/lib/planning-trash-api.ts:114-170` implement withdrawal, revision checks, audit metadata, and GitHub lifecycle handling.
@@ -111,7 +111,7 @@ Direct deletion is intentionally unavailable from an active Item.
 - `src/app/api/tasks/[id]/route.ts:457-459` returns `410` with `Direktes Löschen ist nicht mehr verfügbar. Nutze den Papierkorb-Workflow.`
 - Focused planning-trash route and interaction tests verify reversible withdrawal and the unavailable direct-delete path.
 - `src/features/tasks/hooks/use-task-withdraw-command.ts` performs reversible optimistic removal, server withdrawal, and rollback on failure.
-- `supabase/migrations/20260713120959_production_baseline.sql:3549-3672` gives withdrawn roots a 90-day purge date.
+- The planning-trash functions in `supabase/migrations/20260827064853_current_schema_baseline.sql` give withdrawn roots a purge date, but no scheduled workflow executes the purge.
 - `src/app/api/maintenance/planning-trash/purge/route.ts` remains a manual operator endpoint. It requires the maintenance secret and calls `purge_expired_planning_trash_batch`; no scheduled workflow invokes it.
 - The baseline still contains service-role-only legacy `task_deletion_operations` and prepare/finalize/cancel functions. They are dormant schema primitives, not an available product contract, and must not be reconnected implicitly.
 
@@ -172,7 +172,7 @@ Direct delete may be released only after an explicit retention and irreversibili
 Comments are flat timeline entries.
 
 - `src/lib/types.ts:248-269` gives local and imported comments no parent, thread, or reply-target field.
-- `supabase/migrations/20260713120959_production_baseline.sql:5772-5778` stores only Task, author, body, and creation time for `task_comments`.
+- The `task_comments` table in `supabase/migrations/20260827064853_current_schema_baseline.sql` stores only Task, author, body, and creation time.
 - `src/features/tasks/organisms/task-comment-thread.tsx:27-67` merges activities, local comments, and imported GitHub comments into one chronological list.
 - `src/features/tasks/molecules/task-comment-timeline.tsx` renders comment bodies and provider links but exposes no reply callback.
 - `src/features/tasks/molecules/task-comment-composer.tsx` creates only a new top-level comment.
@@ -300,8 +300,8 @@ Relationships are Task-to-Task edges.
 - `src/features/tasks/model/task-detail-state.ts:134-137` builds targets from `Task[]`, excludes the current Task and every `sub_issue`, and therefore offers Deliverables only.
 - `src/features/tasks/molecules/task-relationship-form.tsx:8-69` stores `relatedTaskId` and presents `Aufgabe auswählen`.
 - `src/app/api/tasks/[id]/relationships/route.ts:81-129` validates both endpoints through the active Task read model before inserting an edge.
-- `supabase/migrations/20260713120959_production_baseline.sql:5976-5985` stores `task_id` and `related_task_id`.
-- The foreign keys at baseline lines `7183-7188` point both endpoints to `tasks`; an Initiative is stored as a `Package`, not a Task.
+- The `task_relationships` table in `supabase/migrations/20260827064853_current_schema_baseline.sql` stores `task_id` and `related_task_id`.
+- Its foreign keys point both endpoints to `tasks`; an Initiative is stored as a `Package`, not a Task.
 - `src/features/tasks/model/task-relationship-permissions.ts` evaluates rights from a current Task and its Initiative context, but it does not authorize an Initiative as an endpoint.
 
 ### Why excluded now
@@ -363,7 +363,7 @@ Initiative targets may be released only after the allowed endpoint/relation matr
 The product stores one Evidence URL string and no document metadata.
 
 - `src/lib/types.ts:84-110` defines `Task.evidenceLink: string`; there are no title, provider, metadata source, or fetch-state fields.
-- `supabase/migrations/20260713120959_production_baseline.sql:4793-4811` projects only `evidence_link` from Tasks.
+- The `active_tasks` view in `supabase/migrations/20260827064853_current_schema_baseline.sql` projects only `evidence_link` from Tasks.
 - `src/features/tasks/molecules/task-evidence-link-section.tsx:13-31` edits the URL and renders it through `CommentBody`.
 - `src/features/tasks/atoms/task-comment-body.tsx:8-35` validates safe link protocols and renders the supplied text; it does not resolve remote metadata.
 - `src/features/tasks/model/task-route-update-helpers.ts:191-202` stores a trimmed `evidence_link` through the existing Task PATCH.

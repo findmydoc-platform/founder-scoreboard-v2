@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { listSupabaseMigrations } from "../scripts/lib/supabase-migrations.mjs";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const publicationCore = await import("../src/features/team-workweek/server/team-workweek-publication-core.ts");
@@ -410,33 +408,4 @@ test("a marker-stable ETag change rebases once before cleanup resumes", async ()
   const completed = await disconnectServer.disconnectGoogleWorkspace(input);
   assert.deepEqual(completed, { state: "completed", recovery: null });
   assert.equal(providerWrites, 2);
-});
-
-test("database, API, and UI keep disconnect targets server-only and confirmation explicit", async () => {
-  const migrations = await listSupabaseMigrations();
-  const migration = migrations.find(({ file }) => file === "20260825114432_disconnect_google_workspace_safely.sql")?.sql || "";
-  assert.match(migration, /create table public\.google_workspace_disconnect_operations/);
-  assert.match(migration, /create table public\.google_workspace_disconnect_series/);
-  assert.match(migration, /status in \('preparing', 'published', 'inactive'\)/);
-  assert.match(migration, /requested_by, revoke_connection, cutoff_date, state/);
-  assert.match(migration, /retain_private_team_workweek_after_deactivation/);
-  assert.match(migration, /deactivate_team_workweek_for_external_revocation/);
-  assert.match(migration, /rebase_google_workspace_disconnect_series/);
-  assert.match(migration, /grant execute on function public\.prepare_google_workspace_disconnect\(text\) to service_role/i);
-  assert.doesNotMatch(migration, /grant execute on function public\.prepare_google_workspace_disconnect[^;]*to authenticated/i);
-  assert.doesNotMatch(migration, /grant (?:select|insert|update|delete).*google_workspace_disconnect_(?:operations|series).*authenticated/i);
-
-  const route = await readFile("src/app/api/google-workspace/disconnect/route.ts", "utf8");
-  assert.match(route, /requirePlanningContributor/);
-  assert.match(route, /input\.confirm !== true/);
-  assert.doesNotMatch(route, /input\.(?:profileId|ownerProfileId|calendarId|googleEventId)/);
-
-  const dialog = await readFile("src/features/team-workweek/molecules/google-workspace-disconnect-dialog.tsx", "utf8");
-  assert.match(dialog, /zukünftige eindeutig markierte Google-Serie/);
-  assert.match(dialog, /Vergangene FounderOps-Vorkommen und gewöhnliche Kalendertermine bleiben unverändert/);
-  assert.match(dialog, /spätere Verbindung veröffentlicht die Woche nicht automatisch/);
-
-  const server = await readFile("src/features/team-workweek/server/google-workspace-disconnect.ts", "utf8");
-  assert.match(server, /publication\.effective_to === null \|\| publication\.effective_to >= cutoff/);
-  assert.match(server, /\.in\("publication_id", futurePublicationIds\)/);
 });

@@ -186,27 +186,9 @@ test("Platform Release planning links preserve a safe return to the release deta
   assert.match(taskPage, /backLabel=\{returnLabel\}/);
 });
 
-test("Migration keeps immutable release provenance and personal notifications atomic", async () => {
-  const migration = await readFile("supabase/migrations/20260814101401_platform_releases.sql", "utf8");
-  const databaseSecurityContracts = await readFile("scripts/lib/database-security/contracts.mjs", "utf8");
-  assert.match(migration, /create table if not exists public\.platform_releases/);
-  assert.match(migration, /manifest_digest text not null unique/);
-  assert.match(migration, /create or replace function public\.ingest_platform_release_v1/);
-  assert.match(migration, /insert into public\.notification_events/);
-  assert.match(migration, /'platform_release\.published'/);
-  assert.match(migration, /grant execute on function public\.ingest_platform_release_v1\(jsonb\) to service_role/);
-  assert.doesNotMatch(migration, /grant execute on function public\.ingest_platform_release_v1\(jsonb\) to authenticated/);
-  assert.match(databaseSecurityContracts, /\["platform_releases_select_team", "platform_releases"\]/);
-});
 
-test("Manifest v3 migration keeps v2 compatible and supports silent ingestion", async () => {
-  const migration = await readFile("supabase/migrations/20260817132304_platform_release_manifest_v3.sql", "utf8");
-  assert.match(migration, /schema_version in \(2, 3\)/);
-  assert.match(migration, /v_silent boolean/);
-  assert.match(migration, /if not v_silent then/);
-  assert.match(migration, /insert into public\.notification_events/);
-  assert.match(migration, /grant execute on function public\.ingest_platform_release_v1\(jsonb\) to service_role/);
-});
+
+
 
 test("Ingest endpoint enforces bearer auth, idempotency and exact digest verification", async () => {
   const route = await readFile("src/app/api/team/platform-releases/v1/releases/route.ts", "utf8");

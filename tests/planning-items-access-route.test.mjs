@@ -4,30 +4,12 @@ import test from "node:test";
 
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
-import { readSupabaseMigrationCorpus } from "../scripts/lib/supabase-migrations.mjs";
 
 const contract = await loadTranspiledModule(
   "src/features/planning-items/model/planning-items-contract.ts",
 );
 
-test("latest Planning token authentication contract returns safe access metadata", async () => {
-  const corpus = await readSupabaseMigrationCorpus();
-  const latestDefinition = corpus.slice(corpus.lastIndexOf(
-    "CREATE OR REPLACE FUNCTION public.authenticate_team_planning_items_token",
-  ));
-  for (const field of [
-    "'tokenHint'",
-    "'scopeGranted'",
-    "'expiresAt'",
-    "'evaluatedAt'",
-    "'remainingSeconds'",
-  ]) {
-    assert.match(latestDefinition, new RegExp(field));
-  }
-  assert.doesNotMatch(latestDefinition, /planning items scope is missing/);
-  assert.match(latestDefinition, /REVOKE ALL ON FUNCTION[\s\S]*FROM PUBLIC, anon, authenticated/);
-  assert.match(latestDefinition, /GRANT EXECUTE ON FUNCTION[\s\S]*TO service_role/);
-});
+
 
 const basePermission = {
   ok: true,

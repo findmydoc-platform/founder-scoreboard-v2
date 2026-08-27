@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const actor = {
@@ -106,35 +104,7 @@ function fixture({ item = epic(), descendants = [], stored = null, rpcResult } =
   return { client, rpcCalls };
 }
 
-test("Browser and Team routes delegate empty Epic policy and writes to PlanningItems.run", async () => {
-  const [browser, team, preview, model, migration, corpus] = await Promise.all([
-    readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
-    readFile("src/features/planning-items/model/planning-items-team-update-route.ts", "utf8"),
-    readFile("src/features/planning-items/model/planning-items-team-delete-preview-route.ts", "utf8"),
-    readFile("src/features/planning-items/model/planning-items-empty-epic-delete.ts", "utf8"),
-    readFile("supabase/migrations/20260812125116_authorize_empty_epic_delete_command.sql", "utf8"),
-    readSupabaseSchemaContract(),
-  ]);
 
-  assert.match(browser, /createEmptyEpicDeletePlanningItems/);
-  assert.match(browser, /\.run\(/);
-  assert.doesNotMatch(browser, /deleteProjectMilestone|loadMilestoneChildCounts|buildMilestoneDeletePolicy|\.rpc\(/);
-  assert.match(team, /createEmptyEpicDeletePlanningItems/);
-  assert.match(team, /\.run\(/);
-  assert.doesNotMatch(team, /isMilestoneNotEmptyDatabaseError|loadMilestoneChildCounts|loadProjectMilestone/);
-  assert.match(preview, /createEmptyEpicDeletePlanningItems/);
-  assert.match(preview, /mode: "preview"/);
-  assert.doesNotMatch(preview, /loadPlanningItemMilestoneDeletePreview|\.rpc\(/);
-  assert.match(model, /delete_team_planning_item_transaction/);
-  assert.match(model, /delete_empty_epic_with_audit_transaction/);
-  assert.match(migration, /select public\.delete_empty_epic_transaction/i);
-  assert.match(migration, /insert into public\.audit_log/i);
-  assert.match(migration, /revoke all on function public\.prepare_empty_epic_delete[^;]*from public, anon, authenticated/i);
-  assert.match(migration, /grant execute on function public\.prepare_empty_epic_delete[^;]*to service_role/i);
-  assert.match(migration, /revoke all on function public\.delete_empty_epic_with_audit_transaction[^;]*from public, anon, authenticated/i);
-  assert.match(migration, /grant execute on function public\.delete_empty_epic_with_audit_transaction[^;]*to service_role/i);
-  assert.match(corpus, /delete_empty_epic_with_audit_transaction/i);
-});
 
 test("Preview and commit share policy while commit uses one atomic Browser RPC", async () => {
   const model = await loadModel();

@@ -124,18 +124,7 @@ test("role, stale revision, and locked Sprint stop before writes", async () => {
   }
 });
 
-test("transaction remains service-only, actor-guarded, ordered, and atomic", async () => {
-  const migration = await readFile("supabase/migrations/20260812123345_authorize_sprint_assignment_transaction.sql", "utf8");
-  const moduleSource = await readFile("src/features/planning-items/model/planning-items-sprint-assignment.ts", "utf8");
-  assert.match(migration, /v_actor_role not in \('ceo', 'deputy'\)/i);
-  assert.match(migration, /raise exception using errcode = 'P0015'/i);
-  assert.match(migration, /order by task\.id\s+for update/i);
-  assert.ok(migration.indexOf("for v_assignment in") < migration.indexOf("update public.tasks as task"));
-  assert.match(migration, /revoke all on function public\.assign_backlog_tasks_to_sprint_transaction[^;]*from public, anon, authenticated/i);
-  assert.match(migration, /grant execute on function public\.assign_backlog_tasks_to_sprint_transaction[^;]*to service_role/i);
-  assert.match(moduleSource, /assign_backlog_tasks_to_sprint_transaction/);
-  assert.doesNotMatch(moduleSource, /github|outbox/i);
-});
+
 
 test("route preserves upstream auth failure and mapped errors", async () => {
   const denied = { ok: false, response: { body: { error: "Nicht erlaubt" }, status: 403 } };

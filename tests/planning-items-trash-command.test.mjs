@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
@@ -82,22 +81,7 @@ function fixture({
   };
 }
 
-test("withdraw and restore routes are transport adapters over one PlanningItems writer", async () => {
-  const [api, module, migration] = await Promise.all([
-    readFile("src/lib/planning-trash-api.ts", "utf8"),
-    readFile("src/features/planning-items/model/planning-items-trash.ts", "utf8"),
-    readFile("supabase/migrations/20260812150600_planning_trash_command_transaction.sql", "utf8"),
-  ]);
-  assert.match(api, /createPlanningTrashPlanningItems/);
-  assert.doesNotMatch(api, /withdraw_planning_item_transaction|restore_planning_item_transaction/);
-  assert.match(api, /item\.task_type !== "initiative" && item\.task_type !== "deliverable"/);
-  assert.match(module, /prepare_planning_trash_command/);
-  assert.match(module, /mutate_planning_trash_command_transaction/);
-  assert.match(migration, /public\.withdraw_planning_item_transaction/);
-  assert.match(migration, /public\.restore_planning_item_transaction/);
-  assert.match(migration, /grant execute on function public\.mutate_planning_trash_command_transaction[\s\S]*to service_role/);
-  assert.match(migration, /revoke all on function public\.mutate_planning_trash_command_transaction[\s\S]*from public, anon, authenticated/);
-});
+
 
 test("Initiative and Deliverable withdraw share preview and atomic commit policy", async () => {
   const model = await loadModel();

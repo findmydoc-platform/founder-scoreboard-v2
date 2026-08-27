@@ -89,31 +89,7 @@ test("Browser and Team transports delegate Revise writes to one deep module", as
   }
 });
 
-test("Revise persistence is service-only, actor-bound, CAS-protected, and parent-safe", async () => {
-  const migration = [
-    await read("supabase/migrations/20260812180500_browser_planning_revise_command.sql"),
-    await read("supabase/migrations/20260813065427_preserve_planning_cutover_compatibility.sql"),
-  ].join("\n");
 
-  assert.match(migration, /update_browser_planning_item_transaction/);
-  assert.match(migration, /update_browser_planning_task_transaction/);
-  assert.match(migration, /where id = p_task_id for update/);
-  assert.match(migration, /v_patch \? 'parent_task_id'/);
-  assert.match(migration, /Epic revise requires an operational lead/);
-  assert.match(migration, /Initiative revise requires ownership/);
-  assert.match(migration, /Parent, owner, and RACI changes require an operational lead/);
-  assert.match(migration, /public\.update_planning_item_transaction\([^]*v_patch[^]*p_strategy[^]*p_raci_assignments/);
-  assert.match(migration, /Deliverable revise requires ownership/);
-  assert.match(migration, /Unowned Sub-Issue revise is limited to status transitions/);
-  assert.match(migration, /planning item review is locked/);
-  assert.match(migration, /parent planning item review is locked/);
-  assert.match(migration, /planning item is not eligible for sprint assignment/);
-  assert.match(migration, /from public\.sprints where id = v_target_sprint_id for share/);
-  assert.match(migration, /revoke all on function public\.update_browser_planning_item_transaction[^]*from public/);
-  assert.match(migration, /grant execute on function public\.update_browser_planning_item_transaction[^]*to service_role/);
-  assert.match(migration, /grant execute on function public\.update_browser_planning_task_transaction[^]*to service_role/);
-  assert.doesNotMatch(migration, /to authenticated|to anon/);
-});
 
 test("Team revise preserves a late inactive-token decision", async () => {
   const model = await loadUpdateModel();

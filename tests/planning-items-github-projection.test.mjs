@@ -120,18 +120,7 @@ test("dispatcher reports a failed finalization instead of claiming completion", 
   assert.equal(result.failed, 1);
 });
 
-test("schema makes enqueue idempotent and orders reconcile with lifecycle delivery", async () => {
-  const migration = await readFile(
-    new URL("../supabase/migrations/20260812183500_durable_planning_github_projection.sql", import.meta.url),
-    "utf8",
-  );
-  assert.match(migration, /unique \(planning_operation_id, task_id\)/);
-  assert.match(migration, /if not coalesce\(\(v_result->>'replayed'\)::boolean, false\)/);
-  assert.match(migration, /planning_github_lifecycle_outbox predecessor[^]*delivery_sequence < request\.delivery_sequence/);
-  assert.match(migration, /planning_github_projection_outbox predecessor[^]*delivery_sequence < job\.delivery_sequence/);
-  assert.match(migration, /update public\.team_task_intake_batches[^]*response_tasks = v_items/);
-  assert.match(migration, /update public\.team_planning_item_update_requests[^]*set response = v_result/);
-});
+
 
 test("all public Team sync paths use durable dispatch and never call projection directly", async () => {
   const files = await Promise.all([

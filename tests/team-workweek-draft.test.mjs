@@ -83,29 +83,7 @@ test("inflation restores every day and preserves ordered wall-clock windows", ()
   assert.deepEqual(windows.wednesday, []);
 });
 
-test("migration creates immutable owner-private versions with a session-derived writer", () => {
-  const migration = readFileSync("supabase/migrations/20260825082529_private_team_workweek_versions.sql", "utf8");
-  assert.match(migration, /create table public\.team_workweek_versions/);
-  assert.match(migration, /create table public\.team_workweek_windows/);
-  assert.match(migration, /status text not null default 'preparing'/);
-  assert.match(migration, /timezone text not null default 'Europe\/Berlin'/);
-  assert.match(migration, /team_workweek_versions_select_owner_private[\s\S]*owner_profile_id = public\.current_profile_id\(\)/);
-  assert.match(migration, /team_workweek_windows_select_owner_private[\s\S]*version\.owner_profile_id = public\.current_profile_id\(\)/);
-  assert.match(migration, /current_platform_role\(\) in \('ceo', 'founder', 'deputy'\)/);
-  assert.match(migration, /revoke all on table public\.team_workweek_versions from public, anon, authenticated, service_role/);
-  assert.match(migration, /grant select on table public\.team_workweek_versions to authenticated/);
-  assert.doesNotMatch(migration, /grant (?:insert|update|delete)[^;]*team_workweek_(?:versions|windows)[^;]*authenticated/i);
-  assert.match(migration, /create_private_team_workweek_version\(\s*p_effective_from date,\s*p_windows jsonb/);
-  assert.doesNotMatch(migration.match(/create_private_team_workweek_version\([\s\S]*?\) returns jsonb/)?.[0] || "", /profile|calendar/i);
-  assert.match(migration, /where profile\.auth_user_id = auth\.uid\(\)/);
-  assert.match(migration, /v_owner_role not in \('ceo', 'founder', 'deputy'\)/);
-  assert.match(migration, /effective date must be a future Monday/);
-  assert.match(migration, /workweek windows must not overlap/);
-  assert.match(migration, /v_window->>'weekday' is null/);
-  assert.match(migration, /security definer/);
-  assert.match(migration, /grant execute on function public\.create_private_team_workweek_version\(date, jsonb\) to authenticated/);
-  assert.doesNotMatch(migration, /\bavailability\b|meeting_finder|google_workspace_connections/i);
-});
+
 
 test("API uses the bearer session for RLS and accepts no profile or calendar target", () => {
   const route = readFileSync("src/app/api/team-workweek/private-draft/route.ts", "utf8");

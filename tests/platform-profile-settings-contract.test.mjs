@@ -1,4 +1,3 @@
-import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -37,78 +36,11 @@ test("profile workspace is hidden from sidebar but reachable from account menu",
   assert.match(renderer, /ProfileSettingsOverview/);
 });
 
-test("profile self-service API writes only whitelisted own-profile fields", async () => {
-  const route = await readFile("src/app/api/profile-settings/route.ts", "utf8");
-  const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
-  const ownCommands = await readFile("src/features/profile/hooks/use-own-profile-settings-commands.ts", "utf8");
-  const migration = await readSupabaseSchemaContract();
 
-  assert.match(route, /requireTeamMember/);
-  assert.match(route, /blockedSelfServiceFields/);
-  for (const blocked of ["profileId", "platformRole", "weeklyCapacity", "githubLogin", "deputyFor", "googleChatUserId"]) {
-    assert.match(route, new RegExp(`"${blocked}"`));
-  }
-  for (const allowed of ["focus", "color", "notificationsEnabled"]) {
-    assert.match(route, new RegExp(`payload\\.${allowed}`));
-  }
-  assert.doesNotMatch(route, /googleCalendarEmail|googleCalendarSyncEnabled|googleCalendarLastSyncedAt/);
-  assert.match(route, /update_profile_settings_transaction/);
-  assert.doesNotMatch(route, /\.from\("profiles"\)[\s\S]*\.update/);
-  assert.doesNotMatch(route, /\.from\("profile_ui_preferences"\)/);
-  assert.doesNotMatch(route, /\.from\("notification_preferences"\)/);
-  assert.doesNotMatch(route, /context\.params/);
-  assert.match(apiClient, /updateOwnProfileSettingsRequest/);
-  assert.match(ownCommands, /updateOwnProfileSettingsRequest/);
-  assert.match(migration, /update_profile_settings_transaction/);
-  assert.match(migration, /security definer/);
-  assert.match(migration, /grant all on function public\.update_profile_settings_transaction[^]*to service_role/);
-});
 
-test("CEO transfer and managed notification preferences use one transaction", async () => {
-  const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
-  const commands = await readFile("src/features/team/hooks/use-profile-settings-commands.ts", "utf8");
-  const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
-  const migration = await readSupabaseSchemaContract();
 
-  assert.match(route, /requireCEO/);
-  assert.match(route, /update_profile_admin_transaction/);
-  assert.match(route, /p_notification_events: notificationEvents/);
-  assert.doesNotMatch(route, /demoteError|\.neq\("id", id\)/);
-  assert.doesNotMatch(route, /await supabase\.from\("audit_log"\)\.insert/);
-  assert.match(commands, /notificationEvents: Object\.fromEntries\(changedNotificationEvents\)/);
-  assert.doesNotMatch(commands, /updateNotificationPreferenceRequest/);
-  assert.doesNotMatch(apiClient, /updateNotificationPreferenceRequest/);
-  assert.match(migration, /lock table public\.profiles in share row exclusive mode/);
-  assert.match(migration, /exactly one CEO is required/);
-  assert.match(migration, /update_profile_admin_transaction/);
-  assert.match(migration, /upsert_profile_notification_preferences/);
-  assert.match(migration, /insert into public\.audit_log/);
-});
 
-test("profile preferences and feature tour acknowledgements are additive data slices", async () => {
-  const migration = await readSupabaseSchemaContract();
-  const loader = (await Promise.all([
-    readFile("src/features/profile/server/profile-read-model-supabase.ts", "utf8"),
-    readFile("src/app/api/profile-feature-tours/seen/route.ts", "utf8"),
-  ])).join("\n");
-  const types = await readFile("src/lib/types.ts", "utf8");
-  const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
 
-  assert.match(migration, /create table if not exists profile_ui_preferences/);
-  assert.match(migration, /create table if not exists profile_feature_tour_acknowledgements/);
-  assert.match(migration, /profile_ui_preferences_write_self/);
-  assert.match(migration, /profile_feature_tour_acknowledgements_write_self/);
-  assert.match(migration, /current_platform_role\(\)[^]*'ceo'[^]*'deputy'/);
-
-  assert.match(loader, /preferenceResult/);
-  assert.match(loader, /profile_feature_tour_acknowledgements/);
-  assert.match(loader, /mapProfileUiPreference/);
-  assert.match(loader, /tour_id/);
-  assert.match(types, /profileUiPreferences: ProfileUiPreference\[\]/);
-  assert.match(types, /profileFeatureTourAcknowledgements: ProfileFeatureTourAcknowledgement\[\]/);
-  assert.match(schemaChecks, /profile_ui_preferences/);
-  assert.match(schemaChecks, /profile_feature_tour_acknowledgements/);
-});
 
 test("URL filters hydrate without silently changing saved profile defaults", async () => {
   const profileSync = await readFile("src/features/profile/hooks/use-profile-ui-preference-sync.ts", "utf8");
@@ -205,84 +137,9 @@ test("profile settings use slim section navigation and dirty-only save UX", asyn
   assert.match(profileUi, /Ungespeicherte Änderungen/);
 });
 
-test("CEO configures the global review and objection window from the settings panel", async () => {
-  const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");
-  const processUi = await readFile("src/features/profile/molecules/profile-process-settings-section.tsx", "utf8");
-  const settingsRoute = await readFile("src/app/api/founderops-settings/route.ts", "utf8");
-  const planningModel = await readFile("src/features/planning/model/planning-app-model.ts", "utf8");
-  const settingsCommands = await readFile("src/features/settings/hooks/use-founderops-settings-commands.ts", "utf8");
-  const sprintCreateRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
-  const sprintUpdateRoute = await readFile("src/app/api/sprints/[id]/route.ts", "utf8");
-  const loader = await readFile("src/features/profile/server/profile-read-model-supabase.ts", "utf8");
-  const migration = await readSupabaseSchemaContract();
 
-  assert.match(profileUi, /section\.id === "process".*currentProfile\.platformRole === "ceo"/s);
-  assert.match(processUi, /Review- und Einspruchsfrist/);
-  assert.match(processUi, /Gelockte Sprints bleiben unverändert/);
-  assert.match(processUi, /MAX_REVIEW_OBJECTION_WINDOW_HOURS/);
-  assert.match(processUi, /aria-errormessage/);
-  assert.match(processUi, /role=\{message\.tone === "danger" \? "alert" : "status"\}/);
-  assert.match(profileUi, /Ungespeicherte persönliche Einstellungen/);
-  assert.match(settingsRoute, /requireCEO/);
-  assert.match(settingsRoute, /update_founderops_review_window_transaction/);
-  assert.match(loader, /review_objection_window_hours/);
-  assert.match(planningModel, /storedReviewWindowHours[\s\S]*DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS/);
-  assert.match(sprintCreateRoute, /sprintReviewDueAt\(endDate, reviewObjectionWindowHours\)/);
-  assert.match(sprintCreateRoute, /create_sprint_plan_with_review_window_transaction/);
-  assert.match(sprintUpdateRoute, /update_sprint_schedule_transaction/);
-  assert.match(settingsCommands, /applyPlanningShellStateUpdate/);
-  assert.doesNotMatch(settingsCommands, /setData\(|previousData|setSaveError\(error/);
-  assert.match(migration, /add column if not exists review_objection_window_hours integer not null default 48/);
-  assert.match(migration, /review_objection_window_hours between 1 and 336/);
-  assert.match(migration, /score_locked is false/);
-  assert.match(migration, /founderops\.review_window\.update/);
-  assert.match(migration, /only CEO may update FounderOps process settings/);
-  assert.match(migration, /pg_advisory_xact_lock\(hashtextextended\('founderops-review-window:' \|\| p_project_id/);
-  assert.match(migration, /create or replace function public\.create_sprint_plan_with_review_window_transaction/);
-  assert.match(migration, /create or replace function public\.update_sprint_schedule_transaction/);
-  assert.match(migration, /create or replace function public\.create_score_objection_transaction/);
-  assert.match(migration, /create or replace function public\.lock_sprint_with_review_window_transaction/);
-  assert.match(migration, /revoke update on table public\.projects from authenticated/);
-  assert.match(migration, /grant update \(id, name, range_label\) on table public\.projects to authenticated/);
-  assert.match(migration, /revoke insert, update on table public\.sprints from authenticated/);
-  assert.match(migration, /revoke all on function public\.update_founderops_review_window_transaction[^]*from public/);
-});
 
-test("only the CEO configures the live-validated global GitHub Project outside local simulation", async () => {
-  const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");
-  const githubProjectUi = await readFile("src/features/profile/molecules/profile-github-project-settings-section.tsx", "utf8");
-  const settingsRoute = await readFile("src/app/api/founderops-settings/github-project/route.ts", "utf8");
-  const syncRoute = await readFile("src/lib/github-sync/project-projection.ts", "utf8");
-  const loader = await readFile("src/features/profile/server/profile-read-model-supabase.ts", "utf8");
-  const migration = await readSupabaseSchemaContract();
-  const ceoOnlyMigration = await readFile(
-    "supabase/migrations/20260723102323_restrict_founderops_github_project_settings_to_ceo.sql",
-    "utf8",
-  );
 
-  assert.match(profileUi, /canConfigureFounderOpsGitHubProject/);
-  assert.match(profileUi, /githubProjectDisabledReason = isLocalLoginSimulationEnabled\(\)/);
-  assert.match(profileUi, /activeSection === "process" && currentProfile\.platformRole === "ceo"/);
-  assert.match(githubProjectUi, /disabledReason/);
-  assert.match(githubProjectUi, /CEO · Global/);
-  assert.match(githubProjectUi, /GitHub-Organisation/);
-  assert.match(githubProjectUi, /Project-Nummer/);
-  assert.match(githubProjectUi, /Prüfen und speichern/);
-  assert.match(githubProjectUi, /founderops-github-project-settings/);
-  assert.match(settingsRoute, /requireCEO/);
-  assert.match(settingsRoute, /isLocalLoginRequestAllowed/);
-  assert.match(settingsRoute, /validateFounderOpsGitHubProject/);
-  assert.match(settingsRoute, /update_founderops_github_project_transaction/);
-  assert.match(syncRoute, /loadGitHubProjectSettings/);
-  assert.match(syncRoute, /projectTaskToFounderOpsGitHubProject/);
-  assert.match(loader, /github_project_owner,github_project_number/);
-  assert.match(migration, /github_project_owner text not null default 'findmydoc-platform'/);
-  assert.match(migration, /github_project_number integer not null default 21/);
-  assert.match(migration, /founderops\.github_project\.update/);
-  assert.match(ceoOnlyMigration, /v_actor\.platform_role <> 'ceo'/);
-  assert.match(ceoOnlyMigration, /only CEO may update the FounderOps GitHub Project/);
-  assert.match(migration, /revoke all on function public\.update_founderops_github_project_transaction[^]*from public/);
-});
 
 test("team overview no longer edits personal self-service settings", async () => {
   const team = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");

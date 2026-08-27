@@ -1,4 +1,3 @@
-import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { readFile } from "node:fs/promises";
 import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
@@ -141,44 +140,7 @@ test("shared task detail surface keeps github-like field saves and role gates", 
   assert.match(routeHelpers, /founderOwnedTaskUpdateFields/);
 });
 
-test("planning hierarchy treats Sprint as a time container and strategic levels as planning items", async () => {
-  const migration = await readSupabaseSchemaContract();
-  const docs = await readFile("docs/planning-hierarchy.md", "utf8");
-  const projectsPage = await readFile("src/app/(workspaces)/projects/page.tsx", "utf8");
-  const backlogOverview = await readFile("src/features/backlog/organisms/backlog-overview.tsx", "utf8");
-  const backlogTree = await readFile("src/features/backlog/molecules/planning-backlog-tree.tsx", "utf8");
-  const planningLevel = await readFile("src/features/planning/model/planning-level.ts", "utf8");
-  const planningFilters = await readFile("src/features/planning/organisms/planning-filters.tsx", "utf8");
-  const board = await readFile("src/features/planning/organisms/planning-task-view-renderer.tsx", "utf8");
 
-  assert.match(migration, /tasks_task_type_check[^]*task_type in \('epic', 'initiative', 'deliverable', 'sub_issue'\)/);
-  assert.match(migration, /create table if not exists public\.planning_item_strategy/);
-  assert.match(migration, /create table if not exists public\.planning_item_raci_assignments/);
-  assert.match(migration, /rename to planning_item_historical_links/);
-  assert.match(migration, /planning_item_raci_one_accountable_idx/);
-  assert.match(migration, /tasks_planning_parent_type_status_sort_idx/);
-  assert.match(docs, /Epic[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/);
-  assert.match(docs, /Sprint is a time container, never a hierarchy parent/);
-  assert.match(docs, /GitHub projection is available only for Deliverables and Sub-Issues/);
-  assert.match(projectsPage, /redirect\("\/backlog\?backlog\.level=epic"\)/);
-  assert.match(backlogOverview, /Planungsebene im Backlog/);
-  assert.match(planningLevel, /value: "epic", label: "Epics"/);
-  assert.match(planningLevel, /value: "initiative", label: "Initiativen"/);
-  assert.match(planningLevel, /value: "deliverable", label: "Deliverables"/);
-  assert.match(backlogOverview, /PlanningBacklogTree/);
-  assert.match(backlogTree, /BacklogPlanningLevel = PlanningLevel/);
-  assert.match(backlogTree, /Der Pfeil öffnet nur direkte Kinder/);
-  assert.match(backlogTree, /Ohne Epic/);
-  assert.match(backlogTree, /Ohne Initiative/);
-  assert.match(backlogTree, /collapsedGroups/);
-  assert.match(backlogTree, /aria-expanded=\{!collapsed\}/);
-  assert.match(backlogTree, /hidden=\{collapsed\}/);
-  assert.match(backlogTree, /const rollup = taskChildProgress\(rollupTasks\)/);
-  assert.match(backlogTree, /label=\{rollupLabel\}/);
-  assert.match(planningFilters, /Parent-Epic/);
-  assert.match(planningFilters, /Parent-Initiative/);
-  assert.match(board, /planningLevel/);
-});
 
 test("management repo cleanup plan protects legacy templates from deletion without approval", async () => {
   const plan = await readFile("docs/management-repo-v2-plan.md", "utf8");

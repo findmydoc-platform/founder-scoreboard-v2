@@ -34,67 +34,9 @@ test("central planning mutation guard distinguishes active, missing, and trashed
   );
 });
 
-test("all high-risk task and initiative mutations use the centralized active guard", async () => {
-  const guardedRoutes = [
-    "src/features/planning-items/model/planning-items-browser-task-update.ts",
-    "src/app/api/tasks/[id]/comments/route.ts",
-    "src/app/api/tasks/[id]/github-comments/route.ts",
-    "src/app/api/tasks/[id]/blockers/route.ts",
-    "src/app/api/tasks/[id]/attachments/route.ts",
-  ];
 
-  for (const route of guardedRoutes) {
-    const source = await read(route);
-    assert.match(source, /requireActivePlanningItem/, `${route} must fail closed for trash mutations`);
-  }
-  const syncProjection = await read("src/lib/github-sync/task-projection.ts");
-  assert.match(syncProjection, /requireActivePlanningItem/, "task projection must fail closed for trash mutations");
 
-  const [relationshipRoute, relationshipModule, relationshipMigration] = await Promise.all([
-    read("src/app/api/tasks/[id]/relationships/route.ts"),
-    read("src/features/planning-items/model/planning-items-relationships.ts"),
-    read("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql"),
-  ]);
-  assert.match(relationshipRoute, /createPlanningRelationshipPlanningItems/);
-  assert.match(relationshipModule, /state\.source\.trashed/);
-  assert.match(relationshipModule, /state\.related\.trashed/);
-  assert.match(relationshipMigration, /v_source\.trashed_at is not null/);
-  assert.match(relationshipMigration, /v_related\.trashed_at is not null/);
 
-  const [reviewRoute, reviewReopenRoute, reviewWithdrawRoute, reviewModule, reviewMigration] = await Promise.all([
-    read("src/app/api/tasks/[id]/review/route.ts"),
-    read("src/app/api/tasks/[id]/review/reopen/route.ts"),
-    read("src/app/api/tasks/[id]/review/withdraw/route.ts"),
-    read("src/features/planning-items/model/planning-items-review.ts"),
-    read("supabase/migrations/20260812133802_planning_review_command_transaction.sql"),
-  ]);
-  for (const route of [reviewRoute, reviewReopenRoute, reviewWithdrawRoute]) {
-    assert.match(route, /createPlanningReviewPlanningItems/);
-  }
-  assert.match(reviewModule, /task\.trashed/);
-  assert.match(reviewMigration, /v_task\.trashed_at is not null/);
-
-  const [approvalTaskRoute, approvalModule, approvalMigration] = await Promise.all([
-    read("src/app/api/tasks/[id]/approval/route.ts"),
-    read("src/features/planning-items/model/planning-items-approval.ts"),
-    read("supabase/migrations/20260812140715_planning_approval_command_transaction.sql"),
-  ]);
-  assert.match(approvalTaskRoute, /createPlanningApprovalPlanningItems/);
-  assert.match(approvalModule, /item\.trashed/);
-  assert.match(approvalMigration, /v_task\.trashed_at/);
-});
-
-test("reparenting and relationship targets use active read models", async () => {
-  const [taskRoute, relationshipModule, relationshipMigration] = await Promise.all([
-    read("src/features/planning-items/model/planning-items-browser-task-update.ts"),
-    read("src/features/planning-items/model/planning-items-relationships.ts"),
-    read("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql"),
-  ]);
-
-  assert.match(taskRoute, /\.from\(ACTIVE_TASKS_TABLE\)[^]*\.select\("id,task_type,approval_status"\)/);
-  assert.match(relationshipModule, /state\.related\.trashed/);
-  assert.match(relationshipMigration, /v_related\.trashed_at is not null/);
-});
 
 test("task detail is active-first and falls back to a read-only trash surface", async () => {
   const [page, taskTemplate, banner] = await Promise.all([

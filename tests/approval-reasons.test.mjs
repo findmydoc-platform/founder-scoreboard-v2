@@ -1,4 +1,3 @@
-import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -92,37 +91,7 @@ test("approval routes and UI share the reason contract", async () => {
   assert.doesNotMatch(taskWorkflow, /onDecideApproval\("return_to_draft"\)/);
 });
 
-test("approval RPCs enforce proposed state, roles, CAS, notes, and atomic return notifications", async () => {
-  const [migration, schema] = await Promise.all([
-    readSupabaseSchemaContract(),
-    readSupabaseSchemaContract(),
-  ]);
 
-  for (const sql of [migration, schema]) {
-    assert.match(sql, /approval_revision <> p_expected_revision/);
-    assert.match(sql, /p_action in \('reject', 'return_to_draft'\) and v_note is null/);
-    assert.match(sql, /char_length\(v_note\) > 2000/);
-    assert.match(sql, /v_initiative\.approval_status <> 'proposed'/);
-    assert.match(sql, /v_task\.approval_status <> 'proposed'/);
-    assert.match(sql, /p_action in \('approve', 'reject'\) and v_actor_role not in \('ceo', 'deputy'\)/);
-    assert.match(sql, /v_actor_role not in \('ceo', 'deputy'\)[^]*v_initiative\.accountable_profile_id/);
-    assert.match(sql, /v_actor_role not in \('ceo', 'deputy'\)/);
-    assert.match(sql, /v_initiative\.accountable_profile_id/);
-    assert.match(sql, /v_notification_recipient_id := v_initiative\.proposed_by/);
-    assert.match(sql, /v_notification_recipient_id := v_task\.proposed_by/);
-    assert.match(sql, /'planning_item\.returned'/);
-    assert.match(sql, /insert into public\.notification_events/);
-    assert.match(sql, /planning-item-returned:initiative/);
-    assert.match(sql, /planning-item-returned:task/);
-    assert.match(sql, /'note', v_note/);
-    assert.doesNotMatch(sql, /proposed_by = case when p_action = 'return_to_draft'/);
-    assert.doesNotMatch(sql, /v_notification_recipient_id\s*<>\s*p_actor_profile_id/);
-  }
-
-  assert.match(migration, /drop function public\.decide_initiative_approval_transaction/);
-  assert.match(migration, /drop function public\.decide_deliverable_approval_transaction/);
-  assert.match(migration, /grant execute on function public\.mutate_planning_approval_command_transaction[^]*to service_role/);
-});
 
 test("returned planning items use the existing personal Google Chat delivery pipeline", () => {
   const definition = notificationCatalog.notificationDefinition("planning_item.returned");

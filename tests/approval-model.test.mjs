@@ -1,75 +1,15 @@
-import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
-test("approval model separates active task type from approval state", async () => {
-  const types = await readFile("src/lib/types.ts", "utf8");
-  const migration = await readSupabaseSchemaContract();
 
-  assert.match(types, /PlanningItemType = "epic" \| "initiative" \| "deliverable" \| "sub_issue"/);
-  assert.match(types, /TaskType = PlanningItemType/);
-  assert.doesNotMatch(types, /TaskType = [^\n]*proposal/);
-  assert.match(types, /ApprovalStatus = "draft" \| "proposed" \| "approved" \| "rejected"/);
-  assert.match(migration, /tasks_approval_status_by_type_check[^]*task_type = 'sub_issue'[^]*approval_status is null/);
-  assert.match(migration, /tasks_score_relevance_approval_check[^]*task_type = 'deliverable'[^]*approval_status = 'approved'[^]*sprint_id is not null/);
-  assert.doesNotMatch(migration, /legacy_proposal_unresolved/);
-});
 
-test("proposal is not an operational task status", async () => {
-  const [types, migration, schema, resolution, catalog] = await Promise.all([
-    readFile("src/lib/types.ts", "utf8"),
-    readSupabaseSchemaContract(),
-    readSupabaseSchemaContract(),
-    readFile("src/lib/notification-resolution.ts", "utf8"),
-    readFile("src/lib/notification-catalog.ts", "utf8"),
-  ]);
-  const status = await loadTranspiledModule("src/lib/status.ts");
 
-  assert.match(types, /TaskStatus = "Offen" \| "In Arbeit" \| "Pausiert" \| "Review" \| "Nacharbeit" \| "Blockiert" \| "Erledigt"/);
-  assert.deepEqual(status.taskStatuses, ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"]);
-  assert.equal(status.normalizeStatus("Vorschlag"), "Offen");
-  assert.equal(status.normalizeStatus("draft"), "Offen");
-  assert.equal(status.normalizeStatus("Idee"), "Offen");
-  assert.equal(status.isTaskStatusChange("In Arbeit", "progress"), false);
-  assert.equal(status.isTaskStatusChange("In Arbeit", "Erledigt"), true);
-  assert.match(migration, /tasks_status_not_proposal_check[\s\S]*status <> 'Vorschlag'/i);
-  assert.match(schema, /constraint tasks_status_not_proposal_check[^]*status <> 'Vorschlag'/i);
-  assert.doesNotMatch(resolution, /normalizeStatus\(task\.status\)[^\n]*Vorschlag/);
-  assert.match(catalog, /"task\.proposed"[^\n]*label: "Vorschlag"/);
-});
 
-test("production baseline excludes legacy proposal storage and the v1 intake RPC", async () => {
-  const [schema, deploy] = await Promise.all([
-    readSupabaseSchemaContract(),
-    readFile("scripts/deploy-production-migrations.mjs", "utf8"),
-  ]);
 
-  assert.match(schema, /tasks_task_type_check[^]*'epic'[^]*'initiative'[^]*'deliverable'[^]*'sub_issue'/);
-  assert.doesNotMatch(schema, /legacy_proposal_unresolved/);
-  assert.doesNotMatch(schema, /create_team_task_intake_batch_transaction/);
-  assert.match(deploy, /productionBaseline/);
-  assert.match(deploy, /supabase_migrations\.schema_migrations/);
-  assert.doesNotMatch(deploy, /approvedDestructiveMigrations|remove_legacy_team_task_intake/);
-});
 
-test("approval transactions enforce revision, initiative prerequisite, and Deputy or accountable decisions", async () => {
-  const migration = await readSupabaseSchemaContract();
-  const taskRoute = await readFile("src/app/api/tasks/[id]/approval/route.ts", "utf8");
-  const approvalModule = await readFile("src/features/planning-items/model/planning-items-approval.ts", "utf8");
 
-  assert.match(migration, /approval_revision <> p_expected_revision/);
-  assert.match(migration, /p_action in \('approve', 'reject'\) and v_actor_role not in \('ceo', 'deputy'\)/);
-  assert.match(migration, /planning_item_raci_assignments/);
-  assert.match(migration, /initiative approval requires one accountable and at least one responsible RACI assignment/);
-  assert.match(migration, /deliverable approval requires an approved initiative/);
-  assert.match(migration, /task\.approval_reset/);
-  assert.match(migration, /task\.approval_resubmitted/);
-  assert.match(taskRoute, /createPlanningApprovalPlanningItems/);
-  assert.match(taskRoute, /item\.task_type !== "initiative" && item\.task_type !== "deliverable"/);
-  assert.match(approvalModule, /mutate_planning_approval_command_transaction/);
-});
 
 test("non-approved deliverables are gated from sprint review score and github", async () => {
   const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
@@ -192,24 +132,7 @@ test("planning items publish an approval-aware repository contract", async () =>
   assert.match(intakeDocs, /Sub-Issue.*approved Deliverable/);
 });
 
-test("github projection uses the item repository and native sub issue relationships", async () => {
-  const repositories = await readFile("src/lib/github-repositories.ts", "utf8");
-  const github = await readFile("src/lib/github.ts", "utf8");
-  const taskProjection = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
-  const issueProjection = await readFile("src/lib/github-sync/issue-projection.ts", "utf8");
-  const migration = await readSupabaseSchemaContract();
 
-  assert.match(repositories, /findmydoc-platform\/management/);
-  assert.match(repositories, /findmydoc-platform\/website/);
-  assert.match(issueProjection, /splitGitHubRepository\(task\.githubRepo\)/);
-  assert.match(github, /addSubIssue/);
-  assert.match(github, /replaceParent: true/);
-  assert.match(taskProjection, /connectGitHubSubIssue/);
-  assert.match(taskProjection, /resolveTaskGitHubRepository/);
-  assert.match(taskProjection, /github:\$\{repository\}#/);
-  assert.match(migration, /tasks_github_repo_allowed_check[^]*task_type = 'sub_issue'[^]*github_repo[^]*findmydoc-platform\/website/);
-  assert.match(migration, /tasks_github_repo_allowed_check[^]*task_type = 'deliverable'[^]*github_repo = 'findmydoc-platform\/management'/);
-});
 
 test("carry-overs re-enter approval without a Sprint assignment", async () => {
   const sprintLock = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");

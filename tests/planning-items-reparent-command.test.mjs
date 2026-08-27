@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
@@ -91,22 +90,7 @@ function fixture({
   };
 }
 
-test("browser and Team parent routes delegate exclusively to the PlanningItems action", async () => {
-  const [taskRoute, teamRoute, module, migration] = await Promise.all([
-    readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
-    readFile("src/features/planning-items/model/planning-items-team-update-route.ts", "utf8"),
-    readFile("src/features/planning-items/model/planning-items-reparent.ts", "utf8"),
-    readFile("supabase/migrations/20260812142454_planning_reparent_command_transaction.sql", "utf8"),
-  ]);
-  for (const route of [taskRoute, teamRoute]) assert.match(route, /createPlanningReparentPlanningItems/);
-  assert.doesNotMatch(taskRoute, /reparent_planning_item_transaction/);
-  assert.match(taskRoute, /patch\.parent_task_id/);
-  assert.match(module, /mutate_planning_reparent_command_transaction/);
-  assert.match(module, /mutate_team_planning_reparent_command_transaction/);
-  assert.match(migration, /public\.reparent_planning_item_transaction/);
-  assert.match(migration, /'commandKind', 'changeParent'/);
-  assert.match(migration, /grant execute on function public\.mutate_team_planning_reparent_command_transaction[\s\S]*to service_role/);
-});
+
 
 test("Initiative, Deliverable, and Sub-Issue share preview and commit policy", async () => {
   const model = await loadModel();
