@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Adds the fail-closed server-side rollout gate in an intermediate stacked pull request; the complete five-person starter and its product update ship together in #396 before production deployment."
+  "reason": "Adds restrained item-type icons and colors to existing planning surfaces without introducing new functionality or changing a workflow."
 }

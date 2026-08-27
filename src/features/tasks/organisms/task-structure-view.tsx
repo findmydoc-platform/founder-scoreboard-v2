@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
 import { TaskCard } from "@/features/tasks/molecules/task-card";
 import { groupSubIssuesByParent } from "@/features/tasks/model/task-card-presentation";
 import { initiativeMetaLabel } from "@/lib/display";
@@ -54,7 +55,10 @@ export function TaskStructureView({
                   <ChevronRight size={16} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-xs font-semibold text-blue-700">{initiativeMetaLabel(initiative)}</span>
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
+                    <TaskTypeIcon taskType={initiative.taskType} size={14} />
+                    <span>{initiativeMetaLabel(initiative)}</span>
+                  </span>
                   <span className="mt-0.5 block text-base font-semibold text-slate-950">{initiative.title}</span>
                   <span className="mt-1 block text-sm text-slate-500">{initiative.strategy?.goal || initiative.description}</span>
                 </span>

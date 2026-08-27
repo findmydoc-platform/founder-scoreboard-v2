@@ -7,6 +7,7 @@ import type { BacklogSprintBucket } from "@/features/backlog/model/backlog-view-
 import { TaskChildProgress } from "@/features/tasks/atoms/task-child-progress";
 import { TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
+import { TaskTypeIndicator } from "@/features/tasks/atoms/task-type-indicator";
 import { directChildPluralLabel, taskChildProgress } from "@/features/tasks/model/task-card-presentation";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import { normalizeStatus } from "@/lib/status";
@@ -37,13 +38,6 @@ type SprintAssignment = {
   onAssignTaskToSprint: (task: Task, sprint: Sprint | null) => void;
   sprintById: ReadonlyMap<string, Sprint>;
 };
-
-function taskTypeLabel(taskType: Task["taskType"]) {
-  if (taskType === "epic") return "Epic";
-  if (taskType === "initiative") return "Initiative";
-  if (taskType === "sub_issue") return "Sub-Issue";
-  return "Deliverable";
-}
 
 function approvalBadge(task: Task) {
   if (task.taskType === "epic") return null;
@@ -136,7 +130,7 @@ function TreeRow({
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-blue-700">{taskTypeLabel(task.taskType)}</span>
+            <TaskTypeIndicator taskType={task.taskType} size={14} className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600" />
             {approvalBadge(task)}
             <TaskStatusBadge status={normalizeStatus(task.status)} size="sm" />
           </div>

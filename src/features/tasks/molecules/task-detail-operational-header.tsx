@@ -4,6 +4,7 @@ import { CalendarDays, Flag, Hourglass, ListChecks, UserRound } from "lucide-rea
 import { useId, type ReactNode } from "react";
 import { TaskStatusControl, TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
+import { TaskTypeIndicator } from "@/features/tasks/atoms/task-type-indicator";
 import { assigneeOptions, priorityOptions } from "@/features/tasks/model/task-form-options";
 import { formatDate, profileNameById, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
@@ -297,7 +298,6 @@ export function TaskDetailOperationalHeader({
 }: TaskDetailOperationalHeaderProps) {
   const generatedTitleId = useId();
   const resolvedTitleId = titleId || generatedTitleId;
-  const itemTypeLabel = task.taskType === "epic" ? "Epic" : task.taskType === "initiative" ? "Initiative" : task.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable";
   const hierarchyLabel = task.taskType === "initiative"
     ? parentTask?.title || "Ohne Epic"
     : task.taskType === "deliverable"
@@ -323,7 +323,7 @@ export function TaskDetailOperationalHeader({
       <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <span>{itemTypeLabel}</span>
+            <TaskTypeIndicator taskType={task.taskType} />
             {task.taskType !== "epic" && hierarchyLabel && (
               <>
                 <span aria-hidden="true">·</span>

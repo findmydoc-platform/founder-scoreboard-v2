@@ -1,13 +1,14 @@
 "use client";
 
 import { Check, ChevronDown, CircleDot, Lock } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useAnchoredPopover } from "@/shared/hooks/use-anchored-popover";
 
 export type CustomSelectOption = {
   value: string;
   label: string;
+  icon?: ReactNode;
   current?: boolean;
   locked?: boolean;
 };
@@ -123,6 +124,7 @@ export function CustomSelect({
         className="flex h-full min-h-8 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-left font-normal text-slate-800 shadow-sm outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 disabled:opacity-70"
       >
         <span className="flex min-w-0 items-center gap-2">
+          {selectedOption?.icon}
           <span className="truncate">{selectedOption?.label || stringValue || "Nicht verfügbar"}</span>
           {selectedOption?.current && <CircleDot size={13} className="shrink-0 text-emerald-500" aria-label="Aktueller Sprint" />}
           {selectedOption?.locked && <Lock size={13} className="shrink-0 text-slate-400" aria-label="Geschützter Sprint" />}
@@ -194,6 +196,7 @@ export function CustomSelect({
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-2">
+                  {option.icon}
                   <span className="min-w-0 truncate">{option.label}</span>
                   {option.current && <CircleDot size={13} className="shrink-0 text-emerald-500" aria-label="Aktueller Sprint" />}
                   {option.locked && <Lock size={13} className="shrink-0 text-slate-400" aria-label="Geschützter Sprint" />}
