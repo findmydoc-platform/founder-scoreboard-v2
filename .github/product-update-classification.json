@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Adds restrained item-type icons and colors to existing planning surfaces without introducing new functionality or changing a workflow."
+  "reason": "Colors the existing item-type label in the detail header without introducing new functionality or changing a workflow."
 }

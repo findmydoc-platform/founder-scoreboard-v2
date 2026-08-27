@@ -33,6 +33,10 @@ export function taskTypeLabel(taskType: TaskType) {
   return taskTypePresentation[taskType].label;
 }
 
+export function taskTypeColorClassName(taskType: TaskType) {
+  return taskTypePresentation[taskType].iconClassName;
+}
+
 export function TaskTypeIcon({
   taskType,
   className,

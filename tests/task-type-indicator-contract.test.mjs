@@ -16,13 +16,14 @@ test("item types keep the approved icon and color contract across planning surfa
   assert.match(indicator, /initiative:\s*\{[\s\S]*?Icon: Route,[\s\S]*?text-violet-600[\s\S]*?label: "Initiative"/);
   assert.match(indicator, /deliverable:\s*\{[\s\S]*?Icon: PackageCheck,[\s\S]*?text-green-600[\s\S]*?label: "Deliverable"/);
   assert.match(indicator, /sub_issue:\s*\{[\s\S]*?Icon: SquareCheckBig,[\s\S]*?text-yellow-600[\s\S]*?label: "Sub-Issue"/);
+  assert.match(indicator, /export function taskTypeColorClassName\(taskType: TaskType\)/);
 
   assert.match(select, /icon\?: ReactNode/);
   assert.match(select, /selectedOption\?\.icon/);
   assert.match(levelSelect, /icon: <TaskTypeIcon taskType=\{level\.value\}/);
   assert.match(taskCard, /<TaskTypeIcon taskType=\{task\.taskType\}/);
   assert.match(taskStructure, /<TaskTypeIcon taskType=\{initiative\.taskType\}/);
-  assert.match(taskDetailHeader, /<TaskTypeIndicator taskType=\{task\.taskType\}/);
+  assert.match(taskDetailHeader, /<TaskTypeIndicator taskType=\{task\.taskType\} className=\{taskTypeColorClassName\(task\.taskType\)\}/);
   assert.match(backlogTree, /<TaskTypeIndicator taskType=\{task\.taskType\}/);
   assert.match(newTaskDialog, /<TaskTypeIcon taskType=\{draft\.taskType\}/);
 });
