@@ -6,8 +6,7 @@
 - Storybook tests cover reusable presentational components, relevant UI states, accessibility, and user interaction in a real browser.
 - Integration tests cross public application boundaries and use real local infrastructure. Keep them sparse and limited to critical behavior and security boundaries.
 - Test executable behavior and stable contracts. Do not use `AGENTS.md` or `SKILL.md` prose as a product behavior source.
-- Prefer direct unit tests of pure functions and focused route or policy tests over broad source-text assertions.
-- Use source-text assertions only when runtime execution is impractical and the assertion protects a stable boundary rather than exact implementation wording.
+- Use direct tests of observable behavior. Do not assert source text, file layout, removed behavior, pipeline implementation, or script internals.
 - Cover unauthenticated, wrong-role, invalid-input, missing-record, empty-state, and external-failure paths when the edited code handles them.
 - Use the ordered migration helpers for schema-wide contracts. A focused migration regression test may read the migration it specifically owns.
 - Add focused domain test files instead of growing large `platform-*` contract files by default.

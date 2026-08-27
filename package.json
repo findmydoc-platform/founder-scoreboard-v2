@@ -11,7 +11,7 @@
     "test:unit": "NODE_OPTIONS=--no-deprecation vitest run --project unit",
     "test:storybook": "STORYBOOK_DISABLE_TELEMETRY=1 NODE_OPTIONS=--no-deprecation vitest run --project storybook",
     "test:integration": "NODE_OPTIONS=--no-deprecation vitest run --project integration --passWithNoTests",
-    "test:legacy": "node --test tests/*.test.mjs && tsx --test tests/*.test.tsx",
+    "test:legacy": "tsx --test tests/*.test.tsx",
     "test:migrations": "node --test --test-concurrency=1 tests/migrations/*.test.mjs",
     "storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook dev --port 6006",
     "build-storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook build",
