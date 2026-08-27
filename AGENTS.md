@@ -8,12 +8,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - Brand spelling is `findmydoc` in user-facing copy and documentation. Preserve other capitalization only when quoting source text or using an existing technical identifier.
 - When the user asks for Localhost or the dev server without naming another project, start this Next.js app. Use a free port such as `3002` when `3000` or `3001` is occupied, and verify the page title is `findmydoc Planning` before reporting the URL.
-- Follow the nearest nested `AGENTS.md` for the files being changed. Keep repository-wide rules here and domain-specific rules near their code.
-- The only project skills are `.agents/skills/supabase-migrations` and `.agents/skills/release-publish`. Do not add aliases or compatibility copies under `skills/`.
-- Repository rules override conflicting generic global Supabase or Vercel skills. Tracked schema changes must use timestamp migrations; deployments must use the repository's GitHub Actions workflows, never a direct local Vercel deployment.
+- Keep repository-wide rules here and domain-specific rules near their code.
+- Do not commit one-off operator artifacts such as cutover, repair, backup, backfill, inspection, or task-specific mapping scripts, workflows, tests, and runbooks. Keep them outside the repository and remove the temporary local artifacts after the approved operation. Track only durable, generally reusable operator infrastructure.
+- Deployments must use the repository's GitHub Actions workflows, never a direct local Vercel deployment.
 - Auth and roles are security boundaries. Changes to OAuth, sessions, `profiles.platform_role`, deputy handling, API guards, grants, or RLS require focused tests.
-- Supabase schema changes are additive by default. Use `.agents/skills/supabase-migrations`, store migrations under `supabase/migrations/`, and ask before drops, truncation, broad deletes, disabling RLS, or removing columns.
-- Production migrations run only through the protected deployment workflow. Local resets are allowed only against the disposable local stack.
 - Decision Log entries are CEO-editable only. Deputies may operate sprint and task workflows but must not edit CEO decisions.
 - Task Intake, AI-assisted task creation, and bulk planning remain CEO-only unless the CEO explicitly approves a broader product scope.
 - Never expose database credentials, Supabase service keys, raw GitHub tokens, OpenAI keys, authorization headers, or in-app model access through browser state, logs, API responses, issues, or documentation.
@@ -28,7 +26,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Keep private execution drafts and sensitive founder analysis outside Git repositories. Do not publish them to shared systems without an explicit publication request.
 - After meaningful frontend or API changes, run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
 - Testing: For changes to observable behavior and bug fixes, use Freeman and Pryce's outside-in TDD, then assess the resulting tests against Kent Beck's Test Desiderata. Do not apply this to docs-only, configuration-only, or exploratory work.
-- Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns. Add a project skill only when `.agents/skills/AGENTS.md` admits it.
+- Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns.
 
 ## Responsive UI Verification
 
@@ -39,7 +37,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Keep primary actions, filters, navigation, and form controls visible or directly reachable. Mobile dialogs and drawers must trap and restore focus, lock background interaction, and keep their close action reachable.
 - Aim for `44px` touch targets on phone and coarse-pointer layouts. Do not ship interactive targets below `24px` unless the larger surrounding control provides the real hit area and the exception is evident from the component structure.
 - When a desktop table becomes hard to operate below `1280px`, provide a card or stacked representation from the same data and actions. Keep the desktop table unchanged and reuse shared filters, badges, selects, and action components.
-- After meaningful UI work, inspect real rendered screens at the applicable matrix sizes and include an inline screenshot in the handoff as required by the repository-wide UI rule.
+- After meaningful UI work, inspect real rendered screens at the applicable matrix sizes.
 
 ## Maintainability Review System
 
