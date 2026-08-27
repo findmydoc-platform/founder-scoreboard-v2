@@ -174,6 +174,106 @@ export function buildBacklogTableViewModel(model: BacklogModel, filters: Backlog
   return { ...workspace, visibleItems };
 }
 
+export type BacklogOverviewActiveFilter = {
+  id: string;
+  label: string;
+  reset: Partial<BacklogTableFilters>;
+};
+
+export function buildBacklogOverviewViewModel(
+  model: BacklogModel,
+  filters: BacklogTableFilters,
+  canManageBacklog: boolean,
+) {
+  const table = buildBacklogTableViewModel(model, filters);
+  const levelTasks = model.items.filter((task) => task.taskType === filters.level);
+  const visibleLevelTasks = filters.level === "deliverable"
+    ? table.visibleItems.map((item) => item.task)
+    : levelTasks.filter((task) => {
+      const query = filters.query.trim().toLocaleLowerCase("de");
+      const matchesQuery = !query || [
+        task.title,
+        task.description,
+        task.assignee,
+        task.priority,
+        task.workstream,
+      ].join(" ").toLocaleLowerCase("de").includes(query);
+      const matchesStatus = filters.status === "Alle" || normalizeStatus(task.status) === filters.status;
+      const matchesPriority = filters.priority === "Alle" || task.priority === filters.priority;
+      const matchesAssignee = filters.assignee === "Alle" || task.assigneeId === filters.assignee || task.assignee === filters.assignee;
+      const matchesEpic = filters.level !== "initiative" || filters.epic === "Alle" || task.parentTaskId === filters.epic;
+      return matchesQuery && matchesStatus && matchesPriority && matchesAssignee && matchesEpic;
+    });
+  const rankEditingEnabled = canManageBacklog
+    && filters.level === "deliverable"
+    && filters.sort === "rank"
+    && filters.direction === "asc"
+    && filters.scope === "all"
+    && !filters.query.trim()
+    && filters.status === "Alle"
+    && filters.readiness === "all"
+    && filters.priority === "Alle"
+    && filters.epic === "Alle"
+    && filters.initiative === "Alle"
+    && filters.assignee === "Alle";
+  const activeFilters: BacklogOverviewActiveFilter[] = [
+    ...(filters.level === "deliverable" && filters.scope !== "all" ? [{
+      id: "scope",
+      label: `Scope: ${filters.scope === "proposals" ? "Vorschläge" : filters.scope === "ready" ? "Bereit" : "Ohne Sprint"}`,
+      reset: { scope: "all" as const },
+    }] : []),
+    ...(filters.status !== "Alle" ? [{ id: "status", label: `Status: ${filters.status}`, reset: { status: "Alle" } }] : []),
+    ...(filters.level === "deliverable" && filters.readiness !== "all" ? [{
+      id: "readiness",
+      label: `Planungsstatus: ${filters.readiness === "ready" ? "Bereit" : "Nicht bereit"}`,
+      reset: { readiness: "all" as const },
+    }] : []),
+    ...(filters.priority !== "Alle" ? [{ id: "priority", label: `Priorität: ${filters.priority}`, reset: { priority: "Alle" } }] : []),
+    ...(filters.level === "initiative" && filters.epic !== "Alle" ? [{
+      id: "epic",
+      label: `Epic: ${model.items.find((task) => task.id === filters.epic)?.title || filters.epic}`,
+      reset: { epic: "Alle" },
+    }] : []),
+    ...(filters.level === "deliverable" && filters.initiative !== "Alle" ? [{
+      id: "initiative",
+      label: `Initiative: ${model.items.find((task) => task.id === filters.initiative)?.title || filters.initiative}`,
+      reset: { initiative: "Alle" },
+    }] : []),
+    ...(filters.assignee !== "Alle" ? [{
+      id: "assignee",
+      label: `Zuständig: ${model.people.find((profile) => profile.id === filters.assignee)?.name || filters.assignee}`,
+      reset: { assignee: "Alle" },
+    }] : []),
+  ];
+
+  return {
+    ...table,
+    activeFilters,
+    filterOptions: {
+      assignees: [{ value: "Alle", label: "Alle Zuständigen" }, ...model.people.map((profile) => ({ value: profile.id, label: profile.name }))],
+      epics: [{ value: "Alle", label: "Alle Epics" }, ...model.items.filter((task) => task.taskType === "epic").map((task) => ({ value: task.id, label: task.title }))],
+      initiatives: [{ value: "Alle", label: "Alle Initiativen" }, ...model.items.filter((task) => task.taskType === "initiative").map((task) => ({ value: task.id, label: task.title }))],
+      priorities: ["Alle", "P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority === "Alle" ? "Alle Prioritäten" : priority })),
+      readiness: [{ value: "all", label: "Alle" }, { value: "ready", label: "Bereit" }, { value: "incomplete", label: "Nicht bereit" }],
+      statuses: [{ value: "Alle", label: "Alle Status" }, ...Array.from(new Set(levelTasks.map((task) => normalizeStatus(task.status)))).map((status) => ({ value: status, label: status }))],
+    },
+    filterStateIsDirty: filters.query !== ""
+      || filters.scope !== "all"
+      || filters.status !== "Alle"
+      || filters.readiness !== "all"
+      || filters.priority !== "Alle"
+      || filters.epic !== "Alle"
+      || filters.initiative !== "Alle"
+      || filters.assignee !== "Alle"
+      || filters.sort !== "rank"
+      || filters.direction !== "asc",
+    levelTasks,
+    rankEditingEnabled,
+    visibleLevelTasks,
+    visibleTaskIds: new Set(visibleLevelTasks.map((task) => task.id)),
+  };
+}
+
 function planningSprints(model: BacklogModel) {
   const ordered = [...model.sprints]
     .filter((sprint) => sprint.status !== "closed")

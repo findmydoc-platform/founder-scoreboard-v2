@@ -5,8 +5,7 @@ import { useState, type ReactNode } from "react";
 import { isApprovedDeliverable } from "@/features/planning/model/approval-domain";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { parentDeliverableOptions, sprintOptions } from "@/features/tasks/model/task-form-options";
-import { projectDeliverableSchedule } from "@/features/planning-items/model/deliverable-schedule";
-import { compactDateRange } from "@/lib/display";
+import { taskDetailPlanningView } from "@/features/tasks/model/task-detail-planning-view";
 import type { Profile, Sprint, Task } from "@/lib/types";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { UiSelectField } from "@/shared/atoms/form-controls";
@@ -43,18 +42,13 @@ export function TaskDetailPlanningSection({
   onUpdate,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const currentParent = allTasks.find((item) => item.id === task.parentTaskId) || null;
-  const schedule = projectDeliverableSchedule({ sprintId: task.sprintId || null, fixedDate: task.fixedDate || null }, sprints);
-  const currentSprint = schedule.sprint;
-  const initiatives = allTasks.filter((item) => item.taskType === "initiative");
-  const epics = allTasks.filter((item) => item.taskType === "epic");
-  const isStrategic = task.taskType === "epic" || task.taskType === "initiative";
-  const currentInitiative = initiatives.find((item) => item.id === task.parentTaskId);
-  const targetDate = task.targetDate || "";
-  const canEditPlanning = task.taskType === "sub_issue" ? canReparentSubIssue : canManageTaskMeta;
-  const sprintPeriod = currentSprint
-    ? compactDateRange(currentSprint)
-    : "Kein Ausführungszeitraum";
+  const view = taskDetailPlanningView({
+    task,
+    allTasks,
+    sprints,
+    canManageTaskMeta,
+    canReparentSubIssue,
+  });
 
   const updateParent = (parentTaskId: string) => {
     onUpdate({ parentTaskId });
@@ -67,8 +61,8 @@ export function TaskDetailPlanningSection({
           <div className="flex min-w-0 items-center gap-3">
             <ListTree size={17} className="shrink-0 text-slate-400" aria-hidden="true" />
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-slate-900">{currentParent?.title || task.parentTaskId || "Parent-Deliverable fehlt"}</div>
-              <div className="mt-0.5 truncate text-xs text-slate-500">{currentInitiative?.title || "Ohne Initiative"}</div>
+              <div className="truncate text-sm font-semibold text-slate-900">{view.currentParent?.title || task.parentTaskId || "Parent-Deliverable fehlt"}</div>
+              <div className="mt-0.5 truncate text-xs text-slate-500">{view.currentInitiative?.title || "Ohne Initiative"}</div>
             </div>
           </div>
           {canReparentSubIssue ? (
@@ -89,33 +83,33 @@ export function TaskDetailPlanningSection({
     );
   }
 
-  if (isStrategic) {
+  if (view.kind === "strategic") {
     const parentOptions = task.taskType === "initiative"
-      ? [{ value: "", label: "Ohne Epic – als Vorschlag" }, ...epics.map((item) => ({ value: item.id, label: item.title }))]
+      ? [{ value: "", label: "Ohne Epic – als Vorschlag" }, ...view.epics.map((item) => ({ value: item.id, label: item.title }))]
       : [];
     return (
       <section aria-label="Strategische Einordnung" className="border-b border-slate-200">
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2.5">
           <div className="flex min-w-0 items-center gap-3 text-sm">
             <CalendarDays size={17} className="shrink-0 text-slate-400" aria-hidden="true" />
-            <span className="truncate font-semibold text-slate-900">{targetDate || "Kein Zieltermin"}</span>
+            <span className="truncate font-semibold text-slate-900">{view.targetDate || "Kein Zieltermin"}</span>
           </div>
           <UiButton type="button" size="sm" variant="ghost" className="text-blue-700 hover:bg-blue-50" aria-expanded={open} aria-controls="strategic-planning-controls" onClick={() => setOpen((current) => !current)}>
             <Pencil size={14} aria-hidden="true" />
-            {canEditPlanning ? "Einordnung bearbeiten" : "Einordnung anzeigen"}
+            {view.canEditPlanning ? "Einordnung bearbeiten" : "Einordnung anzeigen"}
             <ChevronDown size={15} className={classNames("transition", open && "rotate-180")} aria-hidden="true" />
           </UiButton>
         </div>
         {open ? (
           <div id="strategic-planning-controls" className="grid gap-4 border-t border-slate-200 bg-slate-50/70 px-4 py-4 md:grid-cols-2">
             {task.taskType === "initiative" ? (
-              canEditPlanning
+              view.canEditPlanning
                 ? <UiSelectField label="Parent-Epic" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentOptions} selectClassName="h-11 text-sm" />
-                : <ReadFact label="Parent-Epic">{currentParent?.title || "Ohne Epic"}</ReadFact>
+                : <ReadFact label="Parent-Epic">{view.currentParent?.title || "Ohne Epic"}</ReadFact>
             ) : null}
-            {canEditPlanning ? (
-              <div><div className="text-xs font-semibold text-slate-500">Zieltermin</div><CustomDatePicker value={targetDate} disabled={pending} onChange={(targetDateValue) => onUpdate({ targetDate: targetDateValue })} className="mt-1 h-11 text-sm" aria-label="Zieltermin ändern" /></div>
-            ) : <ReadFact label="Zieltermin">{targetDate || "Nicht gesetzt"}</ReadFact>}
+            {view.canEditPlanning ? (
+              <div><div className="text-xs font-semibold text-slate-500">Zieltermin</div><CustomDatePicker value={view.targetDate} disabled={pending} onChange={(targetDateValue) => onUpdate({ targetDate: targetDateValue })} className="mt-1 h-11 text-sm" aria-label="Zieltermin ändern" /></div>
+            ) : <ReadFact label="Zieltermin">{view.targetDate || "Nicht gesetzt"}</ReadFact>}
             {task.taskType === "initiative" && task.raciAssignments?.length ? (
               <ReadFact label="RACI">
                 {task.raciAssignments.map((assignment) => `${teamProfiles.find((profile) => profile.id === assignment.profileId)?.name || assignment.profileId} · ${assignment.role}`).join(" · ")}
@@ -132,13 +126,13 @@ export function TaskDetailPlanningSection({
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2.5">
         <div className="flex min-w-0 items-center gap-3 text-sm">
           <CalendarDays size={17} className="shrink-0 text-slate-400" aria-hidden="true" />
-          <span className="truncate font-semibold text-slate-900">{currentSprint?.name || "Kein Sprint"}</span>
+          <span className="truncate font-semibold text-slate-900">{view.currentSprint?.name || "Kein Sprint"}</span>
           <span className="text-slate-300" aria-hidden="true">·</span>
-          <span className="whitespace-nowrap text-slate-600">{sprintPeriod}</span>
+          <span className="whitespace-nowrap text-slate-600">{view.sprintPeriod}</span>
         </div>
         <UiButton type="button" size="sm" variant="ghost" className="text-blue-700 hover:bg-blue-50" aria-expanded={open} aria-controls="task-detail-planning-controls" onClick={() => setOpen((current) => !current)}>
           <Pencil size={14} aria-hidden="true" />
-          {canEditPlanning ? "Planung bearbeiten" : "Planung anzeigen"}
+          {view.canEditPlanning ? "Planung bearbeiten" : "Planung anzeigen"}
           <ChevronDown size={15} className={classNames("transition", open && "rotate-180")} aria-hidden="true" />
         </UiButton>
       </div>
@@ -147,22 +141,22 @@ export function TaskDetailPlanningSection({
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {canManageTaskMeta ? (
               <>
-                <UiSelectField label="Initiative" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...initiatives.map((item) => ({ value: item.id, label: item.title }))]} selectClassName="h-11 text-sm" />
+                <UiSelectField label="Initiative" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...view.initiatives.map((item) => ({ value: item.id, label: item.title }))]} selectClassName="h-11 text-sm" />
                 <UiSelectField label="Sprint" value={task.sprintId} disabled={!isApprovedDeliverable(task) || pending} onChange={(sprintId) => onUpdate({ sprintId })} options={sprintOptions(sprints)} selectClassName="h-11 text-sm" />
-                <ReadFact label="Sprint-Zeitraum">{sprintPeriod}</ReadFact>
+                <ReadFact label="Sprint-Zeitraum">{view.sprintPeriod}</ReadFact>
               </>
             ) : (
               <>
-                <ReadFact label="Initiative">{currentParent?.title || "Ohne Initiative"}</ReadFact>
-                <ReadFact label="Sprint">{currentSprint?.name || "Kein Sprint"}</ReadFact>
-                <ReadFact label="Sprint-Zeitraum">{sprintPeriod}</ReadFact>
+                <ReadFact label="Initiative">{view.currentParent?.title || "Ohne Initiative"}</ReadFact>
+                <ReadFact label="Sprint">{view.currentSprint?.name || "Kein Sprint"}</ReadFact>
+                <ReadFact label="Sprint-Zeitraum">{view.sprintPeriod}</ReadFact>
               </>
             )}
           </div>
-          {currentInitiative ? (
+          {view.currentInitiative ? (
             <details className="group mt-4 w-fit">
               <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-md px-2 text-xs font-semibold text-slate-600 hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"><UsersRound size={15} aria-hidden="true" />Initiative-Team anzeigen<ChevronDown size={14} className="transition group-open:rotate-180" aria-hidden="true" /></summary>
-              <div className="mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3"><InitiativeRaciList initiative={currentInitiative} profiles={teamProfiles} className="grid gap-2 text-xs text-slate-600" /></div>
+              <div className="mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3"><InitiativeRaciList initiative={view.currentInitiative} profiles={teamProfiles} className="grid gap-2 text-xs text-slate-600" /></div>
             </details>
           ) : null}
         </div>

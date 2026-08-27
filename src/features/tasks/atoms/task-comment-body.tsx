@@ -86,7 +86,9 @@ const markdownComponents: Components = {
     if (!safe || !safe.startsWith("http")) return null;
     return <GitHubCommentImage href={safe} alt={String(alt || "Anhang")} />;
   },
-  input(props) {
+  input(inputProps) {
+    const { node, ...props } = inputProps;
+    void node;
     if (props.type !== "checkbox") return <input {...props} />;
     return (
       <input
@@ -94,6 +96,7 @@ const markdownComponents: Components = {
         type="checkbox"
         disabled
         readOnly
+        aria-label={props.checked ? "Erledigt" : "Offen"}
         className="mr-2 h-3.5 w-3.5 rounded border-slate-300 align-[-2px]"
       />
     );
