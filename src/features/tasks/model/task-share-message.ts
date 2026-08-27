@@ -35,12 +35,13 @@ export function taskShareRequestLabel(task: Pick<Task, "approvalStatus" | "revie
   return "Bitte ansehen und bei Bedarf kurz Rückmeldung geben.";
 }
 
-export function buildTaskShareMessage(task: Pick<Task, "approvalStatus" | "deadline" | "priority" | "reviewStatus" | "status" | "targetDate" | "taskType" | "title">, taskUrl: string) {
+export function buildTaskShareMessage(task: Pick<Task, "approvalStatus" | "fixedDate" | "priority" | "reviewStatus" | "status" | "targetDate" | "taskType" | "title">, taskUrl: string) {
+  const date = task.taskType === "deliverable" ? task.fixedDate : task.targetDate;
   const metadata = [
     taskShareTypeLabel(task.taskType),
     task.status,
     task.priority,
-    task.targetDate || task.deadline ? `Ziel: ${taskShareDeadlineLabel(task.targetDate || task.deadline)}` : "",
+    date ? `${task.taskType === "deliverable" ? "Fixtermin" : "Ziel"}: ${taskShareDeadlineLabel(date)}` : "",
   ].filter(Boolean).join(" · ");
 
   return [

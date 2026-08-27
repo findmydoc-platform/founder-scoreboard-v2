@@ -318,7 +318,7 @@ export function TaskDetailOperationalHeader({
   const directChildren = subIssues.filter((item) => item.parentTaskId === task.id);
   const completedChildren = directChildren.filter((item) => normalizeStatus(item.status) === "Erledigt").length;
   const directChildLabel = task.taskType === "epic" ? "Initiativen" : task.taskType === "initiative" ? "Deliverables" : "Sub-Issues";
-  const targetDate = task.targetDate || task.deadline;
+  const targetDate = task.taskType === "deliverable" ? task.fixedDate : task.targetDate;
   const showTargetDate = canManageTaskMeta || Boolean(targetDate);
 
   return (
@@ -407,17 +407,17 @@ export function TaskDetailOperationalHeader({
             ))}
 
             {showTargetDate && (canManageTaskMeta ? (
-              <OperationalFact label="Ziel" icon={<CalendarDays size={16} />}>
+              <OperationalFact label={task.taskType === "deliverable" ? "Fixtermin" : "Ziel"} icon={<CalendarDays size={16} />}>
                 <CustomDatePicker
                   value={targetDate || ""}
                   disabled={pending}
                   className="h-8 w-36 text-sm"
-                  aria-label="Zieltermin ändern"
-                  onChange={(value) => onUpdate(task.taskType === "deliverable" ? { deadline: value } : { targetDate: value })}
+                  aria-label={task.taskType === "deliverable" ? "Fixtermin ändern" : "Zieltermin ändern"}
+                  onChange={(value) => onUpdate(task.taskType === "deliverable" ? { fixedDate: value } : { targetDate: value })}
                 />
               </OperationalFact>
             ) : (
-              <OperationalFact label="Ziel" icon={<CalendarDays size={16} />}>{formatDate(targetDate, { includeYear: true })}</OperationalFact>
+              <OperationalFact label={task.taskType === "deliverable" ? "Fixtermin" : "Ziel"} icon={<CalendarDays size={16} />}>{formatDate(targetDate || "", { includeYear: true })}</OperationalFact>
             ))}
 
             {subIssuesKnown && directChildren.length > 0 && (

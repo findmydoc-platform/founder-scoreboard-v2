@@ -7,6 +7,9 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 const contract = await loadTranspiledModule(
   "src/features/planning-items/model/planning-items-contract.ts",
 );
+const deliverableSchedule = await loadTranspiledModule(
+  "src/features/planning-items/model/deliverable-schedule.ts",
+);
 
 const create = await loadTranspiledModule(
   "src/features/planning-items/model/planning-items-create.ts",
@@ -30,6 +33,7 @@ const create = await loadTranspiledModule(
     "@/features/planning-items/model/planning-item-normalization": {
       intakeText: (value) => String(value || "").trim(),
     },
+    "@/features/planning-items/model/deliverable-schedule": deliverableSchedule,
   },
 );
 
@@ -48,6 +52,7 @@ const update = await loadTranspiledModule(
     "@/lib/status": {},
     "@/features/planning-items/model/planning-items-contract": contract,
     "@/features/planning-items/model/planning-item-normalization": {},
+    "@/features/planning-items/model/deliverable-schedule": deliverableSchedule,
   },
 );
 

@@ -138,11 +138,10 @@ const task = {
   status: "Offen",
   taskType: "sub_issue",
   sprintId: "",
-  deadline: "",
+  fixedDate: "",
   evidenceLink: "",
   hours: 0,
   priority: "P4",
-  startDate: "",
   workstream: "",
 };
 

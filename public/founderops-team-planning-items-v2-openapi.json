@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FounderOps Planning Items API",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "Canonical personal-token API for Epic, Initiative, Deliverable, and Sub-Issue planning items. Deprecated Milestone and package aliases are rejected."
   },
   "servers": [{ "url": "https://founder-ops.findmydoc.eu" }],
@@ -123,8 +123,8 @@
           "evidenceRequired": { "type": "string" }, "definitionOfDone": { "type": "string" }, "parentTaskId": { "type": "string" },
           "ownerId": { "type": "string" }, "accountableProfileId": { "type": "string" }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
-          "priority": { "$ref": "#/components/schemas/Priority" }, "workstream": { "type": "string" }, "startDate": { "type": "string", "format": "date" },
-          "endDate": { "type": "string", "format": "date" }, "deadline": { "type": "string", "format": "date" }, "hours": { "type": "integer", "minimum": 0, "maximum": 200 },
+          "priority": { "$ref": "#/components/schemas/Priority" }, "workstream": { "type": "string" }, "fixedDate": { "type": ["string", "null"], "format": "date" },
+          "hours": { "type": "integer", "minimum": 0, "maximum": 200 },
           "githubRepo": { "type": "string" }, "targetDate": { "type": ["string", "null"], "format": "date" },
           "status": { "oneOf": [{ "$ref": "#/components/schemas/StrategicStatus" }, { "$ref": "#/components/schemas/TaskStatus" }, { "$ref": "#/components/schemas/SubIssueStatus" }] },
           "githubSync": { "$ref": "#/components/schemas/GitHubSyncCommand" }
@@ -143,7 +143,7 @@
           "ownerId": { "type": ["string", "null"] }, "accountableProfileId": { "type": ["string", "null"] }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "priority": { "type": ["string", "null"], "enum": ["P0", "P1", "P2", "P3", "P4", null] }, "workstream": { "type": ["string", "null"] },
-          "startDate": { "type": ["string", "null"], "format": "date" }, "endDate": { "type": ["string", "null"], "format": "date" }, "deadline": { "type": ["string", "null"], "format": "date" },
+          "fixedDate": { "type": ["string", "null"], "format": "date" },
           "hours": { "type": ["integer", "null"], "minimum": 0, "maximum": 200 }, "githubRepo": { "type": ["string", "null"] }, "targetDate": { "type": ["string", "null"], "format": "date" },
           "status": { "oneOf": [{ "$ref": "#/components/schemas/StrategicStatus" }, { "$ref": "#/components/schemas/TaskStatus" }, { "$ref": "#/components/schemas/SubIssueStatus" }] }
         }

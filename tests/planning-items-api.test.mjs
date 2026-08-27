@@ -21,10 +21,12 @@ test("Planning Items API exposes only the canonical v2 transport", async () => {
   assert.match(tokenRoute, /allowEmptyEpicDeletes/);
   assert.match(documentation, /\/v2\//);
   const document = JSON.parse(openapi);
-  assert.equal(document.info.version, "2.0.0");
+  assert.equal(document.info.version, "2.1.0");
   assert.deepEqual(document.components.schemas.PlanningItemCreate.properties.itemType.enum,
     ["epic", "initiative", "deliverable", "sub_issue"]);
   assert.ok(document.components.schemas.PlanningItemCreate.properties.parentTaskId);
+  assert.ok(document.components.schemas.PlanningItemCreate.properties.fixedDate);
+  assert.ok(document.components.schemas.PatchPayload.properties.fixedDate);
   assert.equal(document.components.schemas.EpicNotEmptyResponse.properties.code.const, "EPIC_NOT_EMPTY");
   assert.ok(document.components.schemas.AccessMetadata);
   assert.ok(document.components.schemas.AuthorizedResponse.required.includes("_meta"));

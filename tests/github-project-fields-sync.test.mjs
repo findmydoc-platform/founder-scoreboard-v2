@@ -114,11 +114,10 @@ function supabaseFixture() {
 }
 
 const task = {
-  deadline: "2026-08-01",
+  fixedDate: "2026-08-01",
   evidenceLink: "",
   hours: 0,
   priority: "P4",
-  startDate: "",
   status: "Review",
   taskType: "deliverable",
   workstream: " founderops ",

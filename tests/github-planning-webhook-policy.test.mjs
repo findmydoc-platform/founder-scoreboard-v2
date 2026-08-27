@@ -26,8 +26,7 @@ function task(overrides = {}) {
     hours: 8,
     evidenceLink: "https://example.com/evidence",
     evidenceLinks: ["https://example.com/evidence"],
-    startDate: "2026-08-17",
-    deadline: "2026-08-20",
+    fixedDate: "2026-08-20",
     sprintId: "sprint-one",
     ownerId: "founder-one",
     parentTaskId: "initiative-one",
@@ -172,7 +171,7 @@ test("ambiguous GitHub Low priority never guesses between FounderOps P3 and P4",
   assert.equal(policy.githubIssuePriorityToFounderOps("Medium"), "P2");
 });
 
-test("managed Issue fields use the same strict field policy as their Project columns", () => {
+test("managed Issue schedule fields update only fixedDate and reconcile Start date to empty", () => {
   assert.equal(policy.isFounderOpsManagedGitHubIssueField("Priority"), true);
   assert.equal(policy.isFounderOpsManagedGitHubIssueField("Effort"), false);
   assert.deepEqual(policy.decideGitHubIssueFieldPlanningChange({
@@ -180,8 +179,16 @@ test("managed Issue fields use the same strict field policy as their Project col
     fieldValue: "2026-08-18",
     task: task(),
   }), {
+    kind: "reconcile",
+    reason: "start_date_is_founderops_owned_empty",
+  });
+  assert.deepEqual(policy.decideGitHubIssueFieldPlanningChange({
+    fieldName: "Target date",
+    fieldValue: "2026-08-21",
+    task: task(),
+  }), {
     kind: "update",
-    patch: { startDate: "2026-08-18" },
+    patch: { fixedDate: "2026-08-21" },
   });
 });
 

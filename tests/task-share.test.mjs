@@ -11,14 +11,15 @@ test("task share messages cover every issue type with a stable FounderOps link",
     taskType: "deliverable",
     status: "Offen",
     priority: "P0",
-    deadline: "2026-06-04",
+    fixedDate: "2026-06-04",
+    targetDate: "",
     approvalStatus: "approved",
     reviewStatus: "not_requested",
   }, taskUrl);
 
   assert.equal(taskUrl, "https://founder-ops.findmydoc.eu/tasks/deliverable-42");
   assert.match(message, /^Contact-404 beheben/m);
-  assert.match(message, /Deliverable · Offen · P0 · Ziel: 04\.06\.2026/);
+  assert.match(message, /Deliverable · Offen · P0 · Fixtermin: 04\.06\.2026/);
   assert.match(message, /Bitte ansehen und bei Bedarf kurz Rückmeldung geben\./);
   assert.match(message, /https:\/\/founder-ops\.findmydoc\.eu\/tasks\/deliverable-42/);
   assert.equal(share.taskShareTypeLabel("sub_issue"), "Sub-Issue");
@@ -27,10 +28,11 @@ test("task share messages cover every issue type with a stable FounderOps link",
     taskType: "sub_issue",
     status: "In Arbeit",
     priority: "P2",
-    deadline: "Sprint 1",
+    fixedDate: "",
+    targetDate: "",
     approvalStatus: null,
     reviewStatus: "not_requested",
-  }, taskUrl), /Ziel: Sprint 1/);
+  }, taskUrl), /Sub-Issue · In Arbeit · P2/);
 });
 
 test("task share requests reflect proposal and active review states", async () => {
@@ -41,7 +43,8 @@ test("task share requests reflect proposal and active review states", async () =
     taskType: "deliverable",
     status: "Offen",
     priority: "P0",
-    deadline: "2026-06-04",
+    fixedDate: "2026-06-04",
+    targetDate: "",
     approvalStatus: "approved",
     reviewStatus: "not_requested",
   };

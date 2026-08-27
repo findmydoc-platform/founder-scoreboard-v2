@@ -18,6 +18,7 @@ test("source.json is the single maintained local seed data source", async () => 
   assert.match(runner, /src\/lib\/seed\/source\.json/);
   assert.doesNotMatch(shared, /\bPackage\b|packageId|milestoneId|source\.packages/);
   assert.doesNotMatch(runner, /packageId|milestoneId|source\.packages/);
+  assert.match(runner, /fixed_date: task\.taskType === "deliverable"/);
   assert.match(packageJson, /"local:seed": "node scripts\/local-development\.mjs seed"/);
 });
 
@@ -30,6 +31,10 @@ test("local seed covers planning roles and stable core data", async () => {
   const simulatedRollupChildren = source.tasks.filter((task) => task.parentTaskId === simulatedRollupParent?.id);
 
   assert.equal(source.project.id, "findmydoc-founder-execution");
+  assert.equal(source.sprints.length, 10);
+  assert.equal(source.sprints.filter((sprint) => sprint.status === "active").length, 1);
+  assert.equal(source.sprints[0].startDate, "2026-05-18");
+  assert.equal(source.sprints.at(-1).endDate, "2026-10-04");
   assert.deepEqual(source.initiatives.map((item) => item.id), ["GC1", "GC2", "GC3", "GC4", "GC5"]);
   assert.ok(source.tasks.length > 0);
   assert.equal(new Set(taskIds).size, taskIds.length);

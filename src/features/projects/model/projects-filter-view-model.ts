@@ -101,15 +101,15 @@ export function buildProjectsFilterViewModel({
       || filters.risk === "blocked" && (Boolean(task.dependsOn) || normalizeStatus(task.status) === "Blockiert")
       || filters.risk === "critical" && taskHasCriticalAttention(task, { tasks, taskRelations: data.taskRelations, taskBlockers: data.taskBlockers })
       || filters.risk === "github" && !hasGitHubIssue(task);
-    const deadline = task.deadline || task.endDate || "";
-    return queryMatches && ownerMatches && statusMatches && priorityMatches && epicMatches && initiativeMatches && riskMatches && (!filters.from || deadline >= filters.from) && (!filters.to || deadline <= filters.to);
+    const fixedDate = task.fixedDate || "";
+    return queryMatches && ownerMatches && statusMatches && priorityMatches && epicMatches && initiativeMatches && riskMatches && (!filters.from || fixedDate >= filters.from) && (!filters.to || fixedDate <= filters.to);
   }).sort((left, right) => {
     let comparison = 0;
     if (filters.sort === "owner") comparison = (left.assignee || "").localeCompare(right.assignee || "", "de");
     else if (filters.sort === "status") comparison = normalizeStatus(left.status).localeCompare(normalizeStatus(right.status), "de");
     else if (filters.sort === "priority") comparison = (priorityRank[left.priority] ?? 9) - (priorityRank[right.priority] ?? 9);
     else if (filters.sort === "hours") comparison = left.hours - right.hours;
-    else if (filters.sort === "date") comparison = (left.deadline || left.endDate || "").localeCompare(right.deadline || right.endDate || "");
+    else if (filters.sort === "date") comparison = (left.fixedDate || "").localeCompare(right.fixedDate || "");
     else comparison = left.title.localeCompare(right.title, "de");
     return direction * (comparison || left.order - right.order);
   });

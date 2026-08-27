@@ -68,9 +68,9 @@ test("deliverable filters combine with AND and keep table sorting stable", async
   const tasks = [
     { id: "e1", taskType: "epic", title: "Epic", description: "", status: "planned", order: 1 },
     { id: "i1", taskType: "initiative", parentTaskId: "e1", title: "Initiative", description: "", priority: "P1", order: 1 },
-    { id: "later", order: 2, taskType: "deliverable", title: "Same", description: "", parentTaskId: "i1", assigneeId: "p1", assignee: "Ada", status: "Offen", priority: "P1", hours: 2, deadline: "2026-07-15" },
-    { id: "first", order: 1, taskType: "deliverable", title: "Same", description: "", parentTaskId: "i1", assigneeId: "p1", assignee: "Ada", status: "Offen", priority: "P1", hours: 1, deadline: "2026-07-10" },
-    { id: "other", order: 3, taskType: "deliverable", title: "Other", description: "", parentTaskId: "i1", assigneeId: "p2", assignee: "Bob", status: "Erledigt", priority: "P2", hours: 1, deadline: "2026-07-10" },
+    { id: "later", order: 2, taskType: "deliverable", title: "Same", description: "", parentTaskId: "i1", assigneeId: "p1", assignee: "Ada", status: "Offen", priority: "P1", hours: 2, fixedDate: "2026-07-15" },
+    { id: "first", order: 1, taskType: "deliverable", title: "Same", description: "", parentTaskId: "i1", assigneeId: "p1", assignee: "Ada", status: "Offen", priority: "P1", hours: 1, fixedDate: "2026-07-10" },
+    { id: "other", order: 3, taskType: "deliverable", title: "Other", description: "", parentTaskId: "i1", assigneeId: "p2", assignee: "Bob", status: "Erledigt", priority: "P2", hours: 1, fixedDate: "2026-07-10" },
   ];
   const filters = { ...DEFAULT_PROJECTS_FILTERS, owner: "p1", status: "Offen", priority: "P1", to: "2026-07-31" };
   const model = buildProjectsFilterViewModel({ data: emptyProjectRelations, tasks, filters });

@@ -23,9 +23,7 @@ export type EditableTaskState = Pick<
   | "assignee"
   | "parentTaskId"
   | "sprintId"
-  | "startDate"
-  | "endDate"
-  | "deadline"
+  | "fixedDate"
   | "reviewStatus"
   | "reviewOwnerProfileId"
   | "reviewRequestedAt"
@@ -49,7 +47,7 @@ export type TaskDetailGitHubState = Pick<
 
 export type TaskDetailDetailsDraft = Pick<
   EditableTaskState,
-  "priority" | "assignee" | "parentTaskId" | "sprintId" | "startDate" | "endDate" | "deadline"
+  "priority" | "assignee" | "parentTaskId" | "sprintId" | "fixedDate"
   | "reviewOwnerProfileId"
 >;
 
@@ -66,9 +64,7 @@ export function buildEditableTaskState(task: Task): EditableTaskState {
     assignee: task.assignee,
     parentTaskId: task.parentTaskId,
     sprintId: task.sprintId,
-    startDate: task.startDate,
-    endDate: task.endDate,
-    deadline: task.deadline,
+    fixedDate: task.fixedDate,
     reviewStatus: task.reviewStatus,
     reviewOwnerProfileId: task.reviewOwnerProfileId || "",
     reviewRequestedAt: task.reviewRequestedAt || "",
@@ -104,9 +100,7 @@ export function buildTaskDetailsDraft(meta: EditableTaskState): TaskDetailDetail
     assignee: meta.assignee,
     parentTaskId: meta.parentTaskId,
     sprintId: meta.sprintId,
-    startDate: meta.startDate,
-    endDate: meta.endDate,
-    deadline: meta.deadline,
+    fixedDate: meta.fixedDate,
     reviewOwnerProfileId: meta.reviewOwnerProfileId || "",
   };
 }

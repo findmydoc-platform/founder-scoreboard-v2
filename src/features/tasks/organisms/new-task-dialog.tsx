@@ -33,14 +33,11 @@ export type NewTaskDraft = {
   evidenceRequired: string;
   taskType: TaskType;
   parentTaskId: string;
-  sprintId: string;
   assignee: string;
   priority: string;
   status: string;
   workstream: string;
-  startDate: string;
-  endDate: string;
-  deadline: string;
+  fixedDate: string;
   targetDate: string;
   hours: number;
   definitionOfDone: string;
@@ -209,11 +206,7 @@ function PlanningFields({ accent = false, draft, setDraft }: { accent?: boolean;
           placeholder="z. B. Produkt, Vertrieb oder Recht"
         />
       </UiField>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <UiDateField label="Start" value={draft.startDate} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
-        <UiDateField label="Ende" value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
-      </div>
-      <UiDateField label="Zieltermin" value={draft.deadline} onChange={(value) => setDraft((current) => ({ ...current, deadline: value }))} />
+      <UiDateField label="Fixtermin" value={draft.fixedDate} onChange={(value) => setDraft((current) => ({ ...current, fixedDate: value }))} />
     </section>
   );
 }
@@ -651,7 +644,6 @@ export function NewTaskDialog({
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [titleTouched, setTitleTouched] = useState(false);
   const [draft, setDraft] = useState<NewTaskDraft>(() => {
-    const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
     const fallbackAssignee = currentProfileId || data.profiles[0]?.id || "";
     const initialInitiativeId = defaults.parentTaskId || initiatives[0]?.id || "";
     const initialInitiativeApproved = initiatives.find((initiative) => initiative.id === initialInitiativeId)?.approvalStatus === "approved";
@@ -666,14 +658,11 @@ export function NewTaskDialog({
       evidenceRequired: defaults.evidenceRequired || "",
       taskType: initialTaskType,
       parentTaskId: defaults.parentTaskId || (initialTaskType === "deliverable" ? initialInitiativeId : ""),
-      sprintId: defaults.sprintId || "",
       assignee: defaults.assignee || fallbackAssignee,
       priority: defaults.priority || "P2",
       status: defaults.status || "Offen",
       workstream: defaults.workstream || "",
-      startDate: defaults.startDate || activeSprint?.startDate || "",
-      endDate: defaults.endDate || activeSprint?.endDate || "",
-      deadline: defaults.deadline || "",
+      fixedDate: defaults.fixedDate || "",
       targetDate: defaults.targetDate || "",
       hours: defaults.hours || 2,
       definitionOfDone: defaults.definitionOfDone || "",
@@ -691,9 +680,7 @@ export function NewTaskDialog({
           status: "Offen",
           priority: "P2",
           workstream: "",
-          startDate: "",
-          endDate: "",
-          deadline: "",
+          fixedDate: "",
           hours: 0,
           problemStatement: "",
           intendedOutcome: "",
@@ -709,9 +696,7 @@ export function NewTaskDialog({
             ...initialDraft,
             parentTaskId: "",
             priority: "",
-            startDate: "",
-            endDate: "",
-            deadline: "",
+            fixedDate: "",
             hours: 0,
             createGitHubIssue: false,
             approveNow: false,
@@ -719,9 +704,7 @@ export function NewTaskDialog({
         : initialTaskType === "initiative"
           ? {
             ...initialDraft,
-              startDate: "",
-              endDate: "",
-              deadline: "",
+              fixedDate: "",
               hours: 0,
               createGitHubIssue: false,
               approveNow: false,
@@ -733,17 +716,14 @@ export function NewTaskDialog({
   const deliverableNeedsStructure = false;
   const subIssueNeedsParent = draft.taskType === "sub_issue" && !draft.parentTaskId;
   const invalidTitle = draft.title.trim().length < 3;
-  const invalidDateRange = Boolean(draft.startDate && draft.endDate && draft.startDate > draft.endDate);
-  const canCreate = !invalidTitle && !deliverableNeedsStructure && !subIssueNeedsParent && !invalidDateRange;
+  const canCreate = !invalidTitle && !deliverableNeedsStructure && !subIssueNeedsParent;
   const titleError = taskCreationTitleError(draft.title, titleTouched || submitAttempted);
   const validationReason = submitAttempted && !invalidTitle
     ? deliverableNeedsStructure
       ? "Initiative auswählen."
       : subIssueNeedsParent
         ? "Übergeordnetes Deliverable auswählen."
-        : invalidDateRange
-          ? "Das Startdatum darf nicht nach dem Enddatum liegen."
-          : ""
+        : ""
     : "";
   const canApproveSelectedInitiative = canApproveNow && selectedInitiative?.approvalStatus === "approved";
   const title = draft.taskType === "sub_issue"

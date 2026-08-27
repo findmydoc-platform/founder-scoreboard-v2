@@ -112,6 +112,19 @@ test("normal task updates omit the server-owned GitHub sync status", async () =>
   assert.equal(Object.prototype.hasOwnProperty.call(payload, "githubIssueSyncStatus"), false);
 });
 
+test("Browser task mutations serialize fixedDate activity", async () => {
+  const { activityMessages, taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+    "@/features/planning/model/planning-app-model": planningAppModelMock,
+    "@/lib/slug": slugMock,
+  });
+
+  const payload = taskUpdateRequestPayload({ fixedDate: "2026-09-10" }, "2026-08-27T10:00:00.000Z");
+  assert.equal(payload.fixedDate, "2026-09-10");
+  assert.deepEqual(activityMessages(payload, { fixed_date: "2026-09-09" }), [
+    "Fixtermin geändert: 2026-09-09 → 2026-09-10",
+  ]);
+});
+
 test("unchanged status payloads become true no-ops before route guards", async () => {
   const { withoutUnchangedTaskStatus } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => false },

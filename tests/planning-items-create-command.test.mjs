@@ -5,6 +5,9 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 async function loadCreate() {
   const contract = await loadTranspiledModule("src/features/planning-items/model/planning-items-contract.ts");
+  const deliverableSchedule = await loadTranspiledModule(
+    "src/features/planning-items/model/deliverable-schedule.ts",
+  );
   const reviewState = await loadTranspiledModule("src/features/reviews/model/task-review-state.ts");
   const normalization = await loadTranspiledModule(
     "src/features/planning-items/model/planning-item-normalization.ts",
@@ -12,6 +15,7 @@ async function loadCreate() {
       "@/lib/api-input": { cleanText: (value, maxLength) => String(value || "").trim().slice(0, maxLength) },
       "@/lib/slug": { normalizeLookup: (value) => value, slugify: (value) => value },
       "@/features/planning-items/model/planning-items-contract": contract,
+      "@/features/planning-items/model/deliverable-schedule": deliverableSchedule,
     },
   );
   return loadTranspiledModule(
@@ -24,6 +28,7 @@ async function loadCreate() {
       },
       "@/features/planning-items/model/planning-items-contract": contract,
       "@/features/planning-items/model/planning-item-normalization": normalization,
+      "@/features/planning-items/model/deliverable-schedule": deliverableSchedule,
       "@/features/planning-items/model/planning-items-github-sync-preview": {
         previewPlanningItemGitHubSync: () => ({ status: "accepted" }),
       },
@@ -119,14 +124,31 @@ test("CreateItems maps all four canonical transport item types", async () => {
   const command = create.planningItemCreateCommand([
     { itemType: "epic", title: "Epic", description: "Direction", ownerId: "ceo-1", status: "Offen" },
     { itemType: "initiative", title: "Initiative", ownerId: "ceo-1", parentTaskId: "epic-1", accountableProfileId: "ceo-1", responsibleProfileIds: ["founder-1"] },
-    { itemType: "deliverable", title: "Deliverable", parentTaskId: "initiative-1", ownerId: "founder-1", definitionOfDone: "Done" },
+    { itemType: "deliverable", title: "Deliverable", parentTaskId: "initiative-1", ownerId: "founder-1", definitionOfDone: "Done", fixedDate: "2026-09-10" },
     { itemType: "sub_issue", title: "Sub-Issue", parentTaskId: "deliverable-1", githubRepo: "findmydoc-platform/website" },
   ], "ceo-1");
 
   assert.deepEqual(command.items.map((item) => item.kind), ["epic", "initiative", "deliverable", "sub_issue"]);
   assert.equal(command.items[1].parentId, "epic-1");
   assert.equal(command.items[2].parentId, "initiative-1");
+  assert.equal(command.items[2].fixedDate, "2026-09-10");
   assert.equal(command.items[3].ownerId, "ceo-1");
+});
+
+test("Team create accepts fixedDate and rejects legacy deliverable schedule fields", async () => {
+  const create = await loadCreate();
+  const valid = create.parsePlanningItemCreatePayload({
+    items: [{ itemType: "deliverable", title: "Scheduled", fixedDate: "2026-09-10" }],
+  });
+  assert.equal(valid.ok, true);
+
+  for (const field of ["startDate", "endDate", "deadline"]) {
+    const result = create.parsePlanningItemCreatePayload({
+      items: [{ itemType: "deliverable", title: "Legacy", [field]: "2026-09-10" }],
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error, new RegExp(`unbekannte Feld ${field}`));
+  }
 });
 
 test("Browser CreateItems commits through exactly one hidden writer", async () => {
@@ -175,7 +197,7 @@ test("CreateItems rejects empty and oversized batches before a writer", async ()
   assert.equal(rpcCalls, 0);
 });
 
-test("Team create rejects stored v1 replay receipts before preview or writer effects", async () => {
+test("Team create rejects stored pre-v3 replay receipts before preview or writer effects", async () => {
   const create = await loadCreate();
   const rawItems = [{ itemType: "epic", title: "Current", description: "Snapshot", ownerId: actor.profileId }];
   const responseItems = [{ itemType: "epic", item: { id: "epic-v1", title: "Current" } }];
@@ -184,7 +206,7 @@ test("Team create rejects stored v1 replay receipts before preview or writer eff
   const query = {
     select() { return this; },
     eq() { return this; },
-    async maybeSingle() { return { data: { id: "batch-v1", request_hash: "stored-v1", response_tasks: responseItems, contract_version: 1 }, error: null }; },
+    async maybeSingle() { return { data: { id: "batch-v2", request_hash: "stored-v2", response_tasks: responseItems, contract_version: 2 }, error: null }; },
   };
   const tokenActor = { ...actor, credential: { kind: "planningToken", tokenId: "token-1", scopes: ["write:planning-items:create"] } };
   const result = await create.createTeamCreatePlanningItems({

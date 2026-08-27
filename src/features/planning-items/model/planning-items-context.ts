@@ -31,9 +31,7 @@ type TaskContextRow = {
   created_by: string | null;
   sprint_id: string | null;
   workstream: string | null;
-  start_date: string | null;
-  end_date: string | null;
-  deadline: string | null;
+  fixed_date: string | null;
   estimate_hours: number | null;
   evidence_link: string | null;
   github_issue_url: string | null;
@@ -121,7 +119,7 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
     loadAllSupabaseRows((from, to) => supabase.from("sprints").select("id,name,status,start_date,end_date").order("start_date").order("id").range(from, to)),
     loadAllSupabaseRows<TaskContextRow>((from, to) => supabase
       .from(ACTIVE_TASKS_TABLE)
-      .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,status,priority,owner,assignee,created_by,sprint_id,workstream,start_date,end_date,deadline,estimate_hours,evidence_link,github_issue_url,issue_url,github_repo,github_issue_sync_status,approval_status,approval_revision,target_date,sort_order,updated_at")
+      .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,status,priority,owner,assignee,created_by,sprint_id,workstream,fixed_date,estimate_hours,evidence_link,github_issue_url,issue_url,github_repo,github_issue_sync_status,approval_status,approval_revision,target_date,sort_order,updated_at")
       .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID)
       .order("sort_order")
       .order("id")
@@ -181,9 +179,7 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
       approvalRevision: Number(task.approval_revision || 1),
       sprintId: itemType === "deliverable" ? task.sprint_id || "" : "",
       workstream: isStrategic || isSubIssue ? "" : task.workstream || "",
-      startDate: isStrategic || isSubIssue ? "" : task.start_date || "",
-      endDate: isStrategic || isSubIssue ? "" : task.end_date || "",
-      deadline: isStrategic || isSubIssue ? "" : task.deadline || "",
+      fixedDate: itemType === "deliverable" ? task.fixed_date || "" : "",
       hours: isStrategic || isSubIssue ? 0 : task.estimate_hours || 0,
       problemStatement: task.problem_statement || (isSubIssue ? "" : task.description || ""),
       intendedOutcome: task.intended_outcome || "",

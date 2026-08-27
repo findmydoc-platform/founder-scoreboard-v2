@@ -6,7 +6,6 @@ import type { PlanningFilters, usePlanningViewState } from "@/features/planning/
 import { planningWorkspaces } from "@/features/planning/model/planning-app-model";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import { findCurrentSprint } from "@/lib/planning-schedule";
 import type { PlanningShellState, Profile, ViewMode } from "@/lib/types";
 
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
@@ -37,10 +36,8 @@ export function usePlanningDerivedState({
   workspace,
 }: UsePlanningDerivedStateOptions) {
   const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters });
-  const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
   const filtersAvailable = planningWorkspaces.includes(workspace);
   const headerActions = usePlanningHeaderActions({
-    activeSprint,
     currentProfile,
     data,
     planningLevel,

@@ -7,7 +7,7 @@ import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { planningLevelCreateLabel, type PlanningLevel } from "@/features/planning/model/planning-level";
 import { epicPlanningItems } from "@/features/planning/model/planning-app-model";
-import type { PlanningShellState, Profile, Sprint, ViewMode } from "@/lib/types";
+import type { PlanningShellState, Profile, ViewMode } from "@/lib/types";
 
 export type HeaderAction = {
   id: string;
@@ -19,7 +19,6 @@ export type HeaderAction = {
 };
 
 type UsePlanningHeaderActionsOptions = {
-  activeSprint?: Sprint;
   currentProfile: Profile | null;
   data: PlanningShellState;
   planningLevel?: PlanningLevel;
@@ -31,7 +30,6 @@ type UsePlanningHeaderActionsOptions = {
 };
 
 export function usePlanningHeaderActions({
-  activeSprint,
   currentProfile,
   data,
   planningLevel = "deliverable",
@@ -58,9 +56,7 @@ export function usePlanningHeaderActions({
       variant: "secondary",
       onClick: () => setTaskDialogDefaults({
         taskType: "deliverable",
-        sprintId: activeSprint?.id || "",
-        startDate: activeSprint?.startDate || "",
-        endDate: activeSprint?.endDate || "",
+        fixedDate: "",
       }),
     }];
   }

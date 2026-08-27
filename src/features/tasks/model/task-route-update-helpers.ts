@@ -85,7 +85,7 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
     payload.priority !== undefined ? "Priorität" : "",
     payload.parentTaskId !== undefined ? "Übergeordnetes Planning Item" : "",
     payload.sprintId !== undefined ? "Sprint" : "",
-    payload.startDate !== undefined || payload.endDate !== undefined || payload.deadline !== undefined ? "Zeitraum" : "",
+    payload.fixedDate !== undefined ? "Fixtermin" : "",
     payload.scorePoints !== undefined || (payload.scoreFinal !== undefined && !isImplicitReviewScoreReset) ? "Score" : "",
   ].filter(Boolean);
 }
@@ -226,9 +226,7 @@ export function applyTaskTitleUpdate(update: TaskRouteDbUpdate, payload: TaskUpd
 
 export function applyTaskBriefUpdateFields(update: TaskRouteDbUpdate, payload: TaskUpdatePayload) {
   if (payload.description !== undefined) update.description = payload.description.trim().slice(0, 4000) || null;
-  if (payload.startDate !== undefined) update.start_date = payload.startDate || null;
-  if (payload.endDate !== undefined) update.end_date = payload.endDate || null;
-  if (payload.deadline !== undefined) update.deadline = payload.deadline || null;
+  if (payload.fixedDate !== undefined) update.fixed_date = payload.fixedDate || null;
   if (payload.problemStatement !== undefined) update.problem_statement = payload.problemStatement.trim().slice(0, 4000) || null;
   if (payload.intendedOutcome !== undefined) update.intended_outcome = payload.intendedOutcome.trim().slice(0, 4000) || null;
   if (payload.scopeConstraints !== undefined) update.scope_constraints = payload.scopeConstraints.trim().slice(0, 4000) || null;

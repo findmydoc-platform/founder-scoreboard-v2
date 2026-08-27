@@ -14,6 +14,7 @@ import {
 } from "@/features/tasks/model/task-route-update-helpers";
 import { isReviewStateLocked, reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 import { isSubIssueStatus, normalizeSubIssueStatus } from "@/lib/status";
+import { normalizeFixedDate } from "@/features/planning-items/model/deliverable-schedule";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEM_PATCH_FIELDS,
@@ -103,8 +104,8 @@ const fieldsByType: Record<TeamPlanningItemType, Set<PlanningItemPatchField>> = 
   ]),
   deliverable: new Set([
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
-    "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "priority", "workstream", "startDate",
-    "endDate", "deadline", "hours", "evidenceLink", "sprintId", "status",
+    "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "priority", "workstream", "fixedDate",
+    "hours", "evidenceLink", "sprintId", "status",
   ]),
   sub_issue: new Set([
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
@@ -234,9 +235,7 @@ function publicTask(row: DatabaseRow): UnknownRecord {
     ownerId: String(row.owner || row.assignee || ""),
     priority: isSubIssue ? "" : String(row.priority || "P2"),
     workstream: isSubIssue ? "" : String(row.workstream || ""),
-    startDate: isSubIssue ? "" : String(row.start_date || ""),
-    endDate: isSubIssue ? "" : String(row.end_date || ""),
-    deadline: isSubIssue ? "" : String(row.deadline || ""),
+    fixedDate: isSubIssue ? "" : String(row.fixed_date || ""),
     hours: isSubIssue ? 0 : Number(row.estimate_hours || 0),
     status: isSubIssue ? normalizeSubIssueStatus(String(row.status || "Offen")) : String(row.status || "Offen"),
     githubRepo: String(row.github_repo || ""),
@@ -323,7 +322,7 @@ async function loadTarget(
 ): Promise<TargetLoadResult> {
   const taskResult = await supabase
     .from(ACTIVE_TASKS_TABLE)
-    .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,start_date,end_date,deadline,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
+    .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,fixed_date,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
     .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID)
     .eq("id", itemId)
     .maybeSingle();
@@ -400,11 +399,15 @@ function normalizePatch(raw: UnknownRecord, presentFields: PlanningItemPatchFiel
         } else result = normalizePatchTaskStatus(value);
         break;
       }
-      case "workstream":
-      case "deadline": result = normalizePatchText(value, 120); break;
-      case "startDate":
-      case "endDate":
+      case "workstream": result = normalizePatchText(value, 120); break;
       case "targetDate": result = normalizePatchDate(value); break;
+      case "fixedDate": {
+        const fixedDate = normalizeFixedDate(value);
+        result = value === null || value === "" || fixedDate
+          ? { ok: true, value: fixedDate }
+          : { ok: false, error: "muss ein gültiges Datum im Format YYYY-MM-DD sein" };
+        break;
+      }
       case "hours": result = normalizePatchHours(value); break;
       case "responsibleProfileIds": result = normalizePatchStringList(value); break;
       case "consultedProfileIds":
@@ -440,7 +443,7 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
   const maps: Array<[string, string]> = [
     ["title", "title"], ["description", "description"], ["status", "status"], ["targetDate", "target_date"],
     ["priority", "priority"], ["parentTaskId", "parent_task_id"], ["workstream", "workstream"],
-    ["startDate", "start_date"], ["endDate", "end_date"], ["deadline", "deadline"], ["hours", "estimate_hours"],
+    ["fixedDate", "fixed_date"], ["hours", "estimate_hours"],
     ["problemStatement", "problem_statement"], ["intendedOutcome", "intended_outcome"], ["scopeConstraints", "scope_constraints"],
     ["acceptanceCriteria", "acceptance_criteria"], ["evidenceRequired", "evidence_required"], ["definitionOfDone", "definition_of_done"],
     ["evidenceLink", "evidence_link"], ["sprintId", "sprint_id"],
@@ -562,10 +565,6 @@ export async function buildPlanningItemUpdatePreview({
   }
 
   const resultingItem: UnknownRecord = { ...currentItem, ...normalizedPatch, parentTaskId };
-  if (String(resultingItem.startDate || "") && String(resultingItem.endDate || "") && String(resultingItem.startDate) > String(resultingItem.endDate)) {
-    errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
-  }
-
   const rewritesLegacySubIssueStatus = target.itemType === "sub_issue"
     && parsed.presentFields.includes("status")
     && !isSubIssueStatus(String(target.row.status || ""));
@@ -833,9 +832,7 @@ export function planningItemReviseCommand(
       ...(Object.keys(brief).length ? { brief } : {}),
       ...(hasOwn(patch, "priority") ? { priority: String(patch.priority || "") } : {}),
       ...(hasOwn(patch, "workstream") ? { workstream: String(patch.workstream || "") } : {}),
-      ...(hasOwn(patch, "startDate") ? { startDate: String(patch.startDate || "") || null } : {}),
-      ...(hasOwn(patch, "endDate") ? { endDate: String(patch.endDate || "") || null } : {}),
-      ...(hasOwn(patch, "deadline") ? { deadline: String(patch.deadline || "") || null } : {}),
+      ...(hasOwn(patch, "fixedDate") ? { fixedDate: normalizeFixedDate(patch.fixedDate) } : {}),
       ...(hasOwn(patch, "hours") ? { hours: Number(patch.hours || 0) } : {}),
       ...(hasOwn(patch, "evidenceLink") ? { evidenceLink: String(patch.evidenceLink || "") || null } : {}),
     } as PlanningItemChanges;
@@ -1028,7 +1025,7 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
       if (existing.error) return { ok: false, error: teamReviseProviderError(existing.error) };
       const stored = existing.data as StoredTeamReviseRequest | null;
       if (stored) {
-        if (Number(stored.contract_version || 1) < 2) {
+        if (Number(stored.contract_version || 1) < 3) {
           return { ok: false, error: { code: "conflict", reason: "idempotency" } };
         }
         const itemType = stored.response?.itemType;

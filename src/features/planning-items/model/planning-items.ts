@@ -55,9 +55,7 @@ export type NewDeliverable = NewPlanningItemBase<"deliverable"> & Readonly<{
   parentId: PlanningItemId | null;
   priority: string;
   workstream: string;
-  startDate: string | null;
-  endDate: string | null;
-  deadline: string | null;
+  fixedDate: string | null;
   hours: number;
   githubRepository: string;
 }>;
@@ -105,9 +103,7 @@ export type DeliverableChanges = Readonly<{
   status?: DeliverableStatus;
   priority?: string;
   workstream?: string;
-  startDate?: string | null;
-  endDate?: string | null;
-  deadline?: string | null;
+  fixedDate?: string | null;
   hours?: number;
   evidenceLink?: string | null;
 }>;
