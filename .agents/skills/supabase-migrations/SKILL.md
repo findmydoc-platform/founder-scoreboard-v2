@@ -27,7 +27,7 @@ Codex may create and apply additive Supabase SQL to the local stack when the tas
 
 ## Authorization Parity
 
-Follow the root `AGENTS.md` principle. Before broadening access, identify the real caller, app guard, database path, role or ownership boundary, and mutable fields. If there is no matching app action or the evidence is unclear, do not add user access.
+Before broadening access, identify the real caller, app guard, database path, role or ownership boundary, and mutable fields. Treat exposed tables, grants, policies, functions, triggers, and views as one access-control boundary, and enable RLS on exposed tables. If there is no matching app action or the evidence is unclear, do not add user access.
 
 ## Workflow
 

@@ -8,4 +8,3 @@
 - Follow `docs/table-filtering.md` for operational tables, use `DataTableFrame`, and declare `embedded` or `external` filtering explicitly.
 - Preserve keyboard navigation, visible focus, Escape handling, outside-click handling, and correct ARIA semantics for interactive UI.
 - Auth-related UI must clear protected client state during logout and must never display or persist raw tokens.
-- Write German visible copy with real UTF-8 umlauts. Run focused tests and lint after UI changes, and include an inline screenshot when handing off a UI change.
