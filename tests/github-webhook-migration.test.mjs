@@ -1,64 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { serviceRoleOnlyTablePrivileges } from "../scripts/lib/database-security/contracts.mjs";
-import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 
-const migrationPath = "supabase/migrations/20260814180126_github_issue_webhook_delivery_journal.sql";
-const commentMigrationPath = "supabase/migrations/20260816104243_github_issue_comment_webhook.sql";
 
-test("the webhook migration creates a service-role-only delivery journal", async () => {
-  const [migration, schemaContract] = await Promise.all([
-    readFile(migrationPath, "utf8"),
-    readSupabaseSchemaContract(),
-  ]);
 
-  assert.match(migration, /create table if not exists public\.github_webhook_deliveries/i);
-  assert.match(migration, /delivery_id text primary key/i);
-  assert.match(migration, /repository_id bigint not null/i);
-  assert.match(migration, /issue_id bigint not null/i);
-  assert.match(migration, /issue_node_id text not null/i);
-  assert.match(migration, /issue_updated_at timestamptz not null/i);
-  assert.match(migration, /payload_sha256 text not null/i);
-  assert.doesNotMatch(migration, /\bpayload jsonb\b/i);
-  assert.match(migration, /status text not null default 'received'/i);
-  assert.match(migration, /primary key[\s\S]*delivery_id|delivery_id text primary key/i);
-  assert.match(migration, /enable row level security/i);
-  assert.match(
-    migration,
-    /revoke all on table public\.github_webhook_deliveries from public, anon, authenticated, service_role/i,
-  );
-  assert.match(
-    migration,
-    /grant select, insert on table public\.github_webhook_deliveries to service_role/i,
-  );
-  assert.doesNotMatch(migration, /grant[^;]*\bupdate\b[^;]*github_webhook_deliveries/i);
-  assert.doesNotMatch(migration, /grant[^;]*github_webhook_deliveries[^;]*to (?:public|anon|authenticated)/i);
-  assert.doesNotMatch(migration, /\b(?:insert into|update|delete from)\s+public\.(?:tasks|deliverables|initiatives|epics)\b/i);
-  assert.match(schemaContract, /github_webhook_deliveries/);
-  assert.deepEqual(
-    serviceRoleOnlyTablePrivileges.find(([table]) => table === "github_webhook_deliveries"),
-    ["github_webhook_deliveries", ["SELECT", "INSERT"]],
-  );
-});
 
-test("the comment webhook migration adds metadata without storing comment content", async () => {
-  const [migration, schemaContract] = await Promise.all([
-    readFile(commentMigrationPath, "utf8"),
-    readSupabaseSchemaContract(),
-  ]);
-
-  assert.match(migration, /add column if not exists comment_id bigint/i);
-  assert.match(migration, /add column if not exists comment_node_id text/i);
-  assert.match(migration, /add column if not exists comment_updated_at timestamptz/i);
-  assert.match(migration, /event_name = 'issue_comment'/i);
-  assert.match(migration, /comment_id > 0/i);
-  assert.match(migration, /github_webhook_deliveries_comment_idx/i);
-  assert.doesNotMatch(migration, /comment_(?:body|payload)/i);
-  assert.match(schemaContract, /comment_id bigint/);
-  assert.match(schemaContract, /comment_node_id text/);
-  assert.match(schemaContract, /comment_updated_at timestamptz/);
-});
 
 test("runtime configuration and operations docs expose the Issue and comment intake boundary", async () => {
   const [envExample, deployment, idempotency, intakeDoc, schemaChecks] = await Promise.all([

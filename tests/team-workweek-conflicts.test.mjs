@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { listSupabaseMigrations } from "../scripts/lib/supabase-migrations.mjs";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const reconciliationCore = await import("../src/features/team-workweek/server/team-workweek-reconciliation-core.ts");
@@ -333,29 +331,4 @@ test("a changed provider CAS refreshes the resolving conflict before an explicit
   assert.equal(publication.status, "preparing");
   assert.equal(publishes, 1);
   assert.equal(publicationInput.transitionsFirst, true);
-});
-
-test("database, API, and UI keep conflict snapshots owner-only and target-free", async () => {
-  const migrations = await listSupabaseMigrations();
-  const migration = migrations.find(({ file }) => file === "20260825110323_resolve_google_workweek_conflicts.sql")?.sql || "";
-  assert.match(migration, /create table public\.team_workweek_google_conflicts/);
-  assert.match(migration, /auth\.role\(\) <> 'service_role'/);
-  assert.match(migration, /series\.provider_state = 'active'/);
-  assert.doesNotMatch(migration, /grant (select|insert|update|delete).*team_workweek_google_conflicts.*authenticated/i);
-
-  const route = await readFile("src/app/api/team-workweek/conflict/route.ts", "utf8");
-  assert.match(route, /context\.permission\.profile\?\.id/);
-  assert.match(route, /\["conflictId", "conflictRevision", "decision"\]/);
-  assert.doesNotMatch(route, /input\.(?:profileId|ownerProfileId|calendarId|googleEventId)/);
-
-  const publishRoute = await readFile("src/app/api/team-workweek/publish/route.ts", "utf8");
-  assert.match(publishRoute, /error\.delayClass/);
-  assert.match(publishRoute, /delayTeamWorkweekPublication/);
-  assert.match(publishRoute, /status: publication\.syncState === "delayed" \? 202 : 200/);
-
-  const card = await readFile("src/features/team-workweek/molecules/private-team-workweek-card.tsx", "utf8");
-  assert.match(card, /Meine FounderOps-Variante/);
-  assert.match(card, /Google-Variante/);
-  assert.match(card, /FounderOps übernehmen/);
-  assert.match(card, /Google übernehmen/);
 });

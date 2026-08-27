@@ -6,7 +6,6 @@ import { resolveProductionSchemaConnection } from "./lib/production-schema-conne
 import {
   findUnapprovedDestructiveDdl,
   listSupabaseMigrations,
-  planOutOfOrderMigrations,
   productionBaseline,
 } from "./lib/supabase-migrations.mjs";
 
@@ -33,7 +32,6 @@ for (const migration of migrations) {
 const connection = resolveProductionSchemaConnection(process.env);
 const client = new pg.Client(connection);
 await client.connect();
-let includeAllMigrations = false;
 
 try {
   const ledger = await client.query("select to_regclass('supabase_migrations.schema_migrations')::text as relation");
@@ -48,19 +46,6 @@ try {
   if (baseline.rowCount !== 1) {
     throw new Error(`Production baseline ${productionBaseline.version} is not marked as applied; refusing to replay it.`);
   }
-
-  const appliedMigrationRows = await client.query(
-    "select version from supabase_migrations.schema_migrations order by version",
-  );
-  const outOfOrderPlan = planOutOfOrderMigrations(
-    migrations,
-    appliedMigrationRows.rows.map((row) => row.version),
-  );
-  const unapprovedOutOfOrderMigrations = outOfOrderPlan.unapprovedMigrations;
-  if (unapprovedOutOfOrderMigrations.length) {
-    throw new Error(`Refusing unapproved out-of-order migrations: ${unapprovedOutOfOrderMigrations.map((migration) => migration.file).join(", ")}.`);
-  }
-  includeAllMigrations = outOfOrderPlan.includeAllMigrations;
 
   const lockTable = await client.query("select to_regclass('public.github_issue_sync_locks')::text as relation");
   if (lockTable.rows[0]?.relation) {
@@ -98,9 +83,8 @@ async function runSupabase(args) {
   });
 }
 
-const includeAllArgs = includeAllMigrations ? ["--include-all"] : [];
-await runSupabase(["db", "push", "--db-url", databaseUrl.toString(), ...includeAllArgs, "--dry-run", "--yes"]);
-await runSupabase(["db", "push", "--db-url", databaseUrl.toString(), ...includeAllArgs, "--yes"]);
+await runSupabase(["db", "push", "--db-url", databaseUrl.toString(), "--dry-run", "--yes"]);
+await runSupabase(["db", "push", "--db-url", databaseUrl.toString(), "--yes"]);
 
 const reloadClient = new pg.Client(connection);
 await reloadClient.connect();

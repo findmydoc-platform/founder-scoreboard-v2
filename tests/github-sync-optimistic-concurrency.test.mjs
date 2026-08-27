@@ -3,37 +3,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
-const migration = await readFile("supabase/migrations/20260713162208_github_issue_sync_optimistic_concurrency.sql", "utf8");
-const pullRequestMigration = await readFile("supabase/migrations/20260724123616_task_evidence_links_and_linked_pull_requests.sql", "utf8");
-const taskProjection = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
 const syncContract = await readFile("src/lib/github-sync/contract.ts", "utf8");
 const listHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
 const detailHook = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
 const mutationCommands = await readFile("src/features/tasks/hooks/use-task-mutation-commands.ts", "utf8");
 const updateHook = await readFile("src/features/tasks/hooks/use-task-update-command.ts", "utf8");
 
-test("GitHub sync v2 RPCs use task revisions for begin and finalize CAS", () => {
-  assert.match(migration, /begin_github_issue_sync_transaction_v2/);
-  assert.match(migration, /finalize_github_issue_sync_transaction_v2/);
-  assert.match(migration, /and updated_at = p_expected_updated_at/);
-  assert.match(migration, /and github_issue_sync_status = 'pending'/);
-  assert.match(migration, /errcode = 'P0001'/);
-  assert.match(migration, /errcode = 'P0002'/);
-  assert.match(migration, /revoke all on function public\.begin_github_issue_sync_transaction_v2[\s\S]*from public/);
-  assert.match(migration, /grant execute on function public\.finalize_github_issue_sync_transaction_v2[\s\S]*to service_role/);
-});
 
-test("task projection owns both revision compare-and-set transitions", () => {
-  assert.match(taskProjection, /begin_github_issue_sync_transaction_v2/);
-  assert.match(taskProjection, /finalize_github_issue_sync_with_pull_requests_v1/);
-  assert.match(taskProjection, /p_expected_updated_at: task\.updatedAt/);
-  assert.match(taskProjection, /p_expected_updated_at: pendingUpdatedAt/);
-  assert.match(taskProjection, /pendingError\?\.code === "P0001"/);
-  assert.match(taskProjection, /finalizeError\?\.code === "P0001"/);
-  assert.match(syncContract, /github_sync_stale/);
-  assert.match(pullRequestMigration, /and updated_at = p_expected_updated_at/);
-  assert.match(pullRequestMigration, /and github_issue_sync_status = 'pending'/);
-});
+
+
 
 test("stale responses remain retryable instead of becoming failed", () => {
   for (const hook of [listHook, detailHook]) {

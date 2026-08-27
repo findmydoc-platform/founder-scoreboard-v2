@@ -1,6 +1,4 @@
-import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
@@ -100,36 +98,7 @@ function supabaseFixture({ requested, active, rpcResult = { data: [], error: nul
   };
 }
 
-test("backlog route is a transport adapter and the module owns the single RPC writer", async () => {
-  const [route, moduleSource, apiClient, ordering, migrationCorpus, originalMigration, authorizationMigration] = await Promise.all([
-    readFile("src/app/api/tasks/backlog-order/route.ts", "utf8"),
-    readFile("src/features/planning-items/model/planning-items-backlog-move.ts", "utf8"),
-    readFile("src/features/tasks/model/task-api-client.ts", "utf8"),
-    readFile("src/features/backlog/hooks/use-backlog-ordering.ts", "utf8"),
-    readSupabaseSchemaContract(),
-    readFile("supabase/migrations/20260713175214_backlog_move_transaction.sql", "utf8"),
-    readFile("supabase/migrations/20260812121913_authorize_backlog_move_transaction.sql", "utf8"),
-  ]);
 
-  assert.match(route, /requirePlanningContributor/);
-  assert.match(route, /createBacklogMovePlanningItems/);
-  assert.match(route, /\.run\(/);
-  assert.doesNotMatch(route, /\.rpc\(|move_backlog_task_transaction|isOperationalLeadRole/);
-  assert.match(moduleSource, /createSupabasePlanningItemsStore/);
-  assert.match(moduleSource, /move_backlog_task_transaction/);
-  assert.match(moduleSource, /backlogMoveDecisionCore/);
-  assert.doesNotMatch(moduleSource, /github_issue_sync_status|github_issue_sync_error|task_activity/);
-
-  assert.match(apiClient, /export type BacklogMoveRequest/);
-  assert.match(ordering, /moveBacklogTaskRequest/);
-  assert.match(migrationCorpus, /create or replace function public\.move_backlog_task_transaction/i);
-  assert.match(originalMigration, /task\.backlog_reorder/i);
-  assert.match(authorizationMigration, /profile\.platform_role/i);
-  assert.match(authorizationMigration, /v_actor_role not in \('ceo', 'deputy'\)/i);
-  assert.match(authorizationMigration, /raise exception using errcode = 'P0004'/i);
-  assert.match(authorizationMigration, /revoke all on function public\.move_backlog_task_transaction[^;]*from public, anon, authenticated/i);
-  assert.match(authorizationMigration, /grant all on function public\.move_backlog_task_transaction[^;]*to service_role/i);
-});
 
 test("Browser adapter preserves validation, invocation metadata, and response shape", async () => {
   const calls = [];

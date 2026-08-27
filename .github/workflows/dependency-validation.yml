@@ -17,6 +17,38 @@ defaults:
     shell: bash
 
 jobs:
+  migration-integration:
+    name: Migration Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.13.1
+          run_install: false
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start local Supabase
+        run: pnpm run local:start
+
+      - name: Run migration integration tests
+        run: pnpm run test:migrations
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm run local:stop
+
   validation:
     name: Dependency Validation
     runs-on: ubuntu-latest

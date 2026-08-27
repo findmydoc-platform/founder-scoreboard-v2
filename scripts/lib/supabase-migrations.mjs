@@ -3,20 +3,12 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 export const productionBaseline = {
-  file: "20260713120959_production_baseline.sql",
-  version: "20260713120959",
-  sha256: "63421ddef79d60d0a5e117915285297ab48f318348278c42ca748d46183be2a5",
+  file: "20260827064853_current_schema_baseline.sql",
+  version: "20260827064853",
+  sha256: "5a1d4c9aedf2db45385002451f4234271df63b243b6c0eb546861ad95333d85d",
 };
 
-export const approvedDestructiveDdlByMigration = new Map([
-  ["20260721120056_replace_task_activity_with_audit_log.sql", new Set(["drop table"])],
-  ["20260813125245_planning_legacy_big_bang_cutover.sql", new Set(["drop table", "drop column"])],
-]);
-
-export const approvedOutOfOrderMigrationVersions = new Set([
-  "20260721112813",
-  "20260721120056",
-]);
+export const approvedDestructiveDdlByMigration = new Map();
 
 export const migrationFilePattern = /^(\d{14})_([a-z0-9_]+)\.sql$/;
 
@@ -41,26 +33,6 @@ export async function listSupabaseMigrations(root = process.cwd()) {
   }));
 }
 
-export async function readSupabaseMigrationCorpus(root = process.cwd()) {
-  const migrations = await listSupabaseMigrations(root);
-  return migrations
-    .map(({ file, sql }) => `\n-- Migration: ${file}\n${sql}`)
-    .join("\n");
-}
-
-export async function readSupabaseSchemaContract(root = process.cwd()) {
-  const corpus = await readSupabaseMigrationCorpus(root);
-  const dequoted = corpus
-    .replace(/"([^"]+)"/g, "$1")
-    .replace(/::[a-z_][a-z0-9_]*(?:\[\])?/gi, "")
-    .replace(/timestamp with time zone/gi, "timestamptz")
-    .replace(/timestamp without time zone/gi, "timestamp")
-    .toLowerCase();
-  const unqualified = dequoted.replace(/\bpublic\./g, "");
-
-  return `${corpus}\n\n-- Dequoted schema contract\n${dequoted}\n\n-- Unqualified schema contract\n${unqualified}`;
-}
-
 export function findDestructiveDdl(sql) {
   const patterns = [
     ["drop table", /^\s*drop\s+table\b/im],
@@ -76,23 +48,4 @@ export function findUnapprovedDestructiveDdl(migration) {
   const approvedOperations = approvedDestructiveDdlByMigration.get(migration.file) || new Set();
   return findDestructiveDdl(migration.sql)
     .filter((operation) => !approvedOperations.has(operation));
-}
-
-export function planOutOfOrderMigrations(migrations, appliedVersions) {
-  const appliedMigrationVersions = new Set(
-    Array.from(appliedVersions, (version) => String(version)),
-  );
-  const latestAppliedVersion = Array.from(appliedMigrationVersions).sort().at(-1) || "";
-  const pendingMigrations = migrations.filter((migration) =>
-    migration.version < latestAppliedVersion && !appliedMigrationVersions.has(migration.version)
-  );
-  const unapprovedMigrations = pendingMigrations.filter((migration) =>
-    !approvedOutOfOrderMigrationVersions.has(migration.version)
-  );
-
-  return {
-    includeAllMigrations: pendingMigrations.length > 0,
-    pendingMigrations,
-    unapprovedMigrations,
-  };
 }

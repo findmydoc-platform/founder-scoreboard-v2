@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { readSupabaseMigrationCorpus } from "../scripts/lib/supabase-migrations.mjs";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const workspacePreferences = await loadTranspiledModule(
@@ -163,35 +162,9 @@ test("profile settings API normalizes old and current initiative preference fiel
   assert.match(route, /expandedInitiativeIds \?\? uiPayload\.expandedPackageIds/);
 });
 
-test("canonical planning preference migration preserves values before readers switch", async () => {
-  const migration = await readFile(
-    "supabase/migrations/20260812231305_canonical_planning_preferences.sql",
-    "utf8",
-  );
 
-  assert.match(migration, /add column if not exists expanded_item_ids text\[\]/);
-  assert.match(migration, /set expanded_item_ids = expanded_package_ids/);
-  assert.match(migration, /planning_filters - 'packageId'/);
-  assert.match(migration, /planning_filters - 'owner'/);
-  assert.match(migration, /alter column planning_filters set default/);
-  assert.match(migration, /legacy Planning preference fields are not supported/);
-  assert.match(migration, /p_ui_preferences -> 'expanded_item_ids'/);
-  assert.doesNotMatch(migration, /drop column|drop table|truncate|delete from/i);
-});
 
-test("rollout compatibility migration accepts old inputs and stores current preference keys", async () => {
-  const migration = await readFile(
-    "supabase/migrations/20260813065427_preserve_planning_cutover_compatibility.sql",
-    "utf8",
-  );
 
-  assert.match(migration, /p_ui_preferences -> 'expanded_package_ids'/);
-  assert.match(migration, /v_filters \? 'packageId'/);
-  assert.match(migration, /v_filters \? 'owner'/);
-  assert.match(migration, /v_filters := v_filters - array\['packageId', 'owner'\]/);
-  assert.match(migration, /expanded_item_ids/);
-  assert.doesNotMatch(migration, /drop column|drop table|truncate|delete from public\.profile_ui_preferences/i);
-});
 
 test("profile settings only offer workspaces supported by the persisted default contract", async () => {
   const profileSettings = await readFile(
@@ -202,51 +175,4 @@ test("profile settings only offer workspaces supported by the persisted default 
   assert.match(profileSettings, /isPersistedWorkspace\(route\.id\)/);
 });
 
-test("workspace constraint migration backfills legacy values and allows every persisted workspace", async () => {
-  const migration = await readFile(
-    "supabase/migrations/20260721121727_align_profile_ui_default_workspaces.sql",
-    "utf8",
-  );
 
-  assert.match(migration, /when default_workspace = 'settings' then 'notifications'/);
-  assert.match(migration, /else 'planning'/);
-  assert.match(migration, /drop constraint if exists profile_ui_preferences_default_workspace_check/);
-  assert.match(migration, /add constraint profile_ui_preferences_default_workspace_check/);
-  assert.ok(
-    migration.indexOf("drop constraint") < migration.indexOf("update public.profile_ui_preferences"),
-    "the legacy constraint must be removed before values are normalized",
-  );
-  assert.ok(
-    migration.indexOf("update public.profile_ui_preferences") < migration.indexOf("add constraint"),
-    "values must be normalized before the current constraint is installed",
-  );
-  for (const workspace of workspacePreferences.persistedWorkspaceIds) {
-    assert.match(migration, new RegExp(`'${workspace}'`));
-  }
-  assert.doesNotMatch(migration, /'decision-log'/);
-});
-
-test("CEO intake workspace removal migrates saved defaults before tightening the constraint", async () => {
-  const corpus = await readSupabaseMigrationCorpus();
-  const match = corpus.match(
-    /-- Migration: 20260723121623_remove_ceo_intake_workspace\.sql\n([\s\S]*?)(?=\n-- Migration:|$)/,
-  );
-  assert.ok(match, "CEO intake workspace removal migration must be in the ordered corpus");
-  const migration = match[1];
-
-  assert.match(migration, /set default_workspace = 'planning'/);
-  assert.match(migration, /where default_workspace = 'ceo-intake'/);
-  assert.match(migration, /drop constraint if exists profile_ui_preferences_default_workspace_check/);
-  assert.match(migration, /add constraint profile_ui_preferences_default_workspace_check/);
-  assert.ok(
-    migration.indexOf("drop constraint") < migration.indexOf("update public.profile_ui_preferences"),
-  );
-  assert.ok(
-    migration.indexOf("update public.profile_ui_preferences") < migration.indexOf("add constraint"),
-  );
-  const currentConstraint = migration.slice(migration.indexOf("add constraint"));
-  assert.doesNotMatch(currentConstraint, /'ceo-intake'/);
-  for (const workspace of workspacePreferences.persistedWorkspaceIds) {
-    assert.match(currentConstraint, new RegExp(`'${workspace}'`));
-  }
-});

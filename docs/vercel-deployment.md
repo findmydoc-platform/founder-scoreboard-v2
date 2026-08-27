@@ -114,7 +114,7 @@ Production deploys start automatically on every push to `main`, which includes m
 
 GitHub Actions executes the production flow in this order:
 
-- Verify the timestamp migration history and immutable production baseline.
+- Verify the timestamp migration history and immutable current-schema baseline.
 - Assert that the configured Vercel organization and project IDs match the FounderOps production project before contacting Vercel.
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
 - Build the production Vercel output from the GitHub Actions production job. The Vercel build command is only `pnpm run build`; it does not repeat tests, lint, or policy checks.
@@ -129,17 +129,17 @@ GitHub Actions executes the production flow in this order:
 
 `vercel.json` sets `buildCommand` to `pnpm run build`. Vercel still creates the environment-specific `.vercel/output` artifact for the prebuilt deployment, but it does not run the pull-request validation suite again.
 
-`supabase/migrations/20260713120959_production_baseline.sql` is an immutable dump of the deployed production schema. A fresh local database starts from that baseline and then applies later timestamp migrations in order. Production must never replay the baseline over the existing schema.
+`supabase/migrations/20260827064853_current_schema_baseline.sql` is the immutable current-schema baseline. A fresh local database starts from it and then applies later timestamp migrations in order. Production must never replay the baseline over the existing schema.
 
-Before the first merge that activates the migration ledger, restore-test a private roles/schema/data backup, confirm that production still matches the baseline, and mark only the baseline version as applied:
+Before the squash is activated in production, follow `docs/supabase-migration-cutover.md`: back up roles, schema, data, and migration history; restore-test the encrypted archive; confirm normalized production-schema and data parity; and obtain separate production approval. Then mark every superseded version as reverted and only the new baseline version as applied.
 
 ```bash
-pnpm exec supabase migration repair --db-url "$SUPABASE_DB_URL" --status applied 20260713120959
+pnpm exec supabase migration repair --linked --status applied 20260827064853
 ```
 
-The bucket configuration migration remains pending and is applied by the first production workflow run. The deploy script fails closed while the ledger is absent or the baseline version is missing. Keep the verified pre-cutover backup for 14 days.
+The command changes only the migration ledger; it must run only in the approved cutover session, after superseded versions have been marked reverted. The deploy script fails closed while the ledger is absent or the new baseline version is missing. The subsequent production dry run must report zero pending migrations. Keep the encrypted pre-cutover backup and its Keeper-held key for 14 days, then delete both.
 
-All later schema changes start with `pnpm run db:migration:new -- <clear_name>` and are committed under `supabase/migrations/`. Run `pnpm run verify:migrations` and a fresh `pnpm run db:reset` before opening a pull request. Production rollback is forward-only by default: add a corrective migration. Backup restoration and migration-history repair require an explicitly approved incident procedure; the pipeline contains no automatic schema rollback.
+All later schema changes start with `pnpm run db:migration:new -- <clear_name>` and are committed under `supabase/migrations/`. Add the matching `tests/migrations/<migration-name>.test.mjs`, then run `pnpm run verify:migrations`, `pnpm run test:migrations`, and a fresh `pnpm run db:reset` before opening a pull request. Production rollback is forward-only by default: add a corrective migration. Backup restoration and migration-history repair require an explicitly approved incident procedure; the pipeline contains no automatic schema rollback.
 
 Configure all three production database secrets from the values shown under **Connect > Session pooler** in Supabase. To update the password from local `.env.local` without printing it, run from the repository root:
 

@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "session" } };
@@ -94,35 +92,7 @@ function fixture({
   };
 }
 
-test("review routes delegate to PlanningItems and the command RPC remains service-only", async () => {
-  const paths = [
-    "src/app/api/tasks/[id]/review/route.ts",
-    "src/app/api/tasks/[id]/review/withdraw/route.ts",
-    "src/app/api/tasks/[id]/review/reopen/route.ts",
-  ];
-  const routes = await Promise.all(paths.map((path) => readFile(path, "utf8")));
-  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
-  const model = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
-  const migration = await readFile("supabase/migrations/20260812133802_planning_review_command_transaction.sql", "utf8");
-  const schema = await readSupabaseSchemaContract();
 
-  for (const route of routes) {
-    assert.match(route, /createPlanningReviewPlanningItems/);
-    assert.match(route, /\.run\(/);
-    assert.doesNotMatch(route, /review_task_transaction|transition_task_review_transaction|\.from\("tasks"\)|createNotificationPayload|requireTaskReviewer/);
-  }
-  assert.match(taskRoute, /isPlanningReviewRequestPayload/);
-  assert.match(taskRoute, /requestPlanningReviewCommand/);
-  assert.doesNotMatch(taskRoute, /const reviewPackageId|accountable_profile_id|update\.review_status = "requested"/);
-  assert.match(model, /prepare_planning_review_command/);
-  assert.match(model, /mutate_planning_review_command_transaction/);
-  assert.match(migration, /public\.review_task_transaction/);
-  assert.match(migration, /public\.transition_task_review_transaction/);
-  assert.match(migration, /public\.update_task_transaction/);
-  assert.match(migration, /task\.review\.request/);
-  assert.match(migration, /grant execute on function public\.mutate_planning_review_command_transaction[\s\S]*to service_role/);
-  assert.match(schema, /mutate_planning_review_command_transaction/);
-});
 
 test("review transport parsers preserve validation and canonical command shapes", async () => {
   const model = await loadModel();

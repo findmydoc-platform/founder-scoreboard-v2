@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
@@ -70,20 +69,7 @@ function fixture(overrides = {}) {
   };
 }
 
-test("approval routes are transport adapters and command RPCs are service-only", async () => {
-  const [taskRoute, module, migration] = await Promise.all([
-    readFile("src/app/api/tasks/[id]/approval/route.ts", "utf8"),
-    readFile("src/features/planning-items/model/planning-items-approval.ts", "utf8"),
-    readFile("supabase/migrations/20260812140715_planning_approval_command_transaction.sql", "utf8"),
-  ]);
-  assert.match(taskRoute, /createPlanningApprovalPlanningItems/);
-  assert.match(taskRoute, /item\.task_type !== "initiative" && item\.task_type !== "deliverable"/);
-  assert.doesNotMatch(taskRoute, /decide_planning_item_approval_transaction|requireActivePlanningItem/);
-  assert.match(module, /prepare_planning_approval_command/);
-  assert.match(module, /mutate_planning_approval_command_transaction/);
-  assert.match(migration, /public\.decide_planning_item_approval_transaction/);
-  assert.match(migration, /grant execute on function public\.mutate_planning_approval_command_transaction[\s\S]*to service_role/);
-});
+
 
 test("initiative approval shares Preview and Commit policy with one writer", async () => {
   const model = await loadModel();

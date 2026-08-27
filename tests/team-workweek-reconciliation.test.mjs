@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
-import { listSupabaseMigrations } from "../scripts/lib/supabase-migrations.mjs";
 
 const reconciliation = await import("../src/features/team-workweek/server/team-workweek-reconciliation-core.ts");
 const workweekModel = await import("../src/features/team-workweek/model/team-workweek-draft.ts");
@@ -407,23 +406,7 @@ test("a resumed publication confirms reconciliation on the new published version
   });
 });
 
-test("migration keeps Google reconciliation service-only and deleted masters non-restoring", async () => {
-  const migrations = await listSupabaseMigrations();
-  const migration = migrations.find(({ file }) => file === "20260825102523_reconcile_google_workweek_changes.sql")?.sql || "";
-  assert.match(migration, /origin in \('owner', 'google_reconciliation'\)/);
-  assert.match(migration, /provider_state in \('active', 'deleted'\)/);
-  assert.match(migration, /series\.provider_state = 'deleted'/);
-  assert.match(migration, /'confirmed',[\s\S]*series\.confirmed_etag/);
-  assert.match(migration, /auth\.role\(\) <> 'service_role'/);
-  assert.match(migration, /create table public\.team_workweek_google_reconciliation_status/);
-  assert.match(migration, /team_workweek_google_reconciliation_status_select_owner_private/);
-  assert.match(migration, /owner_profile_id = public\.current_profile_id\(\)/);
-  assert.doesNotMatch(migration, /team_workweek_publications\s+add column google_reconciliation_state/);
-  assert.match(migration, /guard_owner_team_workweek_version_against_reconciliation/);
-  assert.match(migration, /origin = 'owner'/);
-  assert.match(migration, /revoke all on function public\.prepare_google_team_workweek_reconciliation[\s\S]*grant execute[\s\S]*to service_role/);
-  assert.doesNotMatch(migration, /grant (insert|update|delete).*authenticated/i);
-});
+
 
 test("reconciliation API binds the owner to the mapped session and accepts no target input", async () => {
   const route = await readFile("src/app/api/team-workweek/reconcile/route.ts", "utf8");

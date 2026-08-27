@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
@@ -147,20 +146,7 @@ test("only accepted reviews contribute while both rework decisions stay open", a
   assert.equal(acceptedScore.formPoints, 4);
 });
 
-test("review integration migration keeps both rework decisions open and installs atomic process functions", async () => {
-  const migration = await readFile(
-    "supabase/migrations/20260717175618_integrate_reviews_into_tasks.sql",
-    "utf8",
-  );
 
-  assert.match(migration, /status = 'Erledigt'[\s\S]*score_final = true[\s\S]*where review_status = 'accepted'/);
-  assert.match(migration, /status = 'Nacharbeit'[\s\S]*score_final = false[\s\S]*where review_status in \('partial', 'changes_requested'\)/);
-  assert.match(migration, /create or replace function public\.transition_task_review_transaction/);
-  assert.match(migration, /create or replace function public\.process_score_objection_transaction/);
-  assert.match(migration, /revoke insert on table public\.task_reviews from authenticated/);
-  assert.match(migration, /revoke insert, update on table public\.score_objections from authenticated/);
-  assert.match(migration, /interval '48 hours'/);
-});
 
 test("sprint review window starts after the Berlin sprint end and supports the CEO-configured duration", async () => {
   const window = await loadTranspiledModule("src/lib/sprint-review-window.ts");

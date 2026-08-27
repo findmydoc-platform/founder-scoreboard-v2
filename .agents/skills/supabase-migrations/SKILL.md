@@ -31,23 +31,25 @@ Follow the root `AGENTS.md` principle. Before broadening access, identify the re
 
 ## Workflow
 
-1. Inspect `supabase/migrations/`, `scripts/verify-*.mjs`, API routes, authorization helpers, browser clients, server clients, and data access code before writing SQL.
+1. Inspect `supabase/migrations/`, `tests/migrations/`, the affected API routes, authorization helpers, browser clients, server clients, and data access code before writing SQL.
 2. For RLS, grants, or RPC execution, state the matching app action and identify both allowed and forbidden direct Data API calls.
 3. Run `pnpm run db:migration:new <clear_name>` so the pinned CLI creates the timestamp filename. Do not pass a standalone `--`; Supabase CLI 2.109 treats it as the end of arguments and reports a missing migration name.
 4. Edit only the generated file. Never add SQL directly under `supabase/`, recreate `supabase/schema.sql`, or reuse an existing timestamp.
 5. Keep additive migrations idempotent where practical with `if not exists`, `on conflict`, and guarded `do $$` blocks.
-6. Add or update the narrowest verification script or contract test. Contract tests must read the ordered migration corpus through `scripts/lib/supabase-migrations.mjs`.
-7. For RLS or grants, update `scripts/lib/database-security.mjs` so production fails closed on broad or missing policies. Add local integration coverage with a mapped session, an unmapped session, every affected app role, and forbidden direct writes. Use same-value writes or disposable local rows when proving denial.
-8. Run `pnpm run verify:migrations`, then `pnpm run db:reset` against the disposable local stack.
-9. Run `pnpm run verify:database-security -- --local`, `pnpm run verify:supabase`, `pnpm run verify:auth`, and `pnpm run test:integration:local` for auth/RLS/grants. Also run Supabase database lint and security advisors; classify known service-only `RLS Enabled No Policy` results explicitly.
-10. Let the production workflow run `pnpm run deploy:supabase-migrations`. It validates the production baseline ledger, refuses active GitHub sync locks, performs a dry run, pushes pending migrations with the pinned CLI, then verifies database security, schema, Auth mappings, and the deployed app.
+6. Add `tests/migrations/<migration-name>.test.mjs`. Reset the real local database to the previous migration version, insert representative existing rows, apply the target migration, and assert the intended schema or permission change through PostgreSQL behavior.
+7. Prove that primary keys, relevant values, and row counts survive unless the migration deliberately transforms them. For RLS, grants, or Auth changes, cover allowed and denied access with mapped and unmapped sessions and every affected app role. Do not inspect SQL source text or export production internals only for tests.
+8. For RLS or grants, update `scripts/lib/database-security.mjs` when the production guard must fail closed on broad or missing policies.
+9. Run `pnpm run verify:migrations`, start the disposable local stack, run `pnpm run test:migrations`, and finish with a fresh `pnpm run db:reset`.
+10. Run `pnpm run verify:database-security -- --local` and `pnpm run verify:auth` for auth, RLS, grants, or identity mapping. Also run Supabase database lint and classify known service-only `RLS Enabled No Policy` results explicitly.
+11. Let the production workflow run `pnpm run deploy:supabase-migrations`. It validates the current baseline ledger, refuses active GitHub sync locks, performs a dry run, pushes pending migrations with the pinned CLI, then verifies database security, Auth mappings, and the deployed app.
 
 ## Baseline and future squashes
 
-- `20260713120959_production_baseline.sql` is an immutable dump of the deployed production schema. Its SHA-256 is enforced by `verify:migrations`.
+- `20260827064853_current_schema_baseline.sql` is the immutable current-schema baseline. Its SHA-256 and matching integration test are enforced by `verify:migrations`.
 - Never replay the baseline into an existing production database. The production deploy fails closed unless that version is already marked as applied in `supabase_migrations.schema_migrations`.
-- Before a future squash, create private roles, schema, data, and ledger backups; restore-test them; dump the current deployed schema; create a new CLI baseline; validate a fresh local reset; and repair the remote ledger only after explicit approval.
-- Keep the previous backup for the agreed retention window. Remove superseded migrations and obsolete pipeline paths only in the same reviewed cutover change.
+- Before a future squash, create separate private roles, schema, data, and ledger backups; add a SHA-256 manifest; encrypt the archive with `age`; restore-test it on disposable PostgreSQL 17; compare normalized schema, row counts, sequences, and deterministic data checksums; and repair the remote ledger only after explicit approval.
+- Keep the encrypted backup and its Keeper-held key for 14 days after the verified cutover, then delete both. Remove plaintext dumps and the disposable restore database immediately after verification.
+- Remove superseded migrations and their matching tests together in the same reviewed squash change. Historical backfills do not belong in the schema-only baseline; required storage bootstrap data must remain idempotent.
 - Database rollback is forward-only by default: add a corrective migration. Restoring a backup or repairing migration history is an explicit incident action, not an automatic pipeline step.
 
 ## Output

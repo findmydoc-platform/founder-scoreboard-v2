@@ -1,18 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { readSupabaseMigrationCorpus } from "../scripts/lib/supabase-migrations.mjs";
 
-test("Sub-Issue status updates lock and revalidate the active parent approval", async () => {
-  const corpus = await readSupabaseMigrationCorpus();
-  const latestDefinition = corpus.slice(corpus.lastIndexOf("create or replace function public.update_planning_task_transaction"));
 
-  assert.match(latestDefinition, /v_changes_status boolean := v_patch \? 'status'/);
-  assert.match(latestDefinition, /where id = v_parent_id[\s\S]*task_type = 'deliverable'[\s\S]*trashed_at is null[\s\S]*for share/);
-  assert.match(latestDefinition, /v_changes_status and v_parent\.approval_status is distinct from 'approved'/);
-  assert.match(latestDefinition, /errcode = 'P0008', message = 'sub-issue parent is not approved'/);
-  assert.ok(latestDefinition.indexOf("for share") < latestDefinition.indexOf("select * into v_before_task"));
-});
 
 test("task updates expose an atomic parent-approval conflict as a stable 409", async () => {
   const route = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");

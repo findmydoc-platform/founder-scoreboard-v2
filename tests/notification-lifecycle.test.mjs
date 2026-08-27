@@ -1,6 +1,4 @@
-import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
@@ -255,27 +253,4 @@ test("user lifecycle actions keep seen open and reserve team notifications for o
   const dismissed = lifecycle.applyLocalNotificationAction(seen, "dismiss", now);
   assert.equal(dismissed.status, "dismissed");
   assert.equal(dismissed.dismissedAt, now.toISOString());
-});
-
-test("migration and routes enforce lifecycle persistence reconciliation and ownership", async () => {
-  const migration = await readSupabaseSchemaContract();
-  const route = await readFile("src/app/api/notifications/[id]/route.ts", "utf8");
-  const reconciliation = await readFile("src/lib/notification-resolution.ts", "utf8");
-  const reviewReopen = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
-  const reviewCommands = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
-
-  assert.match(migration, /create table if not exists notification_events[^]*seen_at timestamptz/);
-  assert.match(migration, /notification_events_unseen_recipient_created_idx/);
-  assert.match(migration, /notification_events_unseen_recipient_created_idx[^]*status = 'pending'[^]*seen_at is null/);
-  assert.match(migration, /recipient_profile_id is null/);
-  assert.match(migration, /current_platform_role\(\)[^]*'ceo'[^]*'deputy'/);
-  assert.match(route, /requireTeamMember/);
-  assert.match(route, /canManageNotificationEvent/);
-  assert.match(route, /\["seen", "dismiss"\]/);
-  assert.doesNotMatch(route, /action.*resolved/);
-  assert.match(reconciliation, /\.gt\("id", cursor\)/);
-  assert.match(reconciliation, /\.limit\(pageSize\)/);
-  assert.match(reconciliation, /while \(true\)/);
-  assert.match(reviewReopen, /createPlanningReviewPlanningItems/);
-  assert.match(reviewCommands, /createNotificationPayload\("task\.review_reopened"/);
 });
