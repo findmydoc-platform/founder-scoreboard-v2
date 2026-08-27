@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { isApprovedDeliverable } from "@/features/planning/model/approval-domain";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { parentDeliverableOptions, sprintOptions } from "@/features/tasks/model/task-form-options";
+import { projectDeliverableSchedule } from "@/features/planning-items/model/deliverable-schedule";
 import { compactDateRange } from "@/lib/display";
 import type { Profile, Sprint, Task } from "@/lib/types";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
@@ -43,16 +44,17 @@ export function TaskDetailPlanningSection({
 }: Props) {
   const [open, setOpen] = useState(false);
   const currentParent = allTasks.find((item) => item.id === task.parentTaskId) || null;
-  const currentSprint = sprints.find((item) => item.id === task.sprintId);
+  const schedule = projectDeliverableSchedule({ sprintId: task.sprintId || null, fixedDate: task.fixedDate || null }, sprints);
+  const currentSprint = schedule.sprint;
   const initiatives = allTasks.filter((item) => item.taskType === "initiative");
   const epics = allTasks.filter((item) => item.taskType === "epic");
   const isStrategic = task.taskType === "epic" || task.taskType === "initiative";
   const currentInitiative = initiatives.find((item) => item.id === task.parentTaskId);
-  const targetDate = task.targetDate || task.deadline || "";
+  const targetDate = task.targetDate || "";
   const canEditPlanning = task.taskType === "sub_issue" ? canReparentSubIssue : canManageTaskMeta;
-  const dateSource = task.startDate || task.endDate || task.deadline
-    ? task
-    : { startDate: currentSprint?.startDate || "", endDate: currentSprint?.endDate || "", deadline: "" };
+  const sprintPeriod = currentSprint
+    ? compactDateRange(currentSprint)
+    : "Kein Ausführungszeitraum";
 
   const updateParent = (parentTaskId: string) => {
     onUpdate({ parentTaskId });
@@ -132,7 +134,7 @@ export function TaskDetailPlanningSection({
           <CalendarDays size={17} className="shrink-0 text-slate-400" aria-hidden="true" />
           <span className="truncate font-semibold text-slate-900">{currentSprint?.name || "Kein Sprint"}</span>
           <span className="text-slate-300" aria-hidden="true">·</span>
-          <span className="whitespace-nowrap text-slate-600">{compactDateRange(dateSource)}</span>
+          <span className="whitespace-nowrap text-slate-600">{sprintPeriod}</span>
         </div>
         <UiButton type="button" size="sm" variant="ghost" className="text-blue-700 hover:bg-blue-50" aria-expanded={open} aria-controls="task-detail-planning-controls" onClick={() => setOpen((current) => !current)}>
           <Pencil size={14} aria-hidden="true" />
@@ -147,12 +149,13 @@ export function TaskDetailPlanningSection({
               <>
                 <UiSelectField label="Initiative" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...initiatives.map((item) => ({ value: item.id, label: item.title }))]} selectClassName="h-11 text-sm" />
                 <UiSelectField label="Sprint" value={task.sprintId} disabled={!isApprovedDeliverable(task) || pending} onChange={(sprintId) => onUpdate({ sprintId })} options={sprintOptions(sprints)} selectClassName="h-11 text-sm" />
-                <div><div className="text-xs font-semibold text-slate-500">Zeitraum</div><div className="mt-1 grid grid-cols-2 gap-2"><CustomDatePicker value={task.startDate || ""} disabled={pending} onChange={(startDate) => onUpdate({ startDate })} className="h-11 text-sm" aria-label="Startdatum ändern" /><CustomDatePicker value={task.endDate || ""} disabled={pending} onChange={(endDate) => onUpdate({ endDate })} className="h-11 text-sm" aria-label="Enddatum ändern" /></div></div>
+                <ReadFact label="Sprint-Zeitraum">{sprintPeriod}</ReadFact>
               </>
             ) : (
               <>
                 <ReadFact label="Initiative">{currentParent?.title || "Ohne Initiative"}</ReadFact>
                 <ReadFact label="Sprint">{currentSprint?.name || "Kein Sprint"}</ReadFact>
+                <ReadFact label="Sprint-Zeitraum">{sprintPeriod}</ReadFact>
               </>
             )}
           </div>

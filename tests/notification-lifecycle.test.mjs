@@ -29,8 +29,7 @@ const baseTask = {
   reviewStatus: "requested",
   scoreFinal: false,
   taskType: "deliverable",
-  endDate: "2026-07-10",
-  deadline: "",
+  fixedDate: "2026-07-10",
 };
 const baseEvent = {
   id: 7,
@@ -123,7 +122,7 @@ test("deadlines blockers sprints events and deleted targets reconcile by source 
   const deadline = { ...baseNotification, type: "task.deadline_overdue", recipientProfileId: "founder-1" };
   assert.equal(resolution.notificationResolution(deadline, context(), now), null);
   assert.equal(
-    resolution.notificationResolution(deadline, context({ tasks: new Map([[baseTask.id, { ...baseTask, endDate: "2026-07-20" }]]) }), now).reason,
+    resolution.notificationResolution(deadline, context({ tasks: new Map([[baseTask.id, { ...baseTask, fixedDate: "2026-07-20" }]]) }), now).reason,
     "deadline_changed",
   );
 

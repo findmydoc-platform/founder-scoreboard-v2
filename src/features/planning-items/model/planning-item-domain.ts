@@ -109,6 +109,7 @@ export type Deliverable = PlanningItemBase<"deliverable"> & Readonly<{
   review: PlanningReview;
   githubProjection: GitHubProjection;
   sprintId: SprintId | null;
+  fixedDate: string | null;
   priority: string;
 }>;
 

@@ -29,20 +29,20 @@ test("display helpers preserve shared labels and date formatting", async () => {
   assert.equal(display.formatDate("not-a-date"), "not-a-date");
   assert.equal(display.formatDate("Sprint 1", { includeYear: true }), "Sprint 1");
 
-  const range = display.dateRange({ startDate: "2026-06-09", endDate: "2026-06-10", deadline: "" });
+  const range = display.dateRange({ startDate: "2026-06-09", endDate: "2026-06-10" });
   assert.match(range, /09/);
   assert.match(range, /10/);
-  assert.equal(display.dateRange({ startDate: "", endDate: "", deadline: "2026-06-30" }), "2026-06-30");
+  assert.equal(display.dateRange({ startDate: "", endDate: "" }), "ohne Zeitraum");
   assert.equal(
-    display.compactDateRange({ startDate: "2026-06-02", endDate: "2026-06-04", deadline: "" }),
+    display.compactDateRange({ startDate: "2026-06-02", endDate: "2026-06-04" }),
     "02.–04. Juni",
   );
   assert.equal(
-    display.compactDateRange({ startDate: "2026-05-30", endDate: "2026-06-02", deadline: "" }),
+    display.compactDateRange({ startDate: "2026-05-30", endDate: "2026-06-02" }),
     "30. Mai–02. Juni",
   );
   assert.equal(
-    display.compactDateRange({ startDate: "", endDate: "", deadline: "" }),
+    display.compactDateRange({ startDate: "", endDate: "" }),
     "Zeitraum offen",
   );
 });

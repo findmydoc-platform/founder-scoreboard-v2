@@ -14,10 +14,12 @@ export function formatDate(value: string, options: { includeYear?: boolean } = {
   }).format(date);
 }
 
-export function dateRange(task: Pick<Task, "startDate" | "endDate" | "deadline">, options: { includeYear?: boolean } = {}) {
-  if (!task.startDate && !task.endDate) return task.deadline || "ohne Datum";
-  if (task.startDate === task.endDate) return formatDate(task.startDate, options);
-  return `${formatDate(task.startDate, options)} - ${formatDate(task.endDate, options)}`;
+type DateRangeValue = Readonly<{ startDate: string; endDate: string }>;
+
+export function dateRange(value: DateRangeValue, options: { includeYear?: boolean } = {}) {
+  if (!value.startDate && !value.endDate) return "ohne Zeitraum";
+  if (value.startDate === value.endDate) return formatDate(value.startDate, options);
+  return `${formatDate(value.startDate, options)} - ${formatDate(value.endDate, options)}`;
 }
 
 function parseDisplayDate(value: string) {
@@ -26,10 +28,10 @@ function parseDisplayDate(value: string) {
 }
 
 export function compactDateRange(
-  value: Pick<Task, "startDate" | "endDate" | "deadline">,
+  value: DateRangeValue,
 ) {
-  const startValue = value.startDate || value.endDate || value.deadline;
-  const endValue = value.endDate || value.startDate || value.deadline;
+  const startValue = value.startDate || value.endDate;
+  const endValue = value.endDate || value.startDate;
   if (!startValue || !endValue) return "Zeitraum offen";
 
   const start = parseDisplayDate(startValue);

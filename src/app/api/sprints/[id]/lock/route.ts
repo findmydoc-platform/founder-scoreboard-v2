@@ -21,9 +21,6 @@ type TaskRow = {
   assignee: string | null;
   workstream: string | null;
   sort_order: number;
-  start_date: string | null;
-  end_date: string | null;
-  deadline: string | null;
   estimate_hours: number | null;
   definition_of_done: string | null;
   evidence_link: string | null;
@@ -164,7 +161,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: tasks, error: tasksError } = await supabase
     .from(ACTIVE_TASKS_TABLE)
-    .select("id,project_id,parent_task_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,approval_status,score_relevant,carryover_count,original_sprint_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
+    .select("id,project_id,parent_task_id,title,description,status,priority,owner,assignee,workstream,sort_order,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,approval_status,score_relevant,carryover_count,original_sprint_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
     .eq("sprint_id", id);
 
   if (tasksError) return apiError(tasksError.message, 500);
@@ -226,9 +223,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         assignee: task.assignee || task.owner,
         workstream: task.workstream,
         sortOrder: task.sort_order + 10000,
-        startDate: nextSprint.start_date || null,
-        endDate: nextSprint.end_date || null,
-        deadline: nextSprint.end_date || null,
+        fixedDate: null,
         hours: task.estimate_hours,
         definitionOfDone: task.definition_of_done,
         evidenceLink: task.evidence_link,

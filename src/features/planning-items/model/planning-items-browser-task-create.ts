@@ -12,6 +12,7 @@ import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { isReviewStateLocked, reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 import { unsupportedSubIssueCreateField } from "@/features/tasks/model/task-creation-draft";
+import { normalizeFixedDate } from "@/features/planning-items/model/deliverable-schedule";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
@@ -36,14 +37,11 @@ type CreateTaskPayload = {
   evidenceRequired?: string;
   taskType?: TaskType;
   parentTaskId?: string;
-  sprintId?: string;
   ownerId?: string;
   priority?: string;
   status?: string;
   workstream?: string;
-  startDate?: string;
-  endDate?: string;
-  deadline?: string;
+  fixedDate?: string;
   hours?: number;
   definitionOfDone?: string;
   creationRequestId?: string;
@@ -67,8 +65,8 @@ type CreateTaskPayload = {
 
 const createTaskPayloadFields = new Set<keyof CreateTaskPayload>([
   "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints",
-  "acceptanceCriteria", "evidenceRequired", "taskType", "parentTaskId", "sprintId",
-  "ownerId", "priority", "status", "workstream", "startDate", "endDate", "deadline",
+  "acceptanceCriteria", "evidenceRequired", "taskType", "parentTaskId",
+  "ownerId", "priority", "status", "workstream", "fixedDate",
   "hours", "definitionOfDone", "creationRequestId", "relationType", "relatedTaskId",
   "relationNote", "approveNow", "githubRepo", "targetDate", "strategy", "raciAssignments",
 ]);
@@ -267,12 +265,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (payload.approveNow && !isCeo) return apiError("Nur der CEO kann beim Erstellen direkt freigeben.", 403);
   let parentApprovalStatus: Task["parentApprovalStatus"] = null;
   let initiative: { id: string; owner?: string | null; approval_status?: string | null } | null = null;
-  const startDate = payload.startDate || null;
-  const endDate = payload.endDate || null;
-
-  if (startDate && endDate && startDate > endDate) {
-    return apiError("Das Startdatum darf nicht nach dem Enddatum liegen.", 400);
-  }
+  const fixedDate = normalizeFixedDate(payload.fixedDate);
+  if (payload.fixedDate && !fixedDate) return apiError("Fixtermin ist ungültig.", 400);
 
   const taskType: TaskType = requestedType;
   const scoreRelevant = false;
@@ -369,9 +363,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     createdBy: permission.profile?.id || null,
     workstream: taskType === "sub_issue" ? "" : cleanText(payload.workstream, 120),
     sortOrder: 0,
-    startDate: taskType === "sub_issue" ? null : startDate,
-    endDate: taskType === "sub_issue" ? null : endDate,
-    deadline: taskType === "sub_issue" ? null : payload.deadline || null,
+    fixedDate: taskType === "deliverable" ? fixedDate : null,
     hours: taskType === "sub_issue" ? 0 : Math.max(0, Math.min(200, Math.round(Number(payload.hours || 0)))),
     definitionOfDone: cleanText(payload.definitionOfDone, 4000),
     sprintId: null,
@@ -441,9 +433,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
       ownerId: assignee,
       priority,
       workstream: payload.workstream,
-      startDate,
-      endDate,
-      deadline: payload.deadline,
+      fixedDate,
       hours: payload.hours,
       githubRepo: payload.githubRepo,
       status,

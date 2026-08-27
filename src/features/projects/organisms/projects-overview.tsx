@@ -12,9 +12,10 @@ import { canWithdrawPlanningRoot, isWithdrawableApprovalStatus } from "@/feature
 import { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS, type ProjectsRiskFilter, type ProjectsSort, type ProjectsTableFilters } from "@/features/projects/model/projects-filter-view-model";
 import type { EpicChildCounts } from "@/features/projects/model/epic-contract";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
+import { projectDeliverableSchedule } from "@/features/planning-items/model/deliverable-schedule";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, priorityBadgeTone, taskStatuses } from "@/lib/status";
-import type { ApprovalDecisionAction, PlanningShellState, Profile, Task } from "@/lib/types";
+import type { ApprovalDecisionAction, PlanningShellState, Profile, Sprint, Task } from "@/lib/types";
 import type { ApprovalReasonAction } from "@/lib/approval-decision-policy";
 import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
@@ -413,7 +414,7 @@ function InitiativeTreeItem({
                 <div className="rounded-md bg-slate-50 p-2"><div className="text-xs text-slate-500">Aufwand</div><div className="font-semibold text-slate-900">{effort}h</div></div>
               </div>
             </div>
-            <DeliverableTable tasks={tasks} totalCount={data.tasks.filter((task) => task.parentTaskId === initiative.id && task.taskType === "deliverable").length} onOpenTask={onOpenTask} filters={filters} onFiltersChange={onFiltersChange} ownerOptions={ownerOptions} statusOptions={statusOptions} priorityOptions={priorityOptions} />
+            <DeliverableTable tasks={tasks} sprints={data.sprints} totalCount={data.tasks.filter((task) => task.parentTaskId === initiative.id && task.taskType === "deliverable").length} onOpenTask={onOpenTask} filters={filters} onFiltersChange={onFiltersChange} ownerOptions={ownerOptions} statusOptions={statusOptions} priorityOptions={priorityOptions} />
           </div>
         </div>
       )}
@@ -423,6 +424,7 @@ function InitiativeTreeItem({
 
 function DeliverableTable({
   tasks,
+  sprints,
   totalCount,
   onOpenTask,
   filters,
@@ -432,6 +434,7 @@ function DeliverableTable({
   priorityOptions,
 }: {
   tasks: Task[];
+  sprints: Sprint[];
   totalCount: number;
   onOpenTask: (taskId: string) => void;
   filters: ProjectsTableFilters;
@@ -452,8 +455,9 @@ function DeliverableTable({
       mobileContentBreakpoint="xl"
       mobileContent={(
         <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
-          {tasks.map((task) => (
-            <article key={task.id} className="grid gap-3 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white">
+          {tasks.map((task) => {
+            const schedule = projectDeliverableSchedule({ sprintId: task.sprintId || null, fixedDate: task.fixedDate || null }, sprints);
+            return <article key={task.id} className="grid gap-3 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white">
               <TaskReferenceLink task={task} onOpenTask={onOpenTask} layout="flex" className="min-h-11 items-start py-1 font-semibold leading-5 text-slate-950">
                 <span className="line-clamp-2">{task.title}</span>
               </TaskReferenceLink>
@@ -464,10 +468,11 @@ function DeliverableTable({
               <dl className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
                 <div><dt className="font-semibold text-slate-500">Owner</dt><dd>{taskAssigneeLabel(task)}</dd></div>
                 <div><dt className="font-semibold text-slate-500">Aufwand</dt><dd>{task.hours}h</dd></div>
-                <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Zeitraum</dt><dd>{dateRange(task)}</dd></div>
+                <div><dt className="font-semibold text-slate-500">Sprint-Zeitraum</dt><dd>{schedule.sprint ? dateRange(schedule.sprint) : "–"}</dd></div>
+                <div><dt className="font-semibold text-slate-500">Fixtermin</dt><dd>{schedule.fixedDate || "–"}</dd></div>
               </dl>
-            </article>
-          ))}
+            </article>;
+          })}
           {!tasks.length && <UiEmptyState className="m-4 md:col-span-2">{totalCount ? "Keine Deliverables für diese Filter." : "Noch keine Deliverables in dieser Initiative."}</UiEmptyState>}
         </div>
       )}
@@ -482,8 +487,9 @@ function DeliverableTable({
         </tr>
       </DataTableHead>
       <tbody>
-      {tasks.map((task) => (
-        <DataRow key={task.id}>
+      {tasks.map((task) => {
+        const schedule = projectDeliverableSchedule({ sprintId: task.sprintId || null, fixedDate: task.fixedDate || null }, sprints);
+        return <DataRow key={task.id}>
           <DataCell className="min-w-0" sticky>
             <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="max-w-full font-semibold text-slate-950">
               <span className="block truncate">{task.title}</span>
@@ -493,9 +499,9 @@ function DeliverableTable({
           <DataCell className="truncate text-slate-700">{taskAssigneeLabel(task)}</DataCell>
           <DataCell className="text-slate-700">{task.approvalStatus === "approved" ? normalizeStatus(task.status) : task.approvalStatus}</DataCell>
           <DataCell className="text-slate-700">{task.hours}h</DataCell>
-          <DataCell className="truncate text-slate-700">{dateRange(task)}</DataCell>
-        </DataRow>
-      ))}
+          <DataCell className="truncate text-slate-700">{schedule.sprint ? dateRange(schedule.sprint) : "–"}{schedule.fixedDate ? ` · Fixtermin ${schedule.fixedDate}` : ""}</DataCell>
+        </DataRow>;
+      })}
       {!tasks.length && <DataEmptyRow colSpan={5}>{totalCount ? "Keine Deliverables für diese Filter." : "Noch keine Deliverables in dieser Initiative."}</DataEmptyRow>}
       </tbody>
     </DataTableFrame>

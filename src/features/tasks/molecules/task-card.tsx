@@ -16,7 +16,7 @@ import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
 import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
 import { directChildPluralLabel, taskChildProgress } from "@/features/tasks/model/task-card-presentation";
-import { dateRange, taskAssigneeLabel } from "@/lib/display";
+import { formatDate, taskAssigneeLabel } from "@/lib/display";
 import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
 import type { Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
@@ -433,7 +433,7 @@ export function TaskCard({
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: ownerColor }} />
           <span className="truncate">{taskAssigneeLabel(task)}</span>
         </span>
-        <span className="shrink-0">{task.targetDate || dateRange(task)}</span>
+        <span className="shrink-0">{task.taskType === "deliverable" && task.fixedDate ? `Fixtermin ${formatDate(task.fixedDate)}` : task.targetDate || ""}</span>
       </div>
       <TaskCardStatusMenu
         onStatusChange={onStatusChange}

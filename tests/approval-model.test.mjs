@@ -141,5 +141,6 @@ test("carry-overs re-enter approval without a Sprint assignment", async () => {
   assert.match(sprintLock, /scoreRelevant: false/);
   assert.match(sprintLock, /approvalStatus: "proposed"/);
   assert.doesNotMatch(sprintLock, /sprintId: nextSprint\.id/);
+  assert.doesNotMatch(sprintLock, /fixedDate: task\./);
   assert.doesNotMatch(sprintLock, /approvalStatus: "approved"/);
 });

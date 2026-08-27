@@ -150,10 +150,10 @@ function TreeRow({
               total={rollup.total}
             />
           ) : null}
-          {!rollup.total || task.targetDate || task.deadline ? (
+          {!rollup.total || task.targetDate || task.fixedDate ? (
             <div className={classNames("flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500", rollup.total ? "mt-2" : "mt-1")}>
               {!rollup.total ? (task.assignee ? <span>{task.assignee}</span> : <span className="text-amber-700">Owner fehlt</span>) : null}
-              {task.targetDate || task.deadline ? <span>Zieltermin: {task.targetDate || task.deadline}</span> : null}
+              {task.targetDate ? <span>Zieltermin: {task.targetDate}</span> : task.fixedDate ? <span>Fixtermin: {task.fixedDate}</span> : null}
             </div>
           ) : null}
         </div>

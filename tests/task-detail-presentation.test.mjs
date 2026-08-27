@@ -54,9 +54,7 @@ function task(overrides = {}) {
     milestoneId: "milestone-7",
     packageId: "package-3",
     workstream: "Founder Ops",
-    startDate: "2026-07-14",
-    endDate: "2026-07-18",
-    deadline: "2026-07-18",
+    fixedDate: "2026-07-18",
     githubRepo: "findmydoc-platform/management",
     ...overrides,
   };
@@ -271,14 +269,11 @@ test("buildQuickSubIssueCreationDraft trims the title and inherits parent contex
       evidenceRequired: "",
       taskType: "sub_issue",
       parentTaskId: 42,
-      sprintId: "",
       assignee: "sebastian",
       priority: "P2",
       status: "Offen",
       workstream: "",
-      startDate: "",
-      endDate: "",
-      deadline: "",
+      fixedDate: "",
       targetDate: "",
       hours: 0,
       definitionOfDone: "",
@@ -297,17 +292,13 @@ test("buildQuickSubIssueCreationDraft trims the title and inherits parent contex
     parent: task({
       milestoneId: undefined,
       workstream: undefined,
-      startDate: undefined,
-      endDate: undefined,
-      deadline: undefined,
+      fixedDate: undefined,
       githubRepo: undefined,
     }),
     title: "Fallbacks",
   });
 
   assert.equal(fallbackDraft.workstream, "");
-  assert.equal(fallbackDraft.startDate, "");
-  assert.equal(fallbackDraft.endDate, "");
-  assert.equal(fallbackDraft.deadline, "");
+  assert.equal(fallbackDraft.fixedDate, "");
   assert.equal(fallbackDraft.githubRepo, "");
 });

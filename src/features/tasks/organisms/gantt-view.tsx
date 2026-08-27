@@ -14,7 +14,7 @@ function parseIsoDate(value: string) {
 
 export function GanttView({ tasks, items, sprints, relations, onOpenTask }: { tasks: Task[]; items: Task[]; sprints: Sprint[]; relations: TaskRelation[]; onOpenTask: (taskId: string) => void }) {
   const firstTaskStart = tasks
-    .map((task) => parseIsoDate(sprints.find((sprint) => sprint.id === task.sprintId)?.startDate || "") || parseIsoDate(task.startDate))
+    .map((task) => parseIsoDate(sprints.find((sprint) => sprint.id === task.sprintId)?.startDate || ""))
     .filter((date): date is Date => Boolean(date))
     .sort((a, b) => a.getTime() - b.getTime())[0];
   const start = firstTaskStart || parseIsoDate(sprints[0]?.startDate || "") || new Date("2026-05-25T00:00:00");
@@ -47,8 +47,8 @@ export function GanttView({ tasks, items, sprints, relations, onOpenTask }: { ta
           </div>
           {tasks.map((task) => {
             const sprint = sprints.find((item) => item.id === task.sprintId);
-            const taskStart = parseIsoDate(sprint?.startDate || "") || parseIsoDate(task.startDate) || start;
-            const taskEnd = parseIsoDate(sprint?.endDate || "") || parseIsoDate(task.endDate) || parseIsoDate(task.startDate) || taskStart;
+            const taskStart = parseIsoDate(sprint?.startDate || "") || start;
+            const taskEnd = parseIsoDate(sprint?.endDate || "") || taskStart;
             const left = Math.max(0, Math.floor((taskStart.getTime() - start.getTime()) / 86400000));
             const length = Math.max(1, Math.floor((taskEnd.getTime() - taskStart.getTime()) / 86400000) + 1);
             const initiative = items.find((item) => item.taskType === "initiative" && item.id === task.parentTaskId);

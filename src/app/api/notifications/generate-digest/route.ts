@@ -14,7 +14,7 @@ type TaskRow = {
   priority: string | null;
   assignee: string | null;
   owner: string | null;
-  end_date: string | null;
+  fixed_date: string | null;
   review_status: string | null;
   review_owner_profile_id: string | null;
   task_type: string | null;
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
   ] = await Promise.all([
     supabase
       .from(ACTIVE_TASKS_TABLE)
-      .select("id,title,description,status,priority,assignee,owner,end_date,review_status,review_owner_profile_id,task_type,approval_status,score_relevant,score_final")
+      .select("id,title,description,status,priority,assignee,owner,fixed_date,review_status,review_owner_profile_id,task_type,approval_status,score_relevant,score_final")
       .order("updated_at", { ascending: false })
       .limit(200),
     supabase
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (task.task_type === "deliverable" && isDueTodayOrOverdue(task.end_date, today)) {
+    if (task.task_type === "deliverable" && isDueTodayOrOverdue(task.fixed_date, today)) {
       candidates.push({
         type: "task.deadline_overdue",
         actorProfileId: assignee,
@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
         entityType: "task",
         entityId: task.id,
         title: `Überfällig: ${task.title}`,
-        body: taskBody(task, `Zieltermin war ${task.end_date}. Bitte Status, Review oder Blocker klären.`),
+        body: taskBody(task, `Fixtermin war ${task.fixed_date}. Bitte Status, Review oder Blocker klären.`),
         dedupeKey: dedupeKey("task.deadline_overdue", "task", task.id, today, assignee || groupRecipient),
       });
     }

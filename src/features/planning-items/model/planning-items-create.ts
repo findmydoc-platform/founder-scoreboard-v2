@@ -20,6 +20,7 @@ import {
   type TeamPlanningItemType,
 } from "@/features/planning-items/model/planning-items-contract";
 import { previewPlanningItemGitHubSync } from "@/features/planning-items/model/planning-items-github-sync-preview";
+import { normalizeFixedDate } from "@/features/planning-items/model/deliverable-schedule";
 import { isReviewStateLocked, reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 import {
   intakeDate,
@@ -63,9 +64,7 @@ export type PlanningItemCreateInput = {
   informedProfileIds?: unknown;
   priority?: unknown;
   workstream?: unknown;
-  startDate?: unknown;
-  endDate?: unknown;
-  deadline?: unknown;
+  fixedDate?: unknown;
   hours?: unknown;
   githubRepo?: unknown;
   targetDate?: unknown;
@@ -92,9 +91,7 @@ export type PlanningItemCreatePreviewItem = {
   informedProfileIds?: string[];
   priority?: string;
   workstream?: string;
-  startDate?: string;
-  endDate?: string;
-  deadline?: string;
+  fixedDate?: string;
   hours?: number;
   githubRepo?: string;
   targetDate?: string;
@@ -124,7 +121,7 @@ const fieldsByType: Record<TeamPlanningItemType, Set<string>> = {
   deliverable: new Set([
     "itemType", "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints",
     "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId",
-    "priority", "workstream", "startDate", "endDate", "deadline", "hours", "githubRepo", "status", "githubSync",
+    "priority", "workstream", "fixedDate", "hours", "githubRepo", "status", "githubSync",
   ]),
   sub_issue: new Set([
     "itemType", "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints",
@@ -287,9 +284,10 @@ export async function buildPlanningItemCreatePreview(
       errors.push(`targetDate ist für ${itemType} nicht zulässig.`);
     }
     const status = normalizedStatus(itemType, raw.status, errors);
-    const startDate = intakeDate(raw.startDate);
-    const endDate = intakeDate(raw.endDate);
-    if (startDate && endDate && startDate > endDate) errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
+    const fixedDate = normalizeFixedDate(raw.fixedDate);
+    if (raw.fixedDate !== undefined && raw.fixedDate !== null && intakeText(raw.fixedDate, 20) && !fixedDate) {
+      errors.push("fixedDate muss ein gültiges Datum im Format YYYY-MM-DD sein.");
+    }
 
     const accountableProfileId = intakeText(raw.accountableProfileId, 120);
     const responsibleProfileIds = normalizedTextList(raw.responsibleProfileIds);
@@ -360,9 +358,7 @@ export async function buildPlanningItemCreatePreview(
         Object.assign(preview, {
           priority: intakePriority(raw.priority),
           workstream: intakeText(raw.workstream, 120),
-          startDate,
-          endDate,
-          deadline: intakeText(raw.deadline, 120),
+          fixedDate: fixedDate || undefined,
           hours: intakeHours(raw.hours),
         });
       }
@@ -527,9 +523,7 @@ export function planningItemCreateCommand(items: readonly PlanningItemCreateInpu
         parentId: intakeText(raw.parentTaskId, 120) || null,
         priority: intakePriority(raw.priority),
         workstream: intakeText(raw.workstream, 120),
-        startDate: intakeDate(raw.startDate) || null,
-        endDate: intakeDate(raw.endDate) || null,
-        deadline: intakeDate(raw.deadline) || null,
+        fixedDate: normalizeFixedDate(raw.fixedDate),
         hours: intakeHours(raw.hours),
         githubRepository: intakeText(raw.githubRepo, 120) || defaultGitHubRepository,
       };
@@ -610,7 +604,7 @@ async function prepareTeamCreate(
     if (existingRequest.error) return { data: null, error: existingRequest.error };
     stored = existingRequest.data as StoredCreateRequest | null;
   }
-  if (stored && Number(stored.contract_version || 1) < 2) {
+  if (stored && Number(stored.contract_version || 1) < 3) {
     return { data: { kind: "error", error: { code: "conflict", reason: "idempotency" } }, error: null };
   }
   const preview = await buildPlanningItemCreatePreview([...dependencies.rawItems], {

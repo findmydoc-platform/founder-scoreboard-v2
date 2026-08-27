@@ -14,6 +14,7 @@ import { UiBadge, UiEmptyState, type UiTone } from "@/shared/atoms/ui-primitives
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
 import { DataCell, DataColumnHeader, DataEmptyRow, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
 import { buildTaskTableViewModel, type TaskTableSort } from "@/features/tasks/model/task-table-view-model";
+import { projectDeliverableSchedule } from "@/features/planning-items/model/deliverable-schedule";
 
 type TaskTableViewProps = {
   visibleTasks: Task[];
@@ -99,7 +100,7 @@ export function TaskTableView({
   onUpdateTask,
   onFiltersChange,
 }: TaskTableViewProps) {
-  const sortKeys: TaskTableSort[] = ["title", "status", "assignee", "priority", "sprint", "start", "deadline"];
+  const sortKeys: TaskTableSort[] = ["title", "status", "assignee", "priority", "sprint", "start", "fixedDate"];
   const sortKey: TaskTableSort = sortKeys.includes(filters.sort as TaskTableSort) ? filters.sort as TaskTableSort : "priority";
   const { rows: sortedTasks } = buildTaskTableViewModel({ tasks: visibleTasks, profiles, sprints, filters: { sort: sortKey, direction: filters.direction } });
   const toggleSort = (key: TaskTableSort) => onFiltersChange({ ...filters, sort: key, direction: sortKey === key && filters.direction === "asc" ? "desc" : "asc" });
@@ -113,7 +114,7 @@ export function TaskTableView({
   return (
     <DataTableFrame
       title="Aufgaben"
-      description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "deadline" ? "Zieltermin" : "Status"}`}
+      description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "fixedDate" ? "Fixtermin" : "Status"}`}
       caption="Gefilterte Planungsaufgaben"
       results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: allTasks.filter((task) => task.taskType !== "sub_issue").length }]}
       filtering={{ mode: "external", labelledBy: "planning-filters" }}
@@ -123,6 +124,7 @@ export function TaskTableView({
         <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
           {sortedTasks.map((task) => {
             const canUpdateStatus = canChangeTaskStatus(task);
+            const schedule = projectDeliverableSchedule({ sprintId: task.sprintId || null, fixedDate: task.fixedDate || null }, sprints);
             return (
               <article key={task.id} className="grid gap-4 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white">
                 <div className="flex min-w-0 items-start justify-between gap-3">
@@ -155,8 +157,8 @@ export function TaskTableView({
                   </label>
                 </div>
                 <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-                  <span><strong className="font-semibold text-slate-700">Zeitraum:</strong> {dateRange(task)}</span>
-                  <span><strong className="font-semibold text-slate-700">Zieltermin:</strong> {task.deadline || "–"}</span>
+                  <span><strong className="font-semibold text-slate-700">Sprint-Zeitraum:</strong> {schedule.sprint ? dateRange(schedule.sprint) : "–"}</span>
+                  <span><strong className="font-semibold text-slate-700">Fixtermin:</strong> {schedule.fixedDate || "–"}</span>
                 </div>
                 <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
               </article>
@@ -178,13 +180,14 @@ export function TaskTableView({
             <DataColumnHeader label="Priorität" direction={directionFor("priority")} onSort={() => toggleSort("priority")} filter={<ColumnFilterPopover label="Aufgaben nach Priorität filtern" activeCount={filters.priority === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, priority: "Alle" })}><CustomSelect aria-label="Priorität wählen" value={filters.priority} onChange={(priority) => onFiltersChange({ ...filters, priority })} options={priorityOptions} className="h-10" /></ColumnFilterPopover>} />
             <DataColumnHeader label="Sprint" direction={directionFor("sprint")} onSort={() => toggleSort("sprint")} filter={<ColumnFilterPopover label="Aufgaben nach Sprint filtern" activeCount={filters.sprintId === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, sprintId: "Alle" })}><CustomSelect aria-label="Sprint wählen" value={filters.sprintId} onChange={(sprintId) => onFiltersChange({ ...filters, sprintId })} options={sprintOptions} className="h-10" /></ColumnFilterPopover>} />
             <DataColumnHeader label="Zeitraum" direction={directionFor("start")} onSort={() => toggleSort("start")} />
-            <DataColumnHeader label="Zieltermin" direction={directionFor("deadline")} onSort={() => toggleSort("deadline")} filter={<ColumnFilterPopover label="Aufgaben nach Zieltermin filtern" activeCount={(filters.targetFrom ? 1 : 0) + (filters.targetTo ? 1 : 0)} onReset={() => onFiltersChange({ ...filters, targetFrom: "", targetTo: "" })}><div className="grid gap-3"><CustomDatePicker aria-label="Zieltermin von" value={filters.targetFrom} onChange={(targetFrom) => onFiltersChange({ ...filters, targetFrom })} className="h-10" /><CustomDatePicker aria-label="Zieltermin bis" value={filters.targetTo} onChange={(targetTo) => onFiltersChange({ ...filters, targetTo })} className="h-10" /></div></ColumnFilterPopover>} />
+            <DataColumnHeader label="Fixtermin" direction={directionFor("fixedDate")} onSort={() => toggleSort("fixedDate")} filter={<ColumnFilterPopover label="Aufgaben nach Fixtermin filtern" activeCount={(filters.targetFrom ? 1 : 0) + (filters.targetTo ? 1 : 0)} onReset={() => onFiltersChange({ ...filters, targetFrom: "", targetTo: "" })}><div className="grid gap-3"><CustomDatePicker aria-label="Fixtermin von" value={filters.targetFrom} onChange={(targetFrom) => onFiltersChange({ ...filters, targetFrom })} className="h-10" /><CustomDatePicker aria-label="Fixtermin bis" value={filters.targetTo} onChange={(targetTo) => onFiltersChange({ ...filters, targetTo })} className="h-10" /></div></ColumnFilterPopover>} />
             <DataColumnHeader label="Risiko" filter={<ColumnFilterPopover label="Aufgaben nach Risiko filtern" activeCount={filters.risk === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, risk: "Alle" })}><CustomSelect aria-label="Risiko wählen" value={filters.risk} onChange={(risk) => onFiltersChange({ ...filters, risk })} options={riskOptions} className="h-10" /></ColumnFilterPopover>} />
           </tr>
         </DataTableHead>
         <tbody>
           {sortedTasks.map((task) => {
             const canUpdateStatus = canChangeTaskStatus(task);
+            const schedule = projectDeliverableSchedule({ sprintId: task.sprintId || null, fixedDate: task.fixedDate || null }, sprints);
             return (
               <DataRow key={task.id}>
                 <DataCell className="max-w-sm" sticky>
@@ -210,8 +213,8 @@ export function TaskTableView({
                 <DataCell>
                   <CustomSelect aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => onUpdateTask(task, { sprintId: value })} className="h-8 w-36 text-xs" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
                 </DataCell>
-                <DataCell>{dateRange(task)}</DataCell>
-                <DataCell>{task.deadline}</DataCell>
+                <DataCell>{schedule.sprint ? dateRange(schedule.sprint) : "–"}</DataCell>
+                <DataCell>{schedule.fixedDate || "–"}</DataCell>
                 <DataCell className="max-w-52">
                   <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
                 </DataCell>

@@ -16,9 +16,7 @@ export type TaskUpdatePayload = {
   acceptanceCriteria?: string;
   evidenceRequired?: string;
   definitionOfDone?: string;
-  startDate?: string;
-  endDate?: string;
-  deadline?: string;
+  fixedDate?: string;
   dependsOn?: string;
   evidenceLink?: string;
   evidenceLinks?: string[];
@@ -51,9 +49,7 @@ export type CurrentTaskForActivity = {
   priority?: string | null;
   sprint_id?: string | null;
   parent_task_id?: string | null;
-  start_date?: string | null;
-  end_date?: string | null;
-  deadline?: string | null;
+  fixed_date?: string | null;
   evidence_link?: string | null;
 };
 
@@ -122,9 +118,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
     acceptanceCriteria: patch.acceptanceCriteria,
     evidenceRequired: patch.evidenceRequired,
     definitionOfDone: patch.definitionOfDone,
-    startDate: patch.startDate,
-    endDate: patch.endDate,
-    deadline: patch.deadline,
+    fixedDate: patch.fixedDate,
     note: patch.note,
     reviewStatus: patch.reviewStatus,
     reviewOwnerProfileId: isReviewRequest ? undefined : patch.reviewOwnerProfileId,
@@ -174,12 +168,8 @@ export function activityMessages(payload: TaskUpdatePayload, currentTask?: Curre
   if (payload.parentTaskId !== undefined && payload.parentTaskId !== currentTask?.parent_task_id) {
     messages.push(`${currentTask?.task_type === "sub_issue" ? "Parent-Deliverable" : "Übergeordnetes Planning Item"} geändert: ${formatChange(currentTask?.parent_task_id, payload.parentTaskId)}`);
   }
-  if (
-    (payload.startDate !== undefined && payload.startDate !== currentTask?.start_date)
-    || (payload.endDate !== undefined && payload.endDate !== currentTask?.end_date)
-    || (payload.deadline !== undefined && payload.deadline !== currentTask?.deadline)
-  ) {
-    messages.push(`Zeitraum geändert: ${formatChange(currentTask?.start_date, payload.startDate ?? currentTask?.start_date)} bis ${formatChange(currentTask?.end_date, payload.endDate ?? currentTask?.end_date)}`);
+  if (payload.fixedDate !== undefined && payload.fixedDate !== currentTask?.fixed_date) {
+    messages.push(`Fixtermin geändert: ${formatChange(currentTask?.fixed_date, payload.fixedDate)}`);
   }
   if (payload.problemStatement !== undefined || payload.intendedOutcome !== undefined || payload.scopeConstraints !== undefined || payload.acceptanceCriteria !== undefined || payload.evidenceRequired !== undefined || payload.definitionOfDone !== undefined) messages.push("Aufgabenbrief aktualisiert");
   if (payload.evidenceLinks !== undefined) messages.push("Nachweis-Links geändert");

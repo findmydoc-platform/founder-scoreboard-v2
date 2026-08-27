@@ -235,7 +235,7 @@ export function taskText(task: Task) {
     task.workstream,
     task.priority,
     task.definitionOfDone,
-    task.deadline,
+    task.fixedDate,
     task.githubRepo,
     task.githubIssueUrl,
     task.issueUrl,
@@ -248,10 +248,12 @@ export function taskText(task: Task) {
     .toLowerCase();
 }
 
-export function isThisWeek(task: Task) {
+export function isThisWeek(task: Task, sprints: Sprint[] = []) {
   const now = new Date();
-  const start = new Date(task.startDate);
-  const end = new Date(task.endDate || task.startDate);
+  const sprint = sprints.find((item) => item.id === task.sprintId);
+  if (!sprint?.startDate || !sprint.endDate) return false;
+  const start = new Date(sprint.startDate);
+  const end = new Date(sprint.endDate);
   const weekEnd = new Date(now);
   weekEnd.setDate(now.getDate() + 7);
   return start <= weekEnd && end >= now;

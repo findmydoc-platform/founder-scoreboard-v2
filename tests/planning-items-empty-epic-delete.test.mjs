@@ -203,7 +203,7 @@ test("role, token scope, revision, idempotency, and replay boundaries fail close
     item: null,
     stored: {
       request_hash: replayHash,
-      contract_version: 2,
+      contract_version: 3,
       response: { itemType: "epic", item: source, children: { initiatives: 0, tasks: 0 } },
     },
   });
@@ -222,6 +222,23 @@ test("role, token scope, revision, idempotency, and replay boundaries fail close
   assert.equal(replay.replayed, true);
   assert.equal(replayFixture.rpcCalls.length, 0);
 
+  const legacyReplayFixture = fixture({
+    item: null,
+    stored: {
+      request_hash: replayHash,
+      contract_version: 2,
+      response: { itemType: "epic", item: source, children: { initiatives: 0, tasks: 0 } },
+    },
+  });
+  const legacyReplay = await model.createEmptyEpicDeletePlanningItems(legacyReplayFixture.client).run({
+    actor: authorizedToken,
+    mode: "commit",
+    command,
+    idempotencyKey: "22222222-2222-4222-8222-222222222222",
+  });
+  assert.equal(legacyReplay.error.reason, "idempotency");
+  assert.equal(legacyReplayFixture.rpcCalls.length, 0);
+
   const inactiveFixture = fixture({
     item: source,
     rpcResult: { data: null, error: { code: "P0004", message: "planning items token is inactive" } },
@@ -236,7 +253,7 @@ test("role, token scope, revision, idempotency, and replay boundaries fail close
 
   const conflictFixture = fixture({
     item: null,
-    stored: { request_hash: "different", contract_version: 2, response: { itemType: "epic", item: source } },
+    stored: { request_hash: "different", contract_version: 3, response: { itemType: "epic", item: source } },
   });
   const conflict = await model.createEmptyEpicDeletePlanningItems(conflictFixture.client).run({
     actor: authorizedToken,

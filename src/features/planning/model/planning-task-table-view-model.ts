@@ -35,9 +35,9 @@ export function buildPlanningTaskTableViewModel({
     const matchesInitiative = filters.initiativeId === "Alle" || task.parentTaskId === filters.initiativeId;
     const matchesSprint = filters.sprintId === "Alle" || task.sprintId === filters.sprintId;
     const matchesWorkstream = filters.workstream === "Alle" || task.workstream === filters.workstream;
-    const deadline = task.targetDate || task.deadline || task.endDate || "";
-    const matchesTargetFrom = !filters.targetFrom || deadline >= filters.targetFrom;
-    const matchesTargetTo = !filters.targetTo || deadline <= filters.targetTo;
+    const targetDate = task.targetDate || task.fixedDate || "";
+    const matchesTargetFrom = !filters.targetFrom || targetDate >= filters.targetFrom;
+    const matchesTargetTo = !filters.targetTo || targetDate <= filters.targetTo;
     const matchesRisk = filters.risk === "Alle"
       || filters.risk === "critical" && taskHasCriticalAttention(task, data)
       || filters.risk === "blocked" && (normalized === "Blockiert" || Boolean(task.dependsOn) || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations))
@@ -49,7 +49,7 @@ export function buildPlanningTaskTableViewModel({
       || quickFilter === "open" && normalized === "Offen"
       || quickFilter === "critical" && taskHasCriticalAttention(task, data)
       || quickFilter === "blocked" && (normalized === "Blockiert" || Boolean(task.dependsOn) || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations))
-      || quickFilter === "week" && isThisWeek(task)
+      || quickFilter === "week" && isThisWeek(task, data.sprints)
       || quickFilter === "high" && ["P0", "P1"].includes(task.priority)
       || quickFilter === "evidence" && taskHasMissingEvidenceAttention(task)
     ));

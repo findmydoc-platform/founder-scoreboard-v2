@@ -27,9 +27,9 @@ test("planning task view model combines fields with AND and quick values with OR
     },
   );
   const tasks = [
-    { id: "mine", order: 1, title: "Alpha", description: "", taskType: "deliverable", status: "Offen", priority: "P2", assigneeId: "p1", assignee: "Ada", packageId: "i1", sprintId: "s1", workstream: "Product", deadline: "2026-07-15" },
-    { id: "critical", order: 2, title: "Beta", description: "", taskType: "deliverable", status: "In Arbeit", priority: "P0", assigneeId: "p2", assignee: "Bob", packageId: "i1", sprintId: "s1", workstream: "Product", deadline: "2026-07-20" },
-    { id: "other", order: 3, title: "Gamma", description: "", taskType: "deliverable", status: "Offen", priority: "P0", assigneeId: "p2", assignee: "Bob", packageId: "i2", sprintId: "s2", workstream: "Sales", deadline: "2026-08-01" },
+    { id: "mine", order: 1, title: "Alpha", description: "", taskType: "deliverable", status: "Offen", priority: "P2", assigneeId: "p1", assignee: "Ada", packageId: "i1", sprintId: "s1", workstream: "Product", fixedDate: "2026-07-15" },
+    { id: "critical", order: 2, title: "Beta", description: "", taskType: "deliverable", status: "In Arbeit", priority: "P0", assigneeId: "p2", assignee: "Bob", packageId: "i1", sprintId: "s1", workstream: "Product", fixedDate: "2026-07-20" },
+    { id: "other", order: 3, title: "Gamma", description: "", taskType: "deliverable", status: "Offen", priority: "P0", assigneeId: "p2", assignee: "Bob", packageId: "i2", sprintId: "s2", workstream: "Sales", fixedDate: "2026-08-01" },
   ];
   const data = { tasks, packages: [{ id: "i1", title: "Launch", goal: "" }], sprints: [{ id: "s1", name: "Sprint 1" }], profiles: [], taskRelations: [], taskBlockers: [] };
   const filters = {
@@ -101,8 +101,8 @@ test("task table view model applies a stable secondary order", async () => {
     },
   );
   const tasks = [
-    { id: "later", order: 2, title: "Same", priority: "P1", status: "Offen", assignee: "", sprintId: "", startDate: "", deadline: "", endDate: "" },
-    { id: "first", order: 1, title: "Same", priority: "P1", status: "Offen", assignee: "", sprintId: "", startDate: "", deadline: "", endDate: "" },
+    { id: "later", order: 2, title: "Same", priority: "P1", status: "Offen", assignee: "", sprintId: "", fixedDate: "" },
+    { id: "first", order: 1, title: "Same", priority: "P1", status: "Offen", assignee: "", sprintId: "", fixedDate: "" },
   ];
   const model = buildTaskTableViewModel({ tasks, profiles: [], sprints: [], filters: { sort: "title", direction: "asc" } });
   assert.deepEqual(model.rows.map((task) => task.id), ["first", "later"]);

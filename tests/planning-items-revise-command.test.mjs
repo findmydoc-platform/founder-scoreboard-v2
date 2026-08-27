@@ -6,6 +6,12 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 const read = (path) => readFile(path, "utf8");
 
 async function loadUpdateModel() {
+  const contract = await loadTranspiledModule(
+    "src/features/planning-items/model/planning-items-contract.ts",
+  );
+  const deliverableSchedule = await loadTranspiledModule(
+    "src/features/planning-items/model/deliverable-schedule.ts",
+  );
   return loadTranspiledModule("src/features/planning-items/model/planning-item-update.ts", {
     "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
     "@/lib/github-repositories": { resolveTaskGitHubRepository: () => ({ ok: true, repository: "findmydoc-platform/management" }) },
@@ -23,14 +29,8 @@ async function loadUpdateModel() {
       TASK_COMPLETED_LOCKED_MESSAGE: "",
     },
     "@/lib/status": { isSubIssueStatus: () => true, normalizeSubIssueStatus: (value) => value },
-    "@/features/planning-items/model/planning-items-contract": {
-      FOUNDEROPS_PLANNING_PROJECT_ID: "findmydoc-founder-execution",
-      TEAM_PLANNING_ITEM_PATCH_FIELDS: [],
-      TEAM_PLANNING_STRATEGIC_STATUSES: [],
-      isStrategicPlanningItemType: () => false,
-      parsePlanningItemGitHubSyncCommand: () => ({ ok: true, command: null }),
-      parsePlanningItemGitHubSyncMode: () => null,
-    },
+    "@/features/planning-items/model/planning-items-contract": contract,
+    "@/features/planning-items/model/deliverable-schedule": deliverableSchedule,
     "@/features/planning-items/model/planning-item-normalization": {
       normalizePatchAcceptanceCriteria: (value) => value,
       normalizePatchDate: (value) => value,
@@ -62,6 +62,24 @@ test("ReviseItem owns the four canonical field matrices and excludes workflow pa
   assert.match(update, /deliverable: new Set\(\[[^]*"problemStatement"[^]*"definitionOfDone"/);
   assert.match(update, /sub_issue: new Set\(\[[^]*"githubRepo"/);
   assert.match(update, /reason: "useChangeParentAction"/);
+});
+
+test("Team revise accepts fixedDate and rejects legacy deliverable schedule fields", async () => {
+  const model = await loadUpdateModel();
+  const expectedUpdatedAt = "2026-08-12T10:00:00.000Z";
+  const valid = model.parsePlanningItemPatchPayload({ expectedUpdatedAt, fixedDate: "2026-09-10" });
+  assert.equal(valid.ok, true);
+  assert.deepEqual(valid.presentFields, ["fixedDate"]);
+  assert.deepEqual(
+    model.planningItemReviseCommand("deliverable-one", "deliverable", expectedUpdatedAt, valid.raw).changes,
+    { itemKind: "deliverable", fixedDate: "2026-09-10" },
+  );
+
+  for (const field of ["startDate", "endDate", "deadline"]) {
+    const result = model.parsePlanningItemPatchPayload({ expectedUpdatedAt, [field]: "2026-09-10" });
+    assert.equal(result.ok, false);
+    assert.match(result.error, new RegExp(`unbekannte Feld ${field}`));
+  }
 });
 
 test("Browser and Team transports delegate Revise writes to one deep module", async () => {

@@ -33,7 +33,7 @@ function taskMissingEvidence(task: Task) {
 function reviewIsOverdue(task: Task) {
   if (task.taskType === "sub_issue") return false;
   if (normalizeStatus(task.status) !== "Review" && task.reviewStatus !== "requested") return false;
-  const reviewDate = (task.reviewRequestedAt || task.endDate || "").slice(0, 10);
+  const reviewDate = (task.reviewRequestedAt || "").slice(0, 10);
   return Boolean(reviewDate && reviewDate < addDaysIso(currentIsoDate(), -2));
 }
 

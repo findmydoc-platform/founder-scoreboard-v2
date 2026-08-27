@@ -51,7 +51,7 @@ type FounderOpsGitHubProjectFieldInput = {
   projectNumber: number;
   projectOwner: string;
   sprint?: FounderOpsGitHubSprint | null;
-  task: Pick<Task, "deadline" | "evidenceLink" | "hours" | "priority" | "startDate" | "status" | "taskType" | "workstream">;
+  task: Pick<Task, "fixedDate" | "evidenceLink" | "hours" | "priority" | "status" | "taskType" | "workstream">;
   token: string;
 };
 
@@ -285,9 +285,8 @@ async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubProjectF
     }
   }
 
-  const startDate = input.task.startDate.trim();
-  await reconcileIssue("Start date", "DATE", startDate ? { dateValue: startDate } : null, issueValues.get("Start date")?.value);
-  const targetDate = input.task.deadline.trim();
+  await reconcileIssue("Start date", "DATE", null, issueValues.get("Start date")?.value);
+  const targetDate = input.task.fixedDate.trim();
   await reconcileIssue("Target date", "DATE", targetDate ? { dateValue: targetDate } : null, issueValues.get("Target date")?.value);
 
   return { changes, warnings };

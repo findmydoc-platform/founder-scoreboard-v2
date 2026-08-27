@@ -30,7 +30,7 @@ export type DbTask = {
   created_by: string | null;
   workstream: string | null;
   target_date: string | null;
-  deadline: string | null;
+  fixed_date: string | null;
   problem_statement: string | null;
   intended_outcome: string | null;
   scope_constraints: string | null;
@@ -43,8 +43,6 @@ export type DbTask = {
   issue_url: string | null;
   watched: boolean | null;
   estimate_hours: number | null;
-  start_date: string | null;
-  end_date: string | null;
   sprint_id: string | null;
   review_status: Task["reviewStatus"] | null;
   review_owner_profile_id: string | null;
@@ -127,7 +125,7 @@ export const taskRowColumns = [
   "created_by",
   "workstream",
   "target_date",
-  "deadline",
+  "fixed_date",
   "problem_statement",
   "intended_outcome",
   "scope_constraints",
@@ -140,8 +138,6 @@ export const taskRowColumns = [
   "issue_url",
   "watched",
   "estimate_hours",
-  "start_date",
-  "end_date",
   "sprint_id",
   "review_status",
   "review_owner_profile_id",

@@ -84,7 +84,7 @@ export type Task = {
   createdBy?: string;
   workstream: string;
   targetDate?: string;
-  deadline: string;
+  fixedDate: string;
   problemStatement?: string;
   intendedOutcome?: string;
   scopeConstraints?: string;
@@ -101,8 +101,6 @@ export type Task = {
   note: string;
   watched: boolean;
   hours: number;
-  startDate: string;
-  endDate: string;
   sprintId: string;
   reviewStatus: ReviewStatus;
   reviewOwnerProfileId?: string;

@@ -20,9 +20,7 @@ type BuildTaskInsertRowInput = {
   createdBy?: string | null;
   workstream?: string | null;
   sortOrder: number;
-  startDate?: string | null;
-  endDate?: string | null;
-  deadline?: string | null;
+  fixedDate?: string | null;
   hours?: number | null;
   definitionOfDone?: string | null;
   sprintId?: string | null;
@@ -73,9 +71,7 @@ export function buildTaskInsertRow(input: BuildTaskInsertRowInput) {
     created_by: input.createdBy || null,
     workstream: input.workstream ?? null,
     sort_order: input.sortOrder,
-    start_date: input.startDate || null,
-    end_date: input.endDate || null,
-    deadline: input.deadline || null,
+    fixed_date: input.taskType === "deliverable" || !input.taskType ? input.fixedDate || null : null,
     estimate_hours: input.hours ?? null,
     definition_of_done: input.definitionOfDone ?? null,
     evidence_link: input.evidenceLink ?? null,

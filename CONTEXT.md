@@ -17,8 +17,16 @@ A strategic Planning Item that may belong to an Epic. It owns strategy, RACI, an
 _Avoid_: Package
 
 **Deliverable**:
-An approval-aware Planning Item that may belong to an Initiative. It owns Review, Sprint, and GitHub projection state.
+An approval-aware Planning Item that may belong to an Initiative. It owns Review, Sprint, an optional Fixed Date, and GitHub projection state. Its assigned Sprint defines its execution period.
 _Avoid_: generic Task when the hierarchy type matters
+
+**Sprint**:
+A time container that defines the execution period of its assigned Deliverables. It is not a hierarchy parent; an unassigned Deliverable has no execution period.
+_Avoid_: parent, Deliverable date range
+
+**Fixed Date**:
+An optional single calendar date on a Deliverable. It is separate from the Sprint period and never contains a Sprint name or relative time expression.
+_Avoid_: Deadline text, target period, Sprint label
 
 **Sub-Issue**:
 A Planning Item below one approved Deliverable. It can have a GitHub projection but does not own approval, Review, Sprint, or RACI state.

@@ -297,8 +297,7 @@ function taskSnapshot(value: unknown): GitHubPlanningTaskSnapshot | null {
     hours: Number(row.estimate_hours || 0),
     evidenceLink,
     evidenceLinks: evidenceLinks.length ? evidenceLinks : evidenceLink ? [evidenceLink] : [],
-    startDate: text(row.start_date),
-    deadline: text(row.deadline),
+    fixedDate: text(row.fixed_date),
     sprintId: text(row.sprint_id),
     ownerId: text(row.owner) || text(row.assignee),
     parentTaskId: text(row.parent_task_id),
@@ -379,7 +378,7 @@ export function createSupabaseGitHubPlanningWebhookStore(
       const [taskResult, evidenceLinksResult] = await Promise.all([
         supabase
           .from("tasks")
-          .select("id,task_type,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,status,priority,workstream,estimate_hours,start_date,deadline,sprint_id,owner,assignee,parent_task_id,review_status,score_final,updated_at")
+          .select("id,task_type,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,status,priority,workstream,estimate_hours,fixed_date,sprint_id,owner,assignee,parent_task_id,review_status,score_final,updated_at")
           .eq("id", taskId)
           .is("trashed_at", null)
           .maybeSingle(),

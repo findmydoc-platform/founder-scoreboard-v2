@@ -2,7 +2,7 @@ import type { PlanningShellState, Task } from "../types";
 import seedSource from "./source.json";
 
 type EmptySeedCollections = Omit<PlanningShellState, "project" | "profiles" | "tasks" | "sprints" | "fmdTools" | "meetings">;
-type SeedTaskDefaults = Pick<Task, "status" | "evidenceLink" | "issueNumber" | "issueUrl" | "note" | "watched" | "sprintId" | "reviewStatus" | "scorePoints" | "scoreFinal" | "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubIssueSyncStatus" | "githubIssueLastSyncedAt" | "githubIssueSyncError" | "taskType" | "parentTaskId" | "approvalStatus" | "approvalRevision" | "parentApprovalStatus" | "scoreRelevant">;
+type SeedTaskDefaults = Pick<Task, "status" | "fixedDate" | "evidenceLink" | "issueNumber" | "issueUrl" | "note" | "watched" | "sprintId" | "reviewStatus" | "scorePoints" | "scoreFinal" | "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubIssueSyncStatus" | "githubIssueLastSyncedAt" | "githubIssueSyncError" | "taskType" | "parentTaskId" | "approvalStatus" | "approvalRevision" | "parentApprovalStatus" | "scoreRelevant">;
 export type SeedTaskInput = Omit<Task, keyof SeedTaskDefaults | "owner" | "assignee" | "evidenceLinks" | "linkedPullRequests"> & Partial<SeedTaskDefaults> & {
   assigneeId: string;
   ownerId?: string;
@@ -79,12 +79,10 @@ const seedStrategicTaskDefinitions: SeedTaskInput[] = [
     description: epic.description || "",
     priority: "",
     workstream: "",
-    deadline: "",
+    fixedDate: "",
     definitionOfDone: "",
     dependsOn: "",
     hours: 0,
-    startDate: "",
-    endDate: "",
     ownerId: epic.ownerId || "",
     assigneeId: epic.ownerId || "",
     taskType: "epic" as const,
@@ -113,12 +111,10 @@ const seedStrategicTaskDefinitions: SeedTaskInput[] = [
     description: initiative.goal || "",
     priority: initiative.priority || "P2",
     workstream: "",
-    deadline: "",
+    fixedDate: "",
     definitionOfDone: "",
     dependsOn: "",
     hours: 0,
-    startDate: "",
-    endDate: "",
     ownerId: initiative.ownerId || "",
     assigneeId: initiative.ownerId || "",
     taskType: "initiative" as const,
@@ -158,10 +154,16 @@ const profileNameById = new Map(seedProfiles.map((profile) => [profile.id, profi
 export function defineTask(input: SeedTaskInput): Task {
   const assigneeId = input.assigneeId;
   const ownerId = input.ownerId || assigneeId;
+  const legacyInput = input as SeedTaskInput & { startDate?: string; endDate?: string; deadline?: string };
+  const canonicalInput = { ...legacyInput };
+  delete canonicalInput.startDate;
+  delete canonicalInput.endDate;
+  delete canonicalInput.deadline;
 
   return {
     ...taskDefaults,
-    ...input,
+    ...canonicalInput,
+    fixedDate: canonicalInput.fixedDate || "",
     approvalStatus: input.taskType === "sub_issue" ? null : input.approvalStatus || "approved",
     approvalRevision: input.approvalRevision || 1,
     parentApprovalStatus: input.taskType === "sub_issue" ? input.parentApprovalStatus || "approved" : null,

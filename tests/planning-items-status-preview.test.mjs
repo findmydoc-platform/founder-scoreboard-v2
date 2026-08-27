@@ -3,6 +3,7 @@ import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const contract = await loadTranspiledModule("src/features/planning-items/model/planning-items-contract.ts");
+const deliverableSchedule = await loadTranspiledModule("src/features/planning-items/model/deliverable-schedule.ts");
 const status = await loadTranspiledModule("src/lib/status.ts");
 const isOperationalLeadRole = (role) => role === "ceo" || role === "deputy";
 const reviewState = {
@@ -51,6 +52,7 @@ const updates = await loadTranspiledModule(
     "@/lib/status": status,
     "@/features/planning-items/model/planning-items-contract": contract,
     "@/features/planning-items/model/planning-item-normalization": normalization,
+    "@/features/planning-items/model/deliverable-schedule": deliverableSchedule,
   },
 );
 

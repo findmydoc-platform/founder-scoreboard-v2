@@ -59,6 +59,7 @@ import { hasCompletedTaskChanges, hasReviewLockedTaskChanges, isTaskReviewActive
 import { normalizeEvidenceLinkList } from "@/features/tasks/model/task-evidence-links";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
+import { normalizeFixedDate } from "@/features/planning-items/model/deliverable-schedule";
 import { requireJsonApiContext } from "@/lib/api-response";
 import { requireOperationalLead } from "@/lib/authz";
 import {
@@ -91,7 +92,7 @@ type TaskUpdateTransactionResult = {
 const taskUpdatePayloadFields = new Set<keyof TaskUpdatePayload>([
   "expectedUpdatedAt", "title", "description", "status", "ownerId", "reviewOwnerProfileId",
   "priority", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
-  "evidenceRequired", "definitionOfDone", "startDate", "endDate", "deadline", "dependsOn",
+  "evidenceRequired", "definitionOfDone", "fixedDate", "dependsOn",
   "evidenceLink", "evidenceLinks", "note", "reviewStatus", "scorePoints", "scoreFinal",
   "sprintId", "parentTaskId", "targetDate", "strategy", "raciAssignments", "selfDodChecked",
   "selfEvidenceChecked", "selfDocumentedChecked", "selfBlockersChecked",
@@ -200,7 +201,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   let sprintAssignmentNoop = false;
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,description,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,parent_task_id,start_date,end_date,deadline,evidence_link,target_date,updated_at")
+    .select("id,title,description,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,parent_task_id,fixed_date,evidence_link,target_date,updated_at")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -346,6 +347,11 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
 
   const taskTypeFieldGuard = validateTaskTypeUpdateFields(currentTask, payload);
   if (!taskTypeFieldGuard.ok) return apiError(taskTypeFieldGuard.error, taskTypeFieldGuard.status);
+  if (payload.fixedDate !== undefined) {
+    const fixedDate = normalizeFixedDate(payload.fixedDate);
+    if (payload.fixedDate && !fixedDate) return apiError("Fixtermin ist ungültig.", 400);
+    payload.fixedDate = fixedDate || "";
+  }
   const hasEvidenceLinks = Object.prototype.hasOwnProperty.call(rawPayload, "evidenceLinks");
   const hasLegacyEvidenceLink = Object.prototype.hasOwnProperty.call(rawPayload, "evidenceLink");
   if (hasEvidenceLinks || hasLegacyEvidenceLink) {

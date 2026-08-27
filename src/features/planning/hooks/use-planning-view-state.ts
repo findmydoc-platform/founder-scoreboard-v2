@@ -48,7 +48,7 @@ const planningFilterSchema: TableUrlSchema<PlanningFilters> = {
   risk: stringUrlField("Alle"),
   targetFrom: dateUrlField(),
   targetTo: dateUrlField(),
-  sort: enumUrlField<string>("priority", ["priority", "title", "status", "assignee", "sprint", "start", "deadline"]),
+  sort: enumUrlField<string>("priority", ["priority", "title", "status", "assignee", "sprint", "start", "fixedDate"]),
   direction: enumUrlField("asc", ["asc", "desc"] as const),
 };
 

@@ -243,7 +243,7 @@ async function prepareDelete(
       if (row.request_hash !== expectedHash) {
         return { data: { kind: "error", error: { code: "conflict", reason: "idempotency" } }, error: null };
       }
-      if (Number(row.contract_version || 1) < 2) {
+      if (Number(row.contract_version || 1) < 3) {
         return { data: { kind: "error", error: { code: "conflict", reason: "idempotency" } }, error: null };
       }
       const replay = replayReceipt(row.response);

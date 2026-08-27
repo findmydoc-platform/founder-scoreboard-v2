@@ -26,8 +26,7 @@ export type GitHubPlanningTaskSnapshot = Readonly<{
   hours: number;
   evidenceLink: string;
   evidenceLinks: readonly string[];
-  startDate: string;
-  deadline: string;
+  fixedDate: string;
   sprintId: string;
   ownerId: string;
   parentTaskId: string;
@@ -438,12 +437,12 @@ export function decideGitHubProjectPlanningChange({
   }
   if (field === "Start date") {
     const startDate = typeof value === "string" ? value : "";
-    return task.startDate === startDate
+    return !startDate
       ? { kind: "ignored", reason: "already_aligned" }
-      : { kind: "update", patch: { startDate } };
+      : { kind: "reconcile", reason: "start_date_is_founderops_owned_empty" };
   }
-  const deadline = typeof value === "string" ? value : "";
-  return task.deadline === deadline
+  const fixedDate = typeof value === "string" ? value : "";
+  return task.fixedDate === fixedDate
     ? { kind: "ignored", reason: "already_aligned" }
-    : { kind: "update", patch: { deadline } };
+    : { kind: "update", patch: { fixedDate } };
 }
