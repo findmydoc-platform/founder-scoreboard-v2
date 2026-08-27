@@ -73,6 +73,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Storybook browser
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Verify Supabase Migration History
         run: pnpm run verify:migrations
 
