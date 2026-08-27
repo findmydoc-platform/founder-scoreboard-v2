@@ -6,7 +6,7 @@
 - Prefer pure named functions for mapping, validation, sorting, policy, and error classification so they can be tested directly.
 - Keep React rendering components out of `src/lib`. Domain-specific helpers may depend on the owning feature model only when that boundary is already intentional.
 - Preserve exported types, route-facing result shapes, and database field mappings unless all consumers and tests change together.
-- Add direct tests for changed policies and run `verify:auth` or `verify:supabase` when the affected database or identity boundary requires it. GitHub changes require focused behavior tests for the affected projection or sync path.
+- Add direct tests for changed policies and run `verify:auth` when the affected identity boundary requires it. GitHub changes require focused behavior tests for the affected projection or sync path.
 
 ## GitHub API Mutation Rules
 

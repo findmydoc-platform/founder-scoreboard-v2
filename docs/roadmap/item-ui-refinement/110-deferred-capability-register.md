@@ -109,10 +109,10 @@ Archive may be released only when its domain meaning, cascade and restore semant
 Direct deletion is intentionally unavailable from an active Item.
 
 - `src/app/api/tasks/[id]/route.ts:457-459` returns `410` with `Direktes Löschen ist nicht mehr verfügbar. Nutze den Papierkorb-Workflow.`
-- `tests/platform-github-contract.test.mjs:118-140` explicitly verifies that the Task route does not call the legacy deletion transaction or delete from `tasks`, and that the detail UI shows the planning-trash workflow instead.
+- Focused planning-trash route and interaction tests verify reversible withdrawal and the unavailable direct-delete path.
 - `src/features/tasks/hooks/use-task-withdraw-command.ts` performs reversible optimistic removal, server withdrawal, and rollback on failure.
 - `supabase/migrations/20260713120959_production_baseline.sql:3549-3672` gives withdrawn roots a 90-day purge date.
-- `.github/workflows/purge-planning-trash.yml` invokes the protected bounded purge job; `src/app/api/maintenance/planning-trash/purge/route.ts` requires the maintenance secret and calls `purge_expired_planning_trash_batch`.
+- `src/app/api/maintenance/planning-trash/purge/route.ts` remains a manual operator endpoint. It requires the maintenance secret and calls `purge_expired_planning_trash_batch`; no scheduled workflow invokes it.
 - The baseline still contains service-role-only legacy `task_deletion_operations` and prepare/finalize/cancel functions. They are dormant schema primitives, not an available product contract, and must not be reconnected implicitly.
 
 ### Why excluded now

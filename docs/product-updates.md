@@ -10,14 +10,11 @@ Every production deployment with new or materially expanded user-visible functio
 2. Add at least one current screenshot under `public/product-updates/<update-id>/`.
 3. Explain the visible change and user benefit in short, non-technical German copy.
 4. Add a dedicated, focused Driver.js tour and connect it through the update-level `featureTourId`.
-5. Set `expiresAt` to 30 days after `releasedAt` by default. The verifier allows at most 60 days.
-6. Run `pnpm run verify:product-updates`.
+5. Set `expiresAt` to 30 days after `releasedAt` by default and never more than 60 days after `releasedAt`.
 
 Bug fixes, maintenance, copy changes, visual polish, minor UI or UX improvements, and purely operational changes do not create a gallery entry. They must not reuse an old update ID to reopen stale product news.
 
-The production deployment passes the previous `main` revision to the verifier. New or expanded user-facing TSX or CSS fails unless both the registry and a screenshot under `public/product-updates/` changed. A removal-only UI change is treated as maintenance only when it deletes at least one UI file and every remaining visible UI diff removes more lines than it adds.
-
-For a non-release UI change, update `.github/product-update-classification.json` in the same deployment diff. Use one of `bug-fix`, `copy`, `maintenance`, `minor-ux`, or `visual-polish`, plus a concrete English reason. The same-diff requirement prevents an old classification from suppressing a later product update. Manual local verification validates the complete registry without requiring a Git base revision.
+For new or expanded user-facing functionality, review the registry, screenshot, expiry, and linked tour together. Removal-only UI changes, bug fixes, maintenance, copy changes, visual polish, and minor UI or UX improvements do not require a classification file.
 
 ## Entry contract
 

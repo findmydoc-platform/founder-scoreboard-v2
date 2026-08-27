@@ -2,12 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
-import {
-  isValidNonReleaseClassification,
-  parseGitNumstat,
-  productUpdateClassificationPath,
-  requiresProductUpdateForDiff,
-} from "../scripts/lib/product-update-diff.mjs";
 
 const productUpdateSelection = await loadTranspiledModule(
   "src/features/product-updates/model/product-update-selection.ts",
@@ -80,8 +74,6 @@ test("the shared calendar product update and tour no longer depend on a rollout 
 test("product update releases require screenshots, expiry, and dedicated tours", async () => {
   const updates = JSON.parse(await readFile("src/features/product-updates/model/product-updates.json", "utf8"));
   const tours = await readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8");
-  const validationWorkflow = await readFile(".github/workflows/dependency-validation.yml", "utf8");
-  const verifier = await readFile("scripts/verify-product-updates.mjs", "utf8");
 
   assert.equal(updates.length, 10);
   assert.ok(updates.every((update) => update.slides.length > 0));
@@ -126,59 +118,4 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   assert.match(tours, /task-detail-tab-activity/);
   assert.match(tours, /help-menu-trigger/);
   assert.match(tours, /product-updates-menu-link/);
-  assert.match(
-    validationWorkflow,
-    /PRODUCT_UPDATE_BASE_REF: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*pnpm run verify:product-updates/,
-  );
-  assert.match(verifier, /New or expanded production UI changes require both a product update registry change and a current screenshot/);
-  assert.match(verifier, /expiresAt must be 1 to 60 days after releasedAt/);
-  assert.match(verifier, /has no dedicated Driver\.js tour linked through productUpdateId/);
-  assert.match(verifier, /link\.href must be a GitHub HTTPS URL/);
-});
-
-test("product update diff classification excludes removal-only UI maintenance", () => {
-  const deletionOnly = parseGitNumstat([
-    "0\t259\tsrc/features/intake/organisms/ceo-task-intake.tsx",
-    "1\t27\tsrc/features/planning/organisms/planning-workspace-renderer.tsx",
-    "1\t1\tdocs/team-planning-items-api.md",
-  ].join("\n"));
-  assert.equal(requiresProductUpdateForDiff(deletionOnly), false);
-
-  const refactorWithoutSurfaceRemoval = parseGitNumstat(
-    "1\t27\tsrc/features/planning/organisms/planning-workspace-renderer.tsx",
-  );
-  assert.equal(requiresProductUpdateForDiff(refactorWithoutSurfaceRemoval), true);
-
-  const expandedUi = parseGitNumstat(
-    "3\t1\tsrc/features/planning/organisms/planning-workspace-renderer.tsx",
-  );
-  assert.equal(requiresProductUpdateForDiff(expandedUi), true);
-
-  const serverOnly = parseGitNumstat(
-    "10\t0\tsrc/app/api/team/planning-items/v2/items/route.ts",
-  );
-  assert.equal(requiresProductUpdateForDiff(serverOnly), false);
-});
-
-test("non-release UI classifications are explicit and deployment-bound", async () => {
-  const classification = JSON.parse(await readFile(productUpdateClassificationPath, "utf8"));
-  const verifier = await readFile("scripts/verify-product-updates.mjs", "utf8");
-
-  assert.equal(isValidNonReleaseClassification(classification), true);
-  assert.equal(
-    isValidNonReleaseClassification({
-      classification: "feature",
-      reason: "This adds a materially expanded workflow.",
-    }),
-    false,
-  );
-  assert.equal(
-    isValidNonReleaseClassification({
-      classification: "visual-polish",
-      reason: "Too short",
-    }),
-    false,
-  );
-  assert.match(verifier, /changedFiles\.includes\(productUpdateClassificationPath\)/);
-  assert.match(verifier, /unless the same deployment diff includes a valid non-release classification/);
 });

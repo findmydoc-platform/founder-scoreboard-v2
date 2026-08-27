@@ -126,12 +126,11 @@ function fixture({
 }
 
 test("relationship routes are transport adapters and direct authenticated writes are closed", async () => {
-  const [route, model, migration, corpus, verifier] = await Promise.all([
+  const [route, model, migration, corpus] = await Promise.all([
     readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-relationships.ts", "utf8"),
     readFile("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql", "utf8"),
     readSupabaseSchemaContract(),
-    readFile("scripts/verify-planning-relationship-transaction.mjs", "utf8"),
   ]);
 
   assert.match(route, /createPlanningRelationshipPlanningItems/);
@@ -146,8 +145,6 @@ test("relationship routes are transport adapters and direct authenticated writes
   assert.match(migration, /revoke insert, update, delete on table public\.task_relationship_edges from authenticated/i);
   assert.match(migration, /grant execute on function public\.mutate_planning_relationship_transaction[^;]*to service_role/i);
   assert.match(corpus, /mutate_planning_relationship_transaction/i);
-  assert.match(verifier, /authenticated_insert/);
-  assert.match(verifier, /duplicateState/);
 });
 
 test("relationship transport preserves Browser POST and DELETE shapes", async () => {

@@ -105,7 +105,6 @@ test("review routes delegate to PlanningItems and the command RPC remains servic
   const model = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
   const migration = await readFile("supabase/migrations/20260812133802_planning_review_command_transaction.sql", "utf8");
   const schema = await readSupabaseSchemaContract();
-  const verifier = await readFile("scripts/verify-task-review-transaction.mjs", "utf8");
 
   for (const route of routes) {
     assert.match(route, /createPlanningReviewPlanningItems/);
@@ -123,8 +122,6 @@ test("review routes delegate to PlanningItems and the command RPC remains servic
   assert.match(migration, /task\.review\.request/);
   assert.match(migration, /grant execute on function public\.mutate_planning_review_command_transaction[\s\S]*to service_role/);
   assert.match(schema, /mutate_planning_review_command_transaction/);
-  assert.match(verifier, /authenticated_commit/);
-  assert.match(verifier, /rollbackState/);
 });
 
 test("review transport parsers preserve validation and canonical command shapes", async () => {

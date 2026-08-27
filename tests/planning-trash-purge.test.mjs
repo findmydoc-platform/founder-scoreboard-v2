@@ -1,24 +1,11 @@
 import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parsePlanningTrashPurgeResult } from "../src/lib/planning-trash-maintenance-result.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
-const maintenanceScriptPath = fileURLToPath(
-  new URL(".github/scripts/maintenance/purge-planning-trash.sh", root),
-);
-
-function validateMaintenanceResponse(functionName, response) {
-  return spawnSync(
-    "bash",
-    ["-c", 'source "$1"; "$2" "$3"', "_", maintenanceScriptPath, functionName, JSON.stringify(response)],
-    { encoding: "utf8" },
-  );
-}
 
 test("planning trash purge is bounded, locked, and fails closed on GitHub lifecycle coverage", async () => {
   const [migration, schema] = await Promise.all([
@@ -143,137 +130,5 @@ test("purge API result parsing fails closed on missing or malformed safety metri
     { ...valid, purgedTasks: Number.NaN },
   ]) {
     assert.equal(parsePlanningTrashPurgeResult(invalid), null);
-  }
-});
-
-test("daily workflow warms up and retries one production batch without GitHub credentials", async () => {
-  const [workflow, script] = await Promise.all([
-    read(".github/workflows/purge-planning-trash.yml"),
-    read(".github/scripts/maintenance/purge-planning-trash.sh"),
-  ]);
-
-  assert.match(workflow, /cron: "15 3 \* \* \*"/);
-  assert.match(workflow, /workflow_dispatch/);
-  assert.match(workflow, /name: production/);
-  assert.match(workflow, /cancel-in-progress: false/);
-  assert.match(workflow, /FOUNDEROPS_MAINTENANCE_SECRET/);
-  assert.doesNotMatch(workflow, /GITHUB_TOKEN|permissions:\s*write/);
-  assert.match(script, /sleep 45/);
-  assert.match(script, /backoffs=\(0 45 90 180\)/);
-  assert.match(script, /RANDOM % 6/);
-  assert.match(script, /--fail-with-body/);
-  assert.match(script, /\/api\/health/);
-  assert.match(script, /\/api\/maintenance\/planning-trash\/github-lifecycle/);
-  assert.match(script, /\/api\/maintenance\/planning-trash\/purge/);
-  assert.match(script, /validate_lifecycle_response/);
-  assert.match(script, /validate_purge_response/);
-  assert.match(script, /\.retryScheduled == 0/);
-  assert.match(script, /\.failed == 0/);
-  assert.match(script, /\.terminalFailed == 0/);
-  assert.match(script, /\.outstandingLifecycleJobs == 0/);
-  assert.match(script, /\.blockedExpiredRoots == 0/);
-  assert.match(script, /\.completed == \.claimed/);
-  assert.match(script, /\(\.hasMore == false\) or \(\.purgedRoots == 25\)/);
-  assert.ok(
-    script.indexOf("/api/maintenance/planning-trash/github-lifecycle")
-      < script.indexOf("/api/maintenance/planning-trash/purge"),
-  );
-});
-
-test("daily workflow rejects partial lifecycle and blocked purge responses", () => {
-  const successfulLifecycleResponse = {
-    ok: true,
-    claimed: 1,
-    completed: 1,
-    retryScheduled: 0,
-    failed: 0,
-    terminalFailed: 0,
-    outstandingLifecycleJobs: 0,
-  };
-  const successfulLifecycle = validateMaintenanceResponse(
-    "validate_lifecycle_response",
-    successfulLifecycleResponse,
-  );
-  assert.equal(successfulLifecycle.status, 0, successfulLifecycle.stderr);
-
-  for (const response of [
-    { ok: true, claimed: 1, completed: 0, retryScheduled: 1, failed: 0, terminalFailed: 0, outstandingLifecycleJobs: 1 },
-    { ok: true, claimed: 1, completed: 0, retryScheduled: 0, failed: 1, terminalFailed: 1, outstandingLifecycleJobs: 1 },
-    { ok: true, claimed: 1, completed: 0, retryScheduled: 0, failed: 0, terminalFailed: 0, outstandingLifecycleJobs: 1 },
-    { ok: true, claimed: 0, completed: 0, retryScheduled: 0, failed: 0, terminalFailed: 1, outstandingLifecycleJobs: 1 },
-    { ok: true, claimed: 0, completed: 0, retryScheduled: 0, failed: 0, terminalFailed: 0, outstandingLifecycleJobs: 1 },
-    { ok: false, claimed: 0, completed: 0, retryScheduled: 0, failed: 0, terminalFailed: 0, outstandingLifecycleJobs: 0 },
-  ]) {
-    assert.notEqual(
-      validateMaintenanceResponse("validate_lifecycle_response", response).status,
-      0,
-    );
-  }
-
-  assert.equal(
-    validateMaintenanceResponse("has_terminal_lifecycle_failure", {
-      ok: true,
-      claimed: 0,
-      completed: 0,
-      retryScheduled: 0,
-      failed: 0,
-      terminalFailed: 1,
-      outstandingLifecycleJobs: 1,
-    }).status,
-    0,
-  );
-  assert.notEqual(
-    validateMaintenanceResponse(
-      "has_terminal_lifecycle_failure",
-      successfulLifecycleResponse,
-    ).status,
-    0,
-  );
-
-  for (const response of [
-    {
-      ok: true,
-      busy: false,
-      purgedRoots: 1,
-      purgedTasks: 2,
-      resolvedNotifications: 0,
-      blockedExpiredRoots: 0,
-      hasMore: false,
-    },
-    {
-      ok: true,
-      busy: false,
-      purgedRoots: 25,
-      purgedTasks: 40,
-      resolvedNotifications: 3,
-      blockedExpiredRoots: 0,
-      hasMore: true,
-    },
-  ]) {
-    const result = validateMaintenanceResponse("validate_purge_response", response);
-    assert.equal(result.status, 0, result.stderr);
-  }
-
-  for (const response of [
-    {
-      ok: true,
-      busy: true,
-      purgedRoots: 0,
-      purgedTasks: 0,
-      resolvedNotifications: 0,
-      blockedExpiredRoots: 0,
-      hasMore: true,
-    },
-    {
-      ok: true,
-      busy: false,
-      purgedRoots: 0,
-      purgedTasks: 0,
-      resolvedNotifications: 0,
-      blockedExpiredRoots: 1,
-      hasMore: true,
-    },
-  ]) {
-    assert.notEqual(validateMaintenanceResponse("validate_purge_response", response).status, 0);
   }
 });

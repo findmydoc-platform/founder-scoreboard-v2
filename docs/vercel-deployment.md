@@ -119,7 +119,7 @@ GitHub Actions executes the production flow in this order:
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
 - Build the production Vercel output from the GitHub Actions production job. The Vercel build command is only `pnpm run build`; it does not repeat tests, lint, or policy checks.
 - Run `pnpm run deploy:supabase-migrations`, guarded by `SCHEMA_DEPLOY_TARGET=production`. The deploy refuses a missing baseline ledger or an active GitHub issue sync lock, performs a CLI dry run, and pushes only pending migrations.
-- Verify the live production database security contract, Supabase schema, RPC behavior, and Auth mapping.
+- Verify the live production database security contract and Auth mapping.
 - Copy tracked project files with `git archive HEAD`, then add the prebuilt output, project metadata, Next.js build metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
 - Explicitly promote the ready production deployment so the configured production domains receive the deployment. The `--prod` prebuilt upload alone is not treated as the domain cutover contract.
@@ -188,18 +188,11 @@ Before production GitHub features work, configure the GitHub App owned by `findm
 
 ## Planning Trash Maintenance
 
-`.github/workflows/purge-planning-trash.yml` is the bounded production maintenance path for expired planning trash. It is scheduled for `03:15 UTC`, waits 45 seconds before the first network request, checks `/api/health`, processes at most 25 pending GitHub lifecycle jobs through `/api/maintenance/planning-trash/github-lifecycle`, and then calls exactly one batch of at most 25 roots through `/api/maintenance/planning-trash/purge`. Network failures retry with bounded backoff; a second concurrent run is not cancelled into the first one.
+Expired planning trash is never purged by a schedule or automatic workflow. The protected `/api/maintenance/planning-trash/github-lifecycle` and `/api/maintenance/planning-trash/purge` endpoints remain available for an explicit operator action.
 
-Both endpoints accept only `x-founderops-maintenance-secret` backed by `FOUNDEROPS_MAINTENANCE_SECRET`. They have no user-session, bearer-token, or Supabase-anon fallback. The server obtains GitHub App credentials internally; the workflow receives no GitHub token. Both operations require the explicit service-role client, and physical cleanup remains fail-closed while any matching GitHub lifecycle job is missing or incomplete.
+Both endpoints accept only `x-founderops-maintenance-secret` backed by `FOUNDEROPS_MAINTENANCE_SECRET`. They have no user-session, bearer-token, or Supabase-anon fallback. The server obtains GitHub App credentials internally. Both operations require the explicit service-role client, and physical cleanup remains fail-closed while any matching GitHub lifecycle job is missing or incomplete.
 
-Publishing the workflow does not activate physical cleanup. Before enabling it, separately approve and complete all of the following:
-
-- confirm the canonical migration history contains the planning-trash purge contract and has been deployed through the production ledger;
-- configure the same `FOUNDEROPS_MAINTENANCE_SECRET` in the GitHub `production` environment and the production Vercel runtime;
-- run the rollback-based purge verification against the target Supabase project;
-- explicitly approve the first manual production run.
-
-The maintenance job never deletes GitHub Issues. It retains FounderOps audit records and notification delivery history.
+Before a manual production purge, confirm the deployed migration contract, verify the target and maintenance secret, inspect the bounded batch, and obtain explicit approval. Purge does not delete GitHub Issues and retains FounderOps audit records and notification delivery history.
 
 ## Verification
 
@@ -207,18 +200,9 @@ Run from the repository root:
 
 ```bash
 pnpm run verify:migrations
-pnpm run verify:product-updates
 pnpm test
 pnpm run lint
 pnpm run build
-```
-
-For the authenticated local end-to-end path, reset the disposable stack, run the integration verifier, and stop the stack afterward:
-
-```bash
-pnpm run local:reset
-pnpm run test:integration:local
-pnpm run local:stop
 ```
 
 `pnpm audit --audit-level=moderate` is an optional manual dependency-security check. It is deliberately not a package wrapper and does not run in pull-request, preview, or production build gates because the advisory result can change without a source change.
@@ -226,7 +210,6 @@ pnpm run local:stop
 If production Supabase env is present locally, also run:
 
 ```bash
-pnpm run verify:supabase
 pnpm run verify:auth
 ```
 
@@ -236,7 +219,7 @@ Check after a successful deployment:
 
 - Deployment URL opens.
 - `/api/health` returns `200` and `status: "ready"` for base Supabase readiness.
-- The production workflow reports successful database-security, Supabase-schema, RPC, and Auth-mapping verification.
+- The production workflow reports successful database-security and Auth-mapping verification.
 - GitHub login works.
 - Reload with a valid session shows either the app or a loading shell, not the login gate.
 - GitHub App status stays connected after reload and the central header action reconnects when the encrypted user token is missing, revoked, expired beyond refresh, or mapped to a different GitHub login.

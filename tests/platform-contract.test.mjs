@@ -68,11 +68,12 @@ test("deployment workflows keep validation, artifact creation, and production sa
   assert.equal(packageJson.scripts.lint, "eslint");
   assert.equal(packageJson.scripts.build, "next build");
   assert.equal(packageJson.scripts["verify:migrations"], "node scripts/verify-supabase-migrations.mjs");
-  assert.equal(packageJson.scripts["verify:product-updates"], "node scripts/verify-product-updates.mjs");
+  assert.equal(packageJson.scripts["verify:database-security"], "node scripts/verify-database-security.mjs");
+  assert.equal(packageJson.scripts["verify:auth"], "node scripts/verify-auth.mjs");
 
   assert.match(
     dependencyValidationWorkflow,
-    /name: Dependency Validation[\s\S]*fetch-depth: 0[\s\S]*Verify Supabase Migration History[\s\S]*pnpm run verify:migrations[\s\S]*Verify Product Updates[\s\S]*PRODUCT_UPDATE_BASE_REF: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*pnpm run verify:product-updates[\s\S]*pnpm test[\s\S]*pnpm run lint[\s\S]*pnpm run build/,
+    /name: Dependency Validation[\s\S]*fetch-depth: 0[\s\S]*Verify Supabase Migration History[\s\S]*pnpm run verify:migrations[\s\S]*pnpm test[\s\S]*pnpm run lint[\s\S]*pnpm run build/,
   );
 
   assert.match(previewWorkflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
@@ -90,7 +91,7 @@ test("deployment workflows keep validation, artifact creation, and production sa
   assert.match(productionWorkflow, /refs\/heads\/main/);
   assert.match(
     productionWorkflow,
-    /Verify Supabase Migration History[\s\S]*pnpm run verify:migrations[\s\S]*Build Vercel Output[\s\S]*build --prod[\s\S]*Apply Supabase Migrations to Production[\s\S]*pnpm run deploy:supabase-migrations[\s\S]*Verify Production Database Security[\s\S]*pnpm run verify:database-security -- --production[\s\S]*Verify Production Supabase Schema[\s\S]*pnpm run verify:supabase[\s\S]*Verify Production Auth Mapping[\s\S]*pnpm run verify:auth[\s\S]*Deploy Prebuilt Output to Vercel Production[\s\S]*Verify Production Application[\s\S]*verify-production-application\.sh/,
+    /Verify Supabase Migration History[\s\S]*pnpm run verify:migrations[\s\S]*Build Vercel Output[\s\S]*build --prod[\s\S]*Apply Supabase Migrations to Production[\s\S]*pnpm run deploy:supabase-migrations[\s\S]*Verify Production Database Security[\s\S]*pnpm run verify:database-security -- --production[\s\S]*Verify Production Auth Mapping[\s\S]*pnpm run verify:auth[\s\S]*Deploy Prebuilt Output to Vercel Production[\s\S]*Verify Production Application[\s\S]*verify-production-application\.sh/,
   );
 
   assert.match(deployScript, /git archive HEAD/);

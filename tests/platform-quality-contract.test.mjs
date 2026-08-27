@@ -347,13 +347,3 @@ test("visible German app copy keeps real UTF-8 umlauts", async () => {
     assert.doesNotMatch(source, suspiciousFallbacks, `${file} contains likely ASCII umlaut fallback in visible copy`);
   }
 });
-
-test("german utf8 guard verifies persisted task text", async () => {
-  const pkg = await readFile("package.json", "utf8");
-  const script = await readFile("scripts/verify-task-utf8.mjs", "utf8");
-
-  assert.match(pkg, /verify:task-utf8/);
-  assert.match(script, /BROKEN_WORD_QUESTION_MARK/);
-  assert.match(script, /MOJIBAKE/);
-  assert.match(script, /Supabase/);
-});
