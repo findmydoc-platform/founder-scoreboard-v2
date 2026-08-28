@@ -6,6 +6,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Repository-Wide Rules
 
+- Semantic Anchors: Use [https://llm-coding.github.io/Semantic-Anchors/llms.txt](https://llm-coding.github.io/Semantic-Anchors/llms.txt) to identify established methods; name them without redefining them locally.
+- Use Freeman and Pryce's Outside-In TDD.
+- Use Kent Beck's Test Desiderata.
+- Use Parnas's Information-Hiding Criterion.
+- Use Robert C. Martin's Dependency Rule.
 - Brand spelling is `findmydoc` in user-facing copy and documentation. Preserve other capitalization only when quoting source text or using an existing technical identifier.
 - When the user asks for Localhost or the dev server without naming another project, start this Next.js app. Use a free port such as `3002` when `3000` or `3001` is occupied, and verify the page title is `findmydoc Planning` before reporting the URL.
 - Keep repository-wide rules here and domain-specific rules near their code.
@@ -25,15 +30,19 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - German visible or persisted text must use real UTF-8 umlauts.
 - Keep private execution drafts and sensitive founder analysis outside Git repositories. Do not publish them to shared systems without an explicit publication request.
 - After meaningful frontend or API changes, run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
-- Apply Semantic Anchors: https://llm-coding.github.io/Semantic-Anchors/llms.txt.
-- Testing: For changes to observable behavior and bug fixes, use Freeman and Pryce's outside-in TDD, then assess the resulting tests against Kent Beck's Test Desiderata. Do not apply this to docs-only, configuration-only, or exploratory work.
-- Apply Parnas's Information-Hiding Criterion and the Dependency Rule.
+- Apply the testing anchors to changes in observable behavior and bug fixes. Do not apply them to documentation-only, configuration-only, or exploratory work.
 - Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns.
 
 ## Responsive UI Verification
 
-- Apply Mobile First and Responsive Web Design.
-- Apply WCAG 2.2 AA and the WAI-ARIA Modal Dialog Pattern.
+- Use Luke Wroblewski's Mobile First.
+- Use Ethan Marcotte's Responsive Web Design.
+- Use WCAG 2.2 AA.
+- Use the WAI-ARIA Modal Dialog Pattern.
+- Preserve the established desktop experience at `1200px` and wider unless the task explicitly changes desktop behavior. Use the existing design system across breakpoints rather than creating a separate mobile design system.
+- Do not allow page-level horizontal scrolling. Confine necessary two-dimensional scrolling to its owning board, tab strip, table, or comparable surface.
+- Keep primary actions, filters, navigation, and form controls visible or directly reachable.
+- Aim for `44px` touch targets on phone and coarse-pointer layouts. Do not ship interactive targets below `24px` unless the larger surrounding control provides the real hit area and the exception is evident from the component structure.
 - For meaningful UI work, inspect real rendered screens at `320x568`, `390x844`, `768x1024`, `1024x768`, and `1440x900`; low-risk content changes may use the relevant subset. Shell and board breakpoint changes also use `1234x900` unless the reported host window provides a more relevant width.
 
 ## Maintainability Review System
