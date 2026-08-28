@@ -25,19 +25,16 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - German visible or persisted text must use real UTF-8 umlauts.
 - Keep private execution drafts and sensitive founder analysis outside Git repositories. Do not publish them to shared systems without an explicit publication request.
 - After meaningful frontend or API changes, run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
+- Apply Semantic Anchors: https://llm-coding.github.io/Semantic-Anchors/llms.txt.
 - Testing: For changes to observable behavior and bug fixes, use Freeman and Pryce's outside-in TDD, then assess the resulting tests against Kent Beck's Test Desiderata. Do not apply this to docs-only, configuration-only, or exploratory work.
+- Apply Parnas's Information-Hiding Criterion and the Dependency Rule.
 - Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns.
 
 ## Responsive UI Verification
 
-- Preserve the established desktop experience at `1200px` and wider unless the task explicitly changes desktop behavior. Adapt existing components for smaller screens instead of creating a separate mobile design system.
-- For meaningful layout changes, verify the smallest relevant phone, a typical phone, one tablet orientation, and desktop. Shell, navigation, modal, and wide-data changes use the practical reference matrix `320x568`, `390x844`, `768x1024`, `1024x768`, and `1440x900`; low-risk content changes may use the relevant subset.
-- Shell and board breakpoint changes must also verify a desktop-sized split window between tablet and full desktop; use `1234x900` unless the reported host window provides a more relevant width.
-- Do not allow page-level horizontal scrolling. A self-contained board, tab strip, table, or other two-dimensional surface may scroll internally when reflow would remove essential meaning, but its overflow must remain clipped to that surface.
-- Keep primary actions, filters, navigation, and form controls visible or directly reachable. Mobile dialogs and drawers must trap and restore focus, lock background interaction, and keep their close action reachable.
-- Aim for `44px` touch targets on phone and coarse-pointer layouts. Do not ship interactive targets below `24px` unless the larger surrounding control provides the real hit area and the exception is evident from the component structure.
-- When a desktop table becomes hard to operate below `1280px`, provide a card or stacked representation from the same data and actions. Keep the desktop table unchanged and reuse shared filters, badges, selects, and action components.
-- After meaningful UI work, inspect real rendered screens at the applicable matrix sizes.
+- Apply Mobile First and Responsive Web Design.
+- Apply WCAG 2.2 AA and the WAI-ARIA Modal Dialog Pattern.
+- For meaningful UI work, inspect real rendered screens at `320x568`, `390x844`, `768x1024`, `1024x768`, and `1440x900`; low-risk content changes may use the relevant subset. Shell and board breakpoint changes also use `1234x900` unless the reported host window provides a more relevant width.
 
 ## Maintainability Review System
 

@@ -1,7 +1,6 @@
 # Test Rules
 
 - Runner: Vitest.
-- Semantic Anchors: Freeman and Pryce's Outside-In TDD; Kent Beck's Test Desiderata (https://llm-coding.github.io/Semantic-Anchors/).
 - Keep business logic in `tests/unit/`, presentational UI contracts in colocated Storybook stories, and critical infrastructure-backed paths in `tests/integration/`.
 - Unit tests cover business rules without real database, network, filesystem, or application processes.
 - Storybook tests cover reusable presentational components, relevant UI states, accessibility, and user interaction in a real browser.
