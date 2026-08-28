@@ -104,8 +104,11 @@ test("unrelated Founder receives no status right for a Deliverable", () => {
   assert.equal(permissions.canUpdateStatus, false);
 });
 
-test("review owner can open review without receiving task edit rights", () => {
-  const permissions = taskDetailPermissions({ task: deliverableTask, profile: { id: "reviewer-1", name: "Reviewer", platformRole: "founder" } });
+test("review owner can perform an active review without receiving task edit rights", () => {
+  const permissions = taskDetailPermissions({
+    task: { ...deliverableTask, status: "Review", reviewStatus: "requested", scoreFinal: false },
+    profile: { id: "reviewer-1", name: "Reviewer", platformRole: "founder" },
+  });
   assert.equal(permissions.canOpenReview, true);
   assert.equal(permissions.canEditBrief, false);
 });

@@ -20,6 +20,7 @@ type TaskCreationRequestDraft = TaskCreationHierarchy & {
   intendedOutcome: string;
   acceptanceCriteria: string;
   scopeConstraints: string;
+  createGitHubIssue?: boolean;
 };
 
 export const SUB_ISSUE_CREATE_REQUEST_FIELDS = [
@@ -76,7 +77,8 @@ export function resolveTaskCreationHierarchy<T extends TaskCreationHierarchy>(dr
 }
 
 export function taskCreationRequestPayload<T extends TaskCreationRequestDraft>(draft: T) {
-  const { assignee, ...canonicalDraft } = draft;
+  const { assignee, createGitHubIssue, ...canonicalDraft } = draft;
+  void createGitHubIssue;
   if (draft.taskType === "deliverable") return { ...canonicalDraft, ownerId: assignee };
   if (draft.taskType === "epic" || draft.taskType === "initiative") {
     return {
