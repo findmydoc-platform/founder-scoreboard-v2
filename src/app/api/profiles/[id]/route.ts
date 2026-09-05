@@ -4,6 +4,7 @@ import { requireCEO } from "@/lib/authz";
 import { mapNotificationPreference, mapProfile } from "@/lib/planning-row-mappers";
 import type { DbNotificationPreference, DbProfile } from "@/lib/planning-row-types";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
+import { isGitHubLogin } from "@/lib/mentions";
 import type { NotificationPreference, PlatformRole } from "@/lib/types";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { buildProfileColorPatch, mapProfileColorTransactionError } from "@/features/profile/model/profile-color-api";
@@ -44,7 +45,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: Record<string, string | number | boolean | null> = {};
 
   if (payload.githubLogin !== undefined) {
-    update.github_login = cleanOptionalText(payload.githubLogin, 80) || null;
+    const githubLogin = cleanOptionalText(payload.githubLogin, 80);
+    if (githubLogin && !isGitHubLogin(githubLogin)) {
+      return apiError("GitHub-Login ist ungültig.", 400);
+    }
+    update.github_login = githubLogin || null;
   }
 
   if (payload.platformRole !== undefined) {
