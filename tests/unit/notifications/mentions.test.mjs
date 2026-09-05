@@ -6,6 +6,7 @@ const {
   activeMarkdownMention,
   canonicalizeProfileMentionsForGitHub,
   githubMentionContext,
+  isGitHubLogin,
   mentionSuggestions,
   mentionedProfileIds,
   replaceActiveMention,
@@ -36,11 +37,48 @@ test("offers GitHub-linked profiles for the active mention at the caret", () => 
   );
 });
 
+test("filters accents and ranks exact logins before name and login prefixes", () => {
+  assert.deepEqual(
+    mentionSuggestions("SCHUTZE", [
+      { id: "exact", name: "Other Person", githubLogin: "schutze" },
+      { id: "name-prefix", name: "Schütze Team", githubLogin: "team-member" },
+      { id: "login-prefix", name: "Other Person", githubLogin: "schutze-team" },
+      { id: "name-contains", name: "Kleinschütze", githubLogin: "sebastian" },
+    ]).map((profile) => profile.githubLogin),
+    ["schutze", "team-member", "schutze-team", "sebastian"],
+  );
+});
+
 test("replaces the complete mention token and keeps text around it", () => {
   const active = activeMarkdownMention("Bitte @vol prüfen", 10, 10);
   assert.deepEqual(
     replaceActiveMention("Bitte @vol prüfen", active, profiles[1]),
     { value: "Bitte @MehmetVolkan prüfen", caret: 19 },
+  );
+});
+
+test("keeps valid GitHub-login suggestions aligned with inserted and delivered mentions", () => {
+  const invalidLogins = ["bad_login", "-bad", "bad-", "a".repeat(40)];
+  for (const githubLogin of invalidLogins) {
+    const invalidProfile = { id: githubLogin, name: "Invalid", githubLogin };
+    const active = activeMarkdownMention("@bad", 4, 4);
+    assert.equal(isGitHubLogin(githubLogin), false);
+    assert.deepEqual(mentionSuggestions("", [invalidProfile]), []);
+    assert.equal(replaceActiveMention("@bad", active, invalidProfile), null);
+    assert.deepEqual(mentionedProfileIds(`Ping @${githubLogin}`, [invalidProfile]), []);
+    assert.equal(canonicalizeProfileMentionsForGitHub(`Ping @${githubLogin}`, [invalidProfile]), `Ping @${githubLogin}`);
+  }
+});
+
+test("keeps accent and hyphen search active until a valid GitHub login is selected", () => {
+  const accented = "@Schu\u0308";
+  assert.deepEqual(
+    activeMarkdownMention(accented, accented.length, accented.length),
+    { query: "Schu\u0308", start: 0, end: accented.length },
+  );
+  assert.deepEqual(
+    mentionSuggestions("foo-b", [{ id: "hyphenated", name: "Independent", githubLogin: "foo-bar" }]).map((profile) => profile.githubLogin),
+    ["foo-bar"],
   );
 });
 
@@ -50,6 +88,9 @@ test("does not open mention completion inside Markdown-protected text or email a
   assert.equal(activeMarkdownMention("> @vol", 6, 6), null);
   assert.equal(activeMarkdownMention("[@vol](https://example.test)", 5, 5), null);
   assert.equal(activeMarkdownMention("https://example.test/@vol", 25, 25), null);
+  assert.equal(activeMarkdownMention("    @vol", 8, 8), null);
+  const lazyQuote = "> Previous context\nContinuation @vol";
+  assert.equal(activeMarkdownMention(lazyQuote, lazyQuote.length, lazyQuote.length), null);
 });
 
 test("preserves unknown, ambiguous, and email-like mentions", () => {
@@ -121,6 +162,17 @@ test("does not notify profiles mentioned inside Markdown block quotes", () => {
     mentionedProfileIds("> Previous @sebastian\n\nCurrent @MehmetVolkan", profiles),
     ["volkan"],
   );
+});
+
+test("keeps indented code and lazy block quotes out of delivery", () => {
+  const comment = [
+    "    @SebastianSchuetze",
+    "> Previous context",
+    "Continuation @MehmetVolkan",
+  ].join("\n");
+  assert.deepEqual(mentionedProfileIds(comment, profiles), []);
+  assert.deepEqual(githubMentionContext(comment, profiles, "outside"), { actorProfileId: "", recipientProfileIds: [] });
+  assert.equal(canonicalizeProfileMentionsForGitHub(comment, profiles), comment);
 });
 
 test("resolves GitHub mentions only through unique GitHub logins and includes self-mentions", () => {

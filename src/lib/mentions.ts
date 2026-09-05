@@ -16,6 +16,7 @@ export type MentionReplacement = {
 };
 
 const gitHubMentionPatternSource = String.raw`(^|[^A-Za-z0-9])@([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)(?![A-Za-z0-9_-]|\.[A-Za-z0-9])`;
+const gitHubLoginPattern = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 
 function gitHubMentionMatches(segment: string) {
   return segment.matchAll(new RegExp(gitHubMentionPatternSource, "g"));
@@ -33,11 +34,16 @@ function githubLoginKey(value: string) {
   return value.trim().toLowerCase();
 }
 
+export function isGitHubLogin(value: string) {
+  return gitHubLoginPattern.test(value.trim());
+}
+
 function exactGitHubProfile(login: string, profiles: MentionProfile[]) {
   const key = githubLoginKey(login);
   const matches = profiles.filter((profile) => (
     profile.id
     && profile.githubLogin
+    && isGitHubLogin(profile.githubLogin)
     && githubLoginKey(profile.githubLogin) === key
   ));
   return matches.length === 1 ? matches[0] : null;
@@ -53,12 +59,12 @@ function profileNameWords(profile: MentionProfile) {
 function uniqueGitHubProfiles(profiles: MentionProfile[]) {
   const profileCounts = new Map<string, number>();
   for (const profile of profiles) {
-    if (!profile.id || !profile.githubLogin?.trim()) continue;
+    if (!profile.id || !profile.githubLogin || !isGitHubLogin(profile.githubLogin)) continue;
     const login = githubLoginKey(profile.githubLogin);
     profileCounts.set(login, (profileCounts.get(login) || 0) + 1);
   }
   return profiles.filter((profile) => (
-    Boolean(profile.id && profile.githubLogin?.trim())
+    Boolean(profile.id && profile.githubLogin && isGitHubLogin(profile.githubLogin))
     && profileCounts.get(githubLoginKey(profile.githubLogin || "")) === 1
   ));
 }
@@ -84,16 +90,16 @@ export function mentionSuggestions(query: string, profiles: MentionProfile[]) {
   return uniqueGitHubProfiles(profiles)
     .filter((profile) => {
       if (!normalizedQuery) return true;
-      const login = githubLoginKey(profile.githubLogin || "");
+      const login = mentionSearchKey(profile.githubLogin || "");
       const name = mentionSearchKey(profile.name || "");
       return login.includes(normalizedQuery) || name.includes(normalizedQuery);
     })
     .sort((left, right) => {
       const rank = (profile: MentionProfile) => {
         if (!normalizedQuery) return 0;
-        const login = githubLoginKey(profile.githubLogin || "");
+        const login = mentionSearchKey(profile.githubLogin || "");
         const name = mentionSearchKey(profile.name || "");
-        if (login === normalizedQuery) return 0;
+        if (githubLoginKey(profile.githubLogin || "") === githubLoginKey(query)) return 0;
         if (profileNameWords(profile).some((word) => word.startsWith(normalizedQuery))) return 1;
         if (login.startsWith(normalizedQuery)) return 2;
         if (name.includes(normalizedQuery)) return 3;
@@ -124,19 +130,19 @@ export function activeMarkdownMention(value: string, selectionStart: number, sel
   if (selectionStart !== selectionEnd) return null;
   const caret = Math.max(0, Math.min(selectionStart, value.length));
   let tokenStart = caret;
-  while (tokenStart > 0 && /[A-Za-z0-9._-]/.test(value[tokenStart - 1] || "")) tokenStart -= 1;
+  while (tokenStart > 0 && /[\p{L}\p{M}\p{N}._-]/u.test(value[tokenStart - 1] || "")) tokenStart -= 1;
   const at = tokenStart - 1;
   if (at < 0 || value[at] !== "@") return null;
-  if (at > 0 && /[A-Za-z0-9]/.test(value[at - 1] || "")) return null;
+  if (at > 0 && /[\p{L}\p{M}\p{N}_]/u.test(value[at - 1] || "")) return null;
   if (!isMarkdownTextPosition(value, at)) return null;
 
   let end = caret;
-  while (end < value.length && /[A-Za-z0-9._-]/.test(value[end] || "")) end += 1;
+  while (end < value.length && /[\p{L}\p{M}\p{N}._-]/u.test(value[end] || "")) end += 1;
   return { query: value.slice(tokenStart, caret), start: at, end };
 }
 
 export function replaceActiveMention(value: string, active: ActiveMarkdownMention | null, profile: MentionProfile): MentionReplacement | null {
-  if (!active || !profile.githubLogin?.trim()) return null;
+  if (!active || !profile.githubLogin || !isGitHubLogin(profile.githubLogin)) return null;
   const login = profile.githubLogin.trim();
   const before = value.slice(0, active.start);
   const after = value.slice(active.end);
@@ -171,6 +177,29 @@ function fencedCodeEnd(value: string, index: number) {
   return value.length;
 }
 
+function indentedCodeEnd(value: string, index: number) {
+  if (index > 0 && value[index - 1] !== "\n") return 0;
+  if (!/^(?: {4}|\t)/u.test(value.slice(index))) return 0;
+  const lineEnd = value.indexOf("\n", index);
+  return lineEnd < 0 ? value.length : lineEnd + 1;
+}
+
+function blockQuoteEnd(value: string, index: number) {
+  if (index > 0 && value[index - 1] !== "\n") return 0;
+  if (!/^[ \t]{0,3}>/u.test(value.slice(index))) return 0;
+
+  let cursor = index;
+  while (cursor < value.length) {
+    const lineEnd = value.indexOf("\n", cursor);
+    const end = lineEnd < 0 ? value.length : lineEnd;
+    const line = value.slice(cursor, end);
+    if (cursor !== index && /^\s*$/u.test(line)) break;
+    if (cursor !== index && /^[ \t]{0,3}(?:#{1,6}(?:\s|$)|[-+*]\s|\d+[.)]\s|`{3,}|~{3,})/u.test(line)) break;
+    cursor = lineEnd < 0 ? value.length : lineEnd + 1;
+  }
+  return cursor;
+}
+
 function markdownLinkEnd(value: string, index: number) {
   const labelStart = value[index] === "!" ? index + 1 : index;
   if (value[labelStart] !== "[") return 0;
@@ -203,10 +232,11 @@ function markdownProtectedEnd(value: string, index: number) {
   const fenceEnd = fencedCodeEnd(value, index);
   if (fenceEnd) return fenceEnd;
 
-  if ((index === 0 || value[index - 1] === "\n") && /^[ \t]{0,3}>/u.test(value.slice(index))) {
-    const lineEnd = value.indexOf("\n", index);
-    return lineEnd < 0 ? value.length : lineEnd + 1;
-  }
+  const indentedEnd = indentedCodeEnd(value, index);
+  if (indentedEnd) return indentedEnd;
+
+  const quoteEnd = blockQuoteEnd(value, index);
+  if (quoteEnd) return quoteEnd;
 
   if (value[index] === "`") {
     let markerEnd = index + 1;

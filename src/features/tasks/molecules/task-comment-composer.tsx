@@ -205,7 +205,7 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span className="shrink-0 font-semibold">{profile.githubLogin}</span>
-                <span className={`min-w-0 truncate ${index === selectedMentionIndex ? "text-blue-100" : "text-slate-500"}`}>{profile.name}</span>
+                <span className={`min-w-0 truncate ${index === selectedMentionIndex ? "text-white" : "text-slate-500"}`}>{profile.name}</span>
               </span>
             </div>
           ))}
