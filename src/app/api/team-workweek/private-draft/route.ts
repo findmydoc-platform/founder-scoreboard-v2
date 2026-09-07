@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
   flattenTeamWorkweekWindows,
+  inflatePublishedTeamWorkweekWindows,
   inflateTeamWorkweekWindows,
   nextVersionMondayIso,
   validatePrivateTeamWorkweekDraft,
@@ -110,11 +111,7 @@ export async function GET(request: NextRequest) {
     publication: privateVersion ? publicationPayload(publication?.data || null) : null,
     latestPublished: publicationPayload(latestPublished),
     editBase: latestPublished ? {
-      windows: inflateTeamWorkweekWindows((latestPublished.windows || []).map((window) => ({
-        weekday: window.weekday,
-        start_minute: window.startMinute,
-        end_minute: window.endMinute,
-      }))),
+      windows: inflatePublishedTeamWorkweekWindows(latestPublished.windows || []),
     } : null,
     minimumEffectiveFrom: nextVersionMondayIso(latestPublished?.effective_from || null),
   });

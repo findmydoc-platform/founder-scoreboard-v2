@@ -246,3 +246,13 @@ export function inflateTeamWorkweekWindows(
   }
   return windows;
 }
+
+export function inflatePublishedTeamWorkweekWindows(
+  rows: Array<{ weekday: number; startMinute: number; endMinute: number }>,
+): TeamWorkweekWindows {
+  return inflateTeamWorkweekWindows(rows.map((window) => ({
+    weekday: window.weekday,
+    start_minute: window.startMinute,
+    end_minute: window.endMinute,
+  })));
+}

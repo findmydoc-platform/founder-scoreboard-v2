@@ -2,8 +2,8 @@
 
 import { useId, useState, type KeyboardEvent } from "react";
 import { currentTeamWorkweekDayKey, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
-import type { CalendarTeamWorkweek } from "../model/team-workweek-calendar";
-import { projectActiveTeamWorkweekRows } from "../model/team-workweek-matrix";
+import { projectCurrentCalendarWorkweekRows, type CalendarTeamWorkweek } from "../model/team-workweek-calendar";
+import { teamWorkweekProfiles } from "../model/team-workweek-matrix";
 import { formatDate } from "@/lib/display";
 import type { Profile } from "@/lib/types";
 import { classNames } from "@/shared/atoms/ui-primitives";
@@ -26,7 +26,11 @@ export function TeamWorkweekMatrix({
   profiles: Profile[];
   workweeks: CalendarTeamWorkweek[];
 }) {
-  const rows = projectActiveTeamWorkweekRows(profiles, workweeks, dateKey);
+  const rows = projectCurrentCalendarWorkweekRows({
+    calendarWorkweeks: workweeks,
+    dateKey,
+    profiles: teamWorkweekProfiles(profiles),
+  });
   const [selectedDayKey, setSelectedDayKey] = useState<TeamWorkweekDayKey>(currentTeamWorkweekDayKey);
   const tabGroupId = useId();
   const tabPanelId = `${tabGroupId}-panel`;

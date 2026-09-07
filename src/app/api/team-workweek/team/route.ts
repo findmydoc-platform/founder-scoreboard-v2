@@ -4,7 +4,7 @@ import {
   validateCalendarWorkweekRange,
   type CalendarTeamWorkweek,
 } from "@/features/team-workweek/model/team-workweek-calendar";
-import { berlinTodayIso, inflateTeamWorkweekWindows } from "@/features/team-workweek/model/team-workweek-draft";
+import { berlinTodayIso, inflatePublishedTeamWorkweekWindows } from "@/features/team-workweek/model/team-workweek-draft";
 import { selectVisibleTeamWorkweeks } from "@/features/team-workweek/model/published-team-workweek";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { bearerToken, requireTeamMember } from "@/lib/authz";
@@ -33,11 +33,7 @@ function calendarWorkweek(row: PublishedVersionRow): CalendarTeamWorkweek {
     timezone: row.timezone,
     publicationRevision: row.publication_revision,
     lastSyncAt: row.last_sync_at,
-    windows: inflateTeamWorkweekWindows((row.windows || []).map((window) => ({
-      weekday: window.weekday,
-      start_minute: window.startMinute,
-      end_minute: window.endMinute,
-    }))),
+    windows: inflatePublishedTeamWorkweekWindows(row.windows || []),
   };
 }
 
@@ -81,11 +77,7 @@ export async function GET(request: NextRequest) {
     lastSyncAt: row.last_sync_at,
     publicationRevision: row.publication_revision,
     phase,
-    windows: inflateTeamWorkweekWindows((row.windows || []).map((window) => ({
-      weekday: window.weekday,
-      start_minute: window.startMinute,
-      end_minute: window.endMinute,
-    }))),
+    windows: inflatePublishedTeamWorkweekWindows(row.windows || []),
   }));
   const allCalendarWorkweeks = (data || []).map(calendarWorkweek);
   const currentWorkweeks = [...new Set(allCalendarWorkweeks.map(({ ownerProfileId }) => ownerProfileId))]

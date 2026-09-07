@@ -342,7 +342,10 @@ export function HeaderCalendarDialog({
             <div id={`${tabId}-workweek-panel`} role="tabpanel" aria-labelledby={`${tabId}-workweek`} className="p-2.5 sm:p-4">
               <p className="sr-only" role="status" aria-live="polite">{pending ? "Team-Arbeitswoche wird aktualisiert." : message || "Team-Arbeitswoche wurde geladen."}</p>
               {message ? <UiNotice className="mb-3" tone="warning" size="xs">{workweeks.length ? "Aktualisierung verzögert. Zuletzt bestätigte Grundwochen bleiben sichtbar." : message}</UiNotice> : null}
-              {pending && !workweeks.length ? <UiEmptyState className="min-h-48" tone="muted">Team-Arbeitswoche wird geladen.</UiEmptyState> : <TeamWorkweekMatrix compact dateKey={workweekDateKey} profiles={profiles} workweeks={workweeks} />}
+              {pending && !workweeks.length ? <UiEmptyState className="min-h-48" tone="muted">Team-Arbeitswoche wird geladen.</UiEmptyState> : null}
+              {(!message || workweeks.length > 0) && (!pending || workweeks.length > 0) ? (
+                <TeamWorkweekMatrix compact dateKey={workweekDateKey} profiles={profiles} workweeks={workweeks} />
+              ) : null}
             </div>
           )}
         </div>

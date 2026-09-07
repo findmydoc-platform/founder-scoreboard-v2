@@ -84,7 +84,7 @@ function StoryDialog() {
 
 const meta = {
   component: StoryDialog,
-  parameters: { layout: "fullscreen" },
+  parameters: { layout: "fullscreen", viewport: { defaultViewport: "mobile1" } },
   render: () => <StoryDialog />,
   tags: ["layer:organism", "status:stable"],
   title: "Planning/Organisms/HeaderCalendarDialog",
@@ -100,5 +100,37 @@ export const KeepsTheSelectedDaySeparateFromTheCurrentWorkweek: Story = {
     await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
     await expect(canvas.getAllByText("10:00–18:00").length).toBeGreaterThan(0);
     await expect(canvas.queryByText("08:00–12:00")).not.toBeInTheDocument();
+  },
+};
+
+export const KeepsAnInitialLoadErrorDistinctFromNoPublication: Story = {
+  render: () => (
+    <HeaderCalendarDialog
+      activeTab="workweek"
+      anchor={{ right: 12, top: 12 }}
+      calendarWorkweeks={[]}
+      desktopPopover={false}
+      eventSlot={{ data: [], error: "", state: "ready" }}
+      message="Arbeitszeiten konnten nicht geladen werden."
+      now={new Date("2026-09-07T10:00:00.000Z")}
+      onActiveTabChange={fn()}
+      onClose={fn()}
+      onOpenTeam={fn()}
+      onSelectedDateChange={fn()}
+      onViewMonthChange={fn()}
+      pending={false}
+      profiles={[profile]}
+      restoreFocusRef={{ current: null }}
+      selectedDate="2026-09-07"
+      showWorkweek
+      viewMonth="2026-09-01"
+      workweekDateKey="2026-09-07"
+      workweeks={[]}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByText("Arbeitszeiten konnten nicht geladen werden.").length).toBeGreaterThan(0);
+    await expect(canvas.queryByText("Nicht veröffentlicht")).not.toBeInTheDocument();
   },
 };

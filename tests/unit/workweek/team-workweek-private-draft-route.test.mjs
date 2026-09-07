@@ -8,13 +8,13 @@ function apiError(message, status) {
   return Response.json({ error: message }, { status });
 }
 
-function query(data) {
+function query(data, error = null) {
   return {
     select() { return this; },
     eq() { return this; },
     order() { return this; },
     limit() { return this; },
-    maybeSingle() { return Promise.resolve({ data, error: null }); },
+    maybeSingle() { return Promise.resolve({ data, error }); },
   };
 }
 
@@ -29,6 +29,7 @@ const latestPublication = {
   windows: [{ weekday: 1, startMinute: 540, endMinute: 1020 }],
   team_workweek_google_reconciliation_status: null,
 };
+let latestPublicationResult = { data: latestPublication, error: null };
 
 const route = await importTestModule(
   "src/app/api/team-workweek/private-draft/route.ts",
@@ -54,13 +55,19 @@ const route = await importTestModule(
       getSupabaseForToken: () => ({
         from(table) {
           if (table === "team_workweek_versions") return query(null);
-          if (table === "team_workweek_publications") return query(latestPublication);
+          if (table === "team_workweek_publications") {
+            return query(latestPublicationResult.data, latestPublicationResult.error);
+          }
           throw new Error(`Unexpected table: ${table}`);
         },
       }),
     },
   },
 );
+
+test.beforeEach(() => {
+  latestPublicationResult = { data: latestPublication, error: null };
+});
 
 test("the private editor receives the latest published windows as its edit base", async () => {
   const response = await route.GET({});
@@ -79,4 +86,24 @@ test("the private editor receives the latest published windows as its edit base"
     },
   });
   assert.equal(body.minimumEffectiveFrom, "2026-09-07");
+});
+
+test("the first setup has no published edit base", async () => {
+  latestPublicationResult = { data: null, error: null };
+
+  const response = await route.GET({});
+  assert.equal(response.status, 200);
+  const body = await response.json();
+
+  assert.equal(body.editBase, null);
+  assert.equal(body.latestPublished, null);
+  assert.equal(body.minimumEffectiveFrom, "2026-09-07");
+});
+
+test("a publication lookup failure remains a load error", async () => {
+  latestPublicationResult = { data: null, error: { message: "database unavailable" } };
+
+  const response = await route.GET({});
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "Veröffentlichungsstatus konnte nicht geladen werden." });
 });

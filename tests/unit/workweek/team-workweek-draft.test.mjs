@@ -80,6 +80,9 @@ test("inflation restores every day and preserves ordered wall-clock windows", ()
   ]);
   assert.deepEqual(windows.sunday, [{ start: "00:00", end: "23:59" }]);
   assert.deepEqual(windows.wednesday, []);
+  assert.deepEqual(model.inflatePublishedTeamWorkweekWindows([
+    { weekday: 1, startMinute: 540, endMinute: 1020 },
+  ]).monday, [{ start: "09:00", end: "17:00" }]);
 });
 
 test("editing a published workweek prefills its windows at the next valid Monday", () => {
