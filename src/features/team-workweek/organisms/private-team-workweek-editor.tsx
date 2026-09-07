@@ -100,7 +100,7 @@ export function PrivateTeamWorkweekEditor({
                           ))}
                         </div>
                       )}
-                      {!state.draft.windows[day.key].length && <p className="py-2 text-sm text-slate-400">Freier Tag</p>}
+                      {!state.draft.windows[day.key].length && <p className="py-2 text-sm text-slate-600">Freier Tag</p>}
                       <UiButton
                         className={state.draft.windows[day.key].length
                           ? "col-start-2 mt-1 justify-self-start max-[359px]:col-start-1 max-[359px]:row-start-3 min-[400px]:col-start-3 min-[400px]:row-start-1 min-[400px]:mt-0"

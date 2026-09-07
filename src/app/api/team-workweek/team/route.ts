@@ -63,13 +63,14 @@ export async function GET(request: NextRequest) {
     .returns<PublishedVersionRow[]>();
   if (error) return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
 
+  const referenceDate = berlinTodayIso();
   const visible = selectVisibleTeamWorkweeks((data || []).map((row) => ({
     ownerProfileId: row.owner_profile_id,
     effectiveFrom: row.effective_from,
     effectiveTo: row.effective_to,
     publicationRevision: row.publication_revision,
     row,
-  })), berlinTodayIso());
+  })), referenceDate);
 
   const workweeks = visible.map(({ row, phase }) => ({
     id: row.id,
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
   }));
   const allCalendarWorkweeks = (data || []).map(calendarWorkweek);
   const currentWorkweeks = [...new Set(allCalendarWorkweeks.map(({ ownerProfileId }) => ownerProfileId))]
-    .map((ownerProfileId) => selectCalendarWorkweek(allCalendarWorkweeks, ownerProfileId, berlinTodayIso()))
+    .map((ownerProfileId) => selectCalendarWorkweek(allCalendarWorkweeks, ownerProfileId, referenceDate))
     .filter((workweek): workweek is CalendarTeamWorkweek => workweek !== null);
   const calendarWorkweeks = requestedRange.range
     ? allCalendarWorkweeks
@@ -97,6 +98,7 @@ export async function GET(request: NextRequest) {
     : undefined;
 
   return NextResponse.json({
+    referenceDate,
     workweeks,
     currentWorkweeks,
     ...(calendarWorkweeks ? { calendarWorkweeks } : {}),

@@ -39,8 +39,6 @@ export type PrivateTeamWorkweekDraft = Readonly<{
 }>;
 
 export type TeamWorkweekEditBase = Readonly<{
-  sourcePublicationId: string;
-  effectiveFrom: string;
   windows: TeamWorkweekWindows;
 }>;
 
@@ -90,7 +88,7 @@ export function editableTeamWorkweekDraft({
   minimumEffectiveFrom,
   version,
 }: {
-  editBase: Pick<TeamWorkweekEditBase, "windows"> | null;
+  editBase: TeamWorkweekEditBase | null;
   minimumEffectiveFrom: string;
   version: PrivateTeamWorkweekVersion | null;
 }): PrivateTeamWorkweekDraft {

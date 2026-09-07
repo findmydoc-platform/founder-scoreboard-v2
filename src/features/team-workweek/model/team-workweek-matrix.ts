@@ -1,5 +1,4 @@
 import {
-  berlinDateKey,
   projectCurrentCalendarWorkweekRows,
   type CalendarTeamWorkweek,
 } from "./team-workweek-calendar";
@@ -18,7 +17,7 @@ export function teamWorkweekProfiles(profiles: Profile[]) {
 export function projectActiveTeamWorkweekRows(
   profiles: Profile[],
   workweeks: CalendarTeamWorkweek[],
-  dateKey = berlinDateKey(),
+  dateKey: string,
 ): TeamWorkweekMatrixRow[] {
   return projectCurrentCalendarWorkweekRows({
     calendarWorkweeks: workweeks,

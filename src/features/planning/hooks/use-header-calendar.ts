@@ -14,6 +14,7 @@ type TeamWorkweekCalendarResponse = Readonly<{
   calendarWorkweeks?: CalendarTeamWorkweek[];
   currentWorkweeks?: CalendarTeamWorkweek[];
   error?: string;
+  referenceDate?: string;
 }>;
 
 export function useHeaderCalendar({
@@ -32,7 +33,9 @@ export function useHeaderCalendar({
   const [message, setMessage] = useState("");
   const [calendarWorkweeks, setCalendarWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
   const [workweeks, setWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
+  const [workweekReferenceDate, setWorkweekReferenceDate] = useState(() => berlinDateKey());
   const latestRequest = useRef(0);
+  const today = berlinDateKey(now);
 
   const loadVisibleRange = useCallback(async () => {
     if (!apiClient) return;
@@ -45,11 +48,12 @@ export function useHeaderCalendar({
         `/api/team-workweek/team?from=${range.from}&to=${range.to}`,
         { cache: "no-store" },
       );
-      if (!response.ok || !body?.currentWorkweeks || !body.calendarWorkweeks) {
+      if (!response.ok || !body?.currentWorkweeks || !body.calendarWorkweeks || !body.referenceDate) {
         throw new Error(body?.error || "Arbeitszeiten konnten nicht geladen werden.");
       }
       if (requestId !== latestRequest.current) return;
       setWorkweeks(body.currentWorkweeks);
+      setWorkweekReferenceDate(body.referenceDate);
       setCalendarWorkweeks((current) => {
         const retained = current.filter((workweek) => (
           workweek.effectiveFrom > range.to
@@ -71,7 +75,7 @@ export function useHeaderCalendar({
     if (!open) return;
     const frame = window.requestAnimationFrame(() => void loadVisibleRange());
     return () => window.cancelAnimationFrame(frame);
-  }, [loadVisibleRange, open]);
+  }, [loadVisibleRange, open, today]);
 
   useEffect(() => {
     if (!apiClient || !open) return;
@@ -111,6 +115,7 @@ export function useHeaderCalendar({
     setSelectedDate,
     setViewMonth,
     viewMonth,
+    workweekReferenceDate,
     workweeks,
   };
 }

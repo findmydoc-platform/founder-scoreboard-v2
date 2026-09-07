@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CalendarTeamWorkweek } from "../model/team-workweek-calendar";
+import { berlinDateKey, type CalendarTeamWorkweek } from "../model/team-workweek-calendar";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 
 export const TEAM_WORKWEEK_PUBLISHED_EVENT = "founderops:team-workweek-published";
@@ -9,6 +9,8 @@ export const TEAM_WORKWEEK_PUBLISHED_EVENT = "founderops:team-workweek-published
 export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
   const mounted = useRef(true);
   const [workweeks, setWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
+  const [referenceDate, setReferenceDate] = useState(() => berlinDateKey());
+  const [today, setToday] = useState(() => berlinDateKey());
   const [pending, setPending] = useState(true);
   const [message, setMessage] = useState("");
   const [hasLoadedSuccessfully, setHasLoadedSuccessfully] = useState(false);
@@ -27,12 +29,14 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
       const { response, body } = await apiClient.requestJson<{
         currentWorkweeks?: CalendarTeamWorkweek[];
         error?: string;
+        referenceDate?: string;
       }>("/api/team-workweek/team", { cache: "no-store" });
-      if (!response.ok || !body?.currentWorkweeks) {
+      if (!response.ok || !body?.currentWorkweeks || !body.referenceDate) {
         throw new Error(body?.error || "Veröffentlichte Grundwochen konnten nicht geladen werden.");
       }
       if (mounted.current) {
         setWorkweeks(body.currentWorkweeks);
+        setReferenceDate(body.referenceDate);
         setHasLoadedSuccessfully(true);
       }
     } catch (error) {
@@ -52,7 +56,12 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
       window.clearTimeout(timeout);
       window.removeEventListener(TEAM_WORKWEEK_PUBLISHED_EVENT, reload);
     };
-  }, [load]);
+  }, [load, today]);
 
-  return { hasLoadedSuccessfully, load, message, pending, workweeks };
+  useEffect(() => {
+    const timer = window.setInterval(() => setToday(berlinDateKey()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return { hasLoadedSuccessfully, load, message, pending, referenceDate, workweeks };
 }

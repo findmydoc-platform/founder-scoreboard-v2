@@ -10,6 +10,7 @@ const calendarModel = await importTestModule(
 const publishedModel = await import("../../../src/features/team-workweek/model/published-team-workweek.ts");
 
 let authResult;
+let berlinTodayCalls;
 let rows;
 let queryStatuses;
 
@@ -36,7 +37,10 @@ const route = await importTestModule(
     "@/features/team-workweek/model/team-workweek-calendar": calendarModel,
     "@/features/team-workweek/model/team-workweek-draft": {
       ...draftModel,
-      berlinTodayIso: () => "2026-08-25",
+      berlinTodayIso: () => {
+        berlinTodayCalls += 1;
+        return "2026-08-25";
+      },
     },
     "@/features/team-workweek/model/published-team-workweek": publishedModel,
     "@/lib/api-response": {
@@ -62,6 +66,7 @@ test.beforeEach(() => {
     ok: true,
     permission: { profile: { id: "profile-1", platformRole: "founder" } },
   };
+  berlinTodayCalls = 0;
   queryStatuses = [];
   rows = [];
 });
@@ -129,6 +134,8 @@ test("range responses stay additive, published-only, overlap-filtered, and provi
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.deepEqual(queryStatuses, ["published"]);
+  assert.equal(body.referenceDate, "2026-08-25");
+  assert.equal(berlinTodayCalls, 1);
   assert.ok(Array.isArray(body.workweeks));
   assert.deepEqual(body.currentWorkweeks.map((entry) => entry.id), ["inside"]);
   assert.deepEqual(body.calendarWorkweeks.map((entry) => entry.id), ["inside", "future"]);
@@ -145,10 +152,25 @@ test("range responses stay additive, published-only, overlap-filtered, and provi
   assert.doesNotMatch(JSON.stringify(body), /google_event_id|refresh_token|access_token|etag|calendar_id/);
 });
 
-test("the legacy response omits calendarWorkweeks when no range is requested", async () => {
+test("the no-range response includes the current workweek and omits calendarWorkweeks", async () => {
+  rows = [{
+    id: "current",
+    owner_profile_id: "profile-1",
+    effective_from: "2026-08-24",
+    effective_to: "2026-08-30",
+    timezone: "Europe/Berlin",
+    published_at: "2026-08-24T08:00:00.000Z",
+    last_sync_at: "2026-08-24T08:00:00.000Z",
+    publication_revision: 2,
+    windows: [{ weekday: 1, startMinute: 540, endMinute: 1020 }],
+  }];
+
   const response = await route.GET(request());
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.ok(Array.isArray(body.workweeks));
+  assert.deepEqual(body.currentWorkweeks.map((entry) => entry.id), ["current"]);
+  assert.equal(body.referenceDate, "2026-08-25");
+  assert.equal(berlinTodayCalls, 1);
   assert.equal(Object.hasOwn(body, "calendarWorkweeks"), false);
 });

@@ -110,8 +110,6 @@ export async function GET(request: NextRequest) {
     publication: privateVersion ? publicationPayload(publication?.data || null) : null,
     latestPublished: publicationPayload(latestPublished),
     editBase: latestPublished ? {
-      sourcePublicationId: latestPublished.id,
-      effectiveFrom: latestPublished.effective_from,
       windows: inflateTeamWorkweekWindows((latestPublished.windows || []).map((window) => ({
         weekday: window.weekday,
         start_minute: window.startMinute,

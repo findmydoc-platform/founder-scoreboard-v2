@@ -41,7 +41,7 @@ export function PublishedTeamWorkweeksCard({
       )}
       {state.hasLoadedSuccessfully && (
         <div className="mt-4">
-          <TeamWorkweekMatrix profiles={profiles} workweeks={state.workweeks} />
+          <TeamWorkweekMatrix dateKey={state.referenceDate} profiles={profiles} workweeks={state.workweeks} />
         </div>
       )}
     </UiPanel>

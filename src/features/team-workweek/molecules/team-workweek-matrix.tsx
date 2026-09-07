@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, type KeyboardEvent } from "react";
-import { berlinTodayIso, currentTeamWorkweekDayKey, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
+import { currentTeamWorkweekDayKey, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
 import type { CalendarTeamWorkweek } from "../model/team-workweek-calendar";
 import { projectActiveTeamWorkweekRows } from "../model/team-workweek-matrix";
 import { formatDate } from "@/lib/display";
@@ -17,12 +17,12 @@ import {
 
 export function TeamWorkweekMatrix({
   compact = false,
-  dateKey = berlinTodayIso(),
+  dateKey,
   profiles,
   workweeks,
 }: {
   compact?: boolean;
-  dateKey?: string;
+  dateKey: string;
   profiles: Profile[];
   workweeks: CalendarTeamWorkweek[];
 }) {
@@ -151,7 +151,7 @@ export function TeamWorkweekMatrix({
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-medium text-slate-400">Frei</span>
+                      <span className="text-sm font-medium text-slate-600">Frei</span>
                     )}
                   </div>
                 </li>
@@ -218,7 +218,7 @@ export function TeamWorkweekMatrix({
                           ))}
                         </span>
                       ) : (
-                        <span className="font-medium text-slate-400">Frei</span>
+                        <span className="font-medium text-slate-600">Frei</span>
                       )}
                     </DataCell>
                   );

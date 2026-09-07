@@ -68,8 +68,6 @@ test("the private editor receives the latest published windows as its edit base"
   const body = await response.json();
 
   assert.deepEqual(body.editBase, {
-    sourcePublicationId: "publication-1",
-    effectiveFrom: "2026-08-31",
     windows: {
       monday: [{ start: "09:00", end: "17:00" }],
       tuesday: [],
