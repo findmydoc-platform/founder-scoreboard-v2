@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { validateCalendarWorkweekRange } from "@/features/team-workweek/model/team-workweek-calendar";
-import { berlinTodayIso, inflateTeamWorkweekWindows } from "@/features/team-workweek/model/team-workweek-draft";
+import {
+  selectCalendarWorkweek,
+  validateCalendarWorkweekRange,
+  type CalendarTeamWorkweek,
+} from "@/features/team-workweek/model/team-workweek-calendar";
+import { berlinTodayIso, inflatePublishedTeamWorkweekWindows } from "@/features/team-workweek/model/team-workweek-draft";
 import { selectVisibleTeamWorkweeks } from "@/features/team-workweek/model/published-team-workweek";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { bearerToken, requireTeamMember } from "@/lib/authz";
@@ -19,6 +23,19 @@ type PublishedVersionRow = Readonly<{
   publication_revision: number;
   windows: Array<{ weekday: number; startMinute: number; endMinute: number }>;
 }>;
+
+function calendarWorkweek(row: PublishedVersionRow): CalendarTeamWorkweek {
+  return {
+    id: row.id,
+    ownerProfileId: row.owner_profile_id,
+    effectiveFrom: row.effective_from,
+    effectiveTo: row.effective_to,
+    timezone: row.timezone,
+    publicationRevision: row.publication_revision,
+    lastSyncAt: row.last_sync_at,
+    windows: inflatePublishedTeamWorkweekWindows(row.windows || []),
+  };
+}
 
 export async function GET(request: NextRequest) {
   const context = await requireApiContext(request, requireTeamMember);
@@ -42,13 +59,14 @@ export async function GET(request: NextRequest) {
     .returns<PublishedVersionRow[]>();
   if (error) return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
 
+  const referenceDate = berlinTodayIso();
   const visible = selectVisibleTeamWorkweeks((data || []).map((row) => ({
     ownerProfileId: row.owner_profile_id,
     effectiveFrom: row.effective_from,
     effectiveTo: row.effective_to,
     publicationRevision: row.publication_revision,
     row,
-  })), berlinTodayIso());
+  })), referenceDate);
 
   const workweeks = visible.map(({ row, phase }) => ({
     id: row.id,
@@ -59,34 +77,22 @@ export async function GET(request: NextRequest) {
     lastSyncAt: row.last_sync_at,
     publicationRevision: row.publication_revision,
     phase,
-    windows: inflateTeamWorkweekWindows((row.windows || []).map((window) => ({
-      weekday: window.weekday,
-      start_minute: window.startMinute,
-      end_minute: window.endMinute,
-    }))),
+    windows: inflatePublishedTeamWorkweekWindows(row.windows || []),
   }));
+  const allCalendarWorkweeks = (data || []).map(calendarWorkweek);
+  const currentWorkweeks = [...new Set(allCalendarWorkweeks.map(({ ownerProfileId }) => ownerProfileId))]
+    .map((ownerProfileId) => selectCalendarWorkweek(allCalendarWorkweeks, ownerProfileId, referenceDate))
+    .filter((workweek): workweek is CalendarTeamWorkweek => workweek !== null);
   const calendarWorkweeks = requestedRange.range
-    ? (data || [])
-      .filter((row) => row.effective_from <= requestedRange.range!.to)
-      .filter((row) => !row.effective_to || row.effective_to >= requestedRange.range!.from)
-      .map((row) => ({
-        id: row.id,
-        ownerProfileId: row.owner_profile_id,
-        effectiveFrom: row.effective_from,
-        effectiveTo: row.effective_to,
-        timezone: row.timezone,
-        publicationRevision: row.publication_revision,
-        lastSyncAt: row.last_sync_at,
-        windows: inflateTeamWorkweekWindows((row.windows || []).map((window) => ({
-          weekday: window.weekday,
-          start_minute: window.startMinute,
-          end_minute: window.endMinute,
-        }))),
-      }))
+    ? allCalendarWorkweeks
+      .filter((workweek) => workweek.effectiveFrom <= requestedRange.range!.to)
+      .filter((workweek) => !workweek.effectiveTo || workweek.effectiveTo >= requestedRange.range!.from)
     : undefined;
 
   return NextResponse.json({
+    referenceDate,
     workweeks,
+    currentWorkweeks,
     ...(calendarWorkweeks ? { calendarWorkweeks } : {}),
   });
 }

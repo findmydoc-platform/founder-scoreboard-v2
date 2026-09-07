@@ -2,9 +2,9 @@
 
 import { useId, useState, type KeyboardEvent } from "react";
 import { currentTeamWorkweekDayKey, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
-import { projectActiveTeamWorkweekRows } from "../model/team-workweek-matrix";
+import { projectCurrentCalendarWorkweekRows, type CalendarTeamWorkweek } from "../model/team-workweek-calendar";
+import { teamWorkweekProfiles } from "../model/team-workweek-matrix";
 import { formatDate } from "@/lib/display";
-import type { PublishedTeamWorkweek } from "../model/published-team-workweek";
 import type { Profile } from "@/lib/types";
 import { classNames } from "@/shared/atoms/ui-primitives";
 import {
@@ -17,14 +17,20 @@ import {
 
 export function TeamWorkweekMatrix({
   compact = false,
+  dateKey,
   profiles,
   workweeks,
 }: {
   compact?: boolean;
+  dateKey: string;
   profiles: Profile[];
-  workweeks: PublishedTeamWorkweek[];
+  workweeks: CalendarTeamWorkweek[];
 }) {
-  const rows = projectActiveTeamWorkweekRows(profiles, workweeks);
+  const rows = projectCurrentCalendarWorkweekRows({
+    calendarWorkweeks: workweeks,
+    dateKey,
+    profiles: teamWorkweekProfiles(profiles),
+  });
   const [selectedDayKey, setSelectedDayKey] = useState<TeamWorkweekDayKey>(currentTeamWorkweekDayKey);
   const tabGroupId = useId();
   const tabPanelId = `${tabGroupId}-panel`;
@@ -149,7 +155,7 @@ export function TeamWorkweekMatrix({
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-medium text-slate-400">Frei</span>
+                      <span className="text-sm font-medium text-slate-600">Frei</span>
                     )}
                   </div>
                 </li>
@@ -216,7 +222,7 @@ export function TeamWorkweekMatrix({
                           ))}
                         </span>
                       ) : (
-                        <span className="font-medium text-slate-400">Frei</span>
+                        <span className="font-medium text-slate-600">Frei</span>
                       )}
                     </DataCell>
                   );

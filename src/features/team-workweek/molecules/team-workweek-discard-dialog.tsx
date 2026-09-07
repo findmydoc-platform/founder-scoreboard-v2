@@ -32,9 +32,9 @@ export function TeamWorkweekDiscardDialog({
             <AlertTriangle size={19} />
           </span>
           <div>
-            <h2 id="workweek-discard-title" className="text-lg font-semibold text-slate-950">Ungespeicherte Grundwoche verwerfen?</h2>
+            <h2 id="workweek-discard-title" className="text-lg font-semibold text-slate-950">Ungespeicherte Änderungen verwerfen?</h2>
             <p id="workweek-discard-description" className="mt-2 text-sm leading-6 text-slate-600">
-              Deine Änderungen wurden noch nicht als neue private Wochenversion gespeichert.
+              Deine Änderungen wurden noch nicht privat gespeichert.
             </p>
           </div>
         </div>

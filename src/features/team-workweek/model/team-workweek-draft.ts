@@ -38,6 +38,10 @@ export type PrivateTeamWorkweekDraft = Readonly<{
   windows: TeamWorkweekWindows;
 }>;
 
+export type TeamWorkweekEditBase = Readonly<{
+  windows: TeamWorkweekWindows;
+}>;
+
 export type OwnTeamWorkweekPublication = Readonly<{
   id: string;
   effectiveFrom: string;
@@ -69,6 +73,28 @@ export function emptyTeamWorkweekWindows(): TeamWorkweekWindows {
     friday: [],
     saturday: [],
     sunday: [],
+  };
+}
+
+function cloneTeamWorkweekWindows(windows: TeamWorkweekWindows) {
+  return Object.fromEntries(TEAM_WORKWEEK_DAYS.map((day) => [
+    day.key,
+    windows[day.key].map((window) => ({ ...window })),
+  ])) as TeamWorkweekWindows;
+}
+
+export function editableTeamWorkweekDraft({
+  editBase,
+  minimumEffectiveFrom,
+  version,
+}: {
+  editBase: TeamWorkweekEditBase | null;
+  minimumEffectiveFrom: string;
+  version: PrivateTeamWorkweekVersion | null;
+}): PrivateTeamWorkweekDraft {
+  return {
+    effectiveFrom: version?.effectiveFrom || minimumEffectiveFrom,
+    windows: cloneTeamWorkweekWindows(version?.windows || editBase?.windows || emptyTeamWorkweekWindows()),
   };
 }
 
@@ -219,4 +245,14 @@ export function inflateTeamWorkweekWindows(
     windows[day.key].sort((left, right) => left.start.localeCompare(right.start) || left.end.localeCompare(right.end));
   }
   return windows;
+}
+
+export function inflatePublishedTeamWorkweekWindows(
+  rows: Array<{ weekday: number; startMinute: number; endMinute: number }>,
+): TeamWorkweekWindows {
+  return inflateTeamWorkweekWindows(rows.map((window) => ({
+    weekday: window.weekday,
+    start_minute: window.startMinute,
+    end_minute: window.endMinute,
+  })));
 }
