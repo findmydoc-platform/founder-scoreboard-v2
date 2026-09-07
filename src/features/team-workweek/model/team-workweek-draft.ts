@@ -38,6 +38,12 @@ export type PrivateTeamWorkweekDraft = Readonly<{
   windows: TeamWorkweekWindows;
 }>;
 
+export type TeamWorkweekEditBase = Readonly<{
+  sourcePublicationId: string;
+  effectiveFrom: string;
+  windows: TeamWorkweekWindows;
+}>;
+
 export type OwnTeamWorkweekPublication = Readonly<{
   id: string;
   effectiveFrom: string;
@@ -69,6 +75,28 @@ export function emptyTeamWorkweekWindows(): TeamWorkweekWindows {
     friday: [],
     saturday: [],
     sunday: [],
+  };
+}
+
+function cloneTeamWorkweekWindows(windows: TeamWorkweekWindows) {
+  return Object.fromEntries(TEAM_WORKWEEK_DAYS.map((day) => [
+    day.key,
+    windows[day.key].map((window) => ({ ...window })),
+  ])) as TeamWorkweekWindows;
+}
+
+export function editableTeamWorkweekDraft({
+  editBase,
+  minimumEffectiveFrom,
+  version,
+}: {
+  editBase: Pick<TeamWorkweekEditBase, "windows"> | null;
+  minimumEffectiveFrom: string;
+  version: PrivateTeamWorkweekVersion | null;
+}): PrivateTeamWorkweekDraft {
+  return {
+    effectiveFrom: version?.effectiveFrom || minimumEffectiveFrom,
+    windows: cloneTeamWorkweekWindows(version?.windows || editBase?.windows || emptyTeamWorkweekWindows()),
   };
 }
 

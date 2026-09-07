@@ -38,11 +38,11 @@ export function PrivateTeamWorkweekEditor({
           <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 id="private-workweek-editor-title" className="text-base font-semibold text-slate-950">Eigene Regelwoche</h2>
-                <UiBadge size="xs" tone="amber">{state.publication?.syncState === "delayed" ? "Synchronisierung verzögert" : "In Vorbereitung"}</UiBadge>
+                <h2 id="private-workweek-editor-title" className="text-base font-semibold text-slate-950">Meine Arbeitswoche bearbeiten</h2>
+                <UiBadge size="xs" tone="amber">{state.publication?.syncState === "delayed" ? "Synchronisierung verzögert" : "Bearbeitung"}</UiBadge>
               </div>
               <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                {profile.name} · {state.publication?.syncState === "delayed" ? "Bisherige Teamversion sichtbar" : "Privat · nicht veröffentlicht"} · {TEAM_WORKWEEK_TIMEZONE}
+                {profile.name} · {state.publication?.syncState === "delayed" ? "Bisheriger Teamstand sichtbar" : "Privat · nicht veröffentlicht"} · {TEAM_WORKWEEK_TIMEZONE}
               </p>
             </div>
             <UiButton size="iconLg" aria-label="Editor schließen" onClick={requestClose}><X size={18} /></UiButton>
@@ -67,7 +67,7 @@ export function PrivateTeamWorkweekEditor({
                     >
                       <h4 className="pt-2 text-sm font-semibold text-slate-900" title={day.label}>{day.shortLabel}</h4>
                       {state.draft.windows[day.key].length > 0 && (
-                        <div className="grid min-w-0 gap-2">
+                        <div className="grid min-w-0 gap-2 max-[359px]:col-span-2 max-[359px]:row-start-2">
                           {state.draft.windows[day.key].map((window, index) => (
                             <div key={`${day.key}-${index}`} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] items-center gap-1">
                               <label className="min-w-0">
@@ -103,7 +103,7 @@ export function PrivateTeamWorkweekEditor({
                       {!state.draft.windows[day.key].length && <p className="py-2 text-sm text-slate-400">Freier Tag</p>}
                       <UiButton
                         className={state.draft.windows[day.key].length
-                          ? "col-start-2 mt-1 justify-self-start min-[400px]:col-start-3 min-[400px]:row-start-1 min-[400px]:mt-0"
+                          ? "col-start-2 mt-1 justify-self-start max-[359px]:col-start-1 max-[359px]:row-start-3 min-[400px]:col-start-3 min-[400px]:row-start-1 min-[400px]:mt-0"
                           : "justify-self-start"}
                         size="iconMd"
                         onClick={() => state.addWindow(day.key)}
@@ -128,7 +128,7 @@ export function PrivateTeamWorkweekEditor({
                     value={state.draft.effectiveFrom}
                     onChange={state.setEffectiveFrom}
                     disabled={state.pending}
-                    aria-label="Gültigkeitsbeginn der Grundwoche"
+                    aria-label="Gültigkeitsbeginn der Arbeitswoche"
                     className="h-9 w-full sm:w-[180px] [@media(pointer:coarse)]:h-11"
                   />
                 </div>
@@ -136,7 +136,7 @@ export function PrivateTeamWorkweekEditor({
 
               {state.errors.length > 0 && (
                 <UiNotice tone="danger" role="alert">
-                  <div className="font-semibold">Bitte korrigiere die Grundwoche:</div>
+                  <div className="font-semibold">Bitte korrigiere deine Arbeitswoche:</div>
                   <ul className="mt-1 list-disc pl-5">{state.errors.map((error) => <li key={error}>{error}</li>)}</ul>
                 </UiNotice>
               )}
@@ -145,17 +145,19 @@ export function PrivateTeamWorkweekEditor({
           </div>
 
           <footer className="border-t border-slate-200 bg-white px-3 py-2.5 sm:px-4">
-            <p className="mb-2 text-xs leading-4 text-slate-500">Privat speichern. Nach bestätigtem Google-Abgleich veröffentlichen.</p>
-            <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-[auto_minmax(0,1fr)_auto]">
-              <UiButton className="hidden whitespace-nowrap min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
-              <UiButton className="whitespace-nowrap px-2 text-xs" variant="primary" size="md" data-autofocus onClick={() => void state.save()} disabled={state.pending || !state.dirty}>
-                {state.pending ? "Speichert …" : "Privat speichern"}
+            <p className="mb-2 text-xs leading-4 text-slate-500">
+              Änderungen gelten ab {formatDate(state.draft.effectiveFrom)} und werden erst nach dem Google-Abgleich veröffentlicht.
+            </p>
+            <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
+              <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
+              <UiButton className="whitespace-nowrap px-2 text-xs" variant="primary" size="md" data-autofocus aria-label="Änderung privat speichern" onClick={() => void state.save()} disabled={state.pending || !state.dirty}>
+                {state.pending ? "Speichert …" : "Speichern"}
               </UiButton>
               <UiButton
                 variant="primary"
                 size="md"
                 className="whitespace-nowrap px-2 text-xs"
-                aria-label="In Google & Team veröffentlichen"
+                aria-label="Änderung in Google & Team veröffentlichen"
                 onClick={() => void state.publish().then((published) => published && onClose())}
                 disabled={state.pending || state.dirty || !state.version}
               >

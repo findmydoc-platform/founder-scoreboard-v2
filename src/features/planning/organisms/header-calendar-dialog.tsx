@@ -20,7 +20,6 @@ import {
   weekdayForDate,
   type CalendarTeamWorkweek,
 } from "@/features/team-workweek/model/team-workweek-calendar";
-import type { PublishedTeamWorkweek } from "@/features/team-workweek/model/published-team-workweek";
 import { teamWorkweekProfiles } from "@/features/team-workweek/model/team-workweek-matrix";
 import { TeamWorkweekMatrix } from "@/features/team-workweek/molecules/team-workweek-matrix";
 import type { HeaderCalendarEvent, HeaderDataSlot, Profile } from "@/lib/types";
@@ -107,7 +106,7 @@ export function HeaderCalendarDialog({
   selectedDate: string;
   showWorkweek: boolean;
   viewMonth: string;
-  workweeks: PublishedTeamWorkweek[];
+  workweeks: CalendarTeamWorkweek[];
 }) {
   const dialogRef = useModalDialog<HTMLDivElement>({
     open: true,
@@ -195,7 +194,7 @@ export function HeaderCalendarDialog({
       <section
         style={anchorStyle}
         className={classNames(
-          "relative z-10 flex h-dvh max-h-dvh min-h-0 w-full flex-col overflow-hidden bg-slate-50 shadow-2xl lg:fixed lg:right-[var(--header-calendar-right)] lg:top-[var(--header-calendar-top)] lg:h-auto lg:max-h-[calc(100dvh-var(--header-calendar-top)-0.75rem)] lg:w-[min(900px,calc(100vw-3rem))] lg:rounded-xl lg:border lg:border-slate-200",
+          "relative z-10 flex h-dvh max-h-dvh min-h-0 w-full flex-col overflow-hidden bg-slate-50 shadow-2xl lg:fixed lg:right-[min(var(--header-calendar-right),max(1.5rem,calc(100vw-924px)))] lg:top-[var(--header-calendar-top)] lg:h-auto lg:max-h-[calc(100dvh-var(--header-calendar-top)-0.75rem)] lg:w-[min(900px,calc(100vw-3rem))] lg:rounded-xl lg:border lg:border-slate-200",
           !anchor && "lg:invisible",
         )}
       >

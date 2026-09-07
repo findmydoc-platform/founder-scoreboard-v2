@@ -1,10 +1,10 @@
 "use client";
 
 import { useId, useState, type KeyboardEvent } from "react";
-import { currentTeamWorkweekDayKey, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
+import { berlinTodayIso, currentTeamWorkweekDayKey, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
+import type { CalendarTeamWorkweek } from "../model/team-workweek-calendar";
 import { projectActiveTeamWorkweekRows } from "../model/team-workweek-matrix";
 import { formatDate } from "@/lib/display";
-import type { PublishedTeamWorkweek } from "../model/published-team-workweek";
 import type { Profile } from "@/lib/types";
 import { classNames } from "@/shared/atoms/ui-primitives";
 import {
@@ -17,14 +17,16 @@ import {
 
 export function TeamWorkweekMatrix({
   compact = false,
+  dateKey = berlinTodayIso(),
   profiles,
   workweeks,
 }: {
   compact?: boolean;
+  dateKey?: string;
   profiles: Profile[];
-  workweeks: PublishedTeamWorkweek[];
+  workweeks: CalendarTeamWorkweek[];
 }) {
-  const rows = projectActiveTeamWorkweekRows(profiles, workweeks);
+  const rows = projectActiveTeamWorkweekRows(profiles, workweeks, dateKey);
   const [selectedDayKey, setSelectedDayKey] = useState<TeamWorkweekDayKey>(currentTeamWorkweekDayKey);
   const tabGroupId = useId();
   const tabPanelId = `${tabGroupId}-panel`;

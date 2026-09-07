@@ -25,6 +25,11 @@ export type CalendarWorktime = Readonly<{
   workingNow: boolean;
 }>;
 
+export type CurrentCalendarWorkweekRow = Readonly<{
+  profile: Profile;
+  workweek: CalendarTeamWorkweek | null;
+}>;
+
 function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
@@ -120,6 +125,21 @@ export function selectCalendarWorkweek(
     .filter((workweek) => workweek.effectiveFrom <= dateKey && (!workweek.effectiveTo || workweek.effectiveTo >= dateKey))
     .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom)
       || right.publicationRevision - left.publicationRevision)[0] || null;
+}
+
+export function projectCurrentCalendarWorkweekRows({
+  calendarWorkweeks,
+  dateKey = berlinDateKey(),
+  profiles,
+}: {
+  calendarWorkweeks: CalendarTeamWorkweek[];
+  dateKey?: string;
+  profiles: Profile[];
+}): CurrentCalendarWorkweekRow[] {
+  return profiles.map((profile) => ({
+    profile,
+    workweek: selectCalendarWorkweek(calendarWorkweeks, profile.id, dateKey),
+  }));
 }
 
 function minuteForClock(value: string) {

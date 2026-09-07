@@ -19,6 +19,7 @@ type PublicationRow = Readonly<{
   publication_revision: number;
   published_at: string | null;
   last_sync_at: string | null;
+  windows?: Array<{ weekday: number; startMinute: number; endMinute: number }>;
   team_workweek_google_reconciliation_status: Readonly<{
     state: "confirmed" | "pending" | "delayed" | "conflict";
     last_observed_at: string | null;
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
   const ownerProfileId = context.permission.profile?.id || data?.owner_profile_id || null;
   const latestPublishedResponse = ownerProfileId ? await supabase
     .from("team_workweek_publications")
-    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)")
+    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at,windows,team_workweek_google_reconciliation_status(state,last_observed_at)")
     .eq("owner_profile_id", ownerProfileId)
     .eq("status", "published")
     .order("effective_from", { ascending: false })
@@ -108,6 +109,15 @@ export async function GET(request: NextRequest) {
     } : null,
     publication: privateVersion ? publicationPayload(publication?.data || null) : null,
     latestPublished: publicationPayload(latestPublished),
+    editBase: latestPublished ? {
+      sourcePublicationId: latestPublished.id,
+      effectiveFrom: latestPublished.effective_from,
+      windows: inflateTeamWorkweekWindows((latestPublished.windows || []).map((window) => ({
+        weekday: window.weekday,
+        start_minute: window.startMinute,
+        end_minute: window.endMinute,
+      }))),
+    } : null,
     minimumEffectiveFrom: nextVersionMondayIso(latestPublished?.effective_from || null),
   });
 }

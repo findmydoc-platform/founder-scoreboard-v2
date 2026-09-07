@@ -26,18 +26,18 @@ export function PublishedTeamWorkweeksCard({
     <UiPanel aria-labelledby="published-team-workweeks-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="published-team-workweeks-title" className="text-base font-semibold text-slate-950">Grundwochen im Team</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-500">Aktive veröffentlichte Arbeitszeiten in horizontalen Teamzeilen. Änderungen erfolgen nur über den eigenen Arbeitswochen-Editor.</p>
+          <h2 id="published-team-workweeks-title" className="text-base font-semibold text-slate-950">Arbeitswochen im Team</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">Aktuell gültige, veröffentlichte Arbeitszeiten. Änderungen erfolgen nur über den eigenen Arbeitswochen-Editor.</p>
         </div>
         <UiBadge tone="slate">Nur Lesen</UiBadge>
       </div>
 
       {state.message && <UiNotice className="mt-4" tone="warning">{state.message}</UiNotice>}
       {viewState === "loading" && (
-        <p className="mt-4 text-sm text-slate-500" role="status">Grundwochen werden geladen.</p>
+        <p className="mt-4 text-sm text-slate-500" role="status">Arbeitswochen werden geladen.</p>
       )}
       {viewState === "empty" && (
-        <p className="mt-4 rounded-lg border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">Noch keine Grundwoche veröffentlicht.</p>
+        <p className="mt-4 rounded-lg border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">Für die aktuelle Woche ist keine Arbeitswoche veröffentlicht.</p>
       )}
       {state.hasLoadedSuccessfully && (
         <div className="mt-4">

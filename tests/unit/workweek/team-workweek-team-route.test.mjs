@@ -34,7 +34,10 @@ const route = await importTestModule(
   {
     "next/server": { NextResponse: { json: (value) => Response.json(value) } },
     "@/features/team-workweek/model/team-workweek-calendar": calendarModel,
-    "@/features/team-workweek/model/team-workweek-draft": draftModel,
+    "@/features/team-workweek/model/team-workweek-draft": {
+      ...draftModel,
+      berlinTodayIso: () => "2026-08-25",
+    },
     "@/features/team-workweek/model/published-team-workweek": publishedModel,
     "@/lib/api-response": {
       apiError,
@@ -99,6 +102,17 @@ test("range responses stay additive, published-only, overlap-filtered, and provi
       refresh_token: "must-not-leak",
     },
     {
+      id: "future",
+      owner_profile_id: "profile-1",
+      effective_from: "2026-08-31",
+      effective_to: null,
+      timezone: "Europe/Berlin",
+      published_at: "2026-08-25T08:00:00.000Z",
+      last_sync_at: "2026-08-25T08:00:00.000Z",
+      publication_revision: 3,
+      windows: [{ weekday: 1, startMinute: 600, endMinute: 1080 }],
+    },
+    {
       id: "outside",
       owner_profile_id: "profile-1",
       effective_from: "2026-07-01",
@@ -116,7 +130,8 @@ test("range responses stay additive, published-only, overlap-filtered, and provi
   const body = await response.json();
   assert.deepEqual(queryStatuses, ["published"]);
   assert.ok(Array.isArray(body.workweeks));
-  assert.deepEqual(body.calendarWorkweeks.map((entry) => entry.id), ["inside"]);
+  assert.deepEqual(body.currentWorkweeks.map((entry) => entry.id), ["inside"]);
+  assert.deepEqual(body.calendarWorkweeks.map((entry) => entry.id), ["inside", "future"]);
   assert.deepEqual(Object.keys(body.calendarWorkweeks[0]).sort(), [
     "effectiveFrom",
     "effectiveTo",

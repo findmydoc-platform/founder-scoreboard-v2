@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PublishedTeamWorkweek } from "../model/published-team-workweek";
+import type { CalendarTeamWorkweek } from "../model/team-workweek-calendar";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 
 export const TEAM_WORKWEEK_PUBLISHED_EVENT = "founderops:team-workweek-published";
 
 export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
   const mounted = useRef(true);
-  const [workweeks, setWorkweeks] = useState<PublishedTeamWorkweek[]>([]);
+  const [workweeks, setWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
   const [pending, setPending] = useState(true);
   const [message, setMessage] = useState("");
   const [hasLoadedSuccessfully, setHasLoadedSuccessfully] = useState(false);
@@ -25,14 +25,14 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
     setMessage("");
     try {
       const { response, body } = await apiClient.requestJson<{
-        workweeks?: PublishedTeamWorkweek[];
+        currentWorkweeks?: CalendarTeamWorkweek[];
         error?: string;
       }>("/api/team-workweek/team", { cache: "no-store" });
-      if (!response.ok || !body?.workweeks) {
+      if (!response.ok || !body?.currentWorkweeks) {
         throw new Error(body?.error || "Veröffentlichte Grundwochen konnten nicht geladen werden.");
       }
       if (mounted.current) {
-        setWorkweeks(body.workweeks);
+        setWorkweeks(body.currentWorkweeks);
         setHasLoadedSuccessfully(true);
       }
     } catch (error) {

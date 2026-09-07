@@ -14,17 +14,17 @@ const profiles = [
   { id: "viewer", name: "Viewer", platformRole: "viewer" },
 ];
 
-function workweek(ownerProfileId, phase, id) {
-  return { id, ownerProfileId, phase };
+function workweek(ownerProfileId, effectiveFrom, effectiveTo, id) {
+  return { id, ownerProfileId, effectiveFrom, effectiveTo, publicationRevision: 1 };
 }
 
 test("the matrix keeps every team profile and only each active publication", () => {
-  const current = workweek("founder-1", "current", "current-1");
+  const current = workweek("founder-1", "2026-08-31", null, "current-1");
   const rows = matrixModel.projectActiveTeamWorkweekRows(profiles, [
-    workweek("founder-1", "prepared", "prepared-1"),
+    workweek("founder-1", "2026-09-07", null, "prepared-1"),
     current,
-    workweek("deputy", "current", "current-deputy"),
-  ]);
+    workweek("deputy", "2026-08-31", null, "current-deputy"),
+  ], "2026-09-06");
 
   assert.deepEqual(rows.map(({ profile }) => profile.id), ["ceo", "founder-1", "founder-2", "founder-3", "founder-4", "deputy", "viewer"]);
   assert.equal(rows.length, 7);

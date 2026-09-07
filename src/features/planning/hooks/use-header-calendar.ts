@@ -8,13 +8,12 @@ import {
   firstCalendarDayOfMonth,
   type CalendarTeamWorkweek,
 } from "@/features/team-workweek/model/team-workweek-calendar";
-import type { PublishedTeamWorkweek } from "@/features/team-workweek/model/published-team-workweek";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 
 type TeamWorkweekCalendarResponse = Readonly<{
   calendarWorkweeks?: CalendarTeamWorkweek[];
+  currentWorkweeks?: CalendarTeamWorkweek[];
   error?: string;
-  workweeks?: PublishedTeamWorkweek[];
 }>;
 
 export function useHeaderCalendar({
@@ -32,7 +31,7 @@ export function useHeaderCalendar({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const [calendarWorkweeks, setCalendarWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
-  const [workweeks, setWorkweeks] = useState<PublishedTeamWorkweek[]>([]);
+  const [workweeks, setWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
   const latestRequest = useRef(0);
 
   const loadVisibleRange = useCallback(async () => {
@@ -46,11 +45,11 @@ export function useHeaderCalendar({
         `/api/team-workweek/team?from=${range.from}&to=${range.to}`,
         { cache: "no-store" },
       );
-      if (!response.ok || !body?.workweeks || !body.calendarWorkweeks) {
+      if (!response.ok || !body?.currentWorkweeks || !body.calendarWorkweeks) {
         throw new Error(body?.error || "Arbeitszeiten konnten nicht geladen werden.");
       }
       if (requestId !== latestRequest.current) return;
-      setWorkweeks(body.workweeks);
+      setWorkweeks(body.currentWorkweeks);
       setCalendarWorkweeks((current) => {
         const retained = current.filter((workweek) => (
           workweek.effectiveFrom > range.to
