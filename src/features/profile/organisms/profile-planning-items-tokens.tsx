@@ -24,7 +24,7 @@ export function ProfilePlanningItemsTokens({
     <SettingsPane
       eyebrow="Persönlicher API-Zugang"
       title="Team-Planungs-API"
-      description="Erstelle persönliche Tokens für die Team-Planungs-API. Sie lesen den Planungskontext und führen freigegebene Aktionen in deinem Namen aus. Bestehende Elemente und GitHub bleiben ohne ausdrückliche Freigabe unveränderbar."
+      description="Erstelle persönliche Tokens für die Team-Planungs-API. Sie lesen den Planungskontext und führen freigegebene Aktionen in deinem Namen aus. Bestehende Elemente, ihre Abhängigkeiten und GitHub bleiben ohne ausdrückliche Freigabe unveränderbar."
     >
       <div className="border-b border-blue-100 bg-blue-50 px-5 py-4" data-tour-id="founderops-planning-api-v2">
         <UiNotice tone="info">
@@ -52,10 +52,10 @@ export function ProfilePlanningItemsTokens({
                 className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-400"
                 aria-label="Token-Bezeichnung"
               />
-              <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2" data-tour-id="founderops-planning-update-scope">
                 <div>
                   <div className="text-sm font-medium text-slate-900">Bestehende Planungselemente bearbeiten</div>
-                  <div className="text-xs leading-5 text-slate-500">Aktiviert den separaten Update-Scope für diesen neuen Token.</div>
+                  <div className="text-xs leading-5 text-slate-500">Aktiviert den Update-Scope für Felder und Aufgabenabhängigkeiten dieses neuen Tokens.</div>
                 </div>
                 <ToggleSwitch
                   checked={tokens.allowUpdates}

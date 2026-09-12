@@ -6,7 +6,7 @@ import pg from "pg";
 const execFileAsync = promisify(execFile);
 const supabaseCli = resolve(process.cwd(), "node_modules", ".bin", "supabase");
 
-async function localDatabaseUrl() {
+export async function localDatabaseUrl() {
   const { stdout } = await execFileAsync(supabaseCli, ["status", "-o", "json"], { encoding: "utf8" });
   const status = JSON.parse(stdout) as { DB_URL?: unknown };
   if (typeof status.DB_URL !== "string" || !status.DB_URL.startsWith("postgresql://")) {

@@ -97,7 +97,7 @@
       "AccessMetadata": { "type": "object", "additionalProperties": false, "required": ["operation", "mode", "access"], "properties": { "operation": { "type": "string", "enum": ["planningContext.read", "planningItems.create", "planningItems.update", "planningItems.deleteEmpty", "planningItems.githubSync"] }, "mode": { "type": "string", "enum": ["read", "preview", "commit"] }, "access": { "$ref": "#/components/schemas/AccessDecision" } } },
       "AllowedAccessMetadata": { "allOf": [{ "$ref": "#/components/schemas/AccessMetadata" }, { "type": "object", "properties": { "access": { "type": "object", "properties": { "decision": { "const": "allowed" }, "missingScopes": { "maxItems": 0 } } } } }] },
       "DeniedAccessMetadata": { "allOf": [{ "$ref": "#/components/schemas/AccessMetadata" }, { "type": "object", "properties": { "access": { "type": "object", "properties": { "decision": { "const": "denied" }, "missingScopes": { "minItems": 1 } } } } }] },
-      "AuthorizedResponse": { "type": "object", "required": ["_meta"], "properties": { "_meta": { "$ref": "#/components/schemas/AllowedAccessMetadata" } } },
+      "AuthorizedResponse": { "type": "object", "required": ["_meta"], "properties": { "dependencyChange": { "$ref": "#/components/schemas/DependencyChange" }, "_meta": { "$ref": "#/components/schemas/AllowedAccessMetadata" } } },
       "AuthorizedErrorResponse": { "type": "object", "required": ["ok", "error", "_meta"], "properties": { "ok": { "const": false }, "error": { "type": "string" }, "_meta": { "$ref": "#/components/schemas/AllowedAccessMetadata" } } },
       "TokenRequiredResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "code", "error"], "properties": { "ok": { "const": false }, "code": { "const": "TOKEN_REQUIRED" }, "error": { "type": "string" } } },
       "TokenInactiveResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "code", "error"], "properties": { "ok": { "const": false }, "code": { "const": "TOKEN_INACTIVE" }, "error": { "type": "string" } } },
@@ -135,8 +135,13 @@
         "additionalProperties": false,
         "required": ["expectedUpdatedAt"],
         "minProperties": 2,
+        "description": "A dependency command is exclusive with every other patch field except expectedUpdatedAt.",
+        "oneOf": [
+          { "required": ["dependency"], "maxProperties": 2 },
+          { "not": { "required": ["dependency"] } }
+        ],
         "properties": {
-          "expectedUpdatedAt": { "type": "string", "format": "date-time" }, "githubSyncMode": { "$ref": "#/components/schemas/GitHubSyncMode" }, "githubSync": { "$ref": "#/components/schemas/GitHubSyncCommand" },
+          "expectedUpdatedAt": { "type": "string", "format": "date-time" }, "dependency": { "$ref": "#/components/schemas/DependencyCommand" }, "githubSyncMode": { "$ref": "#/components/schemas/GitHubSyncMode" }, "githubSync": { "$ref": "#/components/schemas/GitHubSyncCommand" },
           "title": { "type": ["string", "null"] }, "description": { "type": ["string", "null"] }, "problemStatement": { "type": ["string", "null"] },
           "intendedOutcome": { "type": ["string", "null"] }, "scopeConstraints": { "type": ["string", "null"] }, "acceptanceCriteria": { "$ref": "#/components/schemas/NullableAcceptanceCriteria" },
           "evidenceRequired": { "type": ["string", "null"] }, "definitionOfDone": { "type": ["string", "null"] }, "parentTaskId": { "type": ["string", "null"] },
@@ -148,6 +153,13 @@
           "status": { "oneOf": [{ "$ref": "#/components/schemas/StrategicStatus" }, { "$ref": "#/components/schemas/TaskStatus" }, { "$ref": "#/components/schemas/SubIssueStatus" }] }
         }
       },
+      "DependencyDirection": { "type": "string", "enum": ["blocked_by", "blocks"], "description": "Direction relative to the planning item identified by the request path." },
+      "DependencyAddCommand": { "type": "object", "additionalProperties": false, "required": ["operation", "direction", "relatedItemId"], "properties": { "operation": { "const": "add" }, "direction": { "$ref": "#/components/schemas/DependencyDirection" }, "relatedItemId": { "type": "string", "minLength": 1 }, "note": { "type": "string", "maxLength": 500 } } },
+      "DependencyRemoveCommand": { "type": "object", "additionalProperties": false, "required": ["operation", "relationshipId"], "properties": { "operation": { "const": "remove" }, "relationshipId": { "type": "integer", "minimum": 1 } } },
+      "DependencyCommand": { "oneOf": [{ "$ref": "#/components/schemas/DependencyAddCommand" }, { "$ref": "#/components/schemas/DependencyRemoveCommand" }] },
+      "PlanningDependency": { "type": "object", "additionalProperties": false, "required": ["relationshipId", "blockedItemId", "blockingItemId", "note"], "properties": { "relationshipId": { "type": "integer", "minimum": 1 }, "blockedItemId": { "type": "string" }, "blockingItemId": { "type": "string" }, "note": { "type": ["string", "null"], "maxLength": 500 } } },
+      "PlanningDependencyChangeRelationship": { "type": "object", "additionalProperties": false, "required": ["relationshipId", "blockedItemId", "blockingItemId", "note"], "properties": { "relationshipId": { "type": ["integer", "null"], "minimum": 1, "description": "Null only while previewing a new dependency that has not been stored yet." }, "blockedItemId": { "type": "string" }, "blockingItemId": { "type": "string" }, "note": { "type": ["string", "null"], "maxLength": 500 } } },
+      "DependencyChange": { "type": "object", "additionalProperties": false, "required": ["operation", "changed", "relationship"], "properties": { "operation": { "type": "string", "enum": ["add", "remove"] }, "changed": { "type": "boolean" }, "relationship": { "$ref": "#/components/schemas/PlanningDependencyChangeRelationship" } } },
       "DeletePayload": { "type": "object", "additionalProperties": false, "required": ["expectedUpdatedAt"], "properties": { "expectedUpdatedAt": { "type": "string", "format": "date-time" } } },
       "EpicChildCounts": { "type": "object", "additionalProperties": false, "required": ["initiatives", "tasks"], "properties": { "initiatives": { "type": "integer", "minimum": 0 }, "tasks": { "type": "integer", "minimum": 0 } } },
       "DeletePreviewResponse": { "type": "object", "required": ["ok", "valid", "canDelete", "itemId", "itemType", "currentItem", "children", "warnings", "_meta"], "properties": { "ok": { "const": true }, "valid": { "type": "boolean" }, "canDelete": { "type": "boolean" }, "itemId": { "type": "string" }, "itemType": { "const": "epic" }, "currentItem": { "type": "object" }, "children": { "$ref": "#/components/schemas/EpicChildCounts" }, "code": { "type": ["string", "null"], "enum": ["EPIC_NOT_EMPTY", null] }, "error": { "type": "string" }, "warnings": { "type": "array", "items": { "type": "string" } }, "_meta": { "$ref": "#/components/schemas/AccessMetadata" } } },
@@ -162,7 +174,7 @@
       "GitHubSyncMode": { "type": "string", "enum": ["async", "wait"] },
       "GitHubSyncCommand": { "type": "object", "additionalProperties": false, "required": ["createIfMissing"], "properties": { "createIfMissing": { "type": "boolean" } } },
       "GitHubSyncRequest": { "type": "object", "additionalProperties": false, "required": ["githubSyncMode", "createIfMissing"], "properties": { "githubSyncMode": { "$ref": "#/components/schemas/GitHubSyncMode" }, "createIfMissing": { "type": "boolean" } } },
-      "ContextResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "context", "_meta"], "properties": { "ok": { "const": true }, "context": { "type": "object", "required": ["actor", "constraints", "profiles", "items", "epics", "initiatives", "tasks", "sprints"], "not": { "required": ["milestones"] } }, "_meta": { "$ref": "#/components/schemas/AccessMetadata" } } }
+      "ContextResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "context", "_meta"], "properties": { "ok": { "const": true }, "context": { "type": "object", "required": ["actor", "constraints", "profiles", "items", "epics", "initiatives", "tasks", "sprints", "dependencies"], "properties": { "dependencies": { "type": "array", "items": { "$ref": "#/components/schemas/PlanningDependency" } } }, "not": { "required": ["milestones"] } }, "_meta": { "$ref": "#/components/schemas/AccessMetadata" } } }
     }
   }
 }

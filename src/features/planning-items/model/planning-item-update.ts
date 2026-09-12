@@ -40,6 +40,7 @@ import {
 } from "@/features/planning-items/model/planning-item-normalization";
 import type { ActorContext } from "./actor-context";
 import type { PlanningError, PlanningItems, PlanningItemChanges, PlanningResult, ReviseItem } from "./planning-items";
+import { parseTeamPlanningDependency } from "./planning-items-team-dependency-contract";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 type UnknownRecord = Record<string, unknown>;
@@ -289,6 +290,7 @@ export function parsePlanningItemPatchPayload(
   const unknownKey = Object.keys(raw).find((key) => (
     key !== "expectedUpdatedAt"
     && key !== "itemType"
+    && key !== "dependency"
     && key !== "githubSync"
     && key !== "githubSyncMode"
     && !allowedPatchFields.has(key as PlanningItemPatchField)
@@ -297,6 +299,23 @@ export function parsePlanningItemPatchPayload(
   if (hasOwn(raw, "itemType")) return { ok: false as const, error: "itemType ist unveränderlich und darf nicht gepatcht werden." };
   if (typeof raw.expectedUpdatedAt !== "string" || Number.isNaN(Date.parse(raw.expectedUpdatedAt))) {
     return { ok: false as const, error: "expectedUpdatedAt muss ein gültiger Zeitstempel sein." };
+  }
+  if (hasOwn(raw, "dependency")) {
+    const mixedField = Object.keys(raw).find((key) => key !== "expectedUpdatedAt" && key !== "dependency");
+    if (mixedField) {
+      return { ok: false as const, error: "Ändere eine Aufgabenabhängigkeit separat von weiteren Feldern." };
+    }
+    const dependency = parseTeamPlanningDependency(raw.dependency);
+    if (!dependency.ok) return { ok: false as const, error: dependency.error };
+    return {
+      ok: true as const,
+      expectedUpdatedAt: raw.expectedUpdatedAt,
+      presentFields: [] as PlanningItemPatchField[],
+      raw,
+      dependency: dependency.dependency,
+      githubSync: null,
+      githubSyncMode: null,
+    };
   }
   const hasGitHubSync = hasOwn(raw, "githubSync");
   let githubSync: PlanningItemGitHubSyncCommand | null = null;
@@ -313,10 +332,10 @@ export function parsePlanningItemPatchPayload(
     (key): key is PlanningItemPatchField => allowedPatchFields.has(key as PlanningItemPatchField),
   );
   if (!presentFields.length && !githubSync) return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld oder githubSync." };
-  return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null };
+  return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, dependency: null, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null };
 }
 
-async function loadTarget(
+export async function loadPlanningItemUpdateTarget(
   supabase: SupabaseServer,
   itemId: string,
 ): Promise<TargetLoadResult> {
@@ -478,7 +497,7 @@ export async function buildPlanningItemUpdatePreview({
   parsed: Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
   supabase: SupabaseServer;
 }): Promise<{ ok: true; preview: PlanningItemUpdatePreview } | { ok: false; status: 403 | 404 | 409; error: string }> {
-  const target = await loadTarget(supabase, itemId);
+  const target = await loadPlanningItemUpdateTarget(supabase, itemId);
   if (!target.ok) return target;
   if (Date.parse(String(target.row.updated_at || "")) !== Date.parse(parsed.expectedUpdatedAt)) {
     return { ok: false, status: 409, error: "Planungselement wurde zwischenzeitlich geändert. Bitte Kontext erneut laden." };

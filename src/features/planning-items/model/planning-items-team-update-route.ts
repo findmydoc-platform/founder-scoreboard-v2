@@ -38,15 +38,22 @@ import {
   dispatchAndLoadPlanningGitHubProjections,
 } from "@/features/planning-items/model/planning-items-github-projection";
 import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
+import {
+  buildTeamPlanningDependencyPreview,
+  commitTeamPlanningDependency,
+  type TeamPlanningDependencyChange,
+} from "@/features/planning-items/model/planning-items-team-dependency";
 
 type UpdateTransactionResult = {
   replayed?: boolean;
-  commandKind?: "changeParent";
+  commandKind?: "changeParent" | "dependency";
   itemType?: PlanningItemReplayType;
   item?: Record<string, unknown>;
   changedFields?: string[];
   systemEffects?: unknown[];
+  warnings?: string[];
   githubSync?: PlanningItemGitHubSyncResult;
+  dependencyChange?: TeamPlanningDependencyChange;
 };
 
 type StoredUpdateRequest = {
@@ -91,6 +98,8 @@ function updateResponse(
     item,
     changedFields: transaction.changedFields || fallbackChangedFields,
     systemEffects: transaction.systemEffects || fallbackSystemEffects,
+    ...(transaction.warnings ? { warnings: transaction.warnings } : {}),
+    ...(transaction.dependencyChange ? { dependencyChange: transaction.dependencyChange } : {}),
     ...(transaction.githubSync ? { githubSync: transaction.githubSync } : {}),
     itemLink: itemLink(request, itemType, String(item.id || fallbackItemId)),
   });
@@ -181,6 +190,59 @@ export async function handleTeamPlanningItemUpdate(
         if (refreshed.data) return storedResponse(refreshed.data as StoredUpdateRequest);
       }
       return storedResponse(existingRequest.data as StoredUpdateRequest);
+    }
+
+    if (parsed.dependency) {
+      const actor = actorContextFromPlanningTokenAuth({
+        ok: true,
+        profile: { id: permission.profile.id, platformRole: permission.profile.platformRole },
+        tokenId: permission.tokenId,
+        scopes: permission.scopes,
+      });
+      if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
+      const prepared = await buildTeamPlanningDependencyPreview({
+        actor: actor.actor,
+        itemId,
+        expectedUpdatedAt: parsed.expectedUpdatedAt,
+        dependency: parsed.dependency,
+        supabase: permission.supabase,
+      });
+      if (!prepared.ok) return planningItemsError(prepared.error, prepared.status);
+      const metadata = auditRequestMetadata(request);
+      const committed = await commitTeamPlanningDependency({
+        actor: actor.actor,
+        itemId,
+        expectedUpdatedAt: parsed.expectedUpdatedAt,
+        dependency: parsed.dependency,
+        supabase: permission.supabase,
+        tokenId: permission.tokenId,
+        requestHash: planningItemUpdateHash({
+          itemId,
+          itemType: prepared.preview.itemType,
+          expectedUpdatedAt: parsed.expectedUpdatedAt,
+          patch: parsed.raw,
+        }),
+        idempotencyKey,
+        requestMetadata: {
+          requestIp: metadata.request_ip || undefined,
+          userAgent: metadata.user_agent || undefined,
+        },
+      });
+      if (!committed.ok) {
+        if (committed.code === "TOKEN_INACTIVE") return planningItemsTokenInactiveError();
+        return planningItemsError(committed.error, committed.status, committed.code
+          ? { code: committed.code }
+          : undefined);
+      }
+      const transaction = committed.transaction as UpdateTransactionResult;
+      return updateResponse(
+        request,
+        itemId,
+        transaction,
+        prepared.preview.itemType,
+        prepared.preview.changedFields.slice(),
+        prepared.preview.systemEffects.slice(),
+      );
     }
 
     if (reparentField) {
