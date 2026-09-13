@@ -60,8 +60,10 @@ async function loadPlanningAuthServer({ supabase, authzResult }) {
   return importTestModule("src/lib/planning-auth-server.ts", {
     "@/features/planning/model/workspace-routes": workspacePreferences,
     "./authz": {
-      async requirePlatformRoleForUser() {
-        return authzResult;
+      async requireTeamMemberForSession() {
+        return authzResult.ok
+          ? { ...authzResult, user: { id: "auth-user", user_metadata: {} } }
+          : { ...authzResult, user: null };
       },
     },
     "./supabase-server": {

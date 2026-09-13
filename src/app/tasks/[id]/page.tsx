@@ -29,7 +29,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
   let authUser: User | null = null;
   const authRequired = requiresSupabaseAuth();
   if (authRequired) {
-    const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
+    const auth = await getServerPlanningAuth();
     if (!auth.ok) {
       return <PlanningApp initialData={emptyPlanningShellState} initialHeaderData={emptyPlanningHeaderData} initialWorkspace="planning" source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;
     }

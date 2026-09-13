@@ -1,23 +1,14 @@
 "use client";
 
-import { getBrowserSupabase } from "@/lib/supabase";
+import { createBrowserApiClient } from "@/lib/browser-api-client";
 
-async function authorizationHeaders(): Promise<Record<string, string>> {
-  const supabase = getBrowserSupabase();
-  if (!supabase) return {};
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {};
-}
+const apiClient = createBrowserApiClient();
 
-export async function platformReleaseRequest(path: string, init: RequestInit = {}) {
-  const headers = new Headers(init.headers);
-  const authorization = await authorizationHeaders();
-  if (!headers.has("authorization") && authorization.Authorization) {
-    headers.set("Authorization", authorization.Authorization);
-  }
-  return fetch(path, {
+type PlatformReleaseRequestOptions = Omit<RequestInit, "body">;
+
+export function platformReleaseRequest<T>(path: string, init: PlatformReleaseRequestOptions = {}) {
+  return apiClient.requestJson<T>(path, {
     ...init,
     cache: "no-store",
-    headers,
   });
 }

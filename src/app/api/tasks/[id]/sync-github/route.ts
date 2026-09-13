@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { invalidSessionBeforeEffectErrorCode } from "@/lib/auth-error-contract";
 import { requireTeamMember } from "@/lib/authz";
 import { requireJsonApiContext } from "@/lib/api-response";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
@@ -41,6 +42,9 @@ export async function POST(
     null,
   );
   if (!apiContext.ok) {
+    if (apiContext.code === invalidSessionBeforeEffectErrorCode) {
+      return apiContext.response;
+    }
     return syncResponse(
       apiContextFailure(apiContext.status, apiContext.error),
       apiContext.status,

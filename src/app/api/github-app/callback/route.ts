@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const state = verifyGitHubAppOAuthState(stateValue);
     next = state.next || "/";
 
-    const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
+    const auth = await getServerPlanningAuth();
     if (!auth.ok || !auth.profile || auth.user.id !== state.userId || auth.profile.id !== state.profileId) {
       return redirectError(request, next);
     }

@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
-import { requirePlatformRole } from "@/lib/authz";
+import { requireTeamMember } from "@/lib/authz";
 import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(
     request,
-    (currentRequest) => requirePlatformRole(currentRequest, ["ceo", "founder", "deputy", "viewer"]),
+    requireTeamMember,
   );
   if (!apiContext.ok) return apiContext.response;
 

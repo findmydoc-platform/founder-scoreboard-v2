@@ -1,148 +1,185 @@
 "use client";
 
-import { getBrowserSupabase } from "@/lib/supabase";
+import { isInvalidSessionBeforeEffectBody } from "@/lib/auth-error-contract";
+import {
+  createSupabaseBrowserSessionAdapter,
+  type BrowserSessionPort,
+  type BrowserSessionSnapshot,
+} from "@/lib/browser-session-adapter";
 
 type BrowserApiClientOptions = {
   devProfileId?: string;
   devProfileOverrideEnabled?: boolean;
+  sessionPort?: BrowserSessionPort;
 };
 
 type BrowserApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
-  body?: BodyInit | null;
   headers?: HeadersInit;
   json?: unknown;
   jsonContentType?: boolean;
   useDevProfileOverride?: boolean;
 };
 
+type BrowserApiFormOptions = Omit<BrowserApiRequestOptions, "json" | "jsonContentType">;
+type BrowserApiInput = string | URL;
+
 export type BrowserApiJsonResult<T> = {
   response: Response;
   body: T | null;
 };
 
-export type BrowserAuthSnapshot = {
-  githubLogin: string;
-  githubInstallationAvailable: boolean;
-  githubUserConnected: boolean;
-  waitingGitHubCommentCount: number;
-};
+const mutationMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-function currentRelativeUrl() {
-  if (typeof window === "undefined") return "/";
-  return `${window.location.pathname}${window.location.search}${window.location.hash}` || "/";
-}
-
-function authLoginFromSession(session: Awaited<ReturnType<NonNullable<ReturnType<typeof getBrowserSupabase>>["auth"]["getSession"]>>["data"]["session"]) {
-  return String(session?.user.user_metadata?.user_name || session?.user.user_metadata?.preferred_username || "");
+function isMutationMethod(method: string) {
+  return mutationMethods.has(method);
 }
 
 export function createBrowserApiClient({
   devProfileId = "",
   devProfileOverrideEnabled = false,
+  sessionPort = createSupabaseBrowserSessionAdapter(),
 }: BrowserApiClientOptions = {}) {
-  async function readSession() {
-    const session = await getBrowserSupabase()?.auth.getSession();
-    const currentSession = session?.data.session || null;
-    return currentSession;
-  }
-
-  async function buildRequest(input: RequestInfo | URL, options: BrowserApiRequestOptions = {}) {
+  function prepareRequest(options: BrowserApiRequestOptions = {}) {
     const {
-      body: requestBody,
       headers: requestHeaders,
       json,
-      jsonContentType,
+      jsonContentType = true,
       useDevProfileOverride = true,
       ...requestInit
     } = options;
-    const session = await readSession();
     const headers = new Headers(requestHeaders);
     const method = (requestInit.method || "GET").toUpperCase();
     const hasJsonPayload = Object.prototype.hasOwnProperty.call(options, "json");
-    const body = hasJsonPayload ? JSON.stringify(json) : requestBody;
+    const body = hasJsonPayload ? JSON.stringify(json) : undefined;
 
-    if (
-      jsonContentType !== false
-      && !headers.has("content-type")
-      && (hasJsonPayload || ["POST", "PUT", "PATCH", "DELETE"].includes(method))
-      && !(body instanceof FormData)
-    ) {
+    if (jsonContentType && !headers.has("content-type") && (hasJsonPayload || isMutationMethod(method))) {
       headers.set("content-type", "application/json");
-    }
-
-    if (session?.access_token && !headers.has("authorization")) {
-      headers.set("authorization", `Bearer ${session.access_token}`);
     }
 
     if (useDevProfileOverride && devProfileOverrideEnabled && devProfileId && !headers.has("x-fmd-dev-profile-id")) {
       headers.set("x-fmd-dev-profile-id", devProfileId);
     }
 
-    return fetch(input, {
-      ...requestInit,
-      method,
-      headers,
-      body,
-    });
-  }
-
-  async function requestJson<T>(input: RequestInfo | URL, options: BrowserApiRequestOptions = {}): Promise<BrowserApiJsonResult<T>> {
-    const response = await buildRequest(input, options);
-    const body = await response.json().catch(() => null) as T | null;
-    return { response, body };
-  }
-
-  async function requestForm<T>(input: RequestInfo | URL, formData: FormData, options: BrowserApiRequestOptions = {}): Promise<BrowserApiJsonResult<T>> {
-    return requestJson<T>(input, {
-      ...options,
-      method: options.method || "POST",
-      body: formData,
-      jsonContentType: false,
-    });
-  }
-
-  async function requestBlob(input: RequestInfo | URL, options: BrowserApiRequestOptions = {}) {
-    const response = await buildRequest(input, options);
-    const blob = response.ok ? await response.blob() : null;
-    return { response, blob };
-  }
-
-  async function getAuthSnapshot(): Promise<BrowserAuthSnapshot> {
-    const session = await readSession();
-    let githubInstallationAvailable = false;
-    let githubUserConnected = false;
-    let waitingGitHubCommentCount = 0;
-    if (session?.access_token) {
-      const status = await fetch("/api/github-app/status", {
-        headers: { authorization: `Bearer ${session.access_token}` },
-      }).then((response) => response.ok ? response.json() : null).catch(() => null) as {
-        installation?: { available?: boolean };
-        user?: { connected?: boolean };
-        waitingCommentCount?: number;
-      } | null;
-      githubInstallationAvailable = Boolean(status?.installation?.available);
-      githubUserConnected = Boolean(status?.user?.connected);
-      waitingGitHubCommentCount = Number(status?.waitingCommentCount || 0);
-    }
     return {
-      githubLogin: authLoginFromSession(session),
-      githubInstallationAvailable,
-      githubUserConnected,
-      waitingGitHubCommentCount,
+      callerAuthorization: headers.has("authorization"),
+      replayAllowed: method === "GET" || method === "HEAD" || typeof body === "string",
+      requestInit: { ...requestInit, body, headers, method },
     };
   }
 
-  async function startGitHubAppConnect() {
-    window.location.assign(`/api/github-app/connect?next=${encodeURIComponent(currentRelativeUrl())}`);
-    return { error: null };
+  async function send(
+    input: BrowserApiInput,
+    requestInit: RequestInit,
+    session: BrowserSessionSnapshot | null,
+  ) {
+    const headers = new Headers(requestInit.headers);
+    if (session?.accessToken && !headers.has("authorization")) {
+      headers.set("authorization", `Bearer ${session.accessToken}`);
+    }
+    const response = await fetch(input, { ...requestInit, headers });
+    return {
+      attachedSession: session,
+      response,
+    };
+  }
+
+  async function recoverAndReplay(
+    input: BrowserApiInput,
+    requestInit: RequestInit,
+    firstResponse: Response,
+    firstBody: unknown,
+    rejectedSession: BrowserSessionSnapshot | null,
+    replayAllowed = true,
+  ) {
+    if (
+      !replayAllowed
+      || firstResponse.status !== 401
+      || !rejectedSession
+      || !isInvalidSessionBeforeEffectBody(firstBody)
+    ) {
+      return null;
+    }
+
+    const recovery = await sessionPort.recover(rejectedSession);
+    if (recovery.kind !== "refreshed") return null;
+    return send(input, requestInit, recovery.session);
+  }
+
+  async function requestJson<T>(
+    input: BrowserApiInput,
+    options: BrowserApiRequestOptions = {},
+  ): Promise<BrowserApiJsonResult<T>> {
+    const prepared = prepareRequest(options);
+    const session = prepared.callerAuthorization ? null : await sessionPort.current();
+    const first = await send(input, prepared.requestInit, session);
+    const firstBody = await first.response.clone().json().catch(() => null) as T | null;
+    const replay = await recoverAndReplay(
+      input,
+      prepared.requestInit,
+      first.response,
+      firstBody,
+      first.attachedSession,
+      prepared.replayAllowed,
+    );
+    if (!replay) return { response: first.response, body: firstBody };
+
+    const replayBody = await replay.response.clone().json().catch(() => null) as T | null;
+    if (replay.response.status === 401 && isInvalidSessionBeforeEffectBody(replayBody)) {
+      if (replay.attachedSession) await sessionPort.clearIfCurrent(replay.attachedSession);
+    }
+    return { response: replay.response, body: replayBody };
+  }
+
+  async function requestForm<T>(
+    input: BrowserApiInput,
+    formData: FormData,
+    options: BrowserApiFormOptions = {},
+  ): Promise<BrowserApiJsonResult<T>> {
+    const { headers: requestHeaders, useDevProfileOverride = true, ...requestInit } = options;
+    const headers = new Headers(requestHeaders);
+    if (useDevProfileOverride && devProfileOverrideEnabled && devProfileId && !headers.has("x-fmd-dev-profile-id")) {
+      headers.set("x-fmd-dev-profile-id", devProfileId);
+    }
+    const callerAuthorization = headers.has("authorization");
+    const session = callerAuthorization ? null : await sessionPort.current();
+    const result = await send(input, {
+      ...requestInit,
+      body: formData,
+      headers,
+      method: (requestInit.method || "POST").toUpperCase(),
+    }, session);
+    const body = await result.response.clone().json().catch(() => null) as T | null;
+    return { response: result.response, body };
+  }
+
+  async function requestBlob(input: BrowserApiInput, options: BrowserApiFormOptions = {}) {
+    const prepared = prepareRequest(options);
+    const session = prepared.callerAuthorization ? null : await sessionPort.current();
+    const first = await send(input, prepared.requestInit, session);
+    const firstErrorBody = first.response.ok ? null : await first.response.clone().json().catch(() => null);
+    const replay = await recoverAndReplay(
+      input,
+      prepared.requestInit,
+      first.response,
+      firstErrorBody,
+      first.attachedSession,
+      prepared.requestInit.method === "GET" || prepared.requestInit.method === "HEAD",
+    );
+    const result = replay || first;
+    const replayErrorBody = replay && !replay.response.ok
+      ? await replay.response.clone().json().catch(() => null)
+      : null;
+    if (replay?.response.status === 401 && isInvalidSessionBeforeEffectBody(replayErrorBody)) {
+      if (replay.attachedSession) await sessionPort.clearIfCurrent(replay.attachedSession);
+    }
+    const blob = result.response.ok ? await result.response.blob() : null;
+    return { response: result.response, blob };
   }
 
   return {
-    getAuthSnapshot,
     requestBlob,
     requestForm,
     requestJson,
-    startGitHubAppConnect,
   };
 }
 

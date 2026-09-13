@@ -145,6 +145,15 @@ sequenceDiagram
 - Missing, revoked, expired, or mismatched GitHub App user connection: issue sync remains available. A locally saved comment waits for its original author's connection and is retried after OAuth reconnect or a later task/bulk sync. It must not start OAuth only because a task was opened.
 - Expired or revoked Supabase session: the app clears protected client state and returns to the login gate.
 
+## Browser Session Recovery
+
+- Supabase owns proactive access-token refresh. The browser API client asks the Supabase session adapter for the current session immediately before each app request.
+- An API guard may return `session_invalid_before_effect` only when authentication failed before the route parsed its payload or started an effect.
+- The browser may refresh and replay exactly once when it attached the rejected bearer token itself and the request is `GET`, `HEAD`, or a JSON request with an already serialized body.
+- Form data, streams, bodyless mutations, caller-provided authorization, unmarked `401` responses, and failures after an effect are never replayed automatically.
+- A replay may use only a refreshed session for the same Supabase user. If login state changes to another user while recovery is running, the old request is abandoned.
+- Retryable refresh failures preserve the local session. Permanent failures and a second marked `401` clear it only when the rejected session is still current, so a newer session is never signed out by stale work.
+
 ## Token Handling
 
 Allowed:

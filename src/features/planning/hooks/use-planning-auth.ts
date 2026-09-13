@@ -1,5 +1,6 @@
 import type { User } from "@supabase/supabase-js";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createBrowserApiClient } from "@/lib/browser-api-client";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData } from "@/lib/types";
 import { githubUserConnectionStateFromStatus, type GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
@@ -73,6 +74,7 @@ export function usePlanningAuth({
   normalizePlanningHeaderData,
   onSignedOut,
 }: UsePlanningAuthOptions) {
+  const apiClient = useMemo(() => createBrowserApiClient(), []);
   const protectedDataUserIdRef = useRef(initialProtectedDataLoaded ? initialAuthUser?.id || "" : "");
   const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
   const [authChecked, setAuthChecked] = useState(!authRequired || Boolean(initialAuthUser));
@@ -118,13 +120,12 @@ export function usePlanningAuth({
         return;
       }
       setGithubConnectionState("checking");
-      const status = await fetch("/api/github-app/status", {
-        headers: { authorization: `Bearer ${session.access_token}` },
-      }).then((response) => response.ok ? response.json() : null).catch(() => null) as {
+      const { response, body } = await apiClient.requestJson<{
         installation?: { available?: boolean };
         user?: { connected?: boolean; needsReconnect?: boolean };
         waitingCommentCount?: number;
-      } | null;
+      }>("/api/github-app/status").catch(() => ({ response: null, body: null }));
+      const status = response?.ok ? body : null;
       if (!active) return;
       const connectionState = githubUserConnectionStateFromStatus(status?.user || null);
       setGithubConnectionState(connectionState);
@@ -149,14 +150,6 @@ export function usePlanningAuth({
 
     const refreshSessionState = async () => {
       const { data: sessionData } = await supabase.auth.getSession();
-      const expiresAt = sessionData.session?.expires_at || 0;
-      const expiresSoon = expiresAt > 0 && expiresAt - Math.floor(Date.now() / 1000) < 300;
-      if (expiresSoon) {
-        const refreshed = await supabase.auth.refreshSession();
-        applySessionState(refreshed.data.session || sessionData.session);
-        await refreshGitHubUserConnectionState(refreshed.data.session || sessionData.session);
-        return;
-      }
       applySessionState(sessionData.session);
       await refreshGitHubUserConnectionState(sessionData.session);
     };
@@ -190,21 +183,11 @@ export function usePlanningAuth({
       }
     });
 
-    const keepAliveId = window.setInterval(() => {
-      refreshSessionState().catch(() => undefined);
-    }, 5 * 60 * 1000);
-    const refreshWhenVisible = () => {
-      if (!document.hidden) refreshSessionState().catch(() => undefined);
-    };
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-
     return () => {
       active = false;
-      window.clearInterval(keepAliveId);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
       subscription.subscription.unsubscribe();
     };
-  }, [onSignedOut, safeInitialData, safeInitialHeaderData, setData, setHeaderData]);
+  }, [apiClient, onSignedOut, safeInitialData, safeInitialHeaderData, setData, setHeaderData]);
 
   useEffect(() => {
     if (!authRequired || source !== "supabase" || !authUser) return;
@@ -231,14 +214,6 @@ export function usePlanningAuth({
 
     async function loadProtectedPlanningShellState() {
       if (!taskCount) setProtectedDataLoaded(false);
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      if (!token) {
-        setAuthError("Der Teamzugriff ist aktiv, aber die Anmeldung muss erneuert werden. Bitte erneut anmelden.");
-        setProtectedDataLoaded(false);
-        return;
-      }
-
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 10_000);
 
@@ -257,16 +232,14 @@ export function usePlanningAuth({
           setProtectedDataLoaded(true);
           return;
         }
-        const response = await fetch(focusedPlanningRoute, {
-          headers: { authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        const payload = await response.json().catch(() => null) as {
+        const { response, body: payload } = await apiClient.requestJson<{
           model?: PlanningWorkspaceModel | SupportingWorkspaceModel | SprintWorkspaceModel;
           headerData?: PlanningHeaderData;
           currentProfile?: AuthenticatedProfile | null;
           error?: string;
-        } | null;
+        }>(focusedPlanningRoute, {
+          signal: controller.signal,
+        });
         const payloadData = payload?.model
           ? workspace === "sprint"
             ? sprintWorkspaceModelToPlanningShellState(payload.model as SprintWorkspaceModel)
@@ -311,7 +284,7 @@ export function usePlanningAuth({
     return () => {
       active = false;
     };
-  }, [authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, safeInitialData, safeInitialHeaderData, setData, setHeaderData, source, taskCount, workspace]);
+  }, [apiClient, authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, safeInitialData, safeInitialHeaderData, setData, setHeaderData, source, taskCount, workspace]);
 
   const signIn = useCallback(async (options: SignInOptions = {}) => {
     const supabase = getBrowserSupabase();

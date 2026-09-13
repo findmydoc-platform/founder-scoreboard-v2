@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
-import { requirePlatformRole } from "@/lib/authz";
+import { requireTeamMember } from "@/lib/authz";
 import { loadPlanningHeaderData } from "@/lib/planning-header-data";
 import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 import type { getServerSupabase } from "@/lib/supabase";
@@ -19,7 +19,7 @@ export async function supportingWorkspaceGet<M>(
 ) {
   const apiContext = await requireApiContext(
     request,
-    (currentRequest) => requirePlatformRole(currentRequest, ["ceo", "founder", "deputy", "viewer"]),
+    requireTeamMember,
   );
   if (!apiContext.ok) return apiContext.response;
   const currentProfile = apiContext.permission.profile;
