@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
-import { requirePlatformRole } from "@/lib/authz";
+import { requireTeamMember } from "@/lib/authz";
 import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
 
 export async function GET(request: NextRequest) {
   const apiContext = await requireApiContext(
     request,
-    (currentRequest) => requirePlatformRole(currentRequest, ["ceo", "founder", "deputy", "viewer"]),
+    requireTeamMember,
   );
   if (!apiContext.ok) return apiContext.response;
   const result = await createSupabaseBacklogReadModel(apiContext.supabase).load({

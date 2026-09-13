@@ -119,7 +119,7 @@ async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
 
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
   if (requiresSupabaseAuth()) {
-    const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
+    const auth = await getServerPlanningAuth();
     if (!auth.ok) {
       return (
         <PlanningApp

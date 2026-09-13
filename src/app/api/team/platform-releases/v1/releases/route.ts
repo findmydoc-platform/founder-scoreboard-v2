@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { canonicalPlatformReleaseManifest, validatePlatformReleaseManifest } from "@/features/platform-releases/model/platform-release-manifest";
 import { loadPlatformReleases } from "@/features/platform-releases/server/platform-release-read-model-supabase";
+import { authzError } from "@/lib/api-response";
 import { requireTeamMember } from "@/lib/authz";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
@@ -21,7 +22,11 @@ function secureTokenMatch(provided: string, expected: string) {
 
 export async function GET(request: NextRequest) {
   const auth = await requireTeamMember(request);
-  if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
+  if (!auth.ok) {
+    const response = authzError(auth, { ok: false });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  }
   const supabase = getServerServiceRoleSupabase();
   if (!supabase) return json({ ok: false, error: "Platform-Releases sind nicht verfügbar." }, 503);
   const releases = await loadPlatformReleases(supabase, auth.profile?.id || null);

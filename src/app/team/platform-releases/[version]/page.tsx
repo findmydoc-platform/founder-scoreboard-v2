@@ -24,7 +24,7 @@ export default async function PlatformReleaseDetailPage({ params, searchParams }
   const { version } = await params;
   if (!/^v\d+\.\d+\.\d+$/.test(version)) notFound();
   const authRequired = requiresSupabaseAuth();
-  const auth = authRequired ? await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]) : null;
+  const auth = authRequired ? await getServerPlanningAuth() : null;
   if (auth && !auth.ok) {
     return <PlanningApp initialData={emptyPlanningShellState} initialHeaderData={emptyPlanningHeaderData} initialWorkspace="notifications" source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;
   }

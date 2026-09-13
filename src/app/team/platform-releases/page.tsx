@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PlatformReleasesPage() {
   const authRequired = requiresSupabaseAuth();
-  const auth = authRequired ? await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]) : null;
+  const auth = authRequired ? await getServerPlanningAuth() : null;
   if (auth && !auth.ok) {
     return <PlanningApp initialData={emptyPlanningShellState} initialHeaderData={emptyPlanningHeaderData} initialWorkspace="notifications" source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;
   }

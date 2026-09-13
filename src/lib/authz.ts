@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
+import { invalidSessionBeforeEffectErrorCode, type AuthErrorCode } from "./auth-error-contract";
 import { isLocalLoginRequestAllowed } from "./local-development-auth";
 import { isOperationalLeadRole } from "./platform";
 import { getSupabaseForToken, requiresSupabaseAuth } from "./supabase";
@@ -12,9 +13,25 @@ type AuthzProfileRow = {
   github_login: string | null;
 };
 
+type AuthzFailure = { ok: false; status: number; error: string; code?: AuthErrorCode };
+
 export type AuthzResult =
   | { ok: true; profile: AuthenticatedProfile | null }
-  | { ok: false; status: number; error: string };
+  | AuthzFailure;
+
+export type SessionAuthzResult =
+  | { ok: true; user: User; profile: AuthenticatedProfile | null }
+  | (AuthzFailure & { user: User | null });
+
+type PlatformRoleCheckOptions = {
+  devProfileId?: string;
+  devProfileOverrideAllowed?: boolean;
+};
+
+const planningContributorRoles: readonly PlatformRole[] = ["ceo", "founder", "deputy"];
+const ceoRoles: readonly PlatformRole[] = ["ceo"];
+const operationalLeadRoles: readonly PlatformRole[] = ["ceo", "deputy"];
+const teamMemberRoles: readonly PlatformRole[] = ["ceo", "founder", "deputy", "viewer"];
 
 export function bearerToken(request: NextRequest) {
   const header = request.headers.get("authorization");
@@ -35,15 +52,30 @@ function mapAuthzProfile(profile: AuthzProfileRow): AuthenticatedProfile {
   };
 }
 
-type PlatformRoleCheckOptions = {
-  devProfileId?: string;
-  devProfileOverrideAllowed?: boolean;
-};
+async function authenticateUser(supabase: SupabaseClient): Promise<{ ok: true; user: User } | AuthzFailure> {
+  try {
+    const { data: userResult, error: userError } = await supabase.auth.getUser();
+    if (isAuthRetryableFetchError(userError)) {
+      return { ok: false, status: 503, error: "Anmeldung konnte vorübergehend nicht geprüft werden." };
+    }
+    if (userError || !userResult.user) {
+      return {
+        ok: false,
+        status: 401,
+        error: "Anmeldung ungültig oder abgelaufen.",
+        code: invalidSessionBeforeEffectErrorCode,
+      };
+    }
+    return { ok: true, user: userResult.user };
+  } catch {
+    return { ok: false, status: 503, error: "Anmeldung konnte vorübergehend nicht geprüft werden." };
+  }
+}
 
-export async function requirePlatformRoleForUser(
+async function authorizeUser(
   supabase: SupabaseClient,
   user: User,
-  allowedRoles: PlatformRole[],
+  allowedRoles: readonly PlatformRole[],
   options: PlatformRoleCheckOptions = {},
 ): Promise<AuthzResult> {
   const authProfileResult = await supabase
@@ -74,15 +106,12 @@ export async function requirePlatformRoleForUser(
     return { ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." };
   }
 
-  return {
-    ok: true,
-    profile: mapAuthzProfile(effectiveProfile),
-  };
+  return { ok: true, profile: mapAuthzProfile(effectiveProfile) };
 }
 
-export async function requirePlatformRole(
+async function requirePlatformRole(
   request: NextRequest,
-  allowedRoles: PlatformRole[],
+  allowedRoles: readonly PlatformRole[],
 ): Promise<AuthzResult> {
   if (!requiresSupabaseAuth()) return { ok: true, profile: null };
 
@@ -90,27 +119,36 @@ export async function requirePlatformRole(
   const supabase = token ? getSupabaseForToken(token) : null;
   if (!supabase) return { ok: false, status: 401, error: "Anmeldung erforderlich." };
 
-  const { data: userResult, error: userError } = await supabase.auth.getUser();
-  if (userError || !userResult.user) return { ok: false, status: 401, error: "Anmeldung ungültig oder abgelaufen." };
+  const authentication = await authenticateUser(supabase);
+  if (!authentication.ok) return authentication;
 
-  return requirePlatformRoleForUser(supabase, userResult.user, allowedRoles, {
+  return authorizeUser(supabase, authentication.user, allowedRoles, {
     devProfileId: request.headers.get("x-fmd-dev-profile-id") || "",
     devProfileOverrideAllowed: devProfileOverrideAllowed(request),
   });
 }
 
+export async function requireTeamMemberForSession(supabase: SupabaseClient): Promise<SessionAuthzResult> {
+  const authentication = await authenticateUser(supabase);
+  if (!authentication.ok) return { ...authentication, user: null };
+
+  const authorization = await authorizeUser(supabase, authentication.user, teamMemberRoles);
+  if (!authorization.ok) return { ...authorization, user: authentication.user };
+  return { ...authorization, user: authentication.user };
+}
+
 export function requirePlanningContributor(request: NextRequest) {
-  return requirePlatformRole(request, ["ceo", "founder", "deputy"]);
+  return requirePlatformRole(request, planningContributorRoles);
 }
 
 export function requireCEO(request: NextRequest) {
-  return requirePlatformRole(request, ["ceo"]);
+  return requirePlatformRole(request, ceoRoles);
 }
 
 export function requireOperationalLead(request: NextRequest) {
-  return requirePlatformRole(request, ["ceo", "deputy"]);
+  return requirePlatformRole(request, operationalLeadRoles);
 }
 
 export function requireTeamMember(request: NextRequest) {
-  return requirePlatformRole(request, ["ceo", "founder", "deputy", "viewer"]);
+  return requirePlatformRole(request, teamMemberRoles);
 }

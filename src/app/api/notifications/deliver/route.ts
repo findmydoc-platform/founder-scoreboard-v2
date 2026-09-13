@@ -86,7 +86,7 @@ async function authorizeDeliveryTrigger(request: NextRequest) {
   }
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return { ok: false as const, status: permission.status, error: permission.error };
+  if (!permission.ok) return permission;
   return { ok: true as const, mode: "user" as const, profile: permission.profile };
 }
 

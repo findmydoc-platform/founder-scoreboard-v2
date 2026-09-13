@@ -8,7 +8,7 @@ import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
+  const auth = await getServerPlanningAuth();
   if (!auth.ok || !auth.profile) {
     return NextResponse.redirect(new URL("/auth/error?next=%2Fteam", request.url));
   }

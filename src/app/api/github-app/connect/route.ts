@@ -15,7 +15,7 @@ function safeRelativeNext(value: string | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
+  const auth = await getServerPlanningAuth();
   const next = safeRelativeNext(request.nextUrl.searchParams.get("next"));
   if (!auth.ok || !auth.profile) {
     return NextResponse.redirect(new URL(`/auth/error?next=${encodeURIComponent(next)}`, request.url));

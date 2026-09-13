@@ -1,14 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
 import { apiError, requireApiContext } from "@/lib/api-response";
-import { requirePlatformRole } from "@/lib/authz";
+import { requireTeamMember } from "@/lib/authz";
 import { loadPlanningHeaderData } from "@/lib/planning-header-data";
 import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 
 export async function GET(request: NextRequest) {
   const apiContext = await requireApiContext(
     request,
-    (currentRequest) => requirePlatformRole(currentRequest, ["ceo", "founder", "deputy", "viewer"]),
+    requireTeamMember,
   );
   if (!apiContext.ok) return apiContext.response;
   const currentProfile = apiContext.permission.profile;
