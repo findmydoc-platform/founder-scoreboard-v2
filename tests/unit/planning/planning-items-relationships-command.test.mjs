@@ -284,79 +284,6 @@ test("Founder ownership and Accountable rights stay limited to outgoing blocked_
   assert.equal(incoming.error.code, "forbidden");
 });
 
-test("Planning token commits use the atomic update receipt RPC and preserve no-op effects", async () => {
-  const model = await loadModel();
-  const current = fixture({
-    commitChanged: false,
-    commitReplay: true,
-    commitItem: task("source"),
-  });
-  const planning = model.createPlanningRelationshipPlanningItems(current.client, {
-    teamUpdate: { tokenId: "00000000-0000-4000-8000-000000000301", requestHash: "a".repeat(64) },
-  });
-  const tokenActor = {
-    profileId: "ceo",
-    platformRole: "ceo",
-    credential: {
-      kind: "planningToken",
-      tokenId: "00000000-0000-4000-8000-000000000301",
-      scopes: ["write:planning-items:update"],
-    },
-  };
-  const result = await planning.run({
-    actor: tokenActor,
-    mode: "commit",
-    command: model.addPlanningRelationshipCommand("source", {
-      relationType: "blocked_by",
-      relatedTaskId: "target",
-      note: "Wait",
-      expectedUpdatedAt: "2026-08-12T10:00:00.000Z",
-    }),
-    idempotencyKey: "00000000-0000-4000-8000-000000000302",
-  });
-
-  assert.equal(result.status, "committed");
-  assert.equal(result.replayed, true);
-  assert.deepEqual(result.effects, []);
-  assert.equal(current.calls.at(-1)[0], "mutate_team_planning_dependency_transaction");
-  assert.equal(current.calls.at(-1)[1].p_token_id, "00000000-0000-4000-8000-000000000301");
-  assert.equal(current.calls.at(-1)[1].p_request_hash, "a".repeat(64));
-  assert.equal(model.planningRelationshipTransactionFromResult(result).commandKind, "dependency");
-});
-
-test("Planning token idempotency conflicts retain the update API error", async () => {
-  const model = await loadModel();
-  const current = fixture({ commitError: { code: "P0003" } });
-  const result = await model.createPlanningRelationshipPlanningItems(current.client, {
-    teamUpdate: { tokenId: "00000000-0000-4000-8000-000000000301", requestHash: "a".repeat(64) },
-  }).run({
-    actor: {
-      profileId: "ceo",
-      platformRole: "ceo",
-      credential: {
-        kind: "planningToken",
-        tokenId: "00000000-0000-4000-8000-000000000301",
-        scopes: ["write:planning-items:update"],
-      },
-    },
-    mode: "commit",
-    command: model.addPlanningRelationshipCommand("source", {
-      relationType: "blocked_by",
-      relatedTaskId: "target",
-      note: "Wait",
-      expectedUpdatedAt: "2026-08-12T10:00:00.000Z",
-    }),
-    idempotencyKey: "00000000-0000-4000-8000-000000000302",
-  });
-
-  assert.equal(result.error.code, "conflict");
-  assert.equal(result.error.reason, "idempotency");
-  assert.deepEqual(model.planningRelationshipError(result.error), {
-    message: "Idempotency-Key wurde mit anderen Daten wiederverwendet.",
-    status: 409,
-  });
-});
-
 test("team dependency duplicate add is a successful no-op while UI and invalid states keep their guards", async () => {
   const model = await loadModel();
   const add = model.addPlanningRelationshipCommand("source", {
@@ -376,6 +303,13 @@ test("team dependency duplicate add is a successful no-op while UI and invalid s
   assert.equal(duplicate.warnings[0].code, "planningRelationshipAlreadyExists");
   assert.deepEqual(duplicate.changes[0].before, duplicate.changes[0].after);
 
+  const duplicateWithStaleRevision = await model.createPlanningRelationshipPlanningItems(
+    duplicateFixture.client,
+    { teamDependency: true },
+  ).run({ actor, mode: "preview", command: add });
+  assert.equal(duplicateWithStaleRevision.status, "previewed");
+  assert.deepEqual(duplicateWithStaleRevision.effects, []);
+
   const removedRelationship = fixture({ currentRelation: null });
   const missingAfterRemove = await model.createPlanningRelationshipPlanningItems(removedRelationship.client, { teamDependency: true }).run({
     actor,
@@ -387,6 +321,15 @@ test("team dependency duplicate add is a successful no-op while UI and invalid s
   });
   assert.equal(missingAfterRemove.error.code, "notFound");
   assert.equal(missingAfterRemove.error.entity.kind, "relationship");
+
+  const unsupportedRemoval = await model.createPlanningRelationshipPlanningItems(fixture({
+    currentRelation: relation({ relation_type: "relates_to" }),
+  }).client, { teamDependency: true }).run({
+    actor,
+    mode: "preview",
+    command: model.removePlanningRelationshipCommand("source", { relationId: 41 }),
+  });
+  assert.equal(unsupportedRemoval.error.code, "notFound");
 
   const cases = [
     [fixture(), add, "conflict", "revision"],

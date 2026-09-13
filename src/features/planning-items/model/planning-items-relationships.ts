@@ -86,10 +86,6 @@ type PlanningSupabase = Readonly<{
 
 type PlanningRelationshipOptions = Readonly<{
   teamDependency?: boolean;
-  teamUpdate?: Readonly<{
-    tokenId: string;
-    requestHash: string;
-  }>;
 }>;
 
 function validTimestamp(value: unknown): value is string {
@@ -234,10 +230,18 @@ export const planningRelationshipDecisionCore: PlanningDecisionCore<
     if (!action) return { ok: false, error: invalid("planningRelationshipRequired") };
     if (!state.source) return { ok: false, error: { code: "notFound", entity: { kind: "deliverable", id: action.itemId } } };
     if (state.source.trashed) return { ok: false, error: stateConflict("sourceTrashed") };
-    if (action.kind === "removeRelationship" && state.teamDependency && !state.relation) {
+    if (
+      action.kind === "removeRelationship"
+      && state.teamDependency
+      && (!state.relation || !["blocked_by", "blocks"].includes(state.relation.relationType))
+    ) {
       return { ok: false, error: { code: "notFound", entity: { kind: "relationship", id: String(action.relationshipId) } } };
     }
-    if (action.expectedRevision && state.source.revision !== action.expectedRevision) {
+    if (
+      action.expectedRevision
+      && state.source.revision !== action.expectedRevision
+      && !(action.kind === "addRelationship" && state.teamDependency && state.existingRelation)
+    ) {
       return { ok: false, error: { code: "conflict", reason: "revision" } };
     }
     if (actor.platformRole === "viewer") {
@@ -416,7 +420,7 @@ async function prepareRelationship(
   }
   const action = relationshipAction(request.command);
   if (!action) return { data: { kind: "error", error: invalid("planningRelationshipRequired") }, error: null };
-  const result = await supabase.rpc(options.teamDependency || options.teamUpdate
+  const result = await supabase.rpc(options.teamDependency
     ? "prepare_team_planning_dependency_command"
     : "prepare_planning_relationship_command", {
     p_task_id: action.itemId,
@@ -433,7 +437,6 @@ async function prepareRelationship(
 function providerError(
   code: string,
   request: PlanningCommitRequest<PlanningRelationshipCommitPlan>,
-  options: PlanningRelationshipOptions,
 ): PlanningCommitOutcome | null {
   if (code === "P0001") return { ok: false, error: { code: "conflict", reason: "revision" } };
   if (code === "P0002") {
@@ -442,12 +445,7 @@ function providerError(
       : { kind: "deliverable" as const, id: request.plan.relatedTaskId || request.plan.taskId };
     return { ok: false, error: { code: "notFound", entity } };
   }
-  if (code === "P0003") return options.teamUpdate
-    ? { ok: false, error: { code: "conflict", reason: "idempotency" } }
-    : { ok: false, error: stateConflict("duplicate") };
-  if (code === "P0004") return { ok: false, error: { code: "forbidden", reason: "planningTokenInactive" } };
-  if (code === "P0005") return { ok: false, error: { code: "forbidden", reason: "planningTokenScopeMissing" } };
-  if (code === "P0006") return { ok: false, error: { code: "forbidden", reason: "planningRelationshipAuthorizationChanged" } };
+  if (code === "P0003") return { ok: false, error: stateConflict("duplicate") };
   if (code === "P0008") return { ok: false, error: stateConflict("reviewLocked") };
   if (code === "P0016") return { ok: false, error: stateConflict("completedLocked") };
   if (code === "P0010") return { ok: false, error: stateConflict("sourceTrashed") };
@@ -459,7 +457,6 @@ function providerError(
 async function commitRelationship(
   supabase: PlanningSupabase,
   request: PlanningCommitRequest<PlanningRelationshipCommitPlan>,
-  options: PlanningRelationshipOptions,
 ): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
   const relationshipParams = {
     p_operation: request.plan.operation,
@@ -473,34 +470,21 @@ async function commitRelationship(
     p_request_ip: request.requestMetadata?.requestIp || null,
     p_user_agent: request.requestMetadata?.userAgent || null,
   };
-  const result = options.teamUpdate
-    ? await supabase.rpc("mutate_team_planning_dependency_transaction", {
-        p_token_id: options.teamUpdate.tokenId,
-        p_idempotency_key: request.idempotencyKey || null,
-        p_request_hash: options.teamUpdate.requestHash,
-        ...relationshipParams,
-      })
-    : await supabase.rpc("mutate_planning_relationship_transaction", relationshipParams);
+  const result = await supabase.rpc("mutate_planning_relationship_transaction", relationshipParams);
   if (result.error) {
-    const mapped = providerError(String((result.error as { code?: unknown }).code || ""), request, options);
+    const mapped = providerError(String((result.error as { code?: unknown }).code || ""), request);
     return mapped ? { data: mapped, error: null } : { data: null, error: result.error };
   }
   if (!result.data || typeof result.data !== "object") return { data: null, error: new Error("Invalid planning relationship result") };
-  const transaction = result.data as Record<string, unknown>;
-  const committedRelation = relationship(transaction.relation);
+  const committedRelation = relationship((result.data as Record<string, unknown>).relation);
   if (!committedRelation) return { data: null, error: new Error("Planning relationship result is incomplete") };
-  const changed = transaction.changed !== false;
-  const replayed = Boolean(transaction.replayed);
   return {
     data: {
       ok: true,
       receipt: {
         items: [],
-        changes: [
-          relationChange(request.plan.operation, committedRelation, changed),
-          ...(options.teamUpdate ? [{ field: "teamPlanningDependencyTransaction", before: null, after: transaction }] : []),
-        ],
-        effects: changed ? [
+        changes: [relationChange(request.plan.operation, committedRelation)],
+        effects: [
           {
             kind: "audit",
             description: request.plan.operation === "add"
@@ -509,8 +493,8 @@ async function commitRelationship(
             status: "applied",
           },
           { kind: "githubProjection", description: "Mark affected GitHub projections stale", status: "applied" },
-        ] : [],
-        replayed,
+        ],
+        replayed: false,
       },
     },
     error: null,
@@ -525,17 +509,10 @@ export function createPlanningRelationshipPlanningItems(
   return createPlanningItems({
     store: createSupabasePlanningItemsStore<PlanningRelationshipState, PlanningRelationshipCommitPlan>({
       prepareCommand: (request) => prepareRelationship(supabase, request, options),
-      commitCommand: (request) => commitRelationship(supabase, request, options),
+      commitCommand: (request) => commitRelationship(supabase, request),
     }),
     decisionCore: planningRelationshipDecisionCore,
   });
-}
-
-export function planningRelationshipTransactionFromResult(result: Extract<PlanningResult, { ok: true }>) {
-  const change = result.changes.find((candidate) => candidate.field === "teamPlanningDependencyTransaction");
-  return change?.after && typeof change.after === "object"
-    ? change.after as Record<string, unknown>
-    : null;
 }
 
 export function planningRelationshipFromResult(result: Extract<PlanningResult, { ok: true }>) {

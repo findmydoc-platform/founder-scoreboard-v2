@@ -89,7 +89,10 @@ function commonMocks(dependencyModel, supabase = { from: () => queryResult() }, 
       planningItemReviseCommand: () => ({}),
       teamReviseTransactionFromResult: () => null,
     },
-    "@/features/planning-items/model/planning-items-team-dependency": dependencyModel,
+    "@/features/planning-items/model/planning-items-team-dependency": {
+      planningDependencyUpdateHash: () => "d".repeat(64),
+      ...dependencyModel,
+    },
   };
 }
 
@@ -161,7 +164,9 @@ test("dependency commit uses the update receipt and returns the dependency chang
     "src/features/planning-items/model/planning-items-team-update-route.ts",
     {
       ...commonMocks({
-        buildTeamPlanningDependencyPreview: async () => ({ ok: true, preview }),
+        buildTeamPlanningDependencyPreview: async () => {
+          throw new Error("commit must not preflight mutable dependency state");
+        },
         commitTeamPlanningDependency: async (input) => {
           calls.push(input);
           return { ok: true, transaction };
@@ -184,7 +189,7 @@ test("dependency commit uses the update receipt and returns the dependency chang
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body.dependencyChange, preview.dependencyChange);
-  assert.equal(calls[0].requestHash, "a".repeat(64));
+  assert.equal(calls[0].requestHash, "d".repeat(64));
   assert.equal(calls[0].idempotencyKey, "00000000-0000-4000-8000-000000000302");
 });
 
@@ -259,7 +264,7 @@ test("dependency removal previews and commits through the same update routes", a
     { params: Promise.resolve({ id: "blocked" }) },
   );
   assert.deepEqual(commitResponse.body.dependencyChange, removeChange);
-  assert.equal(calls.filter(([kind]) => kind === "preview").length, 2);
+  assert.equal(calls.filter(([kind]) => kind === "preview").length, 1);
   assert.equal(calls.filter(([kind]) => kind === "commit").length, 1);
   assert.equal(calls.at(-1)[1].dependency.relationshipId, 41);
 });

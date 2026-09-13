@@ -47,7 +47,7 @@ export const planningApiDependenciesTourId = "planning-api-dependencies-v1";
 export const featureTours: readonly FeatureTourDefinition[] = [
   {
     id: planningApiDependenciesTourId,
-    productUpdateId: "2026-09-12-planning-api-dependencies",
+    productUpdateId: "2026-09-13-planning-api-dependencies",
     startWorkspace: "profile",
     openProfileApiSettings: true,
     requiredSelectors: ["[data-tour-id='profile-settings-api']", "[data-tour-id='founderops-planning-update-scope']"],

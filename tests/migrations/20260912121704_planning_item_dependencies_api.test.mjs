@@ -71,6 +71,11 @@ it("adds canonical uniqueness and service-only atomic dependency RPCs without de
 
   await withLocalDatabase(async (client) => {
     await seedPlanningItems(client);
+    const sharedMutationBefore = await client.query(`
+      select pg_get_functiondef(
+        'public.mutate_planning_relationship_transaction(text,text,text,text,bigint,text,timestamptz,text,text,text)'::regprocedure
+      ) as definition
+    `);
     await client.query(`
       insert into public.task_relationship_edges (
         task_id, related_task_id, relation_type, note, created_by
@@ -80,6 +85,13 @@ it("adds canonical uniqueness and service-only atomic dependency RPCs without de
     `);
 
     await applyMigration(client, migrationFile);
+
+    const sharedMutationAfter = await client.query(`
+      select pg_get_functiondef(
+        'public.mutate_planning_relationship_transaction(text,text,text,text,bigint,text,timestamptz,text,text,text)'::regprocedure
+      ) as definition
+    `);
+    expect(sharedMutationAfter.rows[0].definition).toBe(sharedMutationBefore.rows[0].definition);
 
     const preserved = await client.query(`
       select task_id, related_task_id, relation_type, note

@@ -39,8 +39,8 @@ import {
 } from "@/features/planning-items/model/planning-items-github-projection";
 import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
 import {
-  buildTeamPlanningDependencyPreview,
   commitTeamPlanningDependency,
+  planningDependencyUpdateHash,
   type TeamPlanningDependencyChange,
 } from "@/features/planning-items/model/planning-items-team-dependency";
 
@@ -157,12 +157,14 @@ export async function handleTeamPlanningItemUpdate(
       }
       const requestHash = stored.response?.commandKind === "changeParent" && reparentField
         ? planningReparentHash(itemId, parsed.expectedUpdatedAt, String(parsed.raw[reparentField] || "") || null)
-        : planningItemUpdateHash({
-            itemId,
-            itemType,
-            expectedUpdatedAt: parsed.expectedUpdatedAt,
-            patch: parsed.raw,
-          });
+        : stored.response?.commandKind === "dependency" && parsed.dependency
+          ? planningDependencyUpdateHash(itemId, parsed.expectedUpdatedAt, parsed.dependency)
+          : planningItemUpdateHash({
+              itemId,
+              itemType,
+              expectedUpdatedAt: parsed.expectedUpdatedAt,
+              patch: parsed.raw,
+            });
       if (requestHash !== stored.request_hash) {
         return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
       }
@@ -200,14 +202,6 @@ export async function handleTeamPlanningItemUpdate(
         scopes: permission.scopes,
       });
       if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
-      const prepared = await buildTeamPlanningDependencyPreview({
-        actor: actor.actor,
-        itemId,
-        expectedUpdatedAt: parsed.expectedUpdatedAt,
-        dependency: parsed.dependency,
-        supabase: permission.supabase,
-      });
-      if (!prepared.ok) return planningItemsError(prepared.error, prepared.status);
       const metadata = auditRequestMetadata(request);
       const committed = await commitTeamPlanningDependency({
         actor: actor.actor,
@@ -216,12 +210,7 @@ export async function handleTeamPlanningItemUpdate(
         dependency: parsed.dependency,
         supabase: permission.supabase,
         tokenId: permission.tokenId,
-        requestHash: planningItemUpdateHash({
-          itemId,
-          itemType: prepared.preview.itemType,
-          expectedUpdatedAt: parsed.expectedUpdatedAt,
-          patch: parsed.raw,
-        }),
+        requestHash: planningDependencyUpdateHash(itemId, parsed.expectedUpdatedAt, parsed.dependency),
         idempotencyKey,
         requestMetadata: {
           requestIp: metadata.request_ip || undefined,
@@ -235,13 +224,12 @@ export async function handleTeamPlanningItemUpdate(
           : undefined);
       }
       const transaction = committed.transaction as UpdateTransactionResult;
+      if (!transaction.itemType) throw new Error("Planning-Items-Abhängigkeit lieferte keinen Elementtyp zurück.");
       return updateResponse(
         request,
         itemId,
         transaction,
-        prepared.preview.itemType,
-        prepared.preview.changedFields.slice(),
-        prepared.preview.systemEffects.slice(),
+        transaction.itemType,
       );
     }
 

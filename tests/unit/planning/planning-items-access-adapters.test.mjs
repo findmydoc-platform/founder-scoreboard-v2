@@ -90,6 +90,7 @@ test("Planning route adapters publish stable operation, mode, and scope metadata
   const dependencyModel = {
     buildTeamPlanningDependencyPreview: async () => ({ ok: false }),
     commitTeamPlanningDependency: async () => ({ ok: false }),
+    planningDependencyUpdateHash: () => "d".repeat(64),
   };
   const request = { json: async () => ({}) };
 

@@ -73,6 +73,11 @@ begin
   if coalesce(v_state->'related'->>'project_id', '') <> 'findmydoc-founder-execution' then
     v_state := jsonb_set(v_state, '{related}', 'null'::jsonb, true);
   end if;
+  if p_relation_id is not null
+     and coalesce(v_state->'relation'->>'relation_type', '') not in ('blocked_by', 'blocks') then
+    v_state := jsonb_set(v_state, '{relation}', 'null'::jsonb, true);
+    v_state := jsonb_set(v_state, '{related}', 'null'::jsonb, true);
+  end if;
 
   if p_relation_id is null and p_relation_type in ('blocked_by', 'blocks') then
     select * into v_existing
@@ -121,99 +126,6 @@ revoke all on function public.prepare_team_planning_dependency_command(text, tex
 revoke all on function public.prepare_team_planning_dependency_command(text, text, bigint, text, text) from authenticated;
 grant execute on function public.prepare_team_planning_dependency_command(text, text, bigint, text, text) to service_role;
 
-create or replace function public.mutate_planning_relationship_transaction(
-  p_operation text,
-  p_task_id text,
-  p_related_task_id text,
-  p_relation_type text,
-  p_relation_id bigint,
-  p_note text,
-  p_expected_updated_at timestamptz,
-  p_actor_profile_id text,
-  p_request_ip text default null,
-  p_user_agent text default null
-) returns jsonb
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_relation public.task_relationship_edges%rowtype;
-  v_other_task_id text;
-  v_result jsonb;
-begin
-  if p_operation = 'remove' then
-    select * into v_relation from public.task_relationship_edges where id = p_relation_id for share;
-    if found then
-      v_other_task_id := case
-        when v_relation.task_id = p_task_id then v_relation.related_task_id
-        when v_relation.related_task_id = p_task_id then v_relation.task_id
-        else null
-      end;
-    end if;
-  else
-    v_other_task_id := p_related_task_id;
-  end if;
-
-  if exists (
-    select 1
-    from public.tasks source
-    left join public.tasks source_parent on source_parent.id = source.parent_task_id
-    left join public.tasks related on related.id = v_other_task_id
-    left join public.tasks related_parent on related_parent.id = related.parent_task_id
-    where source.id = p_task_id
-      and 'Erledigt' = any(array[source.status, source_parent.status, related.status, related_parent.status])
-  ) then
-    raise exception using errcode = 'P0016', message = 'completed relationship planning item is locked';
-  end if;
-
-  begin
-    v_result := public.mutate_planning_relationship_transaction_without_completed_guar(
-      p_operation,
-      p_task_id,
-      p_related_task_id,
-      p_relation_type,
-      p_relation_id,
-      p_note,
-      p_expected_updated_at,
-      p_actor_profile_id,
-      p_request_ip,
-      p_user_agent
-    );
-    return jsonb_set(v_result, '{changed}', 'true'::jsonb, true);
-  exception
-    when sqlstate 'P0003' or unique_violation then
-      if p_operation <> 'add' then raise; end if;
-      select * into v_relation
-      from public.task_relationship_edges relation
-      where (
-        relation.task_id = p_task_id
-        and relation.related_task_id = p_related_task_id
-        and relation.relation_type = p_relation_type
-      ) or (
-        p_relation_type = 'blocked_by'
-        and relation.task_id = p_related_task_id
-        and relation.related_task_id = p_task_id
-        and relation.relation_type = 'blocks'
-      ) or (
-        p_relation_type = 'blocks'
-        and relation.task_id = p_related_task_id
-        and relation.related_task_id = p_task_id
-        and relation.relation_type = 'blocked_by'
-      )
-      order by relation.id
-      limit 1;
-      if not found then raise; end if;
-      return jsonb_build_object(
-        'operation', p_operation,
-        'relation', to_jsonb(v_relation),
-        'affectedItemIds', jsonb_build_array(v_relation.task_id, v_relation.related_task_id),
-        'changed', false
-      );
-  end;
-end;
-$$;
-
 create or replace function public.mutate_team_planning_dependency_transaction(
   p_token_id uuid,
   p_idempotency_key uuid,
@@ -249,6 +161,11 @@ declare
   v_strategy jsonb;
   v_raci jsonb;
   v_item jsonb;
+  v_source_type text;
+  v_related_type text;
+  v_source_sync_status text;
+  v_related_sync_status text;
+  v_mutation_expected_updated_at timestamptz;
 begin
   if p_token_id is null
      or p_idempotency_key is null
@@ -314,9 +231,13 @@ begin
   if p_operation = 'remove' then
     select * into v_relation
     from public.task_relationship_edges relation
-    where relation.id = p_relation_id;
+    where relation.id = p_relation_id
+    for update;
     if not found then
       raise exception using errcode = 'P0002', message = 'planning relationship not found';
+    end if;
+    if v_relation.relation_type not in ('blocked_by', 'blocks') then
+      raise exception using errcode = 'P0002', message = 'planning dependency not found';
     end if;
     if v_relation.task_id <> p_task_id and v_relation.related_task_id <> p_task_id then
       raise exception using errcode = 'P0006', message = 'planning relationship does not belong to task';
@@ -337,23 +258,103 @@ begin
     raise exception using errcode = 'P0002', message = 'related planning item not found';
   end if;
 
-  v_result := public.mutate_planning_relationship_transaction(
-    p_operation,
-    p_task_id,
-    p_related_task_id,
-    p_relation_type,
-    p_relation_id,
-    p_note,
-    p_expected_updated_at,
-    p_actor_profile_id,
-    p_request_ip,
-    p_user_agent
-  );
-  v_changed := coalesce((v_result->>'changed')::boolean, true);
+  perform 1
+  from public.tasks task
+  where task.id = any(array[p_task_id, v_other_task_id])
+  order by task.id
+  for update;
+  select * into v_source
+  from public.tasks task
+  where task.id = p_task_id
+    and task.project_id = 'findmydoc-founder-execution';
+  select * into v_related
+  from public.tasks task
+  where task.id = v_other_task_id
+    and task.project_id = 'findmydoc-founder-execution';
+  v_source_type := v_source.task_type;
+  v_related_type := v_related.task_type;
+  v_source_sync_status := v_source.github_issue_sync_status;
+  v_related_sync_status := v_related.github_issue_sync_status;
+  v_mutation_expected_updated_at := p_expected_updated_at;
+  if p_operation = 'add' then
+    select * into v_relation
+    from public.task_relationship_edges relation
+    where (
+      relation.task_id = p_task_id
+      and relation.related_task_id = p_related_task_id
+      and relation.relation_type = p_relation_type
+    ) or (
+      p_relation_type = 'blocked_by'
+      and relation.task_id = p_related_task_id
+      and relation.related_task_id = p_task_id
+      and relation.relation_type = 'blocks'
+    ) or (
+      p_relation_type = 'blocks'
+      and relation.task_id = p_related_task_id
+      and relation.related_task_id = p_task_id
+      and relation.relation_type = 'blocked_by'
+    )
+    order by relation.id
+    limit 1;
+    if found then
+      v_mutation_expected_updated_at := v_source.updated_at;
+    end if;
+  end if;
+
+  begin
+    v_result := public.mutate_planning_relationship_transaction(
+      p_operation,
+      p_task_id,
+      p_related_task_id,
+      p_relation_type,
+      p_relation_id,
+      p_note,
+      v_mutation_expected_updated_at,
+      p_actor_profile_id,
+      p_request_ip,
+      p_user_agent
+    );
+    v_changed := true;
+  exception
+    when sqlstate 'P0003' or unique_violation then
+      if p_operation <> 'add' then raise; end if;
+      select * into v_relation
+      from public.task_relationship_edges relation
+      where (
+        relation.task_id = p_task_id
+        and relation.related_task_id = p_related_task_id
+        and relation.relation_type = p_relation_type
+      ) or (
+        p_relation_type = 'blocked_by'
+        and relation.task_id = p_related_task_id
+        and relation.related_task_id = p_task_id
+        and relation.relation_type = 'blocks'
+      ) or (
+        p_relation_type = 'blocks'
+        and relation.task_id = p_related_task_id
+        and relation.related_task_id = p_task_id
+        and relation.relation_type = 'blocked_by'
+      )
+      order by relation.id
+      limit 1;
+      if not found then raise; end if;
+      v_result := jsonb_build_object(
+        'operation', p_operation,
+        'relation', to_jsonb(v_relation),
+        'affectedItemIds', jsonb_build_array(v_relation.task_id, v_relation.related_task_id)
+      );
+      v_changed := false;
+  end;
   select * into v_relation
   from jsonb_populate_record(null::public.task_relationship_edges, v_result->'relation');
   if v_relation.id is null then
     raise exception using errcode = 'P0002', message = 'planning relationship result is incomplete';
+  end if;
+  if v_changed then
+    update public.tasks
+    set updated_at = clock_timestamp()
+    where id = any(array[v_relation.task_id, v_relation.related_task_id])
+      and task_type in ('epic', 'initiative');
   end if;
   select * into v_source from public.tasks where id = p_task_id;
 
@@ -370,14 +371,30 @@ begin
         'before', case when p_operation = 'remove' then v_dependency else null end,
         'after', case when p_operation = 'add' then v_dependency else null end,
         'reason', case when p_operation = 'add' then 'Aufgabenabhängigkeit wird hinzugefügt.' else 'Aufgabenabhängigkeit wird entfernt.' end
-      ),
-      jsonb_build_object(
-        'field', 'githubIssueSyncStatus',
-        'before', 'current',
-        'after', 'not_synced',
-        'reason', 'Betroffene GitHub-Projektionen werden als nicht synchron markiert.'
       )
     );
+    if v_source_type in ('deliverable', 'sub_issue')
+       and v_source_sync_status is distinct from 'not_synced' then
+      v_system_effects := v_system_effects || jsonb_build_array(
+        jsonb_build_object(
+          'field', 'githubIssueSyncStatus:' || p_task_id,
+          'before', v_source_sync_status,
+          'after', 'not_synced',
+          'reason', 'Die GitHub-Projektion dieses Planungselements wird als nicht synchron markiert.'
+        )
+      );
+    end if;
+    if v_related_type in ('deliverable', 'sub_issue')
+       and v_related_sync_status is distinct from 'not_synced' then
+      v_system_effects := v_system_effects || jsonb_build_array(
+        jsonb_build_object(
+          'field', 'githubIssueSyncStatus:' || v_other_task_id,
+          'before', v_related_sync_status,
+          'after', 'not_synced',
+          'reason', 'Die GitHub-Projektion dieses Planungselements wird als nicht synchron markiert.'
+        )
+      );
+    end if;
   end if;
 
   v_item := to_jsonb(v_source);

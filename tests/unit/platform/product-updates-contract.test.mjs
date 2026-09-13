@@ -49,13 +49,13 @@ test("the planning dependency update has a current desktop screenshot and dedica
     readFile("src/features/product-updates/model/product-updates.json", "utf8").then(JSON.parse),
     readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8"),
     readFile("src/features/profile/organisms/profile-planning-items-tokens.tsx", "utf8"),
-    readFile("public/product-updates/2026-09-12-planning-api-dependencies/planning-api-dependencies.png"),
+    readFile("public/product-updates/2026-09-13-planning-api-dependencies/planning-api-dependencies.png"),
   ]);
-  const update = registry.find(({ id }) => id === "2026-09-12-planning-api-dependencies");
+  const update = registry.find(({ id }) => id === "2026-09-13-planning-api-dependencies");
 
   assert.equal(registry[0], update);
-  assert.equal(update.releasedAt, "2026-09-12");
-  assert.equal(update.expiresAt, "2026-10-12");
+  assert.equal(update.releasedAt, "2026-09-13");
+  assert.equal(update.expiresAt, "2026-10-13");
   assert.equal(update.featureTourId, "planning-api-dependencies-v1");
   assert.equal(update.title, "Aufgabenabhängigkeiten per Skill verwalten");
   assert.equal(
@@ -68,7 +68,7 @@ test("the planning dependency update has a current desktop screenshot and dedica
   assert.equal(screenshot.readUInt32BE(16), 1440);
   assert.equal(screenshot.readUInt32BE(20), 900);
   assert.match(tourSource, /planningApiDependenciesTourId = "planning-api-dependencies-v1"/);
-  assert.match(tourSource, /productUpdateId: "2026-09-12-planning-api-dependencies"/);
+  assert.match(tourSource, /productUpdateId: "2026-09-13-planning-api-dependencies"/);
   assert.match(tourSource, /\[data-tour-id='founderops-planning-update-scope'\]/);
   assert.match(profileSource, /data-tour-id="founderops-planning-update-scope"/);
   assert.match(profileSource, /Update-Scope für Felder und Aufgabenabhängigkeiten/);
