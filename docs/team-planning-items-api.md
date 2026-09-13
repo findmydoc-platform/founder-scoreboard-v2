@@ -28,7 +28,7 @@ Every token includes:
 
 Optional, default-off scopes are issued only when selected while creating the token:
 
-- `write:planning-items:update` — update an existing item.
+- `write:planning-items:update` — update an existing item, including its directed task dependencies.
 - `write:planning-items:delete-empty` — CEO and Deputy only; delete an empty Epic.
 - `write:planning-items:github-sync` — request GitHub projection for a Deliverable or Sub-Issue only.
 
@@ -82,7 +82,18 @@ Token management is session-authorized; bearer-token planning operations use the
 
 ## Context and canonical references
 
-The v2 context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). Every list uses the same canonical projection. `parentTaskId` is the hierarchy reference, and Initiative strategy is available only through the nested `strategy` object. There is no `milestones` collection and no flat Initiative `goal`, `successCriteria`, or strategy-level `scopeConstraints` alias.
+The v2 context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). Every list uses the same canonical projection. `parentTaskId` is the hierarchy reference, and Initiative strategy is available only through the nested `strategy` object. The root `dependencies` list exposes only directed blocking relationships whose two endpoints are part of the returned planning context. There is no `milestones` collection, no flat Initiative `goal`, `successCriteria`, or strategy-level `scopeConstraints` alias, and no `relates_to` entry in `dependencies`.
+
+Each dependency is normalized independently of its storage direction:
+
+```json
+{
+  "relationshipId": 123,
+  "blockedItemId": "item-a",
+  "blockingItemId": "item-b",
+  "note": "Optional context"
+}
+```
 
 V2 rejects the retired `milestone` item type and the `milestoneId` and `packageId` parent fields. Path and parent references must use current planning-item IDs. It also refuses a replay receipt written under the older response contract.
 
@@ -157,6 +168,61 @@ PATCH processes only properties present in the request body. Omitted properties 
 ```
 
 Strategic items accept only strategic fields. They do not accept Review, score, Evidence gates, Sprint, repository, or GitHub fields. Deliverables retain their existing Review and scoring transitions. Sub-Issues retain their separate four-state status contract and never accept Review or Nacharbeit.
+
+## Directed dependencies
+
+Dependency changes use the existing update preview and commit endpoints and require `write:planning-items:update`. A dependency command must be the only patch field besides `expectedUpdatedAt`. Its direction is relative to the item ID in the request path.
+
+Preview an item that is blocked by another item:
+
+```json
+{
+  "expectedUpdatedAt": "2026-09-12T09:00:00.000Z",
+  "dependency": {
+    "operation": "add",
+    "direction": "blocked_by",
+    "relatedItemId": "item-b",
+    "note": "Wait for the rollout decision"
+  }
+}
+```
+
+Use `direction: "blocks"` when the item in the request path blocks `relatedItemId`. Notes are optional and limited to 500 characters. Preview validates and describes the operation without writing. Commit sends the same body to `PATCH /api/team/planning-items/v2/items/{id}` with a UUID `Idempotency-Key`.
+
+Remove a dependency by the `relationshipId` returned by context or a previous response:
+
+```json
+{
+  "expectedUpdatedAt": "2026-09-12T09:00:00.000Z",
+  "dependency": {
+    "operation": "remove",
+    "relationshipId": 123
+  }
+}
+```
+
+Preview and commit responses include the canonical relationship and whether storage changed:
+
+```json
+{
+  "dependencyChange": {
+    "operation": "add",
+    "changed": false,
+    "relationship": {
+      "relationshipId": 123,
+      "blockedItemId": "item-a",
+      "blockingItemId": "item-b",
+      "note": "Existing context"
+    }
+  }
+}
+```
+
+When previewing a new dependency, `relationshipId` is `null` because preview does not reserve or write a database ID. Commit and no-op responses return the stored positive ID.
+
+Adding an existing semantic dependency is a successful no-op, including the inverse `blocked_by`/`blocks` representation. The existing note is preserved, and no audit or GitHub sync effect is emitted. Replaying a committed removal with the same idempotency key returns its stored successful response. A new removal request for an already removed relationship returns `404 Not Found`.
+
+Dependency commands retain the existing relationship rules: CEO and Deputy can manage all allowed relationships; Founder access stays limited to outgoing `blocked_by` relationships for items they own, are assigned to, or manage as the Initiative Accountable. Self-links, missing or trashed endpoints, active or final Review locks, completed endpoints or parents, stale revisions, and relationships that do not belong to the path item are rejected exactly as in the FounderOps interface.
 
 ## GitHub projection
 

@@ -13,6 +13,7 @@ import {
 } from "@/features/planning-items/model/planning-items-route";
 import { previewPlanningItemGitHubSync } from "@/features/planning-items/model/planning-items-github-sync-preview";
 import { isStrategicPlanningItemType } from "@/features/planning-items/model/planning-items-contract";
+import { buildTeamPlanningDependencyPreview } from "@/features/planning-items/model/planning-items-team-dependency";
 
 export async function handleTeamPlanningItemUpdatePreview(
   request: NextRequest,
@@ -41,6 +42,25 @@ export async function handleTeamPlanningItemUpdatePreview(
 
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
 
+    const actor = actorContextFromPlanningTokenAuth({
+      ok: true,
+      profile: { id: permission.profile.id, platformRole: permission.profile.platformRole },
+      tokenId: permission.tokenId,
+      scopes: permission.scopes,
+    });
+    if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
+    if (parsed.dependency) {
+      const result = await buildTeamPlanningDependencyPreview({
+        actor: actor.actor,
+        itemId,
+        expectedUpdatedAt: parsed.expectedUpdatedAt,
+        dependency: parsed.dependency,
+        supabase: permission.supabase,
+      });
+      if (!result.ok) return planningItemsError(result.error, result.status);
+      return planningItemsJson({ ok: true, valid: true, ...result.preview });
+    }
+
     const result = await buildPlanningItemUpdatePreview({
       actor: permission.profile,
       itemId,
@@ -50,13 +70,6 @@ export async function handleTeamPlanningItemUpdatePreview(
     if (!result.ok) return planningItemsError(result.error, result.status);
 
     const { preview } = result;
-    const actor = actorContextFromPlanningTokenAuth({
-      ok: true,
-      profile: { id: permission.profile.id, platformRole: permission.profile.platformRole },
-      tokenId: permission.tokenId,
-      scopes: permission.scopes,
-    });
-    if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
     const reviseResult = await createTeamRevisePlanningItems({
       supabase: permission.supabase,
       actor: actor.actor,

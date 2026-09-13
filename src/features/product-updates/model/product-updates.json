@@ -1,5 +1,30 @@
 [
   {
+    "id": "2026-09-13-planning-api-dependencies",
+    "releasedAt": "2026-09-13",
+    "expiresAt": "2026-10-13",
+    "featureTourId": "planning-api-dependencies-v1",
+    "title": "Aufgabenabhängigkeiten per Skill verwalten",
+    "summary": "Der FounderOps-Skill liest jetzt blockierende Aufgaben und kann Abhängigkeiten nach Vorschau gezielt hinzufügen oder entfernen.",
+    "slides": [
+      {
+        "id": "planning-api-dependencies-scope",
+        "title": "Abhängigkeiten sicher per Skill ändern",
+        "description": "Der Skill zeigt gerichtete Abhängigkeiten im Planungskontext. Mit dem vorhandenen Bearbeiten-Scope kann er sie nach einer Vorschau hinzufügen oder entfernen.",
+        "link": {
+          "href": "https://github.com/findmydoc-platform/skills/tree/main/skills/founderops-planning-items",
+          "label": "FounderOps-Skill öffnen"
+        },
+        "image": {
+          "src": "/product-updates/2026-09-13-planning-api-dependencies/planning-api-dependencies.png",
+          "alt": "FounderOps API-Zugänge mit dem Bearbeiten-Scope für Felder und Aufgabenabhängigkeiten",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-08-25-team-workweek",
     "releasedAt": "2026-08-25",
     "expiresAt": "2026-09-24",

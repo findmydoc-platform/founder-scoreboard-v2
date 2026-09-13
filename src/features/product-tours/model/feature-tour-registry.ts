@@ -42,8 +42,37 @@ export const mobileResponsiveWorkspacesTourId = "mobile-responsive-workspaces-v1
 export const platformReleasesTourId = "platform-releases-v1";
 export const githubIssueWebhookSyncTourId = "github-issue-webhook-sync-v1";
 export const teamWorkweekTourId = "team-workweek-v1";
+export const planningApiDependenciesTourId = "planning-api-dependencies-v1";
 
 export const featureTours: readonly FeatureTourDefinition[] = [
+  {
+    id: planningApiDependenciesTourId,
+    productUpdateId: "2026-09-13-planning-api-dependencies",
+    startWorkspace: "profile",
+    openProfileApiSettings: true,
+    requiredSelectors: ["[data-tour-id='profile-settings-api']", "[data-tour-id='founderops-planning-update-scope']"],
+    steps: [
+      {
+        element: "[data-tour-id='profile-settings-api']",
+        popover: {
+          title: "API-Zugänge öffnen",
+          description: "Hier verwaltest du die persönlichen Tokens für den FounderOps-Skill und andere Planungsintegrationen.",
+          side: "right",
+          align: "center",
+        },
+      },
+      {
+        element: "[data-tour-id='founderops-planning-update-scope']",
+        popover: {
+          title: "Abhängigkeiten freigeben",
+          description: "Der vorhandene Bearbeiten-Scope gilt jetzt auch für gerichtete Aufgabenabhängigkeiten. Vorschau und bestätigtes Speichern bleiben getrennt.",
+          side: "left",
+          align: "center",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: teamWorkweekTourId,
     productUpdateId: "2026-08-25-team-workweek",

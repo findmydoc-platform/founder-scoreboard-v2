@@ -59,6 +59,38 @@ test("Team revise accepts fixedDate and rejects legacy deliverable schedule fiel
   }
 });
 
+test("Team revise routes dependency commands through the existing update contract", async () => {
+  const model = await loadUpdateModel();
+  const expectedUpdatedAt = "2026-09-12T10:00:00.000Z";
+  const parsed = model.parsePlanningItemPatchPayload({
+    expectedUpdatedAt,
+    dependency: {
+      operation: "add",
+      direction: "blocks",
+      relatedItemId: "related",
+      note: "External approval",
+    },
+  });
+
+  assert.equal(parsed.ok, true);
+  assert.deepEqual(parsed.presentFields, []);
+  assert.deepEqual(parsed.dependency, {
+    operation: "add",
+    direction: "blocks",
+    relatedItemId: "related",
+    note: "External approval",
+  });
+  assert.equal(model.parsePlanningItemPatchPayload({
+    expectedUpdatedAt,
+    title: "Mixed",
+    dependency: { operation: "remove", relationshipId: 41 },
+  }).ok, false);
+  assert.equal(model.parsePlanningItemPatchPayload({
+    expectedUpdatedAt,
+    dependency: { operation: "add", direction: "relates_to", relatedItemId: "related" },
+  }).ok, false);
+});
+
 
 test("Team revise preserves a late inactive-token decision", async () => {
   const model = await loadUpdateModel();

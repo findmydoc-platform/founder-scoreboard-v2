@@ -87,6 +87,11 @@ test("Planning route adapters publish stable operation, mode, and scope metadata
     dispatchAndLoadPlanningGitHubProjections: async () => new Map(),
     enqueueTeamPlanningGitHubProjection: async () => ({ ok: false }),
   };
+  const dependencyModel = {
+    buildTeamPlanningDependencyPreview: async () => ({ ok: false }),
+    commitTeamPlanningDependency: async () => ({ ok: false }),
+    planningDependencyUpdateHash: () => "d".repeat(64),
+  };
   const request = { json: async () => ({}) };
 
   const context = await captureAdapterAccess(
@@ -129,6 +134,7 @@ test("Planning route adapters publish stable operation, mode, and scope metadata
       "@/features/planning-items/model/planning-actor-context-server": actorContext,
       "@/features/planning-items/model/planning-items-github-sync-preview": { previewPlanningItemGitHubSync: () => ({}) },
       "@/features/planning-items/model/planning-items-contract": { isStrategicPlanningItemType: () => false },
+      "@/features/planning-items/model/planning-items-team-dependency": dependencyModel,
     },
     request,
   );
@@ -145,6 +151,7 @@ test("Planning route adapters publish stable operation, mode, and scope metadata
       "@/features/planning-items/model/planning-item-update": updateModel,
       "@/features/planning-items/model/planning-items-github-projection": githubProjection,
       "@/features/planning-items/model/planning-items-team-canonical-item": canonicalItem,
+      "@/features/planning-items/model/planning-items-team-dependency": dependencyModel,
     },
     request,
   );
@@ -155,6 +162,7 @@ test("Planning route adapters publish stable operation, mode, and scope metadata
       "@/features/planning-items/model/planning-actor-context-server": actorContext,
       "@/features/planning-items/model/planning-items-empty-epic-delete": deleteModel,
       "@/features/planning-items/model/planning-items-team-canonical-item": canonicalItem,
+      "@/features/planning-items/model/planning-items-team-dependency": dependencyModel,
     },
     request,
   );
@@ -171,6 +179,7 @@ test("Planning route adapters publish stable operation, mode, and scope metadata
       "@/features/planning-items/model/planning-item-update": updateModel,
       "@/features/planning-items/model/planning-items-github-projection": githubProjection,
       "@/features/planning-items/model/planning-items-team-canonical-item": canonicalItem,
+      "@/features/planning-items/model/planning-items-team-dependency": dependencyModel,
     },
     request,
   );

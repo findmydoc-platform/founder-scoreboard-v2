@@ -91,7 +91,11 @@ function fixture({
   initiative = { id: "initiative-one", ownerId: "initiative-owner", accountableProfileId: "accountable-one" },
   reviewLocked = false,
   finalReviewLocked = false,
+  completedLocked = false,
   commitRelation = relation(),
+  commitChanged = true,
+  commitReplay = false,
+  commitItem = null,
   commitError = null,
 } = {}) {
   const calls = [];
@@ -100,7 +104,7 @@ function fixture({
     client: {
       async rpc(name, params) {
         calls.push([name, params]);
-        if (name === "prepare_planning_relationship_command") {
+        if (name === "prepare_planning_relationship_command" || name === "prepare_team_planning_dependency_command") {
           return {
             data: {
               source,
@@ -108,16 +112,25 @@ function fixture({
               relation: currentRelation,
               existingRelation,
               actorName,
+              teamDependency: name === "prepare_team_planning_dependency_command",
               initiative,
               reviewLocked,
               finalReviewLocked,
+              completedLocked,
             },
             error: null,
           };
         }
         return commitError
           ? { data: null, error: commitError }
-          : { data: { operation: params.p_operation, relation: commitRelation, affectedItemIds: [commitRelation.task_id, commitRelation.related_task_id] }, error: null };
+          : { data: {
+              operation: params.p_operation,
+              relation: commitRelation,
+              affectedItemIds: [commitRelation.task_id, commitRelation.related_task_id],
+              changed: commitChanged,
+              replayed: commitReplay,
+              ...(commitItem ? { item: commitItem, itemType: commitItem.task_type, commandKind: "dependency" } : {}),
+            }, error: null };
       },
     },
   };
@@ -271,7 +284,7 @@ test("Founder ownership and Accountable rights stay limited to outgoing blocked_
   assert.equal(incoming.error.code, "forbidden");
 });
 
-test("revision, duplicate, review, trash, not-found, and repeated request states stop before commit", async () => {
+test("team dependency duplicate add is a successful no-op while UI and invalid states keep their guards", async () => {
   const model = await loadModel();
   const add = model.addPlanningRelationshipCommand("source", {
     relationType: "blocked_by",
@@ -279,13 +292,57 @@ test("revision, duplicate, review, trash, not-found, and repeated request states
     note: "",
     expectedUpdatedAt: "2026-08-12T09:00:00.000Z",
   });
+  const duplicateFixture = fixture({ existingRelation: relation() });
+  const duplicate = await model.createPlanningRelationshipPlanningItems(duplicateFixture.client, { teamDependency: true }).run({
+    actor,
+    mode: "preview",
+    command: model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "Replacement" }),
+  });
+  assert.equal(duplicate.status, "previewed");
+  assert.deepEqual(duplicate.effects, []);
+  assert.equal(duplicate.warnings[0].code, "planningRelationshipAlreadyExists");
+  assert.deepEqual(duplicate.changes[0].before, duplicate.changes[0].after);
+
+  const duplicateWithStaleRevision = await model.createPlanningRelationshipPlanningItems(
+    duplicateFixture.client,
+    { teamDependency: true },
+  ).run({ actor, mode: "preview", command: add });
+  assert.equal(duplicateWithStaleRevision.status, "previewed");
+  assert.deepEqual(duplicateWithStaleRevision.effects, []);
+
+  const removedRelationship = fixture({ currentRelation: null });
+  const missingAfterRemove = await model.createPlanningRelationshipPlanningItems(removedRelationship.client, { teamDependency: true }).run({
+    actor,
+    mode: "preview",
+    command: model.removePlanningRelationshipCommand("source", {
+      relationId: 41,
+      expectedUpdatedAt: "2026-08-12T09:00:00.000Z",
+    }),
+  });
+  assert.equal(missingAfterRemove.error.code, "notFound");
+  assert.equal(missingAfterRemove.error.entity.kind, "relationship");
+
+  const unsupportedRemoval = await model.createPlanningRelationshipPlanningItems(fixture({
+    currentRelation: relation({ relation_type: "relates_to" }),
+  }).client, { teamDependency: true }).run({
+    actor,
+    mode: "preview",
+    command: model.removePlanningRelationshipCommand("source", { relationId: 41 }),
+  });
+  assert.equal(unsupportedRemoval.error.code, "notFound");
+
   const cases = [
     [fixture(), add, "conflict", "revision"],
     [fixture({ existingRelation: relation() }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
     [fixture({ reviewLocked: true }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
+    [fixture({ reviewLocked: true, finalReviewLocked: true }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
+    [fixture({ completedLocked: true }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
     [fixture({ source: task("source", { trashed_at: "2026-08-12T11:00:00.000Z" }) }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
+    [fixture({ related: task("target", { trashed_at: "2026-08-12T11:00:00.000Z" }) }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
     [fixture({ related: null }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "notFound", undefined],
+    [fixture(), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "source", note: "" }), "invalidCommand", undefined],
     [fixture({ currentRelation: null }), model.removePlanningRelationshipCommand("source", { relationId: 41 }), "notFound", undefined],
+    [fixture({ currentRelation: relation({ task_id: "other", related_task_id: "another" }) }), model.removePlanningRelationshipCommand("source", { relationId: 41 }), "forbidden", undefined],
   ];
   for (const [current, command, code, reason] of cases) {
     const result = await model.createPlanningRelationshipPlanningItems(current.client).run({ actor, mode: "commit", command });

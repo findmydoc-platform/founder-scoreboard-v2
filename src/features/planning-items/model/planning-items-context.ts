@@ -9,6 +9,7 @@ import {
 } from "@/features/planning-items/model/planning-items-contract";
 import { loadAllSupabaseRows } from "@/features/planning-items/model/supabase-pagination";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { canonicalPlanningDependency } from "@/features/planning-items/model/planning-items-team-dependency-contract";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 
@@ -57,6 +58,14 @@ type RaciRow = {
   profile_id: string;
   role: "accountable" | "responsible" | "consulted" | "informed";
   sort_order: number;
+};
+
+type RelationshipContextRow = {
+  id: number;
+  task_id: string;
+  related_task_id: string;
+  relation_type: string;
+  note: string | null;
 };
 
 function countByTask(rows: Array<{ task_id: string }>) {
@@ -136,7 +145,7 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
       .order("sort_order")
       .range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("task_blockers").select("task_id,status,reason,impact,created_at").order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to)),
-    loadAllSupabaseRows((from, to) => supabase.from("task_relationship_edges").select("task_id,related_task_id,relation_type").order("id").range(from, to)),
+    loadAllSupabaseRows<RelationshipContextRow>((from, to) => supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("task_comments").select("task_id").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("task_external_comments").select("task_id").order("id").range(from, to)),
   ]);
@@ -145,6 +154,18 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
   const strategiesByTaskId = new Map(strategies.map((strategy) => [strategy.task_id, strategy]));
   const raciByTaskId = groupByTask(raciAssignments);
   const relationStats = relationStatsByTask(relations);
+  const planningItemIds = new Set(tasks.map((task) => task.id));
+  const dependencies = relations.flatMap((relation) => {
+    if (!planningItemIds.has(relation.task_id) || !planningItemIds.has(relation.related_task_id)) return [];
+    const dependency = canonicalPlanningDependency({
+      id: relation.id,
+      taskId: relation.task_id,
+      relatedTaskId: relation.related_task_id,
+      relationType: relation.relation_type,
+      note: relation.note,
+    });
+    return dependency ? [dependency] : [];
+  });
   const internalCommentCounts = countByTask(comments);
   const externalCommentCounts = countByTask(externalComments);
   const items = tasks.map((task) => {
@@ -220,6 +241,7 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
       subIssuePolicy: "approved-deliverable",
     },
     profiles: profiles.map((profile) => ({ id: profile.id, name: profile.name })),
+    dependencies,
     items,
     epics,
     initiatives,

@@ -38,15 +38,22 @@ import {
   dispatchAndLoadPlanningGitHubProjections,
 } from "@/features/planning-items/model/planning-items-github-projection";
 import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
+import {
+  commitTeamPlanningDependency,
+  planningDependencyUpdateHash,
+  type TeamPlanningDependencyChange,
+} from "@/features/planning-items/model/planning-items-team-dependency";
 
 type UpdateTransactionResult = {
   replayed?: boolean;
-  commandKind?: "changeParent";
+  commandKind?: "changeParent" | "dependency";
   itemType?: PlanningItemReplayType;
   item?: Record<string, unknown>;
   changedFields?: string[];
   systemEffects?: unknown[];
+  warnings?: string[];
   githubSync?: PlanningItemGitHubSyncResult;
+  dependencyChange?: TeamPlanningDependencyChange;
 };
 
 type StoredUpdateRequest = {
@@ -91,6 +98,8 @@ function updateResponse(
     item,
     changedFields: transaction.changedFields || fallbackChangedFields,
     systemEffects: transaction.systemEffects || fallbackSystemEffects,
+    ...(transaction.warnings ? { warnings: transaction.warnings } : {}),
+    ...(transaction.dependencyChange ? { dependencyChange: transaction.dependencyChange } : {}),
     ...(transaction.githubSync ? { githubSync: transaction.githubSync } : {}),
     itemLink: itemLink(request, itemType, String(item.id || fallbackItemId)),
   });
@@ -148,12 +157,14 @@ export async function handleTeamPlanningItemUpdate(
       }
       const requestHash = stored.response?.commandKind === "changeParent" && reparentField
         ? planningReparentHash(itemId, parsed.expectedUpdatedAt, String(parsed.raw[reparentField] || "") || null)
-        : planningItemUpdateHash({
-            itemId,
-            itemType,
-            expectedUpdatedAt: parsed.expectedUpdatedAt,
-            patch: parsed.raw,
-          });
+        : stored.response?.commandKind === "dependency" && parsed.dependency
+          ? planningDependencyUpdateHash(itemId, parsed.expectedUpdatedAt, parsed.dependency)
+          : planningItemUpdateHash({
+              itemId,
+              itemType,
+              expectedUpdatedAt: parsed.expectedUpdatedAt,
+              patch: parsed.raw,
+            });
       if (requestHash !== stored.request_hash) {
         return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
       }
@@ -181,6 +192,45 @@ export async function handleTeamPlanningItemUpdate(
         if (refreshed.data) return storedResponse(refreshed.data as StoredUpdateRequest);
       }
       return storedResponse(existingRequest.data as StoredUpdateRequest);
+    }
+
+    if (parsed.dependency) {
+      const actor = actorContextFromPlanningTokenAuth({
+        ok: true,
+        profile: { id: permission.profile.id, platformRole: permission.profile.platformRole },
+        tokenId: permission.tokenId,
+        scopes: permission.scopes,
+      });
+      if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
+      const metadata = auditRequestMetadata(request);
+      const committed = await commitTeamPlanningDependency({
+        actor: actor.actor,
+        itemId,
+        expectedUpdatedAt: parsed.expectedUpdatedAt,
+        dependency: parsed.dependency,
+        supabase: permission.supabase,
+        tokenId: permission.tokenId,
+        requestHash: planningDependencyUpdateHash(itemId, parsed.expectedUpdatedAt, parsed.dependency),
+        idempotencyKey,
+        requestMetadata: {
+          requestIp: metadata.request_ip || undefined,
+          userAgent: metadata.user_agent || undefined,
+        },
+      });
+      if (!committed.ok) {
+        if (committed.code === "TOKEN_INACTIVE") return planningItemsTokenInactiveError();
+        return planningItemsError(committed.error, committed.status, committed.code
+          ? { code: committed.code }
+          : undefined);
+      }
+      const transaction = committed.transaction as UpdateTransactionResult;
+      if (!transaction.itemType) throw new Error("Planning-Items-Abhängigkeit lieferte keinen Elementtyp zurück.");
+      return updateResponse(
+        request,
+        itemId,
+        transaction,
+        transaction.itemType,
+      );
     }
 
     if (reparentField) {
