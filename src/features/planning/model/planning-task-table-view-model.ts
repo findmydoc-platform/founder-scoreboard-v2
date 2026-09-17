@@ -8,12 +8,31 @@ export function buildPlanningTaskTableViewModel({
   currentProfile,
   data,
   filters,
+  includeAssignedSubIssueParents = false,
 }: {
   currentProfile: Profile | null;
   data: PlanningShellState;
   filters: PlanningFilterPreferences;
+  includeAssignedSubIssueParents?: boolean;
 }) {
   const normalizedQuery = filters.query.trim().toLocaleLowerCase("de");
+  const taskById = new Map(data.tasks.map((task) => [task.id, task]));
+  const viewerOpenSubIssueIdsByDeliverableId = includeAssignedSubIssueParents && currentProfile
+    ? data.tasks.reduce<Record<string, string[]>>((subIssueIds, task) => {
+        const isViewerOpenSubIssue = task.taskType === "sub_issue"
+          && normalizeStatus(task.status) !== "Erledigt"
+          && taskBelongsToProfile(task, currentProfile);
+        if (!isViewerOpenSubIssue) return subIssueIds;
+
+        const parent = taskById.get(task.parentTaskId);
+        const isForeignDeliverable = parent?.taskType === "deliverable"
+          && !taskBelongsToProfile(parent, currentProfile);
+        if (!parent || !isForeignDeliverable) return subIssueIds;
+
+        (subIssueIds[parent.id] ??= []).push(task.id);
+        return subIssueIds;
+      }, {})
+    : {};
   const visibleTasks = sortTasks(data.tasks.filter((task) => {
     if (task.taskType === "sub_issue") return false;
     const normalized = normalizeStatus(task.status);
@@ -44,7 +63,7 @@ export function buildPlanningTaskTableViewModel({
       || filters.risk === "evidence" && taskHasMissingEvidenceAttention(task)
       || filters.risk === "github" && !hasGitHubIssue(task);
     const matchesQuick = !filters.quick.length || filters.quick.some((quickFilter) => (
-      quickFilter === "mine" && taskBelongsToProfile(task, currentProfile)
+      quickFilter === "mine" && (taskBelongsToProfile(task, currentProfile) || Boolean(viewerOpenSubIssueIdsByDeliverableId[task.id]?.length))
       || quickFilter === "my-reviews" && task.reviewStatus === "requested" && !task.scoreFinal && Boolean(currentProfile?.id) && task.reviewOwnerProfileId === currentProfile?.id
       || quickFilter === "open" && normalized === "Offen"
       || quickFilter === "critical" && taskHasCriticalAttention(task, data)
@@ -60,6 +79,7 @@ export function buildPlanningTaskTableViewModel({
 
   return {
     visibleTasks,
+    viewerOpenSubIssueIdsByDeliverableId,
     metrics: {
       total: visibleTasks.length,
       open: visibleTasks.filter((task) => normalizeStatus(task.status) !== "Erledigt").length,

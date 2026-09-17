@@ -865,6 +865,23 @@
       "assigneeId": "sebastian",
       "taskType": "sub_issue",
       "scoreRelevant": false
+    },
+    {
+      "id": "volkan-personal-sub-issue-board-pruefen",
+      "order": 6,
+      "title": "Persönliche Sub-Issue-Zuordnung im Board prüfen",
+      "description": "Volkan prüft die eigene offene Teilaufgabe innerhalb eines fremden Deliverables.",
+      "status": "Offen",
+      "priority": "P1",
+      "workstream": "MVP",
+      "parentTaskId": "sebastian-contact-404-beheben-oder-links-umstellen",
+      "definitionOfDone": "Das fremde Deliverable erscheint in Meine mit persönlichem Hinweis und gruppiertem Sub-Issue.",
+      "dependsOn": "",
+      "hours": 1,
+      "ownerId": "volkan",
+      "assigneeId": "volkan",
+      "taskType": "sub_issue",
+      "scoreRelevant": false
     }
   ]
 }

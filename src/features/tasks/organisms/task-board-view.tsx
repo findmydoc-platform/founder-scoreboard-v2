@@ -27,6 +27,7 @@ type TaskBoardViewProps = {
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
   statusOptionsForTask: (task: Task) => TaskStatus[];
+  viewerOpenSubIssueIdsByDeliverableId: Record<string, string[]>;
   showParentContext?: boolean;
 };
 
@@ -50,6 +51,7 @@ export function TaskBoardView({
   onDragStart,
   onDragEnd,
   statusOptionsForTask,
+  viewerOpenSubIssueIdsByDeliverableId,
   showParentContext = false,
 }: TaskBoardViewProps) {
   const directChildrenByParent = groupDirectChildrenByParent(allTasks);
@@ -158,6 +160,7 @@ export function TaskBoardView({
                     onDragStart={canUpdateStatus && onDragStart ? onDragStart : undefined}
                     onDragEnd={onDragEnd}
                     statusOptions={canUpdateStatus ? statusOptionsForTask(task) : undefined}
+                    viewerOpenSubIssueIds={viewerOpenSubIssueIdsByDeliverableId[task.id] || []}
                     showParentContext={showParentContext}
                     isSelected={selectedTaskId === task.id}
                     isDragging={draggedTaskId === task.id}
