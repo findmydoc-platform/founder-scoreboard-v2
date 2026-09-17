@@ -122,8 +122,9 @@ test("context returns only canonical blocking dependencies between visible plann
     profiles: [{ id: "ceo", name: "CEO" }],
     sprints: [],
     active_tasks: [
-      { id: "blocked", title: "Blocked", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2" },
-      { id: "blocker", title: "Blocker", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2" },
+      { id: "blocked", title: "Blocked", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2", evidence_link: "https://example.com/legacy" },
+      { id: "blocker", title: "Blocker", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2", github_issue_url: "https://github.com/findmydoc-platform/management/issues/1" },
+      { id: "linked", title: "Linked", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2" },
     ],
     planning_item_strategy: [],
     planning_item_raci_assignments: [],
@@ -135,12 +136,14 @@ test("context returns only canonical blocking dependencies between visible plann
     ],
     task_comments: [],
     task_external_comments: [],
+    task_links: [{ task_id: "linked", type: "evidence", url: "https://example.com/evidence", metadata: {} }],
   };
   const supabase = {
     from(table) {
       const query = {
         select() { return query; },
         eq() { return query; },
+        in() { return query; },
         order() { return query; },
         async range() { return { data: rows[table] || [], error: null }; },
       };
@@ -168,15 +171,19 @@ test("context returns only canonical blocking dependencies between visible plann
     blockingItemId: "blocker",
     note: "Wait",
   }]);
+  const evidenceByItem = new Map(context.items.map((item) => [item.id, item.evidencePresent]));
+  assert.equal(evidenceByItem.get("blocked"), true);
+  assert.equal(evidenceByItem.get("blocker"), false);
+  assert.equal(evidenceByItem.get("linked"), true);
 });
 
-test("the unchanged v2 OpenAPI contract documents dependency reads and update commands", async () => {
+test("the v2 OpenAPI contract documents dependencies and review evidence", async () => {
   const contract = JSON.parse(await readFile(
     new URL("../../../public/founderops-team-planning-items-v2-openapi.json", import.meta.url),
     "utf8",
   ));
 
-  assert.equal(contract.info.version, "2.1.0");
+  assert.equal(contract.info.version, "2.2.0");
   assert.ok(contract.components.schemas.ContextResponse.properties.context.required.includes("dependencies"));
   assert.equal(
     contract.components.schemas.ContextResponse.properties.context.properties.dependencies.items.$ref,
@@ -188,6 +195,8 @@ test("the unchanged v2 OpenAPI contract documents dependency reads and update co
   );
   assert.deepEqual(contract.components.schemas.DependencyDirection.enum, ["blocked_by", "blocks"]);
   assert.equal(contract.components.schemas.DependencyAddCommand.properties.note.maxLength, 500);
+  assert.equal(contract.components.schemas.PatchPayload.properties.evidenceLink.format, "uri");
+  assert.equal(contract.components.schemas.PatchPayload.properties.evidenceExceptionNote.maxLength, 2000);
   assert.deepEqual(
     contract.components.schemas.PlanningDependencyChangeRelationship.properties.relationshipId.type,
     ["integer", "null"],

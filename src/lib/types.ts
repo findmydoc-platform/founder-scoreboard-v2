@@ -105,6 +105,7 @@ export type Task = {
   reviewStatus: ReviewStatus;
   reviewOwnerProfileId?: string;
   reviewRequestedAt?: string;
+  reviewEvidenceExceptionNote?: string;
   scorePoints: number;
   scoreFinal: boolean;
   githubRepo: string;

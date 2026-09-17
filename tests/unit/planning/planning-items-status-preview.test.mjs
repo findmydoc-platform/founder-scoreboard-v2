@@ -124,6 +124,7 @@ function taskRow(overrides = {}) {
     review_status: "not_requested",
     review_owner_profile_id: "reviewer",
     review_requested_at: null,
+    review_evidence_exception_note: null,
     score_points: 4,
     score_final: false,
     score_relevant: false,
@@ -166,6 +167,9 @@ function supabaseFor(target, overrides = {}) {
     active_tasks: parents,
     sprints: overrides.sprints || [],
     planning_item_raci_assignments: overrides.raciAssignments || [],
+    task_links: overrides.taskLinks === undefined
+      ? [{ id: 1, task_id: target.id, type: "evidence", url: "https://example.com/evidence" }]
+      : overrides.taskLinks,
   };
 
   return {
@@ -175,6 +179,8 @@ function supabaseFor(target, overrides = {}) {
           const filters = [];
           const builder = {
             eq(column, value) { filters.push([column, value]); return this; },
+            in(column, values) { filters.push([column, values]); return this; },
+            limit(count) { this.limitCount = count; return this; },
             async maybeSingle() {
               if (table === "active_tasks" && columns.includes("problem_statement")) {
                 return { data: target, error: null };
@@ -183,7 +189,8 @@ function supabaseFor(target, overrides = {}) {
               return { data: null, error: null };
             },
             then(resolve, reject) {
-              const data = (rows[table] || []).filter((row) => filters.every(([column, value]) => row[column] === value));
+              let data = (rows[table] || []).filter((row) => filters.every(([column, value]) => Array.isArray(value) ? value.includes(row[column]) : row[column] === value));
+              if (this.limitCount) data = data.slice(0, this.limitCount);
               return Promise.resolve({ data, error: null }).then(resolve, reject);
             },
           };
@@ -239,6 +246,57 @@ test("Planning Items Review preview exposes the complete server-owned transition
   assert.equal(result.preview.systemEffects.some((effect) => effect.field === "activity"), true);
   assert.equal(result.preview.systemEffects.some((effect) => effect.field === "audit"), true);
   assert.equal(result.preview.systemEffects.some((effect) => effect.field === "githubIssueSyncStatus"), true);
+});
+
+test("Planning Items Review preview requires evidence or an explicit exception note", async () => {
+  const actor = { id: "ceo", name: "CEO", platformRole: "ceo" };
+  const withoutEvidence = await preview(actor, taskRow(), "Review", { taskLinks: [] });
+  assert.equal(withoutEvidence.ok, true);
+  assert.equal(withoutEvidence.preview.errors.some((error) => error.includes("Evidence-Link")), true);
+
+  const parsed = updates.parsePlanningItemPatchPayload({
+    expectedUpdatedAt: updatedAt,
+    status: "Review",
+    evidenceExceptionNote: "Ergebnis wurde im Founder-Meeting abgenommen.",
+  });
+  assert.equal(parsed.ok, true);
+  const withException = await updates.buildPlanningItemUpdatePreview({
+    actor,
+    itemId: "task-1",
+    parsed,
+    supabase: supabaseFor(taskRow(), { taskLinks: [] }),
+  });
+  assert.equal(withException.ok, true);
+  assert.deepEqual(withException.preview.errors, []);
+  assert.equal(withException.preview.resultingItem.evidenceExceptionNote, "Ergebnis wurde im Founder-Meeting abgenommen.");
+});
+
+test("Planning Items Review preview accepts legacy evidence and a valid link in the same patch", async () => {
+  const actor = { id: "ceo", name: "CEO", platformRole: "ceo" };
+  const legacy = await preview(
+    actor,
+    taskRow({ evidence_link: "https://example.com/legacy-evidence" }),
+    "Review",
+    { taskLinks: [] },
+  );
+  assert.equal(legacy.ok, true);
+  assert.deepEqual(legacy.preview.errors, []);
+
+  const parsed = updates.parsePlanningItemPatchPayload({
+    expectedUpdatedAt: updatedAt,
+    status: "Review",
+    evidenceLink: "https://example.com/current-evidence",
+  });
+  assert.equal(parsed.ok, true);
+  const samePatch = await updates.buildPlanningItemUpdatePreview({
+    actor,
+    itemId: "task-1",
+    parsed,
+    supabase: supabaseFor(taskRow(), { taskLinks: [] }),
+  });
+  assert.equal(samePatch.ok, true);
+  assert.deepEqual(samePatch.preview.errors, []);
+  assert.equal(samePatch.preview.resultingItem.evidenceLink, "https://example.com/current-evidence");
 });
 
 test("identical status remains a successful no-op even while review is active", async () => {

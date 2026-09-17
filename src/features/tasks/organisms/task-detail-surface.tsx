@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
+import { ReviewEvidenceGateDialog } from "@/features/reviews/molecules/review-evidence-gate-dialog";
 import { TaskReviewSummary } from "@/features/reviews/molecules/task-review-summary";
 import { TaskReviewRail } from "@/features/reviews/organisms/task-review-rail";
+import {
+  taskHasValidReviewEvidence,
+  type ReviewEvidenceSubmission,
+} from "@/features/reviews/model/review-evidence";
 import { isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
 import {
   canApproveDeliverableApproval,
@@ -77,7 +82,7 @@ type TaskDetailSurfaceProps = {
   onOpenHierarchyTask?: (taskId: string) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onReview: (task: Task, decision: ReviewDecision, score: number, checklist: TaskReviewChecklist, comment: string) => Promise<boolean> | boolean | void;
-  onReopenReview: (task: Task) => void;
+  onReopenReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onWithdrawReview: (task: Task, reason: string) => Promise<boolean> | boolean | void;
   onWithdraw: (reason: string) => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;
@@ -129,6 +134,7 @@ export function TaskDetailSurface({
 }: TaskDetailSurfaceProps) {
   const [activeTab, setActiveTab] = useState<TaskDetailTabId>(requestedCommentTarget ? "activity" : "overview");
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
+  const [reviewEvidenceGateIntent, setReviewEvidenceGateIntent] = useState<"request" | "reopen" | null>(null);
   const [reviewDraftDirty, setReviewDraftDirty] = useState(false);
   const controller = useTaskDetailController({
     task,
@@ -281,6 +287,43 @@ export function TaskDetailSurface({
       onOpenHierarchyTask(taskId);
     });
   };
+  const guardedUpdate = (patch: Partial<Task>) => {
+    const requestsReview = patch.status === "Review" || patch.reviewStatus === "requested";
+    const includesEvidence = Boolean(patch.evidenceLinks?.length || patch.reviewEvidenceExceptionNote?.trim());
+    if (task.taskType === "deliverable"
+      && requestsReview
+      && !taskHasValidReviewEvidence(task)
+      && !includesEvidence) {
+      setReviewEvidenceGateIntent("request");
+      return;
+    }
+    return onUpdate(patch);
+  };
+  const reopenReview = () => {
+    if (!taskHasValidReviewEvidence(task)) {
+      setReviewEvidenceGateIntent("reopen");
+      return;
+    }
+    return onReopenReview(task);
+  };
+  const submitReviewEvidence = async (submission: ReviewEvidenceSubmission) => {
+    if (reviewEvidenceGateIntent === "reopen") {
+      const result = await onReopenReview(task, submission);
+      return result !== false;
+    }
+    const result = await onUpdate({
+      status: "Review",
+      reviewStatus: "requested",
+      scoreFinal: false,
+      ...(submission.evidenceLink ? {
+        evidenceLinks: [...task.evidenceLinks, submission.evidenceLink],
+        reviewEvidenceExceptionNote: "",
+      } : {
+        reviewEvidenceExceptionNote: submission.evidenceExceptionNote || "",
+      }),
+    });
+    return result?.ok !== false;
+  };
 
   const panels = {
     overview: (
@@ -420,7 +463,7 @@ export function TaskDetailSurface({
           onWithdraw={onWithdraw}
         />
       )}
-      onUpdate={onUpdate}
+      onUpdate={guardedUpdate}
     />
   );
 
@@ -452,7 +495,7 @@ export function TaskDetailSurface({
         canManageTaskMeta={controller.permissions.canManageTaskMeta}
         canReparentSubIssue={controller.permissions.canReparentSubIssue}
         pending={pending}
-        onUpdate={onUpdate}
+        onUpdate={guardedUpdate}
       />
 
       {directChildType ? (
@@ -487,7 +530,7 @@ export function TaskDetailSurface({
           canManageReviewOwner={task.taskType === "deliverable" && controller.permissions.canManageReviewOwner}
           forceReviewSetup={reviewSetupOpen}
           pending={pending}
-          onUpdate={onUpdate}
+          onUpdate={guardedUpdate}
           onDecideApproval={onDecideApproval}
         />
       ) : null}
@@ -499,7 +542,7 @@ export function TaskDetailSurface({
           profiles={teamProfiles}
           canReopen={controller.permissions.canOpenReview}
           pending={pending}
-          onReopen={onReopenReview}
+          onReopen={reopenReview}
         />
       ) : null}
 
@@ -525,6 +568,13 @@ export function TaskDetailSurface({
             : "xl:grid-cols-[minmax(0,3fr)_minmax(420px,2fr)]",
         ) : undefined}
       />
+      {reviewEvidenceGateIntent ? (
+        <ReviewEvidenceGateDialog
+          pending={pending}
+          onClose={() => setReviewEvidenceGateIntent(null)}
+          onConfirm={submitReviewEvidence}
+        />
+      ) : null}
     </>
   );
 

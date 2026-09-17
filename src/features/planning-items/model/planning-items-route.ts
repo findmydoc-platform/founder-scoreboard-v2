@@ -93,6 +93,7 @@ function publicCommitError(error: unknown, fallbackError: string) {
   if (code === "P0002") return planningItemsError("Planungselement wurde nicht gefunden.", 404);
   if (code === "P0003") return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
   if (["P0008", "P0010"].includes(code)) return planningItemsError("Statusübergang ist wegen eines zwischenzeitlich geänderten Planungs- oder Review-Zustands nicht mehr zulässig.", 409);
+  if (code === "P0017") return planningItemsError("Ergänze vor der Review-Anfrage einen Evidence-Link oder dokumentiere das Ergebnis ohne Link.", 409);
   if (code === "P0004") {
     return planningItemsTokenInactiveError();
   }

@@ -268,3 +268,61 @@ test("dependency removal previews and commits through the same update routes", a
   assert.equal(calls.filter(([kind]) => kind === "commit").length, 1);
   assert.equal(calls.at(-1)[1].dependency.relationshipId, 41);
 });
+
+test("late review-evidence conflicts remain actionable on the update route", async () => {
+  const parsedReview = {
+    ok: true,
+    expectedUpdatedAt,
+    presentFields: ["status", "evidenceExceptionNote"],
+    raw: { expectedUpdatedAt, status: "Review", evidenceExceptionNote: "Accepted without a link." },
+    dependency: null,
+    githubSync: null,
+    githubSyncMode: null,
+  };
+  const reviewPreview = {
+    ...preview,
+    normalizedPatch: parsedReview.raw,
+    resultingItem: { id: "blocked", status: "Review" },
+    changedFields: ["status", "evidenceExceptionNote"],
+    dependencyChange: undefined,
+  };
+  const mocks = commonMocks({}, undefined, parsedReview);
+  mocks["@/features/planning-items/model/planning-item-update"] = {
+    buildPlanningItemUpdatePreview: async () => ({ ok: true, preview: reviewPreview }),
+    createTeamRevisePlanningItems: () => ({
+      run: async () => ({
+        ok: false,
+        error: {
+          code: "conflict",
+          reason: "state",
+          details: { planningReviewReason: "evidenceRequired" },
+        },
+      }),
+    }),
+    mapPlanningItemDatabaseRow: (_itemType, item) => item,
+    parsePlanningItemPatchPayload: () => parsedReview,
+    planningItemUpdateHash: () => "a".repeat(64),
+    planningItemReviseCommand: () => ({}),
+    teamReviseTransactionFromResult: () => null,
+  };
+  const route = await importTestModule(
+    "src/features/planning-items/model/planning-items-team-update-route.ts",
+    {
+      ...mocks,
+      "@/features/planning-items/model/planning-items-empty-epic-delete": {},
+      "@/features/planning-items/model/planning-items-reparent": {},
+      "@/features/planning-items/model/planning-items-github-projection": { dispatchAndLoadPlanningGitHubProjections: async () => new Map() },
+      "@/features/planning-items/model/planning-items-team-canonical-item": { hasCanonicalTeamPlanningItem: async () => true },
+    },
+  );
+  const response = await route.handleTeamPlanningItemUpdate(
+    {
+      json: async () => parsedReview.raw,
+      headers: { get: () => "00000000-0000-4000-8000-000000000309" },
+      nextUrl: { origin: "https://example.test" },
+    },
+    { params: Promise.resolve({ id: "blocked" }) },
+  );
+  assert.equal(response.status, 409);
+  assert.match(response.body.error, /Evidence-Link/);
+});

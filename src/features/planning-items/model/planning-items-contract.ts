@@ -51,6 +51,8 @@ export const PLANNING_ITEM_FIELD_RULES = {
   fixedDate: { kind: "date" },
   hours: { kind: "number", minimum: 0, maximum: 200 },
   githubRepo: { kind: "string", maxLength: 120 },
+  evidenceLink: { kind: "string", maxLength: 4_000 },
+  evidenceExceptionNote: { kind: "string", maxLength: 2_000 },
 } as const;
 
 export const TEAM_PLANNING_ITEM_CREATE_FIELDS = [
@@ -78,15 +80,17 @@ export const TEAM_PLANNING_ITEM_CREATE_FIELDS = [
   "status",
 ] as const;
 
-export const TEAM_PLANNING_ITEM_PATCH_FIELDS = TEAM_PLANNING_ITEM_CREATE_FIELDS.filter(
-  (field) => field !== "itemType",
-) as Exclude<(typeof TEAM_PLANNING_ITEM_CREATE_FIELDS)[number], "itemType">[];
+export const TEAM_PLANNING_ITEM_PATCH_FIELDS = [
+  ...TEAM_PLANNING_ITEM_CREATE_FIELDS.filter((field) => field !== "itemType"),
+  "evidenceLink",
+  "evidenceExceptionNote",
+] as const;
 
 export type TeamPlanningItemScope = (typeof TEAM_PLANNING_ITEM_SCOPES)[number];
 export type TeamPlanningItemType = (typeof TEAM_PLANNING_ITEM_TYPES)[number];
 export type TeamPlanningItemGenericTaskType = (typeof TEAM_PLANNING_ITEM_GENERIC_TASK_TYPES)[number];
 export type PlanningItemFieldKey = keyof typeof PLANNING_ITEM_FIELD_RULES;
-export type TeamPlanningItemPatchField = (typeof TEAM_PLANNING_ITEM_PATCH_FIELDS)[number];
+export type TeamPlanningItemPatchField = Exclude<(typeof TEAM_PLANNING_ITEM_CREATE_FIELDS)[number], "itemType"> | "evidenceLink" | "evidenceExceptionNote";
 export type TeamPlanningItemGitHubSyncMode =
   (typeof TEAM_PLANNING_ITEM_GITHUB_SYNC_MODES)[number];
 

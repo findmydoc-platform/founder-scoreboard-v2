@@ -192,6 +192,8 @@ export type PlanningAction =
     itemId: PlanningItemId;
     expectedRevision: PlanningRevision;
     reviewerProfileId?: ProfileId;
+    evidenceLinks?: readonly string[];
+    evidenceExceptionNote?: string;
   }>
   | Readonly<{
     kind: "decideReview";
@@ -207,6 +209,8 @@ export type PlanningAction =
   }>)
   | (VersionedItemReference & Readonly<{
     kind: "reopenReview";
+    evidenceLinks?: readonly string[];
+    evidenceExceptionNote?: string;
   }>)
   | Readonly<{
     kind: "assignSprint";

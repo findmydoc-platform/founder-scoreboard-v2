@@ -214,7 +214,16 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           data={data}
           pending={isPending}
           onOpenTask={openTaskPanel}
-          onRequestReview={(task) => updateTask(task, { status: "Review", reviewStatus: "requested", scoreFinal: false })}
+          onRequestReview={async (task, evidence) => {
+            const result = await updateTask(task, {
+              status: "Review",
+              reviewStatus: "requested",
+              scoreFinal: false,
+              ...(evidence?.evidenceLink ? { evidenceLinks: [...task.evidenceLinks, evidence.evidenceLink] } : {}),
+              reviewEvidenceExceptionNote: evidence?.evidenceExceptionNote || "",
+            });
+            return result.ok;
+          }}
           onChangeStatus={(task, status) => updateTask(task, { status })}
           onLockSprint={lockSprint}
           onUpdateSprint={updateSprint}

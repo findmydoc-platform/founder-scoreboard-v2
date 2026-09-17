@@ -10,6 +10,9 @@ import {
 import { loadAllSupabaseRows } from "@/features/planning-items/model/supabase-pagination";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { canonicalPlanningDependency } from "@/features/planning-items/model/planning-items-team-dependency-contract";
+import {
+  storedReviewEvidenceIsValid,
+} from "@/features/reviews/model/review-evidence";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 
@@ -68,6 +71,13 @@ type RelationshipContextRow = {
   note: string | null;
 };
 
+type TaskEvidenceLinkRow = {
+  task_id: string;
+  type: string;
+  url: string;
+  metadata: unknown;
+};
+
 function countByTask(rows: Array<{ task_id: string }>) {
   const counts = new Map<string, number>();
   for (const row of rows) counts.set(row.task_id, (counts.get(row.task_id) || 0) + 1);
@@ -123,7 +133,7 @@ function raciFor(rows: RaciRow[] = []) {
 }
 
 export async function buildPlanningItemsContext(supabase: SupabaseServer, actor: AuthenticatedProfile) {
-  const [profiles, sprints, tasks, strategies, raciAssignments, blockers, relations, comments, externalComments] = await Promise.all([
+  const [profiles, sprints, tasks, strategies, raciAssignments, blockers, relations, comments, externalComments, evidenceLinks] = await Promise.all([
     loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name").order("name").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("sprints").select("id,name,status,start_date,end_date").order("start_date").order("id").range(from, to)),
     loadAllSupabaseRows<TaskContextRow>((from, to) => supabase
@@ -148,11 +158,19 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
     loadAllSupabaseRows<RelationshipContextRow>((from, to) => supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("task_comments").select("task_id").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("task_external_comments").select("task_id").order("id").range(from, to)),
+    loadAllSupabaseRows<TaskEvidenceLinkRow>((from, to) => supabase
+      .from("task_links")
+      .select("task_id,type,url,metadata")
+      .in("type", ["evidence", "github_pull_request"])
+      .order("task_id")
+      .order("id")
+      .range(from, to)),
   ]);
 
   const blockersByTaskId = groupByTask(blockers);
   const strategiesByTaskId = new Map(strategies.map((strategy) => [strategy.task_id, strategy]));
   const raciByTaskId = groupByTask(raciAssignments);
+  const evidenceLinksByTaskId = groupByTask(evidenceLinks);
   const relationStats = relationStatsByTask(relations);
   const planningItemIds = new Set(tasks.map((task) => task.id));
   const dependencies = relations.flatMap((relation) => {
@@ -211,7 +229,10 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
       githubRepo: isStrategic ? "" : task.github_repo || "",
       githubIssueSyncStatus: isStrategic ? "not_applicable" : task.github_issue_sync_status || "not_synced",
       updatedAt: task.updated_at || "",
-      evidencePresent: itemType === "deliverable" && Boolean(task.evidence_link || task.github_issue_url || task.issue_url),
+      evidencePresent: itemType === "deliverable" && storedReviewEvidenceIsValid(
+        task.evidence_link,
+        evidenceLinksByTaskId.get(task.id) || [],
+      ),
       canCreateSubIssue: itemType === "deliverable",
       blockers: {
         openCount: openBlockers.length,

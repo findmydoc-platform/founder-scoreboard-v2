@@ -365,6 +365,11 @@ export async function handleTeamPlanningItemUpdate(
       }
       if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "idempotency") return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
       if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision") return planningItemsError("Planungselement wurde zwischenzeitlich geändert. Bitte Kontext erneut laden.", 409);
+      if (reviseResult.error.code === "conflict"
+        && reviseResult.error.reason === "state"
+        && reviseResult.error.details?.planningReviewReason === "evidenceRequired") {
+        return planningItemsError("Ergänze vor der Review-Anfrage einen Evidence-Link oder dokumentiere das Ergebnis ohne Link.", 409);
+      }
       if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "state") return planningItemsError("GitHub-Sync ist für dieses Planungselement im aktuellen Zustand nicht möglich.", 409);
       if (reviseResult.error.code === "forbidden") return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
       if (reviseResult.error.code === "invalidCommand") return planningItemsJson({ ok: false, error: "Planning-Items-Update enthält ungültige Felder.", errors: reviseResult.error.issues.map((issue) => issue.reason), warnings: preview.warnings }, 400);

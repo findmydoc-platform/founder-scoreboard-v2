@@ -7,6 +7,11 @@ import { SprintPlanningSection } from "@/features/sprint/molecules/sprint-planni
 import { SprintFounderScoreTable } from "@/features/sprint/organisms/sprint-founder-score-table";
 import { SprintScoreObjections } from "@/features/sprint/organisms/sprint-score-objections";
 import { SprintTaskTables } from "@/features/sprint/organisms/sprint-task-tables";
+import { ReviewEvidenceGateDialog } from "@/features/reviews/molecules/review-evidence-gate-dialog";
+import {
+  taskHasValidReviewEvidence,
+  type ReviewEvidenceSubmission,
+} from "@/features/reviews/model/review-evidence";
 import { buildSprintScoreViewModel } from "@/features/sprint/model/sprint-score-view-model";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
@@ -40,7 +45,7 @@ export function SprintScoreTableOverview({
   data: PlanningShellState;
   pending: boolean;
   onOpenTask: (taskId: string) => void;
-  onRequestReview: (task: Task) => void;
+  onRequestReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onChangeStatus: (task: Task, status: TaskStatus) => void;
   onLockSprint: (sprintId: string) => void;
   onUpdateSprint: (sprint: Sprint, patch: Partial<Sprint>) => void;
@@ -81,6 +86,7 @@ export function SprintScoreTableOverview({
   const currentSprint = findCurrentSprint(sprintData.sprints);
   const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
   const [scoreObjectionDraft, setScoreObjectionDraft] = useState("");
+  const [reviewEvidenceTask, setReviewEvidenceTask] = useState<Task | null>(null);
   useEffect(() => {
     if (!sprintData.sprints.length) return;
     if (!selectedSprintId || !sprintData.sprints.some((item) => item.id === selectedSprintId)) {
@@ -108,6 +114,14 @@ export function SprintScoreTableOverview({
     ? sprintData.profiles.find((profile) => profile.id === task.reviewOwnerProfileId)?.name || task.reviewOwnerProfileId
     : "Ohne Review Owner";
   const isSelfReview = (task: Task) => Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
+  const requestReview = (task: Task) => {
+    if (!taskHasValidReviewEvidence(task)) {
+      setReviewEvidenceTask(task);
+      return;
+    }
+    dispatch({ type: "itemPatched", itemId: task.id, patch: { status: "Review", reviewStatus: "requested", scoreFinal: false } });
+    return onRequestReview(task);
+  };
 
   if (!sprint) {
     return (
@@ -200,10 +214,13 @@ export function SprintScoreTableOverview({
         isSelfReview={isSelfReview}
         onOpenTask={onOpenTask}
         onRequestReview={(task) => {
-          dispatch({ type: "itemPatched", itemId: task.id, patch: { status: "Review", reviewStatus: "requested", scoreFinal: false } });
-          onRequestReview(task);
+          requestReview(task);
         }}
         onChangeStatus={(task, status) => {
+          if (status === "Review") {
+            requestReview(task);
+            return;
+          }
           dispatch({ type: "itemPatched", itemId: task.id, patch: { status } });
           onChangeStatus(task, status);
         }}
@@ -213,6 +230,29 @@ export function SprintScoreTableOverview({
         }}
         onOpenReviewTask={onOpenTask}
       />
+      {reviewEvidenceTask ? (
+        <ReviewEvidenceGateDialog
+          pending={pending}
+          onClose={() => setReviewEvidenceTask(null)}
+          onConfirm={async (submission) => {
+            const task = reviewEvidenceTask;
+            const result = await onRequestReview(task, submission);
+            if (result === false) return false;
+            dispatch({
+              type: "itemPatched",
+              itemId: task.id,
+              patch: {
+                status: "Review",
+                reviewStatus: "requested",
+                scoreFinal: false,
+                ...(submission.evidenceLink ? { evidenceLinks: [...task.evidenceLinks, submission.evidenceLink] } : {}),
+                reviewEvidenceExceptionNote: submission.evidenceExceptionNote || "",
+              },
+            });
+            return true;
+          }}
+        />
+      ) : null}
     </div>
   );
 }

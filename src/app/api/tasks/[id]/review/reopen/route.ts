@@ -23,7 +23,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const result = await createPlanningReviewPlanningItems(apiContext.supabase).run({
     actor: actor.actor,
     mode: "commit",
-    command: reopenPlanningReviewCommand(id, parsed.value.expectedUpdatedAt),
+      command: reopenPlanningReviewCommand(id, parsed.value.expectedUpdatedAt, parsed.value),
     requestMetadata: {
       requestIp: metadata.request_ip || undefined,
       userAgent: metadata.user_agent || undefined,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, RotateCcw } from "lucide-react";
+import { AlertTriangle, Check, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { clearTaskReviewDraft, useTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
 import {
@@ -150,6 +150,18 @@ export function TaskReviewRail({
             </div>
           </dl>
         </div>
+
+        {task.reviewEvidenceExceptionNote ? (
+          <UiNotice tone="warning" className="mt-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <div>
+                <div className="font-semibold">Ausnahme beim Nachweis</div>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-5">{task.reviewEvidenceExceptionNote}</p>
+              </div>
+            </div>
+          </UiNotice>
+        ) : null}
 
         {!canReview ? (
           <UiNotice tone="info" className="mt-4">

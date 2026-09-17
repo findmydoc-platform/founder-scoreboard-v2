@@ -22,6 +22,7 @@ export type TaskUpdatePayload = {
   evidenceLinks?: string[];
   note?: string;
   reviewStatus?: string;
+  evidenceExceptionNote?: string;
   scorePoints?: number;
   scoreFinal?: boolean;
   sprintId?: string;
@@ -121,6 +122,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
     fixedDate: patch.fixedDate,
     note: patch.note,
     reviewStatus: patch.reviewStatus,
+    evidenceExceptionNote: patch.reviewEvidenceExceptionNote,
     reviewOwnerProfileId: isReviewRequest ? undefined : patch.reviewOwnerProfileId,
     scorePoints: patch.scorePoints,
     scoreFinal: isReviewRequest ? undefined : patch.scoreFinal,
