@@ -131,7 +131,9 @@ test("PATCH permits sync-only commands and keeps mode-command coupling strict", 
   assert.match(unknownField.error, /unbekannte Feld unsupportedField/);
 
   assert.equal(update.parsePlanningItemPatchPayload({ expectedUpdatedAt, sprintId: "sprint-1" }).ok, false);
-  assert.equal(update.parsePlanningItemPatchPayload({ expectedUpdatedAt, evidenceLink: "https://example.com" }).ok, false);
+  const publicEvidence = update.parsePlanningItemPatchPayload({ expectedUpdatedAt, evidenceLink: "https://example.com" });
+  assert.equal(publicEvidence.ok, true);
+  assert.deepEqual(publicEvidence.presentFields, ["evidenceLink"]);
   const internal = update.parsePlanningItemPatchPayload(
     { expectedUpdatedAt, sprintId: "sprint-1", evidenceLink: "https://example.com" },
     { allowWebhookProjectionFields: true },

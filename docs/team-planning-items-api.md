@@ -169,6 +169,28 @@ PATCH processes only properties present in the request body. Omitted properties 
 
 Strategic items accept only strategic fields. They do not accept Review, score, Evidence gates, Sprint, repository, or GitHub fields. Deliverables retain their existing Review and scoring transitions. Sub-Issues retain their separate four-state status contract and never accept Review or Nacharbeit.
 
+Moving an approved Deliverable to `Review` requires a valid HTTP(S) evidence URL. Existing manual Evidence links, the legacy `evidenceLink` field, and linked pull requests count. GitHub Issue URLs do not. A client may provide `evidenceLink` in the same PATCH as the Review status:
+
+```json
+{
+  "expectedUpdatedAt": "2026-09-17T08:30:00.000Z",
+  "status": "Review",
+  "evidenceLink": "https://example.com/release-notes"
+}
+```
+
+If no link exists, the same request must include a non-empty `evidenceExceptionNote` with at most 2,000 characters. The note is valid for that Review request only and remains visible in the Review area. A later Review request checks the evidence again.
+
+```json
+{
+  "expectedUpdatedAt": "2026-09-17T08:30:00.000Z",
+  "status": "Review",
+  "evidenceExceptionNote": "The result was accepted in the founder meeting on 17 September 2026."
+}
+```
+
+Preview reports a missing link or note as a validation error. Commit repeats the check atomically. If evidence disappears between Preview and Commit, Commit returns `409 Conflict` with the same corrective message.
+
 ## Directed dependencies
 
 Dependency changes use the existing update preview and commit endpoints and require `write:planning-items:update`. A dependency command must be the only patch field besides `expectedUpdatedAt`. Its direction is relative to the item ID in the request path.

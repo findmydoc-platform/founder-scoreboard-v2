@@ -37,6 +37,7 @@ export type ReviewTaskProjection = Readonly<{
   reviewStatus: string;
   reviewOwnerProfileId: string;
   reviewRequestedAt: string;
+  reviewEvidenceExceptionNote: string;
   scorePoints: number;
   scoreFinal: boolean;
   githubIssueSyncStatus: string;
@@ -79,6 +80,7 @@ type ReviewTaskState = Readonly<{
   reviewStatus: string;
   reviewOwnerProfileId: string;
   reviewRequestedAt: string;
+  reviewEvidenceExceptionNote: string;
   scorePoints: number;
   scoreFinal: boolean;
   sprintId: string;
@@ -95,6 +97,7 @@ export type PlanningReviewState = Readonly<{
   defaultReviewerProfileId: string;
   defaultReviewerContributor: boolean;
   sprintLocked: boolean;
+  hasValidEvidence: boolean;
 }>;
 
 type NotificationPayload = ReturnType<typeof createNotificationPayload>;
@@ -109,6 +112,8 @@ export type PlanningReviewCommitPlan = Readonly<{
   checklist: PlanningReviewChecklist;
   points: number;
   reason: string;
+  evidenceLinks: readonly string[];
+  evidenceExceptionNote: string;
   activityMessages: readonly string[];
   notifications: readonly NotificationPayload[];
   auditAfterData: Readonly<Record<string, unknown>>;
@@ -136,6 +141,21 @@ function text(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
+function evidenceLinks(value: unknown): readonly string[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 20) return null;
+  const normalized = value.map((candidate) => text(candidate, 2_048));
+  if (normalized.some((candidate) => {
+    try {
+      const url = new URL(candidate);
+      return url.protocol !== "http:" && url.protocol !== "https:";
+    } catch {
+      return true;
+    }
+  })) return null;
+  return [...new Map(normalized.map((candidate) => [candidate.toLowerCase(), candidate])).values()];
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -158,21 +178,27 @@ export function isPlanningReviewRequestPayload(payload: unknown) {
 }
 
 export function parsePlanningReviewRequestPayload(payload: unknown):
-  | Readonly<{ ok: true; value: { expectedUpdatedAt: string; reviewerProfileId: string } }>
+  | Readonly<{ ok: true; value: { expectedUpdatedAt: string; reviewerProfileId: string; evidenceLinks: readonly string[]; evidenceExceptionNote: string } }>
   | Readonly<{ ok: false; error: string; status: number }> {
   const row = record(payload);
   if (!row || !validTimestamp(row.expectedUpdatedAt)) {
     return { ok: false, error: "Aktueller Aufgabenstand ist erforderlich.", status: 400 };
   }
-  const supported = new Set(["expectedUpdatedAt", "status", "reviewStatus", "reviewOwnerProfileId", "scoreFinal"]);
+  const supported = new Set(["expectedUpdatedAt", "status", "reviewStatus", "reviewOwnerProfileId", "scoreFinal", "evidenceLinks", "evidenceExceptionNote"]);
   if (Object.keys(row).some((key) => !supported.has(key))) {
     return { ok: false, error: "Gib die Review-Anfrage getrennt von weiteren Änderungen ab.", status: 409 };
+  }
+  const normalizedEvidenceLinks = evidenceLinks(row.evidenceLinks);
+  if (!normalizedEvidenceLinks) {
+    return { ok: false, error: "Evidence-Links müssen gültige HTTP- oder HTTPS-URLs sein.", status: 400 };
   }
   return {
     ok: true,
     value: {
       expectedUpdatedAt: row.expectedUpdatedAt,
       reviewerProfileId: text(row.reviewOwnerProfileId, 240),
+      evidenceLinks: normalizedEvidenceLinks,
+      evidenceExceptionNote: text(row.evidenceExceptionNote, 2_000),
     },
   };
 }
@@ -211,17 +237,30 @@ export function parsePlanningReviewWithdrawPayload(payload: unknown):
 }
 
 export function parsePlanningReviewReopenPayload(payload: unknown):
-  | Readonly<{ ok: true; value: { expectedUpdatedAt: string } }>
+  | Readonly<{ ok: true; value: { expectedUpdatedAt: string; evidenceLinks: readonly string[]; evidenceExceptionNote: string } }>
   | Readonly<{ ok: false; error: string }> {
   const row = record(payload);
-  return validTimestamp(row?.expectedUpdatedAt)
-    ? { ok: true, value: { expectedUpdatedAt: row.expectedUpdatedAt } }
-    : { ok: false, error: "Aktueller Aufgabenstand ist erforderlich." };
+  if (!validTimestamp(row?.expectedUpdatedAt)) return { ok: false, error: "Aktueller Aufgabenstand ist erforderlich." };
+  const normalizedEvidenceLinks = evidenceLinks(row?.evidenceLinks);
+  if (!normalizedEvidenceLinks) return { ok: false, error: "Evidence-Links müssen gültige HTTP- oder HTTPS-URLs sein." };
+  return {
+    ok: true,
+    value: {
+      expectedUpdatedAt: row.expectedUpdatedAt,
+      evidenceLinks: normalizedEvidenceLinks,
+      evidenceExceptionNote: text(row?.evidenceExceptionNote, 2_000),
+    },
+  };
 }
 
 export function requestPlanningReviewCommand(
   itemId: string,
-  input: { expectedUpdatedAt: string; reviewerProfileId?: string },
+  input: {
+    expectedUpdatedAt: string;
+    reviewerProfileId?: string;
+    evidenceLinks?: readonly string[];
+    evidenceExceptionNote?: string;
+  },
 ): ActOnItem {
   return {
     kind: "actOnItem",
@@ -230,6 +269,8 @@ export function requestPlanningReviewCommand(
       itemId,
       expectedRevision: input.expectedUpdatedAt,
       ...(input.reviewerProfileId ? { reviewerProfileId: input.reviewerProfileId } : {}),
+      ...(input.evidenceLinks?.length ? { evidenceLinks: input.evidenceLinks } : {}),
+      ...(input.evidenceExceptionNote ? { evidenceExceptionNote: input.evidenceExceptionNote } : {}),
     },
   };
 }
@@ -263,10 +304,20 @@ export function withdrawPlanningReviewCommand(itemId: string, expectedUpdatedAt:
   };
 }
 
-export function reopenPlanningReviewCommand(itemId: string, expectedUpdatedAt: string): ActOnItem {
+export function reopenPlanningReviewCommand(
+  itemId: string,
+  expectedUpdatedAt: string,
+  input: { evidenceLinks?: readonly string[]; evidenceExceptionNote?: string } = {},
+): ActOnItem {
   return {
     kind: "actOnItem",
-    action: { kind: "reopenReview", itemId, expectedRevision: expectedUpdatedAt },
+    action: {
+      kind: "reopenReview",
+      itemId,
+      expectedRevision: expectedUpdatedAt,
+      ...(input.evidenceLinks?.length ? { evidenceLinks: input.evidenceLinks } : {}),
+      ...(input.evidenceExceptionNote ? { evidenceExceptionNote: input.evidenceExceptionNote } : {}),
+    },
   };
 }
 
@@ -303,6 +354,7 @@ function projectedTask(task: ReviewTaskState, overrides: Partial<ReviewTaskProje
     reviewStatus: task.reviewStatus,
     reviewOwnerProfileId: task.reviewOwnerProfileId,
     reviewRequestedAt: task.reviewRequestedAt,
+    reviewEvidenceExceptionNote: task.reviewEvidenceExceptionNote,
     scorePoints: task.scorePoints,
     scoreFinal: task.scoreFinal,
     githubIssueSyncStatus: task.githubIssueSyncStatus,
@@ -360,6 +412,11 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
       : state.defaultReviewerContributor;
     if (!reviewerProfileId) return { ok: false as const, error: conflict("reviewerRequired") };
     if (!reviewerContributor) return { ok: false as const, error: conflict("reviewerInvalid") };
+    const providedEvidenceLinks = action.evidenceLinks || [];
+    const evidenceExceptionNote = text(action.evidenceExceptionNote, 2_000);
+    if (!state.hasValidEvidence && !providedEvidenceLinks.length && !evidenceExceptionNote) {
+      return { ok: false as const, error: conflict("evidenceRequired") };
+    }
     const notifications = [createNotificationPayload("task.review_requested", {
       actorProfileId: actor.profileId,
       recipientProfileId: reviewerProfileId,
@@ -373,6 +430,7 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
       reviewStatus: "requested",
       reviewOwnerProfileId: reviewerProfileId,
       reviewRequestedAt: "",
+      reviewEvidenceExceptionNote: state.hasValidEvidence || providedEvidenceLinks.length ? "" : evidenceExceptionNote,
       scorePoints: 0,
       scoreFinal: false,
       githubIssueSyncStatus: "not_synced",
@@ -391,12 +449,21 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
         checklist: emptyChecklist,
         points: 0,
         reason: "",
+        evidenceLinks: providedEvidenceLinks,
+        evidenceExceptionNote: state.hasValidEvidence || providedEvidenceLinks.length ? "" : evidenceExceptionNote,
         activityMessages: [
           ...(task.status === "Review" ? [] : [`Status geändert: ${task.status} → Review`]),
           ...(task.reviewStatus === "requested" ? [] : [`Review geändert: ${task.reviewStatus} → requested`]),
         ],
         notifications,
-        auditAfterData: { status: "Review", reviewStatus: "requested", scoreFinal: false, reviewOwnerProfileId: reviewerProfileId },
+        auditAfterData: {
+          status: "Review",
+          reviewStatus: "requested",
+          scoreFinal: false,
+          reviewOwnerProfileId: reviewerProfileId,
+          evidencePresent: state.hasValidEvidence || providedEvidenceLinks.length > 0,
+          ...(state.hasValidEvidence || providedEvidenceLinks.length ? {} : { evidenceExceptionNote }),
+        },
         originalTask: before,
         projectedTask: after,
       },
@@ -432,6 +499,7 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
       status: next.status,
       reviewStatus: action.decision,
       reviewRequestedAt: "",
+      reviewEvidenceExceptionNote: "",
       scorePoints: points,
       scoreFinal: next.scoreFinal,
       githubIssueSyncStatus: "not_synced",
@@ -450,6 +518,8 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
         checklist: action.checklist,
         points,
         reason: "",
+        evidenceLinks: [],
+        evidenceExceptionNote: "",
         activityMessages: [rework
           ? `${reviewDecisionLabels[action.decision]} angefordert: ${action.note || "ohne Kommentar"}`
           : `Review finalisiert: ${reviewDecisionLabels[action.decision]}, ${points} Punkte`],
@@ -481,6 +551,7 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
       status: "In Arbeit",
       reviewStatus: "not_requested",
       reviewRequestedAt: "",
+      reviewEvidenceExceptionNote: "",
       scorePoints: 0,
       scoreFinal: false,
       githubIssueSyncStatus: "not_synced",
@@ -499,6 +570,8 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
         checklist: emptyChecklist,
         points: 0,
         reason: action.reason,
+        evidenceLinks: [],
+        evidenceExceptionNote: "",
         activityMessages: [`Review zurückgezogen: ${action.reason}`],
         notifications,
         auditAfterData: { status: "In Arbeit", reviewStatus: "not_requested", scoreFinal: false, reason: action.reason },
@@ -516,6 +589,11 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
     return { ok: false as const, error: { code: "forbidden", reason: "planningReviewReopenForbidden" } as PlanningError };
   }
   if (state.sprintLocked) return { ok: false as const, error: conflict("sprintLocked") };
+  const providedEvidenceLinks = action.evidenceLinks || [];
+  const evidenceExceptionNote = text(action.evidenceExceptionNote, 2_000);
+  if (!state.hasValidEvidence && !providedEvidenceLinks.length && !evidenceExceptionNote) {
+    return { ok: false as const, error: conflict("evidenceRequired") };
+  }
   const assignee = task.assignee || task.owner;
   const notifications = [createNotificationPayload("task.review_requested", {
     actorProfileId: actor.profileId,
@@ -539,6 +617,7 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
     status: "Review",
     reviewStatus: "requested",
     reviewRequestedAt: "",
+    reviewEvidenceExceptionNote: state.hasValidEvidence || providedEvidenceLinks.length ? "" : evidenceExceptionNote,
     scorePoints: 0,
     scoreFinal: false,
     githubIssueSyncStatus: "not_synced",
@@ -557,9 +636,18 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
       checklist: emptyChecklist,
       points: 0,
       reason: "",
+      evidenceLinks: providedEvidenceLinks,
+      evidenceExceptionNote: state.hasValidEvidence || providedEvidenceLinks.length ? "" : evidenceExceptionNote,
       activityMessages: ["Review wieder geöffnet"],
       notifications,
-      auditAfterData: { status: "Review", reviewStatus: "requested", scoreFinal: false, reviewOwnerProfileId: task.reviewOwnerProfileId },
+      auditAfterData: {
+        status: "Review",
+        reviewStatus: "requested",
+        scoreFinal: false,
+        reviewOwnerProfileId: task.reviewOwnerProfileId,
+        evidencePresent: state.hasValidEvidence || providedEvidenceLinks.length > 0,
+        ...(state.hasValidEvidence || providedEvidenceLinks.length ? {} : { evidenceExceptionNote }),
+      },
       originalTask: before,
       projectedTask: after,
     },
@@ -600,6 +688,7 @@ function taskState(value: unknown): ReviewTaskState | null {
     reviewStatus: String(row.review_status || "not_requested"),
     reviewOwnerProfileId: String(row.review_owner_profile_id || ""),
     reviewRequestedAt: String(row.review_requested_at || ""),
+    reviewEvidenceExceptionNote: String(row.review_evidence_exception_note || ""),
     scorePoints: Number(row.score_points || 0),
     scoreFinal: Boolean(row.score_final),
     sprintId: String(row.sprint_id || ""),
@@ -622,6 +711,7 @@ function preparationState(value: unknown): PlanningReviewState | null {
     defaultReviewerProfileId: String(defaultReviewer?.id || ""),
     defaultReviewerContributor: Boolean(defaultReviewer?.contributor),
     sprintLocked: Boolean(row.sprintLocked),
+    hasValidEvidence: Boolean(row.hasValidEvidence),
   };
 }
 
@@ -640,7 +730,10 @@ async function prepareReview(
     p_actor_profile_id: request.actor.profileId,
   });
   if (result.error) return { data: null, error: result.error };
-  const state = preparationState(result.data);
+  const evidenceResult = await supabase.rpc("has_valid_planning_review_evidence", { p_task_id: action.itemId });
+  if (evidenceResult.error) return { data: null, error: evidenceResult.error };
+  const prepared = record(result.data);
+  const state = preparationState(prepared ? { ...prepared, hasValidEvidence: Boolean(evidenceResult.data) } : null);
   return state
     ? { data: { kind: "state", state }, error: null }
     : { data: null, error: new Error("Invalid planning review state") };
@@ -655,6 +748,7 @@ function providerError(code: string, request: PlanningCommitRequest<PlanningRevi
   if (code === "P0007") return { ok: false, error: conflict("reviewerInvalid") };
   if (code === "P0010") return { ok: false, error: conflict("trashed") };
   if (code === "P0016") return { ok: false, error: conflict("completed") };
+  if (code === "P0017") return { ok: false, error: conflict("evidenceRequired") };
   if (code === "22023" || code === "23514") return { ok: false, error: invalid("invalidPlanningReview") };
   return null;
 }
@@ -699,7 +793,7 @@ async function commitReview(
   supabase: PlanningSupabase,
   request: PlanningCommitRequest<PlanningReviewCommitPlan>,
 ): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
-  const result = await supabase.rpc("mutate_planning_review_command_transaction", {
+  const result = await supabase.rpc("mutate_planning_review_command_transaction_v2", {
     p_action: request.plan.action,
     p_task_id: request.plan.taskId,
     p_expected_updated_at: request.plan.expectedRevision,
@@ -710,6 +804,8 @@ async function commitReview(
     p_checklist: request.plan.checklist,
     p_points: request.plan.points,
     p_reason: request.plan.reason || null,
+    p_evidence_links: request.plan.evidenceLinks,
+    p_evidence_exception_note: request.plan.evidenceExceptionNote || null,
     p_activity_messages: request.plan.activityMessages,
     p_notifications: request.plan.notifications,
     p_audit_after_data: request.plan.auditAfterData,
@@ -793,6 +889,7 @@ export function planningReviewError(error: PlanningError, action: "request" | "d
     if (reason === "sprintLocked") return { message: "Sprint-Score ist bereits gelockt.", status: 409 };
     if (reason === "reviewerRequired") return { message: action === "reopen" ? "Lege vor dem erneuten Review eine Review-Verantwortung fest." : "Lege vor der Review-Anfrage eine Review-Verantwortung fest.", status: 409 };
     if (reason === "reviewerInvalid") return { message: "Die Review-Verantwortung braucht eine beitragende Rolle.", status: 409 };
+    if (reason === "evidenceRequired") return { message: "Ergänze vor der Review-Anfrage einen Evidence-Link oder dokumentiere das Ergebnis ohne Link.", status: 409 };
     if (reason === "finalReview") return { message: "Final bewertete Aufgaben müssen über „Review erneut öffnen“ zurück in Review gegeben werden.", status: 409 };
     if (reason === "notFinal") return { message: "Nur ein final akzeptiertes Review kann erneut geöffnet werden.", status: 409 };
     if (reason === "notActive" || reason === "activeReview") {

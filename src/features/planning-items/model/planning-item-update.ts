@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { AuthenticatedProfile, Task } from "@/lib/types";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import {
+  storedReviewEvidenceIsValid,
+  validReviewEvidenceUrl,
+} from "@/features/reviews/model/review-evidence";
 import type { getServerSupabase } from "@/lib/supabase";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { isOperationalLeadRole } from "@/lib/platform";
@@ -46,7 +50,7 @@ type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 type UnknownRecord = Record<string, unknown>;
 type DatabaseRow = Record<string, unknown>;
 export type PlanningItemReplayType = TeamPlanningItemType;
-type PlanningItemPatchField = TeamPlanningItemPatchField | "evidenceLink" | "sprintId";
+type PlanningItemPatchField = TeamPlanningItemPatchField | "sprintId";
 
 type StrategyRow = {
   task_id: string;
@@ -63,7 +67,7 @@ type RaciRow = {
 };
 
 type TargetLoadResult =
-  | { ok: true; itemType: TeamPlanningItemType; row: DatabaseRow; strategy?: StrategyRow; raciAssignments: RaciRow[] }
+  | { ok: true; itemType: TeamPlanningItemType; row: DatabaseRow; strategy?: StrategyRow; raciAssignments: RaciRow[]; hasValidReviewEvidence: boolean }
   | { ok: false; status: 404; error: string };
 
 export type PlanningItemSystemEffect = {
@@ -107,6 +111,7 @@ const fieldsByType: Record<TeamPlanningItemType, Set<PlanningItemPatchField>> = 
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
     "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "priority", "workstream", "fixedDate",
     "hours", "evidenceLink", "sprintId", "status",
+    "evidenceExceptionNote",
   ]),
   sub_issue: new Set([
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
@@ -246,6 +251,7 @@ function publicTask(row: DatabaseRow): UnknownRecord {
     reviewStatus: itemType === "deliverable" ? String(row.review_status || "not_requested") : "not_requested",
     reviewOwnerProfileId: itemType === "deliverable" ? String(row.review_owner_profile_id || "") : "",
     reviewRequestedAt: itemType === "deliverable" ? String(row.review_requested_at || "") : "",
+    evidenceExceptionNote: itemType === "deliverable" ? String(row.review_evidence_exception_note || "") : "",
     scorePoints: itemType === "deliverable" ? Number(row.score_points || 0) : 0,
     scoreFinal: itemType === "deliverable" && Boolean(row.score_final),
     scoreRelevant: itemType === "deliverable" && Boolean(row.score_relevant),
@@ -341,20 +347,42 @@ export async function loadPlanningItemUpdateTarget(
 ): Promise<TargetLoadResult> {
   const taskResult = await supabase
     .from(ACTIVE_TASKS_TABLE)
-    .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,fixed_date,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
+    .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,fixed_date,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,review_evidence_exception_note,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
     .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID)
     .eq("id", itemId)
     .maybeSingle();
   if (taskResult.error) throw new Error(taskResult.error.message);
   if (!taskResult.data) return { ok: false, status: 404, error: "Planungselement wurde nicht gefunden oder ist im Papierkorb." };
   const itemType = taskTypeFromRow(taskResult.data as DatabaseRow);
-  if (itemType !== "initiative") return { ok: true, itemType, row: taskResult.data as DatabaseRow, raciAssignments: [] };
+  if (itemType === "deliverable") {
+    const linksResult = await supabase
+      .from("task_links")
+      .select("id,type,url,metadata")
+      .eq("task_id", itemId)
+      .in("type", ["evidence", "github_pull_request"]);
+    if (linksResult.error) throw new Error(linksResult.error.message);
+    return {
+      ok: true,
+      itemType,
+      row: taskResult.data as DatabaseRow,
+      raciAssignments: [],
+      hasValidReviewEvidence: storedReviewEvidenceIsValid(
+        String(taskResult.data.evidence_link || ""),
+        (linksResult.data || []).map((link) => ({
+          type: String(link.type || ""),
+          url: String(link.url || ""),
+          metadata: link.metadata,
+        })),
+      ),
+    };
+  }
+  if (itemType !== "initiative") return { ok: true, itemType, row: taskResult.data as DatabaseRow, raciAssignments: [], hasValidReviewEvidence: false };
   const [strategyResult, raciResult] = await Promise.all([
     supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").eq("task_id", itemId).maybeSingle<StrategyRow>(),
     supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").eq("task_id", itemId).order("sort_order").returns<RaciRow[]>(),
   ]);
   if (strategyResult.error || raciResult.error) throw new Error(strategyResult.error?.message || raciResult.error?.message || "Initiative konnte nicht geladen werden.");
-  return { ok: true, itemType, row: taskResult.data as DatabaseRow, strategy: strategyResult.data || undefined, raciAssignments: raciResult.data || [] };
+  return { ok: true, itemType, row: taskResult.data as DatabaseRow, strategy: strategyResult.data || undefined, raciAssignments: raciResult.data || [], hasValidReviewEvidence: false };
 }
 
 function appendSystemEffect(effects: PlanningItemSystemEffect[], field: string, before: unknown, after: unknown, reason: string) {
@@ -384,7 +412,11 @@ function validatePermission(actor: AuthenticatedProfile, itemType: TeamPlanningI
   });
   const briefFields = presentFields.filter((field) => founderTaskBriefFields.has(field));
   if (briefFields.length && !permissions.canEditBrief) errors.push("Founder können den Aufgabenbrief nur bei eigenen oder zugewiesenen Aufgaben bearbeiten.");
-  const protectedFields = presentFields.filter((field) => !founderTaskBriefFields.has(field) && field !== "parentTaskId" && field !== "status");
+  const protectedFields = presentFields.filter((field) => !founderTaskBriefFields.has(field)
+    && field !== "parentTaskId"
+    && field !== "status"
+    && field !== "evidenceLink"
+    && field !== "evidenceExceptionNote");
   if (protectedFields.length) errors.push(`Diese Aufgabenfelder sind geschützt: ${protectedFields.join(", ")}.`);
   if (presentFields.includes("parentTaskId") && !permissions.canReparentSubIssue) errors.push("Dieses Sub-Issue darf nur von CEO, Deputy oder der aktuellen Zuständigkeit verschoben werden.");
   return errors;
@@ -409,6 +441,7 @@ function normalizePatch(raw: UnknownRecord, presentFields: PlanningItemPatchFiel
       case "evidenceRequired":
       case "evidenceLink":
       case "definitionOfDone": result = normalizePatchText(value, 4_000); break;
+      case "evidenceExceptionNote": result = normalizePatchText(value, 2_000); break;
       case "acceptanceCriteria": result = normalizePatchAcceptanceCriteria(value); break;
       case "priority": result = normalizePatchPriority(value); break;
       case "status": {
@@ -595,6 +628,9 @@ export async function buildPlanningItemUpdatePreview({
   };
   const changedFields = parsed.presentFields.filter((field) => fieldChanged(field) || (field === "status" && rewritesLegacySubIssueStatus));
   const statusChanged = changedFields.includes("status") && (target.itemType === "deliverable" || target.itemType === "sub_issue");
+  if (changedFields.includes("evidenceExceptionNote") && normalizedPatch.status !== "Review") {
+    errors.push("evidenceExceptionNote ist nur zusammen mit dem Status Review zulässig.");
+  }
   const taskUpdateRequested = (target.itemType === "deliverable" || target.itemType === "sub_issue") && changedFields.length > 0;
   const completedReopen = statusChanged
     && changedFields.length === 1
@@ -695,6 +731,12 @@ export async function buildPlanningItemUpdatePreview({
     if (target.itemType === "deliverable" && startsTaskReviewRequest(statusPayload)) {
       if (target.row.approval_status !== "approved") errors.push("Nur freigegebene Deliverables können in Review gegeben werden.");
       if (target.row.score_final) errors.push("Final bewertete Aufgaben müssen über „Review erneut öffnen“ zurück in Review gegeben werden.");
+      const evidenceExceptionNote = String(normalizedPatch.evidenceExceptionNote || "").trim();
+      const hasValidReviewEvidence = target.hasValidReviewEvidence
+        || validReviewEvidenceUrl(String(normalizedPatch.evidenceLink || ""));
+      if (!hasValidReviewEvidence && !evidenceExceptionNote) {
+        errors.push("Ergänze vor der Review-Anfrage einen Evidence-Link oder dokumentiere das Ergebnis ohne Link.");
+      }
       const sprint = sprints.get(String(target.row.sprint_id || ""));
       if (sprint?.score_locked) errors.push("Sprint-Score ist bereits gelockt.");
 
@@ -723,6 +765,16 @@ export async function buildPlanningItemUpdatePreview({
         resultingItem.scoreFinal = false;
         resultingItem.reviewOwnerProfileId = reviewOwnerProfileId;
         resultingItem.reviewRequestedAt = reviewRequestedAt;
+        resultingItem.evidenceExceptionNote = hasValidReviewEvidence ? "" : evidenceExceptionNote;
+        appendSystemEffect(
+          systemEffects,
+          "evidenceExceptionNote",
+          currentItem.evidenceExceptionNote,
+          resultingItem.evidenceExceptionNote,
+          hasValidReviewEvidence
+            ? "Vorhandener Nachweis macht eine Ausnahmebegründung überflüssig."
+            : "Review ohne Link braucht eine bestätigte Ausnahmebegründung.",
+        );
         systemEffects.push({
           field: "notification",
           before: null,
@@ -900,6 +952,7 @@ function reviseError(error: unknown): PlanningError {
   if (code === "P0010") return { code: "conflict", reason: "state", details: { reviseState: "reviewLocked" } };
   if (code === "P0015") return { code: "conflict", reason: "state", details: { reviseState: "sprintLocked" } };
   if (code === "P0016") return { code: "conflict", reason: "state", details: { reviseState: "completedLocked" } };
+  if (code === "P0017") return { code: "invalidCommand", issues: [{ path: "command.changes.evidenceExceptionNote", reason: "reviewEvidenceRequired" }] };
   if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
   if (code === "P0006") return { code: "forbidden", reason: "reviseNotAllowed" };
   if (code === "23503" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "profileNotFound" }] };
@@ -1010,6 +1063,9 @@ function teamReviseProviderError(error: unknown): PlanningError {
   if (["P0005", "P0006", "P0007"].includes(code)) return { code: "forbidden", reason: "planningTokenRejected" };
   if (["P0008", "P0010"].includes(code)) return { code: "conflict", reason: "state" };
   if (["P0014", "P0015"].includes(code)) return { code: "conflict", reason: "state" };
+  if (code === "P0017") {
+    return { code: "conflict", reason: "state", details: { planningReviewReason: "evidenceRequired" } };
+  }
   if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
   if (["22023", "23514"].includes(code)) return { code: "invalidCommand", issues: [{ path: "command.changes", reason: "persistenceValidation" }] };
   return { code: "dependencyUnavailable", dependency: "database", retryable: true };
@@ -1111,7 +1167,7 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
       };
 
       const metadata = invocation.requestMetadata;
-      const { data, error } = await dependencies.supabase.rpc("update_team_planning_item_with_projection_transaction", {
+      const { data, error } = await dependencies.supabase.rpc("update_team_planning_item_with_review_evidence_transaction_v1", {
         p_token_id: dependencies.tokenId,
         p_profile_id: invocation.actor.profileId,
         p_item_type: preview.itemType,
@@ -1123,6 +1179,7 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
         p_changed_fields: preview.changedFields,
         p_system_effects: preview.systemEffects,
         p_projection_command: dependencies.parsed.githubSync || null,
+        p_evidence_exception_note: String(preview.normalizedPatch.evidenceExceptionNote || "") || null,
         p_request_ip: metadata?.requestIp || null,
         p_user_agent: metadata?.userAgent || null,
       });

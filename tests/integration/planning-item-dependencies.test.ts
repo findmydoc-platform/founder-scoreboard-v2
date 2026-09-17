@@ -618,7 +618,9 @@ it("keeps dependency lock and integrity guards inside the atomic API transaction
         name: "active review",
         code: "P0008",
         prepare: async () => {
-          await client.query("update public.tasks set review_status = 'requested' where id = 'guard-source'");
+          await client.query(
+            "update public.tasks set review_status = 'requested', review_evidence_exception_note = 'Integration guard', review_evidence_exception_confirmed_at = clock_timestamp() where id = 'guard-source'",
+          );
           return addInput();
         },
       },
@@ -626,7 +628,9 @@ it("keeps dependency lock and integrity guards inside the atomic API transaction
         name: "final review",
         code: "P0008",
         prepare: async () => {
-          await client.query("update public.tasks set review_status = 'accepted', score_final = true where id = 'guard-source'");
+          await client.query(
+            "update public.tasks set review_status = 'accepted', score_final = true, review_evidence_exception_note = 'Integration guard', review_evidence_exception_confirmed_at = clock_timestamp() where id = 'guard-source'",
+          );
           return addInput();
         },
       },

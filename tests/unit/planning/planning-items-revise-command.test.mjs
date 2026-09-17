@@ -143,3 +143,59 @@ test("Team revise preserves a late inactive-token decision", async () => {
   });
   assert.deepEqual(result.error, { code: "forbidden", reason: "planningTokenInactive" });
 });
+
+test("Team revise preserves a late review-evidence conflict", async () => {
+  const model = await loadUpdateModel();
+  const query = {
+    select() { return query; },
+    eq() { return query; },
+    async maybeSingle() { return { data: null, error: null }; },
+  };
+  const supabase = {
+    from: () => query,
+    rpc: async () => ({ data: null, error: { code: "P0017", message: "review evidence is required" } }),
+  };
+  const actor = {
+    profileId: "ceo",
+    platformRole: "ceo",
+    credential: { kind: "planningToken", tokenId: "token-one", scopes: ["write:planning-items:update"] },
+  };
+  const parsed = {
+    ok: true,
+    expectedUpdatedAt: "2026-08-12T10:00:00.000Z",
+    raw: { status: "Review", evidenceExceptionNote: "Accepted without a link." },
+    githubSync: null,
+    githubSyncMode: null,
+  };
+  const preview = {
+    itemId: "deliverable-one",
+    itemType: "deliverable",
+    expectedUpdatedAt: parsed.expectedUpdatedAt,
+    currentItem: { id: "deliverable-one", status: "In Arbeit" },
+    normalizedPatch: parsed.raw,
+    resultingItem: { id: "deliverable-one", status: "Review" },
+    changedFields: ["status", "evidenceExceptionNote"],
+    systemEffects: [],
+    warnings: [],
+    errors: [],
+    dbPatch: { status: "Review" },
+  };
+  const result = await model.createTeamRevisePlanningItems({
+    supabase,
+    actor,
+    tokenId: "token-one",
+    itemId: "deliverable-one",
+    parsed,
+    preparedPreview: preview,
+  }).run({
+    actor,
+    mode: "commit",
+    command: model.planningItemReviseCommand("deliverable-one", "deliverable", parsed.expectedUpdatedAt, parsed.raw),
+    idempotencyKey: "00000000-0000-4000-8000-000000000308",
+  });
+  assert.deepEqual(result.error, {
+    code: "conflict",
+    reason: "state",
+    details: { planningReviewReason: "evidenceRequired" },
+  });
+});

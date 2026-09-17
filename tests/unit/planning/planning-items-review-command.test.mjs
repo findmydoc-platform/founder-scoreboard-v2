@@ -54,6 +54,7 @@ function task(overrides = {}) {
 
 function fixture({
   taskRow = task(),
+  hasValidEvidence = true,
   actorName = "CEO",
   reviewer = { id: "reviewer-one", contributor: true },
   defaultReviewer = reviewer,
@@ -74,6 +75,9 @@ function fixture({
     client: {
       async rpc(name, params) {
         calls.push([name, params]);
+        if (name === "has_valid_planning_review_evidence") {
+          return { data: hasValidEvidence, error: null };
+        }
         if (name === "prepare_planning_review_command") {
           return { data: { task: taskRow, actorName, reviewer, defaultReviewer, sprintLocked }, error: null };
         }
@@ -100,7 +104,21 @@ test("review transport parsers preserve validation and canonical command shapes"
   assert.equal(model.isPlanningReviewRequestPayload({ status: "Review" }), true);
   assert.deepEqual(model.parsePlanningReviewRequestPayload({ expectedUpdatedAt: revision, status: "Review", reviewStatus: "requested" }), {
     ok: true,
-    value: { expectedUpdatedAt: revision, reviewerProfileId: "" },
+    value: { expectedUpdatedAt: revision, reviewerProfileId: "", evidenceLinks: [], evidenceExceptionNote: "" },
+  });
+  assert.deepEqual(model.parsePlanningReviewRequestPayload({
+    expectedUpdatedAt: revision,
+    status: "Review",
+    evidenceLinks: ["https://example.com/evidence"],
+    evidenceExceptionNote: "Ergebnis wurde im Founder-Meeting abgenommen.",
+  }), {
+    ok: true,
+    value: {
+      expectedUpdatedAt: revision,
+      reviewerProfileId: "",
+      evidenceLinks: ["https://example.com/evidence"],
+      evidenceExceptionNote: "Ergebnis wurde im Founder-Meeting abgenommen.",
+    },
   });
   assert.equal(model.parsePlanningReviewRequestPayload({ expectedUpdatedAt: revision, status: "Review", title: "combined" }).status, 409);
   assert.equal(model.parsePlanningReviewDecisionPayload({ decision: "partial", checklist: {}, comment: "" }).error, "Kleine Nacharbeit setzt ein bis drei erfüllte Prüfpunkte voraus.");
@@ -110,9 +128,56 @@ test("review transport parsers preserve validation and canonical command shapes"
     kind: "actOnItem",
     action: { kind: "requestReview", itemId: "task-one", expectedRevision: revision },
   });
+  assert.equal(model.parsePlanningReviewReopenPayload({
+    expectedUpdatedAt: revision,
+    evidenceExceptionNote: "Erneut ohne Link geprüft.",
+  }).value.evidenceExceptionNote, "Erneut ohne Link geprüft.");
   assert.equal(model.decidePlanningReviewCommand("task-one", { decision: "accepted", comment: "", checklist }).action.kind, "decideReview");
   assert.equal(model.withdrawPlanningReviewCommand("task-one", revision, "Need work").action.reason, "Need work");
   assert.equal(model.reopenPlanningReviewCommand("task-one", revision).action.kind, "reopenReview");
+});
+
+test("review requests require current evidence or a per-request exception note", async () => {
+  const model = await loadModel();
+  const revision = "2026-08-12T13:00:00.000Z";
+  const missingEvidence = fixture({ hasValidEvidence: false });
+  const rejected = await model.createPlanningReviewPlanningItems(missingEvidence.client).run({
+    actor,
+    mode: "commit",
+    command: model.requestPlanningReviewCommand("task-one", { expectedUpdatedAt: revision }),
+  });
+  assert.equal(rejected.error.code, "conflict");
+  assert.equal(rejected.error.details.planningReviewReason, "evidenceRequired");
+  assert.equal(missingEvidence.calls.some(([name]) => name === "mutate_planning_review_command_transaction_v2"), false);
+
+  const withException = fixture({ hasValidEvidence: false });
+  const committed = await model.createPlanningReviewPlanningItems(withException.client).run({
+    actor,
+    mode: "commit",
+    command: model.requestPlanningReviewCommand("task-one", {
+      expectedUpdatedAt: revision,
+      evidenceExceptionNote: "Ergebnis wurde im Founder-Meeting abgenommen.",
+    }),
+  });
+  assert.equal(committed.status, "committed");
+  const params = withException.calls.find(([name]) => name === "mutate_planning_review_command_transaction_v2")[1];
+  assert.equal(params.p_evidence_exception_note, "Ergebnis wurde im Founder-Meeting abgenommen.");
+  assert.deepEqual(params.p_evidence_links, []);
+});
+
+test("reopening review performs a fresh evidence check", async () => {
+  const model = await loadModel();
+  const revision = "2026-08-12T13:00:00.000Z";
+  const missingEvidence = fixture({
+    hasValidEvidence: false,
+    taskRow: task({ status: "Erledigt", review_status: "accepted", score_points: 10, score_final: true }),
+  });
+  const rejected = await model.createPlanningReviewPlanningItems(missingEvidence.client).run({
+    actor,
+    mode: "commit",
+    command: model.reopenPlanningReviewCommand("task-one", revision),
+  });
+  assert.equal(rejected.error.details.planningReviewReason, "evidenceRequired");
 });
 
 test("request, decide, withdraw, and reopen share Preview policy and one atomic writer", async () => {
@@ -153,7 +218,7 @@ test("request, decide, withdraw, and reopen share Preview policy and one atomic 
     assert.equal(committed.status, "committed");
     assert.deepEqual(preview.effects.map((effect) => effect.kind), currentCase.expectedEffects);
     assert.deepEqual(committed.effects.map((effect) => effect.kind), currentCase.expectedEffects);
-    assert.equal(currentCase.current.calls.filter(([name]) => name === "mutate_planning_review_command_transaction").length, 1);
+    assert.equal(currentCase.current.calls.filter(([name]) => name === "mutate_planning_review_command_transaction_v2").length, 1);
     assert.equal(currentCase.current.calls.at(-1)[1].p_request_ip, "test-ip");
     assert.ok(model.planningReviewTaskFromResult(committed));
   }
@@ -171,7 +236,7 @@ test("review role, ownership, reviewer, lock, revision, and state boundaries fai
   assert.equal((await model.createPlanningReviewPlanningItems(allowedRequest.client).run({ actor: owner, mode: "commit", command: model.requestPlanningReviewCommand("task-one", { expectedUpdatedAt: revision }) })).status, "committed");
   const deniedRequest = fixture();
   assert.equal((await model.createPlanningReviewPlanningItems(deniedRequest.client).run({ actor: unrelated, mode: "commit", command: model.requestPlanningReviewCommand("task-one", { expectedUpdatedAt: revision }) })).error.code, "forbidden");
-  assert.equal(deniedRequest.calls.filter(([name]) => name === "mutate_planning_review_command_transaction").length, 0);
+  assert.equal(deniedRequest.calls.filter(([name]) => name === "mutate_planning_review_command_transaction_v2").length, 0);
 
   const founderReviewerOverride = fixture({
     actorName: "owner-one",
@@ -215,6 +280,6 @@ test("review role, ownership, reviewer, lock, revision, and state boundaries fai
   for (const [current, currentActor, command, code] of boundaries) {
     const result = await model.createPlanningReviewPlanningItems(current.client).run({ actor: currentActor, mode: "commit", command });
     assert.equal(result.error.code, code);
-    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_review_command_transaction").length, 0);
+    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_review_command_transaction_v2").length, 0);
   }
 });

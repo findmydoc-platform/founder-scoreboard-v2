@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FounderOps Planning Items API",
-    "version": "2.1.0",
+    "version": "2.2.0",
     "description": "Canonical personal-token API for Epic, Initiative, Deliverable, and Sub-Issue planning items. Deprecated Milestone and package aliases are rejected."
   },
   "servers": [{ "url": "https://founder-ops.findmydoc.eu" }],
@@ -135,7 +135,7 @@
         "additionalProperties": false,
         "required": ["expectedUpdatedAt"],
         "minProperties": 2,
-        "description": "A dependency command is exclusive with every other patch field except expectedUpdatedAt.",
+        "description": "A dependency command is exclusive with every other patch field except expectedUpdatedAt. Moving a Deliverable to Review requires existing valid evidence, a valid HTTP(S) evidenceLink in the same patch, or a non-empty evidenceExceptionNote.",
         "oneOf": [
           { "required": ["dependency"], "maxProperties": 2 },
           { "not": { "required": ["dependency"] } }
@@ -144,7 +144,7 @@
           "expectedUpdatedAt": { "type": "string", "format": "date-time" }, "dependency": { "$ref": "#/components/schemas/DependencyCommand" }, "githubSyncMode": { "$ref": "#/components/schemas/GitHubSyncMode" }, "githubSync": { "$ref": "#/components/schemas/GitHubSyncCommand" },
           "title": { "type": ["string", "null"] }, "description": { "type": ["string", "null"] }, "problemStatement": { "type": ["string", "null"] },
           "intendedOutcome": { "type": ["string", "null"] }, "scopeConstraints": { "type": ["string", "null"] }, "acceptanceCriteria": { "$ref": "#/components/schemas/NullableAcceptanceCriteria" },
-          "evidenceRequired": { "type": ["string", "null"] }, "definitionOfDone": { "type": ["string", "null"] }, "parentTaskId": { "type": ["string", "null"] },
+          "evidenceRequired": { "type": ["string", "null"] }, "evidenceLink": { "type": ["string", "null"], "format": "uri", "maxLength": 4000 }, "evidenceExceptionNote": { "type": ["string", "null"], "maxLength": 2000 }, "definitionOfDone": { "type": ["string", "null"] }, "parentTaskId": { "type": ["string", "null"] },
           "ownerId": { "type": ["string", "null"] }, "accountableProfileId": { "type": ["string", "null"] }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "priority": { "type": ["string", "null"], "enum": ["P0", "P1", "P2", "P3", "P4", null] }, "workstream": { "type": ["string", "null"] },

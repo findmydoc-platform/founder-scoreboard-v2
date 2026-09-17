@@ -5,6 +5,7 @@ import * as taskApi from "@/features/tasks/model/task-api-client";
 import { hasGitHubIssue } from "@/lib/platform";
 import { reviewDecisionTaskState } from "@/features/reviews/model/task-review-state";
 import type { Task, TaskReviewChecklist } from "@/lib/types";
+import type { ReviewEvidenceSubmission } from "@/features/reviews/model/review-evidence";
 
 type TaskSyncCommand = (task: Task, options?: { createIfMissing?: boolean; silent?: boolean }) => void;
 
@@ -101,7 +102,7 @@ export function useReviewCommands({
     }));
   };
 
-  const reopenReviewTask = (task: Task) => {
+  const reopenReviewTask = (task: Task, evidence: ReviewEvidenceSubmission = {}) => {
     setSaveError("");
     const previousTask = task;
     const reviewRequestedAt = new Date().toISOString();
@@ -114,7 +115,7 @@ export function useReviewCommands({
 
     return new Promise<boolean>((resolve) => startTransition(async () => {
       try {
-        const { response, body } = await taskApi.reopenTaskReviewRequest(apiClient, task.id, task.updatedAt || "");
+        const { response, body } = await taskApi.reopenTaskReviewRequest(apiClient, task.id, task.updatedAt || "", evidence);
         if (!response.ok || !body?.task) throw new Error(body?.error || "Review konnte nicht wieder geöffnet werden.");
         setData((current) => ({
           ...current,

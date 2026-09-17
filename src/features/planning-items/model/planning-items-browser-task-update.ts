@@ -93,7 +93,7 @@ const taskUpdatePayloadFields = new Set<keyof TaskUpdatePayload>([
   "expectedUpdatedAt", "title", "description", "status", "ownerId", "reviewOwnerProfileId",
   "priority", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
   "evidenceRequired", "definitionOfDone", "fixedDate", "dependsOn",
-  "evidenceLink", "evidenceLinks", "note", "reviewStatus", "scorePoints", "scoreFinal",
+  "evidenceLink", "evidenceLinks", "evidenceExceptionNote", "note", "reviewStatus", "scorePoints", "scoreFinal",
   "sprintId", "parentTaskId", "targetDate", "strategy", "raciAssignments", "selfDodChecked",
   "selfEvidenceChecked", "selfDocumentedChecked", "selfBlockersChecked",
 ]);

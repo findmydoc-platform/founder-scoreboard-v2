@@ -47,6 +47,7 @@ export type DbTask = {
   review_status: Task["reviewStatus"] | null;
   review_owner_profile_id: string | null;
   review_requested_at: string | null;
+  review_evidence_exception_note: string | null;
   score_points: number | null;
   score_final: boolean | null;
   github_repo: string | null;
@@ -142,6 +143,7 @@ export const taskRowColumns = [
   "review_status",
   "review_owner_profile_id",
   "review_requested_at",
+  "review_evidence_exception_note",
   "score_points",
   "score_final",
   "github_repo",
