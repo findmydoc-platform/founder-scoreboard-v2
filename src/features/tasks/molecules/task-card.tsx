@@ -8,10 +8,12 @@ import {
   CircleAlert,
   CircleCheck,
   CircleDot,
+  Ellipsis,
   ExternalLink,
 } from "lucide-react";
 import { useId, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { TaskChildProgress } from "@/features/tasks/atoms/task-child-progress";
+import { TaskCardSubIssueNotice } from "@/features/tasks/atoms/task-card-sub-issue-notice";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
 import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
@@ -24,6 +26,8 @@ import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
 import { CustomActionMenu } from "@/shared/molecules/custom-action-menu";
 
 const taskCardControlSelector = "a, button, input, select, textarea, [role='menuitem'], [data-task-card-interactive='true']";
+const collapsedOtherChildLimit = 10;
+const emptyTaskIds: string[] = [];
 
 function isTaskCardControlClick(event: MouseEvent<HTMLElement>) {
   return event.target instanceof Element && Boolean(event.target.closest(taskCardControlSelector));
@@ -113,16 +117,74 @@ function childStatusPresentation(status: TaskStatus) {
   };
 }
 
+function TaskCardChildItem({
+  child,
+  isViewerChild,
+  onOpenTask,
+  showDoneDivider,
+}: {
+  child: Task;
+  isViewerChild: boolean;
+  onOpenTask: (taskId: string) => void;
+  showDoneDivider: boolean;
+}) {
+  const status = normalizeStatus(child.status);
+  const isDone = status === "Erledigt";
+  const { Icon, iconClassName, labelClassName } = childStatusPresentation(status);
+
+  return (
+    <li className={showDoneDivider ? "mt-1 border-t border-slate-200 pt-1" : undefined}>
+      <TaskReferenceLink
+        task={child}
+        onOpenTask={onOpenTask}
+        showIcon={false}
+        layout="flex"
+        draggable={false}
+        onDragStart={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        aria-label={`${child.title}, Status ${status}`}
+        className={`group/direct-child min-w-0 items-center gap-2 rounded-sm px-1 py-1.5 hover:no-underline ${
+          isViewerChild
+            ? "bg-yellow-50 text-slate-800 hover:bg-yellow-100 hover:text-slate-900"
+            : isDone
+              ? "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              : "text-slate-700 hover:bg-slate-50"
+        }`}
+      >
+        <Icon size={13} className={`shrink-0 ${iconClassName}`} aria-hidden="true" />
+        <span title={child.title} className="min-w-0 flex-1 truncate text-[11px] font-medium">{child.title}</span>
+        {isViewerChild ? (
+          <span className="shrink-0 rounded-full bg-yellow-100 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-800">
+            Für dich
+          </span>
+        ) : (
+          <span className={`shrink-0 text-[10px] font-medium ${labelClassName}`}>{status}</span>
+        )}
+        <ChevronRight
+          size={13}
+          className="shrink-0 text-slate-300 transition group-hover/direct-child:text-blue-500"
+          aria-hidden="true"
+        />
+      </TaskReferenceLink>
+    </li>
+  );
+}
+
 function TaskCardChildRollup({
   task,
   childItems,
   onOpenTask,
+  viewerOpenSubIssueIds,
 }: {
   task: Task;
   childItems: Task[];
   onOpenTask: (taskId: string) => void;
+  viewerOpenSubIssueIds: string[];
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showAllOtherChildren, setShowAllOtherChildren] = useState(false);
   const generatedId = useId().replaceAll(":", "");
   const listId = `task-card-children-${generatedId}`;
   const { completed, percentage, total, unfinished } = taskChildProgress(childItems);
@@ -134,6 +196,13 @@ function TaskCardChildRollup({
     if (firstDone !== secondDone) return firstDone ? 1 : -1;
     return first.order - second.order;
   });
+  const viewerOpenSubIssueIdSet = new Set(viewerOpenSubIssueIds);
+  const viewerChildren = sortedChildren.filter((child) => viewerOpenSubIssueIdSet.has(child.id));
+  const otherChildren = sortedChildren.filter((child) => !viewerOpenSubIssueIdSet.has(child.id));
+  const visibleOtherChildren = showAllOtherChildren
+    ? otherChildren
+    : otherChildren.slice(0, collapsedOtherChildLimit);
+  const hiddenOtherChildCount = otherChildren.length - visibleOtherChildren.length;
 
   if (!total) return null;
 
@@ -152,7 +221,10 @@ function TaskCardChildRollup({
         aria-expanded={isExpanded}
         aria-controls={listId}
         aria-label={`${plural} ${isExpanded ? "einklappen" : "anzeigen"}: ${unfinished} offen, ${completed} erledigt`}
-        onClick={() => setIsExpanded((current) => !current)}
+        onClick={() => {
+          setIsExpanded((current) => !current);
+          if (isExpanded) setShowAllOtherChildren(false);
+        }}
         onDragStart={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -174,45 +246,67 @@ function TaskCardChildRollup({
       </button>
       {isExpanded && (
         <ul id={listId} className="mt-1">
-          {sortedChildren.map((child, index) => {
-            const status = normalizeStatus(child.status);
-            const isDone = status === "Erledigt";
-            const previousStatus = index > 0 ? normalizeStatus(sortedChildren[index - 1].status) : null;
-            const showDoneDivider = isDone && previousStatus !== "Erledigt";
-            const { Icon, iconClassName, labelClassName } = childStatusPresentation(status);
+          {viewerChildren.length > 0 ? (
+            <li className="px-1 pb-1 pt-1.5 text-[11px] font-semibold text-slate-800">
+              Für dich ({viewerChildren.length})
+            </li>
+          ) : null}
+          {(viewerChildren.length > 0 ? viewerChildren : sortedChildren).map((child, index) => {
+            const renderedChildren = viewerChildren.length > 0 ? viewerChildren : sortedChildren;
+            const previousStatus = index > 0 ? normalizeStatus(renderedChildren[index - 1].status) : null;
+            const isViewerChild = viewerOpenSubIssueIdSet.has(child.id);
 
             return (
-              <li
+              <TaskCardChildItem
                 key={child.id}
-                className={showDoneDivider ? "mt-1 border-t border-slate-200 pt-1" : undefined}
-              >
-                <TaskReferenceLink
-                  task={child}
-                  onOpenTask={onOpenTask}
-                  showIcon={false}
-                  layout="flex"
-                  draggable={false}
-                  onDragStart={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                  aria-label={`${child.title}, Status ${status}`}
-                  className={`group/direct-child min-w-0 items-center gap-2 rounded-sm px-1 py-1.5 hover:bg-slate-50 hover:no-underline ${
-                    isDone ? "text-slate-400 hover:text-slate-600" : "text-slate-700"
-                  }`}
-                >
-                  <Icon size={13} className={`shrink-0 ${iconClassName}`} aria-hidden="true" />
-                  <span title={child.title} className="min-w-0 flex-1 truncate text-[11px] font-medium">{child.title}</span>
-                  <span className={`shrink-0 text-[10px] font-medium ${labelClassName}`}>{status}</span>
-                  <ChevronRight
-                    size={13}
-                    className="shrink-0 text-slate-300 transition group-hover/direct-child:text-blue-500"
-                    aria-hidden="true"
-                  />
-                </TaskReferenceLink>
-              </li>
+                child={child}
+                isViewerChild={isViewerChild}
+                onOpenTask={onOpenTask}
+                showDoneDivider={normalizeStatus(child.status) === "Erledigt" && previousStatus !== "Erledigt"}
+              />
             );
           })}
+          {viewerChildren.length > 0 && otherChildren.length > 0 ? (
+            <li className="mt-1 border-t border-slate-200 px-1 pb-1 pt-2 text-[11px] font-semibold text-slate-800">
+              Weitere Sub-Issues ({otherChildren.length})
+            </li>
+          ) : null}
+          {viewerChildren.length > 0 ? visibleOtherChildren.map((child, index) => {
+            const previousStatus = index > 0 ? normalizeStatus(visibleOtherChildren[index - 1].status) : null;
+
+            return (
+              <TaskCardChildItem
+                key={child.id}
+                child={child}
+                isViewerChild={false}
+                onOpenTask={onOpenTask}
+                showDoneDivider={normalizeStatus(child.status) === "Erledigt" && previousStatus !== "Erledigt"}
+              />
+            );
+          }) : null}
+          {viewerChildren.length > 0 && otherChildren.length > collapsedOtherChildLimit ? (
+            <li className="mt-1">
+              <button
+                type="button"
+                aria-expanded={showAllOtherChildren}
+                aria-label={showAllOtherChildren
+                  ? "Weitere Sub-Issues ausblenden"
+                  : `Weitere ${hiddenOtherChildCount} Sub-Issues anzeigen`}
+                onClick={() => setShowAllOtherChildren((current) => !current)}
+                className="flex min-h-7 w-full items-center gap-2 rounded-sm px-1 py-1.5 text-left font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                <Ellipsis size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-[10px]">
+                  {showAllOtherChildren ? "Weniger Sub-Issues anzeigen" : `Weitere ${hiddenOtherChildCount} Sub-Issues`}
+                </span>
+                {showAllOtherChildren ? (
+                  <ChevronUp size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+                ) : (
+                  <ChevronRight size={13} className="shrink-0 text-slate-300" aria-hidden="true" />
+                )}
+              </button>
+            </li>
+          ) : null}
         </ul>
       )}
     </div>
@@ -353,6 +447,7 @@ export function TaskCard({
   onDragStart,
   onDragEnd,
   statusOptions,
+  viewerOpenSubIssueIds = emptyTaskIds,
   showParentContext = false,
   isSelected = false,
   isDragging,
@@ -369,6 +464,7 @@ export function TaskCard({
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
   onDragEnd?: () => void;
   statusOptions?: TaskStatus[];
+  viewerOpenSubIssueIds?: string[];
   showParentContext?: boolean;
   isSelected?: boolean;
   isDragging?: boolean;
@@ -401,6 +497,7 @@ export function TaskCard({
       } ${isSelected ? "border-blue-200 opacity-75 ring-1 ring-blue-200" : "border-slate-200"} rounded-md border-l-4 shadow-[0_1px_2px_rgba(15,23,42,0.06)]`}
       style={{ borderLeftColor: ownerColor }}
     >
+      <TaskCardSubIssueNotice count={viewerOpenSubIssueIds.length} />
       <TaskReferenceLink
         task={task}
         onOpenTask={onOpenTask}
@@ -427,7 +524,12 @@ export function TaskCard({
         )}
         <TaskCardRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} maxVisible={2} />
       </div>
-      <TaskCardChildRollup task={task} childItems={directChildren} onOpenTask={onOpenTask} />
+      <TaskCardChildRollup
+        task={task}
+        childItems={directChildren}
+        onOpenTask={onOpenTask}
+        viewerOpenSubIssueIds={viewerOpenSubIssueIds}
+      />
       <div className="mt-3 flex min-w-0 items-center justify-between gap-2 text-xs text-slate-500">
         <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: ownerColor }} />

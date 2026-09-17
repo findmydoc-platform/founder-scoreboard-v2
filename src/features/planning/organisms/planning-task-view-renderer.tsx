@@ -35,6 +35,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     toggleInitiativeCollapse,
     updateTask,
     view,
+    viewerOpenSubIssueIdsByDeliverableId,
     visibleTasks,
   } = controller;
 
@@ -92,6 +93,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
             onDragStart={startTaskDrag}
             onDragEnd={endTaskDrag}
             statusOptionsForTask={statusOptionsForTask}
+            viewerOpenSubIssueIdsByDeliverableId={viewerOpenSubIssueIdsByDeliverableId}
             showParentContext={parentFilterId === "all" && planningLevel !== "epic"}
           />
         </div>

@@ -277,6 +277,7 @@ export function usePlanningAppController({
     taskDialogDefaults,
     toggleFocusMode,
     view,
+    viewerOpenSubIssueIdsByDeliverableId: derivedState.viewerOpenSubIssueIdsByDeliverableId,
     visibleTasks: derivedState.visibleTasks,
     workspace,
     setWorkspace,
