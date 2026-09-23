@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
-import { requireOperationalLead } from "@/lib/authz";
+import { bearerToken, requireActiveAdministrator, resolveAdministratorAccessFailure } from "@/lib/authz";
 import {
   googleChatDeliveryStatus,
   isGoogleChatDmSpace,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/google-chat";
 import { shouldSendToGoogleChatDigest, shouldSendToGoogleChatDm } from "@/lib/notification-policy";
 import { reconcileNotificationEvents } from "@/lib/notification-resolution";
-import { getServerSupabase } from "@/lib/supabase";
+import { getServerSupabase, getSupabaseForToken } from "@/lib/supabase";
 
 type NotificationRow = {
   id: number;
@@ -85,9 +85,9 @@ async function authorizeDeliveryTrigger(request: NextRequest) {
     return { ok: true as const, mode: "pipeline" as const };
   }
 
-  const permission = await requireOperationalLead(request);
+  const permission = await requireActiveAdministrator(request);
   if (!permission.ok) return permission;
-  return { ok: true as const, mode: "user" as const, profile: permission.profile };
+  return { ok: true as const, mode: "user" as const, profile: permission.profile, token: bearerToken(request) };
 }
 
 function statusCodeForError(errorMessage: string) {
@@ -107,39 +107,6 @@ function appUrlFromRequest(request: NextRequest) {
   return `${proto}://${host}`;
 }
 
-async function createTestEvent(
-  supabase: ReturnType<typeof getServerSupabase>,
-  payload: DeliveryRequestPayload,
-  actorProfileId?: string | null,
-) {
-  if (!supabase || !payload.testDelivery) return null;
-  const directDm = payload.testDelivery === "direct_dm";
-  const recipientProfileId = directDm ? String(payload.profileId || "").trim() : "";
-  if (directDm && !recipientProfileId) {
-    throw new Error("Für eine Test-DM muss ein Profil ausgewählt werden.");
-  }
-
-  const { data, error } = await supabase
-    .from("notification_events")
-    .insert({
-      type: directDm ? "task.review_requested" : "task.blocker_reported",
-      actor_profile_id: actorProfileId || null,
-      recipient_profile_id: recipientProfileId || null,
-      entity_type: "google_chat_test",
-      entity_id: directDm ? `dm-${recipientProfileId}` : "founderops-digest",
-      title: "FounderOps Testnachricht",
-      body: directDm
-        ? "Kontrollierter Test der persönlichen FounderOps-DM-Zustellung."
-        : "Kontrollierter Test des FounderOps-Gruppendigest.",
-      status: "pending",
-    })
-    .select("id")
-    .single<{ id: number }>();
-
-  if (error) throw new Error(error.message);
-  return data?.id || null;
-}
-
 async function insertDeliveryRows(
   supabase: ReturnType<typeof getServerSupabase>,
   rows: DeliveryRow[],
@@ -148,7 +115,7 @@ async function insertDeliveryRows(
   extras: { deliveredAt?: string; deliveryMode?: "direct_dm" | "webhook_digest"; error?: string; digestSize?: number },
 ) {
   if (!supabase || !rows.length) return;
-  await supabase.from("notification_deliveries").insert(
+  const { error } = await supabase.from("notification_deliveries").insert(
     rows.map(({ row, target, payload }) => ({
       event_id: row.id,
       channel: "google_chat",
@@ -164,16 +131,37 @@ async function insertDeliveryRows(
       last_error: extras.error || null,
     })),
   );
+  if (error) throw new Error(`Zustellstatus konnte nicht gespeichert werden: ${error.message}`);
+}
+
+async function finalizeDeliveryClaim(
+  supabase: NonNullable<ReturnType<typeof getServerSupabase>>,
+  claimToken: string,
+  eventIds: number[],
+) {
+  const { data, error } = await supabase.rpc("finalize_notification_delivery_claim", {
+    p_claim_token: claimToken,
+    p_event_ids: eventIds,
+  });
+  if (error) throw new Error(`Zustellauftrag konnte nicht abgeschlossen werden: ${error.message}`);
+  if (Number(data) !== eventIds.length) {
+    throw new Error("Zustellauftrag ist nicht mehr exklusiv reserviert.");
+  }
+}
+
+async function releaseDeliveryClaim(
+  supabase: NonNullable<ReturnType<typeof getServerSupabase>>,
+  claimToken: string,
+) {
+  await supabase.rpc("release_notification_delivery_claim", { p_claim_token: claimToken });
 }
 
 export async function GET(request: NextRequest) {
   const supabase = getServerSupabase();
   if (!supabase) return supabaseUnavailable();
 
-  const permission = await requireOperationalLead(request);
+  const permission = await requireActiveAdministrator(request);
   if (!permission.ok) return authzError(permission);
-
-  await reconcileNotificationEvents(supabase);
 
   const { count, error } = await supabase
     .from("notification_events")
@@ -198,8 +186,6 @@ export async function POST(request: NextRequest) {
   const permission = await authorizeDeliveryTrigger(request);
   if (!permission.ok) return authzError(permission);
 
-  await reconcileNotificationEvents(supabase);
-
   const payload = (await request.json().catch(() => ({}))) as DeliveryRequestPayload;
   const limit = safeLimit(payload.limit);
   let requestedEventIds = safeEventIds(payload.eventIds);
@@ -218,14 +204,32 @@ export async function POST(request: NextRequest) {
     }, { status: 424 });
   }
 
-  if (payload.testDelivery) {
-    try {
-      const testEventId = await createTestEvent(supabase, payload, permission.mode === "user" ? permission.profile?.id : null);
-      requestedEventIds = testEventId ? [testEventId] : requestedEventIds;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Testnachricht konnte nicht vorbereitet werden.";
-      return NextResponse.json({ error: message, sent: 0, failed: 0, skipped: 0 }, { status: 400 });
-    }
+  if (permission.mode === "pipeline") {
+    await reconcileNotificationEvents(supabase);
+  }
+
+  const claimClient = permission.mode === "user"
+    ? (permission.token ? getSupabaseForToken(permission.token) : null)
+    : supabase;
+  if (!claimClient) return apiError("Anmeldung erforderlich.", 401);
+  const { data: claim, error: claimError } = await claimClient.rpc("claim_notification_delivery", {
+    p_event_ids: requestedEventIds.length ? requestedEventIds : null,
+    p_limit: limit,
+    p_test_delivery: payload.testDelivery || null,
+    p_recipient_profile_id: payload.profileId || null,
+  });
+  if (claimError?.code === "42501" && permission.mode === "user") {
+    return authzError(await resolveAdministratorAccessFailure(claimClient));
+  }
+  if (claimError?.code === "42501") return apiError("Zustellauftrag ist nicht autorisiert.", 403);
+  if (claimError?.code === "22023") return apiError(claimError.message, 400);
+  if (claimError) return apiError("Zustellauftrag konnte nicht angenommen werden.", 409);
+  const claimToken = typeof claim?.claimToken === "string" ? claim.claimToken : "";
+  requestedEventIds = Array.isArray(claim?.eventIds)
+    ? claim.eventIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0)
+    : [];
+  if (!claimToken || !requestedEventIds.length) {
+    return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: 0, results: [] });
   }
 
   let eventQuery = supabase
@@ -238,8 +242,14 @@ export async function POST(request: NextRequest) {
 
   const { data: events, error: eventError } = await eventQuery;
 
-  if (eventError) return apiError(eventError.message, 500);
-  if (!events?.length) return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: 0, results: [] });
+  if (eventError) {
+    await releaseDeliveryClaim(supabase, claimToken);
+    return apiError(eventError.message, 500);
+  }
+  if (!events?.length) {
+    await releaseDeliveryClaim(supabase, claimToken);
+    return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: 0, results: [] });
+  }
 
   const eventIds = (events as NotificationRow[]).map((event) => event.id);
   const { data: existingDeliveries, error: deliveryReadError } = await supabase
@@ -248,7 +258,10 @@ export async function POST(request: NextRequest) {
     .eq("channel", "google_chat")
     .in("event_id", eventIds);
 
-  if (deliveryReadError) return apiError(deliveryReadError.message, 500);
+  if (deliveryReadError) {
+    await releaseDeliveryClaim(supabase, claimToken);
+    return apiError(deliveryReadError.message, 500);
+  }
 
   const alreadyDelivered = new Set(
     (existingDeliveries || [])
@@ -278,6 +291,7 @@ export async function POST(request: NextRequest) {
     : { data: [] };
 
   if ("error" in preferenceResult && preferenceResult.error) {
+    await releaseDeliveryClaim(supabase, claimToken);
     return apiError(preferenceResult.error.message, 500);
   }
 
@@ -334,6 +348,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!deliverableRows.length) {
+    await finalizeDeliveryClaim(supabase, claimToken, requestedEventIds);
     return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: results.length, results });
   }
 
@@ -409,6 +424,8 @@ export async function POST(request: NextRequest) {
   const sent = results.filter((result) => result.status === "sent").length;
   const failed = results.filter((result) => result.status === "failed").length;
   const skipped = results.filter((result) => result.status === "skipped").length;
+
+  await finalizeDeliveryClaim(supabase, claimToken, requestedEventIds);
 
   if (failed && !sent) {
     const errorMessage = results.find((result) => result.error)?.error || "Google Chat Versand fehlgeschlagen.";
