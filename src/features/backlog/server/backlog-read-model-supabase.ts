@@ -19,7 +19,7 @@ import { mapTaskRow } from "@/lib/planning-task-mappers";
 import type { Profile } from "@/lib/types";
 
 const projectId = "findmydoc-founder-execution";
-const profileSelect = "id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled";
+const profileSelect = "id,name,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled";
 const sprintSelect = "id,name,status,start_date,end_date,review_due_at,score_locked";
 const commitmentSelect = "id,sprint_id,profile_id,commitment_level,weekly_hours,note";
 

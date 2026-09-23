@@ -22,7 +22,7 @@ const localLoginSimulation = process.env.ENABLE_LOCAL_LOGIN === "true"
 
 const { data: profiles, error: profileError } = await supabase
   .from("profiles")
-  .select("id,name,role,auth_user_id,github_login,platform_role,org_role")
+  .select("id,name,auth_user_id,github_login,platform_role,org_role")
   .order("name");
 
 if (profileError) throw new Error(`profiles: ${profileError.message}`);
@@ -73,7 +73,6 @@ const result = {
   missingGithub: missingGithub.map((profile) => ({
     id: profile.id,
     name: profile.name,
-    role: profile.role,
     platformRole: profile.platform_role,
   })),
   missingRole: missingRole.map((profile) => ({
@@ -85,7 +84,6 @@ const result = {
   stale: stale.map((profile) => ({
     id: profile.id,
     name: profile.name,
-    role: profile.role,
     authUserId: profile.auth_user_id,
   })),
 };

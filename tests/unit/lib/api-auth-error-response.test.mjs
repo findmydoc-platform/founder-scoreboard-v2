@@ -98,6 +98,10 @@ function sessionSupabase({ profile = null, profileError = null } = {}) {
       auth: {
         getUser: async () => ({ data: { user }, error: null }),
       },
+      async rpc(name) {
+        assert.equal(name, "current_authenticated_profile");
+        return { data: profile, error: profileError };
+      },
       from() {
         return {
           select() { return this; },
@@ -130,7 +134,7 @@ test("session authorization returns a valid mapped team profile", async () => {
       id: "profile-1",
       name: "Delegate",
       platformRole: "deputy",
-      githubLogin: "delegate",
+      githubLogin: "",
     },
   });
 });

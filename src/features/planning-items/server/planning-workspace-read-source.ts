@@ -22,15 +22,13 @@ import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS } from "@/lib/sprint-review-windo
 import type { Profile, Project } from "@/lib/types";
 
 export const planningProjectId = "findmydoc-founder-execution";
-export const planningProfileSelect = "id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled";
+export const planningProfileSelect = "id,name,platform_role,org_role,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color";
 
 type ProjectRow = {
   id: string;
   name: string;
   range_label: string | null;
   review_objection_window_hours: number | null;
-  github_project_owner: string | null;
-  github_project_number: number | null;
 };
 
 export function mapPlanningProject(row: ProjectRow): Project {
@@ -39,8 +37,8 @@ export function mapPlanningProject(row: ProjectRow): Project {
     name: row.name,
     range: row.range_label || "",
     reviewObjectionWindowHours: Number(row.review_objection_window_hours || DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS),
-    githubProjectOwner: row.github_project_owner || "findmydoc-platform",
-    githubProjectNumber: Number(row.github_project_number || 21),
+    githubProjectOwner: "",
+    githubProjectNumber: 0,
   };
 }
 
@@ -87,7 +85,7 @@ export async function loadPlanningWorkspaceModel(
 ): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
   const [projectResult, profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult] = await Promise.all([
-    supabase.from("projects").select("id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number").eq("id", planningProjectId).single<ProjectRow>(),
+    supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<ProjectRow>(),
     supabase.from("profiles").select(planningProfileSelect).order("name"),
     supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", planningProjectId).order("sort_order").order("id"),
     supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"),

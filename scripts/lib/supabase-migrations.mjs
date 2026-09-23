@@ -8,7 +8,9 @@ export const productionBaseline = {
   sha256: "5a1d4c9aedf2db45385002451f4234271df63b243b6c0eb546861ad95333d85d",
 };
 
-export const approvedDestructiveDdlByMigration = new Map();
+export const approvedDestructiveDdlByMigration = new Map([
+  ["20260922134227_jit_administrator_access.sql", new Set(["drop column"])],
+]);
 
 export const migrationFilePattern = /^(\d{14})_([a-z0-9_]+)\.sql$/;
 

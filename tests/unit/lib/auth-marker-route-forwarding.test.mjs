@@ -35,7 +35,7 @@ test("notification delivery preserves a marked operational-lead failure", async 
   const route = await importTestModule("src/app/api/notifications/deliver/route.ts", {
     "next/server": nextServer,
     "@/lib/api-response": { apiError: () => null, authzError, supabaseUnavailable: () => null },
-    "@/lib/authz": { requireOperationalLead: async () => markedFailure },
+    "@/lib/authz": { requireActiveAdministrator: async () => markedFailure },
     "@/lib/google-chat": {
       googleChatDeliveryStatus: () => ({}),
       isGoogleChatDmSpace: () => false,

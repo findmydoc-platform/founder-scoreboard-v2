@@ -24,10 +24,10 @@ export async function verifyAuthorizationSecurity(client, failures) {
        and procedure.proname = any($1::text[])
        and pg_get_function_identity_arguments(procedure.oid) = ''
      order by procedure.proname`,
-    [["current_platform_role", "current_profile_id", "current_profile_role"]],
+    [["current_platform_role", "current_profile_id"]],
   );
-  if (identityHelpers.rows.length !== 3) {
-    failures.push(`expected 3 Auth identity helpers, found ${identityHelpers.rows.length}`);
+  if (identityHelpers.rows.length !== 2) {
+    failures.push(`expected 2 Auth identity helpers, found ${identityHelpers.rows.length}`);
   }
   for (const helper of identityHelpers.rows) {
     if (
@@ -155,7 +155,7 @@ export async function verifyAuthorizationSecurity(client, failures) {
       || policy.roles[0] !== "authenticated"
       || !/owner_profile_id/i.test(policy.qual || "")
       || !/current_profile_id\(\)/i.test(policy.qual || "")
-      || /auth\.uid|current_platform_role|current_profile_role/i.test(policy.qual || "")
+      || /auth\.uid|current_platform_role/i.test(policy.qual || "")
     ) {
       failures.push(`team-workweek private read policy is not mapped-owner-only: ${tableName}:${policyName}`);
     }
@@ -183,7 +183,7 @@ export async function verifyAuthorizationSecurity(client, failures) {
     }
     if (
       !/profile\.auth_user_id\s*=\s*auth\.uid\(\)/i.test(procedure.definition)
-      || /current_platform_role|current_profile_role|platform_role|\bviewer\b/i.test(procedure.definition)
+      || /current_platform_role|platform_role|\bviewer\b/i.test(procedure.definition)
     ) {
       failures.push(`team-workweek function is not role-independent and auth-bound: ${functionName}`);
     }
@@ -241,7 +241,7 @@ export async function verifyAuthorizationSecurity(client, failures) {
       || !["ceo", "founder", "deputy"].every(
         (role) => expression.includes(`'${role}'::text`),
       )
-      || /viewer|auth\.uid|current_profile_role/i.test(expression)
+      || /viewer|auth\.uid/i.test(expression)
     ) {
       failures.push(`write policy exceeds the app planning contributor role: ${policy.tablename}:${policyName}`);
     }

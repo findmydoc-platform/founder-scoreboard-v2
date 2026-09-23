@@ -68,9 +68,8 @@ export function mapProfile(row: DbProfile): Profile {
   return {
     id: row.id,
     name: row.name,
-    role: row.role,
-    platformRole: row.platform_role || (row.role === "admin" ? "ceo" : "founder"),
-    orgRole: row.org_role || (row.role === "admin" ? "CEO" : "Founder"),
+    platformRole: row.platform_role,
+    orgRole: row.org_role || roleLabelFromPlatformRole(row.platform_role),
     githubLogin: row.github_login || "",
     deputyFor: row.deputy_for || "",
     deputyActiveFrom: row.deputy_active_from || "",
@@ -80,8 +79,15 @@ export function mapProfile(row: DbProfile): Profile {
     color: profileColor(row.id, row.profile_color),
     googleChatUserId: row.google_chat_user_id || "",
     googleChatDmSpace: row.google_chat_dm_space || "",
-    notificationsEnabled: row.notifications_enabled !== false,
+    notificationsEnabled: row.notifications_enabled === true,
   };
+}
+
+function roleLabelFromPlatformRole(role: Profile["platformRole"]) {
+  if (role === "ceo") return "CEO";
+  if (role === "deputy") return "Deputy";
+  if (role === "viewer") return "Viewer";
+  return "Founder";
 }
 
 export function mapProfileUiPreference(row: DbProfileUiPreference): ProfileUiPreference {

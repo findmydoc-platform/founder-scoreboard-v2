@@ -1,10 +1,23 @@
 export const authenticatedFunctionAllowlist = Object.freeze([
+  "public.activate_administrator_access()",
+  "public.administrator_access_snapshot()",
+  "public.administrator_directory_snapshot()",
+  "public.claim_notification_delivery(p_event_ids bigint[], p_limit integer, p_test_delivery text, p_recipient_profile_id text)",
   "public.create_private_team_workweek_version(p_effective_from date, p_windows jsonb)",
   "public.current_platform_role()",
+  "public.current_authenticated_profile()",
   "public.current_profile_id()",
-  "public.current_profile_role()",
+  "public.current_profile_has_active_administrator_access()",
+  "public.end_administrator_access()",
   "public.finalize_team_workweek_publication(p_publication_id uuid)",
+  "public.mutate_administrator_planning_relationship_transaction(p_operation text, p_task_id text, p_related_task_id text, p_relation_type text, p_relation_id bigint, p_note text, p_expected_updated_at timestamp with time zone, p_actor_profile_id text, p_request_ip text, p_user_agent text)",
   "public.prepare_team_workweek_publication(p_version_id uuid)",
+  "public.set_administrator_eligibility(p_profile_id text, p_eligible boolean)",
+  "public.update_administration_github_project_transaction(p_project_id text, p_expected_owner text, p_expected_number integer, p_github_project_owner text, p_github_project_number integer, p_request_ip text, p_user_agent text)",
+  "public.update_administrator_planning_item_transaction(p_task_id text, p_expected_updated_at timestamp with time zone, p_patch jsonb, p_strategy jsonb, p_raci_assignments jsonb, p_request_ip text, p_user_agent text)",
+  "public.update_administrator_planning_task_transaction(p_task_id text, p_expected_updated_at timestamp with time zone, p_task_patch jsonb, p_note_present boolean, p_note text, p_dependency_present boolean, p_dependency_note text, p_activity_messages text[], p_notifications jsonb)",
+  "public.update_profile_governance_transaction(p_profile_id text, p_profile_patch jsonb, p_request_ip text, p_user_agent text)",
+  "public.update_profile_technical_identity_transaction(p_profile_id text, p_profile_patch jsonb, p_request_ip text, p_user_agent text)",
 ]);
 
 export const tablePrivileges = Object.freeze([

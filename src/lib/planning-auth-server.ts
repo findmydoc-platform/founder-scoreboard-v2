@@ -1,11 +1,12 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { rootWorkspaceFromPreference, type AppWorkspace } from "@/features/planning/model/workspace-routes";
-import { requireTeamMemberForSession } from "./authz";
+import { loadSessionAuthority, requireTeamMemberForSession } from "./authz";
 import { getServerAuthSupabase } from "./supabase-server";
 import type { AuthenticatedProfile } from "./types";
+import type { SessionAuthorityContext } from "@/features/administrator-access/model/administrator-access";
 
 export type ServerPlanningAuth =
-  | { ok: true; user: User; profile: AuthenticatedProfile | null }
+  | { ok: true; user: User; profile: AuthenticatedProfile | null; authority: SessionAuthorityContext | null }
   | { ok: false; status: number; error: string; user: User | null };
 
 type ServerPlanningAuthContext =
@@ -29,7 +30,8 @@ async function getServerPlanningAuthContext(): Promise<ServerPlanningAuthContext
 export async function getServerPlanningAuth(): Promise<ServerPlanningAuth> {
   const auth = await getServerPlanningAuthContext();
   if (!auth.ok) return auth;
-  return { ok: true, user: auth.user, profile: auth.profile };
+  const authority = auth.profile ? await loadSessionAuthority(auth.supabase, auth.profile) : null;
+  return { ok: true, user: auth.user, profile: auth.profile, authority };
 }
 
 export async function getServerPlanningHomeWorkspace(): Promise<AppWorkspace> {
