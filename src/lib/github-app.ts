@@ -251,7 +251,8 @@ export async function storeGitHubAppUserToken({
   githubUser: GitHubUser;
   token: GitHubAppTokenResponse;
 }) {
-  if (normalizeLogin(githubUser.login) !== normalizeLogin(profile.githubLogin || "")) {
+  const configuredLogin = await loadConfiguredGitHubLogin(supabase, profile.id);
+  if (!configuredLogin || normalizeLogin(githubUser.login) !== normalizeLogin(configuredLogin)) {
     throw new Error("GitHub-Verbindung passt nicht zum angemeldeten Teamprofil.");
   }
   if (!token.access_token) throw new Error("GitHub-App-Token fehlt.");
@@ -285,6 +286,17 @@ async function loadTokenRow(supabase: SupabaseClient, profile: AuthenticatedProf
 
   if (error) throw new Error(`GitHub-App-Verbindung konnte nicht gelesen werden: ${error.message}`);
   return data || null;
+}
+
+async function loadConfiguredGitHubLogin(supabase: SupabaseClient, profileId: string) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("github_login")
+    .eq("id", profileId)
+    .maybeSingle<{ github_login: string | null }>();
+
+  if (error) throw new Error(`Technische GitHub-Zuordnung konnte nicht gelesen werden: ${error.message}`);
+  return data?.github_login?.trim() || "";
 }
 
 async function refreshGitHubAppUserToken(supabase: SupabaseClient, profile: AuthenticatedProfile, row: GitHubAppUserTokenRow) {
@@ -321,10 +333,12 @@ async function refreshGitHubAppUserToken(supabase: SupabaseClient, profile: Auth
 }
 
 export async function getGitHubUserTokenForProfile(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
-  if (!profile?.id || !profile.githubLogin) throw userTokenRequired();
+  if (!profile?.id) throw userTokenRequired();
+  const configuredLogin = await loadConfiguredGitHubLogin(supabase, profile.id);
+  if (!configuredLogin) throw userTokenRequired();
   const row = await loadTokenRow(supabase, profile);
   if (!row || row.revoked_at) throw userTokenRequired();
-  if (normalizeLogin(row.github_login) !== normalizeLogin(profile.githubLogin)) {
+  if (normalizeLogin(row.github_login) !== normalizeLogin(configuredLogin)) {
     throw userTokenRequired("GitHub-Verbindung passt nicht zum angemeldeten Teamprofil. Bitte verbinde GitHub erneut.");
   }
   if (expiresSoon(row.access_token_expires_at)) {
@@ -350,12 +364,12 @@ export async function getGitHubUserTokenForProfile(supabase: SupabaseClient, pro
 }
 
 export async function getGitHubUserConnectionStatus(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
-  if (!profile?.id || !profile.githubLogin) {
-    return { connected: false, githubLogin: profile?.githubLogin || "", needsReconnect: true, expiresAt: null as string | null };
-  }
+  if (!profile?.id) return { connected: false, needsReconnect: true, expiresAt: null as string | null };
+  const configuredLogin = await loadConfiguredGitHubLogin(supabase, profile.id);
+  if (!configuredLogin) return { connected: false, needsReconnect: true, expiresAt: null as string | null };
   const row = await loadTokenRow(supabase, profile);
-  if (!row || row.revoked_at || normalizeLogin(row.github_login) !== normalizeLogin(profile.githubLogin)) {
-    return { connected: false, githubLogin: profile.githubLogin, needsReconnect: true, expiresAt: null as string | null };
+  if (!row || row.revoked_at || normalizeLogin(row.github_login) !== normalizeLogin(configuredLogin)) {
+    return { connected: false, needsReconnect: true, expiresAt: null as string | null };
   }
 
   try {
@@ -364,18 +378,16 @@ export async function getGitHubUserConnectionStatus(supabase: SupabaseClient, pr
       const refreshed = await loadTokenRow(supabase, profile);
       return {
         connected: true,
-        githubLogin: refreshed?.github_login || profile.githubLogin,
         needsReconnect: false,
         expiresAt: refreshed?.access_token_expires_at || null,
       };
     }
   } catch {
-    return { connected: false, githubLogin: row.github_login, needsReconnect: true, expiresAt: row.access_token_expires_at };
+    return { connected: false, needsReconnect: true, expiresAt: row.access_token_expires_at };
   }
 
   return {
     connected: true,
-    githubLogin: row.github_login,
     needsReconnect: false,
     expiresAt: row.access_token_expires_at,
   };

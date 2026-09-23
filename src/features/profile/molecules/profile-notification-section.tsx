@@ -1,6 +1,7 @@
 import { googleChatDigestEventTypes, notificationEventLabel } from "@/lib/notification-policy";
 import type { ProfileSettingsDraft } from "@/features/profile/model/profile-settings-view-model";
-import { SettingsPane, SettingsRow, ToggleSwitch } from "@/features/profile/molecules/profile-settings-layout";
+import { SettingsPane, SettingsRow } from "@/features/profile/molecules/profile-settings-layout";
+import { ToggleSwitch } from "@/shared/atoms/toggle-switch";
 import { classNames } from "@/shared/atoms/ui-primitives";
 
 export function NotificationSettingsSection({

@@ -12,7 +12,7 @@ export function createSupabaseSprintReadModel(supabase: SupabaseClient): SprintR
       if (!context.authorized) return { status: "forbidden" };
       const [state, projectResult, sprintResult, commitmentResult, scoreResult, strikeStateResult, strikeEventResult, objectionResult, meetingResult, attendanceResult] = await Promise.all([
         loadPlanningItemsForReadModel(supabase),
-        supabase.from("projects").select("id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number").eq("id", planningProjectId).single(),
+        supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single(),
         supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked").order("start_date").order("id"),
         supabase.from("sprint_commitments").select("id,sprint_id,profile_id,commitment_level,weekly_hours,note").order("profile_id"),
         supabase.from("founder_sprint_scores").select("id,sprint_id,profile_id,delivery_points,form_points,weekly_points,total_points,fulfilled,away_neutral,finalized_at,finalized_by,reason_summary").order("finalized_at", { ascending: false }).limit(500),

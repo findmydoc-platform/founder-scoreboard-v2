@@ -4,20 +4,14 @@ import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { requireCEO } from "@/lib/authz";
 import { MAX_REVIEW_OBJECTION_WINDOW_HOURS } from "@/lib/sprint-review-window";
 
-type FounderOpsSettingsPayload = {
+type SprintReviewWindowPayload = {
   expectedReviewObjectionWindowHours?: number;
   reviewObjectionWindowHours?: number;
 };
 
-type FounderOpsSettingsTransactionResult = {
-  project?: {
-    id?: string;
-    reviewObjectionWindowHours?: number;
-  };
-  sprints?: Array<{
-    id?: string;
-    reviewDueAt?: string;
-  }>;
+type SprintReviewWindowTransactionResult = {
+  project?: { id?: string; reviewObjectionWindowHours?: number };
+  sprints?: Array<{ id?: string; reviewDueAt?: string }>;
 };
 
 const projectId = "findmydoc-founder-execution";
@@ -27,7 +21,7 @@ function validWindowHours(value: unknown): value is number {
 }
 
 export async function PATCH(request: NextRequest) {
-  const context = await requireJsonApiContext<FounderOpsSettingsPayload>(request, requireCEO, {});
+  const context = await requireJsonApiContext<SprintReviewWindowPayload>(request, requireCEO, {});
   if (!context.ok) return context.response;
 
   const { payload, permission, supabase } = context;
@@ -54,16 +48,13 @@ export async function PATCH(request: NextRequest) {
     return apiError("Die Prozesseinstellung konnte nicht gespeichert werden.", 500);
   }
 
-  const result = data as FounderOpsSettingsTransactionResult | null;
+  const result = data as SprintReviewWindowTransactionResult | null;
   const savedHours = result?.project?.reviewObjectionWindowHours;
   if (!validWindowHours(savedHours)) return apiError("Die Prozesseinstellung wurde unvollständig gespeichert.", 500);
 
   return NextResponse.json({
     ok: true,
-    project: {
-      id: result?.project?.id || projectId,
-      reviewObjectionWindowHours: savedHours,
-    },
+    project: { id: result?.project?.id || projectId, reviewObjectionWindowHours: savedHours },
     sprints: (result?.sprints || []).flatMap((sprint) => (
       sprint.id && sprint.reviewDueAt ? [{ id: sprint.id, reviewDueAt: sprint.reviewDueAt }] : []
     )),

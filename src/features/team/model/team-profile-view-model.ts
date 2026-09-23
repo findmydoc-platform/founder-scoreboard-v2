@@ -8,7 +8,6 @@ export const platformRoleOptions: PlatformRole[] = ["ceo", "founder", "deputy", 
 export const profileDraftFields: Array<keyof Profile> = [
   "platformRole",
   "orgRole",
-  "githubLogin",
   "weeklyCapacity",
   "deputyFor",
   "deputyActiveFrom",

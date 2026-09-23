@@ -12,6 +12,8 @@ import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
+import type { AuthorityCapabilities } from "@/features/administrator-access/model/administrator-access";
+import type { AdministrationWorkspaceModel } from "@/features/administration/model/administration-read-model";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
@@ -26,16 +28,20 @@ const DecisionLogOverview = dynamic(() => import("@/features/decision-log/organi
 const SprintScoreTableOverview = dynamic(() => import("@/features/sprint/organisms/sprint-score-overview").then((mod) => mod.SprintScoreTableOverview), { loading: GenericWorkspacePanelLoading });
 const FmdQuickLinksOverview = dynamic(() => import("@/features/tools/organisms/fmd-quick-links-overview").then((mod) => mod.FmdQuickLinksOverview), { loading: GenericWorkspacePanelLoading });
 const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overview").then((mod) => mod.TeamOverview), { loading: GenericWorkspacePanelLoading });
+const AdministrationWorkspaceHost = dynamic(() => import("@/features/administration/organisms/administration-workspace-host").then((mod) => mod.AdministrationWorkspaceHost), { loading: GenericWorkspacePanelLoading });
 
 type PlanningWorkspaceRendererProps = {
   controller: PlanningAppController;
+  administrationCapabilities: AuthorityCapabilities;
+  initialAdministrationModel?: AdministrationWorkspaceModel | null;
+  onAdministratorAccessInvalid: () => void;
   source: "supabase";
   decisionLogResult?: NotionDecisionLogResult;
   initialBacklogModel?: BacklogModel;
   initialSprintModel?: SprintWorkspaceModel;
 };
 
-export function PlanningWorkspaceRenderer({ controller, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningWorkspaceRendererProps) {
+export function PlanningWorkspaceRenderer({ controller, administrationCapabilities, initialAdministrationModel = null, onAdministratorAccessInvalid, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningWorkspaceRendererProps) {
   const {
     actualProfile,
     authBusy,
@@ -47,11 +53,9 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     data,
     decideInitiativeApproval,
     dismissNotification,
-    dispatchNotifications,
     eventMessage,
     fmdToolMessage,
     fmdToolPending,
-    googleChatStatus,
     githubConnectionState,
     githubInstallationAvailable,
     githubReauthFailed,
@@ -60,17 +64,13 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     githubUserConnected,
     isPending,
     lockSprint,
-    notificationDispatchMessage,
     openNotification,
     openTaskPanel,
     apiClient,
-    retryNotificationDelivery,
     reviewScoreObjection,
     saveProfileSettings,
     saveOwnProfileSettings,
-    saveFounderOpsGitHubProject,
-    saveFounderOpsReviewWindow,
-    sendGoogleChatTest,
+    saveSprintReviewWindow,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
     setEpicDeleteTarget,
@@ -97,7 +97,6 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
   } = controller;
   const canManageSprint = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
   const canManageProjectEpics = canManageEpics(currentProfile?.platformRole);
-  const canManageNotificationsOutbox = !currentProfile || currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy";
 
   return (
     <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
@@ -165,7 +164,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
         <EventsOverview
           events={data.events}
           profiles={data.profiles}
-          canManageEvents={canManageTaskMeta}
+          canManageEvents={canManageTaskMeta || controller.canCorrectOperationally}
           pending={isPending}
           message={eventMessage}
           onCreateEvent={createFounderEvent}
@@ -204,8 +203,6 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           pending={isPending}
           source={source}
           onSaveOwnProfileSettings={saveOwnProfileSettings}
-          onSaveFounderOpsGitHubProject={saveFounderOpsGitHubProject}
-          onSaveFounderOpsReviewWindow={saveFounderOpsReviewWindow}
         />
       )}
       {workspace === "sprint" && (
@@ -244,21 +241,24 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           currentProfile={currentProfile}
           canManageSprint={canManageSprint}
           sprintLockMessage={sprintLockMessage}
+          reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
+          onSaveReviewObjectionWindow={saveSprintReviewWindow}
         /> : null
       )}
       {workspace === "notifications" && (
         <NotificationsOverview
-          canManageOutbox={canManageNotificationsOutbox}
           currentProfile={currentProfile}
           data={data}
-          pending={isPending}
-          notificationDispatchMessage={notificationDispatchMessage}
-          googleChatStatus={googleChatStatus}
-          onDispatchNotifications={dispatchNotifications}
           onOpenNotification={openNotification}
           onDismissNotification={dismissNotification}
-          onRetryNotificationDelivery={retryNotificationDelivery}
-          onSendGoogleChatTest={sendGoogleChatTest}
+        />
+      )}
+      {workspace === "administration" && (
+        <AdministrationWorkspaceHost
+          apiClient={apiClient}
+          capabilities={administrationCapabilities}
+          initialModel={initialAdministrationModel}
+          onAdministratorAccessInvalid={onAdministratorAccessInvalid}
         />
       )}
       <TaskGitHubSyncQueue

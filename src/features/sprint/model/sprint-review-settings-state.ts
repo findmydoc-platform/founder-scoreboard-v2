@@ -18,14 +18,3 @@ export function applyReviewWindowHours(
     }),
   };
 }
-
-export function applyGitHubProjectSettings(
-  data: PlanningShellState,
-  githubProjectOwner: string,
-  githubProjectNumber: number,
-): PlanningShellState {
-  return {
-    ...data,
-    project: { ...data.project, githubProjectOwner, githubProjectNumber },
-  };
-}

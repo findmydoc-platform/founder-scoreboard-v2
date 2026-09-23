@@ -17,6 +17,7 @@ type AppSidebarProps = {
   authAvailable?: boolean;
   authUserEmail?: string;
   currentPlatformRole?: string;
+  canAccessAdministration?: boolean;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
   onMouseLeave?: () => void;
@@ -27,6 +28,7 @@ const DESKTOP_SIDEBAR_EXPANDED_STORAGE_KEY = "founderops.desktop-sidebar-expande
 
 export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppSidebar({
   activeWorkspace = "planning",
+  canAccessAdministration = false,
   currentPlatformRole = "",
   mobileOpen = false,
   onMobileClose,
@@ -48,7 +50,10 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
     }
   }, []);
 
-  const visibleNavItems = appNavItems.filter((item) => !item.ceoOnly || currentPlatformRole === "ceo");
+  const visibleNavItems = appNavItems.filter((item) => (
+    (!item.ceoOnly || currentPlatformRole === "ceo")
+    && (item.id !== "administration" || canAccessAdministration)
+  ));
   const platformReleasesNavItem = { id: "platform-releases" as const, label: "Releases", icon: Sparkles, href: "/team/platform-releases", navigationSection: "steering" as const };
   const visibleNavigationSections = appNavigationSections.map((section) => ({
     ...section,

@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
@@ -9,17 +8,8 @@ import { navigateAfterNotificationStatusUpdate } from "@/features/notifications/
 import { notificationTarget } from "@/features/notifications/model/notification-target";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import type { HeaderNotification, NotificationDelivery, PlanningHeaderData } from "@/lib/types";
+import type { HeaderNotification, PlanningHeaderData } from "@/lib/types";
 import { applyLocalNotificationAction, type NotificationUserAction } from "@/lib/notification-lifecycle";
-
-type GoogleChatStatus = {
-  webhookConfigured: boolean;
-  apiConfigured: boolean;
-  deliveryEnabled: boolean;
-  ready: boolean;
-  mode: "direct-dm" | "space-webhook" | "not-configured";
-  pending: number;
-};
 
 type UseNotificationCommandsOptions = PlanningCommandContext & {
   openTaskPanel: (taskId: string) => void;
@@ -42,80 +32,10 @@ export function useNotificationCommands({
   setSaveError,
   setShowNotifications,
   setWorkspace,
-  source,
   startTransition,
   workspace,
 }: UseNotificationCommandsOptions) {
   const router = useRouter();
-  const [googleChatStatus, setGoogleChatStatus] = useState<GoogleChatStatus | null>(null);
-  const [notificationDispatchMessage, setNotificationDispatchMessage] = useState("");
-
-  const refreshGoogleChatStatus = useCallback(async () => {
-    if (source !== "supabase") return;
-
-    try {
-      const { response, body } = await planningApi.notificationDeliveryStatusRequest(apiClient);
-      if (!response.ok || !body) return;
-
-      setGoogleChatStatus({
-        webhookConfigured: Boolean(body.googleChat?.webhookConfigured ?? body.googleChatConfigured),
-        apiConfigured: Boolean(body.googleChat?.apiConfigured),
-        deliveryEnabled: Boolean(body.googleChat?.deliveryEnabled),
-        ready: Boolean(body.googleChat?.ready),
-        mode: body.googleChat?.mode || "not-configured",
-        pending: body.pending || 0,
-      });
-    } catch {
-      // Settings can still show local queue counts when the status endpoint is unavailable.
-    }
-  }, [apiClient, source]);
-
-  useEffect(() => {
-    if (workspace !== "notifications") return;
-    const timeout = window.setTimeout(() => {
-      void refreshGoogleChatStatus();
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [refreshGoogleChatStatus, workspace]);
-
-  const runNotificationDelivery = useCallback((payload: Record<string, unknown>, fallbackError: string) => {
-    setSaveError("");
-    setNotificationDispatchMessage("");
-
-    if (source !== "supabase") {
-      setNotificationDispatchMessage("Benachrichtigungsausgang ist in diesem Arbeitsmodus nicht verfügbar.");
-      return;
-    }
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.runNotificationDeliveryRequest(apiClient, payload);
-        if (!response.ok && !body?.error) throw new Error(fallbackError);
-        if (!response.ok) throw new Error(body?.error || "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
-
-        setNotificationDispatchMessage(`${body?.sent || 0} gesendet, ${body?.failed || 0} fehlgeschlagen, ${body?.skipped || 0} übersprungen.`);
-        await refreshGoogleChatStatus();
-        await refreshCurrentWorkspaceModel();
-      } catch (error) {
-        setNotificationDispatchMessage(error instanceof Error ? error.message : "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
-      }
-    });
-  }, [apiClient, refreshGoogleChatStatus, refreshCurrentWorkspaceModel, setSaveError, source, startTransition]);
-
-  const dispatchNotifications = () => {
-    runNotificationDelivery({ limit: 20 }, "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
-  };
-
-  const retryNotificationDelivery = (delivery: NotificationDelivery) => {
-    runNotificationDelivery({ eventIds: [delivery.eventId], limit: 1 }, "Google-Chat-Retry konnte nicht ausgeführt werden.");
-  };
-
-  const sendGoogleChatTest = (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => {
-    runNotificationDelivery(
-      { testDelivery, ...(profileId ? { profileId } : {}), limit: 1 },
-      "Google-Chat-Testversand konnte nicht ausgeführt werden.",
-    );
-  };
 
   const updateNotificationStatus = (eventId: number, action: NotificationUserAction): Promise<void> => {
     setHeaderData((current) => {
@@ -207,12 +127,7 @@ export function useNotificationCommands({
 
   return {
     dismissNotification,
-    dispatchNotifications,
-    googleChatStatus,
-    notificationDispatchMessage,
     openNotificationInbox,
     openNotification,
-    retryNotificationDelivery,
-    sendGoogleChatTest,
   };
 }

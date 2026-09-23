@@ -14,8 +14,10 @@ import { PlanningHelpMenu } from "@/features/planning/molecules/planning-help-me
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { ViewMode } from "@/lib/types";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import type { AdministratorAccessController } from "@/features/administrator-access/hooks/use-administrator-access-controller";
+import { AdministratorModeIndicator } from "@/features/administrator-access/molecules/administrator-mode-indicator";
 
-export function PlanningHeader({ controller }: { controller: PlanningAppController }) {
+export function PlanningHeader({ controller, administratorAccessController }: { controller: PlanningAppController; administratorAccessController: AdministratorAccessController }) {
   const {
     actualProfile,
     authAvailable,
@@ -119,6 +121,13 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
       onSignIn={signIn}
       onSignOut={signOut}
       onOpenProfile={() => setWorkspace("profile")}
+      administratorAccess={administratorAccessController.administratorAccess}
+      administratorAccessBusy={administratorAccessController.busy}
+      administratorRemainingSeconds={administratorAccessController.remainingSeconds}
+      canOpenAdministration={administratorAccessController.authority.capabilities.manageAdministratorEligibility}
+      onActivateAdministrator={() => void administratorAccessController.activate()}
+      onEndAdministrator={() => void administratorAccessController.end()}
+      onOpenAdministration={() => setWorkspace("administration")}
       testProfileOptions={availableTestProfiles.map((profile) => ({
         id: profile.profileId,
         initials: profile.initials,
@@ -128,6 +137,18 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
       onTestProfileChange={setDevProfileId}
     />
   ) : null;
+  const administratorModeActive = administratorAccessController.administratorAccess.active;
+  const administratorModeIndicator = administratorModeActive ? (
+    <AdministratorModeIndicator
+      busy={administratorAccessController.busy}
+      remainingSeconds={administratorAccessController.remainingSeconds}
+      onEnd={() => void administratorAccessController.end()}
+    />
+  ) : null;
+  let mobilePlanningToolbarTopClass = "top-0";
+  if (administratorModeActive && activeTestPersona) mobilePlanningToolbarTopClass = "top-[5.5rem]";
+  else if (administratorModeActive) mobilePlanningToolbarTopClass = "top-12";
+  else if (activeTestPersona) mobilePlanningToolbarTopClass = "top-10";
 
   return (
     <>
@@ -140,6 +161,11 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
       title={title}
       notices={(
         <>
+          {administratorModeIndicator ? (
+            <div className="hidden min-h-14 items-center justify-center border-b border-slate-200 bg-white px-4 py-2 min-[1200px]:flex">
+              {administratorModeIndicator}
+            </div>
+          ) : null}
           {activeTestPersona ? (
             <div className="hidden min-[1200px]:block">
               <TestProfileBanner
@@ -282,8 +308,13 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
         </div>
       )}
       </AppHeader>
+      {administratorModeIndicator ? (
+        <div className="sticky top-0 z-50 flex min-h-12 items-center justify-center border-b border-slate-200 bg-white/95 px-3 py-1 backdrop-blur min-[1200px]:hidden">
+          {administratorModeIndicator}
+        </div>
+      ) : null}
       {activeTestPersona ? (
-        <div className="sticky top-0 z-40 min-[1200px]:hidden">
+        <div className={`sticky z-40 min-[1200px]:hidden ${administratorModeActive ? "top-12" : "top-0"}`}>
           <TestProfileBanner
             initials={activeTestPersona.initials}
             label={activeTestPersona.label}
@@ -295,7 +326,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
       {filtersAvailable ? (
         <div
           data-mobile-planning-toolbar
-          className={`sticky z-30 border-b border-slate-200 bg-white/95 backdrop-blur min-[1200px]:hidden ${activeTestPersona ? "top-10" : "top-0"}`}
+          className={`sticky z-30 border-b border-slate-200 bg-white/95 backdrop-blur min-[1200px]:hidden ${mobilePlanningToolbarTopClass}`}
         >
           <div className="flex h-12 min-w-0 items-center gap-2 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button

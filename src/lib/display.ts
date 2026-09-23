@@ -57,12 +57,12 @@ export function taskAssigneeLabel(task: Pick<Task, "assignee"> | { assignee: str
   return task.assignee || unassignedAssigneeLabel;
 }
 
-export function taskAssigneeOptions(taskType: Task["taskType"], profiles: Profile[]) {
+export function taskAssigneeOptions(taskType: Task["taskType"], profiles: Array<Pick<Profile, "id" | "name">>) {
   const options = profiles.map((profile) => ({ value: profile.id, label: profile.name }));
   return options;
 }
 
-export function initiativeOptionLabel(initiative: Task) {
+export function initiativeOptionLabel(initiative: Pick<Task, "title">) {
   return initiative.title;
 }
 

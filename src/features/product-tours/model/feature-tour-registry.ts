@@ -43,8 +43,28 @@ export const platformReleasesTourId = "platform-releases-v1";
 export const githubIssueWebhookSyncTourId = "github-issue-webhook-sync-v1";
 export const teamWorkweekTourId = "team-workweek-v1";
 export const planningApiDependenciesTourId = "planning-api-dependencies-v1";
+export const administrationWorkspaceTourId = "administration-workspace-v1";
 
 export const featureTours: readonly FeatureTourDefinition[] = [
+  {
+    id: administrationWorkspaceTourId,
+    productUpdateId: "2026-09-22-jit-administration",
+    startWorkspace: "planning",
+    openAccountMenu: true,
+    requiredSelectors: ["[data-tour-id='account-menu-trigger']"],
+    steps: [
+      {
+        element: "[data-tour-id='account-menu-trigger']",
+        popover: {
+          title: "Adminzugang im Profilmenü",
+          description: "Berechtigte Personen aktivieren hier den 60-Minuten-Zugang. Danach öffnet dasselbe Menü den technischen Administrationsbereich.",
+          side: "bottom",
+          align: "end",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: planningApiDependenciesTourId,
     productUpdateId: "2026-09-13-planning-api-dependencies",

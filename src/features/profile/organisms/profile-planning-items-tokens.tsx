@@ -7,7 +7,8 @@ import {
   TEAM_PLANNING_ITEMS_TOKEN_TTL_DAYS,
 } from "@/features/planning-items/model/planning-items-contract";
 import { useProfilePlanningItemsTokens } from "@/features/profile/hooks/use-profile-planning-items-tokens";
-import { SettingsPane, SettingsRow, ToggleSwitch } from "@/features/profile/molecules/profile-settings-layout";
+import { SettingsPane, SettingsRow } from "@/features/profile/molecules/profile-settings-layout";
+import { ToggleSwitch } from "@/shared/atoms/toggle-switch";
 import { ProfilePlanningItemsTokenRow } from "@/features/profile/molecules/profile-planning-items-token-row";
 import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
