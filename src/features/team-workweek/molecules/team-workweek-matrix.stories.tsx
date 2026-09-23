@@ -17,7 +17,6 @@ export const ShowsTheCurrentPublishedWorkweek: Story = {
     profiles: [{
       id: "sebastian",
       name: "Sebastian",
-      role: "member",
       platformRole: "ceo",
       orgRole: "CEO",
       githubLogin: "sebastian",

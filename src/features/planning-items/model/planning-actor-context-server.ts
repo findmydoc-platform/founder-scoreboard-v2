@@ -13,7 +13,7 @@ type TrustedProfile = Readonly<{
 }>;
 
 type SessionAuthResult =
-  | Readonly<{ ok: true; profile: TrustedProfile | null }>
+  | Readonly<{ ok: true; profile: TrustedProfile | null; authority?: { capabilities: { operationalCorrection: boolean } } }>
   | Readonly<{ ok: false }>;
 
 type PlanningTokenAuthResult =
@@ -65,7 +65,17 @@ export function actorContextFromSessionAuth(
 ): ActorContextAdapterResult {
   if (!permission.ok) return { ok: false, reason: "authenticationRejected" };
   if (!permission.profile) return { ok: false, reason: "profileMissing" };
-  return actor(permission.profile, { kind: "session" });
+  const result = actor(permission.profile, { kind: "session" });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    actor: Object.freeze({
+      ...result.actor,
+      capabilities: Object.freeze({
+        operationalCorrection: permission.authority?.capabilities.operationalCorrection === true,
+      }),
+    }),
+  };
 }
 
 export function actorContextFromPlanningTokenAuth(

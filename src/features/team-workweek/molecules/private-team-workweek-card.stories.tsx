@@ -6,7 +6,6 @@ import type { BrowserApiClient } from "@/lib/browser-api-client";
 const profile = {
   id: "sebastian",
   name: "Sebastian",
-  role: "member" as const,
   platformRole: "ceo" as const,
   orgRole: "CEO",
   githubLogin: "sebastian",

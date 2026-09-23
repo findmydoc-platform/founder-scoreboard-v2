@@ -12,6 +12,7 @@ export type PlanningCommandContext = {
   apiClient: BrowserApiClient;
   applyPlanningShellStateUpdate: PlanningShellStateUpdater;
   canChangeTaskStatus: (task: Task) => boolean;
+  canCorrectOperationally: boolean;
   canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
   currentProfile: Profile | null;

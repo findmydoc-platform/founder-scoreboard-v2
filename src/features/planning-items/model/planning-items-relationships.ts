@@ -1,5 +1,7 @@
 import "server-only";
 
+import { hasOperationalCorrection } from "./actor-context";
+
 import { createPlanningItems, type PlanningDecisionCore } from "./planning-items-runner";
 import { createSupabasePlanningItemsStore } from "./planning-items-store-supabase";
 import type {
@@ -86,6 +88,8 @@ type PlanningSupabase = Readonly<{
 
 type PlanningRelationshipOptions = Readonly<{
   teamDependency?: boolean;
+  mutationClient?: unknown;
+  administratorAccess?: boolean;
 }>;
 
 function validTimestamp(value: unknown): value is string {
@@ -250,7 +254,7 @@ export const planningRelationshipDecisionCore: PlanningDecisionCore<
     if (state.reviewLocked) return { ok: false, error: stateConflict(state.finalReviewLocked ? "finalReviewLocked" : "reviewLocked") };
     if (state.completedLocked) return { ok: false, error: stateConflict("completedLocked") };
 
-    const canManageAll = actor.platformRole === "ceo" || actor.platformRole === "deputy";
+    const canManageAll = actor.platformRole === "ceo" || actor.platformRole === "deputy" || hasOperationalCorrection(actor);
     const canManageDependency = canManageBlockedBy(state, actor.profileId, actor.platformRole);
 
     if (action.kind === "addRelationship") {
@@ -437,7 +441,12 @@ async function prepareRelationship(
 function providerError(
   code: string,
   request: PlanningCommitRequest<PlanningRelationshipCommitPlan>,
+  administratorAccess: boolean,
+  message: string,
 ): PlanningCommitOutcome | null {
+  if (administratorAccess && code === "42501" && message.includes("active administrator access required")) {
+    return { ok: false, error: { code: "forbidden", reason: "administratorAccessRequired" } };
+  }
   if (code === "P0001") return { ok: false, error: { code: "conflict", reason: "revision" } };
   if (code === "P0002") {
     const entity = request.plan.operation === "remove" && request.plan.relationId
@@ -457,6 +466,7 @@ function providerError(
 async function commitRelationship(
   supabase: PlanningSupabase,
   request: PlanningCommitRequest<PlanningRelationshipCommitPlan>,
+  administratorAccess = false,
 ): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
   const relationshipParams = {
     p_operation: request.plan.operation,
@@ -470,9 +480,20 @@ async function commitRelationship(
     p_request_ip: request.requestMetadata?.requestIp || null,
     p_user_agent: request.requestMetadata?.userAgent || null,
   };
-  const result = await supabase.rpc("mutate_planning_relationship_transaction", relationshipParams);
+  const result = await supabase.rpc(
+    administratorAccess
+      ? "mutate_administrator_planning_relationship_transaction"
+      : "mutate_planning_relationship_transaction",
+    relationshipParams,
+  );
   if (result.error) {
-    const mapped = providerError(String((result.error as { code?: unknown }).code || ""), request);
+    const providerFailure = result.error as { code?: unknown; message?: unknown };
+    const mapped = providerError(
+      String(providerFailure.code || ""),
+      request,
+      administratorAccess,
+      String(providerFailure.message || ""),
+    );
     return mapped ? { data: mapped, error: null } : { data: null, error: result.error };
   }
   if (!result.data || typeof result.data !== "object") return { data: null, error: new Error("Invalid planning relationship result") };
@@ -506,10 +527,11 @@ export function createPlanningRelationshipPlanningItems(
   options: PlanningRelationshipOptions = {},
 ): PlanningItems {
   const supabase = supabaseClient as PlanningSupabase;
+  const mutationSupabase = (options.mutationClient || supabaseClient) as PlanningSupabase;
   return createPlanningItems({
     store: createSupabasePlanningItemsStore<PlanningRelationshipState, PlanningRelationshipCommitPlan>({
       prepareCommand: (request) => prepareRelationship(supabase, request, options),
-      commitCommand: (request) => commitRelationship(supabase, request),
+      commitCommand: (request) => commitRelationship(mutationSupabase, request, options.administratorAccess),
     }),
     decisionCore: planningRelationshipDecisionCore,
   });

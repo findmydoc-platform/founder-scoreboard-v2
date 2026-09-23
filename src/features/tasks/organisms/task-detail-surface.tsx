@@ -62,6 +62,7 @@ type TaskDetailSurfaceProps = {
   allTasks: Task[];
   relations: TaskRelation[];
   currentProfile?: Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | null;
+  operationalCorrection?: boolean;
   pending: boolean;
   error?: string;
   detailDataError?: string;
@@ -105,6 +106,7 @@ export function TaskDetailSurface({
   allTasks,
   relations,
   currentProfile = null,
+  operationalCorrection = false,
   pending,
   error = "",
   detailDataError = "",
@@ -140,6 +142,7 @@ export function TaskDetailSurface({
     task,
     currentProfile,
     unrestricted: false,
+    operationalCorrection,
     onUpdate,
   });
   const reviewActive = task.taskType === "deliverable" && isTaskReviewActive(task);
@@ -160,7 +163,7 @@ export function TaskDetailSurface({
   const currentInitiative = initiative;
   const parentTask = allTasks.find((item) => item.id === task.parentTaskId);
   const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
-  const baseRelationshipAccess = taskRelationshipAccess({ task, initiative: currentInitiative, profile: currentProfile, unrestricted: false });
+  const baseRelationshipAccess = taskRelationshipAccess({ task, initiative: currentInitiative, profile: currentProfile, unrestricted: false, operationalCorrection });
   const relationshipAccess = reviewLocked ? {
     ...baseRelationshipAccess,
     allowedRelationTypes: [],

@@ -1,7 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { requirePlanningContributor } from "@/lib/authz";
+import { apiError, authzError, requireJsonApiContext } from "@/lib/api-response";
+import {
+  bearerToken,
+  requirePlanningContributorOrActiveAdministrator,
+  resolveAdministratorAccessFailure,
+} from "@/lib/authz";
 import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
 import {
   addPlanningRelationshipCommand,
@@ -12,13 +16,15 @@ import {
   planningRelationshipFromResult,
   removePlanningRelationshipCommand,
 } from "@/features/planning-items/model/planning-items-relationships";
+import { getSupabaseForToken } from "@/lib/supabase";
 
 type RelationshipRouteContext = { params: Promise<{ id: string }> };
 
 function actorFromPermission(permission: {
   profile: { id: string; platformRole: "ceo" | "founder" | "deputy" | "viewer" } | null;
+  authority?: { capabilities: { operationalCorrection: boolean } };
 }) {
-  return actorContextFromSessionAuth({ ok: true, profile: permission.profile });
+  return actorContextFromSessionAuth({ ok: true, profile: permission.profile, authority: permission.authority });
 }
 
 function requestMetadata(request: NextRequest) {
@@ -30,7 +36,7 @@ function requestMetadata(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest, context: RelationshipRouteContext) {
-  const apiContext = await requireJsonApiContext<unknown>(request, requirePlanningContributor, {});
+  const apiContext = await requireJsonApiContext<unknown>(request, requirePlanningContributorOrActiveAdministrator, {});
   if (!apiContext.ok) return apiContext.response;
 
   const parsed = parseAddPlanningRelationshipPayload(apiContext.payload);
@@ -41,13 +47,22 @@ export async function POST(request: NextRequest, context: RelationshipRouteConte
   if (!actor.ok) {
     return apiError("Nur Owner, Accountable, CEO oder Deputy können diese Blocker-Abhängigkeit verwalten.", 403);
   }
-  const result = await createPlanningRelationshipPlanningItems(apiContext.supabase).run({
+  const administratorAccess = apiContext.permission.authority?.capabilities.operationalCorrection === true;
+  const mutationClient = administratorAccess ? getSupabaseForToken(bearerToken(request)) : apiContext.supabase;
+  if (!mutationClient) return apiError("Anmeldung erforderlich.", 401);
+  const result = await createPlanningRelationshipPlanningItems(apiContext.supabase, {
+    mutationClient,
+    administratorAccess,
+  }).run({
     actor: actor.actor,
     mode: "commit",
     command: addPlanningRelationshipCommand(id, parsed.value),
     requestMetadata: requestMetadata(request),
   });
   if (!result.ok) {
+    if (administratorAccess && result.error.code === "forbidden" && result.error.reason === "administratorAccessRequired") {
+      return authzError(await resolveAdministratorAccessFailure(mutationClient));
+    }
     const mapped = planningRelationshipError(result.error);
     return apiError(mapped.message, mapped.status);
   }
@@ -58,7 +73,7 @@ export async function POST(request: NextRequest, context: RelationshipRouteConte
 }
 
 export async function DELETE(request: NextRequest, context: RelationshipRouteContext) {
-  const apiContext = await requireJsonApiContext<unknown>(request, requirePlanningContributor, {});
+  const apiContext = await requireJsonApiContext<unknown>(request, requirePlanningContributorOrActiveAdministrator, {});
   if (!apiContext.ok) return apiContext.response;
 
   const parsed = parseRemovePlanningRelationshipPayload(apiContext.payload);
@@ -68,13 +83,22 @@ export async function DELETE(request: NextRequest, context: RelationshipRouteCon
   if (!actor.ok) {
     return apiError("Nur Owner, Accountable, CEO oder Deputy können diese Blocker-Abhängigkeit verwalten.", 403);
   }
-  const result = await createPlanningRelationshipPlanningItems(apiContext.supabase).run({
+  const administratorAccess = apiContext.permission.authority?.capabilities.operationalCorrection === true;
+  const mutationClient = administratorAccess ? getSupabaseForToken(bearerToken(request)) : apiContext.supabase;
+  if (!mutationClient) return apiError("Anmeldung erforderlich.", 401);
+  const result = await createPlanningRelationshipPlanningItems(apiContext.supabase, {
+    mutationClient,
+    administratorAccess,
+  }).run({
     actor: actor.actor,
     mode: "commit",
     command: removePlanningRelationshipCommand(id, parsed.value),
     requestMetadata: requestMetadata(request),
   });
   if (!result.ok) {
+    if (administratorAccess && result.error.code === "forbidden" && result.error.reason === "administratorAccessRequired") {
+      return authzError(await resolveAdministratorAccessFailure(mutationClient));
+    }
     if (result.error.code === "dependencyUnavailable") {
       return apiError("Abhängigkeit konnte nicht entfernt werden.", 500);
     }

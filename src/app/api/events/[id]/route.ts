@@ -1,17 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { requireOperationalLead } from "@/lib/authz";
+import { bearerToken, requireOperationalLeadOrActiveAdministrator } from "@/lib/authz";
 import { assertFounderEventParticipantsExist, buildFounderEventUpdatePatch, founderEventSelect, validateFounderEventRow, type EventPayload } from "@/features/events/model/event-api";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { mapFounderEvent } from "@/lib/planning-row-mappers";
 import { invalidateSharedPlanningHeaderCache } from "@/lib/planning-header-cache";
+import { getSupabaseForToken } from "@/lib/supabase";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<EventPayload>(request, requireOperationalLead, {});
+  const apiContext = await requireJsonApiContext<EventPayload>(request, requireOperationalLeadOrActiveAdministrator, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
+  const administratorMutation = permission.authority?.capabilities.operationalCorrection === true;
+  const writeSupabase = administratorMutation ? getSupabaseForToken(bearerToken(request)) : supabase;
+  if (!writeSupabase) return apiError("Anmeldung erforderlich.", 401);
 
   const { id: rawId } = await context.params;
   const id = Number(rawId);
@@ -31,7 +35,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const participantError = await assertFounderEventParticipantsExist(supabase, patch.participant_profile_ids);
   if (participantError) return apiError(participantError, participantError.includes("nicht gefunden") ? 404 : 500);
 
-  const { data: event, error } = await supabase
+  const { data: event, error } = await writeSupabase
     .from("founder_events")
     .update(patch)
     .eq("id", id)

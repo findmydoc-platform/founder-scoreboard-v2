@@ -156,6 +156,23 @@ test("Viewer remains fully read-only", () => {
   assert.equal(Object.values(permissions).some(Boolean), false);
 });
 
+test("active administrator can correct open work without final, review, or creation rights", () => {
+  const permissions = taskDetailPermissions({
+    task: deliverableTask,
+    profile: { id: "admin-viewer", name: "Admin Viewer", platformRole: "viewer" },
+    operationalCorrection: true,
+  });
+
+  assert.equal(permissions.canEditBrief, true);
+  assert.equal(permissions.canManageTaskMeta, true);
+  assert.equal(permissions.canUpdateWorkingStatus, true);
+  assert.equal(permissions.canCreateSubIssue, false);
+  assert.equal(permissions.canManageFinalStatus, false);
+  assert.equal(permissions.canManageReviewOwner, false);
+  assert.equal(permissions.canOpenReview, false);
+  assert.equal(permissions.canReopenSubIssue, false);
+});
+
 test("status options expose only the role-allowed Sub-Issue transitions", () => {
   const foreignFounder = taskDetailPermissions({ task, profile: { id: "founder-2", name: "Founder Two", platformRole: "founder" } });
   assert.deepEqual(taskStatusOptionsForPermissions("In Arbeit", foreignFounder, "sub_issue"), ["In Arbeit", "Erledigt"]);

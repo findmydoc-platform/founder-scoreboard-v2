@@ -24,13 +24,15 @@ export function taskRelationshipAccess({
   initiative,
   profile,
   unrestricted = false,
+  operationalCorrection = false,
 }: {
   task: RelationshipTask;
   initiative?: RelationshipInitiative;
   profile?: RelationshipProfile | null;
   unrestricted?: boolean;
+  operationalCorrection?: boolean;
 }) {
-  const canManageAll = unrestricted || isOperationalLeadRole(profile?.platformRole);
+  const canManageAll = unrestricted || operationalCorrection || isOperationalLeadRole(profile?.platformRole);
   const canManageBlockedBy = canManageAll || Boolean(
     profile
     && profile.platformRole === "founder"

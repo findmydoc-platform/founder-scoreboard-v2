@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { apiError, requireApiContext } from "@/lib/api-response";
-import { requirePlanningContributor } from "@/lib/authz";
+import { apiError, authzError, requireApiContext } from "@/lib/api-response";
+import {
+  bearerToken,
+  requirePlanningContributorOrActiveAdministrator,
+  resolveAdministratorAccessFailure,
+} from "@/lib/authz";
 import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { taskAuditActionFromMessage } from "@/features/tasks/model/task-comment-timeline-policy";
 import {
@@ -62,6 +66,7 @@ import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers"
 import { normalizeFixedDate } from "@/features/planning-items/model/deliverable-schedule";
 import { requireJsonApiContext } from "@/lib/api-response";
 import { requireOperationalLead } from "@/lib/authz";
+import { getSupabaseForToken } from "@/lib/supabase";
 import {
   createEmptyEpicDeletePlanningItems,
   emptyEpicDeleteCommand,
@@ -109,12 +114,17 @@ function strategicDate(value: unknown) {
 }
 
 export async function handleBrowserTaskUpdate(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requirePlanningContributor, {
+  const apiContext = await requireApiContext(request, requirePlanningContributorOrActiveAdministrator, {
     supabaseUnavailableMessage: "Änderungen konnten nicht dauerhaft gespeichert werden.",
   });
   if (!apiContext.ok) return apiContext.response;
 
-  const { permission, supabase } = apiContext;
+  const { permission } = apiContext;
+  const operationalCorrection = permission.authority?.capabilities.operationalCorrection === true;
+  const supabase = operationalCorrection
+    ? getSupabaseForToken(bearerToken(request))
+    : apiContext.supabase;
+  if (!supabase) return apiError("Anmeldung erforderlich.", 401);
 
   const { id } = await context.params;
   const rawPayload = await request.json() as unknown;
@@ -127,9 +137,10 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   if (unknownField) return apiError(`Unbekanntes Feld: ${unknownField}.`, 400);
   let payload = { ...rawPayload } as TaskUpdatePayload;
   if (isPlanningReviewRequestPayload(rawPayload)) {
+    if (operationalCorrection) return apiError("Adminzugang darf keine Reviews starten oder finalisieren.", 403);
     const parsed = parsePlanningReviewRequestPayload(rawPayload);
     if (!parsed.ok) return apiError(parsed.error, parsed.status);
-    const actor = actorContextFromSessionAuth({ ok: true, profile: permission.profile });
+    const actor = actorContextFromSessionAuth(permission);
     if (!actor.ok) return apiError("Founder können nur den Status ihrer eigenen Aufgaben ändern.", 403);
     const metadata = auditRequestMetadata(request);
     const result = await createPlanningReviewPlanningItems(supabase).run({
@@ -160,9 +171,10 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     return NextResponse.json({ ok: true, activities, task });
   }
   if (isPlanningTaskReparentPayload(rawPayload)) {
+    if (operationalCorrection) return apiError("Adminzugang darf keine Parent-Zuordnung umgehen.", 403);
     const parsed = parsePlanningTaskReparentPayload(rawPayload);
     if (!parsed.ok) return apiError(parsed.error, parsed.status);
-    const actor = actorContextFromSessionAuth({ ok: true, profile: permission.profile });
+    const actor = actorContextFromSessionAuth(permission);
     if (!actor.ok) return apiError("Zuordnung konnte nicht gespeichert werden.", 403);
     const result = await createPlanningReparentPlanningItems(supabase, "any").run({
       actor: actor.actor,
@@ -207,10 +219,10 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   if (!currentTask) {
     return apiError("Aufgabe wurde nicht gefunden.", 404);
   }
-  const reviseActor = actorContextFromSessionAuth({ ok: true, profile: permission.profile });
+  const reviseActor = actorContextFromSessionAuth(permission);
   if (!reviseActor.ok) return apiError("Aufgabenänderung ist nicht erlaubt.", 403);
   if (currentTask.task_type === "epic" || currentTask.task_type === "initiative") {
-    const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
+    const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole) || operationalCorrection;
     const ownsInitiative = currentTask.task_type === "initiative"
       && Boolean(permission.profile?.id)
       && (currentTask.assignee === permission.profile?.id || currentTask.owner === permission.profile?.id);
@@ -309,6 +321,9 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       command: planningItemReviseCommand(id, currentTask.task_type, expectedUpdatedAt, payload as Record<string, unknown>),
     });
     if (!result.ok) {
+      if (operationalCorrection && result.error.code === "forbidden" && result.error.reason === "administratorAccessRequired") {
+        return authzError(await resolveAdministratorAccessFailure(supabase));
+      }
       if (result.error.code === "conflict" && result.error.reason === "revision") return apiError("Planungselement wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
       if (result.error.code === "notFound") return apiError("Planungselement wurde nicht gefunden.", 404);
       if (result.error.code === "invalidCommand") return apiError("Planungselement ist ungültig.", 400);
@@ -385,7 +400,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   const normalizedStatusUpdate = withoutUnchangedTaskStatus(currentTask, payload);
   payload = normalizedStatusUpdate.payload;
   const statusNoop = normalizedStatusUpdate.statusNoop;
-  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
+  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole) || operationalCorrection;
   const isCeo = permission.profile?.platformRole === "ceo";
   const canSetReviewOwner = isCeo;
   const restrictedFields = restrictedTaskUpdateFields(payload);
@@ -403,6 +418,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       taskType: currentTask.task_type === "sub_issue" ? "sub_issue" : "deliverable",
     },
     profile: permission.profile,
+    operationalCorrection,
   });
 
   if (!isOperationalLead && restrictedFields.length) {
@@ -609,6 +625,9 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     command: planningItemReviseCommand(id, currentTask.task_type, expectedUpdatedAt, payload as Record<string, unknown>),
   });
   if (!reviseResult.ok) {
+    if (operationalCorrection && reviseResult.error.code === "forbidden" && reviseResult.error.reason === "administratorAccessRequired") {
+      return authzError(await resolveAdministratorAccessFailure(supabase));
+    }
     if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision") {
       return apiError("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
     }
