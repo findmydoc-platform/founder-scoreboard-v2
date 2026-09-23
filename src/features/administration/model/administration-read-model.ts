@@ -36,6 +36,12 @@ export type PersonAdministrationPatch = Readonly<{
 }>;
 
 export type AdministrationIntegrationStatus = Readonly<{
+  githubApp: Readonly<{
+    available: boolean;
+    state: "ready" | "configuration_required" | "unavailable";
+    description: string;
+    nextStep: string;
+  }> | null;
   googleChat: {
     ready: boolean;
     webhookConfigured: boolean;

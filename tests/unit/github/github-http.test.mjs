@@ -49,6 +49,29 @@ test("GitHub reads retry one network failure", async () => {
   assert.equal(calls, 2);
 });
 
+test("GitHub reads forward abort signals and do not retry after cancellation", async () => {
+  const controller = new AbortController();
+  let calls = 0;
+
+  await withFetch((_url, init) => new Promise((_resolve, reject) => {
+    calls += 1;
+    assert.equal(init.signal, controller.signal);
+    init.signal.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });
+    queueMicrotask(() => controller.abort());
+  }), async () => {
+    await assert.rejects(
+      () => githubHttp.githubRequest("https://api.github.com/app/installations/456", {
+        token: "app-jwt",
+        errorMessage: "GitHub installation check failed",
+        signal: controller.signal,
+      }),
+      (error) => error instanceof githubHttp.GitHubApiError,
+    );
+  });
+
+  assert.equal(calls, 1);
+});
+
 test("GraphQL POST queries are retryable reads", async () => {
   let calls = 0;
   const body = await withFetch(async (_url, init) => {

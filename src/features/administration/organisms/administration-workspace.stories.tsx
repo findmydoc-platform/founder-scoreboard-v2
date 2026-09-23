@@ -132,6 +132,12 @@ export const administrationStoryModel: AdministrationWorkspaceModel = {
     { id: 201, eventId: 101, channel: "google_chat", status: "sent", attempts: 1, target: "Özen", lastError: "", deliveryMode: "direct_dm", digestSize: 1, deliveredAt: "2026-09-21T16:27:04.000Z", createdAt: "2026-09-21T16:27:00.000Z" },
   ],
   integrationStatus: {
+    githubApp: {
+      available: true,
+      state: "ready",
+      description: "Die GitHub App ist erreichbar und die Installation ist verfügbar.",
+      nextStep: "",
+    },
     googleChat: { ready: true, webhookConfigured: true, apiConfigured: true, deliveryEnabled: true, mode: "direct-dm" },
     pendingDeliveries: 2,
     failedDeliveries: 1,
@@ -140,9 +146,9 @@ export const administrationStoryModel: AdministrationWorkspaceModel = {
 
 const model = administrationStoryModel;
 
-function AdministrationStory() {
+function AdministrationStory({ initialModel = model }: { initialModel?: AdministrationWorkspaceModel }) {
   const [activeTab, setActiveTab] = useState<AdministrationTab>("people");
-  const [storyModel, setStoryModel] = useState(model);
+  const [storyModel, setStoryModel] = useState(initialModel);
   return (
     <main className="min-h-screen bg-[#f4f7fb] px-4 py-6 text-slate-950 sm:px-8 lg:px-12">
       <div className="mx-auto grid max-w-[1184px] gap-4">
@@ -225,6 +231,9 @@ export const ActiveAdministrator: Story = {
     await expect(canvas.queryByRole("heading", { name: "Schnellzugriff" })).not.toBeInTheDocument();
 
     await userEvent.click(canvas.getByRole("tab", { name: "Integrationen & Zustellung" }));
+    const githubAppStatus = canvas.getByRole("region", { name: "GitHub-App-Betriebsstatus" });
+    await expect(within(githubAppStatus).getByText("Verfügbar")).toBeInTheDocument();
+    await expect(within(githubAppStatus).getByText("Die GitHub App ist erreichbar und die Installation ist verfügbar.")).toBeInTheDocument();
     await expect(canvas.queryByText("Geprüft")).not.toBeInTheDocument();
     await expect(canvas.queryByText("Konfiguriert")).not.toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "Erneut senden" })).toBeInTheDocument();
@@ -232,5 +241,33 @@ export const ActiveAdministrator: Story = {
     await expect(canvas.getByRole("button", { name: /Technische Details Testzustellung und Diagnose/ })).toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: /Technische Details Testzustellung und Diagnose/ }));
     await expect(canvas.getByRole("combobox", { name: "Empfänger für Test-DM" })).toBeInTheDocument();
+  },
+};
+
+export const GitHubAppUnavailable: Story = {
+  render: () => (
+    <AdministrationStory
+      initialModel={{
+        ...administrationStoryModel,
+        integrationStatus: {
+          ...administrationStoryModel.integrationStatus,
+          githubApp: {
+            available: false,
+            state: "unavailable",
+            description: "Die GitHub-App-Installation ist momentan nicht erreichbar.",
+            nextStep: "Installation, Berechtigungen und GitHub-Verfügbarkeit prüfen.",
+          },
+        },
+      }}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("tab", { name: "Integrationen & Zustellung" }));
+    const githubAppStatus = canvas.getByRole("region", { name: "GitHub-App-Betriebsstatus" });
+    await expect(within(githubAppStatus).getByText("Nicht verfügbar")).toBeInTheDocument();
+    await expect(within(githubAppStatus).getByText("Die GitHub-App-Installation ist momentan nicht erreichbar.")).toBeInTheDocument();
+    await expect(within(githubAppStatus).getByText("Installation, Berechtigungen und GitHub-Verfügbarkeit prüfen.")).toBeInTheDocument();
+    await expect(canvas.queryByText(/token=|\/private\/|upstream rejected/i)).not.toBeInTheDocument();
   },
 };

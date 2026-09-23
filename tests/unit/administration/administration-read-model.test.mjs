@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { beforeEach, test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
+
+let githubAppStatusCalls = 0;
+let githubAppStatusResult = null;
+
+beforeEach(() => {
+  githubAppStatusCalls = 0;
+  githubAppStatusResult = {
+    available: true,
+    state: "ready",
+    description: "Die GitHub App ist erreichbar und die Installation ist verfügbar.",
+    nextStep: "",
+  };
+});
 
 function createSupabaseFixture() {
   const calls = [];
@@ -114,6 +127,12 @@ const { createSupabaseAdministrationReadModel } = await importTestModule(
   "src/features/administration/server/administration-read-model-supabase.ts",
   {
     "server-only": {},
+    "@/lib/github-app": {
+      getGitHubAppOperationalStatus: async () => {
+        githubAppStatusCalls += 1;
+        return githubAppStatusResult;
+      },
+    },
     "@/lib/planning-row-mappers": {
       mapNotificationEvent: (row) => ({ id: row.id, createdAt: row.created_at }),
       mapNotificationDelivery: (row) => ({ id: row.id, createdAt: row.created_at }),
@@ -147,6 +166,8 @@ test("CEO eligibility view omits technical identity and delivery data", async ()
   assert.equal(result.model.people[0].githubLogin, "");
   assert.equal(result.model.people[0].githubConnection, null);
   assert.equal(result.model.githubProject, null);
+  assert.equal(result.model.integrationStatus.githubApp, null);
+  assert.equal(githubAppStatusCalls, 0);
   assert.deepEqual(result.model.notificationEvents, []);
   assert.deepEqual(result.model.notificationDeliveries, []);
   assert.deepEqual(supabase.calls.map((call) => call.rpc || call.table), ["administrator_directory_snapshot"]);
@@ -169,7 +190,42 @@ test("active administrator view projects technical identity and delivery operati
   assert.equal(result.model.people[0].githubConnection.lastSignInAt, "2026-09-22T11:45:00.000Z");
   assert.equal("authUserId" in result.model.people[0], false);
   assert.deepEqual(result.model.githubProject, { id: "project", owner: "findmydoc-platform", number: 1 });
+  assert.deepEqual(result.model.integrationStatus.githubApp, {
+    available: true,
+    state: "ready",
+    description: "Die GitHub App ist erreichbar und die Installation ist verfügbar.",
+    nextStep: "",
+  });
+  assert.equal(githubAppStatusCalls, 1);
   assert.deepEqual(result.model.notificationEvents.map(({ id }) => id), ["event"]);
   assert.deepEqual(result.model.notificationDeliveries.map(({ id }) => id), ["delivery"]);
   assert.equal(result.model.revision, "2999-01-01T00:00:00.000Z");
+});
+
+test("active administrator view projects the provider-owned GitHub App status", async () => {
+  githubAppStatusResult = {
+    available: false,
+    state: "configuration_required",
+    description: "Die serverseitige GitHub-App-Konfiguration ist unvollständig.",
+    nextStep: "GitHub-App-ID, Installation und privaten Schlüssel in der Laufzeitkonfiguration prüfen.",
+  };
+  const supabase = createSupabaseFixture();
+
+  const result = await createSupabaseAdministrationReadModel(supabase).load({
+    capabilities: {
+      ...eligibilityManager,
+      technicalAdministration: true,
+      operationalCorrection: true,
+      ceoGovernance: false,
+    },
+  });
+
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.model.integrationStatus.githubApp, {
+    available: false,
+    state: "configuration_required",
+    description: "Die serverseitige GitHub-App-Konfiguration ist unvollständig.",
+    nextStep: "GitHub-App-ID, Installation und privaten Schlüssel in der Laufzeitkonfiguration prüfen.",
+  });
+  assert.equal(githubAppStatusCalls, 1);
 });

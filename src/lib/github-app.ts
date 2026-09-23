@@ -5,6 +5,7 @@ import type { AuthenticatedProfile } from "./types";
 
 const tokenRefreshWindowMs = 5 * 60 * 1000;
 const oauthStateTtlMs = 10 * 60 * 1000;
+const githubAppOperationalTimeoutMs = 4_000;
 
 type GitHubAppUserTokenRow = {
   profile_id: string;
@@ -49,6 +50,13 @@ let cachedInstallationToken: { token: string; expiresAt: number } | null = null;
 export class GitHubAppConfigurationError extends Error {}
 export class GitHubAppUserTokenRequiredError extends Error {}
 
+export type GitHubAppOperationalStatus = Readonly<{
+  available: boolean;
+  state: "ready" | "configuration_required" | "unavailable";
+  description: string;
+  nextStep: string;
+}>;
+
 function env(name: string) {
   return process.env[name]?.trim() || "";
 }
@@ -72,7 +80,11 @@ async function githubAppPrivateKey() {
   // Keep runtime-only private key files out of Next's static output trace.
   const runtimeImport = Function("specifier", "return import(specifier)") as (specifier: string) => Promise<typeof import("node:fs/promises")>;
   const { readFile } = await runtimeImport("node:fs/promises");
-  return readFile(resolvePrivateKeyPath(keyPath), "utf8");
+  try {
+    return await readFile(resolvePrivateKeyPath(keyPath), "utf8");
+  } catch {
+    throw new GitHubAppConfigurationError("Der private Schlüssel der GitHub App konnte nicht gelesen werden.");
+  }
 }
 
 function tokenEncryptionKey() {
@@ -106,7 +118,13 @@ async function githubAppJwt() {
     iss: requireEnv("GITHUB_APP_ID"),
   });
   const data = `${header}.${payload}`;
-  const signature = createSign("RSA-SHA256").update(data).sign(await githubAppPrivateKey(), "base64url");
+  let signature: string;
+  try {
+    signature = createSign("RSA-SHA256").update(data).sign(await githubAppPrivateKey(), "base64url");
+  } catch (error) {
+    if (error instanceof GitHubAppConfigurationError) throw error;
+    throw new GitHubAppConfigurationError("Der private Schlüssel der GitHub App ist ungültig.");
+  }
   return `${data}.${signature}`;
 }
 
@@ -238,6 +256,50 @@ export async function getGitHubAppInstallationToken() {
     expiresAt: new Date(body.expires_at).getTime(),
   };
   return cachedInstallationToken.token;
+}
+
+export async function getGitHubAppOperationalStatus(
+  { timeoutMs = githubAppOperationalTimeoutMs }: { timeoutMs?: number } = {},
+): Promise<GitHubAppOperationalStatus> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
+
+  try {
+    const installationId = requireEnv("GITHUB_APP_INSTALLATION_ID");
+    await githubJson<{ id: number }>(
+      `https://api.github.com/app/installations/${encodeURIComponent(installationId)}`,
+      {
+        token: await githubAppJwt(),
+        method: "GET",
+        operation: "read",
+        signal: controller.signal,
+        errorMessage: "GitHub-App-Installation konnte nicht geprüft werden",
+      },
+    );
+    return {
+      available: true,
+      state: "ready",
+      description: "Die GitHub App ist erreichbar und die Installation ist verfügbar.",
+      nextStep: "",
+    };
+  } catch (error) {
+    if (error instanceof GitHubAppConfigurationError) {
+      return {
+        available: false,
+        state: "configuration_required",
+        description: "Die serverseitige GitHub-App-Konfiguration ist unvollständig.",
+        nextStep: "GitHub-App-ID, Installation und privaten Schlüssel in der Laufzeitkonfiguration prüfen.",
+      };
+    }
+    return {
+      available: false,
+      state: "unavailable",
+      description: "Die GitHub-App-Installation ist momentan nicht erreichbar.",
+      nextStep: "Installation, Berechtigungen und GitHub-Verfügbarkeit prüfen.",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function storeGitHubAppUserToken({

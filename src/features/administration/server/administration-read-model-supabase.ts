@@ -9,6 +9,7 @@ import { mapNotificationDelivery, mapNotificationEvent } from "@/lib/planning-ro
 import type { DbNotificationDelivery, DbNotificationEvent } from "@/lib/planning-row-types";
 import type { PlatformRole } from "@/lib/types";
 import { googleChatDeliveryStatus } from "@/lib/google-chat";
+import { getGitHubAppOperationalStatus } from "@/lib/github-app";
 
 type GrantRow = {
   profile_id: string;
@@ -57,7 +58,7 @@ export function createSupabaseAdministrationReadModel(
     async load({ capabilities }) {
       if (!capabilities.manageAdministratorEligibility) return { status: "forbidden" };
       const technical = capabilities.technicalAdministration;
-      const [directoryResult, eventResult, deliveryResult] = await Promise.all([
+      const [directoryResult, eventResult, deliveryResult, githubAppStatus] = await Promise.all([
         supabase.rpc("administrator_directory_snapshot"),
         technical
           ? supabase.from("notification_events").select("id,type,actor_profile_id,actor_label,recipient_profile_id,entity_type,entity_id,title,body,target_path,status,seen_at,dismissed_at,resolved_at,resolution_reason,created_at").order("created_at", { ascending: false }).limit(100)
@@ -65,6 +66,7 @@ export function createSupabaseAdministrationReadModel(
         technical
           ? supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,payload,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100)
           : Promise.resolve({ data: [], error: null }),
+        technical ? getGitHubAppOperationalStatus() : Promise.resolve(null),
       ]);
 
       if (directoryResult.error?.code === "42501") {
@@ -109,6 +111,7 @@ export function createSupabaseAdministrationReadModel(
           notificationEvents,
           notificationDeliveries,
           integrationStatus: {
+            githubApp: githubAppStatus,
             googleChat: {
               ...googleChatStatus,
               mode: googleChatStatus.mode as "direct-dm" | "space-webhook" | "not-configured",
