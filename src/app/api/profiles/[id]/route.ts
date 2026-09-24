@@ -1,156 +1,106 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanOptionalDate, cleanOptionalText } from "@/lib/api-input";
-import { requireCEO } from "@/lib/authz";
-import { mapNotificationPreference, mapProfile } from "@/lib/planning-row-mappers";
-import type { DbNotificationPreference, DbProfile } from "@/lib/planning-row-types";
-import { googleChatDigestEventTypes } from "@/lib/notification-policy";
-import { isGitHubLogin } from "@/lib/mentions";
-import type { NotificationPreference, PlatformRole } from "@/lib/types";
-import { apiError, requireApiContext } from "@/lib/api-response";
-import { buildProfileColorPatch, mapProfileColorTransactionError } from "@/features/profile/model/profile-color-api";
+import { apiError, authzError } from "@/lib/api-response";
+import { bearerToken, requireCEO } from "@/lib/authz";
+import { getSupabaseForToken } from "@/lib/supabase";
+import type { PlatformRole } from "@/lib/types";
 
-type UpdatePayload = {
-  githubLogin?: string;
-  platformRole?: PlatformRole;
-  orgRole?: string;
-  deputyFor?: string;
-  deputyActiveFrom?: string;
-  deputyActiveUntil?: string;
-  focus?: string;
-  weeklyCapacity?: number;
-  color?: string;
-  profileColorDuplicateMode?: boolean;
-  googleChatUserId?: string;
-  googleChatDmSpace?: string;
-  notificationsEnabled?: boolean;
-  notificationEvents?: Record<string, boolean>;
+type GovernancePayload = {
+  platformRole?: unknown;
+  orgRole?: unknown;
+  deputyFor?: unknown;
+  deputyActiveFrom?: unknown;
+  deputyActiveUntil?: unknown;
+  weeklyCapacity?: unknown;
 };
 
-type ProfileAdminTransactionResult = {
-  profile?: DbProfile;
-  notification_preferences?: DbNotificationPreference[];
+type GovernanceProfileRow = {
+  id: string;
+  name: string;
+  platform_role: PlatformRole;
+  org_role: string | null;
+  deputy_for: string | null;
+  deputy_active_from: string | null;
+  deputy_active_until: string | null;
+  weekly_capacity: number;
 };
 
 const platformRoles = new Set<PlatformRole>(["ceo", "founder", "deputy", "viewer"]);
-const allowedEventTypes = new Set<string>(googleChatDigestEventTypes);
+
+function governanceRoleLabel(role: PlatformRole) {
+  if (role === "ceo") return "CEO";
+  if (role === "deputy") return "Deputy";
+  if (role === "viewer") return "Viewer";
+  return "Founder";
+}
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireCEO);
-  if (!apiContext.ok) return apiContext.response;
-
-  const { permission, supabase } = apiContext;
-
-  const { id } = await context.params;
-  const payload = (await request.json()) as UpdatePayload;
-  const update: Record<string, string | number | boolean | null> = {};
-
-  if (payload.githubLogin !== undefined) {
-    const githubLogin = cleanOptionalText(payload.githubLogin, 80);
-    if (githubLogin && !isGitHubLogin(githubLogin)) {
-      return apiError("GitHub-Login ist ungültig.", 400);
-    }
-    update.github_login = githubLogin || null;
-  }
+  const permission = await requireCEO(request);
+  if (!permission.ok) return authzError(permission);
+  const token = bearerToken(request);
+  const supabase = token ? getSupabaseForToken(token) : null;
+  if (!supabase) return apiError("Anmeldung erforderlich.", 401);
+  const payload = await request.json().catch(() => null) as GovernancePayload | null;
+  if (!payload) return apiError("Profiländerung fehlt.", 400);
+  const patch: Record<string, string | number | null> = {};
 
   if (payload.platformRole !== undefined) {
-    if (!platformRoles.has(payload.platformRole)) {
+    if (typeof payload.platformRole !== "string" || !platformRoles.has(payload.platformRole as PlatformRole)) {
       return apiError("Ungültige Plattformrolle.", 400);
     }
-    update.platform_role = payload.platformRole;
+    patch.platform_role = payload.platformRole;
   }
-
-  if (payload.orgRole !== undefined) update.org_role = cleanOptionalText(payload.orgRole, 80) || null;
-  if (payload.focus !== undefined) update.focus = cleanOptionalText(payload.focus, 240) || null;
-
-  const colorPatch = buildProfileColorPatch({
-    color: payload.color,
-    profileColorDuplicateMode: payload.profileColorDuplicateMode,
-  });
-  if (!colorPatch.ok) return apiError(colorPatch.error, colorPatch.status);
-  Object.assign(update, colorPatch.patch);
-
+  if (payload.orgRole !== undefined) patch.org_role = cleanOptionalText(payload.orgRole, 80) || null;
+  if (payload.deputyFor !== undefined) patch.deputy_for = cleanOptionalText(payload.deputyFor, 80) || null;
+  if (payload.deputyActiveFrom !== undefined) {
+    const value = cleanOptionalDate(payload.deputyActiveFrom);
+    if (value === undefined) return apiError("Ungültiges Startdatum.", 400);
+    patch.deputy_active_from = value;
+  }
+  if (payload.deputyActiveUntil !== undefined) {
+    const value = cleanOptionalDate(payload.deputyActiveUntil);
+    if (value === undefined) return apiError("Ungültiges Enddatum.", 400);
+    patch.deputy_active_until = value;
+  }
   if (payload.weeklyCapacity !== undefined) {
     const capacity = Number(payload.weeklyCapacity);
     if (!Number.isFinite(capacity) || capacity < 0 || capacity > 80) {
       return apiError("Kapazität muss zwischen 0 und 80 Stunden liegen.", 400);
     }
-    update.weekly_capacity = Math.round(capacity);
+    patch.weekly_capacity = Math.round(capacity);
+  }
+  if (patch.platform_role && patch.platform_role !== "deputy") {
+    patch.deputy_for = null;
+    patch.deputy_active_from = null;
+    patch.deputy_active_until = null;
   }
 
-  if (payload.deputyFor !== undefined) update.deputy_for = cleanOptionalText(payload.deputyFor, 80) || null;
-
-  if (payload.deputyActiveFrom !== undefined) {
-    const value = cleanOptionalDate(payload.deputyActiveFrom);
-    if (value === undefined) return apiError("Ungültiges Startdatum.", 400);
-    update.deputy_active_from = value;
-  }
-
-  if (payload.deputyActiveUntil !== undefined) {
-    const value = cleanOptionalDate(payload.deputyActiveUntil);
-    if (value === undefined) return apiError("Ungültiges Enddatum.", 400);
-    update.deputy_active_until = value;
-  }
-
-  if (payload.googleChatUserId !== undefined) {
-    update.google_chat_user_id = cleanOptionalText(payload.googleChatUserId, 160) || null;
-  }
-
-  if (payload.googleChatDmSpace !== undefined) {
-    update.google_chat_dm_space = cleanOptionalText(payload.googleChatDmSpace, 240) || null;
-  }
-
-  if (payload.notificationsEnabled !== undefined) {
-    if (typeof payload.notificationsEnabled !== "boolean") {
-      return apiError("Benachrichtigungsstatus ist ungültig.", 400);
-    }
-    update.notifications_enabled = payload.notificationsEnabled;
-  }
-
-  if (update.platform_role && update.platform_role !== "deputy") {
-    update.deputy_for = null;
-    update.deputy_active_from = null;
-    update.deputy_active_until = null;
-  }
-
-  const notificationEvents: Record<string, boolean> = {};
-  if (payload.notificationEvents !== undefined) {
-    if (!payload.notificationEvents || typeof payload.notificationEvents !== "object") {
-      return apiError("Benachrichtigungseinstellungen sind ungültig.", 400);
-    }
-    for (const [eventType, enabled] of Object.entries(payload.notificationEvents)) {
-      if (!allowedEventTypes.has(eventType)) return apiError("Unbekannter Benachrichtigungstyp.", 400);
-      if (typeof enabled !== "boolean") return apiError("Benachrichtigungsstatus ist erforderlich.", 400);
-      notificationEvents[eventType] = enabled;
-    }
-  }
-
+  const { id } = await context.params;
   const metadata = auditRequestMetadata(request);
-  const { data: transactionData, error: transactionError } = await supabase.rpc("update_profile_admin_transaction", {
+  const { data, error } = await supabase.rpc("update_profile_governance_transaction", {
     p_profile_id: id,
-    p_actor_profile_id: permission.profile?.id || "",
-    p_profile_patch: update,
-    p_notification_events: notificationEvents,
+    p_profile_patch: patch,
     p_request_ip: metadata.request_ip,
     p_user_agent: metadata.user_agent,
   });
-
-  if (transactionError) {
-    const colorError = mapProfileColorTransactionError(transactionError);
-    if (colorError) return apiError(colorError.error, colorError.status);
-    if (transactionError.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
-    if (transactionError.code === "23514") return apiError("Genau ein CEO muss gesetzt bleiben.", 409);
-    if (transactionError.code === "22023") return apiError("Profiländerung ist ungültig.", 400);
-    return apiError(transactionError.message, 500);
-  }
-
-  const result = transactionData as ProfileAdminTransactionResult | null;
-  if (!result?.profile) return apiError("Profil konnte nicht gespeichert werden.", 500);
-
-  const profile = mapProfile(result.profile);
-  const notificationPreferences: NotificationPreference[] = (result.notification_preferences || []).map(mapNotificationPreference);
-
+  if (error?.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
+  if (error?.code === "23514") return apiError("Genau ein CEO muss gesetzt bleiben.", 409);
+  if (error?.code === "22023") return apiError("Profiländerung ist ungültig.", 400);
+  if (error?.code === "42501") return apiError("Nur der CEO kann fachliche Rollen verwalten.", 403);
+  if (error) return apiError("Profil konnte nicht gespeichert werden.", 500);
+  if (!data?.profile) return apiError("Profil konnte nicht gespeichert werden.", 500);
+  const profile = data.profile as GovernanceProfileRow;
   return NextResponse.json({
-    profile,
-    notificationPreferences,
+    profile: {
+      id: profile.id,
+      name: profile.name,
+      platformRole: profile.platform_role,
+      orgRole: profile.org_role || governanceRoleLabel(profile.platform_role),
+      deputyFor: profile.deputy_for || "",
+      deputyActiveFrom: profile.deputy_active_from || "",
+      deputyActiveUntil: profile.deputy_active_until || "",
+      weeklyCapacity: profile.weekly_capacity,
+    },
+    notificationPreferences: [],
   });
 }

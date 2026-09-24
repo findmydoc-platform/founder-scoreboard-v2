@@ -144,6 +144,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           sprints={data.sprints}
           initiative={selectedInitiative}
           currentProfile={currentProfile}
+          operationalCorrection={controller.canCorrectOperationally}
           source={source}
           allTasks={data.tasks}
           relations={data.taskRelations}

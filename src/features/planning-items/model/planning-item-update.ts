@@ -42,7 +42,7 @@ import {
   normalizePatchTaskStatus,
   normalizePatchText,
 } from "@/features/planning-items/model/planning-item-normalization";
-import type { ActorContext } from "./actor-context";
+import { hasOperationalCorrection, type ActorContext } from "./actor-context";
 import type { PlanningError, PlanningItems, PlanningItemChanges, PlanningResult, ReviseItem } from "./planning-items";
 import { parseTeamPlanningDependency } from "./planning-items-team-dependency-contract";
 
@@ -955,6 +955,10 @@ function reviseError(error: unknown): PlanningError {
   if (code === "P0017") return { code: "invalidCommand", issues: [{ path: "command.changes.evidenceExceptionNote", reason: "reviewEvidenceRequired" }] };
   if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
   if (code === "P0006") return { code: "forbidden", reason: "reviseNotAllowed" };
+  if (code === "42501" && message.includes("active administrator access required")) {
+    return { code: "forbidden", reason: "administratorAccessRequired" };
+  }
+  if (code === "42501") return { code: "forbidden", reason: "reviseNotAllowed" };
   if (code === "23503" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "profileNotFound" }] };
   if (code === "23505" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "assignmentDuplicated" }] };
   if (code === "22023" || code === "23514") return { code: "invalidCommand", issues: [{ path: "command.changes", reason: "persistenceValidation" }] };
@@ -976,18 +980,19 @@ export function createBrowserRevisePlanningItems(dependencies: BrowserReviseDepe
         warnings: [],
       };
       const writer = dependencies.writer;
+      const administratorCorrection = hasOperationalCorrection(invocation.actor);
       const result = writer.kind === "strategic"
-        ? await dependencies.supabase.rpc("update_browser_planning_item_transaction", {
+        ? await dependencies.supabase.rpc(administratorCorrection ? "update_administrator_planning_item_transaction" : "update_browser_planning_item_transaction", {
           p_task_id: writer.params.taskId,
           p_expected_updated_at: writer.params.expectedUpdatedAt,
           p_patch: writer.params.patch,
           p_strategy: writer.params.strategy,
           p_raci_assignments: writer.params.raciAssignments,
-          p_actor_profile_id: invocation.actor.profileId,
+          ...(administratorCorrection ? {} : { p_actor_profile_id: invocation.actor.profileId }),
           p_request_ip: invocation.requestMetadata?.requestIp || null,
           p_user_agent: invocation.requestMetadata?.userAgent || null,
         })
-        : await dependencies.supabase.rpc("update_browser_planning_task_transaction", {
+        : await dependencies.supabase.rpc(administratorCorrection ? "update_administrator_planning_task_transaction" : "update_browser_planning_task_transaction", {
           p_task_id: writer.params.taskId,
           p_expected_updated_at: writer.params.expectedUpdatedAt,
           p_task_patch: writer.params.taskPatch,
@@ -997,7 +1002,7 @@ export function createBrowserRevisePlanningItems(dependencies: BrowserReviseDepe
           p_dependency_note: writer.params.dependencyNote,
           p_activity_messages: writer.params.activityMessages,
           p_notifications: writer.params.notifications,
-          p_actor_profile_id: invocation.actor.profileId,
+          ...(administratorCorrection ? {} : { p_actor_profile_id: invocation.actor.profileId }),
         });
       if (result.error) return { ok: false, error: reviseError(result.error) };
       return {

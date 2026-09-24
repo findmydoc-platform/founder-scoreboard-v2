@@ -30,6 +30,7 @@ type Props = {
   allTasks: Task[];
   relations: TaskRelation[];
   currentProfile?: Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | null;
+  operationalCorrection?: boolean;
   source: "supabase";
   pending: boolean;
   error?: string;

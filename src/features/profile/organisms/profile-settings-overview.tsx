@@ -8,9 +8,7 @@ import {
 } from "@/features/planning/model/workspace-routes";
 import { BoardSettingsSection } from "@/features/profile/molecules/profile-board-section";
 import { ProfileIdentitySection } from "@/features/profile/molecules/profile-identity-section";
-import { ProfileGitHubProjectSettingsSection } from "@/features/profile/molecules/profile-github-project-settings-section";
 import { NotificationSettingsSection } from "@/features/profile/molecules/profile-notification-section";
-import { ProfileProcessSettingsSection } from "@/features/profile/molecules/profile-process-settings-section";
 import { ProfilePlanningItemsTokens } from "@/features/profile/organisms/profile-planning-items-tokens";
 import { ProfileSettingsNavButton, profileSettingsSections } from "@/features/profile/molecules/profile-settings-layout";
 import {
@@ -27,9 +25,7 @@ import {
 } from "@/features/profile/model/profile-color-policy";
 import type { OwnProfileSettingsPatch } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import { taskStatuses } from "@/lib/status";
-import { canConfigureFounderOpsGitHubProject } from "@/lib/platform";
 import type { PlanningShellState, PlanningFilterPreferences, Profile } from "@/lib/types";
 import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
@@ -40,8 +36,6 @@ type ProfileSettingsOverviewProps = {
   pending: boolean;
   source: "supabase";
   onSaveOwnProfileSettings: (patch: OwnProfileSettingsPatch) => Promise<void>;
-  onSaveFounderOpsGitHubProject: (owner: string, number: number) => Promise<void>;
-  onSaveFounderOpsReviewWindow: (hours: number) => Promise<void>;
 };
 
 export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
@@ -73,8 +67,6 @@ function ProfileSettingsForm({
   pending,
   source,
   onSaveOwnProfileSettings,
-  onSaveFounderOpsGitHubProject,
-  onSaveFounderOpsReviewWindow,
   profileUiPreference,
 }: Omit<ProfileSettingsOverviewProps, "currentProfile"> & { currentProfile: Profile; profileUiPreference: NonNullable<PlanningShellState["profileUiPreferences"][number]> | null }) {
   const initialDraft = buildInitialDraft({ currentProfile, data, profileUiPreference });
@@ -84,12 +76,7 @@ function ProfileSettingsForm({
   const [advancedBoardOpen, setAdvancedBoardOpen] = useState(false);
   const [message, setMessage] = useState("");
   const operationalProfile = currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy" || currentProfile.platformRole === "founder";
-  const canConfigureGitHubProject = canConfigureFounderOpsGitHubProject(currentProfile);
-  const githubProjectDisabledReason = isLocalLoginSimulationEnabled()
-    ? "Im lokalen Simulationsmodus bleiben externe GitHub-Integrationen deaktiviert."
-    : undefined;
   const visibleSections = profileSettingsSections.filter((section) => {
-    if (section.id === "process") return currentProfile.platformRole === "ceo";
     if (section.id === "api") return operationalProfile;
     return true;
   });
@@ -245,42 +232,22 @@ function ProfileSettingsForm({
               onPlanningFiltersChange={updatePlanningFilters}
             />
           )}
-          {activeSection === "process" && currentProfile.platformRole === "ceo" && (
-            <div className="divide-y divide-slate-200">
-              {canConfigureGitHubProject ? (
-                <ProfileGitHubProjectSettingsSection
-                  githubProjectOwner={data.project.githubProjectOwner}
-                  githubProjectNumber={data.project.githubProjectNumber}
-                  pending={pending}
-                  disabledReason={githubProjectDisabledReason}
-                  onSave={onSaveFounderOpsGitHubProject}
-                />
-              ) : null}
-              <ProfileProcessSettingsSection
-                reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
-                pending={pending}
-                onSave={onSaveFounderOpsReviewWindow}
-              />
-            </div>
-          )}
           {activeSection === "api" && operationalProfile && (
             <ProfilePlanningItemsTokens apiClient={apiClient} source={source} />
           )}
         </div>
       </div>
 
-      {(isDirty || (activeSection !== "process" && message)) && (
+      {(isDirty || message) && (
         <div className="sticky bottom-4 z-10 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur" data-profile-save-bar>
           <div className="text-sm font-semibold text-slate-700">
-            {isDirty
-              ? activeSection === "process" ? "Ungespeicherte persönliche Einstellungen" : "Ungespeicherte Änderungen"
-              : message}
+            {isDirty ? "Ungespeicherte Änderungen" : message}
           </div>
           <div className="flex items-center gap-2">
-            {isDirty && message && activeSection !== "process" && <UiNotice tone="success" size="compact">{message}</UiNotice>}
+            {isDirty && message && <UiNotice tone="success" size="compact">{message}</UiNotice>}
             {isDirty && (
               <UiButton onClick={save} disabled={pending} variant="primary">
-                {activeSection === "process" ? "Persönliche Änderungen speichern" : "Speichern"}
+                Speichern
               </UiButton>
             )}
           </div>

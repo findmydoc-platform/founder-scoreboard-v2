@@ -12,7 +12,7 @@ export function createSupabaseProfileReadModel(supabase: SupabaseClient): Profil
       if (!context.authorized) return { status: "forbidden" };
       const [state, projectResult, notificationPreferenceResult, preferenceResult] = await Promise.all([
         loadPlanningItemsForReadModel(supabase),
-        supabase.from("projects").select("id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number").eq("id", planningProjectId).single(),
+        supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single(),
         supabase.from("notification_preferences").select("id,profile_id,channel,event_type,enabled").eq("channel", "google_chat").order("profile_id"),
         supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").order("profile_id"),
       ]);

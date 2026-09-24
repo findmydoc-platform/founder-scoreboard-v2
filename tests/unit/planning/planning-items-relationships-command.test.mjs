@@ -38,7 +38,8 @@ async function loadRoute(run, payload) {
         supabase: {},
       }),
     },
-    "@/lib/authz": { requirePlanningContributor: () => ({}) },
+    "@/lib/authz": { requirePlanningContributorOrActiveAdministrator: () => ({}) },
+    "@/lib/supabase": { getSupabaseForToken: () => null },
     "@/features/planning-items/model/planning-actor-context-server": {
       actorContextFromSessionAuth: () => ({ ok: true, actor }),
     },
@@ -53,6 +54,59 @@ async function loadRoute(run, payload) {
     },
   });
 }
+
+async function loadAdministratorRoute(run, payload) {
+  const mutationClient = {};
+  return importTestModule("src/app/api/tasks/[id]/relationships/route.ts", {
+    "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
+    "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }) },
+    "@/lib/api-response": {
+      apiError: (error, status) => ({ body: { error }, status }),
+      authzError: (failure) => ({ body: { code: failure.code, error: failure.error }, status: failure.status }),
+      requireJsonApiContext: async () => ({
+        ok: true,
+        payload,
+        permission: {
+          profile: { id: "founder-one", platformRole: "founder" },
+          authority: { capabilities: { operationalCorrection: true } },
+        },
+        supabase: {},
+      }),
+    },
+    "@/lib/authz": {
+      bearerToken: () => "session-token",
+      requirePlanningContributorOrActiveAdministrator: () => ({}),
+      resolveAdministratorAccessFailure: async (client) => {
+        assert.equal(client, mutationClient);
+        return {
+          ok: false,
+          status: 403,
+          code: "administrator_access_expired",
+          error: "Der Adminzugang ist abgelaufen.",
+        };
+      },
+    },
+    "@/lib/supabase": { getSupabaseForToken: () => mutationClient },
+    "@/features/planning-items/model/planning-actor-context-server": {
+      actorContextFromSessionAuth: () => ({ ok: true, actor: administratorActor }),
+    },
+    "@/features/planning-items/model/planning-items-relationships": {
+      parseAddPlanningRelationshipPayload: (value) => ({ ok: true, value }),
+      parseRemovePlanningRelationshipPayload: (value) => ({ ok: true, value }),
+      addPlanningRelationshipCommand: (itemId, value) => ({ kind: "addRelationship", itemId, ...value }),
+      removePlanningRelationshipCommand: (itemId, value) => ({ kind: "removeRelationship", itemId, ...value }),
+      createPlanningRelationshipPlanningItems: () => ({ run }),
+      planningRelationshipError: () => ({ message: "Abhängigkeit konnte nicht gespeichert werden.", status: 500 }),
+      planningRelationshipFromResult: (result) => result.items[0],
+    },
+  });
+}
+
+const administratorActor = {
+  ...actor,
+  platformRole: "founder",
+  capabilities: { operationalCorrection: true },
+};
 
 function task(id, overrides = {}) {
   return {
@@ -197,6 +251,53 @@ test("payload parsing preserves relation types, trimming, optional revision, and
   assert.equal(model.parseAddPlanningRelationshipPayload({ relationType: "depends", relatedTaskId: "target" }).error, "Ungültige Abhängigkeitsart.");
   assert.equal(model.parseAddPlanningRelationshipPayload({ relationType: "blocks" }).error, "Bitte eine andere Aufgabe auswählen.");
   assert.equal(model.parseRemovePlanningRelationshipPayload({ relationId: 0 }).error, "Abhängigkeit ist erforderlich.");
+});
+
+test("administrator relationship commits preserve a late access rejection", async () => {
+  const model = await loadModel();
+  const current = fixture({
+    commitError: { code: "42501", message: "active administrator access required" },
+  });
+  const planning = model.createPlanningRelationshipPlanningItems(current.client, {
+    mutationClient: current.client,
+    administratorAccess: true,
+  });
+
+  const result = await planning.run({
+    actor: administratorActor,
+    mode: "commit",
+    command: model.addPlanningRelationshipCommand("source", {
+      relationType: "blocked_by",
+      relatedTaskId: "target",
+      note: "Wait",
+      expectedUpdatedAt: "2026-08-12T10:00:00.000Z",
+    }),
+  });
+
+  assert.deepEqual(result.error, {
+    code: "forbidden",
+    reason: "administratorAccessRequired",
+  });
+});
+
+test("relationship routes return the named expiry contract after a late access rejection", async () => {
+  const route = await loadAdministratorRoute(
+    async () => ({
+      ok: false,
+      error: { code: "forbidden", reason: "administratorAccessRequired" },
+    }),
+    { relationType: "blocked_by", relatedTaskId: "target", note: "Wait" },
+  );
+
+  const response = await route.POST({}, { params: Promise.resolve({ id: "source" }) });
+
+  assert.deepEqual(response, {
+    status: 403,
+    body: {
+      code: "administrator_access_expired",
+      error: "Der Adminzugang ist abgelaufen.",
+    },
+  });
 });
 
 test("Preview and Commit use identical add policy and one atomic writer with deterministic effects", async () => {

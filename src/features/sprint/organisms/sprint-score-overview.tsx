@@ -4,6 +4,7 @@ import { useEffect, useReducer, useState } from "react";
 import { SprintControlsSummary } from "@/features/sprint/molecules/sprint-controls-summary";
 import { SprintMeetingAttendanceSection } from "@/features/sprint/molecules/sprint-meeting-attendance-section";
 import { SprintPlanningSection } from "@/features/sprint/molecules/sprint-planning-section";
+import { SprintReviewWindowSettings } from "@/features/sprint/molecules/sprint-review-window-settings";
 import { SprintFounderScoreTable } from "@/features/sprint/organisms/sprint-founder-score-table";
 import { SprintScoreObjections } from "@/features/sprint/organisms/sprint-score-objections";
 import { SprintTaskTables } from "@/features/sprint/organisms/sprint-task-tables";
@@ -40,6 +41,8 @@ export function SprintScoreTableOverview({
   currentProfile,
   canManageSprint,
   sprintLockMessage,
+  reviewObjectionWindowHours,
+  onSaveReviewObjectionWindow,
 }: {
   initialModel: SprintWorkspaceModel;
   data: PlanningShellState;
@@ -61,6 +64,8 @@ export function SprintScoreTableOverview({
   currentProfile: Profile | null;
   canManageSprint: boolean;
   sprintLockMessage: string;
+  reviewObjectionWindowHours: number;
+  onSaveReviewObjectionWindow: (hours: number) => Promise<void>;
 }) {
   const [model, dispatch] = useReducer(sprintWorkspaceReducer, initialModel);
   useEffect(() => {
@@ -133,6 +138,14 @@ export function SprintScoreTableOverview({
 
   return (
     <div className="grid min-w-0 gap-4">
+      {currentProfile?.platformRole === "ceo" && (
+        <SprintReviewWindowSettings
+          disabled={currentProfile.platformRole !== "ceo"}
+          pending={pending}
+          reviewObjectionWindowHours={reviewObjectionWindowHours}
+          onSave={onSaveReviewObjectionWindow}
+        />
+      )}
       <SprintControlsSummary
         data={sprintData}
         sprint={sprint}

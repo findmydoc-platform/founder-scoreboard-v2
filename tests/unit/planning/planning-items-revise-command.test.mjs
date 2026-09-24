@@ -144,6 +144,56 @@ test("Team revise preserves a late inactive-token decision", async () => {
   assert.deepEqual(result.error, { code: "forbidden", reason: "planningTokenInactive" });
 });
 
+test("Browser revise preserves a late administrator-access rejection", async () => {
+  const model = await loadUpdateModel();
+  const actor = {
+    profileId: "founder-one",
+    platformRole: "founder",
+    credential: { kind: "session" },
+    capabilities: { operationalCorrection: true },
+  };
+  const expectedUpdatedAt = "2026-08-12T10:00:00.000Z";
+  const supabase = {
+    rpc: async () => ({
+      data: null,
+      error: { code: "42501", message: "active administrator access required" },
+    }),
+  };
+
+  const result = await model.createBrowserRevisePlanningItems({
+    supabase,
+    actor,
+    writer: {
+      kind: "delivery",
+      params: {
+        taskId: "deliverable-one",
+        expectedUpdatedAt,
+        taskPatch: { title: "Corrected" },
+        notePresent: false,
+        note: null,
+        dependencyPresent: false,
+        dependencyNote: null,
+        activityMessages: [],
+        notifications: [],
+      },
+    },
+  }).run({
+    actor,
+    mode: "commit",
+    command: model.planningItemReviseCommand(
+      "deliverable-one",
+      "deliverable",
+      expectedUpdatedAt,
+      { title: "Corrected" },
+    ),
+  });
+
+  assert.deepEqual(result.error, {
+    code: "forbidden",
+    reason: "administratorAccessRequired",
+  });
+});
+
 test("Team revise preserves a late review-evidence conflict", async () => {
   const model = await loadUpdateModel();
   const query = {

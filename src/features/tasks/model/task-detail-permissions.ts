@@ -55,10 +55,12 @@ export function taskDetailPermissions({
   task,
   profile,
   unrestricted = false,
+  operationalCorrection = false,
 }: {
   task: TaskPermissionTask;
   profile?: TaskPermissionProfile | Pick<Profile, "id" | "name" | "platformRole"> | null;
   unrestricted?: boolean;
+  operationalCorrection?: boolean;
 }): TaskDetailPermissions {
   const isSubIssue = task.taskType === "sub_issue";
   const isDeliverable = task.taskType === "deliverable";
@@ -92,7 +94,7 @@ export function taskDetailPermissions({
   const isOperationalLead = isOperationalLeadRole(role);
   const isFounder = role === "founder";
   const ownsTask = isFounder && taskOwnedByProfile(task, profile);
-  const canWorkOnTask = isOperationalLead || ownsTask;
+  const canWorkOnTask = isOperationalLead || operationalCorrection || ownsTask;
   const canManageSubIssueFinalStatus = canContributorManageSubIssueFinalStatus({ task, profile });
 
   return {
@@ -105,7 +107,7 @@ export function taskDetailPermissions({
     canCompleteSubIssue: !contentLocked && canManageSubIssueFinalStatus,
     canManageFinalStatus: (!reviewLocked || completed) && !isSubIssue && isCeo,
     canManageReviewOwner: !contentLocked && isDeliverable && isCeo && !reviewFinal,
-    canManageTaskMeta: !contentLocked && isOperationalLead,
+    canManageTaskMeta: !contentLocked && (isOperationalLead || operationalCorrection),
     canOpenReview: isDeliverable && (isOperationalLead || Boolean(role && role !== "viewer" && profile?.id && task.reviewOwnerProfileId === profile.id)),
     canReopenSubIssue: (!reviewLocked || completed) && canManageSubIssueFinalStatus,
     canReportBlocker: !contentLocked && canWorkOnTask,

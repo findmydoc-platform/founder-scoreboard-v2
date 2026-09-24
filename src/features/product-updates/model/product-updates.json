@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-09-22-jit-administration",
+    "releasedAt": "2026-09-22",
+    "expiresAt": "2026-10-22",
+    "featureTourId": "administration-workspace-v1",
+    "title": "Technische Administration auf Zeit",
+    "summary": "Berechtigte Personen aktivieren Adminzugang für 60 Minuten. Technische Identitäten, Integrationen und Zustellung sind in einem eigenen Arbeitsbereich gebündelt.",
+    "slides": [
+      {
+        "id": "jit-administration-overview",
+        "title": "Administration klar von fachlichen Rollen getrennt",
+        "description": "Die neue Administration bündelt Personen und Zugänge, technische Zuordnungen sowie Integrationen und Zustellung. Fachrollen wie CEO, Founder, Deputy und Viewer bleiben unverändert.",
+        "image": {
+          "src": "/product-updates/2026-09-22-jit-administration/administration.png",
+          "alt": "FounderOps Administration mit Übersicht, Personen und Zugängen sowie Integrationen und Zustellung",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-09-13-planning-api-dependencies",
     "releasedAt": "2026-09-13",
     "expiresAt": "2026-10-13",

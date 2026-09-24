@@ -3,19 +3,18 @@ import type { FmdTool, FounderEvent, Meeting, MeetingAttendance, NotificationDel
 export type DbProfile = {
   id: string;
   name: string;
-  role: Profile["role"];
-  platform_role: Profile["platformRole"] | null;
+  platform_role: Profile["platformRole"];
   org_role: string | null;
-  github_login: string | null;
+  github_login?: string | null;
   deputy_for: string | null;
   deputy_active_from: string | null;
   deputy_active_until: string | null;
   focus: string | null;
   weekly_capacity: number;
   profile_color: string | null;
-  google_chat_user_id: string | null;
-  google_chat_dm_space: string | null;
-  notifications_enabled: boolean | null;
+  google_chat_user_id?: string | null;
+  google_chat_dm_space?: string | null;
+  notifications_enabled?: boolean | null;
 };
 
 export type DbTask = {

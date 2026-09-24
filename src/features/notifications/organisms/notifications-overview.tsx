@@ -3,23 +3,13 @@
 import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
-import { NotificationOutboxPanel } from "@/features/notifications/organisms/notification-outbox-panel";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { formatDate } from "@/lib/display";
 import { notificationLifecycleLabel } from "@/lib/notification-lifecycle";
 import { isOperationalLeadRole } from "@/lib/platform";
-import type { NotificationDelivery, NotificationEvent, PlanningShellState, Profile } from "@/lib/types";
-import { classNames, UiBadge, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
+import type { NotificationEvent, PlanningShellState, Profile } from "@/lib/types";
+import { UiBadge, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterSegmentedControl } from "@/shared/molecules/filter-toolbar";
-
-type GoogleChatStatusSummary = {
-  webhookConfigured: boolean;
-  apiConfigured: boolean;
-  deliveryEnabled: boolean;
-  ready: boolean;
-  mode: "direct-dm" | "space-webhook" | "not-configured";
-  pending?: number;
-};
 
 type PersonalNotificationFilter = "pending" | "done" | "all";
 
@@ -61,29 +51,15 @@ function shouldShowTypeBadge(type: NotificationEvent["type"]) {
 }
 
 export function NotificationsOverview({
-  canManageOutbox,
   currentProfile,
   data,
-  pending,
-  notificationDispatchMessage,
-  googleChatStatus,
-  onDispatchNotifications,
   onOpenNotification,
   onDismissNotification,
-  onRetryNotificationDelivery,
-  onSendGoogleChatTest,
 }: {
-  canManageOutbox: boolean;
   currentProfile: Profile | null;
   data: PlanningShellState;
-  pending: boolean;
-  notificationDispatchMessage: string;
-  googleChatStatus: GoogleChatStatusSummary | null;
-  onDispatchNotifications: () => void;
   onOpenNotification: (event: NotificationEvent) => void;
   onDismissNotification: (eventId: number) => void;
-  onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
-  onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
 }) {
   const [personalFilter, setPersonalFilter] = useState<PersonalNotificationFilter>("pending");
   const personalNotifications = useMemo(
@@ -104,20 +80,14 @@ export function NotificationsOverview({
   const personalNewCount = personalNotifications.filter((event) => event.status === "pending" && !event.seenAt).length;
   const personalDoneCount = personalNotifications.filter((event) => isPersonalNotificationDone(event)).length;
   const personalTodayCount = personalNotifications.filter((event) => isToday(event.createdAt)).length;
-  const outboxPendingCount = googleChatStatus?.pending ?? data.notificationEvents.filter((event) => event.status === "pending").length;
-  const deliveryErrorCount = data.notificationDeliveries.filter((delivery) => delivery.status === "failed").length
-    + data.notificationEvents.filter((event) => event.status === "failed").length;
-
   return (
     <div className="grid min-w-0 gap-4">
       <section className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
         <span><strong className="text-slate-900">{personalNewCount}</strong> neu</span>
         <span><strong className="text-slate-900">{personalOpenCount}</strong> offen</span>
-        {canManageOutbox && <span><strong className="text-slate-900">{outboxPendingCount}</strong> im Ausgang</span>}
-        {deliveryErrorCount > 0 && <span className="text-red-700"><strong>{deliveryErrorCount}</strong> Fehler</span>}
       </section>
 
-      <div className={classNames("grid min-w-0 gap-4", canManageOutbox && "xl:grid-cols-[minmax(0,1fr)_minmax(360px,400px)]")}>
+      <div className="grid min-w-0 gap-4">
         <UiPanel padding="none" className="min-w-0 overflow-hidden">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
             <div>
@@ -199,18 +169,6 @@ export function NotificationsOverview({
             </div>
           )}
         </UiPanel>
-
-        {canManageOutbox && (
-          <NotificationOutboxPanel
-            data={data}
-            pending={pending}
-            notificationDispatchMessage={notificationDispatchMessage}
-            googleChatStatus={googleChatStatus}
-            onDispatchNotifications={onDispatchNotifications}
-            onRetryNotificationDelivery={onRetryNotificationDelivery}
-            onSendGoogleChatTest={onSendGoogleChatTest}
-          />
-        )}
       </div>
     </div>
   );

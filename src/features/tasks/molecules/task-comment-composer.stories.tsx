@@ -4,9 +4,9 @@ import type { Profile } from "@/lib/types";
 import { TaskCommentComposer } from "./task-comment-composer";
 
 const profiles: Profile[] = [
-  { id: "sebastian", name: "Sebastian Schütze", role: "admin", platformRole: "ceo", orgRole: "CEO", githubLogin: "SebastianSchuetze", weeklyCapacity: 40 },
-  { id: "volkan", name: "Mehmet Volkan Kablan", role: "member", platformRole: "founder", orgRole: "Engineering", githubLogin: "MehmetVolkan", weeklyCapacity: 40 },
-  { id: "volker", name: "Volker Beispiel", role: "member", platformRole: "viewer", orgRole: "Advisory", githubLogin: "volker", weeklyCapacity: 8 },
+  { id: "sebastian", name: "Sebastian Schütze", platformRole: "ceo", orgRole: "CEO", githubLogin: "SebastianSchuetze", weeklyCapacity: 40 },
+  { id: "volkan", name: "Mehmet Volkan Kablan", platformRole: "founder", orgRole: "Engineering", githubLogin: "MehmetVolkan", weeklyCapacity: 40 },
+  { id: "volker", name: "Volker Beispiel", platformRole: "viewer", orgRole: "Advisory", githubLogin: "volker", weeklyCapacity: 8 },
 ];
 
 const meta = {

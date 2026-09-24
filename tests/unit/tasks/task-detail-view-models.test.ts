@@ -52,11 +52,10 @@ const profiles: Profile[] = [
   {
     id: "founder-1",
     name: "Sebastian",
-    role: "Founder",
     platformRole: "founder",
+    orgRole: "Founder",
+    weeklyCapacity: 40,
     color: "blue",
-    avatarUrl: "",
-    email: "",
     githubLogin: "",
   },
 ];
@@ -98,7 +97,15 @@ describe("task detail operational header view", () => {
 
   it("keeps a missing initiative non-interactive and filters completed dependencies", () => {
     const deliverable = task({ id: "deliverable-1" });
-    const relation = { id: "relation-1" } as TaskRelation;
+    const relation: TaskRelation = {
+      id: 1,
+      taskId: "deliverable-1",
+      relatedTaskId: "open",
+      relationType: "blocked_by",
+      note: "",
+      createdBy: "founder-1",
+      createdAt: "2026-09-22T00:00:00.000Z",
+    };
 
     expect(taskDetailOperationalHeaderView({
       task: deliverable,
@@ -114,8 +121,8 @@ describe("task detail operational header view", () => {
     }).hierarchyFallback).toBe("Ohne Initiative");
     expect(activeTaskDetailDependencyRows([
       { relation, task: task({ id: "open", status: "Offen" }) },
-      { relation: { ...relation, id: "relation-2" }, task: task({ id: "done", status: "Erledigt" }) },
-      { relation: { ...relation, id: "relation-3" } },
+      { relation: { ...relation, id: 2 }, task: task({ id: "done", status: "Erledigt" }) },
+      { relation: { ...relation, id: 3 } },
     ])).toHaveLength(1);
   });
 });

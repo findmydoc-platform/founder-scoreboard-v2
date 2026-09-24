@@ -39,8 +39,8 @@ import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS } from "@/lib/sprint-review-windo
 import type { Profile, Project, Task } from "@/lib/types";
 
 const projectId = "findmydoc-founder-execution";
-const profileSelect = "id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled";
-const projectSelect = "id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number";
+const profileSelect = "id,name,platform_role,org_role,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color";
+const projectSelect = "id,name,range_label,review_objection_window_hours";
 const sprintSelect = "id,name,status,start_date,end_date,review_due_at,score_locked";
 const relationSelect = "id,task_id,related_task_id,relation_type,note,created_by,created_at";
 
@@ -49,8 +49,6 @@ type ProjectRow = {
   name: string;
   range_label: string | null;
   review_objection_window_hours: number | null;
-  github_project_owner: string | null;
-  github_project_number: number | null;
 };
 
 function project(row: ProjectRow): Project {
@@ -59,8 +57,8 @@ function project(row: ProjectRow): Project {
     name: row.name,
     range: row.range_label || "",
     reviewObjectionWindowHours: Number(row.review_objection_window_hours || DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS),
-    githubProjectOwner: row.github_project_owner || "findmydoc-platform",
-    githubProjectNumber: Number(row.github_project_number || 21),
+    githubProjectOwner: "",
+    githubProjectNumber: 0,
   };
 }
 

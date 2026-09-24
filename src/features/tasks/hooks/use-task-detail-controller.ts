@@ -18,12 +18,14 @@ export function useTaskDetailController({
   task,
   currentProfile,
   unrestricted = false,
+  operationalCorrection = false,
   onUpdate,
   onOverviewDirtyChange,
 }: {
   task: Task;
   currentProfile?: TaskDetailProfile | null;
   unrestricted?: boolean;
+  operationalCorrection?: boolean;
   onUpdate: (patch: Partial<Task>) => Promise<TaskUpdateResult> | void;
   onOverviewDirtyChange?: (dirty: boolean) => void;
 }) {
@@ -34,7 +36,7 @@ export function useTaskDetailController({
   const [overviewError, setOverviewError] = useState("");
   const [blockerDraft, setBlockerDraft] = useState({ reason: "", impact: "", needsHelpFrom: "" });
   const [relationDraft, setRelationDraft] = useState<TaskRelationshipDraft>({ relationType: "blocked_by", relatedTaskId: "", note: "" });
-  const permissions = taskDetailPermissions({ task, profile: currentProfile, unrestricted });
+  const permissions = taskDetailPermissions({ task, profile: currentProfile, unrestricted, operationalCorrection });
   const overviewPermissions = useMemo(() => ({
     canEditBrief: permissions.canEditBrief,
     canEditChecklist: permissions.canEditChecklist,

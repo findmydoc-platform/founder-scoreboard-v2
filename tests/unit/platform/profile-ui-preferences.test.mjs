@@ -23,6 +23,7 @@ const workspaceRoutes = await importTestModule(
       LayoutDashboard: icon,
       Link2: icon,
       ListOrdered: icon,
+      ShieldCheck: icon,
       UserCircle: icon,
       Users: icon,
     },
@@ -70,7 +71,7 @@ test("workspace preferences normalize every retired workspace", () => {
   assert.equal(workspacePreferences.rootWorkspaceFromPreference("reviews"), "planning");
   assert.equal(workspacePreferences.rootWorkspaceFromPreference("decisions"), "planning");
   assert.equal(workspacePreferences.rootWorkspaceFromPreference("meetings"), "planning");
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("settings"), "notifications");
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("settings"), "planning");
   assert.equal(workspacePreferences.rootWorkspaceFromPreference("ceo-intake"), "planning");
 });
 
@@ -140,5 +141,3 @@ test("profile preference reads use only canonical planning fields", () => {
   assert.equal(preference.planningFilters.assignee, "profile-2");
   assert.deepEqual(preference.expandedInitiativeIds, ["initiative-1"]);
 });
-
-

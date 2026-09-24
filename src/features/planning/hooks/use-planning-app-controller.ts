@@ -19,6 +19,7 @@ export function usePlanningAppController({
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
   initialAuthError = "",
+  operationalCorrection = false,
 }: PlanningAppControllerOptions) {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
@@ -31,6 +32,7 @@ export function usePlanningAppController({
     initialCurrentProfile,
     initialProtectedDataLoaded,
     initialAuthError,
+    operationalCorrection,
   });
   const {
     actualProfile,
@@ -43,6 +45,7 @@ export function usePlanningAppController({
     authNotice,
     authUser,
     canChangeTaskStatus,
+    canCorrectOperationally,
     canManageFinalTaskStatus,
     canManageTaskMeta,
     currentProfile,
@@ -115,6 +118,7 @@ export function usePlanningAppController({
     apiClient,
     applyPlanningShellStateUpdate,
     canChangeTaskStatus,
+    canCorrectOperationally,
     canManageFinalTaskStatus,
     canManageTaskMeta,
     currentProfile,
@@ -201,6 +205,7 @@ export function usePlanningAppController({
     authNotice,
     authUser,
     canChangeTaskStatus,
+    canCorrectOperationally,
     canManageFinalTaskStatus,
     canManageTaskMeta,
     backTaskPanel,
@@ -284,7 +289,7 @@ export function usePlanningAppController({
     ...boardState,
     ...commandRegistry.eventCommands,
     ...commandRegistry.fmdToolCommands,
-    ...commandRegistry.founderOpsSettingsCommands,
+    ...commandRegistry.sprintReviewSettingsCommand,
     ...commandRegistry.initiativeCommands,
     ...commandRegistry.epicCommands,
     ...commandRegistry.notificationCommands,

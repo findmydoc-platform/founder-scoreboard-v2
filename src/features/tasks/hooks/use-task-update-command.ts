@@ -23,6 +23,7 @@ type UseTaskUpdateCommandOptions = Pick<
   | "apiClient"
   | "applyPlanningShellStateUpdate"
   | "canChangeTaskStatus"
+  | "canCorrectOperationally"
   | "canManageFinalTaskStatus"
   | "canManageTaskMeta"
   | "currentProfile"
@@ -43,6 +44,7 @@ export function useTaskUpdateCommand({
   apiClient,
   applyPlanningShellStateUpdate,
   canChangeTaskStatus,
+  canCorrectOperationally,
   canManageFinalTaskStatus,
   canManageTaskMeta,
   currentProfile,
@@ -82,6 +84,7 @@ export function useTaskUpdateCommand({
       task,
       profile: currentProfile,
       unrestricted: false,
+      operationalCorrection: canCorrectOperationally,
     });
     const completesSubIssue = task.taskType === "sub_issue"
       && currentStatus !== "Erledigt"
@@ -99,7 +102,7 @@ export function useTaskUpdateCommand({
       return Promise.resolve({ ok: false, error: founderStatusGuardMessage(normalizedPatch.status as TaskStatus), status: 403 });
     }
 
-    if (normalizedPatch.status && !canManageTaskMeta && !roleBasedFinalTransition) {
+    if (normalizedPatch.status && !canManageTaskMeta && !canCorrectOperationally && !roleBasedFinalTransition) {
       const guardedMessage = founderStatusGuardMessage(normalizedPatch.status as TaskStatus, task.status);
       if (guardedMessage) {
         setStatusGuardNotice(guardedMessage);

@@ -11,7 +11,6 @@
     {
       "id": "volkan",
       "name": "Volkan",
-      "role": "admin",
       "platformRole": "ceo",
       "orgRole": "CEO",
       "githubLogin": "",
@@ -22,7 +21,6 @@
     {
       "id": "sebastian",
       "name": "Sebastian",
-      "role": "member",
       "platformRole": "founder",
       "orgRole": "Founder",
       "githubLogin": "",
@@ -33,7 +31,6 @@
     {
       "id": "anil",
       "name": "Anil",
-      "role": "member",
       "platformRole": "founder",
       "orgRole": "Founder",
       "githubLogin": "",
@@ -44,7 +41,6 @@
     {
       "id": "ozen",
       "name": "Özen",
-      "role": "member",
       "platformRole": "founder",
       "orgRole": "Founder",
       "githubLogin": "",
@@ -55,7 +51,6 @@
     {
       "id": "youssef",
       "name": "Youssef",
-      "role": "member",
       "platformRole": "founder",
       "orgRole": "Founder",
       "githubLogin": "",
@@ -66,7 +61,6 @@
     {
       "id": "local-deputy",
       "name": "Local Deputy",
-      "role": "member",
       "platformRole": "deputy",
       "orgRole": "Deputy",
       "githubLogin": "",
@@ -78,7 +72,6 @@
     {
       "id": "local-viewer",
       "name": "Local Viewer",
-      "role": "viewer",
       "platformRole": "viewer",
       "orgRole": "Viewer",
       "githubLogin": "",

@@ -180,7 +180,7 @@ export function updateSprintCommitmentRequest(apiClient: BrowserApiClient, commi
 }
 
 export function updateProfileRequest(apiClient: BrowserApiClient, profileId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; profile?: Profile; notificationPreferences?: NotificationPreference[] }>(`/api/profiles/${profileId}`, {
+  return apiClient.requestJson<{ error?: string; profile?: Partial<Profile>; notificationPreferences?: NotificationPreference[] }>(`/api/profiles/${profileId}`, {
     method: "PATCH",
     json: payload,
   });
@@ -198,7 +198,7 @@ export function updateOwnProfileSettingsRequest(apiClient: BrowserApiClient, pay
   });
 }
 
-export function updateFounderOpsReviewWindowRequest(
+export function updateSprintReviewWindowRequest(
   apiClient: BrowserApiClient,
   expectedReviewObjectionWindowHours: number,
   reviewObjectionWindowHours: number,
@@ -207,36 +207,9 @@ export function updateFounderOpsReviewWindowRequest(
     error?: string;
     project?: { id: string; reviewObjectionWindowHours: number };
     sprints?: Array<{ id: string; reviewDueAt: string }>;
-  }>("/api/founderops-settings", {
+  }>("/api/sprints/review-window", {
     method: "PATCH",
     json: { expectedReviewObjectionWindowHours, reviewObjectionWindowHours },
-  });
-}
-
-export function updateFounderOpsGitHubProjectRequest(
-  apiClient: BrowserApiClient,
-  expectedGithubProjectOwner: string,
-  expectedGithubProjectNumber: number,
-  githubProjectOwner: string,
-  githubProjectNumber: number,
-) {
-  return apiClient.requestJson<{
-    error?: string;
-    project?: { id: string; githubProjectOwner: string; githubProjectNumber: number };
-    validation?: {
-      title: string;
-      url: string;
-      repositories: string[];
-      fields: Array<{ name: string; dataType: string }>;
-    };
-  }>("/api/founderops-settings/github-project", {
-    method: "PATCH",
-    json: {
-      expectedGithubProjectOwner,
-      expectedGithubProjectNumber,
-      githubProjectOwner,
-      githubProjectNumber,
-    },
   });
 }
 
@@ -264,21 +237,6 @@ export function createFounderEventRequest(apiClient: BrowserApiClient, payload: 
 export function updateFounderEventRequest(apiClient: BrowserApiClient, eventId: number, payload: unknown) {
   return apiClient.requestJson<{ error?: string; event?: FounderEvent }>(`/api/events/${eventId}`, {
     method: "PATCH",
-    json: payload,
-  });
-}
-
-export function notificationDeliveryStatusRequest(apiClient: BrowserApiClient) {
-  return apiClient.requestJson<{
-    googleChat?: { webhookConfigured?: boolean; apiConfigured?: boolean; deliveryEnabled?: boolean; ready?: boolean; mode?: "direct-dm" | "space-webhook" | "not-configured" };
-    googleChatConfigured?: boolean;
-    pending?: number;
-  }>("/api/notifications/deliver");
-}
-
-export function runNotificationDeliveryRequest(apiClient: BrowserApiClient, payload: Record<string, unknown>) {
-  return apiClient.requestJson<{ error?: string; sent?: number; failed?: number; skipped?: number }>("/api/notifications/deliver", {
-    method: "POST",
     json: payload,
   });
 }

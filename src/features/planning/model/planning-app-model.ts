@@ -80,6 +80,7 @@ export const workspaceLabels: Record<Workspace, string> = {
   tools: "Links & Tools",
   team: "Team",
   notifications: "Benachrichtigungen",
+  administration: "Administration",
   profile: "Mein Profil",
 };
 
@@ -92,7 +93,8 @@ export const workspaceDescriptions: Record<Workspace, string> = {
   projects: "Leitet auf den strategischen Bereich des Backlogs weiter.",
   tools: "Zeigt kuratierte externe Links und weitere Linkziele für das Team.",
   team: "Zeigt Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
-  notifications: "Persönliche Hinweise und Ausgang.",
+  notifications: "Persönliche Hinweise.",
+  administration: "Technik verwalten und korrigieren, ohne fachliche Entscheidungen zu verändern.",
   profile: "Zeigt deine persönlichen Einstellungen für Profil, Hinweise und Planungs-Defaults.",
 };
 

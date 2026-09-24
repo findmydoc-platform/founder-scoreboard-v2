@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { requireCEO } from "@/lib/authz";
+import { apiError, authzError } from "@/lib/api-response";
+import { bearerToken, requireActiveAdministrator, resolveAdministratorAccessFailure } from "@/lib/authz";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { validateFounderOpsGitHubProject } from "@/lib/github-project";
 import { validGitHubProjectNumber, validGitHubProjectOwner } from "@/lib/github-project-config";
-import { isLocalLoginRequestAllowed } from "@/lib/local-development-auth";
+import { getSupabaseForToken } from "@/lib/supabase";
 
 type GitHubProjectSettingsPayload = {
   expectedGithubProjectOwner?: string;
@@ -25,14 +25,12 @@ type GitHubProjectSettingsTransactionResult = {
 const projectId = "findmydoc-founder-execution";
 
 export async function PATCH(request: NextRequest) {
-  const context = await requireJsonApiContext<GitHubProjectSettingsPayload>(request, requireCEO, {});
-  if (!context.ok) return context.response;
-
-  const { payload, permission, supabase } = context;
-  if (!permission.profile) return apiError("CEO-Profil erforderlich.", 401);
-  if (isLocalLoginRequestAllowed(request.headers.get("host") || "")) {
-    return apiError("Das globale GitHub Project ist im lokalen Simulationsmodus deaktiviert.", 409);
-  }
+  const permission = await requireActiveAdministrator(request);
+  if (!permission.ok) return authzError(permission);
+  const token = bearerToken(request);
+  const supabase = token ? getSupabaseForToken(token) : null;
+  if (!supabase) return apiError("Anmeldung erforderlich.", 401);
+  const payload = await request.json().catch(() => ({})) as GitHubProjectSettingsPayload;
   if (
     !validGitHubProjectOwner(payload.expectedGithubProjectOwner)
     || !validGitHubProjectNumber(payload.expectedGithubProjectNumber)
@@ -52,13 +50,12 @@ export async function PATCH(request: NextRequest) {
   }
 
   const metadata = auditRequestMetadata(request);
-  const { data, error } = await supabase.rpc("update_founderops_github_project_transaction", {
+  const { data, error } = await supabase.rpc("update_administration_github_project_transaction", {
     p_project_id: projectId,
     p_expected_owner: payload.expectedGithubProjectOwner,
     p_expected_number: payload.expectedGithubProjectNumber,
     p_github_project_owner: payload.githubProjectOwner,
     p_github_project_number: payload.githubProjectNumber,
-    p_actor_profile_id: permission.profile.id,
     p_request_ip: metadata.request_ip,
     p_user_agent: metadata.user_agent || null,
   });
@@ -66,7 +63,9 @@ export async function PATCH(request: NextRequest) {
   if (error) {
     if (error.code === "P0001") return apiError("Die GitHub-Project-Einstellung wurde parallel geändert. Bitte neu laden.", 409);
     if (error.code === "P0002") return apiError("FounderOps-Projekt wurde nicht gefunden.", 404);
-    if (error.code === "P0005") return apiError("Nur der CEO kann das GitHub Project ändern.", 403);
+    if (error.code === "42501") {
+      return authzError(await resolveAdministratorAccessFailure(supabase));
+    }
     if (error.code === "22023") return apiError("GitHub-Organisation oder Project-Nummer ist ungültig.", 400);
     return apiError("Die GitHub-Project-Einstellung konnte nicht gespeichert werden.", 500);
   }

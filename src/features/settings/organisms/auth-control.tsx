@@ -2,8 +2,11 @@
 
 import { SiGithub } from "@icons-pack/react-simple-icons";
 import type { User } from "@supabase/supabase-js";
-import { Check, Settings } from "lucide-react";
+import { Check, Settings, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
+import { AdministratorCountdown } from "@/features/administrator-access/molecules/administrator-countdown";
+import { UiButton } from "@/shared/atoms/ui-primitives";
 
 export type TestProfileMenuOption = {
   id: string;
@@ -22,6 +25,13 @@ export function AuthControl({
   onSignIn,
   onSignOut,
   onOpenProfile,
+  administratorAccess,
+  administratorAccessBusy = false,
+  administratorRemainingSeconds = 0,
+  canOpenAdministration = false,
+  onActivateAdministrator,
+  onEndAdministrator,
+  onOpenAdministration,
   testProfileOptions = [],
   activeTestProfileId = "",
   onTestProfileChange,
@@ -32,6 +42,13 @@ export function AuthControl({
   onSignIn: () => void;
   onSignOut: () => void;
   onOpenProfile?: () => void;
+  administratorAccess?: AdministratorAccessSnapshot;
+  administratorAccessBusy?: boolean;
+  administratorRemainingSeconds?: number;
+  canOpenAdministration?: boolean;
+  onActivateAdministrator?: () => void;
+  onEndAdministrator?: () => void;
+  onOpenAdministration?: () => void;
   testProfileOptions?: TestProfileMenuOption[];
   activeTestProfileId?: string;
   onTestProfileChange?: (profileId: string) => void;
@@ -253,6 +270,37 @@ export function AuthControl({
                     );
                   })}
                 </div>
+              </div>
+            ) : null}
+            {(administratorAccess?.eligible || canOpenAdministration) ? (
+              <div className="grid gap-2 border-y border-slate-100 py-3">
+                <div className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Administration</div>
+                {administratorAccess?.active ? (
+                  <>
+                    <AdministratorCountdown remainingSeconds={administratorRemainingSeconds} className="text-red-950 [&_svg]:text-red-600" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <UiButton variant="blue" disabled={administratorAccessBusy} onClick={() => { setOpen(false); onOpenAdministration?.(); }}>
+                        <ShieldCheck size={16} aria-hidden="true" />Öffnen
+                      </UiButton>
+                      <UiButton variant="red" disabled={administratorAccessBusy} onClick={() => { setOpen(false); onEndAdministrator?.(); }}>
+                        Adminzugang beenden
+                      </UiButton>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {administratorAccess?.eligible && (
+                      <UiButton variant="primary" size="lg" disabled={administratorAccessBusy} onClick={() => { setOpen(false); onActivateAdministrator?.(); }} data-tour-id="activate-administrator-access">
+                        <ShieldCheck size={16} aria-hidden="true" />Adminzugang für 60 Minuten aktivieren
+                      </UiButton>
+                    )}
+                    {canOpenAdministration && (
+                      <UiButton disabled={administratorAccessBusy} onClick={() => { setOpen(false); onOpenAdministration?.(); }}>
+                        Personen & Zugänge öffnen
+                      </UiButton>
+                    )}
+                  </>
+                )}
               </div>
             ) : null}
             <button

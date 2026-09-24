@@ -261,7 +261,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     attendanceResult,
     strikeStateResult,
   ] = await Promise.all([
-    supabase.from("profiles").select("id,name,role,platform_role,weekly_capacity"),
+    supabase.from("profiles").select("id,name,platform_role,weekly_capacity"),
     supabase.from("sprint_commitments").select("id,sprint_id,profile_id,commitment_level,weekly_hours,note").eq("sprint_id", id),
     supabase.from("meetings").select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda").eq("sprint_id", id).order("meeting_at"),
     supabase.from("meeting_attendance").select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at"),
@@ -277,7 +277,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const profiles = (profileResult.data || []).map((profile) => ({
     id: profile.id,
     name: profile.name,
-    role: profile.role || "member",
     platformRole: profile.platform_role || "founder",
     orgRole: "",
     githubLogin: "",

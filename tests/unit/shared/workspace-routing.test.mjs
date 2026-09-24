@@ -13,7 +13,8 @@ test("root workspace preferences normalize legacy values without accepting route
   assert.equal(rootWorkspaceFromPreference("profile"), "profile");
   assert.equal(rootWorkspaceFromPreference("mine"), "planning");
   assert.equal(rootWorkspaceFromPreference("execution"), "planning");
-  assert.equal(rootWorkspaceFromPreference("settings"), "notifications");
+  assert.equal(rootWorkspaceFromPreference("settings"), "planning");
+  assert.equal(rootWorkspaceFromPreference("administration"), "planning");
   assert.equal(rootWorkspaceFromPreference("unknown"), "planning");
   assert.equal(rootWorkspaceFromPreference(undefined), "planning");
 });

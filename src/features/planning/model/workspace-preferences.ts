@@ -7,6 +7,7 @@ export const appWorkspaceIds = [
   "events",
   "team",
   "notifications",
+  "administration",
   "tools",
   "profile",
 ] as const;
@@ -34,7 +35,6 @@ export function isPersistedWorkspace(
 
 export function appWorkspaceFromValue(value: string | null | undefined): AppWorkspace | null {
   if (value === "mine" || value === "execution" || value === "reviews") return "planning";
-  if (value === "settings") return "notifications";
   if (value === "projects") return "backlog";
   return appWorkspaceIds.find((id) => id === value) || null;
 }

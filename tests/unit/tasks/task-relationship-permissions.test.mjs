@@ -81,3 +81,14 @@ test("CEO and Deputy keep full relationship management", () => {
     assert.equal(access.canRemoveRelation({ ...blockedBy, taskId: "another-task" }), true);
   }
 });
+
+test("active administrator manages relationships without changing the platform role", () => {
+  const access = taskRelationshipAccess({
+    task: deliverable,
+    profile: { id: "admin-viewer", name: "Admin Viewer", platformRole: "viewer" },
+    operationalCorrection: true,
+  });
+
+  assert.deepEqual(access.allowedRelationTypes, ["blocked_by", "blocks", "relates_to"]);
+  assert.equal(access.canRemoveRelation({ ...blockedBy, taskId: "another-task" }), true);
+});

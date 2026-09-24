@@ -53,7 +53,7 @@ test("the planning dependency update has a current desktop screenshot and dedica
   ]);
   const update = registry.find(({ id }) => id === "2026-09-13-planning-api-dependencies");
 
-  assert.equal(registry[0], update);
+  assert.ok(update);
   assert.equal(update.releasedAt, "2026-09-13");
   assert.equal(update.expiresAt, "2026-10-13");
   assert.equal(update.featureTourId, "planning-api-dependencies-v1");
@@ -72,4 +72,23 @@ test("the planning dependency update has a current desktop screenshot and dedica
   assert.match(tourSource, /\[data-tour-id='founderops-planning-update-scope'\]/);
   assert.match(profileSource, /data-tour-id="founderops-planning-update-scope"/);
   assert.match(profileSource, /Update-Scope für Felder und Aufgabenabhängigkeiten/);
+});
+
+test("the JIT administration update is the newest product update and links its account-menu tour", async () => {
+  const [registry, tourSource, screenshot] = await Promise.all([
+    readFile("src/features/product-updates/model/product-updates.json", "utf8").then(JSON.parse),
+    readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8"),
+    readFile("public/product-updates/2026-09-22-jit-administration/administration.png"),
+  ]);
+  const update = registry.find(({ id }) => id === "2026-09-22-jit-administration");
+
+  assert.equal(registry[0], update);
+  assert.equal(update.expiresAt, "2026-10-22");
+  assert.equal(update.featureTourId, "administration-workspace-v1");
+  assert.equal(update.slides[0].image.width, 1440);
+  assert.equal(update.slides[0].image.height, 900);
+  assert.equal(screenshot.subarray(1, 4).toString("ascii"), "PNG");
+  assert.match(tourSource, /administrationWorkspaceTourId = "administration-workspace-v1"/);
+  assert.match(tourSource, /productUpdateId: "2026-09-22-jit-administration"/);
+  assert.match(tourSource, /\[data-tour-id='account-menu-trigger'\]/);
 });

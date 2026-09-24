@@ -14,6 +14,7 @@ import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import { loadPlanningTrashTaskDetail } from "@/lib/planning-trash-detail";
 import type { AuthenticatedProfile } from "@/lib/types";
+import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -27,6 +28,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
   const requestedCommentTarget = parseTaskCommentTarget(comment);
   let authProfile: AuthenticatedProfile | null = null;
   let authUser: User | null = null;
+  let administratorAccess: AdministratorAccessSnapshot | undefined;
   const authRequired = requiresSupabaseAuth();
   if (authRequired) {
     const auth = await getServerPlanningAuth();
@@ -35,6 +37,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
     }
     authProfile = auth.profile;
     authUser = auth.user;
+    administratorAccess = auth.authority?.administratorAccess;
   }
 
   const supabase = getServerSupabase();
@@ -79,6 +82,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
       authRequired={authRequired}
       initialAuthUser={authUser}
       initialCurrentProfile={authProfile}
+      initialAdministratorAccess={administratorAccess}
       initialDetailDataError={taskDetailResult.status === "degraded"
         ? taskDetailDegradationMessage(taskDetailResult.unavailable)
         : ""}

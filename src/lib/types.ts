@@ -1,4 +1,3 @@
-export type Role = "admin" | "member" | "viewer";
 export type PlatformRole = "ceo" | "founder" | "deputy" | "viewer";
 export type ReviewStatus = "not_requested" | "requested" | "accepted" | "partial" | "changes_requested";
 export type ReviewDecision = Exclude<ReviewStatus, "not_requested" | "requested">;
@@ -34,7 +33,6 @@ export type PlanningItemRaciAssignment = {
 export type Profile = {
   id: string;
   name: string;
-  role: Role;
   platformRole: PlatformRole;
   orgRole: string;
   githubLogin: string;

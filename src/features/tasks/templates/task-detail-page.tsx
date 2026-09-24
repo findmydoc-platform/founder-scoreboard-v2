@@ -4,6 +4,8 @@ import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { usePlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
+import { useAdministratorAccessController } from "@/features/administrator-access/hooks/use-administrator-access-controller";
+import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { useTaskDiscardGuard } from "@/features/tasks/hooks/use-task-discard-guard";
@@ -28,6 +30,7 @@ type Props = {
   authRequired?: boolean;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
+  initialAdministratorAccess?: AdministratorAccessSnapshot;
   initialDetailDataError?: string;
   initialCommentTarget?: string;
   returnHref?: string;
@@ -42,6 +45,7 @@ export function TaskDetailPage({
   authRequired = false,
   initialAuthUser = null,
   initialCurrentProfile = null,
+  initialAdministratorAccess,
   initialDetailDataError = "",
   initialCommentTarget = "",
   returnHref = "/planning",
@@ -51,6 +55,10 @@ export function TaskDetailPage({
   const [overviewDirty, setOverviewDirty] = useState(false);
   const discardGuard = useTaskDiscardGuard(overviewDirty);
   const initialData = useMemo(() => taskDetailModelToPlanningShellState(initialModel), [initialModel]);
+  const administratorAccessController = useAdministratorAccessController({
+    initialAccess: initialAdministratorAccess,
+    platformRole: initialCurrentProfile?.platformRole || null,
+  });
   const controller = usePlanningAppController({
     initialData,
     initialHeaderData: headerData,
@@ -60,6 +68,7 @@ export function TaskDetailPage({
     initialAuthUser,
     initialCurrentProfile,
     initialProtectedDataLoaded: Boolean(initialAuthUser),
+    operationalCorrection: administratorAccessController.authority.capabilities.operationalCorrection,
   });
   const task = controller.data.tasks.find((item) => item.id === taskId) || null;
 
@@ -81,6 +90,7 @@ export function TaskDetailPage({
         activeWorkspace="planning"
         source={source}
         currentPlatformRole={controller.currentProfile?.platformRole || ""}
+        canAccessAdministration={administratorAccessController.authority.capabilities.manageAdministratorEligibility}
         onRequestNavigation={(href) => discardGuard.request(() => router.push(href))}
       />
       <TaskDetailHeader
@@ -121,6 +131,7 @@ export function TaskDetailPage({
           allTasks={controller.data.tasks}
           relations={selectedRelations}
           currentProfile={controller.currentProfile}
+          operationalCorrection={controller.canCorrectOperationally}
           pending={controller.isPending}
           error={controller.saveError}
           detailDataError={initialDetailDataError}

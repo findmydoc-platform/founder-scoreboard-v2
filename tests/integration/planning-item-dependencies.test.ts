@@ -33,8 +33,8 @@ const actorAuthUserId = "50000000-0000-0000-0000-000000000010";
 async function seedActorAndProject(client: import("pg").Client) {
   await client.query("insert into auth.users (id) values ($1)", [actorAuthUserId]);
   await client.query(
-    `insert into public.profiles (id, auth_user_id, name, role, platform_role)
-     values ($1, $2, 'Integration Dependency CEO', 'member', 'ceo')`,
+    `insert into public.profiles (id, auth_user_id, name, platform_role)
+     values ($1, $2, 'Integration Dependency CEO', 'ceo')`,
     [actorProfileId, actorAuthUserId],
   );
   await client.query(
@@ -120,8 +120,8 @@ async function seedProfile(
   platformRole: "ceo" | "deputy" | "founder",
 ) {
   await client.query(
-    `insert into public.profiles (id, name, role, platform_role)
-     values ($1, $2, 'member', $3)`,
+    `insert into public.profiles (id, name, platform_role)
+     values ($1, $2, $3)`,
     [id, `Integration ${id}`, platformRole],
   );
 }
@@ -930,8 +930,8 @@ it("serializes concurrent add and remove calls across receipt replays and semant
     `);
     createdProject = project.rowCount === 1;
     await setup.query(
-      `insert into public.profiles (id, name, role, platform_role)
-       values ($1, 'Concurrent dependency CEO', 'member', 'ceo')`,
+      `insert into public.profiles (id, name, platform_role)
+       values ($1, 'Concurrent dependency CEO', 'ceo')`,
       [concurrentActorId],
     );
     await setup.query(
