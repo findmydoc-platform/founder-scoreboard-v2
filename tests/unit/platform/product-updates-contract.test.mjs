@@ -74,21 +74,36 @@ test("the planning dependency update has a current desktop screenshot and dedica
   assert.match(profileSource, /Update-Scope für Felder und Aufgabenabhängigkeiten/);
 });
 
-test("the JIT administration update is the newest product update and links its account-menu tour", async () => {
-  const [registry, tourSource, screenshot] = await Promise.all([
+test("the mention update is newest and the JIT administration update keeps its account-menu tour", async () => {
+  const [registry, tourSource, screenshot, mentionScreenshot] = await Promise.all([
     readFile("src/features/product-updates/model/product-updates.json", "utf8").then(JSON.parse),
     readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8"),
     readFile("public/product-updates/2026-09-22-jit-administration/administration.png"),
+    readFile("public/product-updates/2026-09-24-founderops-mentions/activity-mentions.png"),
   ]);
   const update = registry.find(({ id }) => id === "2026-09-22-jit-administration");
+  const mentionUpdate = registry.find(({ id }) => id === "2026-09-24-founderops-mentions");
 
-  assert.equal(registry[0], update);
+  assert.equal(registry[0], mentionUpdate);
+  assert.equal(mentionUpdate.expiresAt, "2026-10-24");
+  assert.equal(mentionUpdate.featureTourId, "task-mentions-v1");
+  assert.equal(mentionUpdate.title, "Erwähnungen in allen Freitextfeldern");
+  assert.match(mentionUpdate.summary, /Freitextfeld/);
+  assert.match(mentionUpdate.slides[0].description, /Kommentar, Beschreibung oder Review/);
+  assert.equal(mentionUpdate.slides[0].image.width, 1440);
+  assert.equal(mentionUpdate.slides[0].image.height, 900);
+  assert.equal(mentionScreenshot.subarray(1, 4).toString("ascii"), "PNG");
+  assert.equal(mentionScreenshot.readUInt32BE(16), 1440);
+  assert.equal(mentionScreenshot.readUInt32BE(20), 900);
   assert.equal(update.expiresAt, "2026-10-22");
   assert.equal(update.featureTourId, "administration-workspace-v1");
   assert.equal(update.slides[0].image.width, 1440);
   assert.equal(update.slides[0].image.height, 900);
   assert.equal(screenshot.subarray(1, 4).toString("ascii"), "PNG");
   assert.match(tourSource, /administrationWorkspaceTourId = "administration-workspace-v1"/);
+  assert.match(tourSource, /taskMentionsTourId = "task-mentions-v1"/);
+  assert.match(tourSource, /productUpdateId: "2026-09-24-founderops-mentions"/);
+  assert.match(tourSource, /\[data-tour-id='task-mention-all-option'\]/);
   assert.match(tourSource, /productUpdateId: "2026-09-22-jit-administration"/);
   assert.match(tourSource, /\[data-tour-id='account-menu-trigger'\]/);
 });

@@ -74,6 +74,34 @@ export const PointerSelection: Story = {
   },
 };
 
+export const AtAllAndProfileAvatars: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole("textbox", { name: "Kommentar oder Update" }), "@");
+    const allOption = canvas.getByRole("option", { name: "@all, Alle Personen in FounderOps, 3 Personen" });
+    const sebastianOption = canvas.getByRole("option", { name: "Sebastian Schütze, @SebastianSchuetze" });
+    await expect(allOption.querySelector("img")).toBeNull();
+    await expect(allOption).toHaveTextContent("3");
+    await expect(sebastianOption.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://avatars.githubusercontent.com/SebastianSchuetze?s=64",
+    );
+  },
+};
+
+export const PreventsDuplicateMention: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole("textbox", { name: "Kommentar oder Update" });
+    await userEvent.type(textbox, "@seb");
+    await userEvent.click(canvas.getByRole("option", { name: "Sebastian Schütze, @SebastianSchuetze" }));
+    await expect(textbox).toHaveValue("@SebastianSchuetze ");
+    await userEvent.type(textbox, "und @seb");
+    await expect(textbox).toHaveValue("@SebastianSchuetze und @seb");
+    await expect(canvas.getByRole("status")).toHaveTextContent("Diese Erwähnung steht bereits im Text.");
+  },
+};
+
 export const EmptyMentionSearch: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

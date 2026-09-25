@@ -20,6 +20,13 @@ export function githubCommentMarkerId(body: string) {
   return Number.isSafeInteger(commentId) && commentId > 0 ? commentId : null;
 }
 
+export function githubReviewMarkerId(body: string) {
+  const match = body.match(/<!--\s*fmd-review-id:(\d+)\s*-->/);
+  if (!match) return null;
+  const reviewId = Number(match[1]);
+  return Number.isSafeInteger(reviewId) && reviewId > 0 ? reviewId : null;
+}
+
 function hasAnyGitHubCommentMarker(body: string) {
   return githubCommentMarkerId(body) !== null;
 }

@@ -39,7 +39,7 @@ import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS } from "@/lib/sprint-review-windo
 import type { Profile, Project, Task } from "@/lib/types";
 
 const projectId = "findmydoc-founder-execution";
-const profileSelect = "id,name,platform_role,org_role,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color";
+const profileSelect = "id,name,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color";
 const projectSelect = "id,name,range_label,review_objection_window_hours";
 const sprintSelect = "id,name,status,start_date,end_date,review_due_at,score_locked";
 const relationSelect = "id,task_id,related_task_id,relation_type,note,created_by,created_at";
@@ -193,7 +193,7 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
         supabase.from("task_external_comments").select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.externalComments),
         supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.blockers),
         supabase.from("task_audit_timeline").select("id,task_id,action,actor_profile_id,message,payload,created_at").eq("task_id", normalizedItemId).order("created_at", { ascending: true }).limit(taskDetailReadLimits.activity),
-        supabase.from("task_reviews").select("id,task_id,sprint_id,reviewer_profile_id,decision,points,comment,checklist,created_at").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.reviews),
+        supabase.from("task_reviews").select("id,task_id,sprint_id,reviewer_profile_id,decision,points,comment,checklist,created_at,task_review_github_deliveries(status,github_comment_url)").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.reviews),
       ]);
 
       const discussionUnavailable = Boolean(comments.error || externalComments.error);

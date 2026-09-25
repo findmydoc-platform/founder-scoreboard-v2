@@ -22,6 +22,7 @@ const processor = await importTestModule("src/lib/github-issue-comment-webhook.t
   "@/features/tasks/model/github-comment-delivery-policy": markerPolicy,
   "@/lib/mentions": mentions,
   "@/lib/github-comment-mention-snapshot": mentionSnapshots,
+  "@/lib/github-mention-team-config": { loadGitHubMentionTeam: async () => undefined },
   "./github-app": {
     getGitHubAppInstallationToken: async () => "installation-token",
   },
@@ -286,6 +287,7 @@ test("a provider 404 on create or edit remains retryable and preserves projectio
     "@/features/tasks/model/github-comment-delivery-policy": markerPolicy,
     "@/lib/mentions": mentions,
     "@/lib/github-comment-mention-snapshot": mentionSnapshots,
+    "@/lib/github-mention-team-config": { loadGitHubMentionTeam: async () => undefined },
     "./github-app": {
       getGitHubAppInstallationToken: async () => "installation-token",
     },

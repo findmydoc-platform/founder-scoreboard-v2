@@ -787,6 +787,7 @@ export type BrowserCreateWriter =
       item: Record<string, unknown>;
       strategy: Record<string, unknown> | null;
       raciAssignments: readonly Record<string, unknown>[];
+      notifications: readonly Record<string, unknown>[];
     }>;
   }>
   | Readonly<{
@@ -847,10 +848,11 @@ export function createBrowserCreatePlanningItems(dependencies: BrowserCreateDepe
       const metadata = invocation.requestMetadata;
       const writer = dependencies.writer;
       const result = writer.kind === "strategic"
-        ? await dependencies.supabase.rpc("create_browser_planning_item_transaction", {
+        ? await dependencies.supabase.rpc("create_browser_planning_item_transaction_v2", {
           p_item: writer.params.item,
           p_strategy: writer.params.strategy,
           p_raci_assignments: writer.params.raciAssignments,
+          p_notifications: writer.params.notifications,
           p_actor_profile_id: invocation.actor.profileId,
           p_request_ip: metadata?.requestIp || null,
           p_user_agent: metadata?.userAgent || null,

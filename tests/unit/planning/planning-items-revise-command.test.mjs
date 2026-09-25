@@ -194,6 +194,58 @@ test("Browser revise preserves a late administrator-access rejection", async () 
   });
 });
 
+test("Browser strategic revise commits mention notifications in the same RPC", async () => {
+  const model = await loadUpdateModel();
+  const calls = [];
+  const actor = {
+    profileId: "viewer-admin",
+    platformRole: "viewer",
+    credential: { kind: "session" },
+    capabilities: { operationalCorrection: true },
+  };
+  const expectedUpdatedAt = "2026-08-12T10:00:00.000Z";
+  const notifications = [{
+    type: "task.mention",
+    recipient_profile_id: "founder-one",
+    dedupe_key: "task.mention:field:initiative-one:description:revision:founder-one",
+  }];
+  const supabase = {
+    rpc: async (name, params) => {
+      calls.push([name, params]);
+      return { data: { task: { id: "initiative-one" } }, error: null };
+    },
+  };
+
+  const result = await model.createBrowserRevisePlanningItems({
+    supabase,
+    actor,
+    writer: {
+      kind: "strategic",
+      params: {
+        taskId: "initiative-one",
+        expectedUpdatedAt,
+        patch: { description: "Hello @founder" },
+        strategy: null,
+        raciAssignments: null,
+        notifications,
+      },
+    },
+  }).run({
+    actor,
+    mode: "commit",
+    command: model.planningItemReviseCommand(
+      "initiative-one",
+      "initiative",
+      expectedUpdatedAt,
+      { description: "Hello @founder" },
+    ),
+  });
+
+  assert.equal(result.status, "committed");
+  assert.equal(calls[0][0], "update_administrator_planning_item_transaction_v2");
+  assert.deepEqual(calls[0][1].p_notifications, notifications);
+});
+
 test("Team revise preserves a late review-evidence conflict", async () => {
   const model = await loadUpdateModel();
   const query = {

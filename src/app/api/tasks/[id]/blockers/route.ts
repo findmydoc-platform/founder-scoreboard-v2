@@ -3,9 +3,9 @@ import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requirePlanningContributor } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
+import { mentionedProfileIds } from "@/lib/mentions";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
-import { taskIdsHaveReviewLock } from "@/lib/task-review-lock";
 
 type BlockerPayload = {
   reason?: string;
@@ -36,9 +36,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
-  const reviewLock = await taskIdsHaveReviewLock(supabase, [id]);
-  if (reviewLock.error) return apiError(reviewLock.error, 500);
-  if (reviewLock.locked) return apiError(reviewLock.message, 409);
   const detailPermissions = taskDetailPermissions({
     task: {
       assignee: task.assignee || "",
@@ -58,29 +55,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Founder können Blocker nur für eigene Aufgaben melden.", 403);
   }
 
-  const { data: blocker, error: insertError } = await supabase
-    .from("task_blockers")
-    .insert({
-      task_id: id,
-      profile_id: permission.profile?.id || null,
-      reason,
-      impact,
-      needs_help_from: needsHelpFrom,
-      status: "open",
-    })
-    .select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at")
-    .single();
-
-  if (insertError || !blocker) return apiError(insertError?.message || "Blocker konnte nicht gespeichert werden.", 500);
-
-  await supabase.from("tasks").update({
-    status: "Blockiert",
-    github_issue_sync_status: "not_synced",
-    github_issue_sync_error: null,
-  }).eq("id", id);
-
-  const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
-  const notifications = (leads || [])
+  const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id,name,github_login,platform_role");
+  if (profilesError) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
+  const mentionRecipients = new Set(mentionedProfileIds(
+    [reason, impact, needsHelpFrom].filter(Boolean).join("\n"),
+    (profiles || []).map((profile) => ({ id: profile.id, name: profile.name, githubLogin: profile.github_login })),
+  ));
+  const notifications = (profiles || [])
+    .filter((profile) => ["ceo", "deputy"].includes(profile.platform_role))
     .filter((lead) => lead.id !== permission.profile?.id)
     .map((lead) => createNotificationPayload("task.blocker_reported", {
       actorProfileId: permission.profile?.id,
@@ -89,19 +71,39 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       entityId: id,
       title: `Blocker gemeldet: ${task.title}`,
       body: [reason, impact ? `Impact: ${impact}` : "", needsHelpFrom ? `Braucht Hilfe von: ${needsHelpFrom}` : ""].filter(Boolean).join("\n"),
-    }));
-  if (notifications.length) {
-    await supabase.from("notification_events").insert(notifications);
-  }
-
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "task.blocker_reported",
-    entity_type: "task",
-    entity_id: id,
-    after_data: { reason, impact, needsHelpFrom, status: "Blockiert" },
-    ...auditRequestMetadata(request),
+    }))
+    .filter((notification) => !mentionRecipients.has(notification.recipient_profile_id || ""));
+  const metadata = auditRequestMetadata(request);
+  const { data: transaction, error: transactionError } = await supabase.rpc("report_task_blocker_transaction_v2", {
+    p_task_id: id,
+    p_actor_profile_id: permission.profile?.id || "",
+    p_reason: reason,
+    p_impact: impact,
+    p_needs_help_from: needsHelpFrom,
+    p_notifications: notifications,
+    p_mention_recipient_profile_ids: [...mentionRecipients],
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent || null,
   });
+  if (transactionError) {
+    if (transactionError.code === "P0002") return apiError("Aufgabe wurde nicht gefunden.", 404);
+    if (transactionError.code === "P0010") return apiError("Dieses Issue ist während oder nach dem Review geschützt.", 409);
+    if (transactionError.code === "42501") return apiError("Founder können Blocker nur für eigene Aufgaben melden.", 403);
+    if (transactionError.code === "22023") return apiError("Blocker-Grund ist erforderlich.", 400);
+    return apiError("Blocker konnte nicht gespeichert werden.", 500);
+  }
+  const blocker = (transaction as { blocker?: {
+    id: number;
+    task_id: string;
+    profile_id: string | null;
+    reason: string;
+    impact: string | null;
+    needs_help_from: string | null;
+    status: string;
+    created_at: string;
+    resolved_at: string | null;
+  } } | null)?.blocker;
+  if (!blocker) return apiError("Blocker konnte nicht gespeichert werden.", 500);
 
   return NextResponse.json({
     ok: true,

@@ -196,6 +196,9 @@ export function mapTask(
 }
 
 export function mapTaskReview(row: DbTaskReview): TaskReview {
+  const delivery = Array.isArray(row.task_review_github_deliveries)
+    ? row.task_review_github_deliveries[0]
+    : row.task_review_github_deliveries;
   return {
     id: row.id,
     taskId: row.task_id,
@@ -205,6 +208,8 @@ export function mapTaskReview(row: DbTaskReview): TaskReview {
     points: Number(row.points || 0),
     comment: row.comment || "",
     checklist: row.checklist || {},
+    githubDeliveryStatus: delivery?.status as TaskReview["githubDeliveryStatus"],
+    githubCommentUrl: delivery?.github_comment_url || "",
     createdAt: row.created_at,
   };
 }

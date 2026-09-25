@@ -40,6 +40,7 @@ import { taskOwnedByProfile, taskStatusOptionsForPermissions } from "@/features/
 import { buildTaskRelationshipRows, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
 import { taskDetailAvailableTabs } from "@/features/tasks/model/task-detail-tabs-model";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
+import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
 import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
 import { TaskOverviewPanel } from "@/features/tasks/organisms/task-overview-panel";
 import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
@@ -134,7 +135,11 @@ export function TaskDetailSurface({
   onRemoveRelation,
   onDecideApproval,
 }: TaskDetailSurfaceProps) {
-  const [activeTab, setActiveTab] = useState<TaskDetailTabId>(requestedCommentTarget ? "activity" : "overview");
+  const [activeTab, setActiveTab] = useState<TaskDetailTabId>(() => {
+    if (requestedCommentTarget.startsWith("relation:")) return "relationships";
+    if (requestedCommentTarget.startsWith("field:") || requestedCommentTarget.startsWith("blocker:")) return "overview";
+    return requestedCommentTarget ? "activity" : "overview";
+  });
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
   const [reviewEvidenceGateIntent, setReviewEvidenceGateIntent] = useState<"request" | "reopen" | null>(null);
   const [reviewDraftDirty, setReviewDraftDirty] = useState(false);
@@ -206,7 +211,7 @@ export function TaskDetailSurface({
   const detailDataUnavailable = Boolean(detailDataError);
   const canEditOverview = Object.values(controller.overviewPermissions).some(Boolean);
   const relationshipCount = uniqueRelationshipCount(relationshipGroups);
-  const activityCount = visibleTaskActivityCount({ comments, externalComments, activities });
+  const activityCount = visibleTaskActivityCount({ comments, externalComments, activities }) + reviews.length;
   const availableTabs = taskDetailAvailableTabs({
     activityCount: requestedCommentTarget ? Math.max(activityCount, 1) : activityCount,
     activityKnown: detailDataKnown,
@@ -255,7 +260,31 @@ export function TaskDetailSurface({
     }
     onRequestDiscardAction(applyTabChange, true);
   };
-  const openRequestedComment = useEffectEvent(() => changeTab("activity"));
+  const openRequestedComment = useEffectEvent(() => {
+    const reveal = (tab: TaskDetailTabId, targetId: string) => {
+      changeTab(tab);
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        const target = document.getElementById(targetId);
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+        target?.focus({ preventScroll: true });
+      }));
+    };
+    if (requestedCommentTarget.startsWith("blocker:")) {
+      reveal("overview", `task-blocker-${requestedCommentTarget.slice("blocker:".length)}`);
+      return;
+    }
+    if (requestedCommentTarget.startsWith("relation:")) {
+      reveal("relationships", `task-relation-${requestedCommentTarget.slice("relation:".length)}`);
+      return;
+    }
+    if (!requestedCommentTarget.startsWith("field:")) {
+      changeTab("activity");
+      return;
+    }
+    const field = requestedCommentTarget.slice("field:".length);
+    const targetId = taskMentionFieldTargetIds[field as keyof typeof taskMentionFieldTargetIds];
+    if (targetId) reveal("overview", targetId);
+  });
   useEffect(() => {
     if (!requestedCommentTarget) return;
     openRequestedComment();
@@ -338,6 +367,7 @@ export function TaskDetailSurface({
         ) : null}
         <TaskOverviewPanel
           task={task}
+          profiles={teamProfiles}
           baseline={controller.overviewBaselineDraft}
           draft={controller.overviewDraft}
           permissions={controller.overviewPermissions}
@@ -371,6 +401,7 @@ export function TaskDetailSurface({
                   loading={detailDataLoading}
                   unavailable={detailDataUnavailable}
                   pending={pending}
+                  profiles={teamProfiles}
                   profileName={profileName}
                   onBlockerDraftChange={(patch) => controller.setBlockerDraft((current) => ({ ...current, ...patch }))}
                   onReportBlocker={onReportBlocker}
@@ -384,6 +415,7 @@ export function TaskDetailSurface({
     relationships: (
       <TaskRelationshipsSection
         task={task}
+        profiles={teamProfiles}
         waitsOn={relationshipGroups.waitsOn}
         blocks={relationshipGroups.blocks}
         related={relationshipGroups.related}
@@ -417,6 +449,7 @@ export function TaskDetailSurface({
         comments={comments}
         externalComments={externalComments}
         activities={activities}
+        reviews={reviews}
         notice={commentImportNotice}
         profiles={teamProfiles}
         tasks={allTasks}
@@ -574,6 +607,7 @@ export function TaskDetailSurface({
       {reviewEvidenceGateIntent ? (
         <ReviewEvidenceGateDialog
           pending={pending}
+          profiles={teamProfiles}
           onClose={() => setReviewEvidenceGateIntent(null)}
           onConfirm={submitReviewEvidence}
         />

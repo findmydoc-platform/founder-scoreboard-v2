@@ -6,17 +6,21 @@ import {
   validReviewEvidenceUrl,
   type ReviewEvidenceSubmission,
 } from "@/features/reviews/model/review-evidence";
-import { classNames, UiButton, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import type { Profile } from "@/lib/types";
+import { classNames, UiButton, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 type EvidenceMode = "link" | "exception";
 
 export function ReviewEvidenceGateDialog({
   pending,
+  profiles = [],
   onClose,
   onConfirm,
 }: {
   pending: boolean;
+  profiles?: Profile[];
   onClose: () => void;
   onConfirm: (submission: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
 }) {
@@ -136,15 +140,16 @@ export function ReviewEvidenceGateDialog({
               <label htmlFor="review-evidence-exception-note" className="text-sm font-semibold text-slate-800">
                 Begründung <span className="text-red-600" aria-hidden="true">*</span>
               </label>
-              <UiTextArea
+              <TaskMentionTextArea
+                profiles={profiles}
                 id="review-evidence-exception-note"
                 required={mode === "exception"}
                 maxLength={2_000}
                 value={exceptionNote}
                 onFocus={() => setMode("exception")}
-                onChange={(event) => {
+                onValueChange={(value) => {
                   setMode("exception");
-                  setExceptionNote(event.target.value);
+                  setExceptionNote(value);
                 }}
                 placeholder="Wo und wie wurde das Ergebnis nachvollziehbar abgenommen?"
                 className="mt-2 w-full bg-white"

@@ -4,6 +4,7 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 let githubAppStatusCalls = 0;
 let githubAppStatusResult = null;
+let validatedMentionTeam = null;
 
 beforeEach(() => {
   githubAppStatusCalls = 0;
@@ -13,9 +14,10 @@ beforeEach(() => {
     description: "Die GitHub App ist erreichbar und die Installation ist verfügbar.",
     nextStep: "",
   };
+  validatedMentionTeam = { organization: "findmydoc-platform", teamSlug: "founderops" };
 });
 
-function createSupabaseFixture() {
+function createSupabaseFixture({ projectError = null } = {}) {
   const calls = [];
   const data = {
     profiles: [
@@ -70,7 +72,7 @@ function createSupabaseFixture() {
       eligible: true,
       active_until: "2999-01-01T00:00:00.000Z",
     }],
-    projects: [{ id: "project", github_project_owner: "findmydoc-platform", github_project_number: 1 }],
+    projects: [{ id: "project", github_project_owner: "findmydoc-platform", github_project_number: 1, github_mention_team_slug: "founderops" }],
     notification_events: [{ id: "event", created_at: "2026-09-22T12:00:00.000Z" }],
     notification_deliveries: [{ id: "delivery", created_at: "2026-09-22T12:01:00.000Z" }],
   };
@@ -109,10 +111,14 @@ function createSupabaseFixture() {
       calls.push(call);
       const query = {
         select(value) { call.select = value; return query; },
+        eq() { return query; },
         order() { return query; },
         limit() { return query; },
         maybeSingle() {
-          return Promise.resolve({ data: data[table]?.[0] || null, error: null });
+          return Promise.resolve({
+            data: data[table]?.[0] || null,
+            error: table === "projects" ? projectError : null,
+          });
         },
         then(resolve, reject) {
           return Promise.resolve({ data: data[table] || [], error: null }).then(resolve, reject);
@@ -132,6 +138,9 @@ const { createSupabaseAdministrationReadModel } = await importTestModule(
         githubAppStatusCalls += 1;
         return githubAppStatusResult;
       },
+    },
+    "@/lib/github-mention-team-config": {
+      resolveGitHubMentionTeam: async () => validatedMentionTeam,
     },
     "@/lib/planning-row-mappers": {
       mapNotificationEvent: (row) => ({ id: row.id, createdAt: row.created_at }),
@@ -189,7 +198,7 @@ test("active administrator view projects technical identity and delivery operati
   assert.deepEqual(result.model.people.map((person) => person.githubConnection?.status), ["active", "prepared", "incomplete"]);
   assert.equal(result.model.people[0].githubConnection.lastSignInAt, "2026-09-22T11:45:00.000Z");
   assert.equal("authUserId" in result.model.people[0], false);
-  assert.deepEqual(result.model.githubProject, { id: "project", owner: "findmydoc-platform", number: 1 });
+  assert.deepEqual(result.model.githubProject, { id: "project", owner: "findmydoc-platform", number: 1, mentionTeamSlug: "founderops" });
   assert.deepEqual(result.model.integrationStatus.githubApp, {
     available: true,
     state: "ready",
@@ -197,9 +206,42 @@ test("active administrator view projects technical identity and delivery operati
     nextStep: "",
   });
   assert.equal(githubAppStatusCalls, 1);
+  assert.equal(result.model.integrationStatus.mentionTeam.state, "ready");
+  assert.equal(result.model.integrationStatus.mentionTeam.githubHandle, "@findmydoc-platform/founderops");
   assert.deepEqual(result.model.notificationEvents.map(({ id }) => id), ["event"]);
   assert.deepEqual(result.model.notificationDeliveries.map(({ id }) => id), ["delivery"]);
   assert.equal(result.model.revision, "2999-01-01T00:00:00.000Z");
+});
+
+test("configured but unavailable GitHub team keeps @all in fallback", async () => {
+  validatedMentionTeam = undefined;
+  const result = await createSupabaseAdministrationReadModel(createSupabaseFixture()).load({
+    capabilities: {
+      ...eligibilityManager,
+      technicalAdministration: true,
+      operationalCorrection: true,
+      ceoGovernance: false,
+    },
+  });
+
+  assert.equal(result.status, "ready");
+  assert.equal(result.model.integrationStatus.mentionTeam.state, "fallback");
+  assert.equal(result.model.integrationStatus.mentionTeam.githubHandle, "");
+});
+
+test("GitHub project query failures stay inside the unavailable read-model result", async () => {
+  const result = await createSupabaseAdministrationReadModel(createSupabaseFixture({
+    projectError: { message: "project query failed" },
+  })).load({
+    capabilities: {
+      ...eligibilityManager,
+      technicalAdministration: true,
+      operationalCorrection: true,
+      ceoGovernance: false,
+    },
+  });
+
+  assert.deepEqual(result, { status: "unavailable" });
 });
 
 test("active administrator view projects the provider-owned GitHub App status", async () => {

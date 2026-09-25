@@ -56,6 +56,8 @@ import {
 } from "@/features/backlog/model/backlog-planning-state";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { auditRequestMetadata } from "@/lib/api-input";
+import { createNotificationPayload } from "@/lib/notification-catalog";
+import { mentionedProfileIds, newlyMentionedProfilesByField } from "@/lib/mentions";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import type { Task } from "@/lib/types";
@@ -142,11 +144,17 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     if (!parsed.ok) return apiError(parsed.error, parsed.status);
     const actor = actorContextFromSessionAuth(permission);
     if (!actor.ok) return apiError("Founder können nur den Status ihrer eigenen Aufgaben ändern.", 403);
+    const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id,name,github_login");
+    if (profilesError) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
+    const mentionRecipientProfileIds = mentionedProfileIds(
+      parsed.value.evidenceExceptionNote,
+      (profiles || []).map((profile) => ({ id: profile.id, name: profile.name, githubLogin: profile.github_login })),
+    );
     const metadata = auditRequestMetadata(request);
     const result = await createPlanningReviewPlanningItems(supabase).run({
       actor: actor.actor,
       mode: "commit",
-      command: requestPlanningReviewCommand(id, parsed.value),
+      command: requestPlanningReviewCommand(id, { ...parsed.value, mentionRecipientProfileIds }),
       requestMetadata: {
         requestIp: metadata.request_ip || undefined,
         userAgent: metadata.user_agent || undefined,
@@ -213,7 +221,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   let sprintAssignmentNoop = false;
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,description,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,parent_task_id,fixed_date,evidence_link,target_date,updated_at")
+    .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,review_evidence_exception_note,score_final,priority,sprint_id,score_relevant,parent_task_id,fixed_date,evidence_link,target_date,updated_at")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -293,18 +301,50 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       role: assignment.role,
       sortOrder: Number.isInteger(assignment.sortOrder) && (assignment.sortOrder || 0) >= 0 ? assignment.sortOrder : index,
     }));
-    const [existingStrategyResult, existingRaciResult, profileResult] = await Promise.all([
+    const [existingStrategyResult, existingRaciResult] = await Promise.all([
       currentTask.task_type === "initiative"
         ? supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").eq("task_id", id).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       currentTask.task_type === "initiative"
         ? supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").eq("task_id", id).order("sort_order")
         : Promise.resolve({ data: [], error: null }),
-      supabase.from("profiles").select("id,name"),
     ]);
+    const profileResult = operationalCorrection
+      ? await supabase.rpc("administrator_directory_snapshot")
+      : await supabase.from("profiles").select("id,name,github_login");
+    const profileRows = operationalCorrection
+      ? (((profileResult.data || {}) as { people?: Array<{ id: string; name: string; githubLogin?: string }> }).people || []).map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        github_login: profile.githubLogin || "",
+      }))
+      : (profileResult.data || []) as Array<{ id: string; name: string; github_login?: string | null }>;
     if (existingStrategyResult.error || existingRaciResult.error || profileResult.error) {
       return apiError("Planungselement konnte nicht vollständig geladen werden.", 500);
     }
+    const strategicMentionFields = [
+      ...(payload.description === undefined ? [] : [{ key: "description", previous: String(currentTask.description || ""), current: String(patch.description || "") }]),
+      ...(payload.strategy === undefined ? [] : [
+        { key: "strategy-goal", previous: String(existingStrategyResult.data?.goal || ""), current: strategy?.goal || "" },
+        { key: "strategy-success", previous: String(existingStrategyResult.data?.success_criteria || ""), current: strategy?.successCriteria || "" },
+        { key: "strategy-scope", previous: String(existingStrategyResult.data?.scope_constraints || ""), current: strategy?.scopeConstraints || "" },
+      ]),
+    ];
+    const strategicProfiles = profileRows.map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      githubLogin: profile.github_login || "",
+    }));
+    const strategicNotifications = newlyMentionedProfilesByField(strategicMentionFields, strategicProfiles).map((mention) => createNotificationPayload("task.mention", {
+      actorProfileId: permission.profile?.id || null,
+      recipientProfileId: mention.profileId,
+      entityType: "task",
+      entityId: id,
+      title: `In einem Aufgabenfeld erwähnt: ${currentTask.title}`,
+      body: mention.excerpt,
+      dedupeKey: `task.mention:field:${id}:${mention.fieldKey}:${expectedUpdatedAt}:${mention.profileId}`,
+      targetPath: `/tasks/${encodeURIComponent(id)}?focus=field:${mention.fieldKey}`,
+    }));
     const result = await createBrowserRevisePlanningItems({
       supabase,
       actor: reviseActor.actor,
@@ -314,6 +354,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
         patch,
         strategy,
         raciAssignments,
+        notifications: strategicNotifications,
       } },
     }).run({
       actor: reviseActor.actor,
@@ -333,7 +374,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     const transaction = browserReviseTransactionFromResult(result) as { task?: TaskRowForMapping } | null;
     if (!transaction?.task) return apiError("Planungselement konnte nicht gespeichert werden.", 500);
     const updated = transaction.task;
-    const profileNames = new Map((profileResult.data || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
+    const profileNames = new Map(profileRows.map((profile) => [profile.id, profile.name]));
     const resultingStrategy = strategy
       ? {
           task_id: id,
@@ -589,6 +630,38 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   markTaskGitHubSyncDirty(update);
 
   const messages = activityMessages(payload, currentTask);
+  const mentionFieldDefinitions = [
+    { payloadKey: "description", databaseKey: "description", fieldKey: "description" },
+    { payloadKey: "problemStatement", databaseKey: "problem_statement", fieldKey: "problem" },
+    { payloadKey: "intendedOutcome", databaseKey: "intended_outcome", fieldKey: "outcome" },
+    { payloadKey: "scopeConstraints", databaseKey: "scope_constraints", fieldKey: "scope" },
+    { payloadKey: "acceptanceCriteria", databaseKey: "acceptance_criteria", fieldKey: "acceptance" },
+    { payloadKey: "evidenceRequired", databaseKey: "evidence_required", fieldKey: "evidence-required" },
+    { payloadKey: "definitionOfDone", databaseKey: "definition_of_done", fieldKey: "definition-of-done" },
+  ] as const;
+  const changedMentionFields = mentionFieldDefinitions.flatMap((field) => payload[field.payloadKey] === undefined ? [] : [{
+    key: field.fieldKey,
+    previous: String(currentTask[field.databaseKey] || ""),
+    current: String(payload[field.payloadKey] || "").trim(),
+  }]);
+  let mentionNotifications: ReturnType<typeof createNotificationPayload>[] = [];
+  if (changedMentionFields.length) {
+    const { data: mentionProfiles, error: mentionProfilesError } = await supabase
+      .from("profiles")
+      .select("id,name,github_login");
+    if (mentionProfilesError) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
+    const mentionProfileRows = (mentionProfiles || []).map((profile) => ({ id: profile.id, name: profile.name, githubLogin: profile.github_login }));
+    mentionNotifications = newlyMentionedProfilesByField(changedMentionFields, mentionProfileRows).map((mention) => createNotificationPayload("task.mention", {
+      actorProfileId: permission.profile?.id || null,
+      recipientProfileId: mention.profileId,
+      entityType: "task",
+      entityId: id,
+      title: `In einem Aufgabenfeld erwähnt: ${currentTask.title}`,
+      body: mention.excerpt,
+      dedupeKey: `task.mention:field:${id}:${mention.fieldKey}:${expectedUpdatedAt}:${mention.profileId}`,
+      targetPath: `/tasks/${encodeURIComponent(id)}?focus=field:${mention.fieldKey}`,
+    }));
+  }
 
   if ((statusNoop || sprintAssignmentNoop) && Object.keys(update).length === 0 && payload.note === undefined && payload.dependsOn === undefined) {
     return NextResponse.json({
@@ -617,7 +690,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       dependencyPresent: payload.dependsOn !== undefined,
       dependencyNote: payload.dependsOn?.trim().slice(0, 2000) ?? null,
       activityMessages: [...new Set(messages)],
-      notifications: [],
+      notifications: mentionNotifications,
     } },
   }).run({
     actor: reviseActor.actor,

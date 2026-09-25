@@ -14,7 +14,9 @@ export type FeatureTourDefinition = {
   openHelpMenu?: boolean;
   openProfileProcessSettings?: boolean;
   openProfileApiSettings?: boolean;
+  openTaskActivity?: boolean;
   openTaskDetail?: boolean;
+  openTaskMentionMenu?: boolean;
   openTaskShare?: boolean;
   productUpdateId?: string;
   requiredSelectors: readonly string[];
@@ -44,8 +46,39 @@ export const githubIssueWebhookSyncTourId = "github-issue-webhook-sync-v1";
 export const teamWorkweekTourId = "team-workweek-v1";
 export const planningApiDependenciesTourId = "planning-api-dependencies-v1";
 export const administrationWorkspaceTourId = "administration-workspace-v1";
+export const taskMentionsTourId = "task-mentions-v1";
 
 export const featureTours: readonly FeatureTourDefinition[] = [
+  {
+    id: taskMentionsTourId,
+    productUpdateId: "2026-09-24-founderops-mentions",
+    startWorkspace: "planning",
+    openTaskDetail: true,
+    openTaskActivity: true,
+    openTaskMentionMenu: true,
+    requiredSelectors: ["[data-tour-id='task-mention-composer']", "[data-tour-id='task-mention-all-option']"],
+    steps: [
+      {
+        element: "[data-tour-id='task-mention-composer']",
+        popover: {
+          title: "Personen direkt erwähnen",
+          description: "Tippe @ in Kommentare, Beschreibungen und Review-Texte. FounderOps schlägt passende Personen am Cursor vor.",
+          side: "top",
+          align: "start",
+        },
+      },
+      {
+        element: "[data-tour-id='task-mention-all-option']",
+        popover: {
+          title: "Alle mit @all erreichen",
+          description: "@all benachrichtigt alle Personen in FounderOps. Für GitHub nutzt FounderOps das konfigurierte Team oder fällt sichtbar auf einzelne Logins zurück.",
+          side: "right",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: administrationWorkspaceTourId,
     productUpdateId: "2026-09-22-jit-administration",

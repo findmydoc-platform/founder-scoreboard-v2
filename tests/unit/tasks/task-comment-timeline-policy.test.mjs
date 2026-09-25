@@ -18,3 +18,8 @@ test("legacy mutation messages map to typed audit actions", () => {
   assert.equal(policy.taskAuditActionFromMessage("Status geändert: Offen → In Arbeit"), "task.status_changed");
   assert.equal(policy.taskAuditActionFromMessage("Notiz aktualisiert"), "");
 });
+
+test("structured review audit events stay hidden beside the combined review entry", () => {
+  assert.equal(policy.isReviewDecisionActivity({ action: "task.review", message: "" }), true);
+  assert.equal(policy.isReviewDecisionActivity({ action: "task.status_changed", message: "Status geändert" }), false);
+});

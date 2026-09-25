@@ -6,6 +6,7 @@ import {
   resolveGitHubIssueNumber,
 } from "../github-issue-reference";
 import { splitGitHubRepository } from "../github-repositories";
+import { canonicalizeProfileMentionsForGitHub, type MentionProfile, type MentionTeam } from "../mentions";
 
 type GitHubIssuePayload = {
   title: string;
@@ -222,8 +223,7 @@ function taskIssueBody(task: Task) {
   ].join("\n");
 }
 
-function taskIssueUpdateBody(task: Task, existingBody?: string | null) {
-  const desiredBody = taskIssueBody(task);
+function taskIssueUpdateBody(task: Task, existingBody?: string | null, desiredBody = taskIssueBody(task)) {
   if (task.taskType !== "sub_issue" || !existingBody?.trim()) return desiredBody;
 
   const marker = taskIssueMarker(task.id);
@@ -358,7 +358,7 @@ async function updateValidatedGitHubIssue(
     operation: "mutation",
     body: {
       ...payload,
-      body: taskIssueUpdateBody(task, target.body),
+      body: taskIssueUpdateBody(task, target.body, payload.body),
       labels: mergeGitHubIssueLabels(target.labels, payload.labels),
     },
     errorMessage,
@@ -379,17 +379,21 @@ export async function projectTaskGitHubIssue({
   task,
   token,
   assigneeLogin = "",
+  mentionProfiles = [],
+  mentionTeam,
 }: {
   task: Task;
   token: string;
   assigneeLogin?: string;
+  mentionProfiles?: MentionProfile[];
+  mentionTeam?: MentionTeam;
 }): Promise<GitHubIssueProjectionResult> {
   const { owner, repo, repository } = splitGitHubRepository(task.githubRepo);
   assertGitHubIssueRepository(task, repository);
 
   const payload: GitHubIssuePayload = {
     title: taskIssueTitle(task),
-    body: taskIssueBody(task),
+    body: canonicalizeProfileMentionsForGitHub(taskIssueBody(task), mentionProfiles, mentionTeam),
     labels: taskIssueLabels(task),
     state: task.status === "Erledigt" ? "closed" : "open",
   };

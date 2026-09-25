@@ -3,8 +3,9 @@
 import { AlertTriangle, Plus, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import type { TaskActionResult } from "@/features/tasks/hooks/task-mutation-command-types";
-import type { TaskBlocker } from "@/lib/types";
-import { UiBadge, UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import type { Profile, TaskBlocker } from "@/lib/types";
+import { UiBadge, UiButton, UiField } from "@/shared/atoms/ui-primitives";
 
 type BlockerDraft = {
   reason: string;
@@ -21,6 +22,7 @@ type Props = {
   loading?: boolean;
   unavailable?: boolean;
   pending: boolean;
+  profiles: Profile[];
   profileName: (profileId: string) => string;
   onBlockerDraftChange: (patch: Partial<BlockerDraft>) => void;
   onReportBlocker: (draft: BlockerDraft) => Promise<TaskActionResult>;
@@ -35,6 +37,7 @@ export function TaskDetailPanelBlockerSection({
   loading = false,
   unavailable = false,
   pending,
+  profiles,
   profileName,
   onBlockerDraftChange,
   onReportBlocker,
@@ -135,7 +138,7 @@ export function TaskDetailPanelBlockerSection({
       ) : null}
       {blockers.length ? <div className="mt-3 grid gap-2">
         {blockers.map((blocker) => (
-          <article key={blocker.id} className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-sm text-orange-950">
+          <article id={`task-blocker-${blocker.id}`} tabIndex={-1} key={blocker.id} className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-sm text-orange-950 outline-none focus:ring-4 focus:ring-blue-100">
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold">{profileName(blocker.profileId)}</span>
               <span className="text-xs">{blocker.status}</span>
@@ -158,14 +161,14 @@ export function TaskDetailPanelBlockerSection({
         >
           <UiField>
             Grund
-            <UiTextArea
+            <TaskMentionTextArea profiles={profiles}
               id={reasonId}
               value={blockerDraft.reason}
               disabled={busy}
               aria-describedby={reportError ? reportErrorId : undefined}
-              onChange={(event) => {
+              onValueChange={(value) => {
                 setReportError("");
-                onBlockerDraftChange({ reason: event.target.value });
+                onBlockerDraftChange({ reason: value });
               }}
               className="min-h-20 w-full p-3 leading-6"
               placeholder="Was blockiert die Arbeit konkret?"
@@ -173,27 +176,29 @@ export function TaskDetailPanelBlockerSection({
           </UiField>
           <UiField>
             Auswirkung
-            <UiTextInput
+            <TaskMentionTextArea profiles={profiles}
               value={blockerDraft.impact}
               disabled={busy}
-              onChange={(event) => {
+              onValueChange={(value) => {
                 setReportError("");
-                onBlockerDraftChange({ impact: event.target.value });
+                onBlockerDraftChange({ impact: value });
               }}
-              className="h-11 px-3"
+              minHeight="sm"
+              className="min-h-11 px-3 py-2"
               placeholder={embedded ? "Auswirkung auf die weitere Arbeit" : "Auswirkung auf Sprint oder Review"}
             />
           </UiField>
           <UiField>
             Benötigte Hilfe
-            <UiTextInput
+            <TaskMentionTextArea profiles={profiles}
               value={blockerDraft.needsHelpFrom}
               disabled={busy}
-              onChange={(event) => {
+              onValueChange={(value) => {
                 setReportError("");
-                onBlockerDraftChange({ needsHelpFrom: event.target.value });
+                onBlockerDraftChange({ needsHelpFrom: value });
               }}
-              className="h-11 px-3"
+              minHeight="sm"
+              className="min-h-11 px-3 py-2"
               placeholder="Wer oder was wird gebraucht?"
             />
           </UiField>

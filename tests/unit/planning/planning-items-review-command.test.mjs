@@ -160,7 +160,7 @@ test("review requests require current evidence or a per-request exception note",
     }),
   });
   assert.equal(committed.status, "committed");
-  const params = withException.calls.find(([name]) => name === "mutate_planning_review_command_transaction_v2")[1];
+  const params = withException.calls.find(([name]) => name === "mutate_planning_review_command_transaction_v3")[1];
   assert.equal(params.p_evidence_exception_note, "Ergebnis wurde im Founder-Meeting abgenommen.");
   assert.deepEqual(params.p_evidence_links, []);
 });
@@ -185,12 +185,12 @@ test("request, decide, withdraw, and reopen share Preview policy and one atomic 
   const revision = "2026-08-12T13:00:00.000Z";
   const cases = [
     {
-      command: model.requestPlanningReviewCommand("task-one", { expectedUpdatedAt: revision }),
+      command: model.requestPlanningReviewCommand("task-one", { expectedUpdatedAt: revision, mentionRecipientProfileIds: ["mentioned"] }),
       current: fixture(),
       expectedEffects: ["activity", "notification", "audit", "githubProjection"],
     },
     {
-      command: model.decidePlanningReviewCommand("task-one", { decision: "accepted", comment: "", checklist }),
+      command: model.decidePlanningReviewCommand("task-one", { decision: "accepted", comment: "", checklist, mentionRecipientProfileIds: ["mentioned"] }),
       current: fixture({
         taskRow: task({ status: "Review", review_status: "requested" }),
         resultTask: task({ status: "Erledigt", review_status: "accepted", score_points: 10, score_final: true, updated_at: "2026-08-12T13:01:00.000Z" }),
@@ -199,12 +199,12 @@ test("request, decide, withdraw, and reopen share Preview policy and one atomic 
       expectedEffects: ["activity", "notification", "audit", "githubProjection"],
     },
     {
-      command: model.withdrawPlanningReviewCommand("task-one", revision, "Need more work"),
+      command: model.withdrawPlanningReviewCommand("task-one", revision, "Need more work", ["mentioned"]),
       current: fixture({ taskRow: task({ status: "Review", review_status: "requested" }), resultTask: task({ updated_at: "2026-08-12T13:01:00.000Z" }) }),
       expectedEffects: ["activity", "notification", "audit", "githubProjection"],
     },
     {
-      command: model.reopenPlanningReviewCommand("task-one", revision),
+      command: model.reopenPlanningReviewCommand("task-one", revision, { mentionRecipientProfileIds: ["mentioned"] }),
       current: fixture({ taskRow: task({ status: "Erledigt", review_status: "accepted", score_points: 10, score_final: true }) }),
       expectedEffects: ["activity", "notification", "audit", "githubProjection"],
     },
@@ -218,8 +218,9 @@ test("request, decide, withdraw, and reopen share Preview policy and one atomic 
     assert.equal(committed.status, "committed");
     assert.deepEqual(preview.effects.map((effect) => effect.kind), currentCase.expectedEffects);
     assert.deepEqual(committed.effects.map((effect) => effect.kind), currentCase.expectedEffects);
-    assert.equal(currentCase.current.calls.filter(([name]) => name === "mutate_planning_review_command_transaction_v2").length, 1);
+    assert.equal(currentCase.current.calls.filter(([name]) => name === "mutate_planning_review_command_transaction_v3").length, 1);
     assert.equal(currentCase.current.calls.at(-1)[1].p_request_ip, "test-ip");
+    assert.deepEqual(currentCase.current.calls.at(-1)[1].p_mention_recipient_profile_ids, ["mentioned"]);
     assert.ok(model.planningReviewTaskFromResult(committed));
   }
 });

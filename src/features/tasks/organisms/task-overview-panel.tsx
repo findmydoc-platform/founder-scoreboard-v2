@@ -12,9 +12,11 @@ import {
   evidenceLinkPresentation,
   parseEvidenceUrl,
 } from "@/features/tasks/model/task-evidence-links";
-import type { LinkedPullRequest, Task } from "@/lib/types";
+import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
+import type { LinkedPullRequest, Profile, Task } from "@/lib/types";
 import { formatDate } from "@/lib/display";
-import { classNames, UiButton, UiEmptyState, UiField, UiNotice, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { classNames, UiButton, UiEmptyState, UiField, UiNotice, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 const overviewFields = [
   { key: "problemStatement", label: "Problem", placeholder: "Welches Problem löst diese Aufgabe und warum ist es wichtig?", permission: "canEditBrief" },
@@ -213,7 +215,7 @@ function ReviewEvidenceSection({
 }) {
   return (
     <section
-      id="task-review-evidence"
+      id={taskMentionFieldTargetIds["evidence-required"]}
       data-tour-id="task-evidence-links"
       tabIndex={-1}
       className="scroll-mt-6 border-b border-slate-100 py-5 outline-none"
@@ -229,6 +231,7 @@ function ReviewEvidenceSection({
 
 type Props = {
   task: Task;
+  profiles: Profile[];
   baseline: TaskOverviewDraft;
   draft: TaskOverviewDraft;
   permissions: TaskOverviewEditPermissions;
@@ -245,6 +248,7 @@ type Props = {
 
 export function TaskOverviewPanel({
   task,
+  profiles,
   baseline,
   draft,
   permissions,
@@ -370,11 +374,12 @@ export function TaskOverviewPanel({
               <>
                 <UiField>
                   Kontext <span className="font-normal text-slate-400">(optional)</span>
-                  <UiTextArea
+                  <TaskMentionTextArea
+                    profiles={profiles}
                     data-task-overview-field
                     value={draft.description}
                     disabled={saving}
-                    onChange={(event) => onChange({ description: event.target.value })}
+                    onValueChange={(value) => onChange({ description: value })}
                     minHeight="lg"
                     inputPadding="md"
                     leading="relaxed"
@@ -386,15 +391,15 @@ export function TaskOverviewPanel({
                     <legend className="px-1 text-sm font-semibold text-slate-950">Strategie</legend>
                     <UiField>
                       Zielbild
-                      <UiTextArea data-task-overview-field value={draft.strategyGoal} disabled={saving} onChange={(event) => onChange({ strategyGoal: event.target.value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welcher strategische Zustand soll erreicht werden?" />
+                      <TaskMentionTextArea profiles={profiles} data-task-overview-field value={draft.strategyGoal} disabled={saving} onValueChange={(value) => onChange({ strategyGoal: value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welcher strategische Zustand soll erreicht werden?" />
                     </UiField>
                     <UiField>
                       Erfolgskriterien
-                      <UiTextArea data-task-overview-field value={draft.strategySuccessCriteria} disabled={saving} onChange={(event) => onChange({ strategySuccessCriteria: event.target.value })} minHeight="lg" inputPadding="md" leading="relaxed" placeholder="Woran erkennen wir Erfolg?" />
+                      <TaskMentionTextArea profiles={profiles} data-task-overview-field value={draft.strategySuccessCriteria} disabled={saving} onValueChange={(value) => onChange({ strategySuccessCriteria: value })} minHeight="lg" inputPadding="md" leading="relaxed" placeholder="Woran erkennen wir Erfolg?" />
                     </UiField>
                     <UiField>
                       Scope &amp; Grenzen
-                      <UiTextArea data-task-overview-field value={draft.strategyScopeConstraints} disabled={saving} onChange={(event) => onChange({ strategyScopeConstraints: event.target.value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Was gehört dazu und was nicht?" />
+                      <TaskMentionTextArea profiles={profiles} data-task-overview-field value={draft.strategyScopeConstraints} disabled={saving} onValueChange={(value) => onChange({ strategyScopeConstraints: value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Was gehört dazu und was nicht?" />
                     </UiField>
                   </fieldset>
                 ) : null}
@@ -405,11 +410,12 @@ export function TaskOverviewPanel({
               <>
               <UiField>
                 Kontext <span className="font-normal text-slate-400">(optional)</span>
-                <UiTextArea
+                <TaskMentionTextArea
+                  profiles={profiles}
                   data-task-overview-field
                   value={draft.description}
                   disabled={saving}
-                  onChange={(event) => onChange({ description: event.target.value })}
+                  onValueChange={(value) => onChange({ description: value })}
                   minHeight="lg"
                   inputPadding="md"
                   leading="relaxed"
@@ -425,11 +431,12 @@ export function TaskOverviewPanel({
                 {subIssueBriefFields.map(({ key, label, placeholder }) => (
                   <UiField key={key}>
                     {label}
-                    <UiTextArea
+                    <TaskMentionTextArea
+                      profiles={profiles}
                       data-task-overview-field
                       value={draft[key]}
                       disabled={saving}
-                      onChange={(event) => onChange({ [key]: event.target.value })}
+                      onValueChange={(value) => onChange({ [key]: value })}
                       minHeight="lg"
                       inputPadding="md"
                       leading="relaxed"
@@ -443,11 +450,12 @@ export function TaskOverviewPanel({
           ) : overviewFields.map(({ key, label, placeholder, permission }) => permissions[permission] ? (
               <UiField key={key}>
                 {label}
-                <UiTextArea
+                <TaskMentionTextArea
+                  profiles={profiles}
                   data-task-overview-field
                   value={draft[key]}
                   disabled={saving}
-                  onChange={(event) => onChange({ [key]: event.target.value })}
+                  onValueChange={(value) => onChange({ [key]: value })}
                   minHeight={key === "note" ? "md" : "lg"}
                   inputPadding="md"
                   leading="relaxed"
@@ -528,12 +536,12 @@ export function TaskOverviewPanel({
           {!hasReadContent ? <UiEmptyState className="my-5">Für dieses Item ist noch keine Beschreibung hinterlegt.</UiEmptyState> : null}
           {isStrategic ? (
             <>
-              <ReadSection label="Kontext" value={draft.description} emptyValue="Kein strategischer Kontext hinterlegt." />
+              <ReadSection label="Kontext" value={draft.description} anchorId={taskMentionFieldTargetIds.description} emptyValue="Kein strategischer Kontext hinterlegt." />
               {task.taskType === "initiative" ? (
                 <>
-                  <ReadSection label="Zielbild" value={draft.strategyGoal} emptyValue="Kein Zielbild hinterlegt." />
-                  <ReadSection label="Erfolgskriterien" value={draft.strategySuccessCriteria} checklist emptyValue="Keine Erfolgskriterien hinterlegt." />
-                  <ReadSection label="Scope & Grenzen" value={draft.strategyScopeConstraints} emptyValue="Keine Scope-Grenzen hinterlegt." />
+                  <ReadSection label="Zielbild" value={draft.strategyGoal} anchorId={taskMentionFieldTargetIds["strategy-goal"]} emptyValue="Kein Zielbild hinterlegt." />
+                  <ReadSection label="Erfolgskriterien" value={draft.strategySuccessCriteria} anchorId={taskMentionFieldTargetIds["strategy-success"]} checklist emptyValue="Keine Erfolgskriterien hinterlegt." />
+                  <ReadSection label="Scope & Grenzen" value={draft.strategyScopeConstraints} anchorId={taskMentionFieldTargetIds["strategy-scope"]} emptyValue="Keine Scope-Grenzen hinterlegt." />
                 </>
               ) : null}
               {riskContent}
@@ -546,17 +554,17 @@ export function TaskOverviewPanel({
                     <span className="font-semibold text-slate-700">Arbeitsbrief.</span>{" "}
                     Diese Angaben sind optionaler Kontext. Für Sub-Issues entstehen daraus weder Review, Score noch verpflichtende Nachweise.
                   </UiNotice>
-                  {hasDistinctSubIssueContext ? <ReadSection label="Kontext" value={draft.description} /> : null}
-                  <ReadSection label="Problem" value={draft.problemStatement} />
-                  <ReadSection label="Zielbild" value={draft.intendedOutcome} />
-                  <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
-                  <ReadSection label="Abnahmekriterien" value={draft.acceptanceCriteria} checklist />
-                  <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} />
-                  <ReadSection label="Qualitätsstandard" value={draft.definitionOfDone} checklist />
+                  {hasDistinctSubIssueContext ? <ReadSection label="Kontext" value={draft.description} anchorId={taskMentionFieldTargetIds.description} /> : null}
+                  <ReadSection label="Problem" value={draft.problemStatement} anchorId={taskMentionFieldTargetIds.problem} />
+                  <ReadSection label="Zielbild" value={draft.intendedOutcome} anchorId={taskMentionFieldTargetIds.outcome} />
+                  <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} anchorId={taskMentionFieldTargetIds.scope} />
+                  <ReadSection label="Abnahmekriterien" value={draft.acceptanceCriteria} anchorId={taskMentionFieldTargetIds.acceptance} checklist />
+                  <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId={taskMentionFieldTargetIds["evidence-required"]} />
+                  <ReadSection label="Qualitätsstandard" value={draft.definitionOfDone} anchorId={taskMentionFieldTargetIds["definition-of-done"]} checklist />
                   {riskContent}
                 </>
               ) : (
-                <section className="grid gap-4 border-b border-slate-100 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <section id={taskMentionFieldTargetIds.description} className="grid scroll-mt-6 gap-4 border-b border-slate-100 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-950">Kontext</h3>
                     <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
@@ -570,19 +578,19 @@ export function TaskOverviewPanel({
             </>
           ) : (
             <>
-              <ReadSection label="Problem" value={draft.problemStatement} />
+              <ReadSection label="Problem" value={draft.problemStatement} anchorId={taskMentionFieldTargetIds.problem} />
               <ReadSection
                 label="Zielbild"
                 value={draft.intendedOutcome}
-                anchorId="task-review-outcome"
+                anchorId={taskMentionFieldTargetIds.outcome}
                 emptyValue={flatReadOnly ? "Kein Zielbild hinterlegt." : undefined}
               />
-              <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
+              <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} anchorId={taskMentionFieldTargetIds.scope} />
               <ReadSection
                 label="Abnahmekriterien"
                 value={draft.acceptanceCriteria}
                 checklist
-                anchorId="task-review-acceptance"
+                anchorId={taskMentionFieldTargetIds.acceptance}
                 emptyValue={flatReadOnly ? "Keine Abnahmekriterien hinterlegt." : undefined}
               />
               {flatReadOnly ? (
@@ -592,7 +600,7 @@ export function TaskOverviewPanel({
                   linkedPullRequests={linkedPullRequests}
                 />
               ) : (
-                <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId="task-review-evidence" />
+                <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId={taskMentionFieldTargetIds["evidence-required"]} />
               )}
               {!flatReadOnly ? (
                 <section
@@ -608,6 +616,7 @@ export function TaskOverviewPanel({
                 label="Qualitätsstandard"
                 value={draft.definitionOfDone}
                 checklist
+                anchorId={taskMentionFieldTargetIds["definition-of-done"]}
                 emptyValue={flatReadOnly ? "Kein Qualitätsstandard hinterlegt." : undefined}
               />
               {!flatReadOnly ? riskContent : null}

@@ -116,6 +116,7 @@ export type PlanningReviewCommitPlan = Readonly<{
   evidenceExceptionNote: string;
   activityMessages: readonly string[];
   notifications: readonly NotificationPayload[];
+  mentionRecipientProfileIds: readonly string[];
   auditAfterData: Readonly<Record<string, unknown>>;
   originalTask: ReviewTaskProjection;
   projectedTask: ReviewTaskProjection;
@@ -260,6 +261,7 @@ export function requestPlanningReviewCommand(
     reviewerProfileId?: string;
     evidenceLinks?: readonly string[];
     evidenceExceptionNote?: string;
+    mentionRecipientProfileIds?: readonly string[];
   },
 ): ActOnItem {
   return {
@@ -271,6 +273,7 @@ export function requestPlanningReviewCommand(
       ...(input.reviewerProfileId ? { reviewerProfileId: input.reviewerProfileId } : {}),
       ...(input.evidenceLinks?.length ? { evidenceLinks: input.evidenceLinks } : {}),
       ...(input.evidenceExceptionNote ? { evidenceExceptionNote: input.evidenceExceptionNote } : {}),
+      ...(input.mentionRecipientProfileIds?.length ? { mentionRecipientProfileIds: input.mentionRecipientProfileIds } : {}),
     },
   };
 }
@@ -282,6 +285,7 @@ export function decidePlanningReviewCommand(
     comment: string;
     checklist: PlanningReviewChecklist;
     expectedUpdatedAt?: string;
+    mentionRecipientProfileIds?: readonly string[];
   },
 ): ActOnItem {
   return {
@@ -292,22 +296,23 @@ export function decidePlanningReviewCommand(
       decision: input.decision,
       note: input.comment,
       checklist: input.checklist,
+      ...(input.mentionRecipientProfileIds?.length ? { mentionRecipientProfileIds: input.mentionRecipientProfileIds } : {}),
       ...(input.expectedUpdatedAt ? { expectedRevision: input.expectedUpdatedAt } : {}),
     },
   };
 }
 
-export function withdrawPlanningReviewCommand(itemId: string, expectedUpdatedAt: string, reason: string): ActOnItem {
+export function withdrawPlanningReviewCommand(itemId: string, expectedUpdatedAt: string, reason: string, mentionRecipientProfileIds: readonly string[] = []): ActOnItem {
   return {
     kind: "actOnItem",
-    action: { kind: "withdrawReview", itemId, expectedRevision: expectedUpdatedAt, reason },
+    action: { kind: "withdrawReview", itemId, expectedRevision: expectedUpdatedAt, reason, ...(mentionRecipientProfileIds.length ? { mentionRecipientProfileIds } : {}) },
   };
 }
 
 export function reopenPlanningReviewCommand(
   itemId: string,
   expectedUpdatedAt: string,
-  input: { evidenceLinks?: readonly string[]; evidenceExceptionNote?: string } = {},
+  input: { evidenceLinks?: readonly string[]; evidenceExceptionNote?: string; mentionRecipientProfileIds?: readonly string[] } = {},
 ): ActOnItem {
   return {
     kind: "actOnItem",
@@ -317,6 +322,7 @@ export function reopenPlanningReviewCommand(
       expectedRevision: expectedUpdatedAt,
       ...(input.evidenceLinks?.length ? { evidenceLinks: input.evidenceLinks } : {}),
       ...(input.evidenceExceptionNote ? { evidenceExceptionNote: input.evidenceExceptionNote } : {}),
+      ...(input.mentionRecipientProfileIds?.length ? { mentionRecipientProfileIds: input.mentionRecipientProfileIds } : {}),
     },
   };
 }
@@ -456,6 +462,7 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
           ...(task.reviewStatus === "requested" ? [] : [`Review geändert: ${task.reviewStatus} → requested`]),
         ],
         notifications,
+        mentionRecipientProfileIds: action.mentionRecipientProfileIds || [],
         auditAfterData: {
           status: "Review",
           reviewStatus: "requested",
@@ -524,6 +531,7 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
           ? `${reviewDecisionLabels[action.decision]} angefordert: ${action.note || "ohne Kommentar"}`
           : `Review finalisiert: ${reviewDecisionLabels[action.decision]}, ${points} Punkte`],
         notifications,
+        mentionRecipientProfileIds: action.mentionRecipientProfileIds || [],
         auditAfterData: { decision: action.decision, points, status: next.status, scoreFinal: next.scoreFinal, checklist: action.checklist },
         originalTask: before,
         projectedTask: after,
@@ -574,6 +582,7 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
         evidenceExceptionNote: "",
         activityMessages: [`Review zurückgezogen: ${action.reason}`],
         notifications,
+        mentionRecipientProfileIds: action.mentionRecipientProfileIds || [],
         auditAfterData: { status: "In Arbeit", reviewStatus: "not_requested", scoreFinal: false, reason: action.reason },
         originalTask: before,
         projectedTask: after,
@@ -640,6 +649,7 @@ function decisionFor(action: ReviewAction, state: PlanningReviewState, actor: { 
       evidenceExceptionNote: state.hasValidEvidence || providedEvidenceLinks.length ? "" : evidenceExceptionNote,
       activityMessages: ["Review wieder geöffnet"],
       notifications,
+      mentionRecipientProfileIds: action.mentionRecipientProfileIds || [],
       auditAfterData: {
         status: "Review",
         reviewStatus: "requested",
@@ -793,7 +803,7 @@ async function commitReview(
   supabase: PlanningSupabase,
   request: PlanningCommitRequest<PlanningReviewCommitPlan>,
 ): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
-  const result = await supabase.rpc("mutate_planning_review_command_transaction_v2", {
+  const result = await supabase.rpc("mutate_planning_review_command_transaction_v3", {
     p_action: request.plan.action,
     p_task_id: request.plan.taskId,
     p_expected_updated_at: request.plan.expectedRevision,
@@ -808,6 +818,7 @@ async function commitReview(
     p_evidence_exception_note: request.plan.evidenceExceptionNote || null,
     p_activity_messages: request.plan.activityMessages,
     p_notifications: request.plan.notifications,
+    p_mention_recipient_profile_ids: request.plan.mentionRecipientProfileIds,
     p_audit_after_data: request.plan.auditAfterData,
     p_request_ip: request.requestMetadata?.requestIp || null,
     p_user_agent: request.requestMetadata?.userAgent || null,

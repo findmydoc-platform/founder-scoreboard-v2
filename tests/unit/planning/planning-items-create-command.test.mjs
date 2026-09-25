@@ -150,13 +150,14 @@ test("Browser CreateItems commits through exactly one hidden writer", async () =
     actor,
     writer: {
       kind: "strategic",
-      params: { item: { id: "epic-1" }, strategy: null, raciAssignments: [] },
+      params: { item: { id: "epic-1" }, strategy: null, raciAssignments: [], notifications: [] },
     },
   }).run({ actor, mode: "commit", command });
 
   assert.equal(result.ok, true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], "create_browser_planning_item_transaction");
+  assert.equal(calls[0][0], "create_browser_planning_item_transaction_v2");
+  assert.deepEqual(calls[0][1].p_notifications, []);
   assert.equal(create.browserCreateTransactionFromResult(result).task.id, "epic-1");
 });
 
@@ -166,7 +167,7 @@ test("CreateItems rejects empty and oversized batches before a writer", async ()
   const planningItems = create.createBrowserCreatePlanningItems({
     supabase: { rpc: async () => { rpcCalls += 1; return { data: null, error: null }; } },
     actor,
-    writer: { kind: "strategic", params: { item: {}, strategy: null, raciAssignments: [] } },
+    writer: { kind: "strategic", params: { item: {}, strategy: null, raciAssignments: [], notifications: [] } },
   });
   const empty = await planningItems.run({ actor, mode: "commit", command: { kind: "createItems", items: [] } });
   const oversized = await planningItems.run({

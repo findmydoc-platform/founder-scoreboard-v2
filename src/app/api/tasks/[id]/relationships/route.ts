@@ -17,6 +17,7 @@ import {
   removePlanningRelationshipCommand,
 } from "@/features/planning-items/model/planning-items-relationships";
 import { getSupabaseForToken } from "@/lib/supabase";
+import { mentionedProfileIds } from "@/lib/mentions";
 
 type RelationshipRouteContext = { params: Promise<{ id: string }> };
 
@@ -50,9 +51,29 @@ export async function POST(request: NextRequest, context: RelationshipRouteConte
   const administratorAccess = apiContext.permission.authority?.capabilities.operationalCorrection === true;
   const mutationClient = administratorAccess ? getSupabaseForToken(bearerToken(request)) : apiContext.supabase;
   if (!mutationClient) return apiError("Anmeldung erforderlich.", 401);
+  let mentionRecipientProfileIds: string[] = [];
+  if (parsed.value.note.includes("@")) {
+    const profileResult = administratorAccess
+      ? await mutationClient.rpc("administrator_directory_snapshot")
+      : await apiContext.supabase.from("profiles").select("id,name,github_login");
+    if (profileResult.error) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
+    const profileRows = administratorAccess
+      ? (((profileResult.data || {}) as { people?: Array<{ id: string; name: string; githubLogin?: string }> }).people || []).map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        github_login: profile.githubLogin || "",
+      }))
+      : (profileResult.data || []) as Array<{ id: string; name: string; github_login?: string | null }>;
+    mentionRecipientProfileIds = mentionedProfileIds(parsed.value.note, profileRows.map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      githubLogin: profile.github_login || "",
+    })));
+  }
   const result = await createPlanningRelationshipPlanningItems(apiContext.supabase, {
     mutationClient,
     administratorAccess,
+    mentionRecipientProfileIds,
   }).run({
     actor: actor.actor,
     mode: "commit",

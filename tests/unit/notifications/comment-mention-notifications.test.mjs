@@ -48,4 +48,15 @@ test("task comment targets map notification IDs to timeline element IDs", async 
   assert.equal(targets.parseTaskCommentTarget(target), target);
   assert.equal(targets.taskCommentElementId(target), "task-comment-github:5307392288");
   assert.equal(targets.parseTaskCommentTarget("github:"), "");
+  assert.deepEqual({
+    description: targets.taskMentionFieldTargetIds.description,
+    outcome: targets.taskMentionFieldTargetIds.outcome,
+    acceptance: targets.taskMentionFieldTargetIds.acceptance,
+    evidence: targets.taskMentionFieldTargetIds["evidence-required"],
+  }, {
+    description: "task-field-description",
+    outcome: "task-review-outcome",
+    acceptance: "task-review-acceptance",
+    evidence: "task-review-evidence",
+  });
 });
