@@ -310,6 +310,8 @@ export type TaskReview = {
   points: number;
   comment: string;
   checklist: TaskReviewChecklist;
+  githubDeliveryStatus?: GitHubCommentDeliveryStatus;
+  githubCommentUrl?: string;
   createdAt: string;
 };
 

@@ -61,6 +61,10 @@ const githubRoute = await importTestModule("src/app/api/founderops-settings/gith
       fields: [],
     }),
   },
+  "@/lib/github-mention-team": {
+    validGitHubTeamSlug: (value) => typeof value === "string" && value.length > 0,
+    validateGitHubMentionTeam: async () => ({ slug: "founderops", name: "FounderOps", url: "https://github.com/orgs/findmydoc-platform/teams/founderops", notificationsEnabled: true }),
+  },
   "@/lib/github-project-config": {
     validGitHubProjectNumber: (value) => Number.isInteger(value) && value > 0,
     validGitHubProjectOwner: (value) => typeof value === "string" && value.length > 0,
@@ -135,8 +139,10 @@ test("GitHub Project adapter maps post-guard authority loss to the late expiry c
     {
       expectedGithubProjectOwner: "findmydoc-platform",
       expectedGithubProjectNumber: 21,
+      expectedGithubMentionTeamSlug: "founderops",
       githubProjectOwner: "findmydoc-platform",
       githubProjectNumber: 22,
+      githubMentionTeamSlug: "founderops",
     },
   ));
 
@@ -145,7 +151,33 @@ test("GitHub Project adapter maps post-guard authority loss to the late expiry c
     code: "administrator_access_expired",
     error: "Der Adminzugang ist abgelaufen.",
   });
-  assert.equal(rpcCalls[0][0], "update_administration_github_project_transaction");
+  assert.equal(rpcCalls[0][0], "update_administration_github_project_transaction_v2");
+});
+
+test("GitHub Project adapter preserves the legacy payload without a mention team", async () => {
+  rpcData = {
+    project: {
+      id: "findmydoc-founder-execution",
+      githubProjectOwner: "findmydoc-platform",
+      githubProjectNumber: 22,
+      githubMentionTeamSlug: null,
+    },
+  };
+
+  const response = await githubRoute.PATCH(patchRequest(
+    "http://localhost/api/founderops-settings/github-project",
+    {
+      expectedGithubProjectOwner: "findmydoc-platform",
+      expectedGithubProjectNumber: 21,
+      githubProjectOwner: "findmydoc-platform",
+      githubProjectNumber: 22,
+    },
+  ));
+
+  assert.equal(response.status, 200);
+  assert.equal(rpcCalls[0][1].p_expected_team_slug, "");
+  assert.equal(rpcCalls[0][1].p_github_mention_team_slug, null);
+  assert.equal((await response.json()).mentionTeam, null);
 });
 
 test("administration read adapter clears clients with the late expiry code", async () => {

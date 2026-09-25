@@ -322,9 +322,9 @@ test("Preview and Commit use identical add policy and one atomic writer with det
     assert.equal(committed.status, "committed");
     assert.deepEqual(preview.effects.map((effect) => effect.kind), ["audit", "githubProjection"]);
     assert.deepEqual(committed.effects.map((effect) => effect.kind), ["audit", "githubProjection"]);
-    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_relationship_transaction").length, 1);
+    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_relationship_transaction_v2").length, 1);
     const commit = current.calls.at(-1);
-    assert.deepEqual(commit, ["mutate_planning_relationship_transaction", {
+    assert.deepEqual(commit, ["mutate_planning_relationship_transaction_v2", {
       p_operation: "add",
       p_task_id: "source",
       p_related_task_id: "target",
@@ -333,6 +333,7 @@ test("Preview and Commit use identical add policy and one atomic writer with det
       p_note: "Wait",
       p_expected_updated_at: "2026-08-12T10:00:00.000Z",
       p_actor_profile_id: "ceo",
+      p_mention_recipient_profile_ids: [],
       p_request_ip: "test-ip",
       p_user_agent: "test-agent",
     }]);
@@ -449,6 +450,6 @@ test("team dependency duplicate add is a successful no-op while UI and invalid s
     const result = await model.createPlanningRelationshipPlanningItems(current.client).run({ actor, mode: "commit", command });
     assert.equal(result.error.code, code);
     if (reason) assert.equal(result.error.reason, reason);
-    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_relationship_transaction").length, 0);
+    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_relationship_transaction_v2").length, 0);
   }
 });

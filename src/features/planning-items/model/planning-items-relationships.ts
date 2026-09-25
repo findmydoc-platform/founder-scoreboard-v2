@@ -90,6 +90,7 @@ type PlanningRelationshipOptions = Readonly<{
   teamDependency?: boolean;
   mutationClient?: unknown;
   administratorAccess?: boolean;
+  mentionRecipientProfileIds?: readonly string[];
 }>;
 
 function validTimestamp(value: unknown): value is string {
@@ -466,7 +467,7 @@ function providerError(
 async function commitRelationship(
   supabase: PlanningSupabase,
   request: PlanningCommitRequest<PlanningRelationshipCommitPlan>,
-  administratorAccess = false,
+  options: PlanningRelationshipOptions,
 ): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
   const relationshipParams = {
     p_operation: request.plan.operation,
@@ -477,13 +478,14 @@ async function commitRelationship(
     p_note: request.plan.note,
     p_expected_updated_at: request.plan.expectedRevision,
     p_actor_profile_id: request.actor.profileId,
+    p_mention_recipient_profile_ids: options.mentionRecipientProfileIds || [],
     p_request_ip: request.requestMetadata?.requestIp || null,
     p_user_agent: request.requestMetadata?.userAgent || null,
   };
   const result = await supabase.rpc(
-    administratorAccess
-      ? "mutate_administrator_planning_relationship_transaction"
-      : "mutate_planning_relationship_transaction",
+    options.administratorAccess
+      ? "mutate_administrator_planning_relationship_transaction_v2"
+      : "mutate_planning_relationship_transaction_v2",
     relationshipParams,
   );
   if (result.error) {
@@ -491,7 +493,7 @@ async function commitRelationship(
     const mapped = providerError(
       String(providerFailure.code || ""),
       request,
-      administratorAccess,
+      options.administratorAccess === true,
       String(providerFailure.message || ""),
     );
     return mapped ? { data: mapped, error: null } : { data: null, error: result.error };
@@ -531,7 +533,7 @@ export function createPlanningRelationshipPlanningItems(
   return createPlanningItems({
     store: createSupabasePlanningItemsStore<PlanningRelationshipState, PlanningRelationshipCommitPlan>({
       prepareCommand: (request) => prepareRelationship(supabase, request, options),
-      commitCommand: (request) => commitRelationship(mutationSupabase, request, options.administratorAccess),
+      commitCommand: (request) => commitRelationship(mutationSupabase, request, options),
     }),
     decisionCore: planningRelationshipDecisionCore,
   });

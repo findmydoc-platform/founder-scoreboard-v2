@@ -10,6 +10,7 @@ import type { DbNotificationDelivery, DbNotificationEvent } from "@/lib/planning
 import type { PlatformRole } from "@/lib/types";
 import { googleChatDeliveryStatus } from "@/lib/google-chat";
 import { getGitHubAppOperationalStatus } from "@/lib/github-app";
+import { resolveGitHubMentionTeam } from "@/lib/github-mention-team-config";
 
 type GrantRow = {
   profile_id: string;
@@ -58,7 +59,7 @@ export function createSupabaseAdministrationReadModel(
     async load({ capabilities }) {
       if (!capabilities.manageAdministratorEligibility) return { status: "forbidden" };
       const technical = capabilities.technicalAdministration;
-      const [directoryResult, eventResult, deliveryResult, githubAppStatus] = await Promise.all([
+      const [directoryResult, eventResult, deliveryResult, githubAppStatus, githubProjectResult] = await Promise.all([
         supabase.rpc("administrator_directory_snapshot"),
         technical
           ? supabase.from("notification_events").select("id,type,actor_profile_id,actor_label,recipient_profile_id,entity_type,entity_id,title,body,target_path,status,seen_at,dismissed_at,resolved_at,resolution_reason,created_at").order("created_at", { ascending: false }).limit(100)
@@ -67,12 +68,15 @@ export function createSupabaseAdministrationReadModel(
           ? supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,payload,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100)
           : Promise.resolve({ data: [], error: null }),
         technical ? getGitHubAppOperationalStatus() : Promise.resolve(null),
+        technical
+          ? supabase.from("projects").select("id,github_project_owner,github_project_number,github_mention_team_slug").eq("id", "findmydoc-founder-execution").maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
       ]);
 
       if (directoryResult.error?.code === "42501") {
         return { status: "forbidden" };
       }
-      if (directoryResult.error || eventResult.error || deliveryResult.error) {
+      if (directoryResult.error || eventResult.error || deliveryResult.error || githubProjectResult.error) {
         return { status: "unavailable" };
       }
 
@@ -91,7 +95,16 @@ export function createSupabaseAdministrationReadModel(
         googleChatReady: technical && Boolean(profile.googleChatUserId && profile.googleChatDmSpace && profile.notificationsEnabled !== false),
         administratorAccess: accessForGrant({ profile_id: profile.id, eligible: profile.eligible, active_until: profile.activeUntil }, now),
       }));
-      const project = directory.project || null;
+      const projectRow = githubProjectResult.data as { id: string; github_project_owner: string | null; github_project_number: number | null; github_mention_team_slug: string | null } | null;
+      const validatedMentionTeam = technical && projectRow?.github_project_owner && projectRow.github_mention_team_slug
+        ? await resolveGitHubMentionTeam(projectRow.github_project_owner, projectRow.github_mention_team_slug)
+        : undefined;
+      const project = technical && projectRow ? {
+        id: projectRow.id,
+        owner: projectRow.github_project_owner || "",
+        number: projectRow.github_project_number || 0,
+        mentionTeamSlug: projectRow.github_mention_team_slug || "",
+      } : directory.project ? { ...directory.project, mentionTeamSlug: "" } : null;
       const notificationEvents = ((eventResult.data || []) as DbNotificationEvent[]).map(mapNotificationEvent);
       const notificationDeliveries = ((deliveryResult.data || []) as DbNotificationDelivery[]).map(mapNotificationDelivery);
       const googleChatStatus = googleChatDeliveryStatus();
@@ -112,6 +125,11 @@ export function createSupabaseAdministrationReadModel(
           notificationDeliveries,
           integrationStatus: {
             githubApp: githubAppStatus,
+            mentionTeam: {
+              state: githubAppStatus?.available && Boolean(validatedMentionTeam) ? "ready" : "fallback",
+              githubHandle: validatedMentionTeam ? `@${validatedMentionTeam.organization}/${validatedMentionTeam.teamSlug}` : "",
+              profilesWithoutGitHubLogin: people.filter((person) => !person.githubLogin).length,
+            },
             googleChat: {
               ...googleChatStatus,
               mode: googleChatStatus.mode as "direct-dm" | "space-webhook" | "not-configured",

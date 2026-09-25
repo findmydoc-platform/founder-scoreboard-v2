@@ -6,6 +6,7 @@ import {
   validateDeliverySecret,
 } from "@/lib/delivery-auth";
 import { deliverPendingGitHubComments, previewPendingGitHubComments } from "@/lib/github-comment-delivery";
+import { deliverPendingGitHubReviews } from "@/lib/github-review-delivery";
 import { getServerSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -43,5 +44,6 @@ export async function POST(request: NextRequest) {
   if (!context.ok) return context.response;
 
   const commentDelivery = await deliverPendingGitHubComments({ supabase: context.supabase, limit: 100 });
-  return NextResponse.json({ ok: true, commentDelivery });
+  const reviewDelivery = await deliverPendingGitHubReviews({ supabase: context.supabase, limit: 100 });
+  return NextResponse.json({ ok: true, commentDelivery, reviewDelivery });
 }

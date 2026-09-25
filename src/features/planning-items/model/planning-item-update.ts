@@ -920,6 +920,7 @@ export type BrowserReviseWriter =
       patch: UnknownRecord;
       strategy: UnknownRecord | null;
       raciAssignments: readonly UnknownRecord[] | null;
+      notifications: readonly UnknownRecord[];
     }>;
   }>
   | Readonly<{
@@ -982,17 +983,18 @@ export function createBrowserRevisePlanningItems(dependencies: BrowserReviseDepe
       const writer = dependencies.writer;
       const administratorCorrection = hasOperationalCorrection(invocation.actor);
       const result = writer.kind === "strategic"
-        ? await dependencies.supabase.rpc(administratorCorrection ? "update_administrator_planning_item_transaction" : "update_browser_planning_item_transaction", {
+        ? await dependencies.supabase.rpc(administratorCorrection ? "update_administrator_planning_item_transaction_v2" : "update_browser_planning_item_transaction_v2", {
           p_task_id: writer.params.taskId,
           p_expected_updated_at: writer.params.expectedUpdatedAt,
           p_patch: writer.params.patch,
           p_strategy: writer.params.strategy,
           p_raci_assignments: writer.params.raciAssignments,
+          p_notifications: writer.params.notifications,
           ...(administratorCorrection ? {} : { p_actor_profile_id: invocation.actor.profileId }),
           p_request_ip: invocation.requestMetadata?.requestIp || null,
           p_user_agent: invocation.requestMetadata?.userAgent || null,
         })
-        : await dependencies.supabase.rpc(administratorCorrection ? "update_administrator_planning_task_transaction" : "update_browser_planning_task_transaction", {
+        : await dependencies.supabase.rpc(administratorCorrection ? "update_administrator_planning_task_transaction_v2" : "update_browser_planning_task_transaction_v2", {
           p_task_id: writer.params.taskId,
           p_expected_updated_at: writer.params.expectedUpdatedAt,
           p_task_patch: writer.params.taskPatch,

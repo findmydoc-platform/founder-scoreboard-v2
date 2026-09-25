@@ -49,6 +49,11 @@ export type AdministrationIntegrationStatus = Readonly<{
     deliveryEnabled: boolean;
     mode: "direct-dm" | "space-webhook" | "not-configured";
   };
+  mentionTeam: {
+    state: "ready" | "fallback";
+    githubHandle: string;
+    profilesWithoutGitHubLogin: number;
+  };
   pendingDeliveries: number;
   failedDeliveries: number;
 }>;
@@ -61,6 +66,7 @@ export type AdministrationWorkspaceModel = Readonly<{
     id: string;
     owner: string;
     number: number;
+    mentionTeamSlug: string;
   }> | null;
   notificationEvents: readonly NotificationEvent[];
   notificationDeliveries: readonly NotificationDelivery[];

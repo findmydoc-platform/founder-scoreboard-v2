@@ -109,6 +109,7 @@ export type DbTaskReview = {
   comment: string | null;
   checklist: TaskReview["checklist"] | null;
   created_at: string;
+  task_review_github_deliveries?: { status: string; github_comment_url: string | null }[] | { status: string; github_comment_url: string | null } | null;
 };
 
 type DbTaskScalarColumn = Exclude<keyof DbTask, "task_dependencies" | "task_notes">;

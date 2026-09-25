@@ -4,11 +4,16 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const {
   activeMarkdownMention,
+  availableMentionOptions,
   canonicalizeProfileMentionsForGitHub,
   githubMentionContext,
   isGitHubLogin,
+  mentionOptions,
   mentionSuggestions,
   mentionedProfileIds,
+  newlyMentionedProfileIds,
+  newlyMentionedProfilesByField,
+  normalizeGitHubMentionsForFounderOps,
   replaceActiveMention,
 } = await importTestModule("src/lib/mentions.ts");
 
@@ -16,6 +21,124 @@ const profiles = [
   { id: "sebastian", name: "Sebastian Schütze", githubLogin: "SebastianSchuetze" },
   { id: "volkan", name: "Mehmet Volkan Kablan", githubLogin: "MehmetVolkan" },
 ];
+
+test("offers @all before people and includes every FounderOps profile", () => {
+  const allProfiles = [...profiles, { id: "no-login", name: "No Login", githubLogin: "" }];
+  assert.deepEqual(
+    mentionOptions("", allProfiles).map((option) => option.kind === "all" ? option.login : option.profile.githubLogin),
+    ["all", "MehmetVolkan", "SebastianSchuetze"],
+  );
+  assert.deepEqual(mentionedProfileIds("Ping @all", allProfiles), ["sebastian", "volkan", "no-login"]);
+  assert.deepEqual(mentionOptions("", []).map((option) => option.login), ["all"]);
+  assert.equal(mentionOptions("", allProfiles)[0].count, 3);
+});
+
+test("offers each mention only once per text field while allowing the active token to be edited", () => {
+  const repeatedPerson = "@SebastianSchuetze und @seb";
+  const repeatedPersonActive = activeMarkdownMention(repeatedPerson, repeatedPerson.length, repeatedPerson.length);
+  assert.deepEqual(availableMentionOptions("seb", profiles, repeatedPerson, repeatedPersonActive), []);
+
+  const repeatedAll = "@all und @al";
+  const repeatedAllActive = activeMarkdownMention(repeatedAll, repeatedAll.length, repeatedAll.length);
+  assert.deepEqual(availableMentionOptions("al", profiles, repeatedAll, repeatedAllActive), []);
+
+  const editedMention = "@SebastianSchuetze";
+  const editedMentionActive = activeMarkdownMention(editedMention, editedMention.length, editedMention.length);
+  assert.deepEqual(
+    availableMentionOptions("SebastianSchuetze", profiles, editedMention, editedMentionActive).map((option) => option.id),
+    ["sebastian"],
+  );
+});
+
+test("filters @all like a normal picker option and inserts its local token", () => {
+  assert.deepEqual(mentionOptions("al", profiles).map((option) => option.kind), ["all"]);
+  const active = activeMarkdownMention("Bitte @al prüfen", 9, 9);
+  assert.deepEqual(
+    replaceActiveMention("Bitte @al prüfen", active, mentionOptions("al", profiles)[0]),
+    { value: "Bitte @all prüfen", caret: 10 },
+  );
+});
+
+test("keeps @all inactive in Markdown-protected content", () => {
+  assert.deepEqual(mentionedProfileIds("`@all`\n> @all\nhttps://example.test/@all", profiles), []);
+});
+
+test("projects @all to the configured GitHub team and falls back to linked logins", () => {
+  assert.equal(
+    canonicalizeProfileMentionsForGitHub("Ping @all", profiles, { organization: "findmydoc-platform", teamSlug: "founderops" }),
+    "Ping @findmydoc-platform/founderops",
+  );
+  assert.equal(
+    canonicalizeProfileMentionsForGitHub("Ping @all", profiles),
+    "Ping @SebastianSchuetze @MehmetVolkan",
+  );
+});
+
+test("maps the configured GitHub team mention and literal @all to local recipients", () => {
+  const body = "Ping @findmydoc-platform/founderops and @all";
+  assert.equal(
+    normalizeGitHubMentionsForFounderOps(body, { organization: "findmydoc-platform", teamSlug: "founderops" }),
+    "Ping @all and @all",
+  );
+  assert.deepEqual(
+    githubMentionContext(body, profiles, "outside", { organization: "findmydoc-platform", teamSlug: "founderops" }),
+    { actorProfileId: "", recipientProfileIds: ["sebastian", "volkan"] },
+  );
+});
+
+test("returns only newly added recipients for edit notifications", () => {
+  assert.deepEqual(newlyMentionedProfileIds(["one", "two"], ["two", "three"]), ["three"]);
+  assert.deepEqual(newlyMentionedProfileIds(["one"], ["one"]), []);
+  assert.deepEqual(newlyMentionedProfileIds([], ["one"]), ["one"]);
+});
+
+test("resolves new field mentions once per recipient and preserves the first exact target", () => {
+  assert.deepEqual(newlyMentionedProfilesByField([
+    { key: "problem", previous: "", current: "Ping @all" },
+    { key: "outcome", previous: "", current: "Again @MehmetVolkan" },
+  ], profiles), [
+    { profileId: "sebastian", fieldKey: "problem", excerpt: "Ping @all" },
+    { profileId: "volkan", fieldKey: "problem", excerpt: "Ping @all" },
+  ]);
+});
+
+test("new planning items create canonical mention notifications for every free-text field", async () => {
+  const { buildCreateMentionNotifications } = await importTestModule(
+    "src/features/planning-items/model/planning-items-browser-task-create.ts",
+    { "server-only": {} },
+  );
+  const notifications = buildCreateMentionNotifications({
+    taskId: "task-1",
+    taskTitle: "Mention task",
+    actorProfileId: "sebastian",
+    fields: [
+      { key: "problem", current: "Ping @all" },
+      { key: "outcome", current: "Again @MehmetVolkan" },
+    ],
+    profiles: profiles.map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      github_login: profile.githubLogin,
+    })),
+  });
+
+  assert.deepEqual(notifications.map((notification) => ({
+    recipient: notification.recipient_profile_id,
+    target: notification.target_path,
+    dedupeKey: notification.dedupe_key,
+  })), [
+    {
+      recipient: "sebastian",
+      target: "/tasks/task-1?focus=field:problem",
+      dedupeKey: "task.mention:field:task-1:problem:created:sebastian",
+    },
+    {
+      recipient: "volkan",
+      target: "/tasks/task-1?focus=field:problem",
+      dedupeKey: "task.mention:field:task-1:problem:created:volkan",
+    },
+  ]);
+});
 
 test("canonicalizes only exact GitHub logins", () => {
   assert.equal(

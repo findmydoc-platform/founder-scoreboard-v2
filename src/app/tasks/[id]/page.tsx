@@ -18,14 +18,14 @@ import type { AdministratorAccessSnapshot } from "@/features/administrator-acces
 
 type Props = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ returnTo?: string | string[]; comment?: string | string[] }>;
+  searchParams: Promise<{ returnTo?: string | string[]; comment?: string | string[]; focus?: string | string[] }>;
 };
 
 export default async function TaskPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { returnTo, comment } = await searchParams;
+  const { returnTo, comment, focus } = await searchParams;
   const safeReturnTo = safeTaskDetailReturnTo(returnTo);
-  const requestedCommentTarget = parseTaskCommentTarget(comment);
+  const requestedCommentTarget = parseTaskCommentTarget(focus) || parseTaskCommentTarget(comment);
   let authProfile: AuthenticatedProfile | null = null;
   let authUser: User | null = null;
   let administratorAccess: AdministratorAccessSnapshot | undefined;

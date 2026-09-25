@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-09-24-founderops-mentions",
+    "releasedAt": "2026-09-24",
+    "expiresAt": "2026-10-24",
+    "featureTourId": "task-mentions-v1",
+    "title": "Erwähnungen in allen Freitextfeldern",
+    "summary": "Tippe @ in ein Freitextfeld und erwähne eine Person oder mit @all das gesamte FounderOps-Team.",
+    "slides": [
+      {
+        "id": "founderops-mentions-activity",
+        "title": "Überall erwähnen, wo du frei schreibst",
+        "description": "Ob Kommentar, Beschreibung oder Review: Tippe @ und wähle eine Person oder @all. FounderOps verhindert doppelte Erwähnungen im selben Feld und zeigt bei @all direkt, wie viele Personen erreicht werden.",
+        "image": {
+          "src": "/product-updates/2026-09-24-founderops-mentions/activity-mentions.png",
+          "alt": "Geteilte FounderOps-Ansicht mit geöffnetem Personenmenü in einem Aktivitätskommentar und einem Review-Kommentar",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-09-22-jit-administration",
     "releasedAt": "2026-09-22",
     "expiresAt": "2026-10-22",

@@ -1,4 +1,4 @@
-import { githubMentionContext } from "@/lib/mentions";
+import { githubMentionContext, normalizeGitHubMentionsForFounderOps, type MentionTeam } from "@/lib/mentions";
 
 export type GitHubMentionProfile = {
   id: string;
@@ -19,27 +19,32 @@ export function resolveGitHubCommentMentionSnapshot({
   body,
   existing,
   profiles,
+  team,
 }: {
   authorLogin: string;
   body: string;
   existing?: ExistingGitHubCommentMentionSnapshot;
   profiles: GitHubMentionProfile[];
+  team?: MentionTeam;
 }) {
-  const current = githubMentionContext(body, profiles, authorLogin);
+  const normalizedBody = normalizeGitHubMentionsForFounderOps(body, team);
+  const current = githubMentionContext(normalizedBody, profiles, authorLogin);
   if (!existing || existing.mentionRecipientsInitialized) {
     return {
       actorProfileId: current.actorProfileId,
       mentionRecipientProfileIds: current.recipientProfileIds,
       baselineMentionRecipientProfileIds: [] as string[],
       baselineSourceUpdatedAt: null as string | null,
+      normalizedBody,
     };
   }
 
-  const baseline = githubMentionContext(existing.body, profiles, existing.authorLogin);
+  const baseline = githubMentionContext(existing.body, profiles, existing.authorLogin, team);
   return {
     actorProfileId: current.actorProfileId,
     mentionRecipientProfileIds: current.recipientProfileIds,
     baselineMentionRecipientProfileIds: baseline.recipientProfileIds,
     baselineSourceUpdatedAt: existing.sourceUpdatedAt,
+    normalizedBody,
   };
 }

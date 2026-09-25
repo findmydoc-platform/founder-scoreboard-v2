@@ -9,13 +9,16 @@ export function AdministrationOverview({ model, onNavigate, onRefresh }: { model
   const failedEvent = failedDelivery ? model.notificationEvents.find((event) => event.id === failedDelivery.eventId) : null;
   const incompleteGitHubProfile = model.people.find((person) => person.githubConnection?.status === "incomplete");
   const projectIncomplete = !model.githubProject?.owner || !model.githubProject.number;
+  const mentionTeamFallback = model.integrationStatus.mentionTeam.state === "fallback";
   const attention = [
     ...(failedDelivery ? [{ id: `delivery-${failedDelivery.id}`, tone: "red" as const, title: failedEvent?.title || "Google-Chat-Zustellung fehlgeschlagen", area: "Benachrichtigungen", detail: failedDelivery.lastError || "Die letzte Zustellung konnte nicht abgeschlossen werden.", date: failedDelivery.createdAt, action: "Prüfen", tab: "integrations" as const }] : []),
     ...(incompleteGitHubProfile ? [{ id: `profile-${incompleteGitHubProfile.id}`, tone: "amber" as const, title: "GitHub-Verbindung unvollständig", area: "Personen & Zugänge", detail: `${incompleteGitHubProfile.name}: ${incompleteGitHubProfile.githubConnection?.description || "Die GitHub-Verbindung ist unvollständig."}`, date: model.revision, action: "Prüfen", tab: "people" as const }] : []),
     ...(projectIncomplete ? [{ id: "github-project", tone: "amber" as const, title: "GitHub Project Validierung erforderlich", area: "Integrationen", detail: "Organisation und Project-Nummer müssen geprüft werden.", date: model.revision, action: "Prüfen", tab: "integrations" as const }] : []),
+    ...(!projectIncomplete && mentionTeamFallback ? [{ id: "github-mention-team", tone: "amber" as const, title: "GitHub-Team für @all prüfen", area: "Integrationen", detail: `Bis zur erfolgreichen Teamprüfung erwähnt FounderOps verknüpfte GitHub-Logins einzeln. ${model.integrationStatus.mentionTeam.profilesWithoutGitHubLogin} Profile haben keinen GitHub-Login.`, date: model.revision, action: "Prüfen", tab: "integrations" as const }] : []),
   ];
   const systemStatus = [
     { label: "GitHub Project", detail: "Repository-Zugriff", healthy: !projectIncomplete, state: projectIncomplete ? "Prüfen" : "Konfiguriert" },
+    { label: "GitHub @all", detail: model.integrationStatus.mentionTeam.githubHandle || "Einzelne GitHub-Logins", healthy: !mentionTeamFallback, state: mentionTeamFallback ? "Fallback" : "Bereit" },
     { label: "Google Chat", detail: "Benachrichtigungen", healthy: model.integrationStatus.googleChat.ready, state: model.integrationStatus.googleChat.ready ? "Bereit" : "Prüfen" },
     { label: "Zustellung", detail: `${model.integrationStatus.pendingDeliveries} ausstehend`, healthy: model.integrationStatus.failedDeliveries === 0, state: model.integrationStatus.failedDeliveries ? `${model.integrationStatus.failedDeliveries} fehlgeschlagen` : "Unauffällig" },
   ];

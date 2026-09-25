@@ -69,7 +69,7 @@ export const administrationStoryModel: AdministrationWorkspaceModel = {
       administratorAccess: { eligible: false, active: false, expiresAt: null },
     },
   ],
-  githubProject: { id: "findmydoc-founder-execution", owner: "findmydoc-platform", number: 7 },
+  githubProject: { id: "findmydoc-founder-execution", owner: "findmydoc-platform", number: 7, mentionTeamSlug: "founderops" },
   notificationEvents: [
     {
       id: 103,
@@ -132,6 +132,7 @@ export const administrationStoryModel: AdministrationWorkspaceModel = {
     { id: 201, eventId: 101, channel: "google_chat", status: "sent", attempts: 1, target: "Özen", lastError: "", deliveryMode: "direct_dm", digestSize: 1, deliveredAt: "2026-09-21T16:27:04.000Z", createdAt: "2026-09-21T16:27:00.000Z" },
   ],
   integrationStatus: {
+    mentionTeam: { state: "ready", githubHandle: "@findmydoc-platform/founderops", profilesWithoutGitHubLogin: 0 },
     githubApp: {
       available: true,
       state: "ready",

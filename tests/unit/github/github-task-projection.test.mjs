@@ -87,6 +87,7 @@ async function projectionFixture(options = {}) {
   let activeCheck = 0;
   let failurePersistenceCalls = 0;
   const taskProjectionModule = await importTestModule("src/lib/github-sync/task-projection.ts", {
+    "../github-mention-team-config": { loadGitHubMentionTeam: async () => undefined },
     "../github-comment-delivery": {
       deliverPendingGitHubComments: async () => {
         calls.push("comments");
@@ -101,6 +102,15 @@ async function projectionFixture(options = {}) {
           failed: 0,
         };
       },
+    },
+    "../github-review-delivery": {
+      deliverPendingGitHubReviews: async () => ({
+        delivered: 0,
+        waitingForAuthorConnection: 0,
+        waitingForIssue: 0,
+        retryScheduled: 0,
+        failed: 0,
+      }),
     },
     "../github": {
       connectGitHubSubIssue: async () => {

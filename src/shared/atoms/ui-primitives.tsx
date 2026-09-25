@@ -7,6 +7,7 @@ import type {
   ReactNode,
   TextareaHTMLAttributes,
 } from "react";
+import { forwardRef } from "react";
 
 export type UiTone =
   | "white"
@@ -287,7 +288,7 @@ export function UiTextInput({ className, surface = "default", borderTone = "defa
   );
 }
 
-type UiTextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+export type UiTextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
   surface?: keyof typeof fieldSurfaces;
   borderTone?: keyof typeof fieldBorders;
   minHeight?: "sm" | "md" | "lg" | "xl" | "2xl";
@@ -315,9 +316,13 @@ const textAreaLeading = {
   relaxed: "leading-6",
 };
 
-export function UiTextArea({ className, surface = "default", borderTone = "default", minHeight = "sm", inputPadding = "sm", textTone = "default", leading = "normal", ...props }: UiTextAreaProps) {
+export const UiTextArea = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(function UiTextArea(
+  { className, surface = "default", borderTone = "default", minHeight = "sm", inputPadding = "sm", textTone = "default", leading = "normal", ...props },
+  ref,
+) {
   return (
     <textarea
+      ref={ref}
       className={classNames(
         "resize-y rounded-md border text-sm font-normal outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 disabled:opacity-60",
         textAreaMinHeights[minHeight],
@@ -331,4 +336,4 @@ export function UiTextArea({ className, surface = "default", borderTone = "defau
       {...props}
     />
   );
-}
+});

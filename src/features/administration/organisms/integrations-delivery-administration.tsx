@@ -12,9 +12,9 @@ export function IntegrationsDeliveryAdministration({ busy, model, onDeliver, onS
   busy: boolean;
   model: AdministrationWorkspaceModel;
   onDeliver: (payload: Record<string, unknown>) => Promise<void>;
-  onSaveGitHubProject: (owner: string, number: number) => Promise<void>;
+  onSaveGitHubProject: (owner: string, number: number, mentionTeamSlug: string) => Promise<void>;
 }) {
-  const [project, setProject] = useState({ owner: model.githubProject?.owner || "", number: model.githubProject?.number || 0 });
+  const [project, setProject] = useState({ owner: model.githubProject?.owner || "", number: model.githubProject?.number || 0, mentionTeamSlug: model.githubProject?.mentionTeamSlug || "" });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [testProfileId, setTestProfileId] = useState(model.people.find((person) => person.googleChatReady)?.id || "");
   const latestByEvent = new Map(model.notificationDeliveries.map((delivery) => [delivery.eventId, delivery]));
@@ -49,7 +49,19 @@ export function IntegrationsDeliveryAdministration({ busy, model, onDeliver, onS
             )}
           </div>
         </div>
-        <div className="grid gap-4 px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(10rem,0.7fr)_auto] md:items-end"><UiField>GitHub-Organisation<UiTextInput value={project.owner} disabled={busy} onChange={(event) => setProject((current) => ({ ...current, owner: event.target.value }))} /></UiField><UiField>Project-Nummer<UiTextInput type="number" min={1} value={project.number || ""} disabled={busy} onChange={(event) => setProject((current) => ({ ...current, number: Number(event.target.value) }))} /></UiField><UiButton variant="primary" disabled={busy || !project.owner || project.number < 1} onClick={() => void onSaveGitHubProject(project.owner, project.number)}><RefreshCw size={15} />Erneut prüfen</UiButton></div>
+        <div className="grid gap-4 px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(10rem,0.7fr)_minmax(0,1fr)_auto] md:items-end">
+          <UiField>GitHub-Organisation<UiTextInput value={project.owner} disabled={busy} onChange={(event) => setProject((current) => ({ ...current, owner: event.target.value }))} /></UiField>
+          <UiField>Project-Nummer<UiTextInput type="number" min={1} value={project.number || ""} disabled={busy} onChange={(event) => setProject((current) => ({ ...current, number: Number(event.target.value) }))} /></UiField>
+          <UiField>Team-Slug für @all<UiTextInput value={project.mentionTeamSlug} disabled={busy} onChange={(event) => setProject((current) => ({ ...current, mentionTeamSlug: event.target.value.toLowerCase() }))} placeholder="founderops" /></UiField>
+          <UiButton variant="primary" disabled={busy || !project.owner || project.number < 1} onClick={() => void onSaveGitHubProject(project.owner, project.number, project.mentionTeamSlug)}><RefreshCw size={15} />Speichern und prüfen</UiButton>
+        </div>
+        <div className="border-t border-slate-100 px-5 py-4">
+          {model.integrationStatus.mentionTeam.state === "ready" ? (
+            <div className="text-sm text-emerald-700"><span className="font-semibold">@all → {model.integrationStatus.mentionTeam.githubHandle}</span><span className="ml-2">Team bestätigt, App-Recht aktiv, Team-Erwähnungen aktiviert.</span></div>
+          ) : (
+            <div className="text-sm text-amber-800"><span className="font-semibold">Fallback aktiv.</span><span className="ml-2">FounderOps erwähnt verknüpfte GitHub-Logins einzeln. {model.integrationStatus.mentionTeam.profilesWithoutGitHubLogin} Profile haben keinen GitHub-Login.</span></div>
+          )}
+        </div>
       </UiPanel>
 
       <UiPanel padding="none" className="overflow-hidden">

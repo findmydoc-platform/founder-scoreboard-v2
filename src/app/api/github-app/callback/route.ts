@@ -3,6 +3,7 @@ import { exchangeGitHubAppCode, githubUserForAppUserToken, storeGitHubAppUserTok
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { getServerSupabase } from "@/lib/supabase";
 import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
+import { deliverPendingGitHubReviews } from "@/lib/github-review-delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +35,18 @@ export async function GET(request: NextRequest) {
     await storeGitHubAppUserToken({ supabase, profile: auth.profile, githubUser, token });
     const connectedProfileId = auth.profile.id;
     after(async () => {
-      await deliverPendingGitHubComments({
-        supabase,
-        authorProfileId: connectedProfileId,
-        limit: 100,
-      }).catch(() => undefined);
+      await Promise.all([
+        deliverPendingGitHubComments({
+          supabase,
+          authorProfileId: connectedProfileId,
+          limit: 100,
+        }),
+        deliverPendingGitHubReviews({
+          supabase,
+          authorProfileId: connectedProfileId,
+          limit: 100,
+        }),
+      ]).catch(() => undefined);
     });
 
     return NextResponse.redirect(new URL(next, request.url));

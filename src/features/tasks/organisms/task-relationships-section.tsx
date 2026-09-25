@@ -5,13 +5,15 @@ import { useId, useState } from "react";
 import type { TaskActionResult, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import { RelationshipList } from "@/features/tasks/molecules/relationship-list";
 import { TaskRelationshipForm, type TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
+import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
 import type { TaskRelationshipRow } from "@/features/tasks/model/task-detail-state";
 import { relationMatchesDraft } from "@/lib/relationship-view-model";
-import type { Task, TaskRelation, TaskRelationType } from "@/lib/types";
-import { UiButton, UiEmptyState, UiField, UiTextArea } from "@/shared/atoms/ui-primitives";
+import type { Profile, Task, TaskRelation, TaskRelationType } from "@/lib/types";
+import { UiButton, UiEmptyState, UiField } from "@/shared/atoms/ui-primitives";
 
 type Props = {
   task: Task;
+  profiles: Profile[];
   waitsOn: TaskRelationshipRow[];
   blocks: TaskRelationshipRow[];
   related: TaskRelationshipRow[];
@@ -34,6 +36,7 @@ type Props = {
 
 export function TaskRelationshipsSection({
   task,
+  profiles,
   waitsOn,
   blocks,
   related,
@@ -179,10 +182,11 @@ export function TaskRelationshipsSection({
         >
           <UiField>
             Bestehender Abhängigkeitshinweis
-            <UiTextArea
+            <TaskMentionTextArea
+              profiles={profiles}
               value={legacyDraft}
               disabled={legacySaving}
-              onChange={(event) => setLegacyDraft(event.target.value)}
+              onValueChange={setLegacyDraft}
               className="min-h-24 w-full p-3 leading-6"
               placeholder="Freitext-Hinweis zu einer noch nicht verknüpften Abhängigkeit"
             />
@@ -230,6 +234,7 @@ export function TaskRelationshipsSection({
       {canAdd && relationshipDataReady && formOpen ? (
         <div id="task-relationship-form" className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <TaskRelationshipForm
+            profiles={profiles}
             relationDraft={relationDraft}
             relationTargetOptions={relationTargetOptions}
             allowedRelationTypes={allowedRelationTypes}

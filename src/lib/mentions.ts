@@ -15,6 +15,15 @@ export type MentionReplacement = {
   caret: number;
 };
 
+export type MentionTeam = {
+  organization: string;
+  teamSlug: string;
+};
+
+export type MentionOption =
+  | { kind: "all"; id: "all"; login: "all"; name: "Alle Personen in FounderOps"; count: number }
+  | { kind: "person"; id: string; login: string; name: string; profile: MentionProfile };
+
 const gitHubMentionPatternSource = String.raw`(^|[^A-Za-z0-9])@([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)(?![A-Za-z0-9_-]|\.[A-Za-z0-9])`;
 const gitHubLoginPattern = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 
@@ -72,9 +81,17 @@ function uniqueGitHubProfiles(profiles: MentionProfile[]) {
 function exactMentionedProfileIds(comment: string, profiles: MentionProfile[]) {
   const matches = new Set<string>();
   mapMarkdownText(comment, (segment) => {
+    let mentionsAll = false;
     for (const match of gitHubMentionMatches(segment)) {
+      if ((match[2] || "").toLowerCase() === "all") {
+        mentionsAll = true;
+        continue;
+      }
       const profile = exactGitHubProfile(match[2] || "", profiles);
       if (profile?.id) matches.add(profile.id);
+    }
+    if (mentionsAll) {
+      for (const profile of profiles) if (profile.id) matches.add(profile.id);
     }
     return segment;
   });
@@ -112,6 +129,58 @@ export function mentionSuggestions(query: string, profiles: MentionProfile[]) {
     });
 }
 
+export function mentionOptions(query: string, profiles: MentionProfile[]): MentionOption[] {
+  const normalizedQuery = mentionSearchKey(query);
+  const allOption: MentionOption = {
+    kind: "all",
+    id: "all",
+    login: "all",
+    name: "Alle Personen in FounderOps",
+    count: new Set(profiles.map((profile) => profile.id).filter(Boolean)).size,
+  };
+  const people = mentionSuggestions(query, profiles).map((profile): MentionOption => ({
+    kind: "person",
+    id: profile.id,
+    login: profile.githubLogin?.trim() || "",
+    name: profile.name || profile.githubLogin?.trim() || "",
+    profile,
+  }));
+  return "all".includes(normalizedQuery) ? [allOption, ...people] : people;
+}
+
+function mentionOptionKey(option: MentionOption) {
+  return `${option.kind}:${option.id}`;
+}
+
+function mentionedOptionKeys(comment: string, profiles: MentionProfile[]) {
+  const matches = new Set<string>();
+  mapMarkdownText(comment, (segment) => {
+    for (const match of gitHubMentionMatches(segment)) {
+      if ((match[2] || "").toLowerCase() === "all") {
+        matches.add("all:all");
+        continue;
+      }
+      const profile = exactGitHubProfile(match[2] || "", profiles);
+      if (profile?.id) matches.add(`person:${profile.id}`);
+    }
+    return segment;
+  });
+  return matches;
+}
+
+export function availableMentionOptions(
+  query: string,
+  profiles: MentionProfile[],
+  value: string,
+  activeMention?: ActiveMarkdownMention | null,
+) {
+  const valueWithoutActiveMention = activeMention
+    ? `${value.slice(0, activeMention.start)} ${value.slice(activeMention.end)}`
+    : value;
+  const unavailable = mentionedOptionKeys(valueWithoutActiveMention, profiles);
+  return mentionOptions(query, profiles).filter((option) => !unavailable.has(mentionOptionKey(option)));
+}
+
 function isMarkdownTextPosition(value: string, position: number) {
   let cursor = 0;
   while (cursor < value.length) {
@@ -141,9 +210,12 @@ export function activeMarkdownMention(value: string, selectionStart: number, sel
   return { query: value.slice(tokenStart, caret), start: at, end };
 }
 
-export function replaceActiveMention(value: string, active: ActiveMarkdownMention | null, profile: MentionProfile): MentionReplacement | null {
-  if (!active || !profile.githubLogin || !isGitHubLogin(profile.githubLogin)) return null;
-  const login = profile.githubLogin.trim();
+export function replaceActiveMention(value: string, active: ActiveMarkdownMention | null, target: MentionProfile | MentionOption): MentionReplacement | null {
+  if (!active) return null;
+  const login = "kind" in target
+    ? target.login
+    : target.githubLogin?.trim();
+  if (!login || !isGitHubLogin(login)) return null;
   const before = value.slice(0, active.start);
   const after = value.slice(active.end);
   const separator = /^[\s]/u.test(after) ? "" : " ";
@@ -151,9 +223,34 @@ export function replaceActiveMention(value: string, active: ActiveMarkdownMentio
   return { value: `${before}${mention}${after}`, caret: before.length + mention.length };
 }
 
-export function githubMentionContext(comment: string, profiles: MentionProfile[], authorLogin: string) {
+export function githubMentionContext(comment: string, profiles: MentionProfile[], authorLogin: string, team?: MentionTeam) {
   const actorProfileId = exactGitHubProfile(authorLogin, profiles)?.id || "";
-  return { actorProfileId, recipientProfileIds: exactMentionedProfileIds(comment, profiles) };
+  const normalizedComment = normalizeGitHubMentionsForFounderOps(comment, team);
+  return { actorProfileId, recipientProfileIds: exactMentionedProfileIds(normalizedComment, profiles) };
+}
+
+export function newlyMentionedProfileIds(previous: string[], current: string[]) {
+  const previousIds = new Set(previous);
+  return [...new Set(current)].filter((profileId) => !previousIds.has(profileId));
+}
+
+export function newlyMentionedProfilesByField(
+  fields: readonly { key: string; previous: string; current: string }[],
+  profiles: MentionProfile[],
+) {
+  const recipients = new Map<string, { profileId: string; fieldKey: string; excerpt: string }>();
+  for (const field of fields) {
+    const added = newlyMentionedProfileIds(
+      mentionedProfileIds(field.previous, profiles),
+      mentionedProfileIds(field.current, profiles),
+    );
+    for (const profileId of added) {
+      if (!recipients.has(profileId)) {
+        recipients.set(profileId, { profileId, fieldKey: field.key, excerpt: field.current.slice(0, 500) });
+      }
+    }
+  }
+  return [...recipients.values()];
 }
 
 function fencedCodeEnd(value: string, index: number) {
@@ -289,12 +386,37 @@ function mapMarkdownText(value: string, transform: (segment: string) => string) 
   return result + transform(value.slice(plainTextStart));
 }
 
-export function canonicalizeProfileMentionsForGitHub(comment: string, profiles: MentionProfile[]) {
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function configuredTeamMention(team?: MentionTeam) {
+  const organization = team?.organization.trim();
+  const teamSlug = team?.teamSlug.trim();
+  if (!organization || !teamSlug) return "";
+  return `@${organization}/${teamSlug}`;
+}
+
+export function normalizeGitHubMentionsForFounderOps(comment: string, team?: MentionTeam) {
+  const teamMention = configuredTeamMention(team);
+  if (!teamMention) return comment;
+  const pattern = new RegExp(`${escapeRegExp(teamMention)}(?![A-Za-z0-9_-])`, "giu");
+  return mapMarkdownText(comment, (segment) => segment.replace(pattern, "@all"));
+}
+
+export function canonicalizeProfileMentionsForGitHub(comment: string, profiles: MentionProfile[], team?: MentionTeam) {
+  const teamMention = configuredTeamMention(team);
+  const fallbackAllMention = uniqueGitHubProfiles(profiles)
+    .map((profile) => `@${profile.githubLogin?.trim()}`)
+    .join(" ");
   return mapMarkdownText(
     comment,
     (segment) => segment.replace(
       new RegExp(gitHubMentionPatternSource, "g"),
       (mention, prefix: string, token: string) => {
+        if (token.toLowerCase() === "all") {
+          return `${prefix}${teamMention || fallbackAllMention || "@all"}`;
+        }
         const profile = exactGitHubProfile(token, profiles);
         const login = profile?.githubLogin?.trim();
         if (!login) return mention;

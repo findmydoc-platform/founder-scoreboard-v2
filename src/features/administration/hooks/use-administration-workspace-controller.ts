@@ -123,7 +123,7 @@ export function useAdministrationWorkspaceController({
     }
   }, [apiClient, capabilities.technicalAdministration, handleAccessError, load]);
 
-  const saveGitHubProject = useCallback(async (owner: string, number: number) => {
+  const saveGitHubProject = useCallback(async (owner: string, number: number, mentionTeamSlug: string) => {
     const current = model?.githubProject;
     if (!current) return;
     await runCommand(
@@ -132,8 +132,10 @@ export function useAdministrationWorkspaceController({
         json: {
           expectedGithubProjectOwner: current.owner,
           expectedGithubProjectNumber: current.number,
+          expectedGithubMentionTeamSlug: current.mentionTeamSlug,
           githubProjectOwner: owner,
           githubProjectNumber: number,
+          githubMentionTeamSlug: mentionTeamSlug,
         },
         useDevProfileOverride: false,
       }),

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireTeamMember } from "@/lib/authz";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { loadGitHubMentionTeam } from "@/lib/github-mention-team-config";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { resolveGitHubCommentMentionSnapshot } from "@/lib/github-comment-mention-snapshot";
 import { importGitHubTaskCommentsWithMentions } from "@/lib/github-comment-mention-import";
@@ -10,7 +11,7 @@ import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permis
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 function isAppMirroredComment(body: string) {
-  return /<!--\s*fmd-comment-id:\d+\s*-->/.test(body);
+  return /<!--\s*fmd-(?:comment|review)-id:\d+\s*-->/.test(body);
 }
 
 function extractEvidenceFromIssueBody(body: string) {
@@ -103,9 +104,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   } else {
     importedEvidenceLink = "";
   }
-  const { data: profiles, error: profilesError } = await supabase
-    .from("profiles")
-    .select("id,name,github_login");
+  const [{ data: profiles, error: profilesError }, mentionTeam] = await Promise.all([
+    supabase.from("profiles").select("id,name,github_login"),
+    loadGitHubMentionTeam(supabase),
+  ]);
   if (profilesError) return apiError(profilesError.message, 500);
   const mentionProfiles = (profiles || []).map((profile) => ({
     id: profile.id,
@@ -141,6 +143,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         authorLogin,
         body: comment.body,
         profiles: mentionProfiles,
+        team: mentionTeam,
         existing: existing ? {
           authorLogin: existing.author_login,
           body: existing.body,
@@ -157,7 +160,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         mentionRecipientProfileIds: mentionSnapshot.mentionRecipientProfileIds,
         baselineMentionRecipientProfileIds: mentionSnapshot.baselineMentionRecipientProfileIds,
         baselineSourceUpdatedAt: mentionSnapshot.baselineSourceUpdatedAt,
-        body: comment.body.trim(),
+        body: mentionSnapshot.normalizedBody.trim(),
         htmlUrl: comment.html_url || "",
         createdAt: comment.created_at,
         sourceUpdatedAt: comment.updated_at || comment.created_at,
