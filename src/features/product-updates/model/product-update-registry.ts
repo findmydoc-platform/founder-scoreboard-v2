@@ -19,6 +19,7 @@ export type ProductUpdateSlide = {
 };
 
 export type ProductUpdateDefinition = {
+  draft?: boolean;
   expiresAt: string;
   featureTourId: string;
   id: string;

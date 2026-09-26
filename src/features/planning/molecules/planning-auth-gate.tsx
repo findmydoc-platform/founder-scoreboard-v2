@@ -57,6 +57,7 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
                   Anmeldung wird geprüft...
                 </div>
               )}
+              <p className="mt-5 text-sm leading-6 text-slate-500">Die Anmeldung und deine GitHub-Verbindung sind getrennt. GitHub verbindest du nach der Anmeldung für Kommentare und Anhänge.</p>
             </div>
           </div>
         </div>

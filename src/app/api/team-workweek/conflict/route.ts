@@ -7,7 +7,7 @@ import {
 import { TeamWorkweekPublicationError } from "@/features/team-workweek/server/team-workweek-publication";
 import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
 import { bearerToken, requireTeamMember } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";

@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+vi.mock("@/lib/workspace-access", () => ({ requireWorkspaceAccess: async () => null }));
 import assert from "node:assert/strict";
 
 import { test } from "vitest";
@@ -135,4 +137,20 @@ test("Planning token authentication distinguishes missing credentials from an un
   }, "read:planning-context");
   assert.equal(unknown.code, "TOKEN_INACTIVE");
   assert.equal(rpcCalls, 0);
+});
+
+test("a valid personal token cannot bypass its owner's Workspace access denial", async () => {
+  const { WorkspaceAccessError } = await import("../../../src/lib/workspace-identity.ts");
+  const token = await importTestModule("src/features/planning-items/model/planning-items-token.ts", {
+    "@/lib/supabase": { getServerSupabase: () => ({ rpc: async () => ({ data: {
+      tokenId:"token-1",tokenHint:"test",scopes:["read:planning-context"],scopeGranted:true,
+      expiresAt:"2030-01-01T00:00:00Z",evaluatedAt:"2026-09-26T00:00:00Z",remainingSeconds:100,
+      profile:{id:"profile-1",platformRole:"ceo"},
+    },error:null}) }) },
+    "@/lib/workspace-access": { requireWorkspaceAccess: async () => { throw new WorkspaceAccessError(403,"workspace_access_denied"); } },
+  });
+  const result = await token.requireTeamPlanningItemScope({headers:new Headers({authorization:"Bearer fmd_ti_test-token"})},"read:planning-context");
+  assert.equal(result.ok,false);
+  assert.equal(result.status,403);
+  assert.equal("supabase" in result,false);
 });

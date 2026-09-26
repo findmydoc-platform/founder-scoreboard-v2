@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
 import { apiError, authzError } from "@/lib/api-response";
 import { bearerToken, requireAdministratorEligibilityManager, resolveAdministratorAccessFailure } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 
 export async function GET(request: NextRequest) {
   const permission = await requireAdministratorEligibilityManager(request);

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanOptionalDate, cleanOptionalText } from "@/lib/api-input";
 import { apiError, authzError } from "@/lib/api-response";
 import { bearerToken, requireCEO } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 import type { PlatformRole } from "@/lib/types";
 
 type GovernancePayload = {

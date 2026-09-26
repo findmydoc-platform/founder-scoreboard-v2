@@ -11,7 +11,8 @@ import {
 } from "@/lib/google-chat";
 import { shouldSendToGoogleChatDigest, shouldSendToGoogleChatDm } from "@/lib/notification-policy";
 import { reconcileNotificationEvents } from "@/lib/notification-resolution";
-import { getServerSupabase, getSupabaseForToken } from "@/lib/supabase";
+import { getServerSupabase } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 
 type NotificationRow = {
   id: number;

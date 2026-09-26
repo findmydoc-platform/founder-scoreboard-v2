@@ -1,3 +1,4 @@
+import { verifyWorkspaceSecurity } from "./database-security/workspace-security.mjs";
 import { verifyAuthorizationSecurity } from "./database-security/authorization-security.mjs";
 import { verifyCatalogSecurity } from "./database-security/catalog-security.mjs";
 import { verifyDefaultPrivileges } from "./database-security/default-privileges.mjs";
@@ -11,6 +12,7 @@ export async function verifyDatabaseSecurity(client) {
   await verifyAuthorizationSecurity(client, failures);
   await verifyDefaultPrivileges(client, failures);
   await verifyStorageSecurity(client, failures);
+  await verifyWorkspaceSecurity(client, failures);
 
   throwIfDatabaseSecurityFailed(failures);
   return summary;

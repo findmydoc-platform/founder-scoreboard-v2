@@ -16,7 +16,7 @@ import {
   planningRelationshipFromResult,
   removePlanningRelationshipCommand,
 } from "@/features/planning-items/model/planning-items-relationships";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 import { mentionedProfileIds } from "@/lib/mentions";
 
 type RelationshipRouteContext = { params: Promise<{ id: string }> };

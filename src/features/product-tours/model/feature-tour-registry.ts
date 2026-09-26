@@ -50,6 +50,16 @@ export const taskMentionsTourId = "task-mentions-v1";
 
 export const featureTours: readonly FeatureTourDefinition[] = [
   {
+    id: "google-workspace-login-v1",
+    productUpdateId: "2026-09-26-google-workspace-login",
+    startWorkspace: "planning",
+    requiredSelectors: ["[data-tour-id='account-menu-trigger']", "[data-tour-id='github-sync-trigger']"],
+    steps: [
+      { element: "[data-tour-id='account-menu-trigger']", popover: { title: "Dein FounderOps-Konto", description: "Öffne hier dein Profil oder melde dich aus FounderOps ab. Deine Kalender- und GitHub-Verbindungen verwaltest du unabhängig davon.", side: "bottom" } },
+      { element: "[data-tour-id='github-sync-trigger']", popover: { title: "GitHub separat verbinden", description: "Öffne hier den GitHub-Status. Fehlt deine Verbindung, kannst du sie dort für eigene Kommentare und Anhänge herstellen.", side: "bottom", doneBtnText: "Verstanden" } },
+    ],
+  },
+  {
     id: taskMentionsTourId,
     productUpdateId: "2026-09-24-founderops-mentions",
     startWorkspace: "planning",

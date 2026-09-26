@@ -5,7 +5,7 @@ import {
 } from "@/features/administrator-access/model/administrator-access";
 import { apiError, authzError } from "@/lib/api-response";
 import { bearerToken, requireTeamMember } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 
 function sessionClient(request: NextRequest) {
   const token = bearerToken(request);

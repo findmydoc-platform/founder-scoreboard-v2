@@ -233,7 +233,7 @@ const disconnectServer = await importTestModule(
     "./google-workspace-oauth-core": oauthCore,
     "./google-workspace-oauth": {
       getGoogleWorkspaceAccessToken: async () => "token",
-      revokeAndRemoveGoogleWorkspaceConnection: async () => undefined,
+      removeGoogleWorkspaceConnection: async () => undefined,
     },
     "./google-workspace-disconnect-core": disconnectCore,
     "./team-workweek-publication-core": publicationCore,

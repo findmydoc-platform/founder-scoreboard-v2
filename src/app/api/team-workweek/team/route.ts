@@ -8,7 +8,7 @@ import { berlinTodayIso, inflatePublishedTeamWorkweekWindows } from "@/features/
 import { selectVisibleTeamWorkweeks } from "@/features/team-workweek/model/published-team-workweek";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { bearerToken, requireTeamMember } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 
 export const dynamic = "force-dynamic";
 

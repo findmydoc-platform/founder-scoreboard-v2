@@ -1,3 +1,6 @@
+import { vi } from "vitest";
+vi.mock("@/lib/supabase-user", async () => vi.importMock("@/lib/supabase"));
+vi.mock("@/lib/workspace-access", () => ({ requireWorkspaceAccess: async () => null }));
 import assert from "node:assert/strict";
 import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { beforeEach, test } from "vitest";
@@ -147,7 +150,7 @@ test("session authorization fails closed for an unmapped user", async () => {
   assert.deepEqual(result, {
     ok: false,
     status: 403,
-    error: "GitHub-User ist keinem Teamprofil zugeordnet.",
+    error: "Dieses Konto ist keinem Teamprofil zugeordnet.",
     user: fixture.user,
   });
 });

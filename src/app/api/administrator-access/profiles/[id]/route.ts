@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, authzError } from "@/lib/api-response";
 import { bearerToken, requireAdministratorEligibilityManager, resolveAdministratorAccessFailure } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 
 export async function PATCH(
   request: NextRequest,

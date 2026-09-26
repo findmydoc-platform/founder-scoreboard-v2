@@ -1,4 +1,5 @@
 "use client";
+import { isProtectedToolPreviewUrl } from "@/lib/tool-preview-image";
 
 import { useState } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
@@ -79,7 +80,7 @@ export function useFmdToolCommands({
         return null;
       }
     }
-    if (previewImageUrl && !isValidHttpUrl(previewImageUrl) && !(source !== "supabase" && previewImageUrl.startsWith("data:image/"))) {
+    if (previewImageUrl && !isProtectedToolPreviewUrl(previewImageUrl) && !isValidHttpUrl(previewImageUrl) && !(source !== "supabase" && previewImageUrl.startsWith("data:image/"))) {
       setSaveError("Vorschaubild muss mit http:// oder https:// beginnen.");
       return null;
     }

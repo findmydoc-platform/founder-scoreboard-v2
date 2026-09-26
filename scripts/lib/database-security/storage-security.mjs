@@ -10,7 +10,7 @@ export async function verifyStorageSecurity(client, failures) {
   const allowedMimeTypes = new Set(bucket?.allowed_mime_types || []);
   if (
     previewBucket.rowCount !== 1
-    || bucket.public !== true
+    || bucket.public !== false
     || Number(bucket.file_size_limit) !== 5 * 1024 * 1024
     || allowedMimeTypes.size !== 4
     || ![

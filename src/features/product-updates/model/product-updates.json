@@ -1,5 +1,27 @@
 [
   {
+    "id": "2026-09-26-google-workspace-login",
+    "draft": true,
+    "releasedAt": "2026-09-26",
+    "expiresAt": "2026-10-26",
+    "featureTourId": "google-workspace-login-v1",
+    "title": "Mit Google Workspace anmelden",
+    "summary": "Melde dich mit deinem freigegebenen Workspace-Konto an. Dein Profil, deine Aufgaben und deine bestehenden Verbindungen bleiben erhalten.",
+    "slides": [
+      {
+        "id": "google-workspace-login",
+        "title": "Eine Anmeldung für FounderOps",
+        "description": "Google Workspace übernimmt die Anmeldung. GitHub verbindest du getrennt für Kommentare und Anhänge. Auch dein Kalender bleibt eigenständig verbunden.",
+        "image": {
+          "src": "/product-updates/2026-09-26-google-workspace-login/login.png",
+          "alt": "FounderOps-Anmeldung mit Google Workspace und Hinweis auf die getrennte GitHub-Verbindung",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-09-24-founderops-mentions",
     "releasedAt": "2026-09-24",
     "expiresAt": "2026-10-24",
@@ -155,8 +177,8 @@
         "image": {
           "src": "/product-updates/2026-08-14-platform-releases/platform-releases.jpg",
           "alt": "FounderOps mit dem Release-Archiv und dem aktuellen Release im Seitenmenü",
-            "width": 1200,
-            "height": 919
+          "width": 1200,
+          "height": 919
         }
       }
     ]

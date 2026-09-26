@@ -1,3 +1,5 @@
+import { requireWorkspaceAccess } from "./workspace-access";
+import { WorkspaceAccessError } from "./workspace-identity";
 import type { NextRequest } from "next/server";
 import { isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
 import {
@@ -14,7 +16,8 @@ import {
 } from "@/features/administrator-access/model/administrator-access";
 import { isLocalLoginRequestAllowed } from "./local-development-auth";
 import { isOperationalLeadRole } from "./platform";
-import { getSupabaseForToken, requiresSupabaseAuth } from "./supabase";
+import { requiresSupabaseAuth } from "./supabase";
+import { getSupabaseForToken } from "./supabase-user";
 import type { AuthenticatedProfile, PlatformRole } from "./types";
 
 type AuthzProfileRow = {
@@ -77,8 +80,10 @@ async function authenticateUser(supabase: SupabaseClient): Promise<{ ok: true; u
         code: invalidSessionBeforeEffectErrorCode,
       };
     }
+    await requireWorkspaceAccess({ userId: userResult.user.id });
     return { ok: true, user: userResult.user };
-  } catch {
+  } catch (error) {
+    if (error instanceof WorkspaceAccessError) return { ok: false, status: error.status, code: error.code, error: error.message };
     return { ok: false, status: 503, error: "Anmeldung konnte vorübergehend nicht geprüft werden." };
   }
 }
@@ -93,7 +98,7 @@ async function authorizeUser(
   if (authProfileResult.error) return { ok: false, status: 403, error: "Teamprofil konnte nicht eindeutig geprüft werden." };
 
   const profile = authProfileResult.data as AuthzProfileRow | null;
-  if (!profile) return { ok: false, status: 403, error: "GitHub-User ist keinem Teamprofil zugeordnet." };
+  if (!profile) return { ok: false, status: 403, error: "Dieses Konto ist keinem Teamprofil zugeordnet." };
   let effectiveProfile = profile;
   const devProfileId = options.devProfileId?.trim() || "";
   const canUseDevProfile = isOperationalLeadRole(profile.platform_role);

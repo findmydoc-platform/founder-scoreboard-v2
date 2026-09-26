@@ -1,3 +1,7 @@
+import { getServerAuthSupabase } from "@/lib/supabase-server";
+import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { requireTeamMemberForSession } from "@/lib/authz";
+import { validToolPreviewPath } from "@/lib/tool-preview-image";
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
@@ -52,10 +56,24 @@ export async function POST(request: NextRequest) {
 
   if (error) return apiError(error.message || "Bild konnte nicht gespeichert werden.", 500);
 
-  const { data } = context.supabase.storage.from(bucketName).getPublicUrl(path);
   return NextResponse.json({
     ok: true,
-    imageUrl: data.publicUrl,
+    imageUrl: `/api/tools/preview-image?path=${encodeURIComponent(path)}`,
     source: "manual",
   });
+}
+
+export async function GET(request: NextRequest) {
+  const path = request.nextUrl.searchParams.get("path") || "";
+  if (!validToolPreviewPath(path)) return apiError("Ungültiger Bildpfad.", 400);
+  const client = await getServerAuthSupabase();
+  const service = getServerServiceRoleSupabase();
+  if (!client || !service) return apiError("Anmeldung erforderlich.", 401);
+  const permission = await requireTeamMemberForSession(client);
+  if (!permission.ok) return apiError(permission.error, permission.status);
+  const { data, error } = await service.storage.from(bucketName).download(path);
+  if (error || !data) return apiError("Bild nicht verfügbar.", 404);
+  return new NextResponse(data, { headers: {
+    "Content-Type": data.type, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+  } });
 }

@@ -5,7 +5,7 @@ import { nextMondayIso } from "../model/team-workweek-draft";
 import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
 import {
   getGoogleWorkspaceAccessToken,
-  revokeAndRemoveGoogleWorkspaceConnection,
+  removeGoogleWorkspaceConnection,
 } from "./google-workspace-oauth";
 import {
   ensureGoogleWorkweekSeriesAbsent,
@@ -265,7 +265,7 @@ export async function disconnectGoogleWorkspace({
   now = () => new Date(),
   observe = observeGoogleWorkweekSeriesForDisconnect,
   ownerProfileId,
-  revoke = revokeAndRemoveGoogleWorkspaceConnection,
+  revoke = removeGoogleWorkspaceConnection,
   serviceSupabase,
 }: {
   ensureAbsent?: typeof ensureGoogleWorkweekSeriesAbsent;
@@ -274,7 +274,7 @@ export async function disconnectGoogleWorkspace({
   now?: () => Date;
   observe?: typeof observeGoogleWorkweekSeriesForDisconnect;
   ownerProfileId: string;
-  revoke?: typeof revokeAndRemoveGoogleWorkspaceConnection;
+  revoke?: typeof removeGoogleWorkspaceConnection;
   serviceSupabase: SupabaseClient;
 }) {
   let operation = await openOperation(serviceSupabase, ownerProfileId);
