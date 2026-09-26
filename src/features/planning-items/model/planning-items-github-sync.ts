@@ -30,6 +30,7 @@ function failureResult(
     code: failure.code,
     error: failure.error,
     retryable: failure.retryable,
+    ...(failure.lengthErrors ? { lengthErrors: failure.lengthErrors } : {}),
   };
 }
 

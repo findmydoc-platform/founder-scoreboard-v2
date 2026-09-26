@@ -353,3 +353,102 @@ test("Team create preserves a late inactive-token response", async () => {
   assert.equal(response.body.code, "TOKEN_INACTIVE");
   assert.equal(response.headers["WWW-Authenticate"], 'Bearer error="invalid_token"');
 });
+
+test("CreateItems keeps long briefs and list entries intact", async () => {
+  const create = await loadCreate();
+  const description = "ä".repeat(5000);
+  const criterion = "😀".repeat(3500);
+  const command = create.planningItemCreateCommand([{ itemType: "deliverable", title: "Long brief", description, acceptanceCriteria: [criterion] }], actor.profileId);
+  assert.equal(command.items[0].brief.description, description);
+  assert.equal(command.items[0].brief.acceptanceCriteria, criterion);
+});
+
+test("Team create rejects an oversized item atomically in preview and commit", async () => {
+  const create = await loadCreate();
+  const tokenActor = { ...actor, credential: { kind: "planningToken", tokenId: "token-1", scopes: ["write:planning-items:create"] } };
+  const rawItems = [
+    { itemType: "epic", title: "Valid epic", description: "x".repeat(5000), ownerId: actor.profileId },
+    { itemType: "epic", title: "Oversized epic", description: "😀".repeat(65_537), ownerId: actor.profileId },
+  ];
+  let writes = 0;
+  const supabase = {
+    from(table) {
+      const query = {
+        select() { return this; }, eq() { return this; },
+        async maybeSingle() { return { data: null, error: null }; },
+        then(resolve) { return Promise.resolve({ data: table === "profiles" ? [{ id: actor.profileId, name: "CEO" }] : [], error: null }).then(resolve); },
+      };
+      return query;
+    },
+    async rpc() { writes += 1; throw new Error("Invalid content must not write"); },
+  };
+  for (const mode of ["preview", "commit"]) {
+    let previews;
+    const result = await create.createTeamCreatePlanningItems({ supabase, actor: tokenActor, tokenId: "token-1", rawItems, githubSyncMode: null, onPreview: (items) => { previews = items; } }).run({ actor: tokenActor, mode, command: create.planningItemCreateCommand(rawItems, actor.profileId), idempotencyKey: "00000000-0000-4000-8000-000000000000" });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "invalidCommand");
+    assert.equal(previews[0].description.length, 5000);
+    assert.equal(Array.from(previews[1].description).length, 65_537);
+    assert.equal(previews[1].lengthErrors[0].excess, 1);
+  }
+  assert.equal(writes, 0);
+});
+
+test("Create request hashes distinguish content beyond the former truncation boundary", async () => {
+  const create = await loadCreate();
+  const first = [{ itemType: "epic", title: "Same", description: "x".repeat(4000) + "A" }];
+  const second = [{ ...first[0], description: "x".repeat(4000) + "B" }];
+  assert.notEqual(create.planningItemCreateHash(first, null, []), create.planningItemCreateHash(second, null, []));
+});
+
+
+test("create replay survives changed mention expansion diagnostics", async () => {
+  const create = await loadCreate();
+  const rawItems = [{ itemType: "deliverable", title: "Mention replay", description: "x".repeat(65_000) + " @all", ownerId: actor.profileId }];
+  const responseItems = [{ itemType: "deliverable", item: { id: "saved-task" } }];
+  let expanded = false;
+  let stored = null;
+  const supabase = {
+    from(table) {
+      const query = {
+        select() { return this; }, eq() { return this; },
+        async maybeSingle() { return { data: table === "team_task_intake_batches" ? stored : null, error: null }; },
+        then(resolve) { return Promise.resolve({ data: table === "profiles" ? [{ id: actor.profileId, name: "CEO", github_login: "ceo" }, ...(expanded ? Array.from({ length: 100 }, (_, i) => ({ id: `profile-${i}`, name: `Member ${i}`, github_login: `member-${i}` })) : [])] : [], error: null }).then(resolve); },
+      };
+      return query;
+    },
+    rpc() { throw new Error("Replay must not write"); },
+  };
+  const key = "a1111111-1111-4111-8111-111111111111";
+  const initial = await create.buildPlanningItemCreatePreview(rawItems, { id: actor.profileId, platformRole: "ceo" }, supabase, key);
+  assert.equal(initial[0].lengthErrors, undefined);
+  stored = { id: "batch-1", request_hash: create.planningItemCreateHash(initial), response_tasks: responseItems, contract_version: 3 };
+  expanded = true;
+  const tokenActor = { ...actor, credential: { kind: "planningToken", tokenId: "token-1", scopes: ["write:planning-items:create"] } };
+  let preview;
+  const result = await create.createTeamCreatePlanningItems({ supabase, actor: tokenActor, tokenId: "token-1", rawItems, githubSyncMode: null, onPreview: (items) => { preview = items; } }).run({
+    actor: tokenActor, mode: "commit", command: create.planningItemCreateCommand(rawItems, actor.profileId), idempotencyKey: key,
+  });
+  assert.equal(preview[0].lengthErrors[0].field, "githubBody");
+  assert.equal(result.ok, true);
+  assert.equal(create.planningCreateTransactionFromResult(result).replayed, true);
+  assert.deepEqual(create.planningCreateTransactionFromResult(result).items, responseItems);
+});
+
+
+test("invalid create commit returns per-item structured diagnostics with HTTP 400", async () => {
+  const lengthErrors = [{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1, message: "Body too long" }];
+  const previewItems = [{ errors: ["Body too long"], lengthErrors }];
+  const { route } = await loadTeamCreateRoute({
+    runResult: { ok: false, error: { code: "invalidCommand", issues: [{ path: "command.items.0", reason: "Body too long" }] } },
+    previewItems,
+    planningCreateError: () => ({ message: "Invalid batch", status: 400, issues: previewItems[0].errors }),
+  });
+  const response = await route.handleTeamPlanningItemsCreate({
+    headers: new Headers({ "idempotency-key": "00000000-0000-4000-8000-000000000000" }),
+    json: async () => ({ items: [{ itemType: "deliverable", title: "Create" }] }),
+  });
+  assert.equal(response.status, 400);
+  assert.equal(response.body.ok, false);
+  assert.deepEqual(response.body.items[0].lengthErrors, lengthErrors);
+});

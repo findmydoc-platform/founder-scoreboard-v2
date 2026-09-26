@@ -251,6 +251,7 @@ export async function handleTeamPlanningItemUpdate(
           ok: false,
           error: "Planning-Items-Update enthält ungültige Felder.",
           errors: canonicalPreview.preview.errors,
+          ...(canonicalPreview.preview.lengthErrors?.length ? { lengthErrors: canonicalPreview.preview.lengthErrors } : {}),
           warnings: canonicalPreview.preview.warnings,
         }, 400);
       }
@@ -331,6 +332,7 @@ export async function handleTeamPlanningItemUpdate(
         ok: false,
         error: "Planning-Items-Update enthält ungültige Felder.",
         errors: preview.errors,
+        ...(preview.lengthErrors?.length ? { lengthErrors: preview.lengthErrors } : {}),
         warnings: preview.warnings,
       }, 400);
     }

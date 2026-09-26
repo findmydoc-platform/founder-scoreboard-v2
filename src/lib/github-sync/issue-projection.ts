@@ -6,7 +6,8 @@ import {
   resolveGitHubIssueNumber,
 } from "../github-issue-reference";
 import { splitGitHubRepository } from "../github-repositories";
-import { canonicalizeProfileMentionsForGitHub, type MentionProfile, type MentionTeam } from "../mentions";
+import type { MentionProfile, MentionTeam } from "../mentions";
+import { assertGitHubIssueContent, renderGitHubIssueContent, founderOpsTaskUrl, taskIssueMarker, taskIssueTitle, taskIssueUpdateBody } from "../github-issue-content";
 
 type GitHubIssuePayload = {
   title: string;
@@ -52,14 +53,6 @@ const founderOpsManagedIssueLabels = new Set([
   "p3-low",
 ]);
 
-function taskTypeLabel(task: Task) {
-  return task.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable";
-}
-
-function taskIssueTitle(task: Task) {
-  return `[${taskTypeLabel(task)}] ${task.title}`;
-}
-
 function taskIssueLabels(task: Task) {
   if (task.taskType === "sub_issue") {
     return [
@@ -103,60 +96,8 @@ function mergeGitHubIssueLabels(existingLabels: GitHubIssueLabel[], desiredLabel
   return merged;
 }
 
-function compactSection(title: string, rows: string[]) {
-  const content = rows.filter(Boolean);
-  if (!content.length) return [`## ${title}`, "_Nicht gesetzt._"];
-  return [`## ${title}`, ...content];
-}
-
-function lines(value?: string) {
-  return (value || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => (line.startsWith("- ") || line.startsWith("* ") ? line : `- ${line}`));
-}
-
-function isPrivateHostname(hostname: string) {
-  const value = hostname.toLowerCase();
-  if (value === "localhost" || value === "0.0.0.0" || value === "::1" || value === "[::1]") return true;
-  if (value.endsWith(".local") || value.endsWith(".internal") || value.endsWith(".lan") || value.endsWith(".test") || value.endsWith(".example")) return true;
-  if (/^127\./.test(value) || /^10\./.test(value) || /^192\.168\./.test(value)) return true;
-  const private172 = value.match(/^172\.(\d{1,2})\./);
-  return Boolean(private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31);
-}
-
-function founderOpsTaskUrl(taskId: string) {
-  const configured = process.env.APP_URL?.trim();
-  if (!configured) return "";
-
-  try {
-    const url = new URL(configured);
-    if (url.protocol !== "https:" || isPrivateHostname(url.hostname)) return "";
-    const basePath = url.pathname.replace(/\/$/, "");
-    return `${url.origin}${basePath}/tasks/${encodeURIComponent(taskId)}`;
-  } catch {
-    return "";
-  }
-}
-
-function sourceLine(task: Task) {
-  const taskUrl = founderOpsTaskUrl(task.id);
-  const source = taskUrl ? `[Open in FounderOps](${taskUrl})` : "FounderOps";
-  return `Planning context: ${source}. GitHub issue sync keeps the working issue aligned.`;
-}
-
-function subIssueSourceLine(task: Task) {
-  const taskUrl = founderOpsTaskUrl(task.id);
-  return taskUrl ? `Source: [FounderOps](${taskUrl}).` : "Source: FounderOps.";
-}
-
-function taskIssueMarker(taskId: string) {
-  return `<!-- founderops-task-id:${taskId} -->`;
-}
-
 function hasMatchingLegacyFounderOpsTaskLink(task: Task, body?: string | null) {
-  const taskUrl = founderOpsTaskUrl(task.id);
+  const taskUrl = founderOpsTaskUrl(task.id, process.env.APP_URL);
   return Boolean(taskUrl && body?.includes(`](${taskUrl})`));
 }
 
@@ -168,70 +109,6 @@ function hasMatchingLegacyFounderOpsTaskId(task: Task, body?: string | null) {
     .filter((line) => line.startsWith(prefix))
     .map((line) => line.slice(prefix.length).trim()));
   return taskIds.size === 1 && taskIds.has(task.id);
-}
-
-function subIssueBriefSections(task: Task) {
-  const sections: string[] = [];
-  const textSection = (title: string, value?: string) => {
-    const content = value?.trim();
-    if (content) sections.push(`## ${title}\n${content}`);
-  };
-  const listSection = (title: string, value?: string) => {
-    const content = lines(value);
-    if (content.length) sections.push([`## ${title}`, ...content].join("\n"));
-  };
-
-  textSection("Context", task.description);
-  textSection("Problem Statement", task.problemStatement);
-  textSection("Intended Outcome", task.intendedOutcome);
-  listSection("Scope & Constraints", task.scopeConstraints);
-  listSection("Acceptance Criteria", task.acceptanceCriteria);
-  textSection("Evidence Required", task.evidenceRequired);
-  listSection("Definition of Done", task.definitionOfDone);
-  return sections;
-}
-
-function taskIssueBody(task: Task) {
-  if (task.taskType === "sub_issue") {
-    const sections = subIssueBriefSections(task);
-    return [
-      ...(sections.length ? [sections.join("\n\n"), ""] : []),
-      "---",
-      subIssueSourceLine(task),
-      taskIssueMarker(task.id),
-    ].join("\n");
-  }
-  return [
-    "## Problem Statement",
-    task.problemStatement || task.description || "_Nicht gesetzt._",
-    "",
-    "## Intended Outcome",
-    task.intendedOutcome || "_Nicht gesetzt._",
-    "",
-    ...compactSection("Scope & Constraints", lines(task.scopeConstraints)),
-    "",
-    ...compactSection("Acceptance Criteria", lines(task.acceptanceCriteria)),
-    "",
-    "## Evidence Required",
-    task.evidenceRequired || task.evidenceLink || "_Nicht gesetzt._",
-    "",
-    ...compactSection("Definition of Done", lines(task.definitionOfDone)),
-    "",
-    "---",
-    sourceLine(task),
-    taskIssueMarker(task.id),
-  ].join("\n");
-}
-
-function taskIssueUpdateBody(task: Task, existingBody?: string | null, desiredBody = taskIssueBody(task)) {
-  if (task.taskType !== "sub_issue" || !existingBody?.trim()) return desiredBody;
-
-  const marker = taskIssueMarker(task.id);
-  if (!subIssueBriefSections(task).length) {
-    if (existingBody.includes(marker)) return desiredBody;
-    return `${existingBody.trimEnd()}\n\n${marker}`;
-  }
-  return desiredBody;
 }
 
 async function assignableGitHubLogin(login: string, token: string, repository: string) {
@@ -352,13 +229,15 @@ async function updateValidatedGitHubIssue(
     throw new Error("Bestehende GitHub-Labels konnten nicht sicher gelesen werden.");
   }
 
+  const body = taskIssueUpdateBody(task, target.body, payload.body);
+  assertGitHubIssueContent({ ...payload, body });
   return githubJson<{ number: number; html_url: string }>(issueUrl, {
     token,
     method: "PATCH",
     operation: "mutation",
     body: {
       ...payload,
-      body: taskIssueUpdateBody(task, target.body, payload.body),
+      body,
       labels: mergeGitHubIssueLabels(target.labels, payload.labels),
     },
     errorMessage,
@@ -392,11 +271,11 @@ export async function projectTaskGitHubIssue({
   assertGitHubIssueRepository(task, repository);
 
   const payload: GitHubIssuePayload = {
-    title: taskIssueTitle(task),
-    body: canonicalizeProfileMentionsForGitHub(taskIssueBody(task), mentionProfiles, mentionTeam),
+    ...renderGitHubIssueContent(task, { appUrl: process.env.APP_URL, mentionProfiles, mentionTeam }),
     labels: taskIssueLabels(task),
     state: task.status === "Erledigt" ? "closed" : "open",
   };
+  assertGitHubIssueContent(payload);
   const warnings: string[] = [];
   const normalizedAssigneeLogin = assigneeLogin.trim();
   if (normalizedAssigneeLogin) {

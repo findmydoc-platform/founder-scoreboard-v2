@@ -1,5 +1,7 @@
 "use client";
 
+import { validatePlanningFields } from "@/features/planning-items/model/planning-item-content";
+
 import { useEffect, useMemo, useState } from "react";
 import type { TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
 import {
@@ -68,6 +70,12 @@ export function useTaskDetailController({
     const patch = taskOverviewPatch(overviewBaseline, overviewDraft, overviewPermissions);
     if (!Object.keys(patch).length) return false;
 
+    const resultingTask = { ...overviewBaseline, ...patch };
+    const lengthErrors = validatePlanningFields(resultingTask.taskType === "initiative" ? {
+      ...resultingTask, intendedOutcome: overviewDraft.strategyGoal,
+      acceptanceCriteria: overviewDraft.strategySuccessCriteria, scopeConstraints: overviewDraft.strategyScopeConstraints,
+    } : resultingTask);
+    if (lengthErrors.length) { setOverviewError(lengthErrors[0].message); return false; }
     setOverviewSaving(true);
     setOverviewError("");
     try {

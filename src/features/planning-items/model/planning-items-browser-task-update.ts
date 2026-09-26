@@ -1,3 +1,6 @@
+import { codepointLength } from "@/lib/github-issue-content";
+import { planningContentFromRow } from "./planning-item-content";
+import { validateStoredPlanningContent } from "./planning-item-content-server";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, authzError, requireApiContext } from "@/lib/api-response";
 import {
@@ -105,8 +108,8 @@ const taskUpdatePayloadFields = new Set<keyof TaskUpdatePayload>([
   "selfEvidenceChecked", "selfDocumentedChecked", "selfBlockersChecked",
 ]);
 
-function strategicText(value: unknown, maxLength: number) {
-  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+function strategicText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function strategicDate(value: unknown) {
@@ -262,7 +265,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     if (payload.priority !== undefined && !["P0", "P1", "P2", "P3", "P4"].includes(payload.priority)) {
       return apiError("Ungültige Priorität.", 400);
     }
-    if (payload.title !== undefined && strategicText(payload.title, 240).length < 3) {
+    if (payload.title !== undefined && codepointLength(strategicText(payload.title)) < 3) {
       return apiError("Titel ist erforderlich.", 400);
     }
     const targetDate = strategicDate(payload.targetDate);
@@ -274,8 +277,8 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       return apiError("Nur Initiativen haben RACI-Zuordnungen.", 400);
     }
     const patch: Record<string, string | number | null> = {};
-    if (payload.title !== undefined) patch.title = strategicText(payload.title, 240);
-    if (payload.description !== undefined) patch.description = strategicText(payload.description, 4_000) || null;
+    if (payload.title !== undefined) patch.title = strategicText(payload.title);
+    if (payload.description !== undefined) patch.description = strategicText(payload.description) || null;
     if (payload.status !== undefined) patch.status = payload.status;
     if (payload.priority !== undefined) patch.priority = payload.priority;
     if (payload.ownerId !== undefined) {
@@ -292,9 +295,9 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       patch.parent_task_id = profileId(payload.parentTaskId) || null;
     }
     const strategy = payload.strategy === undefined ? null : {
-      goal: strategicText(payload.strategy.goal, 4_000),
-      successCriteria: strategicText(payload.strategy.successCriteria, 6_000),
-      scopeConstraints: strategicText(payload.strategy.scopeConstraints, 4_000),
+      goal: strategicText(payload.strategy.goal),
+      successCriteria: strategicText(payload.strategy.successCriteria),
+      scopeConstraints: strategicText(payload.strategy.scopeConstraints),
     };
     const raciAssignments = payload.raciAssignments === undefined ? null : payload.raciAssignments.map((assignment, index) => ({
       profileId: profileId(assignment.profileId),
@@ -309,6 +312,11 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
         ? supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").eq("task_id", id).order("sort_order")
         : Promise.resolve({ data: [], error: null }),
     ]);
+    const lengthErrors = await validateStoredPlanningContent(supabase, {
+      ...planningContentFromRow({ ...currentTask, ...patch }),
+      intendedOutcome: strategy?.goal ?? existingStrategyResult.data?.goal ?? "", acceptanceCriteria: strategy?.successCriteria ?? existingStrategyResult.data?.success_criteria ?? "", scopeConstraints: strategy?.scopeConstraints ?? existingStrategyResult.data?.scope_constraints ?? "",
+    });
+    if (lengthErrors.length) return NextResponse.json({ error: lengthErrors[0].message, lengthErrors }, { status: 400 });
     const profileResult = operationalCorrection
       ? await supabase.rpc("administrator_directory_snapshot")
       : await supabase.from("profiles").select("id,name,github_login");
@@ -530,6 +538,9 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     update.evidence_link = payload.evidenceLinks[0] || null;
     update.evidence_links = payload.evidenceLinks;
   }
+
+  const lengthErrors = await validateStoredPlanningContent(supabase, planningContentFromRow({ ...currentTask, ...update }));
+  if (lengthErrors.length) return NextResponse.json({ error: lengthErrors[0].message, lengthErrors }, { status: 400 });
 
   if (payload.sprintId !== undefined) {
     const nextSprintId = payload.sprintId || null;

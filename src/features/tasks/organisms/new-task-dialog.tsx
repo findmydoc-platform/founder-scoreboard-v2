@@ -1,5 +1,8 @@
 "use client";
 
+import { validatePlanningFields } from "@/features/planning-items/model/planning-item-content";
+import { codepointLength } from "@/lib/github-issue-content";
+
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
@@ -716,7 +719,7 @@ export function NewTaskDialog({
   const selectedInitiative = initiatives.find((initiative) => initiative.id === draft.parentTaskId);
   const deliverableNeedsStructure = false;
   const subIssueNeedsParent = draft.taskType === "sub_issue" && !draft.parentTaskId;
-  const invalidTitle = draft.title.trim().length < 3;
+  const invalidTitle = codepointLength(draft.title.trim()) < 3;
   const canCreate = !invalidTitle && !deliverableNeedsStructure && !subIssueNeedsParent;
   const titleError = taskCreationTitleError(draft.title, titleTouched || submitAttempted);
   const validationReason = submitAttempted && !invalidTitle
@@ -775,6 +778,8 @@ export function NewTaskDialog({
             }
             return;
           }
+          const lengthErrors = validatePlanningFields({ ...draft, id: "" });
+          if (lengthErrors.length) { setSubmitError(lengthErrors[0].message); return; }
           setSubmitError("");
           onCreate(draft, { onError: setSubmitError });
         }}

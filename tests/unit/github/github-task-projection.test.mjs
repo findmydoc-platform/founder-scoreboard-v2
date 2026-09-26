@@ -1,3 +1,4 @@
+import { GitHubContentLengthError } from "../../../src/lib/github-issue-content";
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
@@ -419,3 +420,14 @@ for (const [name, options] of [
     assert.equal(fixture.calls.at(-1), "release");
   });
 }
+
+test("content length errors stop projection without retrying or applying later projections", async () => {
+  const fixture = await projectionFixture({ issueError: new GitHubContentLengthError([{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1, message: "Body too long" }]) });
+  const result = await fixture.project();
+  assert.equal(result.code, "github_content_too_long");
+  assert.deepEqual(result.lengthErrors, [{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1, message: "Body too long" }]);
+  assert.equal(result.retryable, false);
+  assert.equal(fixture.calls.includes("dependencies"), false);
+  assert.equal(fixture.calls.includes("project"), false);
+  assert.deepEqual(fixture.calls.slice(-2), ["persistFailure", "release"]);
+});

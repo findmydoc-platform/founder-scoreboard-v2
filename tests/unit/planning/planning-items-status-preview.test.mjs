@@ -479,3 +479,25 @@ test("Review preview rejects missing owners and locked Sprints", async () => {
   assert.equal(lockedSprint.ok, true);
   assert.equal(lockedSprint.preview.errors.some((error) => error.includes("gelockt")), true);
 });
+
+test("Update preview validates the full merged brief and retains a long patch", async () => {
+  const target = taskRow({ problem_statement: "p".repeat(40_000) });
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, intendedOutcome: "😀".repeat(30_000) });
+  assert.equal(parsed.ok, true);
+  const result = await updates.buildPlanningItemUpdatePreview({ actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target) });
+  assert.equal(result.ok, true);
+  assert.equal(Array.from(result.preview.normalizedPatch.intendedOutcome).length, 30_000);
+  assert.equal(result.preview.resultingItem.problemStatement.length, 40_000);
+  assert.equal(result.preview.lengthErrors[0].field, "githubBody");
+  assert.ok(result.preview.errors.length > 0);
+});
+
+test("an invalid update preview retains the full input and exposes structured length errors", async () => {
+  const target = taskRow();
+  const intendedOutcome = "x".repeat(65_537);
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, intendedOutcome });
+  const result = await updates.buildPlanningItemUpdatePreview({ actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target) });
+  assert.equal(result.ok, true);
+  assert.equal(result.preview.normalizedPatch.intendedOutcome?.length, 65_537);
+  assert.equal(result.preview.lengthErrors.find((error) => error.field === "intendedOutcome").excess, 1);
+});

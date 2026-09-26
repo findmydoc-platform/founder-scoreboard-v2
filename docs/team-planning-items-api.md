@@ -269,3 +269,18 @@ Only an Epic with zero direct Initiative and Deliverable references can be delet
 The legacy hierarchy tables and v1 transport adapters were removed in the controlled cutover. Historical Initiative links and immutable delete replay receipts remain available under canonical storage names; they are not active planning write paths.
 
 The OpenAPI document is available at `/founderops-team-planning-items-v2-openapi.json`.
+
+
+## Lossless content limits
+
+Brief input is trimmed at its outer boundaries, but never truncated. Titles contain 3–240 Unicode codepoints. Emoji count as one codepoint; combining marks count separately. The API does not apply Unicode normalization. Acceptance-criteria arrays are joined with newlines without per-entry truncation.
+
+Epics and Initiatives accept up to 65,536 codepoints in each long-text field independently. Deliverables and Sub-Issues use the same per-field ceiling, plus a limit of 65,536 codepoints for the complete rendered GitHub issue body. That body includes Markdown section headers, list prefixes, resolved mentions, the public source link and the durable task marker. The rendered title, including its item-type prefix, has a separate 256-codepoint limit. A description hidden by a populated problem statement still receives the per-field check.
+
+Preview and commit use the same renderer. Updates validate the merged existing item and patch. Create previews use an ID with the same encoded length as the committed ID; commits derive the real ID from the existing actor, idempotency key and batch index contract. An invalid item rejects the entire create batch before the transaction.
+
+Existing error responses remain compatible. Content failures may additionally include `lengthErrors`, with `field`, `actual`, `maximum`, `excess` and `message`. Create responses include these per item; update responses include them beside the existing errors. Preview reports `valid: false`. Browser forms retain their draft after rejection and show the error beside the editor. Browser field checks share the codepoint rules; the server performs the authoritative rendered-body check using local projection configuration.
+
+Saving does not contact GitHub. The sync path validates the final outgoing payload again, including any preserved external Sub-Issue body. A content overflow returns `github_content_too_long`, HTTP 422, with `retryable: false`, before any GitHub mutation. Sync bookkeeping may record the failure; an already saved FounderOps edit is not rolled back. Changed mention-team availability or external GitHub content can therefore cause a later sync to fail even after local validation succeeded.
+
+Existing database text columns remain unchanged. Previously truncated text cannot be recovered by this change.

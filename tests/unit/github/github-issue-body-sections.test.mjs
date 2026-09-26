@@ -148,3 +148,24 @@ test("Sub-Issue GitHub projection omits empty optional work-brief sections", asy
   assert.doesNotMatch(body, /## Context|## Intended Outcome|## Scope & Constraints|## Acceptance Criteria|## Evidence Required|## Definition of Done/);
   assert.doesNotMatch(body, /_Nicht gesetzt\._/);
 });
+
+test("GitHub projection rejects oversized rendered bodies before a mutation", async () => {
+  await assert.rejects(() => projectIssue(task({ problemStatement: "ä".repeat(65_536) })), /65\.536/);
+});
+
+test("preserved Sub-Issue body is validated with its appended marker before PATCH", async () => {
+  let writes = 0;
+  const source = task({ taskType: "sub_issue", title: "Existing", description: "", problemStatement: "", intendedOutcome: "", scopeConstraints: "", acceptanceCriteria: "", evidenceRequired: "", definitionOfDone: "", githubIssueNumber: 42 });
+  const projection = await importTestModule("src/lib/github-sync/issue-projection.ts", {
+    "../github-http": {
+      GitHubApiError: class extends Error {},
+      githubRequest: async () => { throw new Error("Unexpected request"); },
+      githubJson: async (_url, options) => {
+        if (options.method) { writes += 1; throw new Error("Unexpected mutation"); }
+        return { number: 42, title: "[Sub-Issue] Existing", labels: [], html_url: "https://github.com/findmydoc-platform/management/issues/42", body: "x".repeat(65_536) };
+      },
+    },
+  });
+  await assert.rejects(() => projection.projectTaskGitHubIssue({ task: source, token: "test-token" }), (error) => error.retryable === false && error.issues[0].field === "githubBody");
+  assert.equal(writes, 0);
+});

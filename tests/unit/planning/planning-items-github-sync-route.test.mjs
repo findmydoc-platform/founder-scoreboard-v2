@@ -15,6 +15,7 @@ const githubContract = await importTestModule(
 let standaloneAccessRequest = null;
 
 let standaloneMode = "accepted";
+const contentFailure = { status: "notEligible", code: "github_content_too_long", error: "Body too long", retryable: false, lengthErrors: [{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1, message: "Body too long" }] };
 
 let standaloneEnqueueError = null;
 
@@ -117,7 +118,7 @@ const standaloneRoute = await importTestModule(
             },
           },
       dispatchAndLoadPlanningGitHubProjections: async () => new Map([
-        ["task-1", standaloneMode === "failed"
+        ["task-1", standaloneMode === "oversized" ? contentFailure : standaloneMode === "failed"
           ? {
               status: "failed",
               code: "github_sync_unavailable",
@@ -198,4 +199,17 @@ test("standalone wait sync preserves GitHub failure status", async () => {
   assert.equal(response.status, 503);
   assert.equal(body.ok, false);
   assert.equal(body.githubSync.code, "github_sync_unavailable");
+});
+
+
+test("standalone wait sync returns 422 with structured length errors", async () => {
+  standaloneMode = "oversized";
+  standaloneEnqueueError = null;
+  const response = await standaloneRoute.handleTeamPlanningItemGitHubSync({
+    json: async () => ({ githubSyncMode: "wait", createIfMissing: false }),
+  }, { params: Promise.resolve({ id: "task-1" }) });
+  const body = await response.json();
+  assert.equal(response.status, 422);
+  assert.equal(body.ok, false);
+  assert.deepEqual(body.githubSync, contentFailure);
 });

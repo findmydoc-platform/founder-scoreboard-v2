@@ -135,3 +135,33 @@ export const ReviewMentionPicker: Story = {
     await expect(canvas.getByRole("listbox", { name: "Person erwähnen" })).toBeVisible();
   },
 };
+
+export const OversizedBrief: Story = {
+  args: {
+    task: { ...task, problemStatement: "Prüfbarer Kontext. ".repeat(3641) },
+    onUpdate: fn(async () => ({ ok: true as const, task: {} })),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.type(title, " aktualisiert");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(canvas.getByRole("alert")).toHaveTextContent("maximal 65.536 Zeichen");
+    await expect(canvas.getByRole("textbox", { name: "Problem" })).toHaveValue(args.task.problemStatement);
+    await expect(args.onUpdate).not.toHaveBeenCalled();
+  },
+};
+
+export const CorrectOversizedBrief: Story = {
+  args: OversizedBrief.args,
+  play: async (context) => {
+    await OversizedBrief.play!(context);
+    const canvas = within(context.canvasElement);
+    const problem = canvas.getByRole("textbox", { name: "Problem" });
+    await userEvent.clear(problem);
+    await userEvent.type(problem, "Vollständiger, gekürzter Kontext.");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(context.args.onUpdate).toHaveBeenCalledWith(expect.objectContaining({ problemStatement: "Vollständiger, gekürzter Kontext." }));
+  },
+};

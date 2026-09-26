@@ -1,3 +1,4 @@
+import { codepointLength } from "@/lib/github-issue-content";
 import { taskAssignedToProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { isSubIssueStatus, isTaskStatusChange, normalizeStatus, taskStatuses } from "@/lib/status";
 import type { AuthenticatedProfile } from "@/lib/types";
@@ -218,22 +219,22 @@ export function applyTaskPriorityUpdate(update: TaskRouteDbUpdate, payload: Task
 
 export function applyTaskTitleUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload): RouteGuardResult {
   if (payload.title === undefined) return { ok: true };
-  const title = payload.title.trim().slice(0, 240);
-  if (title.length < 3) return { ok: false, error: "Titel ist erforderlich.", status: 400 };
+  const title = payload.title.trim();
+  if (codepointLength(title) < 3) return { ok: false, error: "Titel ist erforderlich.", status: 400 };
   update.title = title;
   return { ok: true };
 }
 
 export function applyTaskBriefUpdateFields(update: TaskRouteDbUpdate, payload: TaskUpdatePayload) {
-  if (payload.description !== undefined) update.description = payload.description.trim().slice(0, 4000) || null;
+  if (payload.description !== undefined) update.description = payload.description.trim() || null;
   if (payload.fixedDate !== undefined) update.fixed_date = payload.fixedDate || null;
-  if (payload.problemStatement !== undefined) update.problem_statement = payload.problemStatement.trim().slice(0, 4000) || null;
-  if (payload.intendedOutcome !== undefined) update.intended_outcome = payload.intendedOutcome.trim().slice(0, 4000) || null;
-  if (payload.scopeConstraints !== undefined) update.scope_constraints = payload.scopeConstraints.trim().slice(0, 4000) || null;
-  if (payload.acceptanceCriteria !== undefined) update.acceptance_criteria = payload.acceptanceCriteria.trim().slice(0, 6000) || null;
-  if (payload.evidenceRequired !== undefined) update.evidence_required = payload.evidenceRequired.trim().slice(0, 4000) || null;
-  if (payload.definitionOfDone !== undefined) update.definition_of_done = payload.definitionOfDone.trim().slice(0, 4000) || null;
-  if (payload.evidenceLink !== undefined) update.evidence_link = payload.evidenceLink.trim().slice(0, 4000) || null;
+  if (payload.problemStatement !== undefined) update.problem_statement = payload.problemStatement.trim() || null;
+  if (payload.intendedOutcome !== undefined) update.intended_outcome = payload.intendedOutcome.trim() || null;
+  if (payload.scopeConstraints !== undefined) update.scope_constraints = payload.scopeConstraints.trim() || null;
+  if (payload.acceptanceCriteria !== undefined) update.acceptance_criteria = payload.acceptanceCriteria.trim() || null;
+  if (payload.evidenceRequired !== undefined) update.evidence_required = payload.evidenceRequired.trim() || null;
+  if (payload.definitionOfDone !== undefined) update.definition_of_done = payload.definitionOfDone.trim() || null;
+  if (payload.evidenceLink !== undefined) update.evidence_link = payload.evidenceLink.trim() || null;
 }
 
 export function applyReviewStatusUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload): RouteGuardResult {
