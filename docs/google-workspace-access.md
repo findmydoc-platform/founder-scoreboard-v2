@@ -28,7 +28,7 @@ Open the linking stage only after the provider configuration has been verified. 
 
 A server-created, expiring nonce binds the linking attempt to the original Auth user. The callback must return the same user, an existing profile and a valid Google identity with current group membership. Only then is the Google subject recorded in the private binding table. A conflicting subject is rejected. This supports different GitHub and Workspace email addresses without replacing a profile, changing `profiles.auth_user_id`, copying tasks or moving stored tokens. Cancellation does not grant access. Failed linking may leave an identity attached in Supabase, but cannot create an approved application binding; the user can retry from the original account.
 
-Maintain the intended account roster privately. Set `REQUIRED_AUTH_LINKED_PROFILE_IDS` for verification, confirm every intended account has successfully linked and test each account. Do not publish personal mapping inventories in Git. `pnpm run verify:auth` checks bindings in Google mode; it does not prove live group membership or replace the individual sign-in checks.
+Maintain the intended account roster privately. Set `REQUIRED_AUTH_LINKED_PROFILE_IDS` for verification, confirm every intended account has successfully linked and test each account. Do not publish personal mapping inventories in Git. Before disabling GitHub, run `pnpm run verify:auth -- --workspace-ready` to require the complete roster and validate Google bindings while still in linking mode. The normal verifier also checks those bindings in Google mode. Neither check proves live group membership or replaces the individual sign-in checks.
 
 ## Authorization and data paths
 

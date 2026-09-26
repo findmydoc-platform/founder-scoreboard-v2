@@ -62,7 +62,8 @@ const workspace = await supabase.rpc("workspace_access_context");
 if (workspace.error || !workspace.data) throw new Error("Workspace authorization configuration unavailable.");
 const workspaceMode = workspace.data.mode;
 const unlinkedWorkspaceProfiles = [];
-if (workspaceMode === "google") {
+const checkWorkspaceReadiness = workspaceMode === "google" || process.argv.includes("--workspace-ready");
+if (checkWorkspaceReadiness) {
   if (!requiredAuthLinkedProfileIds.length) throw new Error("Google cutover requires an explicit REQUIRED_AUTH_LINKED_PROFILE_IDS roster.");
   for (const profileId of requiredAuthLinkedProfileIds) {
     const context = await supabase.rpc("workspace_access_context", { p_profile_id: profileId });

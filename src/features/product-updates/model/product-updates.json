@@ -18,6 +18,17 @@
           "width": 1440,
           "height": 900
         }
+      },
+      {
+        "id": "github-connection",
+        "title": "GitHub bei Bedarf verbinden",
+        "description": "Der GitHub-Status zeigt dir, ob deine Verbindung für eigene Kommentare und Anhänge bereit ist. Deine Anmeldung bei FounderOps bleibt davon unabhängig.",
+        "image": {
+          "src": "/product-updates/2026-09-26-google-workspace-login/github-connection.png",
+          "alt": "GitHub-Verbindungsstatus mit separat angebotener Autorenverbindung",
+          "width": 1440,
+          "height": 900
+        }
       }
     ]
   },
