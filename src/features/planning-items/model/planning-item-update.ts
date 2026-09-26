@@ -1,3 +1,5 @@
+import { validateStoredPlanningContent } from "./planning-item-content-server";
+import type { ContentLengthError, IssueContentTask } from "@/lib/github-issue-content";
 import { createHash } from "node:crypto";
 import type { AuthenticatedProfile, Task } from "@/lib/types";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
@@ -78,6 +80,7 @@ export type PlanningItemSystemEffect = {
 };
 
 export type PlanningItemUpdatePreview = {
+  lengthErrors?: ContentLengthError[];
   itemId: string;
   itemType: TeamPlanningItemType;
   expectedUpdatedAt: string;
@@ -433,14 +436,14 @@ function normalizePatch(raw: UnknownRecord, presentFields: PlanningItemPatchFiel
     const value = raw[field];
     let result: { ok: true; value: unknown } | { ok: false; error: string };
     switch (field) {
-      case "title": result = normalizePatchText(value, 240, true); break;
+      case "title": result = normalizePatchText(value, undefined, true); break;
       case "description":
       case "problemStatement":
       case "intendedOutcome":
       case "scopeConstraints":
       case "evidenceRequired":
-      case "evidenceLink":
-      case "definitionOfDone": result = normalizePatchText(value, 4_000); break;
+            case "definitionOfDone": result = normalizePatchText(value); break;
+      case "evidenceLink": result = normalizePatchText(value, 4_000); break;
       case "evidenceExceptionNote": result = normalizePatchText(value, 2_000); break;
       case "acceptanceCriteria": result = normalizePatchAcceptanceCriteria(value); break;
       case "priority": result = normalizePatchPriority(value); break;
@@ -785,6 +788,8 @@ export async function buildPlanningItemUpdatePreview({
     }
   }
 
+  const lengthErrors = await validateStoredPlanningContent(supabase, { ...resultingItem, id: itemId, taskType: target.itemType } as IssueContentTask);
+  errors.push(...lengthErrors.map((error) => error.message));
   const parentChanged = changedFields.includes("parentTaskId");
   if (parentChanged && (target.itemType === "deliverable" || target.itemType === "sub_issue") && changedFields.length > 1) {
     errors.push("Ändere die übergeordnete Planungsebene separat von weiteren Feldern.");
@@ -819,6 +824,7 @@ export async function buildPlanningItemUpdatePreview({
       expectedUpdatedAt: parsed.expectedUpdatedAt,
       currentItem,
       normalizedPatch,
+      ...(lengthErrors.length ? { lengthErrors } : {}),
       resultingItem,
       changedFields,
       systemEffects,

@@ -1,3 +1,5 @@
+import type { ContentLengthError } from "@/lib/github-issue-content";
+import { PLANNING_LONG_TEXT_LIMIT } from "./planning-content-limits";
 export const TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE = 30;
 export const TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS = 3;
 export const TEAM_PLANNING_ITEMS_TOKEN_HISTORY_LIMIT = 20;
@@ -27,13 +29,13 @@ export const TEAM_PLANNING_ITEMS_FORBIDDEN_WRITES = [
 
 export const PLANNING_ITEM_FIELD_RULES = {
   title: { kind: "string", required: true, minLength: 3, maxLength: 240 },
-  description: { kind: "string", maxLength: 4_000 },
-  problemStatement: { kind: "string", maxLength: 4_000 },
-  intendedOutcome: { kind: "string", maxLength: 4_000 },
-  scopeConstraints: { kind: "string", maxLength: 4_000 },
-  acceptanceCriteria: { kind: "string-or-string-array", maxLength: 6_000 },
-  evidenceRequired: { kind: "string", maxLength: 4_000 },
-  definitionOfDone: { kind: "string", maxLength: 4_000 },
+  description: { kind: "string", maxLength: PLANNING_LONG_TEXT_LIMIT },
+  problemStatement: { kind: "string", maxLength: PLANNING_LONG_TEXT_LIMIT },
+  intendedOutcome: { kind: "string", maxLength: PLANNING_LONG_TEXT_LIMIT },
+  scopeConstraints: { kind: "string", maxLength: PLANNING_LONG_TEXT_LIMIT },
+  acceptanceCriteria: { kind: "string-or-string-array", maxLength: PLANNING_LONG_TEXT_LIMIT },
+  evidenceRequired: { kind: "string", maxLength: PLANNING_LONG_TEXT_LIMIT },
+  definitionOfDone: { kind: "string", maxLength: PLANNING_LONG_TEXT_LIMIT },
   taskType: { kind: "enum", values: TEAM_PLANNING_ITEM_TYPES },
   parentTaskId: { kind: "string", maxLength: 120 },
   sprintId: { kind: "string", maxLength: 120 },
@@ -127,6 +129,7 @@ export type PlanningItemGitHubSyncResult =
     code: string;
     error: string;
     retryable: boolean;
+    lengthErrors?: ContentLengthError[];
   };
 
 export type TeamPlanningItemTokenRecord = {

@@ -1,3 +1,4 @@
+import type { ContentLengthError } from "../github-issue-content";
 import type { LinkedPullRequest } from "../types";
 
 export type TaskGitHubSyncCommand = {
@@ -14,6 +15,7 @@ export type TaskGitHubSyncErrorCode =
   | "github_sync_creation_required"
   | "github_sync_locked"
   | "github_sync_stale"
+  | "github_content_too_long"
   | "github_sync_failed"
   | "github_sync_unavailable"
   | "github_sync_state_persist_failed";
@@ -66,6 +68,7 @@ export type TaskGitHubProjectionFailure = {
   code: TaskGitHubSyncErrorCode;
   error: string;
   retryable: boolean;
+  lengthErrors?: ContentLengthError[];
   task?: TaskGitHubSyncPatch;
 };
 
@@ -102,6 +105,7 @@ const statusByErrorCode: Record<TaskGitHubSyncErrorCode, number> = {
   github_sync_creation_required: 409,
   github_sync_locked: 409,
   github_sync_stale: 409,
+  github_content_too_long: 422,
   github_sync_failed: 502,
   github_sync_unavailable: 503,
   github_sync_state_persist_failed: 503,
@@ -123,6 +127,7 @@ export function taskGitHubSyncFailure(
   code: TaskGitHubSyncErrorCode,
   error: string,
   task?: TaskGitHubSyncPatch,
+  lengthErrors?: ContentLengthError[],
 ): TaskGitHubProjectionFailure {
   return {
     ok: false,
@@ -130,6 +135,7 @@ export function taskGitHubSyncFailure(
     error,
     retryable: retryableCodes.has(code),
     ...(task ? { task } : {}),
+    ...(lengthErrors?.length ? { lengthErrors } : {}),
   };
 }
 

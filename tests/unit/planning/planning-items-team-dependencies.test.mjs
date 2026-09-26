@@ -183,7 +183,7 @@ test("the v2 OpenAPI contract documents dependencies and review evidence", async
     "utf8",
   ));
 
-  assert.equal(contract.info.version, "2.2.0");
+  assert.equal(contract.info.version, "2.3.0");
   assert.ok(contract.components.schemas.ContextResponse.properties.context.required.includes("dependencies"));
   assert.equal(
     contract.components.schemas.ContextResponse.properties.context.properties.dependencies.items.$ref,
@@ -201,4 +201,25 @@ test("the v2 OpenAPI contract documents dependencies and review evidence", async
     contract.components.schemas.PlanningDependencyChangeRelationship.properties.relationshipId.type,
     ["integer", "null"],
   );
+});
+
+
+test("the v2 OpenAPI contract exposes lossless limits and structured validation errors", async () => {
+  const contract = JSON.parse(await readFile(new URL("../../../public/founderops-team-planning-items-v2-openapi.json", import.meta.url), "utf8"));
+  const schemas = contract.components.schemas;
+  for (const name of ["PlanningItemCreate", "PatchPayload"]) {
+    assert.equal(schemas[name].properties.title.maxLength, 240);
+    for (const field of ["description", "problemStatement", "intendedOutcome", "scopeConstraints", "evidenceRequired", "definitionOfDone"]) {
+      assert.equal(schemas[name].properties[field].maxLength, 65_536);
+    }
+  }
+  assert.equal(schemas.AcceptanceCriteria.oneOf[0].maxLength, 65_536);
+  assert.deepEqual(schemas.ContentLengthError.required, ["field", "actual", "maximum", "excess", "message"]);
+  assert.equal(schemas.AuthorizedErrorResponse.properties.lengthErrors.items.$ref, "#/components/schemas/ContentLengthError");
+  for (const response of ["AuthorizedResponse", "AuthorizedErrorResponse"]) {
+    assert.equal(schemas[response].properties.items.items.$ref, "#/components/schemas/PlanningItemCreateDiagnostic");
+  }
+  assert.equal(schemas.PlanningItemCreateDiagnostic.properties.lengthErrors.items.$ref, "#/components/schemas/ContentLengthError");
+  assert.equal(schemas.PlanningGitHubSyncResult.properties.lengthErrors.items.$ref, "#/components/schemas/ContentLengthError");
+  assert.ok(contract.paths["/api/team/planning-items/v2/items/{id}/github-sync"].post.responses["422"]);
 });

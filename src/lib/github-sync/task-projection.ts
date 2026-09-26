@@ -1,3 +1,4 @@
+import { GitHubContentLengthError } from "../github-issue-content";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deliverPendingGitHubComments } from "../github-comment-delivery";
 import { deliverPendingGitHubReviews } from "../github-review-delivery";
@@ -501,13 +502,13 @@ export async function projectTaskToGitHub({
         githubSyncStatePersistFailedMessage,
       );
     } else {
-      projectionResult = taskGitHubSyncFailure("github_sync_failed", message, {
+      projectionResult = taskGitHubSyncFailure(error instanceof GitHubContentLengthError ? "github_content_too_long" : "github_sync_failed", message, {
         githubIssueSyncStatus: "failed",
         githubIssueSyncError: message,
         updatedAt: typeof failurePersistence.data?.updated_at === "string"
           ? failurePersistence.data.updated_at
           : "",
-      });
+      }, error instanceof GitHubContentLengthError ? error.issues : undefined);
     }
   }
 

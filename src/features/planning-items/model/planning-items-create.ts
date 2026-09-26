@@ -1,3 +1,7 @@
+import { codepointLength } from "@/lib/github-issue-content";
+import { planningText, planningCriteria, validatePlanningContent } from "./planning-item-content";
+import { planningContentContext } from "./planning-item-content-server";
+import type { ContentLengthError } from "@/lib/github-issue-content";
 import { createHash } from "node:crypto";
 import type { AuthenticatedProfile } from "@/lib/types";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
@@ -74,6 +78,7 @@ export type PlanningItemCreateInput = {
 
 export type PlanningItemCreatePreviewItem = {
   clientId: string;
+  lengthErrors?: ContentLengthError[];
   itemType: TeamPlanningItemType;
   title: string;
   description: string;
@@ -213,6 +218,7 @@ export async function buildPlanningItemCreatePreview(
   items: PlanningItemCreateInput[],
   actor: AuthenticatedProfile,
   supabase: SupabaseServer,
+  idempotencyKey = "00000000-0000-4000-8000-000000000000",
 ) {
   const [profilesResult, parentsResult] = await Promise.all([
     supabase.from("profiles").select("id,name"),
@@ -228,6 +234,7 @@ export async function buildPlanningItemCreatePreview(
   const profileIds = new Set((profilesResult.data || []).map((profile) => profile.id));
   const parents = new Map((parentsResult.data || []).map((parent) => [parent.id, parent as ParentRow]));
 
+  const contentContext = await planningContentContext(supabase, items.map((item) => ({ ...createBrief(item), id: "", title: planningText(item.title), taskType: itemTypeForInput(item.itemType).itemType || "deliverable" })));
   return items.map((raw, index): PlanningItemCreatePreviewItem => {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -243,9 +250,9 @@ export async function buildPlanningItemCreatePreview(
       errors.push("GitHub-Sync ist für Epic und Initiative nicht verfügbar.");
     }
 
-    const title = intakeText(raw.title, 240);
-    if (title.length < 3) errors.push("Titel ist erforderlich.");
-    const description = intakeText(raw.description, 4_000);
+    const title = planningText(raw.title);
+    if (codepointLength(title) < 3) errors.push("Titel ist erforderlich.");
+    const description = planningText(raw.description);
     const ownerId = intakeText(raw.ownerId, 120) || (itemType === "sub_issue" ? actor.id : "");
     if ((itemType === "epic" || itemType === "initiative") && !ownerId) {
       errors.push(`${itemType === "epic" ? "Epic" : "Initiative"} braucht einen Owner.`);
@@ -329,11 +336,9 @@ export async function buildPlanningItemCreatePreview(
 
     if (itemType === "initiative") {
       Object.assign(preview, {
-        intendedOutcome: intakeText(raw.intendedOutcome, 4_000) || description,
-        scopeConstraints: intakeText(raw.scopeConstraints, 4_000),
-        acceptanceCriteria: Array.isArray(raw.acceptanceCriteria)
-          ? raw.acceptanceCriteria.map((value) => intakeText(value, 1_000)).filter(Boolean).join("\n")
-          : intakeText(raw.acceptanceCriteria, 6_000),
+        intendedOutcome: planningText(raw.intendedOutcome) || description,
+        scopeConstraints: planningText(raw.scopeConstraints),
+        acceptanceCriteria: planningCriteria(raw.acceptanceCriteria),
         priority: intakePriority(raw.priority),
         accountableProfileId,
         responsibleProfileIds,
@@ -343,14 +348,12 @@ export async function buildPlanningItemCreatePreview(
     }
     if (itemType === "deliverable" || itemType === "sub_issue") {
       Object.assign(preview, {
-        problemStatement: intakeText(raw.problemStatement, 4_000),
-        intendedOutcome: intakeText(raw.intendedOutcome, 4_000),
-        scopeConstraints: intakeText(raw.scopeConstraints, 4_000),
-        acceptanceCriteria: Array.isArray(raw.acceptanceCriteria)
-          ? raw.acceptanceCriteria.map((value) => intakeText(value, 1_000)).filter(Boolean).join("\n")
-          : intakeText(raw.acceptanceCriteria, 6_000),
-        evidenceRequired: intakeText(raw.evidenceRequired, 4_000),
-        definitionOfDone: intakeText(raw.definitionOfDone, 4_000),
+        problemStatement: planningText(raw.problemStatement),
+        intendedOutcome: planningText(raw.intendedOutcome),
+        scopeConstraints: planningText(raw.scopeConstraints),
+        acceptanceCriteria: planningCriteria(raw.acceptanceCriteria),
+        evidenceRequired: planningText(raw.evidenceRequired),
+        definitionOfDone: planningText(raw.definitionOfDone),
         githubRepo,
         scoreRelevant: false,
       });
@@ -363,6 +366,8 @@ export async function buildPlanningItemCreatePreview(
         });
       }
     }
+    const lengthErrors = validatePlanningContent({ ...preview, id: `${actor.id}-planning-items-v1-${idempotencyKey.replaceAll("-", "")}-${index + 1}`, taskType: itemType }, contentContext);
+    if (lengthErrors.length) { preview.lengthErrors = lengthErrors; errors.push(...lengthErrors.map((error) => error.message)); }
     if (githubSync) preview.githubSync = githubSync;
     return preview;
   });
@@ -371,6 +376,7 @@ export async function buildPlanningItemCreatePreview(
 export function planningItemCreateCommitItem(item: PlanningItemCreatePreviewItem) {
   const result = { ...item } as Partial<PlanningItemCreatePreviewItem>;
   delete result.errors;
+  delete result.lengthErrors;
   delete result.warnings;
   delete result.githubSync;
   return result;
@@ -451,15 +457,13 @@ function providerErrorMessage(error: unknown) {
 
 function createBrief(raw: PlanningItemCreateInput) {
   return {
-    description: intakeText(raw.description, 4_000),
-    problemStatement: intakeText(raw.problemStatement, 4_000),
-    intendedOutcome: intakeText(raw.intendedOutcome, 4_000),
-    scopeConstraints: intakeText(raw.scopeConstraints, 4_000),
-    acceptanceCriteria: Array.isArray(raw.acceptanceCriteria)
-      ? raw.acceptanceCriteria.map((value) => intakeText(value, 1_000)).filter(Boolean).join("\n")
-      : intakeText(raw.acceptanceCriteria, 6_000),
-    evidenceRequired: intakeText(raw.evidenceRequired, 4_000),
-    definitionOfDone: intakeText(raw.definitionOfDone, 4_000),
+    description: planningText(raw.description),
+    problemStatement: planningText(raw.problemStatement),
+    intendedOutcome: planningText(raw.intendedOutcome),
+    scopeConstraints: planningText(raw.scopeConstraints),
+    acceptanceCriteria: planningCriteria(raw.acceptanceCriteria),
+    evidenceRequired: planningText(raw.evidenceRequired),
+    definitionOfDone: planningText(raw.definitionOfDone),
   };
 }
 
@@ -470,7 +474,7 @@ export function planningItemCreateCommand(items: readonly PlanningItemCreateInpu
     items: items.map((raw): NewPlanningItem => {
       const type = itemTypeForInput(raw.itemType);
       const kind = type.itemType || "deliverable";
-      const title = intakeText(raw.title, 240);
+      const title = planningText(raw.title);
       const ownerId = intakeText(raw.ownerId, 120) || (kind === "sub_issue" ? actorProfileId : "") || null;
       const statusErrors: string[] = [];
       const status = normalizedStatus(kind, raw.status, statusErrors);
@@ -478,7 +482,7 @@ export function planningItemCreateCommand(items: readonly PlanningItemCreateInpu
         kind,
         title,
         ownerId,
-        description: intakeText(raw.description, 4_000),
+        description: planningText(raw.description),
         status: status as Extract<NewPlanningItem, { kind: "epic" }>["status"],
         targetDate: intakeDate(raw.targetDate) || null,
       };
@@ -486,15 +490,13 @@ export function planningItemCreateCommand(items: readonly PlanningItemCreateInpu
         kind,
         title,
         ownerId,
-        description: intakeText(raw.description, 4_000),
+        description: planningText(raw.description),
         status: status as Extract<NewPlanningItem, { kind: "initiative" }>["status"],
         parentId: intakeText(raw.parentTaskId, 120) || null,
         strategy: {
-          goal: intakeText(raw.intendedOutcome, 4_000) || intakeText(raw.description, 4_000),
-          successCriteria: Array.isArray(raw.acceptanceCriteria)
-            ? raw.acceptanceCriteria.map((value) => intakeText(value, 1_000)).filter(Boolean).join("\n")
-            : intakeText(raw.acceptanceCriteria, 6_000),
-          scopeConstraints: intakeText(raw.scopeConstraints, 4_000),
+          goal: planningText(raw.intendedOutcome) || planningText(raw.description),
+          successCriteria: planningCriteria(raw.acceptanceCriteria),
+          scopeConstraints: planningText(raw.scopeConstraints),
         },
         raciAssignments: [
           ...(intakeText(raw.accountableProfileId, 120) ? [{ profileId: intakeText(raw.accountableProfileId, 120), role: "accountable" as const, sortOrder: 0 }] : []),
@@ -610,7 +612,7 @@ async function prepareTeamCreate(
   const preview = await buildPlanningItemCreatePreview([...dependencies.rawItems], {
     id: request.actor.profileId,
     platformRole: request.actor.platformRole,
-  } as AuthenticatedProfile, dependencies.supabase);
+  } as AuthenticatedProfile, dependencies.supabase, request.idempotencyKey);
   dependencies.onPreview?.(preview);
   const githubSyncCommands = planningItemCreateGitHubSyncCommands([...dependencies.rawItems]);
   const requestHash = planningItemCreateHash(preview, dependencies.githubSyncMode, githubSyncCommands);

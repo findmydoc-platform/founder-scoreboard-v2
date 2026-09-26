@@ -1,0 +1,2 @@
+export const PLANNING_LONG_TEXT_LIMIT = 65_536;
+export const PLANNING_TITLE_LIMIT = 240;

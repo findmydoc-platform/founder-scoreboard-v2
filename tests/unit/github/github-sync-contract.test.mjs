@@ -5,6 +5,7 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 const contract = await importTestModule("src/lib/github-sync/contract.ts");
 
 const errorCases = [
+  ["github_content_too_long", 422, false],
   ["github_sync_unauthenticated", 401, false],
   ["github_sync_forbidden", 403, false],
   ["github_sync_not_found", 404, false],
@@ -74,6 +75,7 @@ const success = {
 test("GitHub sync client classifier handles every contract code", () => {
   assert.equal(contract.classifyTaskGitHubSyncResponse(200, success).kind, "success");
   const expected = new Map([
+    ["github_content_too_long", ["failure", "failed"]],
     ["github_sync_unauthenticated", ["failure", "failed"]],
     ["github_sync_forbidden", ["failure", "failed"]],
     ["github_sync_not_found", ["failure", "failed"]],

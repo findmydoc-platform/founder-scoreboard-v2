@@ -97,6 +97,7 @@ export async function handleTeamPlanningItemUpdatePreview(
       changedFields: preview.changedFields,
       systemEffects: preview.systemEffects,
       errors: preview.errors,
+      ...(preview.lengthErrors?.length ? { lengthErrors: preview.lengthErrors } : {}),
       warnings: preview.warnings,
       ...(parsed.githubSync && !isStrategicPlanningItemType(preview.itemType) ? {
         githubSync: previewPlanningItemGitHubSync({
