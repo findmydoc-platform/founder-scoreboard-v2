@@ -71,7 +71,7 @@ function client(options: ClientOptions = {}): BrowserApiClient {
         return response({ connection: { state: "not_connected", connectedAt: null, refreshedAt: null, lastUsedAt: null, accessTokenExpiresAt: null } });
       }
       if (path === "/api/google-workspace/disconnect") {
-        return response({ disconnect: { state: "idle", activePublicationCount: 0, futureSeriesCount: 0, pendingSeriesCount: 0, teamVisibilityWillBeDisabled: false, connectionWillBeRevoked: true } });
+        return response({ disconnect: { state: "idle", activePublicationCount: 0, futureSeriesCount: 0, pendingSeriesCount: 0, teamVisibilityWillBeDisabled: false } });
       }
       throw new Error(`Unexpected request: ${path}`);
     },

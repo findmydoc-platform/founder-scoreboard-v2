@@ -24,7 +24,7 @@ const readCachedHeaderQuickLinks = unstable_cache(
     if (result.state === "error") throw new Error(result.error || "Quick links are unavailable.");
     return result;
   },
-  ["planning-header-quick-links-v1"],
+  ["planning-header-quick-links-v2"],
   { revalidate: sharedHeaderCacheSeconds, tags: [sharedHeaderCacheTags.quickLinks] },
 );
 

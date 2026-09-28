@@ -258,7 +258,7 @@ test("manual disconnect resumes partial cleanup, deactivates before revoke, and 
         ? { state: "delayed", errorClass: "provider_unavailable" }
         : { state: "confirmed", etag: '"etag-b2"', observedAt: "2026-08-25T12:01:00.000Z" };
     },
-    revoke: async () => {
+    removeConnection: async () => {
       assert.equal(state.operation.state, "revoke_pending");
       revokes += 1;
     },
@@ -282,7 +282,7 @@ test("manual disconnect resumes partial cleanup, deactivates before revoke, and 
   assert.equal(revokes, 1);
 });
 
-test("lost revocation response stays revoke-pending and retries without calendar writes", async () => {
+test("local removal retries without calendar writes or provider revocation", async () => {
   const state = fakeState();
   state.operation = { ...operation(), state: "revoke_pending", deactivated_at: "2026-08-25T12:00:00.000Z" };
   const clients = fakeClients(state);
@@ -291,20 +291,28 @@ test("lost revocation response stays revoke-pending and retries without calendar
     ...clients,
     ownerProfileId: "profile-1",
     observe: async ({ target: observedTarget }) => ({ state: "present", etag: observedTarget.expectedEtag }),
-    revoke: async () => {
+    removeConnection: async () => {
       revokeAttempts += 1;
       if (revokeAttempts === 1) throw new Error("lost response");
     },
   });
-  assert.deepEqual(first, { state: "revoke_pending", recovery: "retry" });
+  assert.deepEqual(first, { state: "remove_pending", recovery: "retry" });
   const second = await disconnectServer.disconnectGoogleWorkspace({
     ...clients,
     ownerProfileId: "profile-1",
     observe: async ({ target: observedTarget }) => ({ state: "present", etag: observedTarget.expectedEtag }),
-    revoke: async () => { revokeAttempts += 1; },
+    removeConnection: async () => { revokeAttempts += 1; },
   });
   assert.deepEqual(second, { state: "completed", recovery: null });
   assert.equal(revokeAttempts, 2);
+});
+
+test("legacy persisted state exposes only the local removal contract", async () => {
+  const state = fakeState();
+  state.operation = { ...operation(), state: "revoke_pending" };
+  const view = await disconnectServer.getGoogleWorkspaceDisconnectView(fakeClients(state).serviceSupabase, "profile-1");
+  assert.equal(view.state, "remove_pending");
+  assert.equal("connectionWillBeRevoked" in view, false);
 });
 
 test("an already revoked connection deactivates the team week and leaves cleanup pending", async () => {
@@ -329,7 +337,7 @@ test("an already revoked connection deactivates the team week and leaves cleanup
       providerWrites += 1;
       return { state: "confirmed" };
     },
-    revoke: async () => {
+    removeConnection: async () => {
       revokes += 1;
     },
     now: () => new Date("2026-08-25T12:03:00.000Z"),
@@ -398,7 +406,7 @@ test("a marker-stable ETag change rebases once before cleanup resumes", async ()
       providerWrites += 1;
       return { state: "confirmed", etag: '"etag-b"', observedAt: "2026-08-25T12:04:00.000Z" };
     },
-    revoke: async () => undefined,
+    removeConnection: async () => undefined,
     now: () => new Date("2026-08-25T12:04:00.000Z"),
   };
   const rebased = await disconnectServer.disconnectGoogleWorkspace(input);

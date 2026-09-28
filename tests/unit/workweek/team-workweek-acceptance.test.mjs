@@ -420,7 +420,7 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
       },
       observe: async ({ target }) => ({ state: "present", etag: target.expectedEtag }),
       ensureAbsent: async (input) => ensureGoogleWorkweekSeriesAbsent({ ...input, fetchImpl }),
-      revoke: async (_supabase, requestedProfileId) => {
+      removeConnection: async (_supabase, requestedProfileId) => {
         assert.equal(requestedProfileId, profileId);
         assert.equal(vault.operations.get(requestedProfileId)?.state, "revoke_pending");
         assert.equal(vault.connections.delete(requestedProfileId), true);

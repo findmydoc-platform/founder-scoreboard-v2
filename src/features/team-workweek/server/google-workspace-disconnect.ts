@@ -38,12 +38,11 @@ type DisconnectTargetRow = Readonly<{
 }>;
 
 export type GoogleWorkspaceDisconnectView = Readonly<{
-  state: "idle" | "cleaning" | "cleanup_pending" | "revoke_pending" | "completed";
+  state: "idle" | "cleaning" | "cleanup_pending" | "remove_pending" | "completed";
   activePublicationCount: number;
   futureSeriesCount: number;
   pendingSeriesCount: number;
   teamVisibilityWillBeDisabled: boolean;
-  connectionWillBeRevoked: boolean;
 }>;
 
 export class GoogleWorkspaceDisconnectError extends Error {
@@ -116,12 +115,11 @@ export async function getGoogleWorkspaceDisconnectView(
   }
   const pendingSeriesCount = operationTargets.filter((target) => target.state === "pending").length;
   return {
-    state: operation?.state || "idle",
+    state: operation?.state === "revoke_pending" ? "remove_pending" : operation?.state || "idle",
     activePublicationCount: publications.length,
     futureSeriesCount: operation ? operationTargets.length : futureSeriesCount,
     pendingSeriesCount,
     teamVisibilityWillBeDisabled: publications.length > 0,
-    connectionWillBeRevoked: operation?.revoke_connection ?? true,
   };
 }
 
@@ -265,7 +263,7 @@ export async function disconnectGoogleWorkspace({
   now = () => new Date(),
   observe = observeGoogleWorkweekSeriesForDisconnect,
   ownerProfileId,
-  revoke = removeGoogleWorkspaceConnection,
+  removeConnection = removeGoogleWorkspaceConnection,
   serviceSupabase,
 }: {
   ensureAbsent?: typeof ensureGoogleWorkweekSeriesAbsent;
@@ -274,7 +272,7 @@ export async function disconnectGoogleWorkspace({
   now?: () => Date;
   observe?: typeof observeGoogleWorkweekSeriesForDisconnect;
   ownerProfileId: string;
-  revoke?: typeof removeGoogleWorkspaceConnection;
+  removeConnection?: typeof removeGoogleWorkspaceConnection;
   serviceSupabase: SupabaseClient;
 }) {
   let operation = await openOperation(serviceSupabase, ownerProfileId);
@@ -321,16 +319,16 @@ export async function disconnectGoogleWorkspace({
 
   if (operation.state === "revoke_pending") {
     try {
-      await revoke(serviceSupabase, ownerProfileId);
+      await removeConnection(serviceSupabase, ownerProfileId);
     } catch {
-      return { state: "revoke_pending" as const, recovery: "retry" as const };
+      return { state: "remove_pending" as const, recovery: "retry" as const };
     }
     const completed = await serviceSupabase.rpc("complete_google_workspace_disconnect", {
       p_operation_id: operation.id,
       p_owner_profile_id: ownerProfileId,
       p_completed_at: now().toISOString(),
     });
-    if (completed.error) throw new GoogleWorkspaceDisconnectError("unavailable", "Trennung wurde extern bestätigt, aber lokal noch nicht abgeschlossen.");
+    if (completed.error) throw new GoogleWorkspaceDisconnectError("unavailable", "Google-Verbindung wurde lokal entfernt, aber die Trennung ist noch nicht abgeschlossen.");
   }
   return { state: "completed" as const, recovery: null };
 }

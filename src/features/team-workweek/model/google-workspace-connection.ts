@@ -9,12 +9,11 @@ export type GoogleWorkspaceConnectionStatus = Readonly<{
 }>;
 
 export type GoogleWorkspaceDisconnectView = Readonly<{
-  state: "idle" | "cleaning" | "cleanup_pending" | "revoke_pending" | "completed";
+  state: "idle" | "cleaning" | "cleanup_pending" | "remove_pending" | "completed";
   activePublicationCount: number;
   futureSeriesCount: number;
   pendingSeriesCount: number;
   teamVisibilityWillBeDisabled: boolean;
-  connectionWillBeRevoked: boolean;
 }>;
 
 export function googleWorkspaceConnectionLabel(state: GoogleWorkspaceConnectionState) {
