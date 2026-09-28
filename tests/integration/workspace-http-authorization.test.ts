@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
@@ -34,13 +34,13 @@ it("blocks direct REST, RPC and Storage while the server relay retains user-cont
     expect((await fetch(`${local.API_URL}/rest/v1/profiles?select=id`, { headers })).status).toBe(403);
     expect((await fetch(`${local.API_URL}/rest/v1/rpc/current_authenticated_profile`, { method: "POST", headers })).status).toBe(403);
     const permit = randomUUID();
-    const digest = (value: string) => createHash("sha256").update(value).digest("hex");
-    const issued = await service.rpc("workspace_issue_permit", { p_hash:digest(permit),p_user_id:userId,p_jwt_hash:digest(token),p_method:"GET",p_path:"/profiles" });
+    const digest = async (value: string) => (await database.query<{ hash: string }>("select encode(digest($1, 'sha256'), 'hex') as hash", [value])).rows[0].hash;
+    const issued = await service.rpc("workspace_issue_permit", { p_hash:await digest(permit),p_user_id:userId,p_jwt_hash:await digest(token),p_method:"GET",p_path:"/profiles" });
     expect(issued.error).toBeNull();
     const accepted = await fetch(`${local.API_URL}/rest/v1/profiles?select=id&id=eq.${profile}`, { headers: { ...headers, "x-founderops-workspace-permit":permit } });
     expect(accepted.status).toBe(200);
     expect(await accepted.json()).toEqual([{ id: profile }]);
-    await service.rpc("workspace_release_permit", { p_hash:digest(permit) });
+    await service.rpc("workspace_release_permit", { p_hash:await digest(permit) });
     expect((await fetch(`${local.API_URL}/rest/v1/profiles?select=id`, { headers: { ...headers, "x-founderops-workspace-permit":permit } })).status).toBe(403);
     const uploaded = await service.storage.from("fmd-tool-previews").upload(image, new Uint8Array([137,80,78,71]), { contentType:"image/png" });
     expect(uploaded.error).toBeNull();

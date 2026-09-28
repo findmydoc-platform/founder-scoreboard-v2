@@ -7,11 +7,11 @@ test("uses existing WIF resources, caches only the service credential and rechec
   vi.stubEnv("GOOGLE_WORKSPACE_SERVICE_ACCOUNT", "reader@example.iam.gserviceaccount.com");
   let memberships = 0;
   const network = vi.fn(async (url, init) => {
-    if (url.includes("sts.googleapis.com")) {
+    if (new URL(url).hostname === "sts.googleapis.com") {
       expect(JSON.parse(init.body).audience).toBe("configured-audience");
       return Response.json({ access_token:"test-sts" });
     }
-    if (url.includes("iamcredentials.googleapis.com")) return Response.json({ accessToken:"test-reader",expireTime:new Date(Date.now()+3_600_000).toISOString() });
+    if (new URL(url).hostname === "iamcredentials.googleapis.com") return Response.json({ accessToken:"test-reader",expireTime:new Date(Date.now()+3_600_000).toISOString() });
     memberships++;
     return Response.json({ isMember:memberships===1 });
   });
