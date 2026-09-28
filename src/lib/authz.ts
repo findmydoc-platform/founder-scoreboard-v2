@@ -66,7 +66,7 @@ function mapAuthzProfile(profile: AuthzProfileRow): AuthenticatedProfile {
   };
 }
 
-async function authenticateUser(supabase: SupabaseClient): Promise<{ ok: true; user: User } | AuthzFailure> {
+async function authenticateUser(supabase: SupabaseClient, bearerAccessToken?: string): Promise<{ ok: true; user: User } | AuthzFailure> {
   try {
     const { data: userResult, error: userError } = await supabase.auth.getUser();
     if (isAuthRetryableFetchError(userError)) {
@@ -82,9 +82,14 @@ async function authenticateUser(supabase: SupabaseClient): Promise<{ ok: true; u
     }
     const identity = await requireWorkspaceAccess({ userId: userResult.user.id });
     if (identity) {
-      const { data: sessionResult, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !sessionResult.session?.access_token) throw new WorkspaceAccessError(403, "workspace_google_login_required");
-      await assertGoogleSession(sessionResult.session.access_token, userResult.user.id);
+      let accessToken = bearerAccessToken;
+      if (!accessToken) {
+        const { data: sessionResult, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
+        if (!sessionResult.session?.access_token) throw new WorkspaceAccessError(403, "workspace_google_login_required");
+        accessToken = sessionResult.session.access_token;
+      }
+      await assertGoogleSession(accessToken, userResult.user.id);
     }
     return { ok: true, user: userResult.user };
   } catch (error) {
@@ -136,7 +141,7 @@ async function requirePlatformRole(
   const supabase = token ? getSupabaseForToken(token) : null;
   if (!supabase) return { ok: false, status: 401, error: "Anmeldung erforderlich." };
 
-  const authentication = await authenticateUser(supabase);
+  const authentication = await authenticateUser(supabase, token);
   if (!authentication.ok) return authentication;
 
   return authorizeUser(supabase, authentication.user, allowedRoles, {
@@ -213,7 +218,7 @@ async function requireAdministratorCapability(
   const supabase = token ? getSupabaseForToken(token) : null;
   if (!supabase) return { ok: false, status: 401, error: "Anmeldung erforderlich." };
 
-  const authentication = await authenticateUser(supabase);
+  const authentication = await authenticateUser(supabase, token);
   if (!authentication.ok) return authentication;
   const authorization = await authorizeUser(supabase, authentication.user, teamMemberRoles);
   if (!authorization.ok || !authorization.profile) return authorization;
@@ -255,7 +260,7 @@ async function requirePlatformRoleOrOperationalCorrection(
   const supabase = token ? getSupabaseForToken(token) : null;
   if (!supabase) return { ok: false, status: 401, error: "Anmeldung erforderlich." };
 
-  const authentication = await authenticateUser(supabase);
+  const authentication = await authenticateUser(supabase, token);
   if (!authentication.ok) return authentication;
   const authorization = await authorizeUser(supabase, authentication.user, teamMemberRoles);
   if (!authorization.ok || !authorization.profile) return authorization;

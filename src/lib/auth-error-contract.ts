@@ -15,3 +15,10 @@ export function isInvalidSessionBeforeEffectBody(body: unknown) {
   if (!body || typeof body !== "object") return false;
   return "code" in body && body.code === invalidSessionBeforeEffectErrorCode;
 }
+
+export function workspaceTransitionTarget(body: unknown): string | null {
+  if (!body || typeof body !== "object" || !("code" in body)) return null;
+  if (body.code === "workspace_link_required") return "/auth/link-google";
+  if (body.code === "workspace_google_login_required") return "/auth/login?provider=google";
+  return null;
+}

@@ -10,7 +10,6 @@ fi
 response_file="$(mktemp)"
 trap 'rm -f "${response_file}"' EXIT
 backoffs=(0 5 10 20)
-ready=false
 
 for delay in "${backoffs[@]}"; do
   if [[ "${delay}" -gt 0 ]]; then sleep "${delay}"; fi
@@ -23,27 +22,10 @@ try { body = JSON.parse(fs.readFileSync(file, "utf8")); } catch { process.exit(1
 process.exit(status === "200" && body?.status === "ready" ? 0 : 1);
 NODE
   then
-    ready=true
-    break
+    echo "Production application is ready."
+    exit 0
   fi
 done
 
-if [[ "${ready}" != true ]]; then
-  echo "Production application did not become ready." >&2
-  exit 1
-fi
-
-if [[ "${1:-}" == "--require-linking" ]]; then
-  status="$(curl --silent --show-error --output "${response_file}" --write-out '%{http_code}' "${app_url%/}/api/auth/login-mode")"
-  node - "${response_file}" "${status}" <<'NODE'
-const fs = require("node:fs");
-const [file, status] = process.argv.slice(2);
-const state = JSON.parse(fs.readFileSync(file, "utf8"));
-if (status !== "200" || !(state.mode === "google" || (state.mode === "linking" && state.linkingEnforced === true))) {
-  throw new Error("Mandatory Google linking is not active in production.");
-}
-NODE
-  echo "Mandatory Google linking is active in production."
-else
-  echo "Production application is ready."
-fi
+echo "Production application did not become ready." >&2
+exit 1

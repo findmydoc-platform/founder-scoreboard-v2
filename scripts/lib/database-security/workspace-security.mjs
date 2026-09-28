@@ -18,7 +18,7 @@ export async function verifyWorkspaceSecurity(client, failures) {
     limit 1`);
   if (!previewBoundary.rowCount) failures.push("Workspace preview Storage boundary missing");
   for (const role of ["anon", "authenticated"]) {
-    for (const signature of ["public.workspace_record_google_login(uuid,uuid,text)", "public.workspace_linking_session_allowed(uuid,uuid)"]) {
+    for (const signature of ["public.workspace_record_google_login(uuid,uuid,text)", "public.workspace_linking_session_allowed(uuid,uuid)", "public.workspace_issue_permit(text,uuid,text,text,text,uuid)"]) {
       const access = await client.query("select has_function_privilege($1,$2,'execute') as allowed", [role, signature]);
       if (access.rows[0]?.allowed) failures.push(`${signature} exposed to ${role}`);
     }

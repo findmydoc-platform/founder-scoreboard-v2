@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { asAuthenticated, captureDatabaseError, withIsolatedLocalDatabase } from "./helpers/local-database";
 
 const uid = "61000000-0000-0000-0000-000000000001";
+const sessionId = "63000000-0000-0000-0000-000000000001";
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 
 it("requires a server permit in addition to the existing user role and consumes write permits", async () => {
@@ -11,10 +12,11 @@ it("requires a server permit in addition to the existing user role and consumes 
     await client.query("insert into public.profiles(id,auth_user_id,name,platform_role) values ('workspace-founder',$1,'Workspace Founder','founder')", [uid]);
     await client.query("insert into workspace_private.identity_bindings(user_id,google_subject) values ($1,'google-1')", [uid]);
     await client.query("update workspace_private.configuration set mode = 'google'");
+    await client.query("insert into auth.sessions(id,user_id,created_at) values ($1,$2,clock_timestamp())", [sessionId, uid]);
     await client.query("select set_config('request.method','POST',true), set_config('request.path','/rpc/current_authenticated_profile',true)");
     const denied = await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_check_request()")));
     expect(denied).toMatchObject({ code: "42501" });
-    await client.query("select public.workspace_issue_permit($1,$2,$3,'POST','/rpc/current_authenticated_profile')", [digest("permit"), uid, digest("token")]);
+    await client.query("select public.workspace_issue_permit($1,$2,$3,'POST','/rpc/current_authenticated_profile',$4)", [digest("permit"), uid, digest("token"), sessionId]);
     await client.query("select set_config('request.headers',$1,true)", [JSON.stringify({ authorization: "Bearer token", "x-founderops-workspace-permit": "permit" })]);
     await asAuthenticated(client, uid, async () => {
       await client.query("select public.workspace_check_request()");
@@ -23,7 +25,7 @@ it("requires a server permit in addition to the existing user role and consumes 
     });
     const replay = await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_check_request()")));
     expect(replay).toMatchObject({ code: "42501" });
-    const issue = await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_issue_permit('forged',$1,'token','GET','/profiles')", [uid])));
+    const issue = await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_issue_permit('forged',$1,'token','GET','/profiles',$2)", [uid, sessionId])));
     expect(issue).toMatchObject({ code: "42501" });
   });
 });
@@ -47,7 +49,8 @@ it.each(["wrong-token", "wrong-path", "expired"])("rejects %s permits", async sc
     await client.query("insert into auth.users(id) values ($1)", [uid]);
     await client.query("insert into workspace_private.identity_bindings(user_id,google_subject) values ($1,'google-1')", [uid]);
     await client.query("update workspace_private.configuration set mode='google'");
-    await client.query("select public.workspace_issue_permit($1,$2,$3,'GET','/profiles')", [digest("permit"), uid, digest("token")]);
+    await client.query("insert into auth.sessions(id,user_id,created_at) values ($1,$2,clock_timestamp())", [sessionId, uid]);
+    await client.query("select public.workspace_issue_permit($1,$2,$3,'GET','/profiles',$4)", [digest("permit"), uid, digest("token"), sessionId]);
     if (scenario === "expired") await client.query("update workspace_private.request_permits set expires_at = now()-interval '1 second'");
     await client.query("select set_config('request.method','GET',true),set_config('request.path',$1,true),set_config('request.headers',$2,true)", [scenario === "wrong-path" ? "/tasks" : "/profiles", JSON.stringify({ authorization: scenario === "wrong-token" ? "Bearer other" : "Bearer token", "x-founderops-workspace-permit": "permit" })]);
     expect(await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_check_request()")))).toMatchObject({ code: "42501" });
@@ -102,5 +105,24 @@ it("admits only a server-approved Google login session for the bound user", asyn
     await client.query("select public.workspace_record_google_login($1,$2,'workspace-sub')", [uid, sessionId]);
     expect((await client.query("select public.workspace_linking_session_allowed($1,$2) as allowed", [uid, sessionId])).rows[0].allowed).toBe(true);
     expect(await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_record_google_login($1,$2,'workspace-sub')", [uid, sessionId])))).toMatchObject({ code: "42501" });
+  });
+});
+
+it("rejects a linking permit after the Google-only cutover", async () => {
+  await withIsolatedLocalDatabase(async client => {
+    await client.query("insert into auth.users(id) values ($1)", [uid]);
+    await client.query("insert into public.profiles(id,auth_user_id,name,platform_role) values ('workspace-founder',$1,'Workspace Founder','founder')", [uid]);
+    await client.query("insert into auth.identities(user_id,provider,provider_id,identity_data) values ($1,'google','workspace-sub',$2)", [uid, JSON.stringify({ sub: "workspace-sub", iss: "https://accounts.google.com", email: "member@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } })]);
+    await client.query("insert into workspace_private.identity_bindings(user_id,google_subject) values ($1,'workspace-sub')", [uid]);
+    await client.query("insert into auth.sessions(id,user_id,created_at) values ($1,$2,now())", [sessionId, uid]);
+    await client.query("update workspace_private.configuration set mode='linking', linking_enforced=true");
+    await client.query("select public.workspace_record_google_login($1,$2,'workspace-sub')", [uid, sessionId]);
+    await client.query("select public.workspace_issue_permit($1,$2,$3,'POST','/rpc/current_authenticated_profile',$4)", [digest("stale-permit"), uid, digest("token"), sessionId]);
+    const before = (await client.query("select access_generation from workspace_private.configuration")).rows[0].access_generation;
+    await client.query("update workspace_private.configuration set mode='google'");
+    expect(BigInt((await client.query("select access_generation from workspace_private.configuration")).rows[0].access_generation)).toBeGreaterThan(BigInt(before));
+    await client.query("select set_config('request.method','POST',true),set_config('request.path','/rpc/current_authenticated_profile',true),set_config('request.headers',$1,true)", [JSON.stringify({ authorization: "Bearer token", "x-founderops-workspace-permit": "stale-permit" })]);
+    expect(await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_check_request()")))).toMatchObject({ code: "42501" });
+    expect(await captureDatabaseError(client, () => client.query("select public.workspace_issue_permit($1,$2,$3,'POST','/rpc/current_authenticated_profile',$4)", [digest("new-permit"), uid, digest("token"), sessionId]))).toMatchObject({ code: "42501" });
   });
 });

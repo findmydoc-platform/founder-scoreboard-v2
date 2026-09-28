@@ -31,6 +31,47 @@ function jsonResponse(body, status = 200) {
   });
 }
 
+for (const [code, target] of [
+  ["workspace_link_required", "/auth/link-google"],
+  ["workspace_google_login_required", "/auth/login?provider=google"],
+]) {
+  for (const kind of ["json", "form", "blob"]) {
+    test(`${kind} requests navigate once for ${code} without replay or clearing the linking session`, async () => {
+      const session = sessionPort();
+      const onWorkspaceTransition = vi.fn();
+      const apiClient = browserApiModule.createBrowserApiClient({ sessionPort: session, onWorkspaceTransition });
+      const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ code }, 403));
+      globalThis.fetch = fetchMock;
+      const request = () => kind === "json"
+        ? apiClient.requestJson("/api/tasks/task-1", { method: "POST", json: { title: "Test" } })
+        : kind === "form"
+          ? apiClient.requestForm("/api/tasks/task-1/attachments", new FormData())
+          : apiClient.requestBlob("/api/export");
+
+      const results = await Promise.all([request(), request()]);
+
+      assert.deepEqual(results.map(result => result.response.status), [403, 403]);
+      assert.deepEqual(onWorkspaceTransition.mock.calls, [[target]]);
+      assert.equal(fetchMock.mock.calls.length, 2);
+      assert.equal(session.recover.mock.calls.length, 0);
+      assert.equal(session.clearIfCurrent.mock.calls.length, 0);
+    });
+  }
+}
+
+test("a Workspace dependency outage does not navigate to Google login", async () => {
+  const session = sessionPort();
+  const onWorkspaceTransition = vi.fn();
+  const apiClient = browserApiModule.createBrowserApiClient({ sessionPort: session, onWorkspaceTransition });
+  globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ code: "workspace_access_unavailable" }, 503));
+
+  const result = await apiClient.requestJson("/api/tasks/task-1");
+
+  assert.equal(result.response.status, 503);
+  assert.equal(onWorkspaceTransition.mock.calls.length, 0);
+  assert.equal(session.recover.mock.calls.length, 0);
+});
+
 test("a review mutation sends the browser credentials returned by the session port", async () => {
   const session = sessionPort({ snapshot: { accessToken: "fresh-token", userId: "user-a" } });
   const apiClient = browserApiModule.createBrowserApiClient({ sessionPort: session });

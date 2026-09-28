@@ -16,6 +16,7 @@ it("adds an inactive linking boundary without changing accounts or integrations"
     for (const role of ["anon", "authenticated"]) {
       expect((await client.query("select has_function_privilege($1,'public.workspace_record_google_login(uuid,uuid,text)','execute') as allowed", [role])).rows[0].allowed).toBe(false);
       expect((await client.query("select has_function_privilege($1,'public.workspace_linking_session_allowed(uuid,uuid)','execute') as allowed", [role])).rows[0].allowed).toBe(false);
+      expect((await client.query("select has_function_privilege($1,'public.workspace_issue_permit(text,uuid,text,text,text,uuid)','execute') as allowed", [role])).rows[0].allowed).toBe(false);
     }
   });
 });
