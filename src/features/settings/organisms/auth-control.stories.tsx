@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { AuthControl } from "./auth-control";
+import type { User } from "@supabase/supabase-js";
 
-function loginMode(mode: string) {
+function loginMode(mode: string, account?: { linked: boolean; workspaceEmail?: string }) {
   const previous = globalThis.fetch;
   globalThis.fetch = async (input, init) => String(input).includes("/api/auth/login-mode")
-    ? Response.json({ mode }) : previous(input, init);
+    ? Response.json({ mode }) : String(input).includes("/api/auth/account-state")
+      ? Response.json(account || { linked: false }) : previous(input, init);
   return () => { globalThis.fetch = previous; };
 }
 const meta = {
@@ -39,5 +41,21 @@ export const Linking: Story = {
   play: async ({ canvasElement }) => {
     await expect(await within(canvasElement).findByRole("button", { name: "Mit Google anmelden" })).toBeEnabled();
     await expect(within(canvasElement).getByRole("link", { name: "Bestehendes Konto mit Google verknüpfen" })).toHaveAttribute("href", "/auth/link-google");
+  },
+};
+
+export const LinkedAccount: Story = {
+  args: {
+    user: { id: "existing-user", aud: "authenticated", created_at: "2026-09-28T00:00:00Z", app_metadata: {}, email: "old@example.com", user_metadata: { full_name: "Founder", user_name: "old-github-handle" } } satisfies User,
+    variant: "header",
+  },
+  beforeEach: () => loginMode("linking", { linked: true, workspaceEmail: "founder@findmydoc.eu" }),
+  play: async ({ canvasElement }) => {
+    await userEvent.click(await within(canvasElement).findByRole("button", { name: "Account-Menü öffnen" }));
+    const menu = within(canvasElement).getByRole("dialog", { name: "Account und Testprofil" });
+    await expect(await within(menu).findByText("founder@findmydoc.eu")).toBeVisible();
+    await expect(within(menu).getByText("Google verbunden")).toBeVisible();
+    await expect(within(menu).queryByText("old@example.com")).not.toBeInTheDocument();
+    await expect(within(menu).queryByRole("link", { name: "Google-Konto verknüpfen" })).not.toBeInTheDocument();
   },
 };

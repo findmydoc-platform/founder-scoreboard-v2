@@ -130,6 +130,24 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
         run: bash ./.github/scripts/deploy/verify-production-application.sh
 
+      - name: Enforce Google account linking
+        id: activate_linking
+        if: steps.verify_production_app.outcome == 'success'
+        env:
+          SCHEMA_DEPLOY_TARGET: production
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          node .github/scripts/deploy/ensure-workspace-linking-enforcement.mjs --dry-run
+          node .github/scripts/deploy/ensure-workspace-linking-enforcement.mjs
+
+      - name: Verify Google linking enforcement
+        id: verify_linking
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: bash ./.github/scripts/deploy/verify-production-application.sh --require-linking
+
       - name: Reconcile Existing GitHub Comments
         if: steps.verify_production_app.outcome == 'success'
         env:
@@ -152,12 +170,17 @@ jobs:
         if: always()
         env:
           DEPLOYMENT_OUTCOME: ${{ steps.vercel_production.outcome }}
+          LINKING_ACTIVATION_OUTCOME: ${{ steps.activate_linking.outcome }}
+          LINKING_VERIFICATION_OUTCOME: ${{ steps.verify_linking.outcome }}
           DEPLOYMENT_URL: ${{ steps.vercel_production.outputs.deploymentUrl }}
         run: |
           {
             echo "## Production Deployment Summary"
-            if [[ "$DEPLOYMENT_OUTCOME" == "success" ]]; then
-              echo "- **Status**: Success"
+            if [[ "$DEPLOYMENT_OUTCOME" == "success" && "$LINKING_ACTIVATION_OUTCOME" == "success" && "$LINKING_VERIFICATION_OUTCOME" == "success" ]]; then
+              echo "- **Status**: Automated deployment checks passed; account acceptance remains pending"
+              echo "- **URL**: ${DEPLOYMENT_URL}"
+            elif [[ "$DEPLOYMENT_OUTCOME" == "success" ]]; then
+              echo "- **Status**: Google linking activation or verification failed"
               echo "- **URL**: ${DEPLOYMENT_URL}"
             else
               echo "- **Status**: Failed"

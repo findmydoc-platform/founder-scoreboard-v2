@@ -1,9 +1,10 @@
 import { test, expect, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-async function startWith(identities, { access = { subject: "google-subject" }, completeError = null } = {}) {
+async function startWith(identities, { access = { subject: "google-subject" }, completeError = null, linkingEnforced = false } = {}) {
   const calls = [];
   const linkIdentity = vi.fn(async () => ({ data: { url: "https://accounts.google.com/authorize" }, error: null }));
+  const signOut = vi.fn(async () => ({}));
   const setCookie = vi.fn();
   const requireWorkspaceAccess = vi.fn(async () => {
     if (access instanceof Error) throw access;
@@ -13,6 +14,7 @@ async function startWith(identities, { access = { subject: "google-subject" }, c
     "next/headers": { cookies: async () => ({ set: setCookie }) },
     "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: {
       getUser: async () => ({ data: { user: { id: "auth-user", identities } } }), linkIdentity,
+      signOut,
     } }) },
     "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => ({
       rpc: async (name, args) => {
@@ -22,11 +24,11 @@ async function startWith(identities, { access = { subject: "google-subject" }, c
     }) },
     "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu" },
     "@/lib/workspace-data-fetch": { sha256: value => value },
-    "@/lib/workspace-access": { requireWorkspaceAccess },
+    "@/lib/workspace-access": { requireWorkspaceAccess, workspaceAccessContext: async () => ({ linkingEnforced }) },
   });
   const url = "https://founder-ops.findmydoc.eu/auth/google-link/start";
   const response = await route.POST({ url, headers: new Headers({ origin: "https://founder-ops.findmydoc.eu" }) });
-  return { calls, linkIdentity, requireWorkspaceAccess, response, setCookie };
+  return { calls, linkIdentity, requireWorkspaceAccess, response, setCookie, signOut };
 }
 
 test("retry completes an already attached Google identity without another OAuth link", async () => {
@@ -48,6 +50,12 @@ test("a new link still starts OAuth after recording its attempt", async () => {
   expect(calls.map(call => call.name)).toEqual(["workspace_begin_link"]);
   expect(linkIdentity).toHaveBeenCalledOnce();
   expect(setCookie).toHaveBeenCalledWith("workspace_link", expect.any(String), expect.objectContaining({ httpOnly: true }));
+});
+
+test("an already attached identity requires a fresh Google login when linking is enforced", async () => {
+  const { response, signOut } = await startWith([{ provider: "google" }], { linkingEnforced: true });
+  expect(new URL(response.headers.get("location")).pathname).toBe("/auth/login");
+  expect(signOut).toHaveBeenCalledWith({ scope: "local" });
 });
 
 test.each([

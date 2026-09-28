@@ -5,6 +5,8 @@ export const administratorAccessExpiredErrorCode = "administrator_access_expired
 export type AuthErrorCode =
   | "workspace_access_denied"
   | "workspace_access_unavailable"
+  | "workspace_link_required"
+  | "workspace_google_login_required"
   | typeof invalidSessionBeforeEffectErrorCode
   | typeof administratorAccessRequiredErrorCode
   | typeof administratorAccessExpiredErrorCode;

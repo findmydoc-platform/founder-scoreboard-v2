@@ -72,3 +72,35 @@ it("links differing email identities to the existing profile and rejects mismatc
     expect(await captureDatabaseError(client, () => client.query("select public.workspace_complete_link($1,'nonce','workspace-sub')", [uid]))).toMatchObject({ code:"42501" });
   });
 });
+
+it("keeps linking open until activation and then denies direct database access", async () => {
+  await withIsolatedLocalDatabase(async client => {
+    await client.query("insert into auth.users(id) values ($1)", [uid]);
+    await client.query("insert into public.profiles(id,auth_user_id,name,platform_role) values ('workspace-founder',$1,'Workspace Founder','founder')", [uid]);
+    await client.query("update workspace_private.configuration set mode='linking'");
+    await client.query("select set_config('request.method','GET',true),set_config('request.path','/profiles',true)");
+    await asAuthenticated(client, uid, () => client.query("select public.workspace_check_request()"));
+    await client.query("update workspace_private.configuration set linking_enforced=true");
+    expect(await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_check_request()")))).toMatchObject({ code: "42501" });
+    await asAuthenticated(client, uid, async () => {
+      expect((await client.query("select id from public.profiles")).rows).toEqual([]);
+    });
+  });
+});
+
+it("admits only a server-approved Google login session for the bound user", async () => {
+  await withIsolatedLocalDatabase(async client => {
+    const sessionId = "63000000-0000-0000-0000-000000000001";
+    await client.query("insert into auth.users(id) values ($1)", [uid]);
+    await client.query("insert into public.profiles(id,auth_user_id,name,platform_role) values ('workspace-founder',$1,'Workspace Founder','founder')", [uid]);
+    await client.query("insert into auth.identities(user_id,provider,provider_id,identity_data) values ($1,'google','workspace-sub',$2)", [uid, JSON.stringify({ sub: "workspace-sub", iss: "https://accounts.google.com", email: "member@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } })]);
+    await client.query("insert into workspace_private.identity_bindings(user_id,google_subject) values ($1,'workspace-sub')", [uid]);
+    await client.query("insert into auth.sessions(id,user_id,created_at) values ($1,$2,now())", [sessionId, uid]);
+    await client.query("update workspace_private.configuration set mode='linking', linking_enforced=true");
+    expect((await client.query("select public.workspace_linking_session_allowed($1,$2) as allowed", [uid, sessionId])).rows[0].allowed).toBe(false);
+    expect(await captureDatabaseError(client, () => client.query("select public.workspace_record_google_login($1,$2,'wrong-sub')", [uid, sessionId]))).toMatchObject({ code: "42501" });
+    await client.query("select public.workspace_record_google_login($1,$2,'workspace-sub')", [uid, sessionId]);
+    expect((await client.query("select public.workspace_linking_session_allowed($1,$2) as allowed", [uid, sessionId])).rows[0].allowed).toBe(true);
+    expect(await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_record_google_login($1,$2,'workspace-sub')", [uid, sessionId])))).toMatchObject({ code: "42501" });
+  });
+});

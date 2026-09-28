@@ -1,4 +1,4 @@
-import { requireWorkspaceAccess } from "./workspace-access";
+import { assertGoogleSession, requireWorkspaceAccess } from "./workspace-access";
 import { WorkspaceAccessError } from "./workspace-identity";
 import type { NextRequest } from "next/server";
 import { isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
@@ -80,7 +80,12 @@ async function authenticateUser(supabase: SupabaseClient): Promise<{ ok: true; u
         code: invalidSessionBeforeEffectErrorCode,
       };
     }
-    await requireWorkspaceAccess({ userId: userResult.user.id });
+    const identity = await requireWorkspaceAccess({ userId: userResult.user.id });
+    if (identity) {
+      const { data: sessionResult, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionResult.session?.access_token) throw new WorkspaceAccessError(403, "workspace_google_login_required");
+      await assertGoogleSession(sessionResult.session.access_token, userResult.user.id);
+    }
     return { ok: true, user: userResult.user };
   } catch (error) {
     if (error instanceof WorkspaceAccessError) return { ok: false, status: error.status, code: error.code, error: error.message };

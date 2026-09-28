@@ -60,6 +60,8 @@ export function AuthControl({
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
   const [loginMode, setLoginMode] = useState<string | null>(null);
+  const [workspaceAccountResult, setWorkspaceAccountResult] = useState<{ userId: string; linked: boolean; workspaceEmail?: string } | null>(null);
+  const userId = user?.id;
   useEffect(() => {
     let active = true;
     fetch("/api/auth/login-mode", { cache: "no-store" }).then(response => response.json()).then(data => {
@@ -67,11 +69,20 @@ export function AuthControl({
     }).catch(() => { if (active) setLoginMode("unavailable"); });
     return () => { active = false; };
   }, []);
+  useEffect(() => {
+    if (!userId || loginMode === "legacy") return;
+    let active = true;
+    fetch("/api/auth/account-state", { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(data => {
+      if (active) setWorkspaceAccountResult(data ? { ...data, userId } : null);
+    }).catch(() => { if (active) setWorkspaceAccountResult(null); });
+    return () => { active = false; };
+  }, [userId, loginMode]);
   const loginReady = loginMode === "legacy" || loginMode === "linking" || loginMode === "google";
   const googleLogin = loginMode !== "legacy";
+  const workspaceAccount = workspaceAccountResult?.userId === user?.id ? workspaceAccountResult : null;
 
   const githubLogin = getUserMetadataString(user, "user_name") || getUserMetadataString(user, "preferred_username");
-  const avatarUrl = getUserMetadataString(user, "avatar_url");
+  const avatarUrl = loginMode === "legacy" ? getUserMetadataString(user, "avatar_url") : "";
   const displayName = getUserMetadataString(user, "full_name") || getUserMetadataString(user, "name") || githubLogin || user?.email || "";
   const activeTestProfile = testProfileOptions.find((profile) => profile.id === activeTestProfileId) || null;
 
@@ -142,7 +153,7 @@ export function AuthControl({
           )}
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold text-slate-950">{displayName}</div>
-            <div className="truncate text-xs text-slate-500">{githubLogin ? `@${githubLogin}` : user.email || "GitHub angemeldet"}</div>
+            <div className="truncate text-xs text-slate-500">{workspaceAccount?.workspaceEmail || (loginMode === "legacy" ? user.email || "GitHub angemeldet" : "Workspace-Adresse wird geprüft")}</div>
           </div>
           <button
             type="button"
@@ -224,8 +235,10 @@ export function AuthControl({
               <div className="min-w-0">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">FounderOps-Konto</div>
                 <div className="mt-1 truncate font-semibold text-slate-950">{displayName}</div>
-                {githubLogin && <div className="truncate text-xs text-slate-500">@{githubLogin}</div>}
-                {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
+                {workspaceAccount?.linked && <div className="truncate text-xs text-emerald-700">Google verbunden</div>}
+                {workspaceAccount?.workspaceEmail ? <div className="truncate text-xs text-slate-500">{workspaceAccount.workspaceEmail}</div>
+                  : loginMode === "legacy" && user.email ? <div className="truncate text-xs text-slate-500">{user.email}</div>
+                    : <div className="truncate text-xs text-slate-500">Workspace-Adresse wird geprüft</div>}
               </div>
             </div>
             {testProfileOptions.length > 0 && onTestProfileChange ? (
@@ -317,7 +330,7 @@ export function AuthControl({
                 )}
               </div>
             ) : null}
-            {loginMode === "linking" && <a className="min-h-11 rounded border border-blue-200 p-3 text-blue-800" href="/auth/link-google">Google-Konto verknüpfen</a>}
+            {loginMode === "linking" && workspaceAccount?.linked === false && <a className="min-h-11 rounded border border-blue-200 p-3 text-blue-800" href="/auth/link-google">Google-Konto verknüpfen</a>}
             <button
               type="button"
               data-account-menu-autofocus={testProfileOptions.length > 0 ? undefined : true}

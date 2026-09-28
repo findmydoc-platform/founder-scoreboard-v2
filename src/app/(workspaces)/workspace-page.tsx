@@ -23,6 +23,7 @@ import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 import { redirect } from "next/navigation";
 import { getServerAuthSupabase } from "@/lib/supabase-server";
+import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
 
 async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
@@ -124,6 +125,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
   if (requiresSupabaseAuth()) {
     const auth = await getServerPlanningAuth();
     if (!auth.ok) {
+      redirectForWorkspaceGate(auth.code);
       return (
         <PlanningApp
           initialData={emptyPlanningShellState}

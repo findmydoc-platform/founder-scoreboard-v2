@@ -9,6 +9,7 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
 import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
+import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 import { requiresSupabaseAuth } from "@/lib/supabase";
 
@@ -26,6 +27,7 @@ export default async function PlatformReleaseDetailPage({ params, searchParams }
   const authRequired = requiresSupabaseAuth();
   const auth = authRequired ? await getServerPlanningAuth() : null;
   if (auth && !auth.ok) {
+    redirectForWorkspaceGate(auth.code);
     return <PlanningApp initialData={emptyPlanningShellState} initialHeaderData={emptyPlanningHeaderData} initialWorkspace="notifications" source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;
   }
   const profile = auth?.ok ? auth.profile : null;
