@@ -5,7 +5,7 @@ import { assertFounderEventParticipantsExist, buildFounderEventUpdatePatch, foun
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { mapFounderEvent } from "@/lib/planning-row-mappers";
 import { invalidateSharedPlanningHeaderCache } from "@/lib/planning-header-cache";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireJsonApiContext<EventPayload>(request, requireOperationalLeadOrActiveAdministrator, {});

@@ -3,6 +3,8 @@ export const administratorAccessRequiredErrorCode = "administrator_access_requir
 export const administratorAccessExpiredErrorCode = "administrator_access_expired" as const;
 
 export type AuthErrorCode =
+  | "workspace_access_denied"
+  | "workspace_access_unavailable"
   | typeof invalidSessionBeforeEffectErrorCode
   | typeof administratorAccessRequiredErrorCode
   | typeof administratorAccessExpiredErrorCode;

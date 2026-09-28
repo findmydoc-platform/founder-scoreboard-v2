@@ -1,6 +1,6 @@
 "use client";
 
-import { SiGithub } from "@icons-pack/react-simple-icons";
+import { SiGithub, SiGoogle } from "@icons-pack/react-simple-icons";
 import type { User } from "@supabase/supabase-js";
 import { Check, Settings, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -59,6 +59,17 @@ export function AuthControl({
   const menuRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [loginMode, setLoginMode] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/login-mode", { cache: "no-store" }).then(response => response.json()).then(data => {
+      if (active) setLoginMode(data.mode);
+    }).catch(() => { if (active) setLoginMode("unavailable"); });
+    return () => { active = false; };
+  }, []);
+  const loginReady = loginMode === "legacy" || loginMode === "linking" || loginMode === "google";
+  const googleLogin = loginMode !== "legacy";
+
   const githubLogin = getUserMetadataString(user, "user_name") || getUserMetadataString(user, "preferred_username");
   const avatarUrl = getUserMetadataString(user, "avatar_url");
   const displayName = getUserMetadataString(user, "full_name") || getUserMetadataString(user, "name") || githubLogin || user?.email || "";
@@ -100,17 +111,20 @@ export function AuthControl({
 
   if (!user) {
     return (
+      <div className="grid gap-4">
       <button
         type="button"
         onClick={onSignIn}
-        disabled={busy}
+        disabled={busy || !loginReady}
         className={variant === "gate"
           ? "inline-flex h-12 w-full items-center justify-center gap-3 rounded-[5px] bg-[#1557ff] px-4 text-base font-medium text-white shadow-sm transition hover:bg-[#0d47e5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1557ff] disabled:cursor-not-allowed disabled:opacity-60"
           : "inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"}
       >
-        <SiGithub size={variant === "gate" ? 21 : 17} aria-hidden="true" />
-        {busy ? "GitHub wird geöffnet..." : "Mit GitHub anmelden"}
+        {googleLogin ? <SiGoogle size={variant === "gate" ? 21 : 17} aria-hidden="true" /> : <SiGithub size={variant === "gate" ? 21 : 17} aria-hidden="true" />}
+        {!loginReady ? loginMode === "unavailable" ? "Anmeldung nicht verfügbar" : "Anmeldung wird geprüft..." : busy ? "Anmeldung wird geöffnet..." : googleLogin ? "Mit Google anmelden" : "Mit GitHub anmelden"}
       </button>
+      {loginMode === "linking" && <a className="inline-flex min-h-11 items-center text-sm text-blue-700 underline" href="/auth/link-google">Bestehendes Konto mit Google verknüpfen</a>}
+      </div>
     );
   }
 
@@ -208,7 +222,7 @@ export function AuthControl({
                 </div>
               )}
               <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Angemeldet mit GitHub</div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">FounderOps-Konto</div>
                 <div className="mt-1 truncate font-semibold text-slate-950">{displayName}</div>
                 {githubLogin && <div className="truncate text-xs text-slate-500">@{githubLogin}</div>}
                 {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
@@ -235,7 +249,7 @@ export function AuthControl({
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">EA</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold">Eigene Ansicht</span>
-                      <span className="block truncate text-xs text-slate-500">Mit deinem GitHub-Konto</span>
+                      <span className="block truncate text-xs text-slate-500">Mit deinem eigenen Konto</span>
                     </span>
                     {!activeTestProfileId ? <Check size={16} className="shrink-0 text-blue-700" aria-hidden="true" /> : null}
                   </button>
@@ -303,6 +317,7 @@ export function AuthControl({
                 )}
               </div>
             ) : null}
+            {loginMode === "linking" && <a className="min-h-11 rounded border border-blue-200 p-3 text-blue-800" href="/auth/link-google">Google-Konto verknüpfen</a>}
             <button
               type="button"
               data-account-menu-autofocus={testProfileOptions.length > 0 ? undefined : true}

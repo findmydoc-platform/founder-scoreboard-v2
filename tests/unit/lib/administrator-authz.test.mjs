@@ -1,3 +1,6 @@
+import { vi } from "vitest";
+vi.mock("@/lib/supabase-user", async () => vi.importMock("@/lib/supabase"));
+vi.mock("@/lib/workspace-access", () => ({ requireWorkspaceAccess: async () => null }));
 import assert from "node:assert/strict";
 import { beforeEach, test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";

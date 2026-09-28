@@ -48,6 +48,7 @@ test("notification delivery preserves a marked operational-lead failure", async 
     },
     "@/lib/notification-resolution": { reconcileNotificationEvents: async () => undefined },
     "@/lib/supabase": { getServerSupabase: () => ({}) },
+    "@/lib/supabase-user": { getSupabaseForToken: () => null },
   });
 
   await assertMarked(await route.POST(new Request("http://localhost/api/notifications/deliver", { method: "POST" })));
@@ -59,6 +60,7 @@ test("notification digest generation preserves a marked operational-lead failure
     "@/lib/api-response": { apiError: () => null, authzError, supabaseUnavailable: () => null },
     "@/lib/authz": { requireOperationalLead: async () => markedFailure },
     "@/lib/supabase": { getServerSupabase: () => ({}) },
+    "@/lib/supabase-user": { getSupabaseForToken: () => null },
     "@/lib/notification-catalog": { createNotificationPayload: () => ({}) },
     "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
   });

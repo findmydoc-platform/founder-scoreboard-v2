@@ -71,7 +71,7 @@ import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers"
 import { normalizeFixedDate } from "@/features/planning-items/model/deliverable-schedule";
 import { requireJsonApiContext } from "@/lib/api-response";
 import { requireOperationalLead } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 import {
   createEmptyEpicDeletePlanningItems,
   emptyEpicDeleteCommand,

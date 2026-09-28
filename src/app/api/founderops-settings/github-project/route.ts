@@ -6,7 +6,7 @@ import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { validGitHubTeamSlug, validateGitHubMentionTeam } from "@/lib/github-mention-team";
 import { validateFounderOpsGitHubProject } from "@/lib/github-project";
 import { validGitHubProjectNumber, validGitHubProjectOwner } from "@/lib/github-project-config";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 
 type GitHubProjectSettingsPayload = {
   expectedGithubProjectOwner?: string;

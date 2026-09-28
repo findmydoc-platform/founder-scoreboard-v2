@@ -3,7 +3,7 @@ import { auditRequestMetadata, cleanOptionalText } from "@/lib/api-input";
 import { apiError, authzError } from "@/lib/api-response";
 import { bearerToken, requireActiveAdministrator, resolveAdministratorAccessFailure } from "@/lib/authz";
 import { isGitHubLogin } from "@/lib/mentions";
-import { getSupabaseForToken } from "@/lib/supabase";
+import { getSupabaseForToken } from "@/lib/supabase-user";
 
 type TechnicalIdentityPayload = {
   githubLogin?: unknown;

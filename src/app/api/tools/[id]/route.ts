@@ -1,3 +1,4 @@
+import { isProtectedToolPreviewUrl } from "@/lib/tool-preview-image";
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
@@ -38,6 +39,7 @@ function normalizeToolUrl(value: string) {
 }
 
 function normalizePreviewImageUrl(value: string) {
+  if (isProtectedToolPreviewUrl(value)) return value;
   if (!value) return "";
   try {
     const url = new URL(value);

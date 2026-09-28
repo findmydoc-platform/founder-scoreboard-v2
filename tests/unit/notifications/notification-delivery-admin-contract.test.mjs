@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+vi.mock("@/lib/supabase-user", async () => vi.importMock("@/lib/supabase"));
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";

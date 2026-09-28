@@ -74,7 +74,7 @@ test("the planning dependency update has a current desktop screenshot and dedica
   assert.match(profileSource, /Update-Scope für Felder und Aufgabenabhängigkeiten/);
 });
 
-test("the mention update is newest and the JIT administration update keeps its account-menu tour", async () => {
+test("the mention update is the newest published update and JIT administration keeps its account-menu tour", async () => {
   const [registry, tourSource, screenshot, mentionScreenshot] = await Promise.all([
     readFile("src/features/product-updates/model/product-updates.json", "utf8").then(JSON.parse),
     readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8"),
@@ -84,7 +84,7 @@ test("the mention update is newest and the JIT administration update keeps its a
   const update = registry.find(({ id }) => id === "2026-09-22-jit-administration");
   const mentionUpdate = registry.find(({ id }) => id === "2026-09-24-founderops-mentions");
 
-  assert.equal(registry[0], mentionUpdate);
+  assert.equal(registry.find(update => !update.draft), mentionUpdate);
   assert.equal(mentionUpdate.expiresAt, "2026-10-24");
   assert.equal(mentionUpdate.featureTourId, "task-mentions-v1");
   assert.equal(mentionUpdate.title, "Erwähnungen in allen Freitextfeldern");

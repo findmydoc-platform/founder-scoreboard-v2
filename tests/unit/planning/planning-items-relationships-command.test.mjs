@@ -39,7 +39,7 @@ async function loadRoute(run, payload) {
       }),
     },
     "@/lib/authz": { requirePlanningContributorOrActiveAdministrator: () => ({}) },
-    "@/lib/supabase": { getSupabaseForToken: () => null },
+    "@/lib/supabase-user": { getSupabaseForToken: () => null },
     "@/features/planning-items/model/planning-actor-context-server": {
       actorContextFromSessionAuth: () => ({ ok: true, actor }),
     },
@@ -86,7 +86,7 @@ async function loadAdministratorRoute(run, payload) {
         };
       },
     },
-    "@/lib/supabase": { getSupabaseForToken: () => mutationClient },
+    "@/lib/supabase-user": { getSupabaseForToken: () => mutationClient },
     "@/features/planning-items/model/planning-actor-context-server": {
       actorContextFromSessionAuth: () => ({ ok: true, actor: administratorActor }),
     },

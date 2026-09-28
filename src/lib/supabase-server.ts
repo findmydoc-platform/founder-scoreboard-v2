@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
+import { workspaceDataFetch } from "./workspace-data-fetch";
 import { hasSupabaseEnv } from "./supabase";
 
 function runtimeSupabaseUrl() {
@@ -23,6 +24,7 @@ export async function getServerAuthSupabase() {
   const cookieStore = await cookies();
 
   return createServerClient(runtimeSupabaseUrl(), runtimeSupabaseAnonKey(), {
+    global: { fetch: workspaceDataFetch },
     auth: {
       persistSession: true,
       autoRefreshToken: true,

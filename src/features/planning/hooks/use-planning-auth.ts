@@ -313,22 +313,8 @@ export function usePlanningAuth({
       return;
     }
 
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+    window.location.assign(`/auth/login?next=${encodeURIComponent(next)}`);
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: {
-        redirectTo,
-        scopes: "repo read:user user:email",
-      },
-    });
-
-    setAuthBusy(false);
-    if (error) {
-      setAuthError("GitHub-Anmeldung konnte nicht gestartet werden.");
-      if (options.githubReconnect) setGithubReauthFailed(true);
-      return;
-    }
   }, []);
 
   const signOut = async () => {

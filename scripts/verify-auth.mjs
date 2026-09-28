@@ -58,8 +58,24 @@ const stale = profiles.filter((profile) => profile.auth_user_id && !authUserIds.
 const missingRole = profiles.filter((profile) => !profile.platform_role || !profile.org_role);
 const ceos = profiles.filter((profile) => profile.platform_role === "ceo");
 
+const workspace = await supabase.rpc("workspace_access_context");
+if (workspace.error || !workspace.data) throw new Error("Workspace authorization configuration unavailable.");
+const workspaceMode = workspace.data.mode;
+const unlinkedWorkspaceProfiles = [];
+const checkWorkspaceReadiness = workspaceMode === "google" || process.argv.includes("--workspace-ready");
+if (checkWorkspaceReadiness) {
+  if (!requiredAuthLinkedProfileIds.length) throw new Error("Google cutover requires an explicit REQUIRED_AUTH_LINKED_PROFILE_IDS roster.");
+  for (const profileId of requiredAuthLinkedProfileIds) {
+    const context = await supabase.rpc("workspace_access_context", { p_profile_id: profileId });
+    const identity = context.data?.identity;
+    if (context.error || !context.data?.linked || identity?.email_verified !== true
+      || identity?.custom_claims?.hd !== "findmydoc.eu"
+      || !["https://accounts.google.com", "accounts.google.com"].includes(identity?.iss)) unlinkedWorkspaceProfiles.push(profileId);
+  }
+}
 const result = {
-  mode: localLoginSimulation ? "local-simulated-login" : "github-oauth",
+  mode: localLoginSimulation ? "local-simulated-login" : workspaceMode,
+  unlinkedWorkspaceProfiles,
   profiles: profiles.length,
   authUsers: authUsers.users.length,
   legacyAuthLinked: linked.length,
@@ -94,7 +110,8 @@ const localAuthIncomplete = localLoginSimulation
   && (missingRole.length || stale.length || ceos.length !== 1 || linked.length !== 1 || linked[0]?.id !== ceos[0]?.id);
 const githubAuthIncomplete = !localLoginSimulation
   && (
-    missingGithub.length
+    (workspaceMode !== "google" && missingGithub.length)
+    || unlinkedWorkspaceProfiles.length
     || missingRole.length
     || stale.length
     || ceos.length !== 1

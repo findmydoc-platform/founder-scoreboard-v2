@@ -18,7 +18,6 @@ import {
 } from "./google-workspace-oauth-core";
 
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
-const GOOGLE_TOKEN_REVOCATION_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 const GOOGLE_CALENDAR_EVENTS_ENDPOINT = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
 type GoogleWorkspaceEnvironment = Readonly<{
@@ -275,57 +274,12 @@ export async function getGoogleWorkspaceAccessToken(
   }
 }
 
-export async function revokeAndRemoveGoogleWorkspaceConnection(
+export async function removeGoogleWorkspaceConnection(
   supabase: SupabaseClient,
   profileId: string,
 ) {
-  const { data, error } = await supabase
-    .from("google_workspace_connections")
-    .select("encrypted_refresh_token")
-    .eq("profile_id", profileId)
-    .maybeSingle<{ encrypted_refresh_token: string }>();
+  const { error } = await supabase.from("google_workspace_connections").delete().eq("profile_id", profileId);
   if (error) {
-    throw new GoogleWorkspaceOAuthContractError("invalid_token_response", "Google-Verbindung konnte nicht geladen werden.");
-  }
-  if (!data) return;
-
-  const revokedAt = new Date().toISOString();
-  const { error: revokeIntentError } = await supabase
-    .from("google_workspace_connections")
-    .update({
-      revoked_at: revokedAt,
-      last_error_class: "oauth_reconnect_required",
-      updated_at: revokedAt,
-    })
-    .eq("profile_id", profileId);
-  if (revokeIntentError) {
-    throw new GoogleWorkspaceOAuthContractError("invalid_token_response", "Google-Widerruf konnte nicht vorbereitet werden.");
-  }
-
-  const { encryptionKey } = googleWorkspaceEnvironment();
-  const refreshToken = decryptGoogleWorkspaceToken(data.encrypted_refresh_token, encryptionKey);
-  let response: Response;
-  try {
-    response = await fetch(GOOGLE_TOKEN_REVOCATION_ENDPOINT, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ token: refreshToken }),
-      cache: "no-store",
-    });
-  } catch {
-    await markGoogleWorkspaceConnectionError(supabase, profileId, "oauth_provider_unavailable");
-    throw new GoogleWorkspaceOAuthContractError("invalid_token_response", "Google-Widerruf konnte nicht bestätigt werden.");
-  }
-  if (!response.ok && response.status !== 400) {
-    await markGoogleWorkspaceConnectionError(supabase, profileId, "oauth_provider_unavailable");
-    throw new GoogleWorkspaceOAuthContractError("invalid_token_response", "Google-Verbindung konnte nicht widerrufen werden.");
-  }
-
-  const { error: deleteError } = await supabase
-    .from("google_workspace_connections")
-    .delete()
-    .eq("profile_id", profileId);
-  if (deleteError) {
-    throw new GoogleWorkspaceOAuthContractError("invalid_token_response", "Widerrufene Google-Verbindung konnte nicht entfernt werden.");
+    throw new GoogleWorkspaceOAuthContractError("invalid_token_response", "Google-Verbindung konnte nicht entfernt werden.");
   }
 }

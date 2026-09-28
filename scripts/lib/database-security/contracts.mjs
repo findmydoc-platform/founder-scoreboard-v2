@@ -1,4 +1,6 @@
 export const authenticatedFunctionAllowlist = Object.freeze([
+  "public.workspace_check_request()",
+  "public.workspace_request_admitted()",
   "public.activate_administrator_access()",
   "public.administrator_access_snapshot()",
   "public.administrator_directory_snapshot()",
