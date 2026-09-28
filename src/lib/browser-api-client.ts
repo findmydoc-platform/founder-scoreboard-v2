@@ -1,6 +1,6 @@
 "use client";
 
-import { isInvalidSessionBeforeEffectBody } from "@/lib/auth-error-contract";
+import { isInvalidSessionBeforeEffectBody, workspaceTransitionTarget } from "@/lib/auth-error-contract";
 import {
   createSupabaseBrowserSessionAdapter,
   type BrowserSessionPort,
@@ -11,6 +11,7 @@ type BrowserApiClientOptions = {
   devProfileId?: string;
   devProfileOverrideEnabled?: boolean;
   sessionPort?: BrowserSessionPort;
+  onWorkspaceTransition?: (target: string) => void;
 };
 
 type BrowserApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
@@ -38,7 +39,19 @@ export function createBrowserApiClient({
   devProfileId = "",
   devProfileOverrideEnabled = false,
   sessionPort = createSupabaseBrowserSessionAdapter(),
+  onWorkspaceTransition = target => window.location.replace(target),
 }: BrowserApiClientOptions = {}) {
+  let transitioning = false;
+
+  function transitionIfRequired(response: Response, body: unknown, session: BrowserSessionSnapshot | null) {
+    if (!session || response.status !== 403 || transitioning) return;
+    const target = workspaceTransitionTarget(body);
+    if (!target) return;
+    transitioning = true;
+    // A full navigation removes protected in-memory state while retaining the GitHub session needed to link.
+    onWorkspaceTransition(target);
+  }
+
   function prepareRequest(options: BrowserApiRequestOptions = {}) {
     const {
       headers: requestHeaders,
@@ -113,6 +126,7 @@ export function createBrowserApiClient({
     const session = prepared.callerAuthorization ? null : await sessionPort.current();
     const first = await send(input, prepared.requestInit, session);
     const firstBody = await first.response.clone().json().catch(() => null) as T | null;
+    transitionIfRequired(first.response, firstBody, first.attachedSession);
     const replay = await recoverAndReplay(
       input,
       prepared.requestInit,
@@ -124,6 +138,7 @@ export function createBrowserApiClient({
     if (!replay) return { response: first.response, body: firstBody };
 
     const replayBody = await replay.response.clone().json().catch(() => null) as T | null;
+    transitionIfRequired(replay.response, replayBody, replay.attachedSession);
     if (replay.response.status === 401 && isInvalidSessionBeforeEffectBody(replayBody)) {
       if (replay.attachedSession) await sessionPort.clearIfCurrent(replay.attachedSession);
     }
@@ -149,6 +164,7 @@ export function createBrowserApiClient({
       method: (requestInit.method || "POST").toUpperCase(),
     }, session);
     const body = await result.response.clone().json().catch(() => null) as T | null;
+    transitionIfRequired(result.response, body, result.attachedSession);
     return { response: result.response, body };
   }
 
@@ -157,6 +173,7 @@ export function createBrowserApiClient({
     const session = prepared.callerAuthorization ? null : await sessionPort.current();
     const first = await send(input, prepared.requestInit, session);
     const firstErrorBody = first.response.ok ? null : await first.response.clone().json().catch(() => null);
+    transitionIfRequired(first.response, firstErrorBody, first.attachedSession);
     const replay = await recoverAndReplay(
       input,
       prepared.requestInit,
@@ -169,6 +186,7 @@ export function createBrowserApiClient({
     const replayErrorBody = replay && !replay.response.ok
       ? await replay.response.clone().json().catch(() => null)
       : null;
+    if (replay) transitionIfRequired(replay.response, replayErrorBody, replay.attachedSession);
     if (replay?.response.status === 401 && isInvalidSessionBeforeEffectBody(replayErrorBody)) {
       if (replay.attachedSession) await sessionPort.clearIfCurrent(replay.attachedSession);
     }

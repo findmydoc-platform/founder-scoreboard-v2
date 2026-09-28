@@ -49,7 +49,9 @@ export async function POST(request: NextRequest) {
   const extension = extensionByMimeType[file.type] || safeFileName(file.name).split(".").pop() || "bin";
   const path = `quicklinks/${new Date().toISOString().slice(0, 10)}/${Date.now()}-${randomUUID()}.${extension}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  const { error } = await context.supabase.storage.from(bucketName).upload(path, buffer, {
+  const service = getServerServiceRoleSupabase();
+  if (!service) return apiError("Bild konnte nicht gespeichert werden.", 503);
+  const { error } = await service.storage.from(bucketName).upload(path, buffer, {
     contentType: file.type,
     upsert: false,
   });

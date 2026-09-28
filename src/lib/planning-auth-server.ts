@@ -4,10 +4,11 @@ import { loadSessionAuthority, requireTeamMemberForSession } from "./authz";
 import { getServerAuthSupabase } from "./supabase-server";
 import type { AuthenticatedProfile } from "./types";
 import type { SessionAuthorityContext } from "@/features/administrator-access/model/administrator-access";
+import type { AuthErrorCode } from "./auth-error-contract";
 
 export type ServerPlanningAuth =
   | { ok: true; user: User; profile: AuthenticatedProfile | null; authority: SessionAuthorityContext | null }
-  | { ok: false; status: number; error: string; user: User | null };
+  | { ok: false; status: number; error: string; code?: AuthErrorCode; user: User | null };
 
 type ServerPlanningAuthContext =
   | { ok: true; user: User; profile: AuthenticatedProfile | null; supabase: SupabaseClient }

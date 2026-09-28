@@ -5,7 +5,7 @@ import { getServerAuthSupabase } from "@/lib/supabase-server";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 import { authOrigin } from "@/lib/auth-redirect";
 import { sha256 } from "@/lib/workspace-data-fetch";
-import { requireWorkspaceAccess } from "@/lib/workspace-access";
+import { requireWorkspaceAccess, workspaceAccessContext } from "@/lib/workspace-access";
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,6 +32,11 @@ export async function POST(request: NextRequest) {
       });
       if (completed.error) return new NextResponse(null, { status: 403 });
       (await cookies()).set("workspace_link", "", { path: "/auth", maxAge: 0, httpOnly: true, sameSite: "lax" });
+      const context = await workspaceAccessContext({ userId: user.id });
+      if (context.linkingEnforced) {
+        await supabase.auth.signOut({ scope: "local" });
+        return NextResponse.redirect(new URL("/auth/login?provider=google", origin), 303);
+      }
       return NextResponse.redirect(new URL("/auth/link-google", origin), 303);
     }
     const { data, error } = await supabase.auth.linkIdentity({ provider: "google", options: {

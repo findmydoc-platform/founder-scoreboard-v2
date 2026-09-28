@@ -2,8 +2,10 @@ export type WorkspaceIdentity = { userId: string; subject: string; email: string
 type IdentityUser = { id: string; identities?: { provider: string; identity_data?: Record<string, unknown> }[] };
 
 export class WorkspaceAccessError extends Error {
-  constructor(public readonly status: 403 | 503, public readonly code: "workspace_access_denied" | "workspace_access_unavailable") {
-    super(status === 403 ? "Kein freigegebener Google-Workspace-Zugang." : "Workspace-Zugang konnte vorübergehend nicht geprüft werden.");
+  constructor(public readonly status: 403 | 503, public readonly code: "workspace_access_denied" | "workspace_access_unavailable" | "workspace_link_required" | "workspace_google_login_required") {
+    super(code === "workspace_link_required" ? "Google-Konto muss verknüpft werden."
+      : code === "workspace_google_login_required" ? "Bitte neu mit Google anmelden."
+        : status === 403 ? "Kein freigegebener Google-Workspace-Zugang." : "Workspace-Zugang konnte vorübergehend nicht geprüft werden.");
   }
 }
 

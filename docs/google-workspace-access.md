@@ -10,9 +10,12 @@ The approved infrastructure contract is the [Ops handoff](https://github.com/fin
 
 - `legacy` keeps the existing GitHub sign-in while deploying compatible application code. Workspace group enforcement is not active yet.
 - `linking` opens `/auth/link-google` and offers Google sign-in. Existing users can still sign in with GitHub to link their account. This is a migration stage, not completed Management-only enforcement.
+- `linking` with private `linking_enforced = true` makes linking mandatory. An unlinked account can use GitHub only to reach the linking page; a linked account needs a newly approved Google OAuth session for interactive access. Personal Planning Items tokens resume after their owner links and passes the current group check. Direct user database requests require the same server-issued permit as in Google mode. The deployment migration leaves this flag false; the separately approved cutover activates it only after the new application has passed its deployment check.
 - `google` requires the approved Google identity binding and fresh app-group membership on every protected online authorization decision. It also applies to personal Planning Items API tokens. Entering this mode starts a new session epoch. Prior application sessions cannot access protected data.
 
 Production deployment and each production mode/provider change require separate operator approval. A merge to `main` starts the production workflow, so a reviewable PR must remain unmerged until that approval. Development and Production share the hosted Auth provider described by Ops. A change made for Development can therefore affect Production. Preview must not receive Google credentials, trusted return URLs, linking or sign-in access.
+
+The production workflow confirms application health. The operator then activates mandatory linking as a separate database action and verifies the active mode before acceptance. Do not report the cutover as complete from the mode check alone. With approved real accounts, verify that an unlinked GitHub session reaches only `/auth/link-google`, that linking forces a fresh Google sign-in, and that the linked Google session can enter the app. Confirm that an old session and an unlinked personal API token are rejected, while the same token works again after its owner links and retains group membership. Check group removal separately. Stop the rollout and investigate any unexpected access; do not clear `linking_enforced` as an automatic fallback.
 
 ## Provider configuration and identity evidence
 
@@ -24,7 +27,7 @@ Before entering `google`, disable every other Supabase sign-in provider, includi
 
 ## Account linking
 
-Open the linking stage only after the provider configuration has been verified. Each intended Management member signs into their existing FounderOps account, opens the account menu and chooses **Google-Konto verknüpfen**. An unauthenticated user can open `/auth/link-google` and first authenticate with their existing GitHub account.
+Open the linking stage only after the provider configuration has been verified. Each intended Management member signs into their existing FounderOps account and links Google through `/auth/link-google`. Once enforcement is active, the application sends unlinked sessions to this page automatically and requires a fresh Google login after linking. GitHub remains available solely for accounts that still need to link; a GitHub session cannot access application data. An unauthenticated user can open `/auth/link-google` and first authenticate with their existing GitHub account.
 
 A server-created, expiring nonce binds the linking attempt to the original Auth user. The callback must return the same user, an existing profile and a valid Google identity with current group membership. Only then is the Google subject recorded in the private binding table. A conflicting subject is rejected. This supports different GitHub and Workspace email addresses without replacing a profile, changing `profiles.auth_user_id`, copying tasks or moving stored tokens. Cancellation does not grant access. Failed linking may leave an identity attached in Supabase, but cannot create an approved application binding; the user can retry from the original account.
 

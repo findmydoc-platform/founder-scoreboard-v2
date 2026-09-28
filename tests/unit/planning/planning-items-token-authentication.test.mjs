@@ -154,3 +154,21 @@ test("a valid personal token cannot bypass its owner's Workspace access denial",
   assert.equal(result.status,403);
   assert.equal("supabase" in result,false);
 });
+
+test("an existing personal token works again after its owner passes Workspace access", async () => {
+  const requireWorkspaceAccess = async input => {
+    assert.deepEqual(input, { profileId: "profile-1" });
+    return { userId: "user-1", subject: "google-subject", email: "member@findmydoc.eu" };
+  };
+  const token = await importTestModule("src/features/planning-items/model/planning-items-token.ts", {
+    "@/lib/supabase": { getServerSupabase: () => ({ rpc: async () => ({ data: {
+      tokenId: "token-1", tokenHint: "test", scopes: ["read:planning-context"], scopeGranted: true,
+      expiresAt: "2030-01-01T00:00:00Z", evaluatedAt: "2026-09-26T00:00:00Z", remainingSeconds: 100,
+      profile: { id: "profile-1", platformRole: "ceo" },
+    }, error: null }) }) },
+    "@/lib/workspace-access": { requireWorkspaceAccess },
+  });
+  const result = await token.requireTeamPlanningItemScope({ headers: new Headers({ authorization: "Bearer fmd_ti_test-token" }) }, "read:planning-context");
+  assert.equal(result.ok, true);
+  assert.equal(result.tokenId, "token-1");
+});

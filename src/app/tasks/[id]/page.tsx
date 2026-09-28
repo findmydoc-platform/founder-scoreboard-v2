@@ -11,6 +11,7 @@ import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
+import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import { loadPlanningTrashTaskDetail } from "@/lib/planning-trash-detail";
 import type { AuthenticatedProfile } from "@/lib/types";
@@ -33,6 +34,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
   if (authRequired) {
     const auth = await getServerPlanningAuth();
     if (!auth.ok) {
+      redirectForWorkspaceGate(auth.code);
       return <PlanningApp initialData={emptyPlanningShellState} initialHeaderData={emptyPlanningHeaderData} initialWorkspace="planning" source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;
     }
     authProfile = auth.profile;
