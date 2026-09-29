@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerAuthSupabase } from "@/lib/supabase-server";
 import { workspaceAccessContext } from "@/lib/workspace-access";
-import { workspaceIdentity } from "@/lib/workspace-identity";
+import { workspaceAvatarUrl, workspaceIdentity } from "@/lib/workspace-identity";
 
 export async function GET() {
   try {
@@ -11,7 +11,8 @@ export async function GET() {
     const context = await workspaceAccessContext({ userId: data.user.id });
     if (!context.linked || !context.identity) return NextResponse.json({ linked: false }, { headers: { "Cache-Control": "no-store" } });
     const identity = workspaceIdentity({ id: data.user.id, identities: [{ provider: "google", identity_data: context.identity }] });
-    return NextResponse.json({ linked: true, workspaceEmail: identity.email }, { headers: { "Cache-Control": "no-store" } });
+    const avatarUrl = workspaceAvatarUrl(context.identity);
+    return NextResponse.json({ linked: true, workspaceEmail: identity.email, ...(avatarUrl ? { workspaceAvatarUrl: avatarUrl } : {}) }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ linked: false }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }

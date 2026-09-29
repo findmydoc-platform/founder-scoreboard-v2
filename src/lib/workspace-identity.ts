@@ -22,6 +22,18 @@ export function workspaceIdentity(user: IdentityUser): WorkspaceIdentity {
   return { userId: user.id, subject: data.sub, email: data.email };
 }
 
+export function workspaceAvatarUrl(identityData: Record<string, unknown>): string | undefined {
+  const picture = identityData.picture;
+  if (typeof picture !== "string" || !picture || picture.length > 2048) return undefined;
+  try {
+    const url = new URL(picture);
+    if (url.protocol !== "https:" || !url.hostname.endsWith(".googleusercontent.com") || url.username || url.password || url.port) return undefined;
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function authorizeWorkspaceIdentity(user: IdentityUser, isMember: (email: string) => Promise<boolean>) {
   const identity = workspaceIdentity(user);
   let member: boolean;
