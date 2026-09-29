@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authorizeWorkspaceIdentity, workspaceIdentity } from "@/lib/workspace-identity";
+import { authorizeWorkspaceIdentity, workspaceAvatarUrl, workspaceIdentity } from "@/lib/workspace-identity";
 
 const google = { provider: "google", identity_data: { sub: "google-123", iss: "https://accounts.google.com", email: "member@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } } };
 const user = { id: "existing-user", identities: [google], user_metadata: {} };
@@ -24,5 +24,11 @@ describe("Workspace access", () => {
     member = false;
     await expect(authorizeWorkspaceIdentity(user, check)).rejects.toMatchObject({ status: 403 });
     await expect(authorizeWorkspaceIdentity(user, async () => { throw new Error("Directory unavailable"); })).rejects.toMatchObject({ status: 503 });
+  });
+  it("accepts only HTTPS Google-hosted profile images", () => {
+    expect(workspaceAvatarUrl({ picture: "https://lh3.googleusercontent.com/a/profile=s96-c" })).toBe("https://lh3.googleusercontent.com/a/profile=s96-c");
+    for (const picture of [undefined, "", "http://lh3.googleusercontent.com/a/profile", "https://lh3.googleusercontent.com.evil.example/a/profile", "https://person@lh3.googleusercontent.com/a/profile", "javascript:alert(1)"]) {
+      expect(workspaceAvatarUrl({ picture })).toBeUndefined();
+    }
   });
 });

@@ -3,7 +3,9 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { AuthControl } from "./auth-control";
 import type { User } from "@supabase/supabase-js";
 
-function loginMode(mode: string, account?: { linked: boolean; workspaceEmail?: string }) {
+const sampleWorkspaceAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect width='96' height='96' fill='%23dbeafe'/%3E%3Ccircle cx='48' cy='36' r='18' fill='%233b82f6'/%3E%3Cpath d='M13 96c2-23 15-35 35-35s33 12 35 35' fill='%231d4ed8'/%3E%3C/svg%3E";
+
+function loginMode(mode: string, account?: { linked: boolean; workspaceEmail?: string; workspaceAvatarUrl?: string }) {
   const previous = globalThis.fetch;
   globalThis.fetch = async (input, init) => String(input).includes("/api/auth/login-mode")
     ? Response.json({ mode }) : String(input).includes("/api/auth/account-state")
@@ -49,13 +51,43 @@ export const LinkedAccount: Story = {
     user: { id: "existing-user", aud: "authenticated", created_at: "2026-09-28T00:00:00Z", app_metadata: {}, email: "old@example.com", user_metadata: { full_name: "Founder", user_name: "old-github-handle" } } satisfies User,
     variant: "header",
   },
-  beforeEach: () => loginMode("linking", { linked: true, workspaceEmail: "founder@findmydoc.eu" }),
+  beforeEach: () => loginMode("linking", { linked: true, workspaceEmail: "founder@findmydoc.eu", workspaceAvatarUrl: sampleWorkspaceAvatar }),
   play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByRole("img", { name: "Google-Profilbild" })).toHaveAttribute("src", sampleWorkspaceAvatar);
     await userEvent.click(await within(canvasElement).findByRole("button", { name: "Account-Menü öffnen" }));
     const menu = within(canvasElement).getByRole("dialog", { name: "Account und Testprofil" });
+    await expect(within(menu).getByRole("img", { name: "Google-Profilbild" })).toBeVisible();
     await expect(await within(menu).findByText("founder@findmydoc.eu")).toBeVisible();
     await expect(within(menu).getByText("Google verbunden")).toBeVisible();
     await expect(within(menu).queryByText("old@example.com")).not.toBeInTheDocument();
     await expect(within(menu).queryByRole("link", { name: "Google-Konto verknüpfen" })).not.toBeInTheDocument();
+  },
+};
+
+export const LinkedAccountGate: Story = {
+  args: { ...LinkedAccount.args, variant: "gate" },
+  beforeEach: LinkedAccount.beforeEach,
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByRole("img", { name: "Google-Profilbild" })).toHaveAttribute("src", sampleWorkspaceAvatar);
+    await expect(within(canvasElement).getByText("founder@findmydoc.eu")).toBeVisible();
+  },
+};
+
+export const LinkedAccountWithoutAvatar: Story = {
+  args: LinkedAccount.args,
+  beforeEach: () => loginMode("linking", { linked: true, workspaceEmail: "founder@findmydoc.eu" }),
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByText("F")).toBeVisible();
+    await userEvent.click(within(canvasElement).getByRole("button", { name: "Account-Menü öffnen" }));
+    await expect(within(canvasElement).queryByRole("img", { name: "Google-Profilbild" })).not.toBeInTheDocument();
+  },
+};
+
+export const LinkedAccountWithUnavailableAvatar: Story = {
+  args: LinkedAccount.args,
+  beforeEach: () => loginMode("linking", { linked: true, workspaceEmail: "founder@findmydoc.eu", workspaceAvatarUrl: "/missing-workspace-avatar.png" }),
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByText("F")).toBeVisible();
+    await expect(within(canvasElement).queryByRole("img", { name: "Google-Profilbild" })).not.toBeInTheDocument();
   },
 };

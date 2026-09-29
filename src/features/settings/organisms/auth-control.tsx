@@ -60,7 +60,7 @@ export function AuthControl({
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
   const [loginMode, setLoginMode] = useState<string | null>(null);
-  const [workspaceAccountResult, setWorkspaceAccountResult] = useState<{ userId: string; linked: boolean; workspaceEmail?: string } | null>(null);
+  const [workspaceAccountResult, setWorkspaceAccountResult] = useState<{ userId: string; linked: boolean; workspaceEmail?: string; workspaceAvatarUrl?: string } | null>(null);
   const userId = user?.id;
   useEffect(() => {
     let active = true;
@@ -82,7 +82,10 @@ export function AuthControl({
   const workspaceAccount = workspaceAccountResult?.userId === user?.id ? workspaceAccountResult : null;
 
   const githubLogin = getUserMetadataString(user, "user_name") || getUserMetadataString(user, "preferred_username");
-  const avatarUrl = loginMode === "legacy" ? getUserMetadataString(user, "avatar_url") : "";
+  const avatarUrl = loginMode === "legacy" ? getUserMetadataString(user, "avatar_url") : workspaceAccount?.linked ? workspaceAccount.workspaceAvatarUrl || "" : "";
+  const avatarAlt = loginMode === "legacy" ? "" : "Google-Profilbild";
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
+  const visibleAvatarUrl = avatarUrl === failedAvatarUrl ? "" : avatarUrl;
   const displayName = getUserMetadataString(user, "full_name") || getUserMetadataString(user, "name") || githubLogin || user?.email || "";
   const activeTestProfile = testProfileOptions.find((profile) => profile.id === activeTestProfileId) || null;
 
@@ -143,9 +146,9 @@ export function AuthControl({
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <div className="flex min-w-0 items-center gap-3">
-          {avatarUrl ? (
+          {visibleAvatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover" />
+            <img src={visibleAvatarUrl} alt={avatarAlt} onError={() => setFailedAvatarUrl(visibleAvatarUrl)} className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover" />
           ) : (
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700">
               {displayName.slice(0, 1).toUpperCase() || "?"}
@@ -197,11 +200,12 @@ export function AuthControl({
           <span className="grid h-8 w-8 place-items-center rounded-full bg-emerald-50 text-[10px] font-bold text-emerald-800">
             {activeTestProfile.initials}
           </span>
-        ) : avatarUrl ? (
+        ) : visibleAvatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={avatarUrl}
-            alt=""
+            src={visibleAvatarUrl}
+            alt={avatarAlt}
+            onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
             className="h-8 w-8 rounded-full bg-slate-100 object-cover"
           />
         ) : (
@@ -220,11 +224,12 @@ export function AuthControl({
         >
           <div className="grid gap-4">
             <div className="flex min-w-0 items-center gap-3">
-              {avatarUrl ? (
+              {visibleAvatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={avatarUrl}
-                  alt=""
+                  src={visibleAvatarUrl}
+                  alt={avatarAlt}
+                  onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
                   className="h-11 w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover"
                 />
               ) : (
