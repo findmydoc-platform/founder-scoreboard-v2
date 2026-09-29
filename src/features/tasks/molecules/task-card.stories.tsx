@@ -15,6 +15,8 @@ const deliverable = taskDetailStoryTask({
   definitionOfDone: "Documentation is complete.",
 });
 
+const sampleAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect width='96' height='96' fill='%23dbeafe'/%3E%3Ccircle cx='48' cy='36' r='18' fill='%233b82f6'/%3E%3Cpath d='M13 96c2-23 15-35 35-35s33 12 35 35' fill='%231d4ed8'/%3E%3C/svg%3E";
+
 const subIssues = [
   taskDetailStoryTask({
     id: "sub-issue-1",
@@ -71,12 +73,12 @@ const meta = {
     blockers: [],
     childItems: subIssues,
     onOpenTask: fn(),
-    ownerColor: "#7c3aed",
+    assigneeProfile: { id: "volkan", name: "Volkan", color: "#7c3aed", avatarUrl: sampleAvatar },
     relations: [],
     task: deliverable,
     viewerOpenSubIssueIds: [subIssues[0].id],
   },
-  decorators: [(Story) => <div className="w-80 bg-slate-50 p-2"><Story /></div>],
+  decorators: [(Story) => <div className="w-full max-w-80 bg-slate-50 p-2"><Story /></div>],
   tags: ["domain:tasks", "layer:molecule", "status:stable"],
   title: "Features/Tasks/Molecules/TaskCard",
 } satisfies Meta<typeof TaskCard>;
@@ -90,7 +92,48 @@ export const ForeignDeliverableWithAssignedSubIssue: Story = {
     await expect(canvas.getByText("1 offenes Sub-Issue für dich")).toBeVisible();
     await expect(canvas.getByText(deliverable.title)).toBeVisible();
     await expect(canvas.getByText("Volkan")).toBeVisible();
+    await expect(canvasElement.querySelector("img[src^='data:image/svg+xml']")).toBeVisible();
     await expect(canvas.queryByText(subIssues[0].title)).not.toBeInTheDocument();
+  },
+};
+
+export const AssigneeWithoutAvatar: Story = {
+  args: { assigneeProfile: { id: "volkan", name: "Volkan", color: "#7c3aed" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("V", { exact: true })).toBeVisible();
+    await expect(canvasElement.querySelector("img")).not.toBeInTheDocument();
+  },
+};
+
+export const AssigneeWithBrokenAvatar: Story = {
+  args: { assigneeProfile: { id: "volkan", name: "Volkan", color: "#7c3aed", avatarUrl: "/missing-assignee-avatar.png" } },
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByText("V", { exact: true })).toBeVisible();
+  },
+};
+
+export const Unassigned: Story = {
+  args: {
+    assigneeProfile: undefined,
+    task: taskDetailStoryTask({ ...deliverable, assigneeId: "", assignee: "", ownerId: "", owner: "" }),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("?", { exact: true })).toBeVisible();
+    await expect(canvas.getByText("Nicht zugeordnet")).toBeVisible();
+  },
+};
+
+export const NarrowCardWithDueDate: Story = {
+  args: {
+    assigneeProfile: { id: "volkan", name: "Volkan Mehmet Kablan", color: "#7c3aed", avatarUrl: sampleAvatar },
+    task: taskDetailStoryTask({ ...deliverable, assignee: "Volkan Mehmet Kablan", targetDate: "12.10.2026" }),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Volkan Mehmet Kablan")).toBeVisible();
+    await expect(canvas.getByText("12.10.2026")).toBeVisible();
   },
 };
 

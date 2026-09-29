@@ -42,6 +42,7 @@ export type Profile = {
   focus?: string;
   weeklyCapacity: number;
   color?: string;
+  avatarUrl?: string;
   googleChatUserId?: string;
   googleChatDmSpace?: string;
   notificationsEnabled?: boolean;

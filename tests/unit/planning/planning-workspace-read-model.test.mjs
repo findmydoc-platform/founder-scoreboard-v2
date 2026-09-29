@@ -65,6 +65,9 @@ const moduleStubs = {
     }),
   },
   "@/lib/sprint-review-window": { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS: 48 },
+  "@/features/planning-items/server/workspace-profile-avatars": {
+    withWorkspaceProfileAvatars: async (profiles) => profiles.map((profile) => ({ ...profile, avatarUrl: "https://lh3.googleusercontent.com/a/profile" })),
+  },
 };
 
 const { loadPlanningWorkspaceModel } = await importTestModule(
@@ -89,6 +92,7 @@ test("planning workspace reader loads only the focused canonical model", async (
   assert.equal(result.model.items.find(({ id }) => id === "deliverable").parentApprovalStatus, "approved");
   assert.deepEqual(result.model.relationships.map(({ id }) => id), [1]);
   assert.equal(result.model.people[0].githubLogin, "person-login");
+  assert.equal(result.model.people[0].avatarUrl, "https://lh3.googleusercontent.com/a/profile");
   assert.deepEqual(Object.keys(result.model).sort(), ["items", "people", "preferences", "project", "relationships", "revision", "sprints"]);
   assert.deepEqual(supabase.calls.map(({ table }) => table), [
     "projects",

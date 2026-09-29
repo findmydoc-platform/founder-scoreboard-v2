@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { isTaskPlanningActive } from "@/features/planning/model/approval-domain";
-import { initiativePlanningItems, profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
+import { initiativePlanningItems, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
+import { taskAssigneeProfile } from "@/features/tasks/model/task-card-presentation";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import { GanttView } from "@/features/tasks/organisms/gantt-view";
@@ -84,7 +85,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
             selectedTaskId={selectedTaskId}
             dragOverStatus={dragOverStatus}
             canChangeTaskStatus={canChangeTaskStatus}
-            ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
+            assigneeProfileForTask={(task) => taskAssigneeProfile(task, data.profiles)}
             onOpenTask={openTaskPanel}
             onCreateTask={setTaskDialogDefaults}
             onChangeTaskStatus={(task, status) => updateTask(task, { status })}
@@ -107,7 +108,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           allTasks={data.tasks}
           blockers={data.taskBlockers}
           expandedInitiatives={expandedInitiatives}
-          ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
+          assigneeProfileForTask={(task) => taskAssigneeProfile(task, data.profiles)}
           onOpenTask={openTaskPanel}
           onToggleInitiative={toggleInitiativeCollapse}
           onSetAllInitiativeCollapse={setAllInitiativeCollapse}

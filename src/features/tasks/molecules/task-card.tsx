@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useId, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { TaskChildProgress } from "@/features/tasks/atoms/task-child-progress";
+import { TaskAssigneeAvatar } from "@/features/tasks/atoms/task-assignee-avatar";
 import { TaskCardSubIssueNotice } from "@/features/tasks/atoms/task-card-sub-issue-notice";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
@@ -20,8 +21,9 @@ import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/featur
 import { directChildPluralLabel, taskChildProgress } from "@/features/tasks/model/task-card-presentation";
 import { formatDate, taskAssigneeLabel } from "@/lib/display";
 import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
+import { profileColor } from "@/lib/profile-style";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
-import type { Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
 import { CustomActionMenu } from "@/shared/molecules/custom-action-menu";
 
@@ -436,7 +438,7 @@ function TaskCardRiskBadges({
 
 export function TaskCard({
   task,
-  ownerColor,
+  assigneeProfile,
   relations,
   allTasks,
   blockers,
@@ -453,7 +455,7 @@ export function TaskCard({
   isDragging,
 }: {
   task: Task;
-  ownerColor: string;
+  assigneeProfile?: Pick<Profile, "id" | "name" | "color" | "avatarUrl">;
   relations: TaskRelation[];
   allTasks: Task[];
   blockers: TaskBlocker[];
@@ -474,6 +476,7 @@ export function TaskCard({
   const directParentType = task.taskType === "initiative" ? "Epic" : task.taskType === "deliverable" ? "Initiative" : null;
   const directParent = directParentType && task.parentTaskId ? allTasks.find((candidate) => candidate.id === task.parentTaskId) : null;
   const draggedRef = useRef(false);
+  const ownerColor = profileColor(assigneeProfile);
 
   return (
     <article
@@ -530,10 +533,10 @@ export function TaskCard({
         onOpenTask={onOpenTask}
         viewerOpenSubIssueIds={viewerOpenSubIssueIds}
       />
-      <div className="mt-3 flex min-w-0 items-center justify-between gap-2 text-xs text-slate-500">
-        <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: ownerColor }} />
-          <span className="truncate">{taskAssigneeLabel(task)}</span>
+      <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-slate-500">
+        <span className="inline-flex min-w-32 flex-1 items-center gap-2">
+          <TaskAssigneeAvatar profile={assigneeProfile} color={ownerColor} />
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{taskAssigneeLabel(task)}</span>
         </span>
         <span className="shrink-0">{task.taskType === "deliverable" && task.fixedDate ? `Fixtermin ${formatDate(task.fixedDate)}` : task.targetDate || ""}</span>
       </div>

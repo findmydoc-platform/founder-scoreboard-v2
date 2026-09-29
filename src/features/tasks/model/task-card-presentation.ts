@@ -1,10 +1,15 @@
-import type { Task } from "@/lib/types";
+import type { Profile, Task } from "@/lib/types";
 import { normalizeStatus } from "@/lib/status";
 
 export function directChildPluralLabel(taskType: Task["taskType"]) {
   if (taskType === "epic") return "Initiativen";
   if (taskType === "initiative") return "Deliverables";
   return "Sub-Issues";
+}
+
+export function taskAssigneeProfile(task: Pick<Task, "assigneeId" | "assignee">, profiles: Profile[]) {
+  if (task.assigneeId) return profiles.find((profile) => profile.id === task.assigneeId);
+  return profiles.find((profile) => profile.name === task.assignee);
 }
 
 export function taskChildProgress(childItems: Task[]) {

@@ -20,6 +20,7 @@ import { mapSprint } from "@/lib/planning-sprint-mappers";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS } from "@/lib/sprint-review-window";
 import type { Profile, Project } from "@/lib/types";
+import { withWorkspaceProfileAvatars } from "./workspace-profile-avatars";
 
 export const planningProjectId = "findmydoc-founder-execution";
 export const planningProfileSelect = "id,name,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color";
@@ -98,7 +99,7 @@ export async function loadPlanningWorkspaceModel(
   if (projectResult.error || !projectResult.data || profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error || sprintResult.error || relationResult.error || preferenceResult.error) {
     return { status: "unavailable" };
   }
-  const people = ((profileResult.data || []) as DbProfile[]).map(mapProfile);
+  const people = await withWorkspaceProfileAvatars(((profileResult.data || []) as DbProfile[]).map(mapProfile));
   const items = mapPlanningItemRows(
     (itemResult.data || []) as unknown as DbTask[],
     people,

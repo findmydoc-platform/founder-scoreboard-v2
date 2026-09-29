@@ -3,7 +3,7 @@ import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
 import { TaskCard } from "@/features/tasks/molecules/task-card";
 import { groupSubIssuesByParent } from "@/features/tasks/model/task-card-presentation";
 import { initiativeMetaLabel } from "@/lib/display";
-import type { Task, TaskBlocker, TaskRelation } from "@/lib/types";
+import type { Profile, Task, TaskBlocker, TaskRelation } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
 import { DataSurface } from "@/shared/molecules/data-surface";
 
@@ -14,7 +14,7 @@ type TaskStructureViewProps = {
   allTasks: Task[];
   blockers: TaskBlocker[];
   expandedInitiatives: Record<string, boolean>;
-  ownerColorForTask: (task: Task) => string;
+  assigneeProfileForTask: (task: Task) => Profile | undefined;
   onOpenTask: (taskId: string) => void;
   onToggleInitiative: (initiativeId: string) => void;
   onSetAllInitiativeCollapse: (collapsed: boolean) => void;
@@ -27,7 +27,7 @@ export function TaskStructureView({
   allTasks,
   blockers,
   expandedInitiatives,
-  ownerColorForTask,
+  assigneeProfileForTask,
   onOpenTask,
   onToggleInitiative,
   onSetAllInitiativeCollapse,
@@ -71,7 +71,7 @@ export function TaskStructureView({
                   <TaskCard
                     key={task.id}
                     task={task}
-                    ownerColor={ownerColorForTask(task)}
+                    assigneeProfile={assigneeProfileForTask(task)}
                     relations={relations}
                     allTasks={allTasks}
                     blockers={blockers}
