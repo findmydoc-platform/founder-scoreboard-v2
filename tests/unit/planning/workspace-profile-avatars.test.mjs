@@ -14,6 +14,7 @@ const identity = {
 const contexts = new Map();
 const requested = [];
 let serviceAvailable = true;
+let batchError = false;
 const { withWorkspaceProfileAvatars } = await importTestModule(
   "src/features/planning-items/server/workspace-profile-avatars.ts",
   {
@@ -22,6 +23,11 @@ const { withWorkspaceProfileAvatars } = await importTestModule(
       getServerServiceRoleSupabase: () => serviceAvailable ? {
         rpc: async (name, params) => {
           requested.push([name, params]);
+          if (name === "workspace_access_contexts") {
+            return batchError
+              ? { data: null, error: new Error("batch unavailable") }
+              : { data: params.p_profile_ids.map((id) => contexts.get(id) ?? null), error: null };
+          }
           const value = contexts.get(params.p_profile_id);
           return value instanceof Error ? { data: null, error: value } : { data: value, error: null };
         },
@@ -34,6 +40,7 @@ beforeEach(() => {
   contexts.clear();
   requested.length = 0;
   serviceAvailable = true;
+  batchError = false;
 });
 
 test("team avatars come only from each profile's confirmed Google identity", async () => {
@@ -46,8 +53,7 @@ test("team avatars come only from each profile's confirmed Google identity", asy
     profiles[1],
   ]);
   assert.deepEqual(requested, [
-    ["workspace_access_context", { p_profile_id: "linked" }],
-    ["workspace_access_context", { p_profile_id: "unlinked" }],
+    ["workspace_access_contexts", { p_profile_ids: ["linked", "unlinked"] }],
   ]);
 });
 
@@ -66,4 +72,26 @@ test("missing service client leaves the planning board usable", async () => {
   const profiles = [{ id: "member", name: "Member" }];
   assert.deepEqual(await withWorkspaceProfileAvatars(profiles), profiles);
   assert.deepEqual(requested, []);
+});
+
+test("empty profile lists avoid the privileged RPC", async () => {
+  assert.deepEqual(await withWorkspaceProfileAvatars([]), []);
+  assert.deepEqual(requested, []);
+});
+
+test("batch errors preserve partial avatar results through the existing per-profile RPC", async () => {
+  batchError = true;
+  const profiles = [{ id: "linked" }, { id: "failed" }];
+  contexts.set("linked", { profileId: "linked", userId: "auth-linked", linked: true, identity });
+  contexts.set("failed", new Error("identity unavailable"));
+
+  assert.deepEqual(await withWorkspaceProfileAvatars(profiles), [
+    { ...profiles[0], avatarUrl: identity.picture },
+    profiles[1],
+  ]);
+  assert.deepEqual(requested, [
+    ["workspace_access_contexts", { p_profile_ids: ["linked", "failed"] }],
+    ["workspace_access_context", { p_profile_id: "linked" }],
+    ["workspace_access_context", { p_profile_id: "failed" }],
+  ]);
 });
