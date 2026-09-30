@@ -1,5 +1,6 @@
 "use client";
 
+import "driver.js/dist/driver.css";
 import type { User } from "@supabase/supabase-js";
 import { usePlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { PlanningAppShell } from "@/features/planning/templates/planning-app-shell";
