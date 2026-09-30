@@ -17,6 +17,8 @@ export function buildPlanningTaskTableViewModel({
 }) {
   const normalizedQuery = filters.query.trim().toLocaleLowerCase("de");
   const taskById = new Map(data.tasks.map((task) => [task.id, task]));
+  const sprintById = normalizedQuery ? new Map(data.sprints.map((sprint) => [sprint.id, sprint])) : null;
+  const reviewOwnerById = normalizedQuery ? new Map(data.profiles.map((profile) => [profile.id, profile])) : null;
   const viewerOpenSubIssueIdsByDeliverableId = includeAssignedSubIssueParents && currentProfile
     ? data.tasks.reduce<Record<string, string[]>>((subIssueIds, task) => {
         const isViewerOpenSubIssue = task.taskType === "sub_issue"
@@ -36,17 +38,21 @@ export function buildPlanningTaskTableViewModel({
   const visibleTasks = sortTasks(data.tasks.filter((task) => {
     if (task.taskType === "sub_issue") return false;
     const normalized = normalizeStatus(task.status);
-    const initiative = data.tasks.find((candidate) => candidate.taskType === "initiative" && candidate.id === task.parentTaskId);
-    const sprint = data.sprints.find((item) => item.id === task.sprintId);
-    const reviewOwner = data.profiles.find((profile) => profile.id === task.reviewOwnerProfileId);
-    const matchesQuery = !normalizedQuery || [
-      taskText(task),
-      normalized,
-      initiative?.title || "",
-      initiative?.strategy?.goal || "",
-      sprint?.name || "",
-      reviewOwner?.name || "",
-    ].join(" ").toLocaleLowerCase("de").includes(normalizedQuery);
+    let matchesQuery = true;
+    if (normalizedQuery) {
+      const parent = task.parentTaskId ? taskById.get(task.parentTaskId) : undefined;
+      const initiative = parent?.taskType === "initiative" ? parent : null;
+      const sprint = sprintById?.get(task.sprintId);
+      const reviewOwner = task.reviewOwnerProfileId ? reviewOwnerById?.get(task.reviewOwnerProfileId) : undefined;
+      matchesQuery = [
+        taskText(task),
+        normalized,
+        initiative?.title || "",
+        initiative?.strategy?.goal || "",
+        sprint?.name || "",
+        reviewOwner?.name || "",
+      ].join(" ").toLocaleLowerCase("de").includes(normalizedQuery);
+    }
     const matchesAssignee = filters.assignee === "Alle" || task.assignee === filters.assignee || task.assigneeId === filters.assignee;
     const matchesStatus = filters.status === "Alle" || normalized === filters.status;
     const matchesPriority = filters.priority === "Alle" || task.priority === filters.priority;
