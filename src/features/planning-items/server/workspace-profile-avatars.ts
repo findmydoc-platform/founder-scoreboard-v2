@@ -27,13 +27,18 @@ export async function withWorkspaceProfileAvatars(profiles: Profile[]): Promise<
 
   try {
     const { data, error } = await service.rpc("workspace_access_contexts", { p_profile_ids: profiles.map((profile) => profile.id) });
-    if (!error && Array.isArray(data) && data.length === profiles.length) {
+    if (error) {
+      if (error.code !== "PGRST202" && error.code !== "42883") return profiles;
+    } else if (Array.isArray(data) && data.length === profiles.length) {
       return profiles.map((profile, index) => withWorkspaceAvatar(profile, data[index]));
+    } else {
+      return profiles;
     }
   } catch {
-    // Keep the original per-profile path available if the batch RPC is unavailable.
+    return profiles;
   }
 
+  // A missing batch RPC can occur while the application and schema are rolling out.
   return Promise.all(profiles.map(async (profile) => {
     try {
       const { data, error } = await service.rpc("workspace_access_context", { p_profile_id: profile.id });
