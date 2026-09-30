@@ -14,6 +14,9 @@ const identity = {
 const contexts = new Map();
 const requested = [];
 let serviceAvailable = true;
+let batchError = null;
+let batchThrows = false;
+let batchData = undefined;
 const { withWorkspaceProfileAvatars } = await importTestModule(
   "src/features/planning-items/server/workspace-profile-avatars.ts",
   {
@@ -22,6 +25,12 @@ const { withWorkspaceProfileAvatars } = await importTestModule(
       getServerServiceRoleSupabase: () => serviceAvailable ? {
         rpc: async (name, params) => {
           requested.push([name, params]);
+          if (name === "workspace_access_contexts") {
+            if (batchThrows) throw new Error("connection failed");
+            return batchError
+              ? { data: null, error: batchError }
+              : { data: batchData ?? params.p_profile_ids.map((id) => contexts.get(id) ?? null), error: null };
+          }
           const value = contexts.get(params.p_profile_id);
           return value instanceof Error ? { data: null, error: value } : { data: value, error: null };
         },
@@ -34,6 +43,9 @@ beforeEach(() => {
   contexts.clear();
   requested.length = 0;
   serviceAvailable = true;
+  batchError = null;
+  batchThrows = false;
+  batchData = undefined;
 });
 
 test("team avatars come only from each profile's confirmed Google identity", async () => {
@@ -46,8 +58,7 @@ test("team avatars come only from each profile's confirmed Google identity", asy
     profiles[1],
   ]);
   assert.deepEqual(requested, [
-    ["workspace_access_context", { p_profile_id: "linked" }],
-    ["workspace_access_context", { p_profile_id: "unlinked" }],
+    ["workspace_access_contexts", { p_profile_ids: ["linked", "unlinked"] }],
   ]);
 });
 
@@ -66,4 +77,53 @@ test("missing service client leaves the planning board usable", async () => {
   const profiles = [{ id: "member", name: "Member" }];
   assert.deepEqual(await withWorkspaceProfileAvatars(profiles), profiles);
   assert.deepEqual(requested, []);
+});
+
+test("empty profile lists avoid the privileged RPC", async () => {
+  assert.deepEqual(await withWorkspaceProfileAvatars([]), []);
+  assert.deepEqual(requested, []);
+});
+
+test.each(["PGRST202", "42883"])("missing batch RPC (%s) uses the existing per-profile RPC", async (code) => {
+  batchError = { code, message: "missing function" };
+  const profiles = [{ id: "linked" }, { id: "failed" }];
+  contexts.set("linked", { profileId: "linked", userId: "auth-linked", linked: true, identity });
+  contexts.set("failed", new Error("identity unavailable"));
+
+  assert.deepEqual(await withWorkspaceProfileAvatars(profiles), [
+    { ...profiles[0], avatarUrl: identity.picture },
+    profiles[1],
+  ]);
+  assert.deepEqual(requested, [
+    ["workspace_access_contexts", { p_profile_ids: ["linked", "failed"] }],
+    ["workspace_access_context", { p_profile_id: "linked" }],
+    ["workspace_access_context", { p_profile_id: "failed" }],
+  ]);
+});
+
+test("transient batch failures do not fan out to per-profile RPCs", async () => {
+  batchError = { code: "PGRST000", message: "connection failed" };
+  const profiles = [{ id: "linked" }, { id: "unlinked" }];
+  contexts.set("linked", { profileId: "linked", userId: "auth-linked", linked: true, identity });
+
+  assert.deepEqual(await withWorkspaceProfileAvatars(profiles), profiles);
+  assert.deepEqual(requested, [["workspace_access_contexts", { p_profile_ids: ["linked", "unlinked"] }]]);
+});
+
+test("thrown batch requests do not fan out to per-profile RPCs", async () => {
+  batchThrows = true;
+  const profiles = [{ id: "linked" }];
+  contexts.set("linked", { profileId: "linked", userId: "auth-linked", linked: true, identity });
+
+  assert.deepEqual(await withWorkspaceProfileAvatars(profiles), profiles);
+  assert.deepEqual(requested, [["workspace_access_contexts", { p_profile_ids: ["linked"] }]]);
+});
+
+test("malformed batch responses do not fan out to per-profile RPCs", async () => {
+  batchData = [];
+  const profiles = [{ id: "linked" }];
+  contexts.set("linked", { profileId: "linked", userId: "auth-linked", linked: true, identity });
+
+  assert.deepEqual(await withWorkspaceProfileAvatars(profiles), profiles);
+  assert.deepEqual(requested, [["workspace_access_contexts", { p_profile_ids: ["linked"] }]]);
 });
