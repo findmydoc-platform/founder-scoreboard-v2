@@ -3,7 +3,7 @@ import { useState, useTransition } from "react";
 import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-data-loader";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { PlanningShellState, Profile } from "@/lib/types";
 import { TaskDetailSurface } from "./task-detail-surface";
@@ -234,10 +234,10 @@ export const HydratesAgainAfterWorkspaceRefresh: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
-    await expect(canvas.getByLabelText("Detail requests")).toHaveTextContent("1");
+    await waitFor(() => expect(canvas.getByLabelText("Detail requests")).toHaveTextContent(/^1$/));
     await userEvent.click(canvas.getByRole("button", { name: "Refresh workspace summary" }));
     await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
-    await expect(canvas.getByLabelText("Detail requests")).toHaveTextContent("2");
+    await waitFor(() => expect(canvas.getByLabelText("Detail requests")).toHaveTextContent(/^2$/));
   },
 };
 
@@ -248,7 +248,7 @@ export const RetriesFailedSummaryHydration: Story = {
     await expect(await canvas.findByText("Details vorübergehend nicht verfügbar.")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Erneut laden" }));
     await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
-    await expect(canvas.getByLabelText("Detail requests")).toHaveTextContent("2");
+    await waitFor(() => expect(canvas.getByLabelText("Detail requests")).toHaveTextContent(/^2$/));
     await expect(canvas.queryByRole("button", { name: "Erneut laden" })).not.toBeInTheDocument();
   },
 };
