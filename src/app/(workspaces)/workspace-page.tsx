@@ -59,6 +59,7 @@ async function loadPlanningWorkspacePageData(
     loadPlanningHeaderData(supabase, {
       currentProfileId: profile?.id || null,
       platformRole: profile?.platformRole || null,
+      slots: workspace === "planning" && profile ? ["quickLinks", "calendarEvents"] : undefined,
       sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
     }),
   ]);

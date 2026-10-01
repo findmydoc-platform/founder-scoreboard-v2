@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, X } from "lucide-react";
+import { Bell, LoaderCircle, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
@@ -26,6 +26,7 @@ export function NotificationInbox({
   const rootRef = useRef<HTMLDivElement>(null);
   const unreadCount = notifications.data.unreadCount;
   const items = notifications.data.items;
+  const loading = notifications.state === "idle" || notifications.state === "loading";
 
   useEffect(() => {
     if (!open) return;
@@ -53,10 +54,11 @@ export function NotificationInbox({
         onClick={onToggle}
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-busy={loading}
         className="relative grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-        aria-label="Benachrichtigungen"
+        aria-label={loading ? "Benachrichtigungen werden geladen" : "Benachrichtigungen"}
       >
-        <Bell size={16} />
+        {loading ? <LoaderCircle size={16} className="motion-safe:animate-spin" /> : <Bell size={16} />}
         {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-blue-600 px-1 text-[11px] font-semibold text-white">
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -83,7 +85,7 @@ export function NotificationInbox({
             </div>
           </div>
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 sm:max-h-[420px]">
-            {notifications.state === "loading" ? (
+            {loading ? (
               <UiEmptyState className="px-4 py-8">
                 Benachrichtigungen werden geladen.
               </UiEmptyState>
