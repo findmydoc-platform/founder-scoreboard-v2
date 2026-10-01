@@ -248,6 +248,7 @@ export function usePlanningAppController({
     selectedTaskActivity: taskSelection.selectedTaskActivity,
     selectedTaskBlockers: taskSelection.selectedTaskBlockers,
     selectedTaskComments: taskSelection.selectedTaskComments,
+    retrySelectedTaskDetail: taskDetailDataLoader.retrySelectedTaskDetail,
     selectedTaskDetailError: taskDetailDataLoader.selectedTaskDetailError,
     selectedTaskDetailLoading: taskDetailDataLoader.selectedTaskDetailLoading,
     selectedTaskExternalComments: taskSelection.selectedTaskExternalComments,

@@ -93,6 +93,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     selectedTaskActivity,
     selectedTaskBlockers,
     selectedTaskComments,
+    retrySelectedTaskDetail,
     selectedTaskDetailError,
     selectedTaskDetailLoading,
     selectedTaskExternalComments,
@@ -137,6 +138,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           reviews={data.taskReviews.filter((review) => review.taskId === selectedTask.id)}
           detailDataError={selectedTaskDetailError}
           detailDataLoading={selectedTaskDetailLoading}
+          onRetryDetailData={retrySelectedTaskDetail}
           commentImportNotice={commentImportNotice}
           blockers={selectedTaskBlockers}
           subIssues={selectedTaskSubIssues}

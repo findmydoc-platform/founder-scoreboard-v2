@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type TransitionStartFunction } from "react";
+import { useCallback, useEffect, useState, type TransitionStartFunction } from "react";
 import { requestTaskDetailData } from "@/features/tasks/model/task-api-client";
 import { applyTaskDetailModel, taskDetailDegradationMessage } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -22,12 +22,23 @@ export function useTaskDetailDataLoader({
   startTransition,
 }: UseTaskDetailDataLoaderOptions) {
   const [loadedTaskIds, setLoadedTaskIds] = useState<Set<string>>(() => new Set());
+  const [attempt, setAttempt] = useState(0);
   const [loadState, setLoadState] = useState({ taskId: "", loading: false, error: "" });
   const selectedTaskId = selectedTask?.id || "";
+  const selectedTaskIsSummary = selectedTask?.detailAvailability === "summary";
+  const retrySelectedTaskDetail = useCallback(() => {
+    setLoadedTaskIds((current) => {
+      if (!current.has(selectedTaskId)) return current;
+      const next = new Set(current);
+      next.delete(selectedTaskId);
+      return next;
+    });
+    setAttempt((current) => current + 1);
+  }, [selectedTaskId]);
 
   useEffect(() => {
     if (!selectedTaskId) return;
-    if (source !== "supabase" || loadedTaskIds.has(selectedTaskId)) {
+    if (source !== "supabase" || (loadedTaskIds.has(selectedTaskId) && !selectedTaskIsSummary)) {
       return;
     }
 
@@ -67,16 +78,17 @@ export function useTaskDetailDataLoader({
     return () => {
       active = false;
     };
-  }, [apiClient, applyPlanningShellStateUpdate, loadedTaskIds, selectedTaskId, source, startTransition]);
+  }, [apiClient, applyPlanningShellStateUpdate, attempt, loadedTaskIds, selectedTaskId, selectedTaskIsSummary, source, startTransition]);
 
   const selectedStateMatches = loadState.taskId === selectedTaskId;
   const selectedTaskNeedsLoad = Boolean(
     selectedTaskId
     && source === "supabase"
-    && !loadedTaskIds.has(selectedTaskId),
+    && (!loadedTaskIds.has(selectedTaskId) || selectedTaskIsSummary),
   );
 
   return {
+    retrySelectedTaskDetail,
     selectedTaskDetailError: selectedStateMatches ? loadState.error : "",
     selectedTaskDetailLoading: selectedTaskNeedsLoad && (!selectedStateMatches || loadState.loading),
   };

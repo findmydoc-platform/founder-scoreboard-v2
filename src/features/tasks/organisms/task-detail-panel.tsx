@@ -21,6 +21,7 @@ type Props = {
   reviews: TaskReview[];
   detailDataError: string;
   detailDataLoading: boolean;
+  onRetryDetailData?: () => void;
   commentImportNotice: string;
   commentImportPending: boolean;
   blockers: TaskBlocker[];

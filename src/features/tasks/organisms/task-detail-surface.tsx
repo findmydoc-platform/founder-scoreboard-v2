@@ -46,7 +46,7 @@ import { TaskOverviewPanel } from "@/features/tasks/organisms/task-overview-pane
 import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
 import { normalizeStatus } from "@/lib/status";
 import type { ApprovalDecisionAction, AuthenticatedProfile, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
-import { classNames, UiNotice } from "@/shared/atoms/ui-primitives";
+import { classNames, UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 type TaskDetailSurfaceProps = {
   surface?: "page" | "modal";
@@ -69,6 +69,7 @@ type TaskDetailSurfaceProps = {
   detailDataError?: string;
   requestedCommentTarget?: string;
   detailDataLoading?: boolean;
+  onRetryDetailData?: () => void;
   commentImportNotice?: string;
   commentImportPending?: boolean;
   githubInstallationAvailable: boolean;
@@ -92,7 +93,39 @@ type TaskDetailSurfaceProps = {
   onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
 };
 
-export function TaskDetailSurface({
+export function TaskDetailSurface(props: TaskDetailSurfaceProps) {
+  // Keep the editor mounted when a workspace refresh returns a summary for
+  // the same item, including failed-save refreshes with an unsaved draft.
+  const [lastHydratedTask, setLastHydratedTask] = useState(props.task);
+  if (props.task.detailAvailability !== "summary" && props.task !== lastHydratedTask) {
+    setLastHydratedTask(props.task);
+  }
+  const cachedTask = lastHydratedTask.id === props.task.id && lastHydratedTask.detailAvailability !== "summary"
+    ? lastHydratedTask
+    : null;
+  if (props.task.detailAvailability === "summary" && !cachedTask) {
+    return (
+      <div className="p-6" role="status" aria-live="polite">
+        <UiNotice tone={props.detailDataError ? "danger" : "info"}>
+          {props.detailDataError || "Aufgabendetails werden geladen …"}
+        </UiNotice>
+        {props.detailDataError && props.onRetryDetailData ? (
+          <UiButton className="mt-3" onClick={props.onRetryDetailData}>Erneut laden</UiButton>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <>
+      {props.detailDataError && props.onRetryDetailData ? (
+        <UiButton className="m-3" onClick={props.onRetryDetailData}>Erneut laden</UiButton>
+      ) : null}
+      <HydratedTaskDetailSurface {...props} task={props.task.detailAvailability === "summary" ? cachedTask! : props.task} />
+    </>
+  );
+}
+
+function HydratedTaskDetailSurface({
   surface = "page",
   task,
   initiative,
