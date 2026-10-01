@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { ReviewEvidenceGateDialog } from "./review-evidence-gate-dialog";
 
 const onConfirm = fn(async () => true);
@@ -57,9 +57,15 @@ export const EvidenceLink: Story = {
   play: async ({ canvasElement }) => {
     onConfirm.mockClear();
     const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Dialog schließen" })).toHaveFocus());
     await userEvent.click(canvas.getByRole("radio", { name: /Evidence-Link hinzufügen/ }));
-    await userEvent.type(canvas.getByRole("textbox", { name: "Evidence-Link" }), "https://example.com/release-notes");
-    await userEvent.click(canvas.getByRole("button", { name: "In Review verschieben" }));
-    await expect(onConfirm).toHaveBeenCalledWith({ evidenceLink: "https://example.com/release-notes" });
+    const evidenceLink = canvas.getByRole("textbox", { name: "Evidence-Link" });
+    await userEvent.type(evidenceLink, "https://example.com/release-notes");
+    await expect(evidenceLink).toHaveValue("https://example.com/release-notes");
+    await expect(canvas.getByRole("radio", { name: /Evidence-Link hinzufügen/ })).toBeChecked();
+    const submit = canvas.getByRole("button", { name: "In Review verschieben" });
+    await waitFor(() => expect(submit).toBeEnabled());
+    await userEvent.click(submit);
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ evidenceLink: "https://example.com/release-notes" }));
   },
 };
