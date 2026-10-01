@@ -48,29 +48,20 @@ function createSupabaseFixture(failedTable = "") {
 const moduleStubs = {
   "server-only": {},
   "@/lib/planning-row-mappers": { mapTaskRelation: (row) => ({ id: row.id, taskId: row.task_id, relatedTaskId: row.related_task_id, relationType: row.relation_type }) },
-  "@/lib/planning-row-types": { taskRowSelect: "id" },
   "@/lib/planning-profile-mappers": {
+    profileNameById: (profiles, id) => profiles.find((profile) => profile.id === id)?.name || id || "",
     mapProfile: (row) => ({ id: row.id, name: row.name, githubLogin: row.github_login || "" }),
     mapProfileUiPreference: (row) => ({ profileId: row.profile_id }),
   },
   "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
   "@/lib/planning-sprint-mappers": { mapSprint: (row) => row },
-  "@/lib/planning-task-mappers": {
-    mapTaskRow: (row) => ({
-      id: row.id,
-      taskType: row.task_type,
-      parentTaskId: row.parent_task_id,
-      approvalStatus: row.approval_status,
-      updatedAt: row.updated_at,
-    }),
-  },
   "@/lib/sprint-review-window": { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS: 48 },
   "@/features/planning-items/server/workspace-profile-avatars": {
     withWorkspaceProfileAvatars: async (profiles) => profiles.map((profile) => ({ ...profile, avatarUrl: "https://lh3.googleusercontent.com/a/profile" })),
   },
 };
 
-const { loadPlanningWorkspaceModel } = await importTestModule(
+const { loadPlanningWorkspaceModel, mapPlanningSummaryRows } = await importTestModule(
   "src/features/planning-items/server/planning-workspace-read-source.ts",
   moduleStubs,
 );
@@ -106,5 +97,37 @@ test("planning workspace reader loads only the focused canonical model", async (
     "profile_ui_preferences",
   ]);
   assert.equal(supabase.calls.find(({ table }) => table === "task_relationship_edges").limit, 500);
+  const select = supabase.calls.find(({ table }) => table === "active_tasks").select;
+  assert.doesNotMatch(select, /intended_outcome|scope_constraints|evidence_required|task_notes/);
+  assert.match(select, /description/);
+  assert.match(select, /acceptance_criteria/);
+  assert.match(select, /definition_of_done/);
+  for (const column of ["sprint_id", "target_date", "fixed_date", "parent_task_id", "assignee", "status", "priority", "workstream", "task_dependencies(note)"]) {
+    assert.ok(select.includes(column), `${column} must remain in the summary query`);
+  }
+  assert.equal(result.model.items[0].detailAvailability, "summary");
   assert.match(supabase.calls.find(({ table }) => table === "profiles").select, /(?:^|,)github_login(?:,|$)/);
+});
+
+test("planning startup summaries omit detail briefs while preserving search, quality and sub-issue context", () => {
+  const result = mapPlanningSummaryRows([{ id: "deliverable", task_type: "deliverable", description: "search context", problem_statement: "private brief", intended_outcome: "outcome", scope_constraints: "scope", evidence_required: "proof", acceptance_criteria: "criteria", definition_of_done: "search quality", sprint_id: "sprint-2", target_date: "2026-10-10", fixed_date: "2026-10-11", parent_task_id: "initiative", assignee: "owner", status: "In Arbeit", priority: "P1", workstream: "Engineering", task_dependencies: [{ note: "waiting" }] }], [], [], [], []);
+  assert.equal(result[0].detailAvailability, "summary");
+  assert.equal(result[0].problemStatement, "");
+  assert.equal(result[0].intendedOutcome, "");
+  assert.equal(result[0].scopeConstraints, "");
+  assert.equal(result[0].evidenceRequired, "");
+  assert.equal(result[0].description, "search context");
+  assert.equal(result[0].definitionOfDone, "search quality");
+  assert.equal(result[0].acceptanceCriteria, "criteria");
+  assert.equal(result[0].sprintId, "sprint-2");
+  assert.equal(result[0].targetDate, "2026-10-10");
+  assert.equal(result[0].fixedDate, "2026-10-11");
+  assert.equal(result[0].parentTaskId, "initiative");
+  assert.equal(result[0].assigneeId, "owner");
+  assert.equal(result[0].status, "In Arbeit");
+  assert.equal(result[0].priority, "P1");
+  assert.equal(result[0].workstream, "Engineering");
+  assert.equal(result[0].dependsOn, "waiting");
+  const [subIssue] = mapPlanningSummaryRows([{ id: "child", task_type: "sub_issue", problem_statement: "legacy context" }], [], [], [], []);
+  assert.equal(subIssue.description, "legacy context");
 });

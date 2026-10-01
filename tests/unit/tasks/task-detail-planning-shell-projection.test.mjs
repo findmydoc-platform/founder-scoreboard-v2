@@ -55,3 +55,15 @@ test("task detail degradation copy names every unavailable area", () => {
     "Diskussion, Beziehungen und Blocker, Aktivität und Reviews konnten nicht vollständig geladen werden.",
   );
 });
+
+test("task detail hydration replaces startup summary without retaining its availability marker", () => {
+  const current = taskDetailModelToPlanningShellState(model());
+  current.tasks = [{ id: "target", detailAvailability: "summary", problemStatement: "" }];
+  const full = model();
+  full.item = { ...full.item, problemStatement: "complete briefing", intendedOutcome: "outcome", scopeConstraints: "scope", evidenceRequired: "proof", note: "note" };
+  const hydrated = applyTaskDetailModel(current, full).tasks.find((task) => task.id === "target");
+  assert.equal(hydrated.detailAvailability, undefined);
+  assert.equal(hydrated.problemStatement, "complete briefing");
+  assert.equal(hydrated.evidenceRequired, "proof");
+  assert.equal(hydrated.note, "note");
+});

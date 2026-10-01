@@ -1,7 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { useState, useTransition } from "react";
+import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-data-loader";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
-import type { Profile } from "@/lib/types";
+import type { PlanningShellState, Profile } from "@/lib/types";
 import { TaskDetailSurface } from "./task-detail-surface";
 
 const profiles: Profile[] = [
@@ -163,5 +167,106 @@ export const CorrectOversizedBrief: Story = {
     await userEvent.type(problem, "Vollständiger, gekürzter Kontext.");
     await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
     await expect(context.args.onUpdate).toHaveBeenCalledWith(expect.objectContaining({ problemStatement: "Vollständiger, gekürzter Kontext." }));
+  },
+};
+
+export const SummaryLoading: Story = {
+  args: { task: { ...task, detailAvailability: "summary" }, detailDataLoading: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("status")).toHaveTextContent("Aufgabendetails werden geladen");
+    await expect(canvas.queryByRole("button", { name: /bearbeiten/i })).not.toBeInTheDocument();
+    await expect(canvas.queryByText(task.problemStatement!)).not.toBeInTheDocument();
+  },
+};
+
+export const SummaryFailure: Story = {
+  args: { task: { ...task, detailAvailability: "summary" }, detailDataError: "Task-Details konnten nicht geladen werden.", onRetryDetailData: fn() },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("status")).toHaveTextContent("Task-Details konnten nicht geladen werden.");
+    await expect(canvas.queryByRole("button", { name: /bearbeiten/i })).not.toBeInTheDocument();
+  },
+};
+
+function SummaryRefreshHarness({ failFirst = false, failSave = false, ...args }: React.ComponentProps<typeof TaskDetailSurface> & { failFirst?: boolean; failSave?: boolean }) {
+  const [data, setData] = useState<PlanningShellState>(() => ({ ...emptyPlanningShellState, tasks: [{ ...task, detailAvailability: "summary" as const }] }));
+  const [requests, setRequests] = useState(0);
+  const [dirty, setDirty] = useState(false);
+  const [, startTransition] = useTransition();
+  const [apiClient] = useState(() => {
+    let attempts = 0;
+    return {
+    requestBlob: async () => { throw new Error("Unexpected blob request"); },
+    requestForm: async () => { throw new Error("Unexpected form request"); },
+    requestJson: async <T,>() => {
+      attempts += 1;
+      setRequests((count) => count + 1);
+      if (failFirst && attempts === 1) return { response: new Response(null, { status: 503 }), body: { error: "Details vorübergehend nicht verfügbar." } as T };
+      return {
+        response: new Response(null, { status: 200 }),
+        body: { taskDetail: {
+          revision: "revision", project: emptyPlanningShellState.project, item: task,
+          ancestors: [], children: [], relatedItems: [], people: [], sprints: [],
+          discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+        } } as T,
+      };
+    },
+  } satisfies BrowserApiClient;
+  });
+  const selectedTask = data.tasks[0];
+  const loader = useTaskDetailDataLoader({ apiClient, applyPlanningShellStateUpdate: setData, selectedTask, source: "supabase", startTransition });
+  return (
+    <>
+      <button onClick={() => setData((current) => ({ ...current, tasks: [{ ...task, detailAvailability: "summary" }] }))}>Refresh workspace summary</button>
+      <output aria-label="Detail requests">{requests}</output>
+      <output aria-label="Unsaved draft">{String(dirty)}</output>
+      <TaskDetailSurface {...args} task={selectedTask} detailDataLoading={loader.selectedTaskDetailLoading} detailDataError={loader.selectedTaskDetailError} onRetryDetailData={loader.retrySelectedTaskDetail} onOverviewDirtyChange={setDirty} onUpdate={failSave ? async () => {
+        setData((current) => ({ ...current, tasks: [{ ...task, detailAvailability: "summary" }] }));
+        return { ok: false, status: 409, error: "Aufgabe wurde zwischenzeitlich geändert." };
+      } : args.onUpdate} />
+    </>
+  );
+}
+
+export const HydratesAgainAfterWorkspaceRefresh: Story = {
+  render: (args) => <SummaryRefreshHarness {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
+    await waitFor(() => expect(canvas.getByLabelText("Detail requests")).toHaveTextContent(/^1$/));
+    await userEvent.click(canvas.getByRole("button", { name: "Refresh workspace summary" }));
+    await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
+    await waitFor(() => expect(canvas.getByLabelText("Detail requests")).toHaveTextContent(/^2$/));
+  },
+};
+
+export const RetriesFailedSummaryHydration: Story = {
+  render: (args) => <SummaryRefreshHarness {...args} failFirst />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("Details vorübergehend nicht verfügbar.")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Erneut laden" }));
+    await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
+    await waitFor(() => expect(canvas.getByLabelText("Detail requests")).toHaveTextContent(/^2$/));
+    await expect(canvas.queryByRole("button", { name: "Erneut laden" })).not.toBeInTheDocument();
+  },
+};
+
+export const PreservesDraftAfterRefreshAndFailedSave: Story = {
+  render: (args) => <SummaryRefreshHarness {...args} failSave />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.type(title, " Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Refresh workspace summary" }));
+    await expect(canvas.getByRole("textbox", { name: "Titel" })).toHaveValue(`${task.title} Entwurf`);
+    await expect(canvas.getByLabelText("Unsaved draft")).toHaveTextContent("true");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(canvas.getByRole("alert")).toHaveTextContent("Aufgabe wurde zwischenzeitlich geändert.");
+    await expect(canvas.getByRole("textbox", { name: "Titel" })).toHaveValue(`${task.title} Entwurf`);
+    await expect(canvas.getByLabelText("Unsaved draft")).toHaveTextContent("true");
   },
 };
