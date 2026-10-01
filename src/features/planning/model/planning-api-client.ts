@@ -46,9 +46,26 @@ export function requestPlanningShellStateRevision(apiClient: BrowserApiClient) {
   return apiClient.requestJson<{ error?: string; revision?: PlanningTaskRevision }>("/api/planning-revision");
 }
 
-export function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: readonly PlanningHeaderSlotKey[], options: { signal?: AbortSignal } = {}) {
+export async function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: readonly PlanningHeaderSlotKey[], options: { signal?: AbortSignal } = {}) {
   const query = slots?.length ? `?slots=${encodeURIComponent(slots.join(","))}` : "";
-  return apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, options);
+  const controller = new AbortController();
+  const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
+  const timeout = setTimeout(() => controller.abort(new DOMException("Header request timed out.", "TimeoutError")), 15_000);
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+  try {
+    return await Promise.race([
+      apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, { signal }),
+      aborted,
+    ]);
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", onAbort);
+  }
 }
 
 function strategicStatus(status: string) {

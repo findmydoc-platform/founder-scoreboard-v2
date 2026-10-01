@@ -3,7 +3,7 @@
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import { setProtectedPlanningShellStateCache } from "@/features/planning/hooks/use-planning-auth";
+import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "@/features/planning/hooks/use-planning-auth";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import {
   idlePlanningHeaderSlots,
@@ -31,6 +31,15 @@ type UsePlanningHeaderDataOptions = {
   workspace: AppWorkspace;
 };
 
+function cacheHeaderData(authUserId: string, incoming: PlanningHeaderData) {
+  const cached = getProtectedPlanningShellStateCache();
+  if (cached?.authUserId !== authUserId) return;
+  setProtectedPlanningShellStateCache({
+    ...cached,
+    headerData: mergePlanningHeaderData(cached.headerData, incoming),
+  });
+}
+
 export function usePlanningHeaderData({
   apiClient,
   authRequired,
@@ -46,14 +55,8 @@ export function usePlanningHeaderData({
 }: UsePlanningHeaderDataOptions) {
   const [loadingSlots, setLoadingSlots] = useState<PlanningHeaderSlotKey[]>([]);
   const inFlightKeyRef = useRef("");
-  const notificationRefreshInFlightRef = useRef(false);
-  const dataRef = useRef(data);
-  const serverCurrentProfileRef = useRef(serverCurrentProfile);
+  const notificationRequestRef = useRef<symbol | null>(null);
   const authUserId = authUser?.id || "";
-  useEffect(() => {
-    dataRef.current = data;
-    serverCurrentProfileRef.current = serverCurrentProfile;
-  }, [data, serverCurrentProfile]);
   const projectedHeaderData = useMemo(
     () => projectPlanningHeaderData(data, baseHeaderData, {
       currentProfileId,
@@ -83,6 +86,11 @@ export function usePlanningHeaderData({
     inFlightKeyRef.current = idleSlotKey;
     const controller = new AbortController();
     let active = true;
+    const notificationRequest = requestedSlots.includes("notifications") ? Symbol() : null;
+    if (notificationRequest) notificationRequestRef.current = notificationRequest;
+    const releaseNotificationRequest = () => {
+      if (notificationRequestRef.current === notificationRequest) notificationRequestRef.current = null;
+    };
 
     setLoadingSlots(requestedSlots);
 
@@ -101,13 +109,9 @@ export function usePlanningHeaderData({
 
         const nextHeaderData = normalizePlanningHeaderData(body.headerData);
         setHeaderData((current) => {
+          if (!active) return current;
           const mergedHeaderData = mergePlanningHeaderData(current, nextHeaderData);
-          setProtectedPlanningShellStateCache({
-            authUserId,
-            currentProfile: serverCurrentProfileRef.current,
-            data: dataRef.current,
-            headerData: mergedHeaderData,
-          });
+          cacheHeaderData(authUserId, nextHeaderData);
           return mergedHeaderData;
         });
       } catch (error) {
@@ -115,6 +119,8 @@ export function usePlanningHeaderData({
         inFlightKeyRef.current = "";
         setLoadingSlots([]);
         setHeaderData((current) => markPlanningHeaderDataError(current, requestedSlots, "Headerdaten konnten nicht geladen werden."));
+      } finally {
+        releaseNotificationRequest();
       }
     }
 
@@ -123,6 +129,7 @@ export function usePlanningHeaderData({
     return () => {
       active = false;
       controller.abort();
+      releaseNotificationRequest();
       if (inFlightKeyRef.current === idleSlotKey) inFlightKeyRef.current = "";
       setLoadingSlots([]);
     };
@@ -134,9 +141,12 @@ export function usePlanningHeaderData({
 
     let active = true;
     const controller = new AbortController();
+    let ownedRequest: symbol | null = null;
     const refreshNotifications = async () => {
-      if (!active || notificationRefreshInFlightRef.current) return;
-      notificationRefreshInFlightRef.current = true;
+      if (!active || notificationRequestRef.current) return;
+      const notificationRequest = Symbol();
+      ownedRequest = notificationRequest;
+      notificationRequestRef.current = notificationRequest;
       try {
         if (workspace === "notifications" && refreshNotificationsWorkspace) {
           await refreshNotificationsWorkspace();
@@ -148,13 +158,9 @@ export function usePlanningHeaderData({
         if (!active || !response.ok || !body?.headerData) return;
         const nextHeaderData = normalizePlanningHeaderData(body.headerData);
         setHeaderData((current) => {
+          if (!active) return current;
           const mergedHeaderData = mergePlanningHeaderData(current, nextHeaderData);
-          setProtectedPlanningShellStateCache({
-            authUserId,
-            currentProfile: serverCurrentProfileRef.current,
-            data: dataRef.current,
-            headerData: mergedHeaderData,
-          });
+          cacheHeaderData(authUserId, nextHeaderData);
           return mergedHeaderData;
         });
       } catch (error) {
@@ -162,7 +168,7 @@ export function usePlanningHeaderData({
           // Keep the last successfully loaded notification state; the next poll retries.
         }
       } finally {
-        notificationRefreshInFlightRef.current = false;
+        if (notificationRequestRef.current === notificationRequest) notificationRequestRef.current = null;
       }
     };
     const interval = window.setInterval(refreshNotifications, 60_000);
@@ -176,7 +182,7 @@ export function usePlanningHeaderData({
       controller.abort();
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      notificationRefreshInFlightRef.current = false;
+      if (notificationRequestRef.current === ownedRequest) notificationRequestRef.current = null;
     };
   }, [apiClient, authRequired, authUserId, protectedDataLoaded, refreshNotificationsWorkspace, setHeaderData, workspace]);
 

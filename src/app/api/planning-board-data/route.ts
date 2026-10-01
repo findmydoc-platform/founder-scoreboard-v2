@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     loadPlanningHeaderData(apiContext.supabase, {
       currentProfileId: currentProfile?.id || null,
       platformRole: currentProfile?.platformRole || null,
+      slots: currentProfile ? ["quickLinks", "calendarEvents"] : undefined,
       sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
     }),
   ]);
