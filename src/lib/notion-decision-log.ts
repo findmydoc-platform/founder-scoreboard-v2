@@ -175,7 +175,7 @@ export async function loadNotionDecisionLog(
   const token = environment.NOTION_DECISION_LOG_TOKEN?.trim() || "";
   const dataSourceId = normalizeDataSourceId(environment.NOTION_DECISION_LOG_DATA_SOURCE_ID || "");
 
-  if (!token || !dataSourceId) {
+  if (environment.NOTION_DECISION_LOG_ENABLED === "false" || !token || !dataSourceId) {
     return {
       ok: false,
       code: "missing_configuration",

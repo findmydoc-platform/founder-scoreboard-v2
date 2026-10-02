@@ -1,7 +1,8 @@
 import { test, expect, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-test("uses existing WIF resources, caches only the service credential and rechecks membership", async () => {
+test.each(["production", "preview"])("%s uses WIF, caches only the service credential and rechecks membership", async environment => {
+  vi.stubEnv("VERCEL_ENV", environment);
   vi.stubEnv("GOOGLE_AUTHORIZED_GROUP", "internal-tool-founder-ops-access@findmydoc.eu");
   vi.stubEnv("GOOGLE_WORKLOAD_IDENTITY_AUDIENCE", "configured-audience");
   vi.stubEnv("GOOGLE_WORKSPACE_SERVICE_ACCOUNT", "reader@example.iam.gserviceaccount.com");
@@ -22,8 +23,5 @@ test("uses existing WIF resources, caches only the service credential and rechec
     expect(await directory.isWorkspaceGroupMember("member@findmydoc.eu")).toBe(false);
     expect(network).toHaveBeenCalledTimes(4);
     expect(memberships).toBe(2);
-    vi.stubEnv("VERCEL_ENV","preview");
-    await expect(directory.isWorkspaceGroupMember("member@findmydoc.eu")).rejects.toThrow();
-    expect(network).toHaveBeenCalledTimes(4);
   } finally { vi.unstubAllEnvs(); vi.unstubAllGlobals(); }
 });

@@ -281,3 +281,15 @@ test("labels the form as an action and moves closed forms to history language", 
   assert.equal(decisionLogFormLabel(entry()), "Zur Abstimmung ↗");
   assert.equal(decisionLogFormLabel(entry({ status: "Bestätigt" })), "Abstimmung ansehen ↗");
 });
+
+
+test("disabled Notion integration makes no request even when credentials exist", async () => {
+  let calls = 0;
+  const result = await loadNotionDecisionLog({
+    NOTION_DECISION_LOG_ENABLED: "false",
+    NOTION_DECISION_LOG_TOKEN: "secret-test-token",
+    NOTION_DECISION_LOG_DATA_SOURCE_ID: "source-id",
+  }, async () => { calls++; return Response.json({ results: [], has_more: false }); });
+  assert.equal(result.ok, false);
+  assert.equal(calls, 0);
+});

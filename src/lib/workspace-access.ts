@@ -18,7 +18,7 @@ export async function requireWorkspaceAccess(input: { userId?: string; profileId
   const context = await workspaceAccessContext(input);
   if (context.mode === "legacy" || (context.mode === "linking" && !context.linkingEnforced && requireLinked)) return null;
   if (context.mode === "linking" && context.linkingEnforced && requireLinked && context.profileId && !context.linked) throw new WorkspaceAccessError(403, "workspace_link_required");
-  if (process.env.VERCEL_ENV === "preview" || !context.userId || !context.profileId || !context.identity || (requireLinked && !context.linked)) throw new WorkspaceAccessError(403, "workspace_access_denied");
+  if (!context.userId || !context.profileId || !context.identity || (requireLinked && !context.linked)) throw new WorkspaceAccessError(403, "workspace_access_denied");
   return authorizeWorkspaceIdentity({ id: context.userId, identities: [{ provider: "google", identity_data: context.identity }] }, isWorkspaceGroupMember);
 }
 
