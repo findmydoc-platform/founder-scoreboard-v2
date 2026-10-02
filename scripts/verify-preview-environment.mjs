@@ -24,6 +24,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const contents = await readFile(".vercel/.env.preview.local", "utf8");
     const env = Object.fromEntries(contents.split(/\r?\n/).map(parseEnvLine).filter(Boolean));
+    // The workflow supplies this value to both the build and deployment command.
+    env.REQUIRE_SUPABASE_AUTH = process.env.REQUIRE_SUPABASE_AUTH ?? env.REQUIRE_SUPABASE_AUTH;
     const ref = verifyPreviewEnvironment(env, process.env.PRODUCTION_SUPABASE_PROJECT_REF);
     console.log(`Preview environment verified: isolated Supabase project ${ref}, authentication required.`);
   } catch (error) {
