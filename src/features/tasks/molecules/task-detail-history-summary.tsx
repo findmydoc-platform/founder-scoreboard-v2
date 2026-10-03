@@ -1,6 +1,7 @@
 import { ArrowRight, History } from "lucide-react";
 import { formatDate } from "@/lib/display";
 import type { Profile, Task } from "@/lib/types";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
 
 type Props = {
   task: Task;
@@ -25,8 +26,8 @@ export function TaskDetailHistorySummary({ task, profiles }: Props) {
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
           <ArrowRight size={14} className="shrink-0 text-blue-600" aria-hidden="true" />
           {task.carriedFromSprintId ? <span>Aus Sprint {task.carriedFromSprintId} übertragen</span> : null}
-          {task.sprintOutcome ? <span>· Outcome: {task.sprintOutcome}</span> : null}
-          {task.carryoverReason ? <span>· {task.carryoverReason}</span> : null}
+          {task.sprintOutcome ? <span>· Outcome: <LinkifiedText value={task.sprintOutcome} /></span> : null}
+          {task.carryoverReason ? <span>· <LinkifiedText value={task.carryoverReason} /></span> : null}
         </div>
       ) : null}
     </footer>

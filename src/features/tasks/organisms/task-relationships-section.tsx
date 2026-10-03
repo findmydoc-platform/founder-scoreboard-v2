@@ -6,6 +6,7 @@ import type { TaskActionResult, TaskUpdateResult } from "@/features/tasks/hooks/
 import { RelationshipList } from "@/features/tasks/molecules/relationship-list";
 import { TaskRelationshipForm, type TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
 import type { TaskRelationshipRow } from "@/features/tasks/model/task-detail-state";
 import { relationMatchesDraft } from "@/lib/relationship-view-model";
 import type { Profile, Task, TaskRelation, TaskRelationType } from "@/lib/types";
@@ -211,7 +212,7 @@ export function TaskRelationshipsSection({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="font-semibold">Bestehender Abhängigkeitshinweis</div>
-              <p className="mt-1 whitespace-pre-wrap break-words">{legacyDependsOn}</p>
+              <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"><LinkifiedText value={legacyDependsOn} /></p>
             </div>
             {canEditLegacy ? (
               <UiButton
