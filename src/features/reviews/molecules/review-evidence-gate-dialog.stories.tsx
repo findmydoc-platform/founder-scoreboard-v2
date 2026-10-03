@@ -2,8 +2,6 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { ReviewEvidenceGateDialog } from "./review-evidence-gate-dialog";
 
-const onConfirm = fn(async () => true);
-
 const meta = {
   component: ReviewEvidenceGateDialog,
   parameters: { layout: "fullscreen" },
@@ -28,7 +26,7 @@ const meta = {
   args: {
     pending: false,
     onClose: fn(),
-    onConfirm,
+    onConfirm: fn(async () => true),
   },
 } satisfies Meta<typeof ReviewEvidenceGateDialog>;
 
@@ -36,8 +34,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const ExceptionNote: Story = {
-  play: async ({ canvasElement }) => {
-    onConfirm.mockClear();
+  args: { onConfirm: fn(async () => true) },
+  play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     const submit = canvas.getByRole("button", { name: "In Review verschieben" });
     await expect(submit).toBeDisabled();
@@ -47,15 +45,15 @@ export const ExceptionNote: Story = {
     );
     await expect(submit).toBeEnabled();
     await userEvent.click(submit);
-    await expect(onConfirm).toHaveBeenCalledWith({
+    await expect(args.onConfirm).toHaveBeenCalledWith({
       evidenceExceptionNote: "Ergebnis wurde im Founder-Meeting vom 17.09.2026 abgenommen.",
     });
   },
 };
 
 export const EvidenceLink: Story = {
-  play: async ({ canvasElement }) => {
-    onConfirm.mockClear();
+  args: { onConfirm: fn(async () => true) },
+  play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await waitFor(() => expect(canvas.getByRole("button", { name: "Dialog schließen" })).toHaveFocus());
     await userEvent.click(canvas.getByRole("radio", { name: /Evidence-Link hinzufügen/ }));
@@ -66,6 +64,6 @@ export const EvidenceLink: Story = {
     const submit = canvas.getByRole("button", { name: "In Review verschieben" });
     await waitFor(() => expect(submit).toBeEnabled());
     await userEvent.click(submit);
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ evidenceLink: "https://example.com/release-notes" }));
+    await waitFor(() => expect(args.onConfirm).toHaveBeenCalledWith({ evidenceLink: "https://example.com/release-notes" }));
   },
 };
