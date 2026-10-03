@@ -270,3 +270,48 @@ export const PreservesDraftAfterRefreshAndFailedSave: Story = {
     await expect(canvas.getByLabelText("Unsaved draft")).toHaveTextContent("true");
   },
 };
+
+export const PlainTextUrls: Story = {
+  args: {
+    task: {
+      ...task,
+      title: "Arbeitsbrief prüfen: https://example.com/title.",
+      problemStatement: "Prüfgrundlage steht unter https://example.com/problem.",
+      acceptanceCriteria: "- [ ] Kriterien unter https://example.com/criteria, prüfen",
+      evidenceRequired: "Nachweis: https://example.com/evidence.",
+    },
+    comments: [{
+      id: 2,
+      taskId: task.id,
+      profileId: "volkan",
+      comment: "Rückfrage dazu: https://example.com/comment.",
+      githubDeliveryStatus: "delivered",
+      githubCommentUrl: "",
+      createdAt: "2026-09-24T10:15:00.000Z",
+    }],
+    activities: [{
+      id: 2,
+      taskId: task.id,
+      action: "task.status_changed",
+      actorProfileId: "sebastian",
+      message: "Status geändert: Offen → In Arbeit. Details: https://example.com/activity.",
+      createdAt: "2026-09-24T09:45:00.000Z",
+    }],
+    requestedCommentTarget: "comment:2",
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    const taskTitle = canvas.getByRole("heading", { level: 1 });
+    const problemLink = canvas.getByRole("link", { name: "https://example.com/problem (öffnet in neuem Tab)" });
+    const evidenceLink = canvas.getByRole("link", { name: "https://example.com/evidence (öffnet in neuem Tab)" });
+
+    await expect(taskTitle).toHaveTextContent("Arbeitsbrief prüfen: https://example.com/title.");
+    await expect(within(taskTitle).queryByRole("link")).not.toBeInTheDocument();
+    await expect(problemLink).toHaveAttribute("href", "https://example.com/problem");
+    await expect(evidenceLink).toHaveAttribute("href", "https://example.com/evidence");
+    await userEvent.click(canvas.getByRole("tab", { name: /Aktivität/ }));
+    await expect(canvas.getByRole("link", { name: "https://example.com/comment (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://example.com/comment");
+    await expect(canvas.getByRole("link", { name: "https://example.com/activity (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://example.com/activity");
+  },
+};
