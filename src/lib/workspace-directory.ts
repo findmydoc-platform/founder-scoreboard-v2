@@ -10,7 +10,6 @@ async function jsonRequest(url: string, init: RequestInit) {
 }
 
 export async function isWorkspaceGroupMember(email: string): Promise<boolean> {
-  if (process.env.VERCEL_ENV === "preview") throw new Error("Workspace login is unavailable in Preview");
   const audience = process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE;
   const account = process.env.GOOGLE_WORKSPACE_SERVICE_ACCOUNT;
   const group = process.env.GOOGLE_AUTHORIZED_GROUP;

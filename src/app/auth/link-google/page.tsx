@@ -8,7 +8,7 @@ export default async function LinkGooglePage() {
   const client = await getServerAuthSupabase();
   const user = client ? (await client.auth.getUser()).data.user : null;
   const context = await workspaceAccessContext(user ? { userId: user.id } : {}).catch(() => null);
-  const available = context?.mode === "linking" && process.env.VERCEL_ENV !== "preview";
+  const available = context?.mode === "linking";
   const session = user && context?.linked && context.linkingEnforced ? (await client?.auth.getSession())?.data.session : null;
   const approved = session && user ? await Promise.all([
     requireWorkspaceAccess({ userId: user.id }), assertGoogleSession(session.access_token, user.id),

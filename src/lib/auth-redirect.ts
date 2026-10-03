@@ -8,8 +8,11 @@ export function safeRelativeNext(value: string | null) {
 }
 
 export function authOrigin() {
-  const url = new URL(process.env.APP_URL || "http://localhost:3000");
-  if (process.env.VERCEL_ENV === "preview") throw new Error("Preview login unavailable");
-  if (url.origin !== "https://founder-ops.findmydoc.eu" && !(process.env.NODE_ENV === "development" && url.hostname === "localhost" && url.protocol === "http:")) throw new Error("Unapproved application origin");
+  const configured = process.env.APP_URL || (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+  const url = new URL(configured || (process.env.NODE_ENV === "development" ? "http://localhost:3000" : ""));
+  const local = process.env.NODE_ENV === "development" && url.hostname === "localhost" && url.protocol === "http:";
+  if ((!local && url.protocol !== "https:") || url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error("Unapproved application origin");
+  }
   return url.origin;
 }
