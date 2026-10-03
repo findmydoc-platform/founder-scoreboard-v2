@@ -1039,12 +1039,6 @@ export type TeamReviseTransaction = Readonly<{
   projectionOperationId?: string;
 }>;
 
-type StoredTeamReviseRequest = Readonly<{
-  request_hash: string;
-  response: TeamReviseTransaction | null;
-  contract_version: number | null;
-}>;
-
 type TeamReviseDependencies = Readonly<{
   supabase: SupabaseServer;
   actor: ActorContext;
@@ -1053,11 +1047,6 @@ type TeamReviseDependencies = Readonly<{
   parsed: Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
   preparedPreview?: PlanningItemUpdatePreview;
   onPreview?: (preview: PlanningItemUpdatePreview) => void;
-  dispatchGitHubProjections?: (
-    supabase: SupabaseServer,
-    operationId: string,
-  ) => Promise<Map<string, PlanningItemGitHubSyncResult>>;
-  scheduleAfter?: (callback: () => Promise<void>) => void;
 }>;
 
 function teamReviseChange(transaction: TeamReviseTransaction) {
@@ -1104,54 +1093,6 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
         return { ok: false, error: { code: "invalidCommand", issues: [{ path: "idempotencyKey", reason: "idempotencyKeyRequired" }] } };
       }
       const idempotencyKey = invocation.idempotencyKey || "";
-      const existing = invocation.mode === "commit" ? await dependencies.supabase
-        .from("team_planning_item_update_requests")
-        .select("request_hash,response,contract_version")
-        .eq("token_id", dependencies.tokenId)
-        .eq("idempotency_key", idempotencyKey)
-        .maybeSingle() : { data: null, error: null };
-      if (existing.error) return { ok: false, error: teamReviseProviderError(existing.error) };
-      const stored = existing.data as StoredTeamReviseRequest | null;
-      if (stored) {
-        if (Number(stored.contract_version || 1) < 3) {
-          return { ok: false, error: { code: "conflict", reason: "idempotency" } };
-        }
-        const itemType = stored.response?.itemType;
-        if (!itemType) return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: false } };
-        if (itemType === "epic" && !["ceo", "deputy"].includes(invocation.actor.platformRole)) {
-          return { ok: false, error: { code: "forbidden", reason: "reviseEpicRequiresOperationalLead" } };
-        }
-        const requestHash = planningItemUpdateHash({
-          itemId: dependencies.itemId,
-          itemType,
-          expectedUpdatedAt: dependencies.parsed.expectedUpdatedAt,
-          patch: dependencies.parsed.raw,
-        });
-        if (requestHash !== stored.request_hash) return { ok: false, error: { code: "conflict", reason: "idempotency" } };
-        let replayResponse = stored.response;
-        if (dependencies.parsed.githubSyncMode === "wait" && dependencies.dispatchGitHubProjections) {
-          await dependencies.dispatchGitHubProjections(
-            dependencies.supabase,
-            `team-update:${dependencies.tokenId}:${idempotencyKey}`,
-          );
-          const refreshed = await dependencies.supabase
-            .from("team_planning_item_update_requests")
-            .select("response")
-            .eq("token_id", dependencies.tokenId)
-            .eq("idempotency_key", idempotencyKey)
-            .single();
-          if (refreshed.error) return { ok: false, error: teamReviseProviderError(refreshed.error) };
-          replayResponse = (refreshed.data as { response: TeamReviseTransaction }).response;
-        }
-        return {
-          ok: true,
-          status: "committed",
-          items: [],
-          changes: [teamReviseChange({ ...replayResponse, replayed: true })],
-          effects: [],
-          replayed: true,
-        };
-      }
 
       const prepared = dependencies.preparedPreview ? { ok: true as const, preview: dependencies.preparedPreview } : await buildPlanningItemUpdatePreview({
           actor: { id: invocation.actor.profileId, platformRole: invocation.actor.platformRole } as AuthenticatedProfile,
@@ -1197,24 +1138,9 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
         p_user_agent: metadata?.userAgent || null,
       });
       if (error) return { ok: false, error: teamReviseProviderError(error) };
-      let transaction = data as TeamReviseTransaction | null;
+      const transaction = data as TeamReviseTransaction | null;
       if (!transaction) return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: false } };
 
-      const syncMode = dependencies.parsed.githubSyncMode;
-      if (syncMode && transaction.projectionOperationId) {
-        const projectionOperationId = transaction.projectionOperationId;
-        if (syncMode === "wait") {
-          if (!dependencies.dispatchGitHubProjections) return { ok: false, error: { code: "dependencyUnavailable", dependency: "github", retryable: true } };
-          const results = await dependencies.dispatchGitHubProjections(dependencies.supabase, projectionOperationId);
-          transaction = { ...transaction, githubSync: results.get(preview.itemId) };
-        } else {
-          if (dependencies.scheduleAfter && dependencies.dispatchGitHubProjections) {
-            dependencies.scheduleAfter(async () => {
-              await dependencies.dispatchGitHubProjections!(dependencies.supabase, projectionOperationId);
-            });
-          }
-        }
-      }
       return {
         ok: true,
         status: "committed",
