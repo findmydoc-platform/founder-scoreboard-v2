@@ -226,3 +226,13 @@ Check after a successful deployment:
 - GitHub Actions job logs show no production errors.
 
 Useful commands are not part of the operator flow anymore; use the GitHub Actions run and summary instead.
+
+## Preview authentication and database isolation
+
+Production and Preview use the same Vercel project with separate environment variables. Configure an isolated hosted Supabase project and matching anon/service-role keys for Preview. `REQUIRE_SUPABASE_AUTH` must remain `true`. The Preview workflow validates these settings before building and rejects the production project reference configured in `PRODUCTION_SUPABASE_PROJECT_REF`. Update that reference when the production database changes.
+
+Preview Google login enforces the same Workspace group, verified identity, profile binding and session rules as Production. Register the isolated Supabase provider callback in the approved Google client, and the exact protected deployment return URL in the isolated Supabase Auth settings. Configure the existing Workspace reader federation to trust only this Vercel project and its approved environments. Keep deployment protection enabled. Never copy production sessions or integration credentials into a test environment.
+
+Set a trusted HTTPS `APP_URL`, or leave it unset in Preview to use the platform-provided `VERCEL_URL`. Request Host headers cannot select a login return origin. Production still requires its configured `APP_URL`.
+
+Set `NOTION_DECISION_LOG_ENABLED=false` in an isolated test deployment to prevent Notion requests without replacing or deleting existing sensitive credentials. The integration remains enabled by default.
