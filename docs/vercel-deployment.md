@@ -71,7 +71,7 @@ GOOGLE_CHAT_DELIVERY_ENABLED=false
 FOUNDEROPS_DELIVERY_SECRET=
 ```
 
-The FounderOps Google Workspace OAuth values belong only to Vercel Development and Production; do not expose them to Preview. `GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY` is a dedicated base64 value that decodes to exactly 32 bytes and must not reuse `GITHUB_TOKEN_ENCRYPTION_KEY`. Personal Google access and refresh tokens stay encrypted in the service-role-only Supabase vault and never belong in Vercel or Keeper.
+Configure Google Workspace OAuth values only for the environments explicitly approved for their purpose. An isolated Preview may use the approved client after its provider callback and application return URLs are registered. Calendar connections require separately approved Preview configuration. `GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY` is a dedicated base64 value that decodes to exactly 32 bytes and must not reuse `GITHUB_TOKEN_ENCRYPTION_KEY`. Personal Google access and refresh tokens stay encrypted in the service-role-only Supabase vault and never belong in Vercel or Keeper.
 
 For operational in-app delivery, set `GOOGLE_CHAT_WEBHOOK_URL` to the incoming webhook of the renamed `FounderOps` Google Chat space and set `GOOGLE_CHAT_DELIVERY_ENABLED=true` only after a controlled test. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase, and stay out of the release channel.
 
@@ -226,3 +226,13 @@ Check after a successful deployment:
 - GitHub Actions job logs show no production errors.
 
 Useful commands are not part of the operator flow anymore; use the GitHub Actions run and summary instead.
+
+## Preview authentication and database isolation
+
+Production and Preview use the same Vercel project with separate environment variables. Preview deployment is optional. If no Supabase endpoint or key is assigned to Preview, the workflow skips its build and deployment. A partial configuration remains an error, including alternative Supabase variable names that the guard cannot validate. To enable deployment, configure an isolated hosted Supabase project and matching legacy anon/service-role JWT keys for Preview. `REQUIRE_SUPABASE_AUTH` must remain `true`. The workflow validates these settings before building and rejects the production project reference configured in `PRODUCTION_SUPABASE_PROJECT_REF`. Update that reference when the production database changes.
+
+Preview Google login enforces the same Workspace group, verified identity, profile binding and session rules as Production. Register the isolated Supabase provider callback in the approved Google client, and the exact protected deployment return URL in the isolated Supabase Auth settings. Configure the existing Workspace reader federation to trust only this Vercel project and its approved environments. Keep deployment protection enabled. Never copy production sessions or integration credentials into a test environment.
+
+Set a trusted HTTPS `APP_URL`, or leave it unset in Preview to use the platform-provided `VERCEL_URL`. Request Host headers cannot select a login return origin. Production still requires its configured `APP_URL`.
+
+Set `NOTION_DECISION_LOG_ENABLED=false` in an isolated test deployment to prevent Notion requests without replacing or deleting existing sensitive credentials. The integration remains enabled by default.
