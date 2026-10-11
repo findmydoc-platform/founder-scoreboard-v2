@@ -13,6 +13,27 @@ test("accepts an isolated database with matching keys and required authenticatio
   expect(verifyPreviewEnvironment(environment(), "productionref")).toBe("previewref");
 });
 
+test("skips a completely unconfigured backend only when explicitly allowed", () => {
+  const env = { REQUIRE_SUPABASE_AUTH: "true" };
+  expect(() => verifyPreviewEnvironment(env, "productionref")).toThrow();
+  expect(verifyPreviewEnvironment(env, "productionref", { allowUnconfigured: true })).toBeNull();
+});
+
+test.each([
+  "NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY",
+])("does not skip a partially configured backend with %s", key => {
+  expect(() => verifyPreviewEnvironment({ REQUIRE_SUPABASE_AUTH: "true", [key]: environment()[key] || "configured" }, "productionref", { allowUnconfigured: true })).toThrow();
+});
+
+test("optional Preview still rejects Production, missing target guard, and disabled authentication", () => {
+  expect(() => verifyPreviewEnvironment(environment(), "previewref", { allowUnconfigured: true })).toThrow(/production database/);
+  expect(() => verifyPreviewEnvironment({ REQUIRE_SUPABASE_AUTH: "true" }, "", { allowUnconfigured: true })).toThrow(/reference is required/);
+  expect(() => verifyPreviewEnvironment({ REQUIRE_SUPABASE_AUTH: "false" }, "productionref", { allowUnconfigured: true })).toThrow(/require authentication/);
+});
+
 test("rejects the production database and missing production reference", () => {
   expect(() => verifyPreviewEnvironment(environment(), "previewref")).toThrow(/production database/);
   expect(() => verifyPreviewEnvironment(environment(), "")).toThrow(/reference is required/);
