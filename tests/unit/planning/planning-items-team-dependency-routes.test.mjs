@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { beforeEach, test, vi } from "vitest";
 
 import { importTestModule } from "../../helpers/vitest-module.mjs";
+
+beforeEach(() => vi.resetModules());
 
 const expectedUpdatedAt = "2026-09-12T10:00:00.000Z";
 const dependency = {

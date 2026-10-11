@@ -26,6 +26,7 @@ import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import { describeTaskActivity, type TaskActivityIconKey, type TaskActivityTone } from "@/features/tasks/model/task-activity-presentation";
 import { taskCommentElementId } from "@/features/tasks/model/task-comment-target";
 import type { GitHubCommentDeliveryStatus, Profile, TaskActivity } from "@/lib/types";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
 import type { TaskReview } from "@/lib/types";
 import { UiEmptyState } from "@/shared/atoms/ui-primitives";
 import { classNames } from "@/shared/atoms/ui-primitives";
@@ -282,10 +283,10 @@ export function TaskCommentTimeline({
               <div className="min-w-0 flex-1 overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-slate-800">{activity.title}</span>
-                  <span className="text-xs text-slate-400">{formatDateTime(item.createdAt)}</span>
+                  <span className="text-xs text-slate-500">{formatDateTime(item.createdAt)}</span>
                 </div>
-                {activity.detail && <div className="mt-1 text-sm leading-6 text-slate-600">{activity.detail}</div>}
-                <div className="mt-1 text-xs text-slate-400">durch {actorName}</div>
+                {activity.detail && <div className="mt-1 text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]"><LinkifiedText value={activity.detail} /></div>}
+                <div className="mt-1 text-xs text-slate-500">durch {actorName}</div>
               </div>
             </article>
           );

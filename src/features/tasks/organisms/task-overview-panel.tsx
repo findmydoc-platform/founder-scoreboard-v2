@@ -16,6 +16,7 @@ import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-tex
 import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
 import type { LinkedPullRequest, Profile, Task } from "@/lib/types";
 import { formatDate } from "@/lib/display";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
 import { classNames, UiButton, UiEmptyState, UiField, UiNotice, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 const overviewFields = [
@@ -44,7 +45,9 @@ function ChecklistReadValue({ value }: { value: string }) {
           <span className="mt-1.5 grid h-4 w-4 shrink-0 place-items-center rounded border border-slate-300 bg-white" aria-hidden="true">
             {/^\s*[-*]?\s*\[[xX]\]/.test(line) ? <Check size={11} className="text-emerald-600" /> : null}
           </span>
-          <span>{line.replace(/^\s*[-*]?\s*\[[ xX]\]\s*/, "")}</span>
+          <span className="[overflow-wrap:anywhere]">
+            <LinkifiedText value={line.replace(/^\s*[-*]?\s*\[[ xX]\]\s*/, "")} />
+          </span>
         </li>
       ))}
     </ul>
@@ -75,7 +78,7 @@ function ReadSection({
       <h3 className="text-sm font-semibold text-slate-950">{label}</h3>
       {hasValue ? (
         <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
-          {checklist ? <ChecklistReadValue value={value} /> : value}
+          {checklist ? <ChecklistReadValue value={value} /> : <LinkifiedText value={value} />}
         </div>
       ) : <p className="mt-2 text-[15px] leading-7 text-slate-500">{emptyValue}</p>}
     </section>
@@ -222,7 +225,7 @@ function ReviewEvidenceSection({
     >
       <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
       <div className="mt-2 text-[15px] leading-7 text-slate-700">
-        <p>{evidenceRequired.trim() || <span className="text-slate-500">Kein erwarteter Nachweis hinterlegt.</span>}</p>
+        <p><LinkifiedText value={evidenceRequired.trim() || "Kein erwarteter Nachweis hinterlegt."} /></p>
         <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} />
       </div>
     </section>

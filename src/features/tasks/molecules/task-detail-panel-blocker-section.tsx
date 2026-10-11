@@ -4,6 +4,7 @@ import { AlertTriangle, Plus, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import type { TaskActionResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
 import type { Profile, TaskBlocker } from "@/lib/types";
 import { UiBadge, UiButton, UiField } from "@/shared/atoms/ui-primitives";
 
@@ -143,9 +144,9 @@ export function TaskDetailPanelBlockerSection({
               <span className="font-semibold">{profileName(blocker.profileId)}</span>
               <span className="text-xs">{blocker.status}</span>
             </div>
-            <p className="mt-1 leading-6">{blocker.reason}</p>
-            {blocker.impact && <p className="mt-1 text-xs text-orange-800">Impact: {blocker.impact}</p>}
-            {blocker.needsHelpFrom && <p className="mt-1 text-xs text-orange-800">Braucht Hilfe von: {blocker.needsHelpFrom}</p>}
+            <p className="mt-1 leading-6 [overflow-wrap:anywhere]"><LinkifiedText value={blocker.reason} /></p>
+            {blocker.impact && <p className="mt-1 text-xs text-orange-800 [overflow-wrap:anywhere]">Impact: <LinkifiedText value={blocker.impact} /></p>}
+            {blocker.needsHelpFrom && <p className="mt-1 text-xs text-orange-800 [overflow-wrap:anywhere]">Braucht Hilfe von: <LinkifiedText value={blocker.needsHelpFrom} /></p>}
           </article>
         ))}
       </div> : null}

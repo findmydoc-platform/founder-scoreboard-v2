@@ -252,6 +252,8 @@ GitHub projection is intentionally unavailable for Epics and Initiatives. The AP
 
 Deliverables and Sub-Issues retain the existing response contract. The Planning commit stores its GitHub projection request durably and atomically with the item and idempotency receipt. `wait` processes that stored request before returning; `async` returns `accepted` after the durable commit and only uses request-lifecycle work as a wake-up optimization. GitHub failure never rolls back a successful FounderOps create or update, and replaying the same idempotency key never creates another request.
 
+Update replay validates the stored contract, item, actor permissions, and request hash before processing any queued GitHub projection. A rejected replay does not start GitHub processing. Valid replay returns the stored Planning Item and, in `wait` mode, its refreshed projection status.
+
 ## Empty Epic deletion
 
 The preview and delete endpoints require `write:planning-items:delete-empty`, a CEO or Deputy actor, and `expectedUpdatedAt`.

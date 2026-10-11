@@ -44,7 +44,7 @@ import {
   normalizePatchTaskStatus,
   normalizePatchText,
 } from "@/features/planning-items/model/planning-item-normalization";
-import { hasOperationalCorrection, type ActorContext } from "./actor-context";
+import type { ActorContext } from "./actor-context";
 import type { PlanningError, PlanningItems, PlanningItemChanges, PlanningResult, ReviseItem } from "./planning-items";
 import { parseTeamPlanningDependency } from "./planning-items-team-dependency-contract";
 
@@ -917,118 +917,6 @@ export function planningItemReviseCommand(
   return { kind: "reviseItem", itemId, expectedRevision, changes };
 }
 
-export type BrowserReviseWriter =
-  | Readonly<{
-    kind: "strategic";
-    params: Readonly<{
-      taskId: string;
-      expectedUpdatedAt: string;
-      patch: UnknownRecord;
-      strategy: UnknownRecord | null;
-      raciAssignments: readonly UnknownRecord[] | null;
-      notifications: readonly UnknownRecord[];
-    }>;
-  }>
-  | Readonly<{
-    kind: "delivery";
-    params: Readonly<{
-      taskId: string;
-      expectedUpdatedAt: string;
-      taskPatch: UnknownRecord;
-      notePresent: boolean;
-      note: string | null;
-      dependencyPresent: boolean;
-      dependencyNote: string | null;
-      activityMessages: readonly string[];
-      notifications: readonly UnknownRecord[];
-    }>;
-  }>;
-
-type BrowserReviseDependencies = Readonly<{
-  supabase: SupabaseServer;
-  actor: ActorContext;
-  writer: BrowserReviseWriter;
-}>;
-
-function reviseError(error: unknown): PlanningError {
-  const code = error && typeof error === "object" && "code" in error ? String(error.code || "") : "";
-  const message = error && typeof error === "object" && "message" in error ? String(error.message || "") : "";
-  if (code === "P0001") return { code: "conflict", reason: "revision" };
-  if (code === "P0003") return { code: "conflict", reason: "state", details: { reviseState: "trashed" } };
-  if (code === "P0008") return { code: "conflict", reason: "state", details: { reviseState: "parentApproval" } };
-  if (code === "P0010") return { code: "conflict", reason: "state", details: { reviseState: "reviewLocked" } };
-  if (code === "P0015") return { code: "conflict", reason: "state", details: { reviseState: "sprintLocked" } };
-  if (code === "P0016") return { code: "conflict", reason: "state", details: { reviseState: "completedLocked" } };
-  if (code === "P0017") return { code: "invalidCommand", issues: [{ path: "command.changes.evidenceExceptionNote", reason: "reviewEvidenceRequired" }] };
-  if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
-  if (code === "P0006") return { code: "forbidden", reason: "reviseNotAllowed" };
-  if (code === "42501" && message.includes("active administrator access required")) {
-    return { code: "forbidden", reason: "administratorAccessRequired" };
-  }
-  if (code === "42501") return { code: "forbidden", reason: "reviseNotAllowed" };
-  if (code === "23503" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "profileNotFound" }] };
-  if (code === "23505" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "assignmentDuplicated" }] };
-  if (code === "22023" || code === "23514") return { code: "invalidCommand", issues: [{ path: "command.changes", reason: "persistenceValidation" }] };
-  return { code: "dependencyUnavailable", dependency: "database", retryable: true };
-}
-
-export function createBrowserRevisePlanningItems(dependencies: BrowserReviseDependencies): PlanningItems {
-  return {
-    async run(invocation) {
-      if (invocation.actor.profileId !== dependencies.actor.profileId) return { ok: false, error: { code: "forbidden", reason: "actorMismatch" } };
-      if (invocation.command.kind !== "reviseItem") return { ok: false, error: { code: "invalidCommand", issues: [{ path: "command.kind", reason: "reviseItemRequired" }] } };
-      if ("parentId" in invocation.command.changes) return { ok: false, error: { code: "invalidCommand", issues: [{ path: "command.changes.parentId", reason: "useChangeParentAction" }] } };
-      if (invocation.mode === "preview") return {
-        ok: true,
-        status: "previewed",
-        items: [],
-        changes: [{ field: "reviseItem", before: null, after: invocation.command.changes }],
-        effects: [{ kind: "audit", description: "Record the planning item revision" }],
-        warnings: [],
-      };
-      const writer = dependencies.writer;
-      const administratorCorrection = hasOperationalCorrection(invocation.actor);
-      const result = writer.kind === "strategic"
-        ? await dependencies.supabase.rpc(administratorCorrection ? "update_administrator_planning_item_transaction_v2" : "update_browser_planning_item_transaction_v2", {
-          p_task_id: writer.params.taskId,
-          p_expected_updated_at: writer.params.expectedUpdatedAt,
-          p_patch: writer.params.patch,
-          p_strategy: writer.params.strategy,
-          p_raci_assignments: writer.params.raciAssignments,
-          p_notifications: writer.params.notifications,
-          ...(administratorCorrection ? {} : { p_actor_profile_id: invocation.actor.profileId }),
-          p_request_ip: invocation.requestMetadata?.requestIp || null,
-          p_user_agent: invocation.requestMetadata?.userAgent || null,
-        })
-        : await dependencies.supabase.rpc(administratorCorrection ? "update_administrator_planning_task_transaction_v2" : "update_browser_planning_task_transaction_v2", {
-          p_task_id: writer.params.taskId,
-          p_expected_updated_at: writer.params.expectedUpdatedAt,
-          p_task_patch: writer.params.taskPatch,
-          p_note_present: writer.params.notePresent,
-          p_note: writer.params.note,
-          p_dependency_present: writer.params.dependencyPresent,
-          p_dependency_note: writer.params.dependencyNote,
-          p_activity_messages: writer.params.activityMessages,
-          p_notifications: writer.params.notifications,
-          ...(administratorCorrection ? {} : { p_actor_profile_id: invocation.actor.profileId }),
-        });
-      if (result.error) return { ok: false, error: reviseError(result.error) };
-      return {
-        ok: true,
-        status: "committed",
-        items: [],
-        changes: [{ field: "browserReviseTransaction", before: null, after: result.data }],
-        effects: [{ kind: "audit", description: "Record the planning item revision", status: "applied" }],
-        replayed: false,
-      };
-    },
-  };
-}
-
-export function browserReviseTransactionFromResult(result: Extract<PlanningResult, { ok: true }>) {
-  return result.changes.find((change) => change.field === "browserReviseTransaction")?.after;
-}
-
 export type TeamReviseTransaction = Readonly<{
   replayed?: boolean;
   itemType?: PlanningItemReplayType;
@@ -1039,12 +927,6 @@ export type TeamReviseTransaction = Readonly<{
   projectionOperationId?: string;
 }>;
 
-type StoredTeamReviseRequest = Readonly<{
-  request_hash: string;
-  response: TeamReviseTransaction | null;
-  contract_version: number | null;
-}>;
-
 type TeamReviseDependencies = Readonly<{
   supabase: SupabaseServer;
   actor: ActorContext;
@@ -1053,11 +935,6 @@ type TeamReviseDependencies = Readonly<{
   parsed: Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
   preparedPreview?: PlanningItemUpdatePreview;
   onPreview?: (preview: PlanningItemUpdatePreview) => void;
-  dispatchGitHubProjections?: (
-    supabase: SupabaseServer,
-    operationId: string,
-  ) => Promise<Map<string, PlanningItemGitHubSyncResult>>;
-  scheduleAfter?: (callback: () => Promise<void>) => void;
 }>;
 
 function teamReviseChange(transaction: TeamReviseTransaction) {
@@ -1104,54 +981,6 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
         return { ok: false, error: { code: "invalidCommand", issues: [{ path: "idempotencyKey", reason: "idempotencyKeyRequired" }] } };
       }
       const idempotencyKey = invocation.idempotencyKey || "";
-      const existing = invocation.mode === "commit" ? await dependencies.supabase
-        .from("team_planning_item_update_requests")
-        .select("request_hash,response,contract_version")
-        .eq("token_id", dependencies.tokenId)
-        .eq("idempotency_key", idempotencyKey)
-        .maybeSingle() : { data: null, error: null };
-      if (existing.error) return { ok: false, error: teamReviseProviderError(existing.error) };
-      const stored = existing.data as StoredTeamReviseRequest | null;
-      if (stored) {
-        if (Number(stored.contract_version || 1) < 3) {
-          return { ok: false, error: { code: "conflict", reason: "idempotency" } };
-        }
-        const itemType = stored.response?.itemType;
-        if (!itemType) return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: false } };
-        if (itemType === "epic" && !["ceo", "deputy"].includes(invocation.actor.platformRole)) {
-          return { ok: false, error: { code: "forbidden", reason: "reviseEpicRequiresOperationalLead" } };
-        }
-        const requestHash = planningItemUpdateHash({
-          itemId: dependencies.itemId,
-          itemType,
-          expectedUpdatedAt: dependencies.parsed.expectedUpdatedAt,
-          patch: dependencies.parsed.raw,
-        });
-        if (requestHash !== stored.request_hash) return { ok: false, error: { code: "conflict", reason: "idempotency" } };
-        let replayResponse = stored.response;
-        if (dependencies.parsed.githubSyncMode === "wait" && dependencies.dispatchGitHubProjections) {
-          await dependencies.dispatchGitHubProjections(
-            dependencies.supabase,
-            `team-update:${dependencies.tokenId}:${idempotencyKey}`,
-          );
-          const refreshed = await dependencies.supabase
-            .from("team_planning_item_update_requests")
-            .select("response")
-            .eq("token_id", dependencies.tokenId)
-            .eq("idempotency_key", idempotencyKey)
-            .single();
-          if (refreshed.error) return { ok: false, error: teamReviseProviderError(refreshed.error) };
-          replayResponse = (refreshed.data as { response: TeamReviseTransaction }).response;
-        }
-        return {
-          ok: true,
-          status: "committed",
-          items: [],
-          changes: [teamReviseChange({ ...replayResponse, replayed: true })],
-          effects: [],
-          replayed: true,
-        };
-      }
 
       const prepared = dependencies.preparedPreview ? { ok: true as const, preview: dependencies.preparedPreview } : await buildPlanningItemUpdatePreview({
           actor: { id: invocation.actor.profileId, platformRole: invocation.actor.platformRole } as AuthenticatedProfile,
@@ -1197,24 +1026,9 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
         p_user_agent: metadata?.userAgent || null,
       });
       if (error) return { ok: false, error: teamReviseProviderError(error) };
-      let transaction = data as TeamReviseTransaction | null;
+      const transaction = data as TeamReviseTransaction | null;
       if (!transaction) return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: false } };
 
-      const syncMode = dependencies.parsed.githubSyncMode;
-      if (syncMode && transaction.projectionOperationId) {
-        const projectionOperationId = transaction.projectionOperationId;
-        if (syncMode === "wait") {
-          if (!dependencies.dispatchGitHubProjections) return { ok: false, error: { code: "dependencyUnavailable", dependency: "github", retryable: true } };
-          const results = await dependencies.dispatchGitHubProjections(dependencies.supabase, projectionOperationId);
-          transaction = { ...transaction, githubSync: results.get(preview.itemId) };
-        } else {
-          if (dependencies.scheduleAfter && dependencies.dispatchGitHubProjections) {
-            dependencies.scheduleAfter(async () => {
-              await dependencies.dispatchGitHubProjections!(dependencies.supabase, projectionOperationId);
-            });
-          }
-        }
-      }
       return {
         ok: true,
         status: "committed",

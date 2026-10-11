@@ -12,6 +12,7 @@ import {
 } from "@/features/reviews/model/task-review-state";
 import type { Profile, ReviewDecision, Task, TaskReviewChecklist } from "@/lib/types";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
 import { classNames, UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 const reviewChecks: Array<{
@@ -158,7 +159,7 @@ export function TaskReviewRail({
               <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
               <div>
                 <div className="font-semibold">Ausnahme beim Nachweis</div>
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-5">{task.reviewEvidenceExceptionNote}</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-5 [overflow-wrap:anywhere]"><LinkifiedText value={task.reviewEvidenceExceptionNote} /></p>
               </div>
             </div>
           </UiNotice>
