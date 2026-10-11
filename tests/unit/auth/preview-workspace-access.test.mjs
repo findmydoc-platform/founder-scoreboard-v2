@@ -1,4 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -44,4 +46,44 @@ test("Preview reports the configured login mode instead of hiding login", async 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ mode: "linking", linkingEnforced: true });
   expect(response.headers.get("cache-control")).toBe("no-store");
+});
+
+
+async function linkingPage(context = {}, user = { id: "user-1" }) {
+  vi.stubEnv("VERCEL_ENV", "preview");
+  const page = await importTestModule("src/app/auth/link-google/page.tsx", {
+    "next/link": { default: ({ children, ...props }) => createElement("a", props, children) },
+    "@/shared/atoms/app-brand": { AppBrand: () => null },
+    "@/lib/supabase-server": {
+      getServerAuthSupabase: async () => ({ auth: { getUser: async () => ({ data: { user } }) } }),
+    },
+    "@/lib/workspace-access": {
+      workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true, linked: false, profileId: "founder", ...context }),
+    },
+  });
+  return renderToStaticMarkup(await page.default());
+}
+
+test("Preview lets a mapped unlinked user submit the Google linking form", async () => {
+  const html = await linkingPage();
+  expect(html).toContain('<form action="/auth/google-link/start" method="post">');
+  expect(html).toContain('type="submit">Mit Google verknüpfen</button>');
+});
+
+test("Preview asks an unauthenticated user to sign in before linking", async () => {
+  const html = await linkingPage({}, null);
+  expect(html).toContain("Mit bestehendem Konto anmelden");
+  expect(html).not.toContain('action="/auth/google-link/start"');
+});
+
+test("Preview does not offer linking to an unmapped account", async () => {
+  const html = await linkingPage({ profileId: null });
+  expect(html).toContain("Diesem Konto ist kein Teamprofil zugeordnet.");
+  expect(html).not.toContain('action="/auth/google-link/start"');
+});
+
+test("Preview does not offer linking outside linking mode", async () => {
+  const html = await linkingPage({ mode: "google" });
+  expect(html).toContain("Die Kontoverknüpfung ist derzeit nicht geöffnet.");
+  expect(html).not.toContain('action="/auth/google-link/start"');
 });

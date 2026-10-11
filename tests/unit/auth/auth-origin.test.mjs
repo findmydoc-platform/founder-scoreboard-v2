@@ -10,8 +10,15 @@ function environment(env, appUrl = "") {
   vi.stubEnv("VERCEL_URL", "founder-ops-preview.example.vercel.app");
 }
 
-test.each(["production", "preview"])("uses the explicitly configured HTTPS origin in %s", env => {
-  environment(env, "https://planning.example.com");
+test("Production retains the canonical application origin", () => {
+  environment("production", "https://founder-ops.findmydoc.eu");
+  expect(authOrigin()).toBe("https://founder-ops.findmydoc.eu");
+  vi.stubEnv("APP_URL", "https://planning.example.com");
+  expect(() => authOrigin()).toThrow(/Unapproved application origin/);
+});
+
+test("Preview uses its explicitly configured HTTPS origin", () => {
+  environment("preview", "https://planning.example.com");
   expect(authOrigin()).toBe("https://planning.example.com");
 });
 
