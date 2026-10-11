@@ -2,7 +2,7 @@
 
 FounderOps retains Supabase Auth. Google authenticates people; the app-specific Google group admits them; the existing profile binding and platform role authorize their actions. GitHub App and Calendar credentials remain separate encrypted connections.
 
-The approved infrastructure contract is the [Ops handoff](https://github.com/findmydoc-platform/ops/blob/main/.codex/skills/provision-internal-tool-google-auth/references/founderops-google-login-handoff.md). Reuse its existing client, callbacks, group reader and workload identity resources. This application does not provision Google resources.
+The registered infrastructure configuration is the [Ops registry entry](https://github.com/findmydoc-platform/ops/blob/main/config/internal-tools/apps/founder-ops.json). Reuse the approved client, callbacks, group reader and workload identity resources. Additional environments require their own approved configuration. This application does not provision Google resources.
 
 ## Deployment and login modes
 
