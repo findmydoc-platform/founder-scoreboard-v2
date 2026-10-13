@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import type { AuthenticatedProfile, Task } from "@/lib/types";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import {
-  storedReviewEvidenceIsValid,
   validReviewEvidenceUrl,
 } from "@/features/reviews/model/review-evidence";
 import type { getServerSupabase } from "@/lib/supabase";
@@ -358,25 +357,14 @@ export async function loadPlanningItemUpdateTarget(
   if (!taskResult.data) return { ok: false, status: 404, error: "Planungselement wurde nicht gefunden oder ist im Papierkorb." };
   const itemType = taskTypeFromRow(taskResult.data as DatabaseRow);
   if (itemType === "deliverable") {
-    const linksResult = await supabase
-      .from("task_links")
-      .select("id,type,url,metadata")
-      .eq("task_id", itemId)
-      .in("type", ["evidence", "github_pull_request"]);
-    if (linksResult.error) throw new Error(linksResult.error.message);
+    const evidenceResult = await supabase.rpc("has_valid_planning_review_evidence", { p_task_id: itemId });
+    if (evidenceResult.error) throw new Error(evidenceResult.error.message);
     return {
       ok: true,
       itemType,
       row: taskResult.data as DatabaseRow,
       raciAssignments: [],
-      hasValidReviewEvidence: storedReviewEvidenceIsValid(
-        String(taskResult.data.evidence_link || ""),
-        (linksResult.data || []).map((link) => ({
-          type: String(link.type || ""),
-          url: String(link.url || ""),
-          metadata: link.metadata,
-        })),
-      ),
+      hasValidReviewEvidence: evidenceResult.data === true,
     };
   }
   if (itemType !== "initiative") return { ok: true, itemType, row: taskResult.data as DatabaseRow, raciAssignments: [], hasValidReviewEvidence: false };

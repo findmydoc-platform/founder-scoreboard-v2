@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-10-13-sub-issue-evidence",
+    "releasedAt": "2026-10-13",
+    "expiresAt": "2026-11-12",
+    "featureTourId": "sub-issue-evidence-v1",
+    "title": "Nachweise aus Sub-Issues zählen mit",
+    "summary": "Pull Requests und Nachweis-Links aus deinen Sub-Issues stehen am Deliverable bereit. Du musst sie dort für die Review-Anfrage nicht erneut hinterlegen.",
+    "slides": [
+      {
+        "id": "sub-issue-evidence",
+        "title": "Einmal hinterlegen, gemeinsam prüfen",
+        "description": "Der geschlossene Bereich zeigt die Anzahl eindeutiger Nachweise. Aufgeklappt siehst du die Links mit ihren Quellaufgaben. Mehrfach verknüpfte Links erscheinen nur einmal.",
+        "image": {
+          "src": "/product-updates/2026-10-13-sub-issue-evidence/sub-issue-evidence.png",
+          "alt": "Aufgeklappter Nachweisbereich eines Deliverables mit fünf eindeutigen Nachweisen aus zwei Sub-Issues und zusätzlicher Herkunft eines gemeinsamen Pull Requests",
+          "width": 1220,
+          "height": 538
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-09-26-google-workspace-login",
     "draft": true,
     "releasedAt": "2026-09-26",

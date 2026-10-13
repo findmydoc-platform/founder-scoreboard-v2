@@ -171,6 +171,13 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
   const strategiesByTaskId = new Map(strategies.map((strategy) => [strategy.task_id, strategy]));
   const raciByTaskId = groupByTask(raciAssignments);
   const evidenceLinksByTaskId = groupByTask(evidenceLinks);
+  const evidenceByTaskId = new Map(tasks.map((task) => [task.id, storedReviewEvidenceIsValid(
+    task.evidence_link,
+    evidenceLinksByTaskId.get(task.id) || [],
+  )]));
+  const parentsWithChildEvidence = new Set(tasks
+    .filter((task) => task.task_type === "sub_issue" && evidenceByTaskId.get(task.id))
+    .map((task) => task.parent_task_id));
   const relationStats = relationStatsByTask(relations);
   const planningItemIds = new Set(tasks.map((task) => task.id));
   const dependencies = relations.flatMap((relation) => {
@@ -229,10 +236,7 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
       githubRepo: isStrategic ? "" : task.github_repo || "",
       githubIssueSyncStatus: isStrategic ? "not_applicable" : task.github_issue_sync_status || "not_synced",
       updatedAt: task.updated_at || "",
-      evidencePresent: itemType === "deliverable" && storedReviewEvidenceIsValid(
-        task.evidence_link,
-        evidenceLinksByTaskId.get(task.id) || [],
-      ),
+      evidencePresent: itemType === "deliverable" && Boolean(evidenceByTaskId.get(task.id) || parentsWithChildEvidence.has(task.id)),
       canCreateSubIssue: itemType === "deliverable",
       blockers: {
         openCount: openBlockers.length,

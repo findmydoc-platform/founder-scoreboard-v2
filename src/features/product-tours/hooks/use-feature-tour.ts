@@ -14,6 +14,7 @@ import {
   type FeatureTourRunClaim,
 } from "@/features/product-tours/model/feature-tour-run-state";
 import { selectNextFeatureTour } from "@/features/product-tours/model/feature-tour-selection";
+import { selectSubIssueEvidenceTourTask } from "@/features/product-tours/model/sub-issue-evidence-tour-task";
 
 export type FeatureTourProviderProps = {
   apiClient: BrowserApiClient;
@@ -281,7 +282,9 @@ export function useFeatureTour({
       }
 
       if (startingStepIndex === 0 && activeTour.openTaskDetail) {
-        const taskId = selectedTaskIdRef.current || tasksRef.current.find((task) => (
+        const taskId = activeTour.openSubIssueEvidence
+          ? selectSubIssueEvidenceTourTask(tasksRef.current, selectedTaskIdRef.current)?.id
+          : selectedTaskIdRef.current || tasksRef.current.find((task) => (
           !task.trashedAt
           && (!activeTour.openTaskShare || task.taskType === "deliverable" || task.taskType === "sub_issue")
         ))?.id;
@@ -290,6 +293,16 @@ export function useFeatureTour({
           return;
         }
         openTaskPanelRef.current(taskId);
+      }
+
+      if (startingStepIndex === 0 && activeTour.openSubIssueEvidence) {
+        const overviewTab = await waitForElement("[data-tour-id='task-detail-tab-overview']");
+        if (!runIsActive()) return;
+        if (!(overviewTab instanceof HTMLElement)) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+          return;
+        }
+        overviewTab.click();
       }
 
       if (startingStepIndex === 0 && activeTour.openTaskActivity) {

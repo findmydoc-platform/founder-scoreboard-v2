@@ -26,7 +26,9 @@ function database(taskOverrides: Record<string, unknown> = {}) {
   const rpc = vi.fn<(...args: unknown[]) => Promise<{ data: unknown; error: null | { code: string; message: string } }>>(async () => { throw new Error("Unexpected transaction"); });
   const rows: Record<string, Record<string, unknown>[]> = { tasks: [task], active_tasks: [task], profiles: [], sprints: [] };
   const client = {
-    rpc,
+    rpc: (name: string, ...args: unknown[]) => name === "has_valid_planning_review_evidence"
+      ? Promise.resolve({ data: false, error: null })
+      : rpc(name, ...args),
     from(table: string) {
       const filters: Array<[string, unknown]> = [];
       const result = () => ({ data: (rows[table] || []).filter((row) => filters.every(([key, value]) => Array.isArray(value) ? value.includes(row[key]) : row[key] === value)), error: null });

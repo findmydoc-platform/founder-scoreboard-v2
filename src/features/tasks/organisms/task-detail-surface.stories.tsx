@@ -315,3 +315,68 @@ export const PlainTextUrls: Story = {
     await expect(canvas.getByRole("link", { name: "https://example.com/activity (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://example.com/activity");
   },
 };
+
+const evidenceParent = taskDetailStoryTask({
+  ...task, id: "evidence-parent", title: "Kontaktwege für den Launch prüfen",
+  problemStatement: "Alle Kontaktwege sollen zum richtigen Formular führen.",
+  intendedOutcome: "", scopeConstraints: "", evidenceRequired: "", evidenceLinks: [], linkedPullRequests: [],
+  acceptanceCriteria: "Alle definierten Kontaktwege führen zum richtigen Formular.\nWeiterleitungen funktionieren auf allen relevanten Endgeräten.",
+  definitionOfDone: "Funktionierende Kontaktwege sind mit einem kurzen Test dokumentiert.",
+});
+const sharedPR = { title: "Kontaktformular anbinden", repository: "example/web", number: 42,
+  url: "https://github.com/example/web/pull/42", status: "merged" as const };
+const evidenceChildren = [
+  taskDetailStoryTask({ id: "form", title: "Kontaktformular prüfen", taskType: "sub_issue", parentTaskId: evidenceParent.id,
+    evidenceLinks: ["https://example.com/form-test"], linkedPullRequests: [sharedPR,
+      { ...sharedPR, title: "Formularvalidierung ergänzen", number: 43, url: "https://github.com/example/web/pull/43", status: "open" }] }),
+  taskDetailStoryTask({ id: "redirect", title: "Weiterleitungen prüfen", taskType: "sub_issue", parentTaskId: evidenceParent.id,
+    evidenceLinks: ["https://example.com/redirect-test"], linkedPullRequests: [sharedPR,
+      { ...sharedPR, title: "Kontaktlinks korrigieren", number: 44, url: "https://github.com/example/web/pull/44" }] }),
+];
+
+export const InheritedEvidenceWithoutParentLink: Story = {
+  args: { task: evidenceParent, subIssues: evidenceChildren, allTasks: [evidenceParent, ...evidenceChildren], comments: [], activities: [] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const disclosure = canvas.getByLabelText("Nachweise aus Sub-Issues: 5");
+    await expect(disclosure).toBeVisible();
+    await expect(canvas.queryByText("Noch keine Links hinterlegt.")).not.toBeInTheDocument();
+    await expect(canvas.queryByText("Noch keine Pull Requests mit dem GitHub Issue verknüpft.")).not.toBeInTheDocument();
+    await userEvent.click(disclosure);
+    await expect(canvas.getByText("Kontaktformular anbinden")).toBeVisible();
+    await expect(canvas.getAllByRole("link").filter((link) => link.getAttribute("href") === sharedPR.url)).toHaveLength(1);
+  },
+};
+
+export const RequestReviewWithInheritedEvidence: Story = {
+  args: {
+    ...InheritedEvidenceWithoutParentLink.args,
+    task: { ...evidenceParent, reviewOwnerProfileId: "volkan" },
+    onUpdate: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole("combobox", { name: "Status ändern" }));
+    await userEvent.click(page.getByRole("option", { name: /^Review$/ }));
+    await expect(args.onUpdate).toHaveBeenCalledWith({ status: "Review" });
+    await expect(page.queryByRole("heading", { name: "Nachweis vor Review" })).not.toBeInTheDocument();
+  },
+};
+
+export const RequestReviewWithoutEvidence: Story = {
+  args: {
+    ...InheritedEvidenceWithoutParentLink.args,
+    task: { ...evidenceParent, reviewOwnerProfileId: "volkan" },
+    subIssues: [],
+    onUpdate: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole("combobox", { name: "Status ändern" }));
+    await userEvent.click(page.getByRole("option", { name: /^Review$/ }));
+    await expect(page.getByRole("heading", { name: "Nachweis vor Review" })).toBeVisible();
+    await expect(args.onUpdate).not.toHaveBeenCalled();
+  },
+};
