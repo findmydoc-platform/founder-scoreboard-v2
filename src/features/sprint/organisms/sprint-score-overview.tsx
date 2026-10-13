@@ -120,7 +120,7 @@ export function SprintScoreTableOverview({
     : "Ohne Review Owner";
   const isSelfReview = (task: Task) => Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
   const requestReview = (task: Task) => {
-    if (!taskHasValidReviewEvidence(task)) {
+    if (!taskHasValidReviewEvidence(task, sprintData.tasks)) {
       setReviewEvidenceTask(task);
       return;
     }

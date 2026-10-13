@@ -1,4 +1,5 @@
 import type { Task } from "@/lib/types";
+import { subIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
 
 export type ReviewEvidenceSubmission = Readonly<{
   evidenceLink?: string;
@@ -11,8 +12,12 @@ export type StoredReviewEvidenceLink = Readonly<{
   metadata?: unknown;
 }>;
 
-export function taskHasValidReviewEvidence(task: Pick<Task, "evidenceLinks" | "linkedPullRequests">) {
-  return task.evidenceLinks.length > 0 || task.linkedPullRequests.length > 0;
+export function taskHasValidReviewEvidence(
+  task: Pick<Task, "evidenceLinks" | "linkedPullRequests"> & Partial<Pick<Task, "id" | "taskType">>,
+  tasks: readonly Task[] = [],
+) {
+  return task.evidenceLinks.length > 0 || task.linkedPullRequests.length > 0
+    || Boolean(task.id && task.taskType && subIssueEvidenceSummary({ id: task.id, taskType: task.taskType }, tasks).count);
 }
 
 export function validReviewEvidenceUrl(value: string) {

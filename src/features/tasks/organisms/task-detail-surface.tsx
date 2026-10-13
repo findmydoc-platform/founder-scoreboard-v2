@@ -357,7 +357,7 @@ function HydratedTaskDetailSurface({
     const includesEvidence = Boolean(patch.evidenceLinks?.length || patch.reviewEvidenceExceptionNote?.trim());
     if (task.taskType === "deliverable"
       && requestsReview
-      && !taskHasValidReviewEvidence(task)
+      && !taskHasValidReviewEvidence(task, directChildren)
       && !includesEvidence) {
       setReviewEvidenceGateIntent("request");
       return;
@@ -365,7 +365,7 @@ function HydratedTaskDetailSurface({
     return onUpdate(patch);
   };
   const reopenReview = () => {
-    if (!taskHasValidReviewEvidence(task)) {
+    if (!taskHasValidReviewEvidence(task, directChildren)) {
       setReviewEvidenceGateIntent("reopen");
       return;
     }
@@ -400,6 +400,8 @@ function HydratedTaskDetailSurface({
         ) : null}
         <TaskOverviewPanel
           task={task}
+          subIssues={directChildren}
+          onOpenTask={openTask}
           profiles={teamProfiles}
           baseline={controller.overviewBaselineDraft}
           draft={controller.overviewDraft}

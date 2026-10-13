@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadAllSupabaseRows } from "@/features/planning-items/model/supabase-pagination";
 import {
   taskDetailReadLimits,
   type TaskDetailLoadResult,
@@ -85,25 +86,33 @@ async function loadAncestors(supabase: SupabaseClient, firstParentId: string | n
 }
 
 async function loadSupportingRows(supabase: SupabaseClient, itemIds: readonly string[]) {
-  if (!itemIds.length) {
-    return {
-      links: [] as DbTaskLink[],
-      strategies: [] as DbPlanningItemStrategy[],
-      raci: [] as DbPlanningItemRaciAssignment[],
-      error: false,
-    };
+  const result = { links: [] as DbTaskLink[], strategies: [] as DbPlanningItemStrategy[], raci: [] as DbPlanningItemRaciAssignment[], error: false };
+  try {
+    for (let from = 0; from < itemIds.length; from += taskDetailReadLimits.children) {
+      const ids = itemIds.slice(from, from + taskDetailReadLimits.children);
+      const [links, strategies, raci] = await Promise.all([
+        loadAllSupabaseRows<DbTaskLink>((start, end) => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").in("task_id", ids).order("position").order("id").range(start, end)),
+        loadAllSupabaseRows<DbPlanningItemStrategy>((start, end) => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").in("task_id", ids).order("task_id").range(start, end)),
+        loadAllSupabaseRows<DbPlanningItemRaciAssignment>((start, end) => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").in("task_id", ids).order("task_id").order("sort_order").order("profile_id").range(start, end)),
+      ]);
+      result.links.push(...links);
+      result.strategies.push(...strategies);
+      result.raci.push(...raci);
+    }
+    return result;
+  } catch {
+    return { ...result, error: true };
   }
-  const [links, strategies, raci] = await Promise.all([
-    supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").in("task_id", itemIds).order("position").order("id"),
-    supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").in("task_id", itemIds),
-    supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").in("task_id", itemIds).order("task_id").order("sort_order"),
-  ]);
-  return {
-    links: (links.data || []) as DbTaskLink[],
-    strategies: (strategies.data || []) as DbPlanningItemStrategy[],
-    raci: (raci.data || []) as DbPlanningItemRaciAssignment[],
-    error: Boolean(links.error || strategies.error || raci.error),
-  };
+}
+
+async function loadDirectChildren(supabase: SupabaseClient, parentId: string) {
+  try {
+    const data = await loadAllSupabaseRows<DbTask>((from, to) => supabase.from(ACTIVE_TASKS_TABLE)
+      .select(taskRowSelect).eq("parent_task_id", parentId).order("sort_order").order("id").range(from, to).returns<DbTask[]>(), taskDetailReadLimits.children);
+    return { data, error: false };
+  } catch {
+    return { data: [] as DbTask[], error: true };
+  }
 }
 
 function mapTasks(rows: readonly DbTask[], people: Profile[], supporting: Awaited<ReturnType<typeof loadSupportingRows>>) {
@@ -151,7 +160,7 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
         loadAncestors(supabase, target.parent_task_id),
         target.task_type === "sub_issue"
           ? Promise.resolve({ data: [] as DbTask[], error: null })
-          : supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("parent_task_id", normalizedItemId).order("sort_order").order("id").limit(taskDetailReadLimits.children),
+          : loadDirectChildren(supabase, normalizedItemId),
         supabase.from("task_relationship_edges").select(relationSelect).eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.relationships),
         supabase.from("task_relationship_edges").select(relationSelect).eq("related_task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.relationships),
       ]);

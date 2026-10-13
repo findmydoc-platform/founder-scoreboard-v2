@@ -13,6 +13,8 @@ import {
   parseEvidenceUrl,
 } from "@/features/tasks/model/task-evidence-links";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import { SubIssueEvidenceSection } from "@/features/tasks/molecules/sub-issue-evidence-section";
+import { subIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
 import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
 import type { LinkedPullRequest, Profile, Task } from "@/lib/types";
 import { formatDate } from "@/lib/display";
@@ -189,20 +191,25 @@ function LinkedPullRequestsSection({
 function EvidenceGroups({
   evidenceLinks,
   linkedPullRequests,
+  inherited = { count: 0, groups: [] },
+  onOpenTask,
 }: {
   evidenceLinks: string[];
   linkedPullRequests: LinkedPullRequest[];
+  inherited?: ReturnType<typeof subIssueEvidenceSummary>;
+  onOpenTask?: (id: string) => void;
 }) {
   return (
     <div className="mt-3 grid gap-5">
-      <div>
+      {evidenceLinks.length > 0 || !inherited.count ? <div>
         <h4 className="mb-2 text-sm font-medium text-slate-600">Links</h4>
         <EvidenceLinksList links={evidenceLinks} />
-      </div>
-      <div>
+      </div> : null}
+      {linkedPullRequests.length > 0 || !inherited.count ? <div>
         <h4 className="mb-2 text-sm font-medium text-slate-600">Verknüpfte Pull Requests</h4>
         <LinkedPullRequestsList pullRequests={linkedPullRequests} />
-      </div>
+      </div> : null}
+      <SubIssueEvidenceSection {...inherited} onOpenTask={onOpenTask} />
     </div>
   );
 }
@@ -211,10 +218,14 @@ function ReviewEvidenceSection({
   evidenceLinks,
   evidenceRequired,
   linkedPullRequests,
+  inherited,
+  onOpenTask,
 }: {
   evidenceLinks: string[];
   evidenceRequired: string;
   linkedPullRequests: LinkedPullRequest[];
+  inherited: ReturnType<typeof subIssueEvidenceSummary>;
+  onOpenTask?: (id: string) => void;
 }) {
   return (
     <section
@@ -226,7 +237,7 @@ function ReviewEvidenceSection({
       <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
       <div className="mt-2 text-[15px] leading-7 text-slate-700">
         <p><LinkifiedText value={evidenceRequired.trim() || "Kein erwarteter Nachweis hinterlegt."} /></p>
-        <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} />
+        <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} inherited={inherited} onOpenTask={onOpenTask} />
       </div>
     </section>
   );
@@ -234,6 +245,8 @@ function ReviewEvidenceSection({
 
 type Props = {
   task: Task;
+  subIssues?: Task[];
+  onOpenTask?: (id: string) => void;
   profiles: Profile[];
   baseline: TaskOverviewDraft;
   draft: TaskOverviewDraft;
@@ -251,6 +264,8 @@ type Props = {
 
 export function TaskOverviewPanel({
   task,
+  subIssues = [],
+  onOpenTask,
   profiles,
   baseline,
   draft,
@@ -276,6 +291,7 @@ export function TaskOverviewPanel({
   const evidenceInvalid = evidenceInvalidIndex >= 0;
   const evidenceLinks = draft.evidenceLinks.map((value) => value.trim()).filter((value) => Boolean(parseEvidenceUrl(value)));
   const linkedPullRequests = task.linkedPullRequests || [];
+  const inherited = subIssueEvidenceSummary(task, subIssues);
   const isSubIssue = task.taskType === "sub_issue";
   const isStrategic = task.taskType === "epic" || task.taskType === "initiative";
   const hasSubIssueBrief = isSubIssue && subIssueBriefFields.some(({ key }) => Boolean(draft[key].trim()));
@@ -285,10 +301,11 @@ export function TaskOverviewPanel({
   const hasReadContent = isStrategic
     ? Boolean(draft.description.trim() || draft.strategyGoal.trim() || draft.strategySuccessCriteria.trim() || draft.strategyScopeConstraints.trim() || riskContent)
     : isSubIssue
-    ? Boolean(draft.description.trim() || hasSubIssueBrief || linkedPullRequests.length > 0 || riskContent)
+    ? Boolean(draft.description.trim() || hasSubIssueBrief || evidenceLinks.length > 0 || linkedPullRequests.length > 0 || riskContent)
     : overviewFields.some(({ key }) => draft[key].trim())
       || evidenceLinks.length > 0
       || linkedPullRequests.length > 0
+      || inherited.count > 0
       || Boolean(riskContent);
   const flatReadOnly = flat && !editing;
 
@@ -578,6 +595,10 @@ export function TaskOverviewPanel({
                 </section>
               )}
               <LinkedPullRequestsSection compact pullRequests={linkedPullRequests} />
+              {evidenceLinks.length ? <section className="border-b border-slate-100 py-4">
+                <h3 className="mb-2 text-sm font-semibold text-slate-950">Nachweis-Links</h3>
+                <EvidenceLinksList links={evidenceLinks} />
+              </section> : null}
             </>
           ) : (
             <>
@@ -598,9 +619,12 @@ export function TaskOverviewPanel({
               />
               {flatReadOnly ? (
                 <ReviewEvidenceSection
+                  key={task.id}
                   evidenceLinks={evidenceLinks}
                   evidenceRequired={draft.evidenceRequired}
                   linkedPullRequests={linkedPullRequests}
+                  inherited={inherited}
+                  onOpenTask={onOpenTask}
                 />
               ) : (
                 <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId={taskMentionFieldTargetIds["evidence-required"]} />
@@ -611,7 +635,7 @@ export function TaskOverviewPanel({
                   className="border-b border-slate-100 py-5"
                 >
                   <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
-                  <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} />
+                  <EvidenceGroups key={task.id} evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} inherited={inherited} onOpenTask={onOpenTask} />
                 </section>
               ) : null}
               {flatReadOnly ? riskContent : null}
