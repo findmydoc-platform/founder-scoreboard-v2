@@ -1,4 +1,5 @@
 import type { Profile, Task, TaskRelation, TaskRelationType } from "./types";
+import { isGitHubIssueUrl } from "./github-url-policy";
 
 export function isOperationalLeadRole(role?: Profile["platformRole"] | null) {
   return role === "ceo" || role === "deputy";
@@ -47,9 +48,9 @@ export function syncLabel(status: Task["githubIssueSyncStatus"]) {
 export function hasGitHubIssue(task: Pick<Task, "githubIssueNumber" | "githubIssueUrl" | "issueNumber" | "issueUrl">) {
   return Boolean(
     task.githubIssueNumber ||
-    task.githubIssueUrl ||
     task.issueNumber ||
-    task.issueUrl.includes("github.com"),
+    isGitHubIssueUrl(task.githubIssueUrl) ||
+    isGitHubIssueUrl(task.issueUrl),
   );
 }
 

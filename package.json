@@ -35,7 +35,7 @@
     "@vercel/oidc": "3.8.9",
     "driver.js": "^1.8.0",
     "lucide-react": "^1.27.0",
-    "next": "16.2.12",
+    "next": "16.3.8",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-markdown": "^10.1.0",
@@ -54,9 +54,9 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19",
-    "@vitest/browser-playwright": "4.1.10",
+    "@vitest/browser-playwright": "4.1.11",
     "eslint": "^9",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.3.8",
     "pg": "^8.22.0",
     "playwright": "1.62.1",
     "storybook": "10.5.7",
@@ -64,6 +64,6 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "8.2.1",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }
