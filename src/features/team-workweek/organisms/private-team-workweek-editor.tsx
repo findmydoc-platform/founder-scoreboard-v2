@@ -29,6 +29,8 @@ export function PrivateTeamWorkweekEditor({
   restoreFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const [discardOpen, setDiscardOpen] = useState(false);
+  const hasTransitionClockLabel = state.draft.windows.sunday.some((window) =>
+    [window.start, window.end].some((clock) => clock >= "02:00" && clock < "03:00"));
   const requestClose = () => {
     if (state.pending) return;
     if (state.dirty) setDiscardOpen(true);
@@ -122,6 +124,11 @@ export function PrivateTeamWorkweekEditor({
                     </div>
                   ))}
                 </div>
+                {hasTransitionClockLabel && (
+                  <p className="border-t border-slate-100 px-3 py-2 text-xs leading-5 text-slate-500">
+                    Sonntagszeiten zwischen 02:00 und 03:00: Doppelte Uhrzeiten zählen beim ersten Vorkommen; fehlende Uhrzeiten werden eine Stunde später eingeplant. Leere Fenster entfallen; überschneidende Zeiten werden zusammengefasst.
+                  </p>
+                )}
               </section>
 
               <section className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">

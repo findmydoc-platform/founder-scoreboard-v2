@@ -421,3 +421,18 @@ export const ReplacesAnActiveScheduleWithAnExplicitConfirmedBoundary: Story = {
     await expect(canvas.getByText(/Arbeitswoche bestätigt\. Gültig ab 14\.10\.2026, 14:03 MESZ/)).toBeVisible();
   },
 };
+
+export const ExplainsOnlyAffectedSundayClockLabels: Story = {
+  args: { apiClient: client({ version: {
+    id: "seasonal-private", effectiveFrom: nextMondayIso(), timezone: "Europe/Berlin", status: "preparing",
+    createdAt: new Date().toISOString(), windows: { ...publishedWindows, sunday: [{ start: "02:15", end: "03:30" }] },
+  } }), profile },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeitung fortsetzen" }));
+    await expect(canvas.getByText(/Sonntagszeiten zwischen 02:00 und 03:00/)).toBeInTheDocument();
+    await userEvent.clear(canvas.getByLabelText("Sonntag, Fenster 1, Beginn"));
+    await userEvent.type(canvas.getByLabelText("Sonntag, Fenster 1, Beginn"), "01:15");
+    await expect(canvas.queryByText(/Sonntagszeiten zwischen 02:00 und 03:00/)).not.toBeInTheDocument();
+  },
+};

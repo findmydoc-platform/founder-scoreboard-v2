@@ -163,8 +163,11 @@ function civilStamp(instant: number) {
 
 function berlinCivilInstant(dateKey: string, clock: string) {
   const nominal = Date.parse(`${dateKey}T${clock}:00Z`);
-  const guess = nominal - (civilStamp(nominal) - nominal);
-  const candidates = [guess - 3_600_000, guess, guess + 3_600_000];
+  const offsets = new Set([-2, -1, 0, 1, 2].map((days) => {
+    const sample = nominal + days * 86_400_000;
+    return civilStamp(sample) - sample;
+  }));
+  const candidates = [...offsets].map((offset) => nominal - offset);
   const exact = candidates.filter((candidate) => civilStamp(candidate) === nominal);
   if (exact.length) return Math.min(...exact);
   // RFC5545's pre-transition offset normalizes a spring-gap civil time forward.
@@ -182,14 +185,25 @@ export function calendarWindowsForDate(workweek: CalendarTeamWorkweek, dateKey: 
     const minute = berlinClockMinute(new Date(instant));
     return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
   };
-  return workweek.windows[weekdayForDate(dateKey).key].flatMap((window) => {
+  const resolved = workweek.windows[weekdayForDate(dateKey).key].flatMap((window) => {
     const start = Math.max(berlinCivilInstant(dateKey, window.start), lower);
     const end = Math.min(berlinCivilInstant(dateKey, window.end), upper);
-    if (start >= end) return [];
-    const offsetChanged = civilStamp(start) - start !== civilStamp(end) - end
-      || Math.floor(berlinCivilInstant(dateKey,clock(start))/60_000) !== Math.floor(start/60_000)
-      || Math.floor(berlinCivilInstant(dateKey,clock(end))/60_000) !== Math.floor(end/60_000);
-    return [{start:clock(start),end:clock(end), ...(offsetChanged ? {startsAt:new Date(start).toISOString(),endsAt:new Date(end).toISOString()} : {})}];
+    return start < end ? [{ start, end }] : [];
+  }).sort((left, right) => left.start - right.start);
+  const united: Array<{ start: number; end: number }> = [];
+  for (const interval of resolved) {
+    const prior = united.at(-1);
+    if (prior && interval.start < prior.end) prior.end = Math.max(prior.end, interval.end);
+    else united.push({ ...interval });
+  }
+  const midnight = berlinCivilInstant(dateKey, "00:00");
+  const nextMidnight = berlinCivilInstant(addCalendarDays(dateKey, 1), "00:00");
+  const transitionDay = nextMidnight - midnight !== 86_400_000;
+  return united.map(({ start, end }) => {
+    const offsetChanged = transitionDay || civilStamp(start) - start !== civilStamp(end) - end
+      || Math.floor(berlinCivilInstant(dateKey, clock(start)) / 60_000) !== Math.floor(start / 60_000)
+      || Math.floor(berlinCivilInstant(dateKey, clock(end)) / 60_000) !== Math.floor(end / 60_000);
+    return { start: clock(start), end: clock(end), ...(offsetChanged ? { startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString() } : {}) };
   });
 }
 
