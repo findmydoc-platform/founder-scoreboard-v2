@@ -55,7 +55,7 @@ export function PrivateTeamWorkweekEditor({
               <section className="overflow-hidden rounded-lg border border-slate-200 bg-white" aria-labelledby="workweek-windows-title">
                 <div className="px-3 py-2.5">
                   <h3 id="workweek-windows-title" className="text-sm font-semibold text-slate-950">Arbeitszeitfenster</h3>
-                  <p className="mt-0.5 text-xs leading-5 text-slate-500">Mehrere Fenster sind möglich. Ohne Fenster bleibt der Tag frei.</p>
+                  <p className="mt-0.5 text-xs leading-5 text-slate-500">Mehrere Fenster sind möglich. Ohne Fenster ist keine Arbeitszeit eingeplant.</p>
                 </div>
                 <div className="divide-y divide-slate-100 border-t border-slate-100">
                   {TEAM_WORKWEEK_DAYS.map((day) => (
@@ -100,7 +100,7 @@ export function PrivateTeamWorkweekEditor({
                           ))}
                         </div>
                       )}
-                      {!state.draft.windows[day.key].length && <p className="py-2 text-sm text-slate-600">Freier Tag</p>}
+                      {!state.draft.windows[day.key].length && <p className="py-2 text-sm text-slate-600">Kein Arbeitszeitfenster</p>}
                       <UiButton
                         className={state.draft.windows[day.key].length
                           ? "col-start-2 mt-1 justify-self-start max-[359px]:col-start-1 max-[359px]:row-start-3 min-[400px]:col-start-3 min-[400px]:row-start-1 min-[400px]:mt-0"

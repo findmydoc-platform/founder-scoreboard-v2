@@ -32,12 +32,12 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
       : reconciliationState === "delayed"
         ? { tone: "amber" as const, label: "Synchronisierung verzögert" }
         : state.version
-          ? { tone: "amber" as const, label: "In Vorbereitung" }
+          ? { tone: "amber" as const, label: "Privater Entwurf" }
           : latestIsPrepared
             ? { tone: "blue" as const, label: "Für Montag vorbereitet" }
             : state.latestPublished
               ? { tone: "emerald" as const, label: "Veröffentlicht" }
-              : { tone: "slate" as const, label: "Noch nicht vorbereitet" };
+              : { tone: "slate" as const, label: "Arbeitszeiten fehlen" };
 
   return (
     <>
@@ -49,7 +49,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
               <UiBadge tone={badge.tone}>{badge.label}</UiBadge>
             </div>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              Deine Arbeitswoche für {profile.name}. Erst eine bestätigte Google-Synchronisierung macht Änderungen im Team sichtbar.
+              {state.version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : state.latestPublished ? "Veröffentlichte Arbeitszeiten für " + profile.name + ". Bestätigt in Team und Google." : "Deine Arbeitszeiten fehlen noch."}
             </p>
             {state.version && (
               <p className="mt-2 text-xs font-semibold text-slate-600">Gültig ab {formatDate(state.version.effectiveFrom)} · {state.version.timezone}</p>
@@ -59,6 +59,9 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
                 {latestIsPrepared ? "Vorbereitet" : "Zuletzt veröffentlicht"}: gültig ab {formatDate(state.latestPublished.effectiveFrom)}
                 {state.latestPublished.lastSyncAt ? ` · letzter erfolgreicher Sync ${formatDate(state.latestPublished.lastSyncAt.slice(0, 10))}` : ""}
               </p>
+            )}
+            {state.latestPublished && !state.version && (
+              <p className="mt-2 text-xs leading-5 text-slate-500">Geprüft werden nur von FounderOps angelegte Google-Serien.</p>
             )}
             {reconciliationState === "conflict" && !state.version && (
               <p className="mt-2 text-xs font-semibold text-amber-700">Eine Google-Serienänderung ist nicht eindeutig. Der bestätigte Teamstand bleibt aktiv.</p>
@@ -70,7 +73,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
           <div className="flex flex-col gap-2 sm:items-end">
             {state.latestPublished && !state.version && (
               <UiButton variant="secondary" size="lg" onClick={() => void state.reconcile()} disabled={state.pending}>
-                Google abgleichen
+                App-Termine in Google prüfen
               </UiButton>
             )}
             <UiButton variant="primary" size="lg" onClick={() => setOpen(true)} disabled={state.pending && !state.version}>
