@@ -203,7 +203,7 @@ export function TeamWorkweekMatrix({
                 {TEAM_WORKWEEK_DAYS.map((day) => {
                   const windows = workweek?.windows[day.key] || [];
                   return (
-                    <DataCell key={day.key} className={classNames("align-top text-slate-700", compact ? "px-1.5 py-2 text-xs" : "text-sm")}>
+                    <DataCell key={day.key} aria-label={workweek && !windows.length ? "Kein Arbeitszeitfenster" : undefined} className={classNames("align-top text-slate-700", compact ? "px-1.5 py-2 text-xs" : "text-sm")}>
                       {!workweek ? (
                         <span className="text-slate-300" aria-label={`${profile.name}, ${day.label}: keine veröffentlichte Arbeitswoche`}>—</span>
                       ) : windows.length ? (
@@ -222,7 +222,7 @@ export function TeamWorkweekMatrix({
                           ))}
                         </span>
                       ) : (
-                        <span className="font-medium text-slate-600">Kein Arbeitszeitfenster</span>
+                        <span className="block break-words font-medium text-slate-600" title="Kein Arbeitszeitfenster">{compact ? "Kein Zeitfenster" : "Kein Arbeitszeitfenster"}</span>
                       )}
                     </DataCell>
                   );
