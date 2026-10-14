@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Trash2, X } from "lucide-react";
-import { useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
 import { formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
 import { formatDate } from "@/lib/display";
@@ -28,6 +28,9 @@ export function PrivateTeamWorkweekEditor({
   onClose: () => void;
   restoreFocusRef?: RefObject<HTMLElement | null>;
 }) {
+  const validityFocusRef = useRef<HTMLInputElement>(null);
+  const restartFocusRequested = useRef(false);
+
   const [discardOpen, setDiscardOpen] = useState(false);
   const hasTransitionClockLabel = state.draft.windows.sunday.some((window) =>
     [window.start, window.end].some((clock) => clock >= "02:00" && clock < "03:00"));
@@ -37,12 +40,18 @@ export function PrivateTeamWorkweekEditor({
     else onClose();
   };
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardOpen || state.pending, restoreFocusRef });
+  useEffect(() => {
+    if (restartFocusRequested.current && !state.pending && !state.restartAvailable && !state.restartContextPending) {
+      restartFocusRequested.current = false;
+      (validityFocusRef.current || dialogRef.current)?.focus({ preventScroll: true });
+    }
+  }, [dialogRef, state.pending, state.restartAvailable, state.restartContextPending]);
 
   return (
     <>
       <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="private-workweek-editor-title" className="fixed inset-0 z-40">
         <button type="button" tabIndex={-1} aria-label="Arbeitswochen-Editor schließen" className="absolute inset-0 cursor-default bg-slate-950/30 backdrop-blur-[1px]" onClick={requestClose} />
-        <aside className="absolute inset-y-0 right-0 z-10 flex w-full max-w-[440px] flex-col overflow-hidden border-l border-slate-200 bg-slate-50 shadow-2xl">
+        <aside className="absolute inset-y-0 right-0 z-10 flex w-full max-w-[440px] flex-col overflow-clip border-l border-slate-200 bg-slate-50 shadow-2xl">
           <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -131,13 +140,13 @@ export function PrivateTeamWorkweekEditor({
                 )}
               </section>
 
-              <section className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
+              <section data-tour-id="workweek-validity" className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
                 <h3 id="workweek-validity-title" className="text-sm font-semibold text-slate-950">Gültigkeitsbeginn</h3>
                 {state.immediateAllowed && (
                   <fieldset className="mt-2 grid gap-1" disabled={state.pending}>
                     <legend className="sr-only">Gültigkeitsbeginn wählen</legend>
                     <label className="flex min-h-11 items-center gap-2 text-sm text-slate-800">
-                      <input type="radio" name="workweek-activation-mode" value="immediate" checked={state.draft.activationMode === "immediate"}
+                      <input ref={validityFocusRef} type="radio" name="workweek-activation-mode" value="immediate" checked={state.draft.activationMode === "immediate"}
                         onChange={() => state.setActivationMode("immediate")} className="h-4 w-4 accent-blue-600" />
                       Nach Bestätigung · aktuelle Woche
                     </label>
@@ -173,7 +182,7 @@ export function PrivateTeamWorkweekEditor({
               </section>
 
               {(state.restartAvailable || state.restartContextPending) && (
-                <UiButton className="justify-self-start whitespace-normal text-left" variant="secondary" onClick={() => void state.restart()} disabled={state.pending}>
+                <UiButton className="justify-self-start whitespace-normal text-left" variant="secondary" onClick={() => { restartFocusRequested.current = true; void state.restart(); }} disabled={state.pending}>
                   {state.restartContextPending ? "Aktuellen Stand laden" : "Mit aktuellem Stand neu beginnen"}
                 </UiButton>
               )}
@@ -190,7 +199,7 @@ export function PrivateTeamWorkweekEditor({
           <footer className="border-t border-slate-200 bg-white px-3 py-2.5 sm:px-4">
             <p className="mb-2 text-xs leading-4 text-slate-500">
               {state.draft.activationMode === "immediate"
-                ? `${state.preparedSuccessor ? "Gilt bis zur geplanten Änderung." : "Gilt dauerhaft."} Bei Verzögerung wird ein neuer zukünftiger Beginn geplant.`
+                ? `${state.preparedSuccessor ? "" : "Gilt dauerhaft. "}Bei Verzögerung wird ein neuer zukünftiger Beginn geplant.`
                 : `Änderungen gelten ab ${formatDate(state.draft.effectiveFrom)} und werden erst nach dem Google-Abgleich veröffentlicht.`}
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
@@ -202,6 +211,7 @@ export function PrivateTeamWorkweekEditor({
                 variant="primary"
                 size="md"
                 className="whitespace-nowrap px-2 text-xs"
+                data-tour-id="workweek-publish"
                 aria-label="Änderung in Google & Team veröffentlichen"
                 onClick={() => void state.publish().then((result) => (result === true || result === "conflict") && onClose())}
                 disabled={state.pending || state.restartContextPending}

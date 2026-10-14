@@ -19,6 +19,7 @@ export type FeatureTourDefinition = {
   openTaskMentionMenu?: boolean;
   openTaskShare?: boolean;
   openSubIssueEvidence?: boolean;
+  openWorkweekEditor?: boolean;
   productUpdateId?: string;
   requiredSelectors: readonly string[];
   startWorkspace?: AppWorkspace;
@@ -51,6 +52,19 @@ export const administrationWorkspaceTourId = "administration-workspace-v1";
 export const taskMentionsTourId = "task-mentions-v1";
 
 export const featureTours: readonly FeatureTourDefinition[] = [
+  {
+    id: "workweek-current-publication-v1",
+    productUpdateId: "2026-10-14-workweek-current-publication",
+    startWorkspace: "team",
+    openWorkweekEditor: true,
+    requiredSelectors: ["[data-tour-id='workweek-validity']"],
+    steps: [
+      { element: "[data-tour-id='workweek-validity']", disableActiveInteraction: true,
+        popover: { progressText: "{{current}} von {{total}}", title: "Beginn bewusst wählen", description: "Wähle die aktuelle Woche oder einen zukünftigen Montag. Für die aktuelle Woche wird der genaue Beginn nach dem kurzen Vorlauf bestätigt." } },
+      { element: "[data-tour-id='workweek-publish']", disableActiveInteraction: true,
+        popover: { progressText: "{{current}} von {{total}}", title: "Veröffentlichen oder privat speichern", description: "Veröffentlichen speichert deine Eingaben und gleicht sie mit Google ab. Privat speichern hält sie als Entwurf zurück. Diese Tour veröffentlicht nichts." } },
+    ],
+  },
   {
     id: subIssueEvidenceTourId,
     productUpdateId: "2026-10-13-sub-issue-evidence",
