@@ -53,6 +53,8 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (manageEnvironment && !isTopModal(dialog)) return;
+      // An owned feature guide keeps its popup inside this modal and owns its keyboard loop.
+      if (dialog?.hasAttribute("data-active-feature-guide") && dialog.querySelector(".driver-popover")) return;
       if (event.key === "Escape" && !closeDisabledRef.current) {
         if (dialog?.querySelector("[aria-expanded='true']")) return;
         event.preventDefault();

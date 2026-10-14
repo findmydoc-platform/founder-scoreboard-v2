@@ -1,3 +1,8 @@
+import { ProductUpdatesProvider } from "@/features/product-updates/organisms/product-updates-provider";
+import { productUpdates } from "@/features/product-updates/model/product-update-registry";
+import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import "driver.js/dist/driver.css";
 import { useState } from "react";
 import { HeaderCalendarAction } from "@/features/planning/molecules/header-calendar-action";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
@@ -83,6 +88,7 @@ function client(options: ClientOptions = {}): BrowserApiClient {
   return {
     requestJson: async (input: RequestInfo | URL, init?: { method?: string; json?: Record<string, unknown> }) => {
       const path = String(input);
+      if (path.includes("feature-tour")) return response({});
       if (path === "/api/team-workweek/private-draft") {
         if (init?.method === "POST") {
           if (options.saveError) return { body: { error: options.saveError }, response: new Response(null, { status: 503 }) };
@@ -572,6 +578,7 @@ export const RestartsWithCurrentContextAndRetainsUnsavedWindows: Story = {
     await expect(canvas.getByText(/Geplante Änderung am 12. Jan. 2099 bleibt erhalten/)).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Änderung privat speichern" })).toBeEnabled();
     await expect(canvas.queryByRole("button", { name: "Mit aktuellem Stand neu beginnen" })).not.toBeInTheDocument();
+    await waitFor(() => expect(canvas.getByRole("radio", { name: /Nach Bestätigung/ })).toHaveFocus());
     await expect(canvas.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).toBeVisible();
     await expect(canvas.queryByText(/Arbeitswoche bestätigt/)).not.toBeInTheDocument();
   },
@@ -662,5 +669,96 @@ export const OffersRestartOnlyForARecoverablePublication: Story = {
     await expect(canvas.getByText("Beginne mit dem aktuellen Stand neu. Deine Eingaben bleiben erhalten.")).toBeVisible();
     await expect(canvas.queryByText(/Wiederhole die Veröffentlichung/)).not.toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
+  },
+};
+
+function WorkweekGuide({ apiClient }: { apiClient: BrowserApiClient }) {
+  const [data, setData] = useState(() => {
+    window.localStorage.setItem("founderops.product-updates.seen.sebastian", JSON.stringify(productUpdates.map((update) => update.id)));
+    return emptyPlanningShellState;
+  });
+  return <>
+    <button onClick={() => window.dispatchEvent(new CustomEvent("fmd:start-feature-tour", { detail: { tourId: "workweek-current-publication-v1" } }))}>Arbeitswoche kennenlernen</button>
+    <button onClick={() => window.dispatchEvent(new CustomEvent("fmd:open-product-updates"))}>Neuerungen öffnen</button>
+    <ProductUpdatesProvider profileId={profile.id} />
+    <PrivateTeamWorkweekCard apiClient={apiClient} profile={profile} />
+    <FeatureTourProvider apiClient={apiClient} currentProfile={profile} data={data} setData={setData}
+      openTaskPanel={() => undefined} selectedTaskId={null} setView={() => undefined} setWorkspace={() => undefined}
+      source="supabase" workspace="team" />
+  </>;
+}
+
+export const GuidesValidityAndPublicationInsideTheOwnerEditor: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true }) },
+  render: ({ apiClient }) => <WorkweekGuide apiClient={apiClient} />,
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(await page.findByRole("button", { name: "Arbeitswoche kennenlernen" }));
+    const editor = await page.findByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" });
+    const guide = await page.findByRole("dialog", { name: "Beginn bewusst wählen" });
+    await expect(editor.contains(guide)).toBe(true);
+    await waitFor(() => expect(within(guide).getByRole("button", { name: "Tour schließen" })).toBeVisible());
+    await userEvent.click(within(guide).getByRole("button", { name: "Weiter" }));
+    const publishGuide = await page.findByRole("dialog", { name: "Veröffentlichen oder privat speichern" });
+    await expect(editor.contains(publishGuide)).toBe(true);
+    for (let index = 0; index < 6; index++) {
+      await userEvent.tab();
+      await expect(publishGuide.contains(canvasElement.ownerDocument.activeElement)).toBe(true);
+    }
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(page.queryByRole("dialog", { name: "Veröffentlichen oder privat speichern" })).not.toBeInTheDocument());
+    await expect(editor).toBeVisible();
+    await waitFor(() => expect(editor.contains(canvasElement.ownerDocument.activeElement)).toBe(true));
+    await expect(page.queryByText(/Arbeitswoche bestätigt/)).not.toBeInTheDocument();
+  },
+};
+
+export const WorkweekGuidePreview: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true }) },
+  render: ({ apiClient }) => <WorkweekGuide apiClient={apiClient} />,
+};
+
+export const StartsTheWorkweekGuideFromTheProductGallery: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true }) },
+  render: ({ apiClient }) => <WorkweekGuide apiClient={apiClient} />,
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(page.getByRole("button", { name: "Neuerungen öffnen" }));
+    await expect(await page.findByRole("dialog", { name: "Arbeitszeiten noch diese Woche ändern" })).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Lass dich leiten" }));
+    const guide = await page.findByRole("dialog", { name: "Beginn bewusst wählen" });
+    await expect(page.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" }).contains(guide)).toBe(true);
+    await userEvent.click(within(guide).getByRole("button", { name: "Tour schließen" }));
+    await waitFor(() => expect(page.getByRole("button", { name: "Editor schließen" })).toHaveFocus());
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(page.getByRole("button", { name: "Arbeitswoche bearbeiten" })).toHaveFocus());
+    await expect(page.queryByText(/Arbeitswoche bestätigt/)).not.toBeInTheDocument();
+  },
+};
+
+export const RestartKeyboardPreview: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true, restartAvailable: true, failRestartContextOnce: true, version: expiredDraft,
+    restart: { after: restartedContext, result: { version: restartedDraft, restart: { state: "ready", recovery: null } } },
+  }) },
+};
+
+export const LeavesUnsavedInputsIntactWhenTheGuideCloses: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true }) },
+  render: ({ apiClient }) => <WorkweekGuide apiClient={apiClient} />,
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(await page.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    await userEvent.clear(page.getByLabelText("Montag, Fenster 1, Ende"));
+    await userEvent.type(page.getByLabelText("Montag, Fenster 1, Ende"), "18:00");
+    window.dispatchEvent(new CustomEvent("fmd:start-feature-tour", { detail: { tourId: "workweek-current-publication-v1" } }));
+    const guide = await page.findByRole("dialog", { name: "Beginn bewusst wählen" });
+    await userEvent.tab({ shift: true });
+    await expect(guide.contains(canvasElement.ownerDocument.activeElement)).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(page.queryByRole("dialog", { name: "Beginn bewusst wählen" })).not.toBeInTheDocument());
+    await expect(page.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await waitFor(() => expect(page.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" }).contains(canvasElement.ownerDocument.activeElement)).toBe(true));
+    await userEvent.keyboard("{Escape}");
+    await expect(await page.findByRole("alertdialog", { name: "Ungespeicherte Änderungen verwerfen?" })).toBeVisible();
   },
 };
