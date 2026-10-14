@@ -65,7 +65,7 @@ it("keeps mapped roles owner-only and installs half-open bounds after all effect
       const bounds=await client.query("select effective_until from public.team_workweek_publications where id=$1",[old.rows[0].id]);
       expect(bounds.rows[0].effective_until.toISOString()).toBe(new Date(publication.effectiveAt).toISOString());
       const preparingSuccessor=await captureDatabaseError(client,()=>asAuthenticated(client,user,()=>client.query("select public.create_private_current_team_workweek_version('[]',$1,2)",[publication.id])));
-      expect(preparingSuccessor).toMatchObject({code:"22023"});
+      expect(preparingSuccessor).toMatchObject({code:"P0004"});
       const forged=await captureDatabaseError(client,()=>asAuthenticated(client,user,()=>client.query("select public.bind_team_workweek_crossing_instance(null,1,'foreign','etag','{}')")));
       expect(forged).toMatchObject({code:"42501"});
     }

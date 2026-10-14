@@ -5,6 +5,7 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const draftModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
+const calendarModel = await import("../../../src/features/team-workweek/model/team-workweek-calendar.ts");
 
 function apiError(message, status) {
   return Response.json({ error: message }, { status });
@@ -17,6 +18,7 @@ function query(data, error = null) {
     order() { return this; },
     limit() { return this; },
     maybeSingle() { return Promise.resolve({ data, error }); },
+    returns() { return Promise.resolve({ data: data ? (Array.isArray(data) ? data : [data]) : [], error }); },
   };
 }
 
@@ -43,6 +45,7 @@ const route = await importTestModule(
       ...draftModel,
       nextVersionMondayIso: () => "2026-09-07",
     },
+    "@/features/team-workweek/model/team-workweek-calendar": calendarModel,
     "@/lib/api-response": {
       apiError,
       readJsonPayload: async () => postPayload,
@@ -112,6 +115,29 @@ test("a publication lookup failure remains a load error", async () => {
   const response = await route.GET({});
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: "Veröffentlichungsstatus konnte nicht geladen werden." });
+});
+
+test("the editor corrects current windows and separately discloses the retained successor", async () => {
+  const future = { ...latestPublication, id: "future", effective_from: "2099-09-07", publication_revision: 5,
+    windows: [{ weekday: 1, startMinute: 600, endMinute: 960 }] };
+  latestPublicationResult = { data: [future, { ...latestPublication, effective_to: "2099-09-06" }], error: null };
+  const response = await route.GET({});
+  const body = await response.json();
+  assert.deepEqual(body.editBase.windows.monday, [{ start: "09:00", end: "17:00" }]);
+  assert.equal(body.editBase.basePublicationId, "publication-1");
+  assert.equal(body.preparedSuccessor.id, "future");
+  assert.equal(body.immediateAllowed, true);
+});
+
+test("two minutes before a legacy Monday the editor does not offer a candidate beyond that successor", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-18T21:58:00Z"));
+  try {
+    latestPublicationResult = { data: [{ ...latestPublication, id: "monday", effective_from: "2026-10-19", publication_revision: 5 }, { ...latestPublication, effective_to: "2026-10-18" }], error: null };
+    const body = await (await route.GET({})).json();
+    assert.equal(body.immediateAllowed, false);
+    assert.equal(body.editBase.basePublicationId, "publication-1");
+  } finally { vi.useRealTimers(); }
 });
 
 test("the immediate API stores intent without accepting a client activation time", async () => {

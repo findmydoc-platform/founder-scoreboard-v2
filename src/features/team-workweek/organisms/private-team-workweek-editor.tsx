@@ -163,6 +163,11 @@ export function PrivateTeamWorkweekEditor({
                       aria-label="Gültigkeitsbeginn der Arbeitswoche" className="h-9 w-full sm:w-[180px] [@media(pointer:coarse)]:h-11" />
                   </div>
                 )}
+                {state.draft.activationMode === "immediate" && state.preparedSuccessor && (
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Geplante Änderung am {new Intl.DateTimeFormat("de-DE", { timeZone: TEAM_WORKWEEK_TIMEZONE, day: "2-digit", month: "short", year: "numeric" }).format(new Date(state.preparedSuccessor.effectiveAt || `${state.preparedSuccessor.effectiveFrom}T12:00:00Z`))} bleibt erhalten. Diese Korrektur gilt bis dahin.
+                  </p>
+                )}
               </section>
 
               {state.errors.length > 0 && (
@@ -178,7 +183,7 @@ export function PrivateTeamWorkweekEditor({
           <footer className="border-t border-slate-200 bg-white px-3 py-2.5 sm:px-4">
             <p className="mb-2 text-xs leading-4 text-slate-500">
               {state.draft.activationMode === "immediate"
-                ? "Gilt dauerhaft. Bei Verzögerung wird ein neuer zukünftiger Beginn geplant."
+                ? `${state.preparedSuccessor ? "Gilt bis zur geplanten Änderung." : "Gilt dauerhaft."} Bei Verzögerung wird ein neuer zukünftiger Beginn geplant.`
                 : `Änderungen gelten ab ${formatDate(state.draft.effectiveFrom)} und werden erst nach dem Google-Abgleich veröffentlicht.`}
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">

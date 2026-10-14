@@ -28,6 +28,8 @@ export class TeamWorkweekPublicationError extends Error {
 }
 
 export type TeamWorkweekPublicationResult = Readonly<{
+  successorPublicationId?: string | null;
+  effectiveUntil?: string | null;
   activationMode?: "immediate" | "future_monday";
   effectiveAt?: string | null;
   id: string;
@@ -180,6 +182,8 @@ export async function publishTeamWorkweek({
       lastSyncAt: publication.lastSyncAt,
       publicationRevision: publication.publicationRevision,
       recovery: null,
+      effectiveUntil: publication.effectiveUntil,
+      successorPublicationId: publication.successorPublicationId,
       ...(publication.effectiveAt ? { effectiveAt: publication.effectiveAt, activationMode: publication.activationMode } : {}),
     };
   }

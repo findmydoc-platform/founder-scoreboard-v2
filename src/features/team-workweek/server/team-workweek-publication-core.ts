@@ -25,6 +25,8 @@ export type PreparedWorkweekSeriesTransition = Readonly<{
 }>;
 
 export type PreparedWorkweekPublication = Readonly<{
+  successorPublicationId?: string | null;
+  effectiveUntil?: string | null;
   predecessorPublicationId?: string | null;
   activationMode?: "immediate" | "future_monday";
   effectiveAt?: string | null;

@@ -9,6 +9,7 @@ import {
 } from "@/features/team-workweek/model/team-workweek-draft";
 import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
 import { bearerToken, requireTeamMember } from "@/lib/authz";
+import { berlinCivilInstant } from "@/features/team-workweek/model/team-workweek-calendar";
 import { getSupabaseForToken } from "@/lib/supabase-user";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,8 @@ type PublicationRow = Readonly<{
   effective_from: string;
   activation_mode?: "immediate" | "future_monday";
   effective_at?: string | null;
+  effective_until?: string | null;
+  effective_to?: string | null;
   status: "preparing" | "published";
   sync_state: "pending" | "delayed" | "confirmed";
   publication_revision: number;
@@ -97,15 +100,24 @@ export async function GET(request: NextRequest) {
   const ownerProfileId = context.permission.profile?.id || data?.owner_profile_id || null;
   const latestPublishedResponse = ownerProfileId ? await supabase
     .from("team_workweek_publications")
-    .select("id,effective_from,activation_mode,effective_at,status,sync_state,publication_revision,published_at,last_sync_at,windows,team_workweek_google_reconciliation_status(state,last_observed_at)")
+    .select("id,effective_from,effective_to,effective_until,activation_mode,effective_at,status,sync_state,publication_revision,published_at,last_sync_at,windows,team_workweek_google_reconciliation_status(state,last_observed_at)")
     .eq("owner_profile_id", ownerProfileId)
     .eq("status", "published")
     .order("effective_from", { ascending: false })
     .order("publication_revision", { ascending: false })
-    .limit(1)
-    .maybeSingle<PublicationRow>() : null;
+    .returns<PublicationRow[]>() : null;
   if (latestPublishedResponse?.error) return apiError("Veröffentlichungsstatus konnte nicht geladen werden.", 503);
-  const latestPublished = latestPublishedResponse?.data || null;
+  const publications = latestPublishedResponse?.data || [];
+  const now = new Date();
+  const startsAt = (row: PublicationRow) => row.effective_at
+    ? new Date(row.effective_at).getTime()
+    : berlinCivilInstant(row.effective_from, "00:00");
+  const currentPublished = publications.filter((row) => startsAt(row) <= now.getTime()
+    && (row.effective_until ? new Date(row.effective_until) > now : !row.effective_to || row.effective_to >= berlinTodayIso(now)))
+    .sort((left, right) => right.publication_revision - left.publication_revision)[0] || null;
+  const preparedSuccessor = publications.filter((row) => startsAt(row) > now.getTime())
+    .sort((left, right) => startsAt(left) - startsAt(right))[0] || null;
+  const latestPublished = currentPublished || preparedSuccessor;
 
   return NextResponse.json({
     version: privateVersion ? {
@@ -120,12 +132,13 @@ export async function GET(request: NextRequest) {
     } : null,
     publication: privateVersion ? publicationPayload(publication?.data || null) : null,
     latestPublished: publicationPayload(latestPublished),
-    immediateAllowed: !latestPublished || (latestPublished.effective_at ? new Date(latestPublished.effective_at) <= new Date() : latestPublished.effective_from <= berlinTodayIso()),
-    editBase: latestPublished ? {
-      basePublicationId:latestPublished.id,basePublicationRevision:latestPublished.publication_revision,
-      windows: inflatePublishedTeamWorkweekWindows(latestPublished.windows || []),
+    preparedSuccessor: publicationPayload(preparedSuccessor),
+    immediateAllowed: !preparedSuccessor || startsAt(preparedSuccessor) > Math.floor(now.getTime() / 60_000) * 60_000 + 180_000,
+    editBase: currentPublished ? {
+      basePublicationId:currentPublished.id,basePublicationRevision:currentPublished.publication_revision,
+      windows: inflatePublishedTeamWorkweekWindows(currentPublished.windows || []),
     } : null,
-    minimumEffectiveFrom: nextVersionMondayIso(latestPublished?.effective_from || null),
+    minimumEffectiveFrom: nextVersionMondayIso(publications[0]?.effective_from || null),
   });
 }
 

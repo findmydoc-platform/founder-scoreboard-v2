@@ -3,6 +3,7 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const draft = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
+const published = await import("../../../src/features/team-workweek/model/published-team-workweek.ts");
 const model = await importTestModule(
   "src/features/team-workweek/model/team-workweek-calendar.ts",
   { "./team-workweek-draft": draft },
@@ -196,4 +197,17 @@ test("autumn endpoints select the first repeated label, never the second fold",(
   const entry=publication("fold","one","2026-10-19",null,1,windows({sunday:[{start:"02:15",end:"02:45"}]}));
   const result=model.projectCalendarWorktimes({calendarWorkweeks:[entry],profiles,dateKey:"2026-10-25",now:new Date("2026-10-25T01:30:00Z")});
   assert.equal(result[0].workingNow,false);
+});
+
+test("a Wednesday correction with a higher revision ends at the retained Monday across Team and calendar", () => {
+  const rows = [
+    { ...publication("old", "one", "2026-10-12", "2026-10-14", 1, windows({ wednesday: [{ start: "09:00", end: "17:00" }] })), effectiveUntil: "2026-10-14T10:03:00Z" },
+    { ...publication("monday", "one", "2026-10-19", null, 2, windows({ monday: [{ start: "10:00", end: "16:00" }], wednesday: [{ start: "10:00", end: "16:00" }] })), effectiveAt: "2026-10-18T22:00:00Z" },
+    { ...publication("correction", "one", "2026-10-12", "2026-10-18", 3, windows({ monday: [{ start: "13:00", end: "18:00" }], wednesday: [{ start: "13:00", end: "18:00" }] })), effectiveAt: "2026-10-14T10:03:00Z", effectiveUntil: "2026-10-18T22:00:00Z" },
+  ];
+  assert.deepEqual(published.selectVisibleTeamWorkweeks(rows, "2026-10-14", new Date("2026-10-14T11:00:00Z")).map(({ id, phase }) => ({ id, phase })), [{ id: "correction", phase: "current" }, { id: "monday", phase: "prepared" }]);
+  assert.deepEqual(model.projectCalendarWorktimes({ calendarWorkweeks: rows, profiles, dateKey: "2026-10-14", now: new Date("2026-10-14T11:00:00Z") })[0].windows, [{ start: "09:00", end: "12:03" }, { start: "13:00", end: "18:00" }]);
+  assert.equal(model.selectCalendarWorkweek(rows, "one", "2026-10-19", new Date("2026-10-18T22:00:00Z")).id, "monday");
+  assert.deepEqual(model.projectCalendarWorktimes({ calendarWorkweeks: rows, profiles, dateKey: "2026-10-19", now: new Date("2026-10-19T09:00:00Z") })[0].windows, [{ start: "10:00", end: "16:00" }]);
+  assert.deepEqual(model.projectCalendarWorktimes({ calendarWorkweeks: rows, profiles, dateKey: "2026-10-21", now: new Date("2026-10-21T09:00:00Z") })[0].windows, [{ start: "10:00", end: "16:00" }]);
 });
