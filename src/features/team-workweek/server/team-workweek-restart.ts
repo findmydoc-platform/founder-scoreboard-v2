@@ -16,8 +16,17 @@ export async function restartPrivateTeamWorkweek({ownerProfileId,versionId,userS
   if(!source.data.restarted_version_id){
     const conflict=await serviceSupabase.from("team_workweek_google_conflicts").select("resolution_version_id").eq("owner_profile_id",ownerProfileId).eq("founderops_version_id",versionId).eq("state","resolving").maybeSingle<{resolution_version_id:string}>();
     if(conflict.error)throw new TeamWorkweekPublicationError("unavailable","Konfliktstatus konnte nicht geladen werden.");
-    const publication=await serviceSupabase.from("team_workweek_publications").select("id,status,attempt_generation,effective_at").eq("source_version_id",conflict.data?.resolution_version_id||versionId).maybeSingle<{id:string;status:string;attempt_generation:number;effective_at:string|null}>();
+    let publication=await serviceSupabase.from("team_workweek_publications").select("id,status,attempt_generation,effective_at").eq("source_version_id",conflict.data?.resolution_version_id||versionId).maybeSingle<{id:string;status:string;attempt_generation:number;effective_at:string|null}>();
     if(publication.error)throw new TeamWorkweekPublicationError("unavailable","Veröffentlichungsstatus konnte nicht geladen werden.");
+    if (!publication.data) {
+      publication = await serviceSupabase.from("team_workweek_publications")
+        .select("id,status,attempt_generation,effective_at,team_workweek_versions!inner(origin)")
+        .eq("owner_profile_id", ownerProfileId).eq("status", "preparing")
+        .eq("team_workweek_versions.origin", "google_reconciliation")
+        .maybeSingle<{id:string;status:string;attempt_generation:number;effective_at:string|null}>();
+      if (publication.error) throw new TeamWorkweekPublicationError("unavailable", "Vorbereiteter Google-Abgleich konnte nicht geladen werden.");
+    }
+
     if(publication.data){
       if(publication.data.status!=="preparing" || !publication.data.attempt_generation || !publication.data.effective_at || new Date(publication.data.effective_at)>now())throw new TeamWorkweekPublicationError("conflict","Die Veröffentlichung läuft noch. Lade ihren aktuellen Stand erneut.");
       let token:string;

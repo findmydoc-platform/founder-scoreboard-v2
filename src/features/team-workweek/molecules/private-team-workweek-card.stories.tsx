@@ -54,6 +54,7 @@ type ClientOptions = {
   googleConnected?: boolean;
   editBase?: { windows: typeof publishedWindows } | null;
   reconciliation?: Record<string, unknown>;
+  reconciliationAfter?: Record<string, unknown>;
   latestPublished?: Record<string, unknown> | null;
   publication?: Record<string, unknown> | null;
   publish?: {
@@ -128,7 +129,10 @@ function client(options: ClientOptions = {}): BrowserApiClient {
         privateBody = options.publish.after as typeof privateBody;
         return response({ publication: options.publish.result });
       }
-      if (path === "/api/team-workweek/reconcile") return response({ reconciliation: options.reconciliation || { state: "unchanged" } });
+      if (path === "/api/team-workweek/reconcile") {
+        if (options.reconciliationAfter) privateBody = options.reconciliationAfter as typeof privateBody;
+        return response({ reconciliation: options.reconciliation || { state: "unchanged" } });
+      }
       if (path === "/api/google-workspace/status") {
         return response({ connection: { state: options.googleConnected ? "connected" : "not_connected", connectedAt: null, refreshedAt: null, lastUsedAt: null, accessTokenExpiresAt: null } });
       }
@@ -786,5 +790,75 @@ export const ReleasesTheGuideEvenBeforeDriversFirstFrame: Story = {
     const restartedGuide = await page.findByRole("dialog", { name: "Beginn bewusst wählen" });
     await userEvent.click(within(restartedGuide).getByRole("button", { name: "Tour schließen" }));
     await waitFor(() => expect(page.getByRole("button", { name: "Editor schließen" })).toHaveFocus());
+  },
+};
+
+
+function legacyMondayClient(): BrowserApiClient {
+  const before = client({ googleConnected: true, preparedSuccessor: { ...latestPublished, id: "legacy-monday", effectiveFrom: "2026-10-19" }, minimumEffectiveFrom: "2026-10-26" });
+  const after = client({ googleConnected: true, latestPublished: { ...latestPublished, id: "legacy-monday", effectiveFrom: "2026-10-19" }, minimumEffectiveFrom: "2026-10-26", editBase: { windows: { ...publishedWindows, monday: [{ start: "12:00", end: "16:00" }] } } });
+  return { requestJson: (input, init) => (Date.now() < Date.parse("2026-10-18T22:00:00Z") ? before : after).requestJson(input, init) } as BrowserApiClient;
+}
+
+function approachingLegacyMonday() {
+  const OriginalDate = Date;
+  const began = performance.now();
+  const base = OriginalDate.parse("2026-10-18T21:59:58Z");
+  class BoundaryDate extends OriginalDate {
+    constructor(value?: string | number | Date) { super(value === undefined ? base + performance.now() - began : value); }
+    static now() { return base + performance.now() - began; }
+  }
+  globalThis.Date = BoundaryDate as DateConstructor;
+  return () => { globalThis.Date = OriginalDate; };
+}
+
+export const RefreshesAnOpenCleanEditorAtALegacyMonday: Story = {
+  args: { profile, apiClient: legacyMondayClient() },
+  beforeEach: approachingLegacyMonday,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("09:00");
+    await waitFor(() => expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("12:00"), { timeout: 5000 });
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("16:00");
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
+  },
+};
+
+export const KeepsUnsavedInputsAtALegacyMonday: Story = {
+  args: { profile, apiClient: legacyMondayClient() },
+  beforeEach: approachingLegacyMonday,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    const start = canvas.getByLabelText("Montag, Fenster 1, Beginn");
+    await userEvent.clear(start);
+    await userEvent.type(start, "08:00");
+    await waitFor(() => expect(canvas.getByText(/Die geplante Arbeitswoche gilt jetzt\. Deine Eingaben bleiben erhalten/)).toBeVisible(), { timeout: 5000 });
+    await expect(start).toHaveValue("08:00");
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("17:00");
+  },
+};
+
+
+export const RestartsAnExpiredAutomaticGoogleCorrectionWithoutInventingAConflict: Story = {
+  args: { profile, apiClient: client({ googleConnected: true,
+    reconciliation: { state: "delayed", recovery: "restart", lastSuccessfulSyncAt: latestPublished.lastSyncAt },
+    reconciliationAfter: { version: { ...expiredDraft, id: "automatic-google-source" },
+      publication: { ...latestPublished, id: "automatic-operation", status: "preparing", syncState: "delayed", effectiveAt: "2020-09-07T07:03:00Z" },
+      latestPublished, editBase: { windows: publishedWindows }, minimumEffectiveFrom: nextMondayIso(), immediateAllowed: true, restartAvailable: true },
+    restart: { after: restartedContext, result: { version: restartedDraft, restart: { state: "ready", recovery: null } } },
+  }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "App-Termine in Google prüfen" }));
+    await expect(await canvas.findByText(/Die Ausgangsversion hat sich geändert\. Beginne die Bearbeitung mit dem aktuellen Stand neu/)).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "FounderOps übernehmen" })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeitung fortsetzen" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" }));
+    await expect(await canvas.findByText(/Neustart vorbereitet/)).toBeVisible();
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("09:00");
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
+    await expect(canvas.queryByText(/Arbeitswoche bestätigt/)).not.toBeInTheDocument();
   },
 };

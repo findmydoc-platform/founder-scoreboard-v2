@@ -27,7 +27,7 @@ type ReconciliationErrorClass =
 type ReconciliationStatus = Readonly<{
   state: "unchanged" | "updated" | "delayed" | "conflict";
   lastSuccessfulSyncAt: string | null;
-  recovery: "retry" | "reconnect" | "resolve_conflict" | null;
+  recovery: "retry" | "reconnect" | "resolve_conflict" | "restart" | null;
   effectiveAt?: string | null;
   effectiveUntil?: string | null;
 }>;
@@ -143,9 +143,11 @@ async function finishPublication({
       : error instanceof TeamWorkweekPublicationError && error.code === "reconnect_required"
         ? "oauth_reconnect_required"
         : "storage_failed";
-    const state = errorClass === "founderops_changed" ? "conflict" : "delayed";
+    const state = "delayed";
     await recordFailure(serviceSupabase, statusPublication, state, errorClass, observedAt);
-    return delayedStatus({ last_sync_at: previousLastSyncAt }, errorClass);
+    return errorClass === "founderops_changed"
+      ? { state: "delayed", lastSuccessfulSyncAt: previousLastSyncAt, recovery: "restart" }
+      : delayedStatus({ last_sync_at: previousLastSyncAt }, errorClass);
   }
 
   if (publication.status === "published") {

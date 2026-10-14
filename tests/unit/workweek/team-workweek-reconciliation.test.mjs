@@ -335,7 +335,7 @@ function pendingReconciliationService({ recordError = null } = {}) {
 test("pending publication errors preserve conflict, retry, and forbidden semantics", async () => {
   for (const scenario of [
     { code: "unavailable", state: "delayed", recovery: "retry", errorClass: "storage_failed" },
-    { code: "conflict", state: "conflict", recovery: "resolve_conflict", errorClass: "founderops_changed" },
+    { code: "conflict", state: "delayed", recovery: "restart", errorClass: "founderops_changed" },
   ]) {
     const service = pendingReconciliationService();
     const result = await reconciliationServer.reconcileTeamWorkweek({

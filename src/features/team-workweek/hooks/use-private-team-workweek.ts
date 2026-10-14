@@ -17,6 +17,7 @@ import {
   type WorkweekActivationMode,
 } from "../model/team-workweek-draft";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
+import { berlinCivilInstant } from "../model/team-workweek-calendar";
 import { TEAM_WORKWEEK_PUBLISHED_EVENT } from "./use-published-team-workweeks";
 
 function confirmedActivation(effectiveAt?: string | null, effectiveUntil?: string | null) {
@@ -132,12 +133,16 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     return () => window.clearTimeout(timeout);
   }, [load]);
 
+  const boundarySource = preparedSuccessor || latestPublished;
+  const nextPublicationBoundary = boundarySource
+    ? boundarySource.effectiveAt ? Date.parse(boundarySource.effectiveAt) : berlinCivilInstant(boundarySource.effectiveFrom, "00:00")
+    : null;
   useEffect(() => {
-    const effectiveAt = preparedSuccessor?.effectiveAt || latestPublished?.effectiveAt;
-    if (!effectiveAt || new Date(effectiveAt).getTime() <= Date.now()) return;
+    if (nextPublicationBoundary === null || nextPublicationBoundary <= Date.now()) return;
+    const boundary = nextPublicationBoundary;
     let timeout: number;
     const refreshAtBoundary = () => {
-      const remaining = new Date(effectiveAt).getTime() - Date.now();
+      const remaining = boundary - Date.now();
       if (remaining > 0) {
         timeout = window.setTimeout(refreshAtBoundary, Math.min(2_147_483_647, remaining + 100));
         return;
@@ -151,7 +156,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     };
     refreshAtBoundary();
     return () => window.clearTimeout(timeout);
-  }, [dirty, latestPublished?.effectiveAt, load, preparedSuccessor?.effectiveAt]);
+  }, [dirty, nextPublicationBoundary, load]);
 
   useEffect(() => {
     const effectiveAt = publication?.effectiveAt;
@@ -441,7 +446,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
           lastSuccessfulSyncAt: string | null;
           effectiveAt?: string | null;
           effectiveUntil?: string | null;
-          recovery: "retry" | "reconnect" | "resolve_conflict" | null;
+          recovery: "retry" | "reconnect" | "resolve_conflict" | "restart" | null;
         };
         error?: string;
       }>("/api/team-workweek/reconcile", {
@@ -470,6 +475,8 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       setMessageTone("warning");
       setMessage(body.reconciliation.recovery === "reconnect"
         ? `Synchronisierung verzögert. Verbinde Google erneut; der letzte Teamstand bleibt aktiv.${lastSuccessfulSync}`
+        : body.reconciliation.recovery === "restart"
+          ? `Die Ausgangsversion hat sich geändert. Beginne die Bearbeitung mit dem aktuellen Stand neu; deine Eingaben und der bestätigte Teamstand bleiben erhalten.${lastSuccessfulSync}`
         : body.reconciliation.recovery === "resolve_conflict"
           ? `Google-Änderung ist nicht eindeutig. Der letzte Teamstand bleibt aktiv, bis der Konflikt geprüft wurde.${lastSuccessfulSync}`
           : `Synchronisierung verzögert. Der letzte Teamstand bleibt aktiv und der Abgleich kann sicher wiederholt werden.${lastSuccessfulSync}`);

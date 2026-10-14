@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
   const supabase = authenticatedClient(request);
   if (!supabase) return apiError("Anmeldung erforderlich.", 401);
 
-  const { data, error } = await supabase
+  const privateResponse = await supabase
     .from("team_workweek_versions")
     .select("id,owner_profile_id,effective_from,activation_mode,base_publication_id,base_publication_revision,successor_snapshot,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
     .eq("status", "preparing")
@@ -104,7 +104,8 @@ export async function GET(request: NextRequest) {
       created_at: string;
       team_workweek_windows: Array<{ weekday: number; start_minute: number; end_minute: number }>;
     }>();
-  if (error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
+  if (privateResponse.error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
+  let data = privateResponse.data;
 
   let publication = data ? await supabase
     .from("team_workweek_publications")
@@ -117,6 +118,32 @@ export async function GET(request: NextRequest) {
     if(conflict.error)return apiError("Privater Konfliktstatus konnte nicht geladen werden.",503);
     if(conflict.data?.resolution_version_id)publication=await supabase.from("team_workweek_publications").select("id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)").eq("source_version_id",conflict.data.resolution_version_id).maybeSingle<PublicationRow>();
     if(publication?.error)return apiError("Private Veröffentlichung konnte nicht geladen werden.",503);
+  }
+
+  // Automatic reconciliation can outlive its pinned current/successor context.
+  // Surface its expired operation through the same explicit owner restart action.
+  if (!publication?.data || publication.data.status === "published") {
+    const automatic = await supabase.from("team_workweek_publications")
+      .select("id,source_version_id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at),team_workweek_versions!inner(origin)")
+      .eq("owner_profile_id", context.permission.profile!.id)
+      .eq("status", "preparing")
+      .eq("team_workweek_versions.origin", "google_reconciliation")
+      .maybeSingle<PublicationRow>();
+    if (automatic.error) return apiError("Vorbereiteter Google-Abgleich konnte nicht geladen werden.", 503);
+    if (automatic.data?.attempt_generation && automatic.data.effective_at && new Date(automatic.data.effective_at) <= new Date()) {
+      if (publication?.data?.status === "published") data = null;
+      publication = automatic;
+      if (!data) {
+        const source = await supabase.from("team_workweek_versions")
+          .select("id,owner_profile_id,effective_from,activation_mode,base_publication_id,base_publication_revision,successor_snapshot,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
+          .eq("id", automatic.data.source_version_id!)
+          .eq("origin", "google_reconciliation")
+          .is("retired_at", null)
+          .maybeSingle<NonNullable<typeof privateResponse.data>>();
+        if (source.error) return apiError("Vorbereitete Arbeitswoche konnte nicht geladen werden.", 503);
+        data = source.data;
+      }
+    }
   }
 
   const privateVersion = publication?.data?.status === "published" ? null : data;

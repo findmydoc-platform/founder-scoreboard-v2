@@ -79,3 +79,33 @@ it.each(["immediate","future_monday"])("never extends the retained actual predec
     expect((await client.query("select observed_payload,confirmed_etag from public.team_workweek_google_series where id=$1",[series.id])).rows[0]).toEqual({observed_payload:actual,confirmed_etag:"actual-cutoff"});
   });
 },30_000);
+
+
+it.each([
+  { count: 1, cutoff: "2025-10-26T01:30:00Z", until: "20251026T010000Z", crossing: "2025-10-26T01:00:00.000Z" },
+  { count: 1, cutoff: "2025-10-27T12:00:00Z", until: "20251026T010000Z", crossing: null },
+  { count: 2, cutoff: "2025-11-02T01:30:00Z", until: "20251102T010000Z", crossing: "2025-11-02T01:00:00.000Z" },
+])("retains the actual legacy COUNT=$count endpoint and elapsed second-fold history at $cutoff", async ({ count, cutoff, until, crossing }) => {
+  await withIsolatedLocalDatabase(async client => {
+    await client.query("insert into public.profiles(id,name,platform_role) values('count-owner','Owner','founder')");
+    const version = (await client.query("insert into public.team_workweek_versions(owner_profile_id,effective_from,activation_mode) values('count-owner','2025-10-20','immediate') returning id")).rows[0];
+    const publication = (await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,activation_mode,effective_at,status,sync_state,attempt_generation,windows,cleanup_history)
+      values($1,'count-owner','2025-10-20','immediate',clock_timestamp()-interval '1 hour','preparing','delayed',1,'[]',jsonb_build_object('1',$2::text)) returning id`, [version.id, cutoff])).rows[0];
+    const physical = { ...payload, start: { dateTime: "2025-10-26T01:00:00Z", timeZone: "Europe/Berlin" }, end: { dateTime: "2025-10-26T02:00:00Z", timeZone: "Europe/Berlin" }, recurrence: [`RRULE:FREQ=WEEKLY;COUNT=${count}`] };
+    await client.query("insert into public.team_workweek_publication_effects(publication_id,owner_profile_id,generation,kind,google_event_id,payload,operation) values($1,'count-owner',1,'weekly',$2,$3,'create')", [publication.id, physical.id, physical]);
+    await client.query("select set_config('request.jwt.claim.role','service_role',true)");
+    await client.query("set local role service_role");
+    const plan = (await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result", [publication.id])).rows[0].result;
+    const master = plan.effects.find((effect: {kind: string}) => effect.kind === "weekly");
+    expect(master.cleanupDisposition).toBe("preserve");
+    expect(master.cleanupPayload.start).toEqual(physical.start);
+    expect(master.cleanupPayload.end).toEqual(physical.end);
+    expect(master.cleanupPayload.recurrence).toEqual([`RRULE:FREQ=WEEKLY;UNTIL=${until}`]);
+    const occurrence = plan.effects.find((effect: {kind: string}) => effect.kind === "cleanup_crossing");
+    if (crossing) {
+      expect(new Date(occurrence.expectedPayload.start.dateTime).toISOString()).toBe(crossing);
+      expect(new Date(occurrence.cleanupPayload.end.dateTime).toISOString()).toBe(new Date(cutoff).toISOString());
+    } else expect(occurrence).toBeUndefined();
+    expect((await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result", [publication.id])).rows[0].result).toEqual(plan);
+  });
+}, 30_000);
