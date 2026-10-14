@@ -12,12 +12,14 @@ function apiError(message, status) {
 }
 
 function query(data, error = null) {
+  let sourceFilter=false;
   return {
     select() { return this; },
-    eq() { return this; },
+    eq(key) { if(key==="source_version_id")sourceFilter=true;return this; },
+    is() { return this; },
     order() { return this; },
     limit() { return this; },
-    maybeSingle() { return Promise.resolve({ data, error }); },
+    maybeSingle() { return Promise.resolve({ data:sourceFilter?null:data, error }); },
     returns() { return Promise.resolve({ data: data ? (Array.isArray(data) ? data : [data]) : [], error }); },
   };
 }
@@ -36,6 +38,7 @@ const latestPublication = {
 let postPayload = null;
 let postCalls = [];
 let latestPublicationResult = { data: latestPublication, error: null };
+let privateVersionResult=null;
 
 const route = await importTestModule(
   "src/app/api/team-workweek/private-draft/route.ts",
@@ -62,7 +65,8 @@ const route = await importTestModule(
       getSupabaseForToken: () => ({
         async rpc(name,args) { postCalls.push([name,args]); return { data:{id:"first",activationMode:"immediate",effectiveFrom:"2026-10-12",status:"preparing",timezone:"Europe/Berlin"},error:null }; },
         from(table) {
-          if (table === "team_workweek_versions") return query(null);
+          if (table === "team_workweek_versions") return query(privateVersionResult);
+          if (table === "team_workweek_google_conflicts") return query(null);
           if (table === "team_workweek_publications") {
             return query(latestPublicationResult.data, latestPublicationResult.error);
           }
@@ -74,7 +78,19 @@ const route = await importTestModule(
 );
 
 test.beforeEach(() => {
+  privateVersionResult=null;
   latestPublicationResult = { data: latestPublication, error: null };
+});
+
+test("a pinned successor mapping change offers explicit restart without exposing provider identities",async()=>{
+  const future={...latestPublication,id:"future",source_version_id:"future-source",effective_from:"2030-04-01",effective_at:"2030-04-01T00:00:00+02:00",publication_revision:5,windows:[],team_workweek_google_series:[{id:"series",google_event_id:"managed",confirmed_etag:"old",state:"confirmed",provider_state:"active",projection_part:"legacy",source_window_ids:null}]};
+  privateVersionResult={id:"private",owner_profile_id:"profile-1",effective_from:"2026-10-12",activation_mode:"immediate",base_publication_id:latestPublication.id,base_publication_revision:4,timezone:"Europe/Berlin",status:"preparing",created_at:"2026-10-14T10:00:00Z",team_workweek_windows:[],successor_snapshot:[{id:"future",revision:5,start:future.effective_at,until:null,effectiveTo:null,sourceVersionId:future.source_version_id,supersededBy:null,windows:[],series:[{id:"series",googleEventId:"managed",etag:"old",state:"confirmed",providerState:"active",part:"legacy",sources:null}]}]};
+  latestPublicationResult={data:[future,latestPublication],error:null};
+  assert.equal((await (await route.GET({})).json()).restartAvailable,false);
+  future.team_workweek_google_series[0].confirmed_etag="new";
+  const result=await (await route.GET({})).json();
+  assert.equal(result.restartAvailable,true);
+  assert.doesNotMatch(JSON.stringify(result),/managed|googleEventId|confirmed_etag/);
 });
 
 test("the private editor receives the latest published windows as its edit base", async () => {

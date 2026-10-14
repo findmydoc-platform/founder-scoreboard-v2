@@ -28,6 +28,12 @@ export type PreparedWorkweekEffect = Readonly<{
   payload: WorkweekGooglePayload;
   state: "pending" | "confirmed" | "cleaned";
   confirmedEtag: string | null;
+  cleanupAt?: string;
+  cleanupPayload?: WorkweekGooglePayload | null;
+  cleanupDisposition?: "delete" | "preserve" | "retain" | "restore";
+  cleanupParentId?: string | null;
+  cleanupPreserved?: boolean;
+  cleanupDeadline?: string;
 }>;
 
 type ObservedEvent = Partial<WorkweekGooglePayload> & { etag?: string };
@@ -68,6 +74,7 @@ async function observe(fetchImpl: typeof fetch, accessToken: string, effect: Pre
     if (response.status === 404 || response.status === 410) return { state: "absent" as const };
     if (!response.ok) return errorFor(response);
     const event = await response.json().catch(() => null) as ObservedEvent | null;
+    if (effect.cleanupPayload && matchesPayload(event,effect.cleanupPayload)) return {state:"cleaned" as const,etag:event!.etag!};
     if (matchesEffect(event, effect)) return { state: "confirmed" as const, etag: event!.etag! };
     if (effect.operation && effect.operation !== "create" && effect.expectedPayload && matchesPayload(event, effect.expectedPayload)
       && (restoring || event!.etag === effect.expectedEtag)) return { state: "baseline" as const, etag: event!.etag! };
@@ -81,6 +88,7 @@ export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImp
   accessToken: string; effect: PreparedWorkweekEffect; fetchImpl?: typeof fetch; now?: () => Date;
 }): Promise<GoogleWorkweekSeriesResult> {
   const observed = await observe(fetchImpl, accessToken, effect);
+  if (observed.state === "cleaned") return {state:"delayed",errorClass:"provider_identity_mismatch"};
   if (observed.state === "confirmed") return { ...observed, observedAt: now().toISOString() };
   if (observed.state === "delayed") return observed;
   const updating = effect.operation && effect.operation !== "create";
@@ -108,7 +116,8 @@ export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImp
 
 export async function cleanupGoogleWorkweekEffect({ accessToken, effect, fetchImpl = fetch, now = () => new Date() }: {
   accessToken: string; effect: PreparedWorkweekEffect; fetchImpl?: typeof fetch; now?: () => Date;
-}): Promise<GoogleWorkweekSeriesResult> {
+}): Promise<GoogleWorkweekSeriesResult & { preserved?: boolean }> {
+  if (effect.cleanupDisposition) return cleanupPlannedEffect({accessToken,effect,fetchImpl,now});
   if (effect.instanceOf && !effect.expectedEtag) return {state:"confirmed",etag:"unbound",observedAt:now().toISOString()};
   const observed = await observe(fetchImpl, accessToken, effect, true);
   const updating = effect.operation && effect.operation !== "create";
@@ -117,6 +126,7 @@ export async function cleanupGoogleWorkweekEffect({ accessToken, effect, fetchIm
     ? {state:"delayed",errorClass:"provider_identity_mismatch"}
     : { state: "confirmed", etag: "absent", observedAt: now().toISOString() };
   if (observed.state === "delayed") return observed;
+  if (observed.state === "cleaned") return {state:"confirmed",etag:observed.etag,observedAt:now().toISOString()};
   try {
     const response = await fetchImpl(`${endpoint(effect)}?sendUpdates=none`, {
       method: updating ? "PUT" : "DELETE", headers: { authorization: `Bearer ${accessToken}`, "if-match": observed.etag,
@@ -141,6 +151,40 @@ export async function cleanupGoogleWorkweekEffect({ accessToken, effect, fetchIm
   if (recovered.state === "baseline") return {state:"confirmed",etag:recovered.etag,observedAt:now().toISOString()};
   return !updating && recovered.state === "absent" ? { state: "confirmed", etag: "absent", observedAt: now().toISOString() }
     : recovered.state === "delayed" ? recovered : { state: "delayed", errorClass: "provider_unavailable" };
+}
+
+async function cleanupPlannedEffect({accessToken,effect,fetchImpl,now}:{accessToken:string;effect:PreparedWorkweekEffect;fetchImpl:typeof fetch;now:()=>Date}):Promise<GoogleWorkweekSeriesResult & {preserved?:boolean}> {
+  if(effect.instanceOf && !effect.expectedEtag && effect.kind!=="cleanup_crossing")return {state:"confirmed",etag:"unbound",observedAt:now().toISOString(),preserved:false};
+  const observed=await observe(fetchImpl,accessToken,effect,true);
+  const preservation=effect.cleanupDisposition==="preserve" || effect.cleanupDisposition==="retain";
+  const confirmed=(etag:string,preserved=preservation)=>({state:"confirmed" as const,etag,observedAt:now().toISOString(),preserved});
+  if(observed.state==="cleaned") return confirmed(observed.etag);
+  if(observed.state==="delayed") return observed;
+  if(observed.state==="absent") return effect.operation && effect.operation!=="create"
+    ? {state:"delayed",errorClass:"provider_identity_mismatch"} : confirmed("absent",false);
+  if(effect.cleanupDisposition==="retain") return {state:"delayed",errorClass:"provider_identity_mismatch"};
+  if(observed.state==="baseline" && !(effect.kind==="cleanup_crossing" && observed.etag===effect.expectedEtag)) return effect.cleanupDisposition==="restore"
+    ? confirmed(observed.etag,false) : {state:"delayed",errorClass:"provider_identity_mismatch"};
+  if(effect.cleanupDeadline && now().getTime()>=Date.parse(effect.cleanupDeadline))return {state:"delayed",errorClass:"provider_identity_mismatch"};
+  // A persisted future-only decision cannot delete an occurrence that has since started.
+  if(effect.cleanupDisposition==="delete" && now().getTime()>=new Date(effect.payload.start.dateTime).getTime()) return {state:"delayed",errorClass:"provider_identity_mismatch"};
+  const deleting=effect.cleanupDisposition==="delete";
+  try {
+    const response=await fetchImpl(`${endpoint(effect)}?sendUpdates=none`,{method:deleting?"DELETE":"PUT",headers:{authorization:`Bearer ${accessToken}`,"if-match":observed.etag,...(!deleting?{"content-type":"application/json"}:{})},...(!deleting?{body:JSON.stringify(effect.cleanupPayload)}:{}),cache:"no-store",signal:AbortSignal.timeout(8_000)});
+    if(response.ok){
+      if(deleting)return confirmed(observed.etag,false);
+      const event=await response.json().catch(()=>null) as ObservedEvent|null;
+      return effect.cleanupPayload && matchesPayload(event,effect.cleanupPayload) ? confirmed(event!.etag!) : {state:"delayed",errorClass:"provider_identity_mismatch"};
+    }
+    if(deleting && (response.status===404 || response.status===410))return confirmed("absent",false);
+    if(response.status===412)return {state:"delayed",errorClass:"provider_identity_mismatch"};
+    if(response.status<500)return errorFor(response);
+  }catch{/* Re-observe the exact persisted cleanup target after an uncertain response. */}
+  const recovered=await observe(fetchImpl,accessToken,effect,true);
+  if(recovered.state==="cleaned")return confirmed(recovered.etag);
+  if(deleting && recovered.state==="absent")return confirmed("absent",false);
+  if(effect.cleanupDisposition==="restore" && recovered.state==="baseline")return confirmed(recovered.etag,false);
+  return recovered.state==="delayed"?recovered:{state:"delayed",errorClass:"provider_unavailable"};
 }
 
 export async function discoverGoogleWorkweekInstance({accessToken,effect,fetchImpl=fetch}: {

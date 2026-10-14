@@ -21,6 +21,10 @@ type PublicationRow = Readonly<{
   effective_at?: string | null;
   effective_until?: string | null;
   effective_to?: string | null;
+  attempt_generation?: number;
+  source_version_id?: string;
+  superseded_by_publication_id?: string | null;
+  team_workweek_google_series?: Array<{id:string;google_event_id:string;confirmed_etag:string|null;state:string;provider_state:string;projection_part:string;source_window_ids:number[]|null}>;
   status: "preparing" | "published";
   sync_state: "pending" | "delayed" | "confirmed";
   publication_revision: number;
@@ -36,6 +40,15 @@ type PublicationRow = Readonly<{
   }>> | null;
 }>;
 
+type PreparedSuccessorBinding={id:string;revision:number;start:string;until?:string|null;effectiveTo?:string|null;sourceVersionId?:string|null;supersededBy?:string|null;windows?:Array<{weekday:number;startMinute:number;endMinute:number}>;series?:Array<{id:string;googleEventId:string;etag:string|null;state:string;providerState:string;part:string;sources:number[]|null}>};
+function successorBindingKey(rows:PreparedSuccessorBinding[]){
+  return JSON.stringify([...rows].sort((a,b)=>Date.parse(a.start)-Date.parse(b.start)||a.id.localeCompare(b.id)).map(row=>[
+    row.id,row.revision,Date.parse(row.start),row.until?Date.parse(row.until):null,row.effectiveTo||null,row.sourceVersionId||null,row.supersededBy||null,
+    (row.windows||[]).map(window=>[window.weekday,window.startMinute,window.endMinute]),
+    [...(row.series||[])].sort((a,b)=>a.id.localeCompare(b.id)).map(series=>[series.id,series.googleEventId,series.etag,series.state,series.providerState,series.part,series.sources?.map(String)??null]),
+  ]));
+}
+
 function publicationPayload(row: PublicationRow | null) {
   const reconciliation = row
     ? Array.isArray(row.team_workweek_google_reconciliation_status)
@@ -46,6 +59,7 @@ function publicationPayload(row: PublicationRow | null) {
     id: row.id,
     effectiveFrom: row.effective_from,
     ...(row.effective_at ? { effectiveAt: row.effective_at } : {}),
+    ...(row.effective_until ? { effectiveUntil:row.effective_until } : {}),
     ...(row.activation_mode ? { activationMode: row.activation_mode } : {}),
     status: row.status,
     syncState: row.sync_state,
@@ -70,9 +84,10 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("team_workweek_versions")
-    .select("id,owner_profile_id,effective_from,activation_mode,base_publication_id,base_publication_revision,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
+    .select("id,owner_profile_id,effective_from,activation_mode,base_publication_id,base_publication_revision,successor_snapshot,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
     .eq("status", "preparing")
     .eq("origin", "owner")
+    .is("retired_at",null)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(1)
@@ -83,6 +98,7 @@ export async function GET(request: NextRequest) {
       activation_mode?: "immediate" | "future_monday";
       base_publication_id?: string | null;
       base_publication_revision?: number | null;
+      successor_snapshot?: PreparedSuccessorBinding[] | null;
       timezone: "Europe/Berlin";
       status: "preparing";
       created_at: string;
@@ -90,17 +106,24 @@ export async function GET(request: NextRequest) {
     }>();
   if (error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
 
-  const publication = data ? await supabase
+  let publication = data ? await supabase
     .from("team_workweek_publications")
-    .select("id,effective_from,activation_mode,effective_at,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)")
+    .select("id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)")
     .eq("source_version_id", data.id)
     .maybeSingle<PublicationRow>() : null;
   if (publication?.error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
+  if(data && !publication?.data){
+    const conflict=await supabase.from("team_workweek_google_conflicts").select("resolution_version_id").eq("founderops_version_id",data.id).eq("state","resolving").maybeSingle<{resolution_version_id:string}>();
+    if(conflict.error)return apiError("Privater Konfliktstatus konnte nicht geladen werden.",503);
+    if(conflict.data?.resolution_version_id)publication=await supabase.from("team_workweek_publications").select("id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)").eq("source_version_id",conflict.data.resolution_version_id).maybeSingle<PublicationRow>();
+    if(publication?.error)return apiError("Private Veröffentlichung konnte nicht geladen werden.",503);
+  }
+
   const privateVersion = publication?.data?.status === "published" ? null : data;
   const ownerProfileId = context.permission.profile?.id || data?.owner_profile_id || null;
   const latestPublishedResponse = ownerProfileId ? await supabase
     .from("team_workweek_publications")
-    .select("id,effective_from,effective_to,effective_until,activation_mode,effective_at,status,sync_state,publication_revision,published_at,last_sync_at,windows,team_workweek_google_reconciliation_status(state,last_observed_at)")
+    .select("id,source_version_id,superseded_by_publication_id,effective_from,effective_to,effective_until,activation_mode,effective_at,status,sync_state,publication_revision,published_at,last_sync_at,windows,team_workweek_google_series(id,google_event_id,confirmed_etag,state,provider_state,projection_part,source_window_ids),team_workweek_google_reconciliation_status(state,last_observed_at)")
     .eq("owner_profile_id", ownerProfileId)
     .eq("status", "published")
     .order("effective_from", { ascending: false })
@@ -118,8 +141,17 @@ export async function GET(request: NextRequest) {
   const preparedSuccessor = publications.filter((row) => startsAt(row) > now.getTime())
     .sort((left, right) => startsAt(left) - startsAt(right))[0] || null;
   const latestPublished = currentPublished || preparedSuccessor;
+  const base=privateVersion?.activation_mode==="future_monday"?publications[0]:currentPublished;
+  const contextChanged=privateVersion && !publication?.data && (
+    (privateVersion.base_publication_id||null)!==(base?.id||null)
+    || (privateVersion.base_publication_revision||null)!==(base?.publication_revision||null)
+    || (privateVersion.successor_snapshot && successorBindingKey(privateVersion.successor_snapshot)!==successorBindingKey(publications.filter(row=>startsAt(row)>now.getTime()).map(row=>({
+      id:row.id,revision:row.publication_revision,start:new Date(startsAt(row)).toISOString(),until:row.effective_until,effectiveTo:row.effective_to,sourceVersionId:row.source_version_id,supersededBy:row.superseded_by_publication_id,windows:row.windows,
+      series:row.team_workweek_google_series?.map(series=>({id:series.id,googleEventId:series.google_event_id,etag:series.confirmed_etag,state:series.state,providerState:series.provider_state,part:series.projection_part,sources:series.source_window_ids})),
+    })))));
 
   return NextResponse.json({
+    restartAvailable: Boolean(privateVersion && (contextChanged || (publication?.data?.attempt_generation && publication.data.effective_at && new Date(publication.data.effective_at)<=now))),
     version: privateVersion ? {
       id: privateVersion.id,
       effectiveFrom: privateVersion.effective_from,

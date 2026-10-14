@@ -8,6 +8,7 @@ import {
   type GoogleWorkweekSeriesResult,
   type PreparedWorkweekPublication,
 } from "./team-workweek-publication-core";
+import { compensateTeamWorkweekGeneration } from "./team-workweek-compensation";
 import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, ensureGoogleWorkweekEffect } from "./team-workweek-immediate-effects";
 import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
 import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
@@ -208,16 +209,8 @@ export async function publishTeamWorkweek({
     });
     const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
     if (expired()) {
-      for (const effect of publication.effects || []) {
-        if (effect.state === "cleaned") continue;
-        const result = await cleanupEffect({ accessToken, effect, now });
-        if (result.state === "delayed") return await delayed(result.errorClass);
-        const restoring = effect.operation && effect.operation !== "create" && !(effect.instanceOf && !effect.expectedEtag);
-        const cleanup = await serviceSupabase.rpc(restoring ? "confirm_team_workweek_effect_restoration" : "confirm_team_workweek_effect_cleanup", {
-          p_effect_id: effect.id, p_generation: effect.generation, ...(restoring ? {p_etag:result.etag} : {}),
-        });
-        if (cleanup.error) return await delayed("storage_failed");
-      }
+      const compensation = await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attemptGeneration!,serviceSupabase,now,cleanupEffect,discoverInstance});
+      if(compensation)return await delayed(compensation);
       const replanned = await userSupabase.rpc("prepare_team_workweek_publication", { p_version_id: versionId });
       if (replanned.error) throw publicationError(replanned.error);
       if (!isPreparedPublication(replanned.data) || replanned.data.status !== "preparing") {

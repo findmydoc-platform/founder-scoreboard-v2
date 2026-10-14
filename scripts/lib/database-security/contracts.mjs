@@ -1,4 +1,5 @@
 export const authenticatedFunctionAllowlist = Object.freeze([
+  "public.restart_private_team_workweek_version(p_version_id uuid)",
   "public.workspace_check_request()",
   "public.workspace_request_admitted()",
   "public.activate_administrator_access()",
@@ -105,6 +106,7 @@ export const mappedOwnerTeamWorkweekFunctions = Object.freeze([
   "create_private_team_workweek_version",
   "create_private_immediate_team_workweek_version",
   "create_private_current_team_workweek_version",
+  "restart_private_team_workweek_version",
   "create_private_monday_team_workweek_version",
   "prepare_team_workweek_publication",
   "finalize_team_workweek_publication",
