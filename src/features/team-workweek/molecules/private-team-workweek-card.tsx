@@ -30,6 +30,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
   const state = usePrivateTeamWorkweek(apiClient);
   const syncDelayed = state.publication?.syncState === "delayed";
   const reconciliationState = state.latestPublished?.googleReconciliationState;
+  const showConfirmedTeamBaseline = Boolean(state.conflict || syncDelayed || reconciliationState === "conflict" || reconciliationState === "delayed");
   const latestIsPrepared = Boolean(state.latestPublished && (state.latestPublished.effectiveAt ? new Date(state.latestPublished.effectiveAt) > new Date() : state.latestPublished.effectiveFrom > berlinTodayIso()));
   const badge = syncDelayed
     ? { tone: "amber" as const, label: "Synchronisierung verzögert" }
@@ -55,7 +56,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
               <UiBadge tone={badge.tone}>{badge.label}</UiBadge>
             </div>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              {state.version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : state.latestPublished ? "Veröffentlichte Arbeitszeiten für " + profile.name + ". Bestätigt in Team und Google." : "Deine Arbeitszeiten fehlen noch."}
+              {state.version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : state.latestPublished ? showConfirmedTeamBaseline ? "Letzter bestätigter Teamstand bleibt sichtbar." : "Veröffentlichte Arbeitszeiten für " + profile.name + ". Bestätigt in Team und Google." : "Deine Arbeitszeiten fehlen noch."}
             </p>
             {state.version && (
               <p className="mt-2 text-xs font-semibold text-slate-600">{state.version.activationMode === "immediate" ? "Beginn wird bei Veröffentlichung bestätigt" : `Gültig ab ${formatDate(state.version.effectiveFrom)}`} · {state.version.timezone}</p>

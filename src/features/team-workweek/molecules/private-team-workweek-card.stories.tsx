@@ -515,6 +515,8 @@ export const ExplainsUnsupportedGoogleVariantWithoutInventingAnEmptyPlan: Story 
     await expect(canvas.getByRole("button", { name: "FounderOps übernehmen" })).toBeEnabled();
     await expect(canvas.getByText("Beginn wird nach Bestätigung festgelegt")).toBeVisible();
     await expect(canvas.queryByText(/^Gültig ab/)).not.toBeInTheDocument();
+    await expect(canvas.getByText("Letzter bestätigter Teamstand bleibt sichtbar.")).toBeVisible();
+    await expect(canvas.queryByText(/Bestätigt in Team und Google/)).not.toBeInTheDocument();
   },
 };
 
