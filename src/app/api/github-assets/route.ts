@@ -37,6 +37,7 @@ async function fetchGitHubAsset(value: string, token: string) {
     });
     if (url.hostname === "github.com") headers.set("authorization", `Bearer ${token}`);
 
+    // This URL passed the asset-host allowlist; every redirect is checked before the next request.
     const response: Response = await fetch(url, {
       method: "GET",
       headers,
