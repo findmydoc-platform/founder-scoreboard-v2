@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
+import { hasGitHubIssue } from "@/lib/platform";
 import {
   taskRowSelect,
   type DbPlanningItemRaciAssignment,
@@ -150,7 +151,7 @@ export async function loadPlanningTrashTaskDetail(
       parent: parentResult.data ? taskSummary(parentResult.data) : null,
       children: (childResult.data || []).map(taskSummary),
       trash,
-      githubLifecycle: task.githubIssueNumber || task.githubIssueUrl || task.issueNumber || task.issueUrl.includes("github.com")
+      githubLifecycle: hasGitHubIssue(task)
         ? "server_managed_close"
         : "not_linked",
     },
