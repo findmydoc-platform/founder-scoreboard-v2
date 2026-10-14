@@ -95,19 +95,19 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <div className="rounded-lg border border-white/80 bg-white p-3">
                 <div className="text-sm font-semibold text-slate-950">Meine FounderOps-Variante</div>
-                <div className="mt-1 text-xs text-slate-600">Gültig ab {formatDate(state.conflict.founderops.effectiveFrom)}</div>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{conflictWindows(state.conflict.founderops.windows)}</p>
+                {state.conflict.founderops.supported !== false && <div className="mt-1 text-xs text-slate-600">{state.conflict.founderops.activationMode === "immediate" ? "Beginn wird nach Bestätigung festgelegt" : `Gültig ab ${formatDate(state.conflict.founderops.effectiveFrom)}`}</div>}
+                <p className="mt-2 text-sm leading-6 text-slate-700">{state.conflict.founderops.supported === false ? "Diese FounderOps-Variante kann derzeit nicht übernommen werden." : conflictWindows(state.conflict.founderops.windows)}</p>
                 <UiButton className="mt-3 w-full sm:w-auto" variant="primary" onClick={() => void state.resolveConflict("founderops")}
-                  disabled={state.pending || (state.conflict.state === "resolving" && state.conflict.decision !== "founderops")}>
+                  disabled={state.pending || state.conflict.founderops.supported === false || (state.conflict.state === "resolving" && state.conflict.decision !== "founderops")}>
                   FounderOps übernehmen
                 </UiButton>
               </div>
               <div className="rounded-lg border border-white/80 bg-white p-3">
                 <div className="text-sm font-semibold text-slate-950">Google-Variante</div>
-                <div className="mt-1 text-xs text-slate-600">Gültig ab {formatDate(state.conflict.google.effectiveFrom)}</div>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{conflictWindows(state.conflict.google.windows)}</p>
+                {state.conflict.google.supported !== false && <div className="mt-1 text-xs text-slate-600">{state.conflict.google.activationMode === "immediate" ? "Beginn wird nach Bestätigung festgelegt" : `Gültig ab ${formatDate(state.conflict.google.effectiveFrom)}`}</div>}
+                <p className="mt-2 text-sm leading-6 text-slate-700">{state.conflict.google.supported === false ? "Diese Google-Änderung lässt sich keiner eindeutigen Grundwoche zuordnen." : conflictWindows(state.conflict.google.windows)}</p>
                 <UiButton className="mt-3 w-full sm:w-auto" variant="secondary" onClick={() => void state.resolveConflict("google")}
-                  disabled={state.pending || (state.conflict.state === "resolving" && state.conflict.decision !== "google")}>
+                  disabled={state.pending || state.conflict.google.supported === false || (state.conflict.state === "resolving" && state.conflict.decision !== "google")}>
                   Google übernehmen
                 </UiButton>
               </div>

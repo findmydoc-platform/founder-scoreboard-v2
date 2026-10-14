@@ -55,6 +55,12 @@ type ClientOptions = {
     after: Record<string, unknown>;
     result: Record<string, unknown>;
   };
+  failRestartContextOnce?: boolean;
+  restartAvailable?: boolean;
+  restart?: { after: Record<string, unknown>; result: Record<string, unknown>; status?: number };
+  conflict?: Record<string, unknown> | null;
+  conflictResolution?: { after: Record<string, unknown>; result: Record<string, unknown> };
+  publishConflict?: Record<string, unknown>;
   version?: Record<string, unknown> | null;
   saveError?: string;
   losePublishResponse?: boolean;
@@ -62,6 +68,7 @@ type ClientOptions = {
 
 function client(options: ClientOptions = {}): BrowserApiClient {
   let privateBody = {
+    ...(options.restartAvailable !== undefined ? { restartAvailable: options.restartAvailable } : {}),
     preparedSuccessor: options.preparedSuccessor || null,
     ...(options.immediateAllowed !== undefined ? {immediateAllowed:options.immediateAllowed} : {}),
     editBase: options.editBase === undefined ? { windows: publishedWindows } : options.editBase,
@@ -70,6 +77,8 @@ function client(options: ClientOptions = {}): BrowserApiClient {
     publication: options.publication || null,
     version: options.version || null,
   };
+  let failRestartContext = false;
+  let activeConflict = options.conflict || null;
   let losePublishResponse = Boolean(options.losePublishResponse);
   return {
     requestJson: async (input: RequestInfo | URL, init?: { method?: string; json?: Record<string, unknown> }) => {
@@ -81,10 +90,30 @@ function client(options: ClientOptions = {}): BrowserApiClient {
           privateBody = { ...privateBody, version };
           return response({ version });
         }
+        if (failRestartContext) {
+          failRestartContext = false;
+          return { body: { error: "Aktueller Stand nicht erreichbar." }, response: new Response(null, { status: 503 }) };
+        }
         return response(privateBody);
       }
       if (path.startsWith("/api/team-workweek/team?")) return response({ calendarWorkweeks: [], currentWorkweeks: [], referenceDate: "2026-09-07" });
-      if (path === "/api/team-workweek/conflict") return response({ conflict: null });
+      if (path === "/api/team-workweek/restart" && options.restart) {
+        failRestartContext = Boolean(options.failRestartContextOnce);
+        privateBody = options.restart.after as typeof privateBody;
+        return { response: new Response(null, { status: options.restart.status || 200 }), body: options.restart.result };
+      }
+      if (path === "/api/team-workweek/conflict") {
+        if (init?.method === "POST" && options.conflictResolution) {
+          privateBody = options.conflictResolution.after as typeof privateBody;
+          activeConflict = null;
+          return response({ publication: options.conflictResolution.result });
+        }
+        return response({ conflict: activeConflict });
+      }
+      if (path === "/api/team-workweek/publish" && options.publishConflict) {
+        activeConflict = options.publishConflict;
+        return { response: new Response(null, { status: 409 }), body: { conflict: { id: activeConflict.id, conflictRevision: activeConflict.conflictRevision } } };
+      }
       if (path === "/api/team-workweek/publish" && options.publish) {
         if (losePublishResponse) {
           losePublishResponse = false;
@@ -122,6 +151,7 @@ export const PrefillsThePublishedWorkweek: Story = {
     await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
     await expect(await canvas.findByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("09:00");
     await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("17:00");
+    await expect(canvas.queryByRole("button", { name: "Mit aktuellem Stand neu beginnen" })).not.toBeInTheDocument();
     await expect(canvas.getByLabelText("Gültigkeitsbeginn der Arbeitswoche")).toHaveTextContent(String(Number(nextMondayIso().slice(-2))));
   },
 };
@@ -467,5 +497,168 @@ export const ConfirmsTheActualStartAndRetainedNextChange: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
     await waitFor(() => expect(canvas.queryByRole("dialog")).not.toBeInTheDocument());
     await expect(canvas.getByText(/Gültig ab 14\.10\.2026, 14:03 MESZ.*Die geplante Änderung am 19\.10\.2026 bleibt erhalten/)).toBeVisible();
+  },
+};
+
+
+export const ExplainsUnsupportedGoogleVariantWithoutInventingAnEmptyPlan: Story = {
+  args: { profile, apiClient: client({ conflict: {
+    id: "conflict-seasonal", conflictRevision: 1, state: "open", decision: null, observedAt: "2026-10-14T12:00:00Z",
+    founderops: { effectiveFrom: nextMondayIso(), activationMode: "immediate", windows: [{ weekday: 1, startMinute: 540, endMinute: 1020 }] },
+    google: { effectiveFrom: nextMondayIso(), supported: false, windows: [] },
+  } }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("button", { name: "Google übernehmen" })).toBeDisabled();
+    await expect(canvas.getByText("Diese Google-Änderung lässt sich keiner eindeutigen Grundwoche zuordnen.")).toBeVisible();
+    await expect(canvas.queryByText("Keine Arbeitszeitfenster")).not.toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "FounderOps übernehmen" })).toBeEnabled();
+    await expect(canvas.getByText("Beginn wird nach Bestätigung festgelegt")).toBeVisible();
+    await expect(canvas.queryByText(/^Gültig ab/)).not.toBeInTheDocument();
+  },
+};
+
+
+export const ExposesVariantsAfterAnAutosavedPublicationConflict: Story = {
+  args: { profile, apiClient: client({ publishConflict: {
+    id: "parallel-conflict", conflictRevision: 1, state: "open", decision: null, observedAt: "2026-10-14T12:00:00Z",
+    founderops: { effectiveFrom: nextMondayIso(), windows: [{ weekday: 1, startMinute: 540, endMinute: 1080 }] },
+    google: { effectiveFrom: nextMondayIso(), windows: [{ weekday: 1, startMinute: 480, endMinute: 960 }] },
+  } }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    const end = await canvas.findByLabelText("Montag, Fenster 1, Ende");
+    await userEvent.clear(end);
+    await userEvent.type(end, "18:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
+    await waitFor(() => expect(canvas.queryByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).not.toBeInTheDocument());
+    await expect(canvas.getByText("Montag: 09:00–18:00")).toBeVisible();
+    await expect(canvas.getByText("Montag: 08:00–16:00")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "FounderOps übernehmen" })).toBeEnabled();
+    await expect(canvas.getByRole("button", { name: "Bearbeitung fortsetzen" })).toHaveFocus();
+  },
+};
+
+
+const expiredDraft = {
+  id: "expired-private", effectiveFrom: nextMondayIso(), activationMode: "immediate", timezone: "Europe/Berlin",
+  status: "preparing", createdAt: "2026-10-14T12:00:00Z", windows: publishedWindows,
+};
+const restartedDraft = { ...expiredDraft, id: "fresh-private", basePublicationId: "22222222-2222-4222-8222-222222222222", basePublicationRevision: 4 };
+const restartedContext = {
+  version: restartedDraft, publication: null, immediateAllowed: true, restartAvailable: false,
+  minimumEffectiveFrom: "2099-01-19", editBase: { windows: publishedWindows },
+  latestPublished: { ...latestPublished, id: "22222222-2222-4222-8222-222222222222", publicationRevision: 4 },
+  preparedSuccessor: { ...latestPublished, id: "successor-new", effectiveFrom: "2099-01-12", effectiveAt: "2099-01-11T23:00:00Z" },
+};
+
+export const RestartsWithCurrentContextAndRetainsUnsavedWindows: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true, restartAvailable: true, version: expiredDraft,
+    publication: { ...latestPublished, id: "expired-operation", status: "preparing", syncState: "delayed", effectiveAt: "2026-10-14T12:03:00Z" },
+    restart: { after: restartedContext, result: { version: restartedDraft, restart: { state: "ready", recovery: null } } },
+  }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeitung fortsetzen" }));
+    const end = await canvas.findByLabelText("Montag, Fenster 1, Ende");
+    await userEvent.clear(end);
+    await userEvent.type(end, "18:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" }));
+    await expect(await canvas.findByText(/Neustart vorbereitet/)).toBeVisible();
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await expect(canvas.getByText(/Geplante Änderung am 12. Jan. 2099 bleibt erhalten/)).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Änderung privat speichern" })).toBeEnabled();
+    await expect(canvas.queryByRole("button", { name: "Mit aktuellem Stand neu beginnen" })).not.toBeInTheDocument();
+    await expect(canvas.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).toBeVisible();
+    await expect(canvas.queryByText(/Arbeitswoche bestätigt/)).not.toBeInTheDocument();
+  },
+};
+
+
+export const BlocksPublicationUntilRestartContextCanBeReloaded: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true, restartAvailable: true, failRestartContextOnce: true, version: expiredDraft,
+    restart: { after: restartedContext, result: { version: restartedDraft, restart: { state: "ready", recovery: null } } },
+  }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeitung fortsetzen" }));
+    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Ende"));
+    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Ende"), "18:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" }));
+    await expect(await canvas.findByText(/Der aktuelle Teamstand konnte noch nicht geladen werden/)).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand laden" }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled());
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await expect(canvas.getByText(/Geplante Änderung am 12. Jan. 2099 bleibt erhalten/)).toBeVisible();
+  },
+};
+
+export const RetainsLocalInputsWhenRestartNeedsReconnection: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true, restartAvailable: true, version: expiredDraft,
+    restart: { status: 202, after: {}, result: { restart: { state: "delayed", recovery: "reconnect" } } },
+  }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeitung fortsetzen" }));
+    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Ende"));
+    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Ende"), "18:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" }));
+    await expect(await canvas.findByText(/Neustart verzögert. Verbinde Google erneut/)).toBeVisible();
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await expect(canvas.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" })).toBeEnabled();
+  },
+};
+
+
+export const ConfirmsGoogleReconciliationAtItsActualActivation: Story = {
+  args: { profile, apiClient: client({ reconciliation: { state: "updated", recovery: null, lastSuccessfulSyncAt: "2026-10-14T12:00:00Z",
+    effectiveAt: "2026-10-14T12:03:00Z", effectiveUntil: "2026-10-18T22:00:00Z" } }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "App-Termine in Google prüfen" }));
+    await expect(await canvas.findByText(/Google-Änderung bestätigt. Gültig ab 14.10.2026, 14:03 MESZ/)).toBeVisible();
+    await expect(canvas.getByText(/Die geplante Änderung am 19.10.2026 bleibt erhalten/)).toBeVisible();
+    await expect(canvas.queryByText(/ab dem nächsten Montag übernommen/)).not.toBeInTheDocument();
+  },
+};
+
+
+export const ConfirmsAnExplicitVariantWithItsActualValidity: Story = {
+  args: { profile, apiClient: client({ conflict: {
+    id: "supported-conflict", conflictRevision: 2, state: "open", decision: null, observedAt: "2026-10-14T12:00:00Z",
+    founderops: { effectiveFrom: nextMondayIso(), supported: false, windows: [] },
+    google: { effectiveFrom: nextMondayIso(), activationMode: "immediate", windows: [{ weekday: 1, startMinute: 480, endMinute: 960 }] },
+  }, conflictResolution: { after: { version: null, publication: null, latestPublished, minimumEffectiveFrom: nextMondayIso(), editBase: { windows: publishedWindows } },
+    result: { status: "published", recovery: null, effectiveAt: "2026-10-14T12:03:00Z", effectiveUntil: "2026-10-18T22:00:00Z" },
+  } }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("button", { name: "FounderOps übernehmen" })).toBeDisabled();
+    await expect(canvas.getByText("Diese FounderOps-Variante kann derzeit nicht übernommen werden.")).toBeVisible();
+    await expect(canvas.queryByText("Keine Arbeitszeitfenster")).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Google übernehmen" }));
+    await expect(await canvas.findByText(/Die Google-Variante wurde erneut geprüft.*Gültig ab 14.10.2026, 14:03 MESZ/)).toBeVisible();
+    await expect(canvas.getByText(/Die geplante Änderung am 19.10.2026 bleibt erhalten/)).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "Google übernehmen" })).not.toBeInTheDocument();
+  },
+};
+
+
+export const OffersRestartOnlyForARecoverablePublication: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true, restartAvailable: true, version: expiredDraft,
+    publication: { ...latestPublished, id: "expired-operation", status: "preparing", syncState: "delayed", effectiveAt: "2026-10-14T12:03:00Z" },
+  }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeitung fortsetzen" }));
+    await expect(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" })).toBeEnabled();
+    await expect(canvas.getByText(/Bisheriger Teamstand sichtbar/)).toBeVisible();
+    await expect(canvas.getByText("Beginne mit dem aktuellen Stand neu. Deine Eingaben bleiben erhalten.")).toBeVisible();
+    await expect(canvas.queryByText(/Wiederhole die Veröffentlichung/)).not.toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
   },
 };

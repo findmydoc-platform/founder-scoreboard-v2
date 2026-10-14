@@ -54,6 +54,7 @@ export type TeamWorkweekEditBase = Readonly<{
 
 export type OwnTeamWorkweekPublication = Readonly<{
   effectiveAt?: string | null;
+  effectiveUntil?: string | null;
   activationMode?: WorkweekActivationMode;
   id: string;
   effectiveFrom: string;
@@ -72,8 +73,8 @@ export type TeamWorkweekConflict = Readonly<{
   state: "open" | "resolving";
   decision: "founderops" | "google" | null;
   observedAt: string;
-  founderops: Readonly<{ effectiveFrom: string; windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>> }>;
-  google: Readonly<{ effectiveFrom: string; windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>> }>;
+  founderops: Readonly<{ effectiveFrom: string; activationMode?: WorkweekActivationMode; supported?: boolean; windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>> }>;
+  google: Readonly<{ effectiveFrom: string; activationMode?: WorkweekActivationMode; supported?: boolean; windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>> }>;
 }>;
 
 export function emptyTeamWorkweekWindows(): TeamWorkweekWindows {
