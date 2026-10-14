@@ -22,7 +22,7 @@ export function useHeaderCalendar({
   onOpenTeam,
 }: {
   apiClient?: BrowserApiClient;
-  onOpenTeam: () => void;
+  onOpenTeam: (editWorkweek?: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"events" | "workweek">("events");
@@ -94,9 +94,9 @@ export function useHeaderCalendar({
     setOpen(true);
   }, []);
   const closeCalendar = useCallback(() => setOpen(false), []);
-  const openTeamWorkspace = useCallback(() => {
+  const openTeamWorkspace = useCallback((editWorkweek = false) => {
     setOpen(false);
-    onOpenTeam();
+    onOpenTeam(editWorkweek);
   }, [onOpenTeam]);
 
   return {

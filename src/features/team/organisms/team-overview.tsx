@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTeamProfileDialog } from "@/features/team/hooks/use-team-profile-dialog";
 import { useTeamProfileDrafts } from "@/features/team/hooks/use-team-profile-drafts";
 import { TeamMemberCard } from "@/features/team/molecules/team-member-card";
@@ -28,6 +29,13 @@ export function TeamOverview({
   actualProfile: Profile | null;
   onSaveProfileSettings: (profile: Profile, patch: Partial<Profile>, eventPatch: Record<string, boolean>) => Promise<void>;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const closeWorkweekRequest = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("workweek");
+    router.replace(`/team${params.size ? `?${params}` : ""}`, { scroll: false });
+  };
   const { closeProfileDialog, editingProfile, openProfileDialog } = useTeamProfileDialog(data.profiles);
   const {
     draftFor,
@@ -56,7 +64,7 @@ export function TeamOverview({
       {actualProfile && <PublishedTeamWorkweeksCard apiClient={apiClient} profiles={data.profiles} />}
 
       {actualProfile && (
-        <PrivateTeamWorkweekCard apiClient={apiClient} profile={actualProfile} />
+        <PrivateTeamWorkweekCard apiClient={apiClient} profile={actualProfile} editorRequested={searchParams.get("workweek") === "edit"} onEditorRequestHandled={closeWorkweekRequest} />
       )}
 
       <div className="grid gap-2">

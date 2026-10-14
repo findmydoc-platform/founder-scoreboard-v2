@@ -98,7 +98,7 @@ export function HeaderCalendarDialog({
   now: Date;
   onActiveTabChange: (tab: "events" | "workweek") => void;
   onClose: () => void;
-  onOpenTeam: () => void;
+  onOpenTeam: (editWorkweek?: boolean) => void;
   onSelectedDateChange: (dateKey: string) => void;
   onViewMonthChange: (monthKey: string) => void;
   pending: boolean;
@@ -350,8 +350,9 @@ export function HeaderCalendarDialog({
           )}
         </div>
 
-        <footer className="flex shrink-0 justify-start border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
-          <UiButton className="min-h-11 w-full justify-center text-blue-700 sm:w-auto sm:justify-start" variant="ghost" onClick={onOpenTeam}>Im Team öffnen</UiButton>
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+          <UiButton className="min-h-11 w-full justify-center text-blue-700 sm:w-auto sm:justify-start" variant="ghost" onClick={() => onOpenTeam()}>Im Team öffnen</UiButton>
+          {showWorkweek && activeTab === "workweek" && <UiButton className="min-h-11 w-full sm:w-auto" variant="primary" onClick={() => onOpenTeam(true)}>Meine Arbeitswoche bearbeiten</UiButton>}
         </footer>
       </section>
     </div>
