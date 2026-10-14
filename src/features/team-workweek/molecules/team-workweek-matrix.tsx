@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, type KeyboardEvent } from "react";
-import { currentTeamWorkweekDayKey, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
+import { currentTeamWorkweekDayKey, formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
 import { projectCurrentCalendarWorkweekRows, type CalendarTeamWorkweek } from "../model/team-workweek-calendar";
 import { teamWorkweekProfiles } from "../model/team-workweek-matrix";
 import { formatDate } from "@/lib/display";
@@ -131,7 +131,7 @@ export function TeamWorkweekMatrix({
                       <p className="truncate text-sm font-semibold text-slate-950">{profile.name}</p>
                       {workweek ? (
                         <p className="mt-0.5 text-xs font-medium leading-4 text-slate-500">
-                          Bestätigt {formatDate(workweek.lastSyncAt.slice(0, 10))}
+                          {workweek.effectiveAt ? `Gültig ab ${formatTeamWorkweekActivation(workweek.effectiveAt)}` : `Bestätigt ${formatDate(workweek.lastSyncAt.slice(0, 10))}`}
                         </p>
                       ) : (
                         <p className="mt-0.5 text-xs font-medium leading-4 text-slate-500">Keine veröffentlichten Arbeitszeiten</p>
@@ -192,7 +192,7 @@ export function TeamWorkweekMatrix({
                       <span className="block truncate text-sm font-semibold text-slate-950">{profile.name}</span>
                       {workweek ? (
                         <span className="mt-1 block text-xs font-medium leading-4 text-slate-500">
-                          Bestätigt {formatDate(workweek.lastSyncAt.slice(0, 10))}
+                          {workweek.effectiveAt ? `Gültig ab ${formatTeamWorkweekActivation(workweek.effectiveAt)}` : `Bestätigt ${formatDate(workweek.lastSyncAt.slice(0, 10))}`}
                         </span>
                       ) : (
                         <span className="mt-0.5 block text-xs font-medium leading-4 text-slate-500">Keine veröffentlichten Arbeitszeiten</span>

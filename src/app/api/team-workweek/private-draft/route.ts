@@ -15,6 +15,8 @@ export const dynamic = "force-dynamic";
 type PublicationRow = Readonly<{
   id: string;
   effective_from: string;
+  activation_mode?: "immediate" | "future_monday";
+  effective_at?: string | null;
   status: "preparing" | "published";
   sync_state: "pending" | "delayed" | "confirmed";
   publication_revision: number;
@@ -39,6 +41,8 @@ function publicationPayload(row: PublicationRow | null) {
   return row ? {
     id: row.id,
     effectiveFrom: row.effective_from,
+    ...(row.effective_at ? { effectiveAt: row.effective_at } : {}),
+    ...(row.activation_mode ? { activationMode: row.activation_mode } : {}),
     status: row.status,
     syncState: row.sync_state,
     publicationRevision: row.publication_revision,
@@ -62,7 +66,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("team_workweek_versions")
-    .select("id,owner_profile_id,effective_from,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
+    .select("id,owner_profile_id,effective_from,activation_mode,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
     .eq("status", "preparing")
     .eq("origin", "owner")
     .order("created_at", { ascending: false })
@@ -72,6 +76,7 @@ export async function GET(request: NextRequest) {
       id: string;
       owner_profile_id: string;
       effective_from: string;
+      activation_mode?: "immediate" | "future_monday";
       timezone: "Europe/Berlin";
       status: "preparing";
       created_at: string;
@@ -81,7 +86,7 @@ export async function GET(request: NextRequest) {
 
   const publication = data ? await supabase
     .from("team_workweek_publications")
-    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)")
+    .select("id,effective_from,activation_mode,effective_at,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)")
     .eq("source_version_id", data.id)
     .maybeSingle<PublicationRow>() : null;
   if (publication?.error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
@@ -89,7 +94,7 @@ export async function GET(request: NextRequest) {
   const ownerProfileId = context.permission.profile?.id || data?.owner_profile_id || null;
   const latestPublishedResponse = ownerProfileId ? await supabase
     .from("team_workweek_publications")
-    .select("id,effective_from,status,sync_state,publication_revision,published_at,last_sync_at,windows,team_workweek_google_reconciliation_status(state,last_observed_at)")
+    .select("id,effective_from,activation_mode,effective_at,status,sync_state,publication_revision,published_at,last_sync_at,windows,team_workweek_google_reconciliation_status(state,last_observed_at)")
     .eq("owner_profile_id", ownerProfileId)
     .eq("status", "published")
     .order("effective_from", { ascending: false })
@@ -103,6 +108,7 @@ export async function GET(request: NextRequest) {
     version: privateVersion ? {
       id: privateVersion.id,
       effectiveFrom: privateVersion.effective_from,
+      ...(privateVersion.activation_mode ? { activationMode: privateVersion.activation_mode } : {}),
       timezone: privateVersion.timezone,
       status: privateVersion.status,
       createdAt: privateVersion.created_at,
@@ -126,10 +132,12 @@ export async function POST(request: NextRequest) {
   const validation = validatePrivateTeamWorkweekDraft(await readJsonPayload<unknown>(request, null));
   if (!validation.ok) return apiError(validation.errors[0], 400);
 
-  const { data, error } = await supabase.rpc("create_private_team_workweek_version", {
-    p_effective_from: validation.draft.effectiveFrom,
-    p_windows: flattenTeamWorkweekWindows(validation.draft.windows),
-  });
+  const { data, error } = validation.draft.activationMode === "immediate"
+    ? await supabase.rpc("create_private_immediate_team_workweek_version", { p_windows: flattenTeamWorkweekWindows(validation.draft.windows) })
+    : await supabase.rpc("create_private_team_workweek_version", {
+      p_effective_from: validation.draft.effectiveFrom,
+      p_windows: flattenTeamWorkweekWindows(validation.draft.windows),
+    });
   if (error) {
     const status = error.code === "22023" ? 400 : error.code === "42501" ? 403 : error.code === "P0003" ? 409 : 503;
     return apiError(

@@ -3,7 +3,7 @@
 import { Plus, Trash2, X } from "lucide-react";
 import { useState, type RefObject } from "react";
 import type { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
-import { TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
+import { formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
 import { formatDate } from "@/lib/display";
 import { GoogleWorkspaceConnectionCard } from "../molecules/google-workspace-connection-card";
 import { TeamWorkweekDiscardDialog } from "../molecules/team-workweek-discard-dialog";
@@ -125,19 +125,37 @@ export function PrivateTeamWorkweekEditor({
               </section>
 
               <section className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 id="workweek-validity-title" className="text-sm font-semibold text-slate-950">Gültigkeitsbeginn</h3>
-                    <p className="mt-0.5 text-xs leading-5 text-slate-500">Montag, frühestens {formatDate(state.minimumEffectiveFrom)}</p>
+                <h3 id="workweek-validity-title" className="text-sm font-semibold text-slate-950">Gültigkeitsbeginn</h3>
+                {!state.latestPublished && (
+                  <fieldset className="mt-2 grid gap-1" disabled={state.pending}>
+                    <legend className="sr-only">Gültigkeitsbeginn wählen</legend>
+                    <label className="flex min-h-11 items-center gap-2 text-sm text-slate-800">
+                      <input type="radio" name="workweek-activation-mode" value="immediate" checked={state.draft.activationMode === "immediate"}
+                        onChange={() => state.setActivationMode("immediate")} className="h-4 w-4 accent-blue-600" />
+                      Nach Bestätigung · aktuelle Woche
+                    </label>
+                    <label className="flex min-h-11 items-center gap-2 text-sm text-slate-800">
+                      <input type="radio" name="workweek-activation-mode" value="future_monday" checked={state.draft.activationMode !== "immediate"}
+                        onChange={() => state.setActivationMode("future_monday")} className="h-4 w-4 accent-blue-600" />
+                      Zukünftiger Montag
+                    </label>
+                  </fieldset>
+                )}
+                {state.draft.activationMode === "immediate" && !state.latestPublished ? (
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {state.publication?.effectiveAt
+                      ? state.publicationExpired
+                        ? "Der geplante Beginn ist abgelaufen. Wiederhole die Veröffentlichung; ein neuer zukünftiger Beginn wird bestätigt."
+                        : `Geplanter Beginn: ${formatTeamWorkweekActivation(state.publication.effectiveAt)}. Erst nach vollständiger Bestätigung gültig.`
+                      : "2–3 Minuten Vorlauf. Der genaue Beginn wird bestätigt; vergangene Zeiten bleiben unverändert."}
+                  </p>
+                ) : (
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs leading-5 text-slate-500">Montag, frühestens {formatDate(state.minimumEffectiveFrom)}</p>
+                    <CustomDatePicker value={state.draft.effectiveFrom} onChange={state.setEffectiveFrom} disabled={state.pending}
+                      aria-label="Gültigkeitsbeginn der Arbeitswoche" className="h-9 w-full sm:w-[180px] [@media(pointer:coarse)]:h-11" />
                   </div>
-                  <CustomDatePicker
-                    value={state.draft.effectiveFrom}
-                    onChange={state.setEffectiveFrom}
-                    disabled={state.pending}
-                    aria-label="Gültigkeitsbeginn der Arbeitswoche"
-                    className="h-9 w-full sm:w-[180px] [@media(pointer:coarse)]:h-11"
-                  />
-                </div>
+                )}
               </section>
 
               {state.errors.length > 0 && (
@@ -152,7 +170,9 @@ export function PrivateTeamWorkweekEditor({
 
           <footer className="border-t border-slate-200 bg-white px-3 py-2.5 sm:px-4">
             <p className="mb-2 text-xs leading-4 text-slate-500">
-              Änderungen gelten ab {formatDate(state.draft.effectiveFrom)} und werden erst nach dem Google-Abgleich veröffentlicht.
+              {state.draft.activationMode === "immediate"
+                ? "Gilt dauerhaft. Bei Verzögerung wird ein neuer zukünftiger Beginn geplant."
+                : `Änderungen gelten ab ${formatDate(state.draft.effectiveFrom)} und werden erst nach dem Google-Abgleich veröffentlicht.`}
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
               <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>

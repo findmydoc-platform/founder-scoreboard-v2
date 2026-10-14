@@ -16,6 +16,8 @@ type PublishedVersionRow = Readonly<{
   id: string;
   owner_profile_id: string;
   effective_from: string;
+  effective_at?: string | null;
+  effective_until?: string | null;
   effective_to: string | null;
   timezone: "Europe/Berlin";
   published_at: string;
@@ -29,6 +31,8 @@ function calendarWorkweek(row: PublishedVersionRow): CalendarTeamWorkweek {
     id: row.id,
     ownerProfileId: row.owner_profile_id,
     effectiveFrom: row.effective_from,
+    ...(row.effective_at ? { effectiveAt: row.effective_at } : {}),
+    ...(row.effective_until ? { effectiveUntil: row.effective_until } : {}),
     effectiveTo: row.effective_to,
     timezone: row.timezone,
     publicationRevision: row.publication_revision,
@@ -51,7 +55,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("team_workweek_publications")
-    .select("id,owner_profile_id,effective_from,effective_to,timezone,published_at,last_sync_at,publication_revision,windows")
+    .select("id,owner_profile_id,effective_from,effective_to,effective_at,effective_until,timezone,published_at,last_sync_at,publication_revision,windows")
     .eq("status", "published")
     .order("effective_from", { ascending: false })
     .order("publication_revision", { ascending: false })
@@ -59,19 +63,24 @@ export async function GET(request: NextRequest) {
     .returns<PublishedVersionRow[]>();
   if (error) return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
 
-  const referenceDate = berlinTodayIso();
+  const now = new Date();
+  const referenceDate = berlinTodayIso(now);
   const visible = selectVisibleTeamWorkweeks((data || []).map((row) => ({
     ownerProfileId: row.owner_profile_id,
     effectiveFrom: row.effective_from,
+    ...(row.effective_at ? { effectiveAt: row.effective_at } : {}),
+    ...(row.effective_until ? { effectiveUntil: row.effective_until } : {}),
     effectiveTo: row.effective_to,
     publicationRevision: row.publication_revision,
     row,
-  })), referenceDate);
+  })), referenceDate, now);
 
   const workweeks = visible.map(({ row, phase }) => ({
     id: row.id,
     ownerProfileId: row.owner_profile_id,
     effectiveFrom: row.effective_from,
+    ...(row.effective_at ? { effectiveAt: row.effective_at } : {}),
+    ...(row.effective_until ? { effectiveUntil: row.effective_until } : {}),
     timezone: row.timezone,
     publishedAt: row.published_at,
     lastSyncAt: row.last_sync_at,
@@ -82,7 +91,7 @@ export async function GET(request: NextRequest) {
   const allCalendarWorkweeks = (data || []).map(calendarWorkweek);
   const currentWorkweeks = [...new Set(allCalendarWorkweeks.map(({ ownerProfileId }) => ownerProfileId))]
     .map((ownerProfileId) => selectCalendarWorkweek(allCalendarWorkweeks, ownerProfileId, referenceDate))
-    .filter((workweek): workweek is CalendarTeamWorkweek => workweek !== null);
+    .filter((workweek): workweek is CalendarTeamWorkweek => workweek !== null && (!workweek.effectiveAt || new Date(workweek.effectiveAt) <= now));
   const calendarWorkweeks = requestedRange.range
     ? allCalendarWorkweeks
       .filter((workweek) => workweek.effectiveFrom <= requestedRange.range!.to)

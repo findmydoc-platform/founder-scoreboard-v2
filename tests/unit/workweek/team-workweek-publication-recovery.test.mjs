@@ -287,3 +287,28 @@ test("team visibility switches from the bounded predecessor to the prepared succ
     [["a-new", "current"], ["b-current", "current"]],
   );
 });
+
+test("a provider confirmation arriving after the candidate never finalizes and retry cleans the expired generation first", async () => {
+  let clock = new Date("2026-10-14T10:00:00Z");
+  const effect={id:"effect-1",calendarId:"primary",googleEventId:"fops12345",generation:1,state:"pending",confirmedEtag:null,payload:{id:"fops12345",start:{dateTime:"2026-10-14T10:03:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2026-10-14T15:00:00Z",timeZone:"Europe/Berlin"},extendedProperties:{private:{founderopsWorkweekEffectId:"effect-1",founderopsWorkweekGeneration:"1"}}}};
+  const prepared={...publication,activationMode:"immediate",effectiveAt:"2026-10-14T10:03:00Z",attemptGeneration:1,effects:[effect]};
+  let cleaned=false;const calls=[];
+  const userSupabase={async rpc(name){calls.push(name);if(name==="prepare_team_workweek_publication")return {data:cleaned?{...prepared,effectiveAt:"2026-10-14T10:07:00Z",attemptGeneration:2,effects:[]}:prepared,error:null};if(name==="finalize_team_workweek_publication")return {data:{...prepared,status:"published",syncState:"confirmed",effectiveAt:"2026-10-14T10:07:00Z"},error:null};throw new Error(name);}};
+  const serviceSupabase={async rpc(name){calls.push(name);if(name==="confirm_team_workweek_effect_cleanup"){cleaned=true;return {data:null,error:null};}if(name==="delay_team_workweek_publication")return {data:{...prepared,syncState:"delayed"},error:null};throw new Error(name);}};
+  const delayed=await publicationServer.publishTeamWorkweek({userSupabase,serviceSupabase,versionId:publication.sourceVersionId,now:()=>clock,ensureEffect:async()=>{clock=new Date("2026-10-14T10:04:00Z");return {state:"confirmed",etag:'"late"',observedAt:clock.toISOString()};}});
+  assert.equal(delayed.status,"preparing");assert.equal(calls.includes("finalize_team_workweek_publication"),false);
+  const recovered=await publicationServer.publishTeamWorkweek({userSupabase,serviceSupabase,versionId:publication.sourceVersionId,now:()=>clock,cleanupEffect:async()=>({state:"confirmed",etag:"absent",observedAt:clock.toISOString()})});
+  assert.equal(cleaned,true);assert.equal(recovered.status,"published");assert.equal(recovered.effectiveAt,"2026-10-14T10:07:00Z");
+});
+
+test("a lost immediate finalization response replays the committed instant after its deadline", async () => {
+  const result=await publicationServer.publishTeamWorkweek({
+    versionId:publication.sourceVersionId,
+    userSupabase:{async rpc(){return {data:{...publication,status:"published",syncState:"confirmed",activationMode:"immediate",effectiveAt:"2026-10-14T10:03:00Z",attemptGeneration:1,effects:[]},error:null};}},
+    serviceSupabase:{async rpc(){throw new Error("committed publication must not be touched");}},
+    now:()=>new Date("2026-10-15T12:00:00Z"),
+    ensureEffect:async()=>{throw new Error("do not replay a committed projection");},
+    cleanupEffect:async()=>{throw new Error("do not compensate a committed projection");},
+  });
+  assert.equal(result.status,"published");assert.equal(result.effectiveAt,"2026-10-14T10:03:00Z");assert.equal(result.recovery,null);
+});

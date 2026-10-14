@@ -24,7 +24,10 @@ export function currentTeamWorkweekDayKey(now = new Date()): TeamWorkweekDayKey 
 export type TeamWorkweekWindow = Readonly<{ start: string; end: string }>;
 export type TeamWorkweekWindows = Record<TeamWorkweekDayKey, TeamWorkweekWindow[]>;
 
+export type WorkweekActivationMode = "immediate" | "future_monday";
+
 export type PrivateTeamWorkweekVersion = Readonly<{
+  activationMode?: WorkweekActivationMode;
   id: string;
   effectiveFrom: string;
   timezone: typeof TEAM_WORKWEEK_TIMEZONE;
@@ -34,6 +37,7 @@ export type PrivateTeamWorkweekVersion = Readonly<{
 }>;
 
 export type PrivateTeamWorkweekDraft = Readonly<{
+  activationMode?: WorkweekActivationMode;
   effectiveFrom: string;
   windows: TeamWorkweekWindows;
 }>;
@@ -43,6 +47,8 @@ export type TeamWorkweekEditBase = Readonly<{
 }>;
 
 export type OwnTeamWorkweekPublication = Readonly<{
+  effectiveAt?: string | null;
+  activationMode?: WorkweekActivationMode;
   id: string;
   effectiveFrom: string;
   status: "preparing" | "published";
@@ -94,6 +100,7 @@ export function editableTeamWorkweekDraft({
 }): PrivateTeamWorkweekDraft {
   return {
     effectiveFrom: version?.effectiveFrom || minimumEffectiveFrom,
+    ...(version?.activationMode ? { activationMode: version.activationMode } : {}),
     windows: cloneTeamWorkweekWindows(version?.windows || editBase?.windows || emptyTeamWorkweekWindows()),
   };
 }
@@ -167,14 +174,18 @@ export function validatePrivateTeamWorkweekDraft(
 ) {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const errors: string[] = [];
-  if (Object.keys(input).some((key) => !["effectiveFrom", "windows"].includes(key))) {
+  if (Object.keys(input).some((key) => !["effectiveFrom", "windows", "activationMode"].includes(key))) {
     errors.push("Die Anfrage enthält nicht unterstützte Felder.");
+  }
+  const activationMode = input.activationMode;
+  if (activationMode !== undefined && activationMode !== "immediate" && activationMode !== "future_monday") {
+    errors.push("Der Gültigkeitsmodus ist ungültig.");
   }
   const effectiveFrom = typeof input.effectiveFrom === "string" ? input.effectiveFrom.trim() : "";
   const earliest = minimumEffectiveFrom > nextMondayIso(now) ? minimumEffectiveFrom : nextMondayIso(now);
   if (!isMonday(effectiveFrom)) {
     errors.push("Der Gültigkeitsbeginn muss ein Montag sein.");
-  } else if (effectiveFrom < earliest) {
+  } else if (activationMode !== "immediate" && effectiveFrom < earliest) {
     errors.push("Der Gültigkeitsbeginn darf nicht rückwirkend sein.");
   }
 
@@ -221,7 +232,7 @@ export function validatePrivateTeamWorkweekDraft(
 
   return errors.length
     ? { ok: false as const, errors }
-    : { ok: true as const, draft: { effectiveFrom, windows } satisfies PrivateTeamWorkweekDraft };
+    : { ok: true as const, draft: { effectiveFrom, windows, ...(activationMode ? { activationMode: activationMode as WorkweekActivationMode } : {}) } satisfies PrivateTeamWorkweekDraft };
 }
 
 export function flattenTeamWorkweekWindows(windows: TeamWorkweekWindows) {
@@ -255,4 +266,8 @@ export function inflatePublishedTeamWorkweekWindows(
     start_minute: window.startMinute,
     end_minute: window.endMinute,
   })));
+}
+
+export function formatTeamWorkweekActivation(value: string) {
+  return `${new Intl.DateTimeFormat("de-DE", { timeZone: TEAM_WORKWEEK_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }).format(new Date(value))} · ${TEAM_WORKWEEK_TIMEZONE}`;
 }

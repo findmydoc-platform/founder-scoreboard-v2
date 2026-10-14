@@ -152,7 +152,8 @@ export const StartsTheFirstWorkweekEmpty: Story = {
     await expect(canvas.getByText("Die Verbindung allein veröffentlicht keine Arbeitszeiten.")).toBeVisible();
     await expect((await canvas.findAllByText("Kein Arbeitszeitfenster")).length).toBeGreaterThan(0);
     await expect(canvas.queryByLabelText("Montag, Fenster 1, Beginn")).not.toBeInTheDocument();
-    await expect(canvas.getByLabelText("Gültigkeitsbeginn der Arbeitswoche")).toHaveTextContent(String(Number(nextMondayIso().slice(-2))));
+    await expect(canvas.getByRole("radio", {name:/Nach Bestätigung/})).toBeChecked();
+    await expect(canvas.queryByLabelText("Gültigkeitsbeginn der Arbeitswoche")).not.toBeInTheDocument();
   },
 };
 
@@ -322,7 +323,7 @@ export const RetainsTheSavedDraftWhenPublicationIsDelayed: Story = {
     await userEvent.clear(end);
     await userEvent.type(end, "18:00");
     await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
-    await expect(await canvas.findByText(/Synchronisierung verzögert\. Die geänderte/)).toHaveTextContent("der bisherige Teamstand bleibt sichtbar");
+    await expect(await canvas.findByText(/Synchronisierung verzögert\. Google kann bereits vorläufige App-Termine/)).toHaveTextContent("der bisherige Teamstand bleibt sichtbar");
     await expect(end).toHaveValue("18:00");
     await expect(canvas.getByRole("button", { name: "Änderung privat speichern" })).toBeDisabled();
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
@@ -368,5 +369,36 @@ export const NamesAPreparedFutureScheduleSeparatelyFromAPrivateDraft: Story = {
     await expect(await canvas.findByText("Für Montag vorbereitet")).toBeVisible();
     await expect(canvas.getByText(/Vorbereitet: gültig ab/)).toBeVisible();
     await expect(canvas.queryByText("Privater Entwurf")).not.toBeInTheDocument();
+  },
+};
+
+export const FirstPublicationHasExplicitValidityChoices: Story = {
+  args: {profile, apiClient: client({latestPublished:null,editBase:null})},
+  play: async ({canvasElement}) => {
+    const canvas=within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button",{name:"Arbeitswoche einrichten"}));
+    await expect(canvas.getByRole("radio",{name:/Nach Bestätigung/})).toBeVisible();
+    await userEvent.click(canvas.getByRole("radio",{name:/Nach Bestätigung/}));
+    await expect(canvas.queryByLabelText("Gültigkeitsbeginn der Arbeitswoche")).not.toBeInTheDocument();
+    await expect(canvas.getByText(/2–3 Minuten Vorlauf/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("radio",{name:/Zukünftiger Montag/}));
+    await expect(canvas.getByLabelText("Gültigkeitsbeginn der Arbeitswoche")).toBeVisible();
+  },
+};
+
+export const PublishesFirstWorkweekWithItsConfirmedInstant: Story = {
+  args:{profile,apiClient:client({latestPublished:null,editBase:null,publish:{
+    result:{...latestPublished,id:"first-confirmed",activationMode:"immediate",effectiveAt:"2026-10-14T10:03:00Z",status:"published",syncState:"confirmed",recovery:null},
+    after:{version:null,publication:null,editBase:{windows:publishedWindows},minimumEffectiveFrom:nextMondayIso(),latestPublished:{...latestPublished,id:"first-confirmed",activationMode:"immediate",effectiveAt:"2026-10-14T10:03:00Z"}},
+  }})},
+  play:async({canvasElement})=>{
+    const canvas=within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button",{name:"Arbeitswoche einrichten"}));
+    await expect(canvas.getByRole("radio",{name:/Nach Bestätigung/})).toBeChecked();
+    await userEvent.click(canvas.getByRole("button",{name:"Mittwoch: Fenster hinzufügen"}));
+    await userEvent.click(canvas.getByRole("button",{name:"Änderung in Google & Team veröffentlichen"}));
+    await waitFor(()=>expect(canvas.queryByRole("dialog")).not.toBeInTheDocument());
+    await expect(canvas.getByText(/Arbeitswoche bestätigt\. Gültig ab 14\.10\.2026, 12:03 MESZ/)).toBeVisible();
+    await expect(canvas.getByText(/gültig ab 14\.10\.2026, 12:03 MESZ/)).toBeVisible();
   },
 };
