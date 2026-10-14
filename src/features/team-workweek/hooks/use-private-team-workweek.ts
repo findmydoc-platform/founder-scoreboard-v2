@@ -30,6 +30,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   const [publicationClock, setPublicationClock] = useState(() => Date.now());
   const [publication, setPublication] = useState<OwnTeamWorkweekPublication | null>(null);
   const [latestPublished, setLatestPublished] = useState<OwnTeamWorkweekPublication | null>(null);
+  const [preparedSuccessor, setPreparedSuccessor] = useState<OwnTeamWorkweekPublication | null>(null);
   const [conflict, setConflict] = useState<TeamWorkweekConflict | null>(null);
   const [immediateAllowed, setImmediateAllowed] = useState(false);
   const [minimumEffectiveFrom, setMinimumEffectiveFrom] = useState(() => nextMondayIso());
@@ -72,6 +73,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         version?: PrivateTeamWorkweekVersion | null;
         publication?: OwnTeamWorkweekPublication | null;
         latestPublished?: OwnTeamWorkweekPublication | null;
+        preparedSuccessor?: OwnTeamWorkweekPublication | null;
         editBase?: TeamWorkweekEditBase | null;
         minimumEffectiveFrom?: string;
         immediateAllowed?: boolean;
@@ -83,6 +85,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       if (mounted.current) {
         setPublication(body.publication || null);
         setLatestPublished(body.latestPublished || null);
+        setPreparedSuccessor(body.preparedSuccessor || null);
         setMinimumEffectiveFrom(body.minimumEffectiveFrom);
         setImmediateAllowed(body.immediateAllowed ?? !body.latestPublished);
         applyVersion(body.version, body.minimumEffectiveFrom, body.editBase || null, body.immediateAllowed ?? !body.latestPublished);
@@ -111,7 +114,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   }, [load]);
 
   useEffect(() => {
-    const effectiveAt = latestPublished?.effectiveAt;
+    const effectiveAt = preparedSuccessor?.effectiveAt || latestPublished?.effectiveAt;
     if (!effectiveAt || new Date(effectiveAt).getTime() <= Date.now()) return;
     let timeout: number;
     const refreshAtBoundary = () => {
@@ -120,12 +123,16 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         timeout = window.setTimeout(refreshAtBoundary, Math.min(2_147_483_647, remaining + 100));
         return;
       }
-      setLatestPublished((current) => current ? { ...current } : null);
-      setImmediateAllowed(true);
+      if (!dirty) void load();
+      else {
+        setPreparedSuccessor(null);
+        setMessageTone("warning");
+        setMessage("Die geplante Arbeitswoche gilt jetzt. Deine Eingaben bleiben erhalten. Lade die Arbeitswoche neu, bevor du diese Bearbeitung veröffentlichst.");
+      }
     };
     refreshAtBoundary();
     return () => window.clearTimeout(timeout);
-  }, [latestPublished?.effectiveAt]);
+  }, [dirty, latestPublished?.effectiveAt, load, preparedSuccessor?.effectiveAt]);
 
   useEffect(() => {
     const effectiveAt = publication?.effectiveAt;
@@ -242,6 +249,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
           publishedAt: string | null;
           lastSyncAt: string | null;
           effectiveAt?: string | null;
+          effectiveUntil?: string | null;
           activationMode?: WorkweekActivationMode;
           recovery: "retry" | "reconnect" | "identity_conflict" | null;
         };
@@ -291,7 +299,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       await load();
       setMessageTone("success");
       setMessage(body.publication.effectiveAt
-        ? `Arbeitswoche bestätigt. Gültig ab ${formatTeamWorkweekActivation(body.publication.effectiveAt)}.`
+        ? `Arbeitswoche bestätigt. Gültig ab ${formatTeamWorkweekActivation(body.publication.effectiveAt)}.${body.publication.effectiveUntil ? ` Die geplante Änderung am ${new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", dateStyle: "medium" }).format(new Date(body.publication.effectiveUntil))} bleibt erhalten.` : ""}`
         : "Arbeitswoche wurde mit Google synchronisiert und im Team veröffentlicht.");
       window.dispatchEvent(new Event(TEAM_WORKWEEK_PUBLISHED_EVENT));
       return true;
@@ -433,6 +441,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     setActivationMode,
     setWindow,
     latestPublished,
+    preparedSuccessor,
     version,
   };
 }

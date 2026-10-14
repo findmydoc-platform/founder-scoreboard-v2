@@ -43,6 +43,8 @@ const latestPublished = {
 };
 
 type ClientOptions = {
+  minimumEffectiveFrom?: string;
+  preparedSuccessor?: Record<string, unknown> | null;
   immediateAllowed?: boolean;
   googleConnected?: boolean;
   editBase?: { windows: typeof publishedWindows } | null;
@@ -60,10 +62,11 @@ type ClientOptions = {
 
 function client(options: ClientOptions = {}): BrowserApiClient {
   let privateBody = {
+    preparedSuccessor: options.preparedSuccessor || null,
     ...(options.immediateAllowed !== undefined ? {immediateAllowed:options.immediateAllowed} : {}),
     editBase: options.editBase === undefined ? { windows: publishedWindows } : options.editBase,
     latestPublished: options.latestPublished === undefined ? latestPublished : options.latestPublished,
-    minimumEffectiveFrom: nextMondayIso(),
+    minimumEffectiveFrom: options.minimumEffectiveFrom || nextMondayIso(),
     publication: options.publication || null,
     version: options.version || null,
   };
@@ -397,6 +400,7 @@ export const PublishesFirstWorkweekWithItsConfirmedInstant: Story = {
     const canvas=within(canvasElement);
     await userEvent.click(await canvas.findByRole("button",{name:"Arbeitswoche einrichten"}));
     await expect(canvas.getByRole("radio",{name:/Nach Bestätigung/})).toBeChecked();
+    await expect(canvas.queryByText(/Geplante Änderung am .* bleibt erhalten/)).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button",{name:"Mittwoch: Fenster hinzufügen"}));
     await userEvent.click(canvas.getByRole("button",{name:"Änderung in Google & Team veröffentlichen"}));
     await waitFor(()=>expect(canvas.queryByRole("dialog")).not.toBeInTheDocument());
@@ -434,5 +438,34 @@ export const ExplainsOnlyAffectedSundayClockLabels: Story = {
     await userEvent.clear(canvas.getByLabelText("Sonntag, Fenster 1, Beginn"));
     await userEvent.type(canvas.getByLabelText("Sonntag, Fenster 1, Beginn"), "01:15");
     await expect(canvas.queryByText(/Sonntagszeiten zwischen 02:00 und 03:00/)).not.toBeInTheDocument();
+  },
+};
+
+export const RetainsThePreparedMondayDuringCurrentCorrections: Story = {
+  args: { profile, apiClient: client({ googleConnected: true, immediateAllowed: true, minimumEffectiveFrom: "2026-10-26", preparedSuccessor: {
+    ...latestPublished, id: "retained", effectiveFrom: "2026-10-19", effectiveAt: "2026-10-18T22:00:00Z",
+  } }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    await expect(canvas.getByText(/Geplante Änderung am 19\. Okt\. 2026 bleibt erhalten/)).toBeVisible();
+    await expect(canvas.queryByText(/Gilt dauerhaft\./)).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("radio", { name: "Zukünftiger Montag" }));
+    await expect(canvas.queryByText(/Geplante Änderung am 19\. Okt\. 2026 bleibt erhalten/)).not.toBeInTheDocument();
+  },
+};
+
+export const ConfirmsTheActualStartAndRetainedNextChange: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true, preparedSuccessor: { ...latestPublished, id: "retained", effectiveFrom: "2026-10-19" }, publish: {
+    result: { ...latestPublished, id: "correction", publicationRevision: 3, status: "published", syncState: "confirmed", recovery: null,
+      activationMode: "immediate", effectiveAt: "2026-10-14T12:03:00Z", effectiveUntil: "2026-10-18T22:00:00Z" },
+    after: { version: null, publication: null, latestPublished, immediateAllowed: true, minimumEffectiveFrom: "2026-10-26", editBase: { windows: publishedWindows } },
+  } }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
+    await waitFor(() => expect(canvas.queryByRole("dialog")).not.toBeInTheDocument());
+    await expect(canvas.getByText(/Gültig ab 14\.10\.2026, 14:03 MESZ.*Die geplante Änderung am 19\.10\.2026 bleibt erhalten/)).toBeVisible();
   },
 };

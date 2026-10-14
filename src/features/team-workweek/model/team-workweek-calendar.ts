@@ -161,7 +161,7 @@ function civilStamp(instant: number) {
   return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
 }
 
-function berlinCivilInstant(dateKey: string, clock: string) {
+export function berlinCivilInstant(dateKey: string, clock: string) {
   const nominal = Date.parse(`${dateKey}T${clock}:00Z`);
   const offsets = new Set([-2, -1, 0, 1, 2].map((days) => {
     const sample = nominal + days * 86_400_000;
