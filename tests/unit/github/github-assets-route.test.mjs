@@ -66,6 +66,23 @@ test("GitHub asset route rejects unapproved URLs before making an outbound reque
   }
 });
 
+test("GitHub asset route rejects paths that escape the attachment endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return new Response("unexpected");
+  };
+
+  try {
+    const response = await route.GET(request("https://github.com/user-attachments/assets/../../../settings"));
+    assert.equal(response.status, 400);
+    assert.equal(fetchCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("GitHub asset route stops when an approved host redirects outside the allowlist", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
