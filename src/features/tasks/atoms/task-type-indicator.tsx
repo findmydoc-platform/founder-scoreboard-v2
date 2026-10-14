@@ -15,7 +15,7 @@ const taskTypePresentation = {
   },
   deliverable: {
     Icon: PackageCheck,
-    iconClassName: "text-green-600",
+    iconClassName: "text-green-700",
     label: "Deliverable",
   },
   sub_issue: {

@@ -1,4 +1,4 @@
-import { Bell, KeyRound, LayoutDashboard, SlidersHorizontal, UserRound } from "lucide-react";
+import { Bell, KeyRound, LayoutDashboard, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ProfileSettingsSectionId } from "@/features/profile/model/profile-settings-view-model";
 import { classNames } from "@/shared/atoms/ui-primitives";
@@ -7,7 +7,6 @@ export const profileSettingsSections: Array<{ id: ProfileSettingsSectionId; labe
   { id: "profile", label: "Profil", description: "Identität, Fokus und Farbe", icon: <UserRound size={16} /> },
   { id: "notifications", label: "Benachrichtigungen", description: "Google-Chat-Hinweise", icon: <Bell size={16} /> },
   { id: "board", label: "Planung", description: "Start und Standardansicht", icon: <LayoutDashboard size={16} /> },
-  { id: "process", label: "FounderOps-Prozess", description: "Globale Fristen & GitHub", icon: <SlidersHorizontal size={16} /> },
   { id: "api", label: "API-Zugänge", description: "Persönliche Planungs-API-Tokens", icon: <KeyRound size={16} /> },
 ];
 
@@ -77,24 +76,5 @@ export function SettingsRow({
       </div>
       <div className="min-w-0 md:justify-self-end md:text-right">{children}</div>
     </div>
-  );
-}
-
-export function ToggleSwitch({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (checked: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={classNames(
-        "inline-flex h-6 w-11 items-center rounded-full p-0.5 transition focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50",
-        checked ? "bg-blue-600" : "bg-slate-300",
-      )}
-    >
-      <span className={classNames("h-5 w-5 rounded-full bg-white shadow transition", checked ? "translate-x-5" : "translate-x-0")} />
-    </button>
   );
 }

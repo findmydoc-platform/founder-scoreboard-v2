@@ -1,9 +1,13 @@
 "use client";
 
+import { validatePlanningFields } from "@/features/planning-items/model/planning-item-content";
+import { codepointLength } from "@/lib/github-issue-content";
+
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
+import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
 import { taskCreationTitleError, withSubIssueParentHierarchy } from "@/features/tasks/model/task-creation-draft";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import {
@@ -16,10 +20,10 @@ import {
 } from "@/features/tasks/model/task-form-options";
 import { allowedGitHubRepositories, defaultGitHubRepository } from "@/lib/github-repositories";
 import { taskAssigneeOptions } from "@/lib/display";
-import type { PlanningShellState, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
+import type { PlanningShellState, Profile, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
 import { initiativePlanningItems } from "@/features/planning/model/planning-app-model";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
-import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { UiButton, UiField, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 export type NewTaskDraft = {
@@ -72,16 +76,16 @@ function RequiredLabel({ children }: { children: string }) {
   );
 }
 
-function TaskBriefFields({ draft, setDraft, compact = false }: { draft: NewTaskDraft; setDraft: DraftSetter; compact?: boolean }) {
+function TaskBriefFields({ draft, profiles, setDraft, compact = false }: { draft: NewTaskDraft; profiles: Profile[]; setDraft: DraftSetter; compact?: boolean }) {
   const textAreaHeight = compact ? "sm" : "md";
 
   return (
     <div className="grid gap-4">
       <UiField>
         Problem
-        <UiTextArea
+        <TaskMentionTextArea profiles={profiles}
           value={draft.problemStatement}
-          onChange={(event) => setDraft((current) => ({ ...current, problemStatement: event.target.value }))}
+          onValueChange={(value) => setDraft((current) => ({ ...current, problemStatement: value }))}
           minHeight={textAreaHeight}
           inputPadding="md"
           leading="relaxed"
@@ -90,9 +94,9 @@ function TaskBriefFields({ draft, setDraft, compact = false }: { draft: NewTaskD
       </UiField>
       <UiField>
         Zielbild
-        <UiTextArea
+        <TaskMentionTextArea profiles={profiles}
           value={draft.intendedOutcome}
-          onChange={(event) => setDraft((current) => ({ ...current, intendedOutcome: event.target.value }))}
+          onValueChange={(value) => setDraft((current) => ({ ...current, intendedOutcome: value }))}
           minHeight={textAreaHeight}
           inputPadding="md"
           leading="relaxed"
@@ -101,9 +105,9 @@ function TaskBriefFields({ draft, setDraft, compact = false }: { draft: NewTaskD
       </UiField>
       <UiField>
         Umfang &amp; Grenzen
-        <UiTextArea
+        <TaskMentionTextArea profiles={profiles}
           value={draft.scopeConstraints}
-          onChange={(event) => setDraft((current) => ({ ...current, scopeConstraints: event.target.value }))}
+          onValueChange={(value) => setDraft((current) => ({ ...current, scopeConstraints: value }))}
           minHeight={textAreaHeight}
           inputPadding="md"
           leading="relaxed"
@@ -112,9 +116,9 @@ function TaskBriefFields({ draft, setDraft, compact = false }: { draft: NewTaskD
       </UiField>
       <UiField>
         Abnahmekriterien
-        <UiTextArea
+        <TaskMentionTextArea profiles={profiles}
           value={draft.acceptanceCriteria}
-          onChange={(event) => setDraft((current) => ({ ...current, acceptanceCriteria: event.target.value }))}
+          onValueChange={(value) => setDraft((current) => ({ ...current, acceptanceCriteria: value }))}
           minHeight={compact ? "md" : "lg"}
           inputPadding="md"
           leading="relaxed"
@@ -123,9 +127,9 @@ function TaskBriefFields({ draft, setDraft, compact = false }: { draft: NewTaskD
       </UiField>
       <UiField>
         Nachweis
-        <UiTextArea
+        <TaskMentionTextArea profiles={profiles}
           value={draft.evidenceRequired}
-          onChange={(event) => setDraft((current) => ({ ...current, evidenceRequired: event.target.value }))}
+          onValueChange={(value) => setDraft((current) => ({ ...current, evidenceRequired: value }))}
           minHeight={textAreaHeight}
           inputPadding="md"
           leading="relaxed"
@@ -134,9 +138,9 @@ function TaskBriefFields({ draft, setDraft, compact = false }: { draft: NewTaskD
       </UiField>
       <UiField>
         Qualitätsstandard
-        <UiTextArea
+        <TaskMentionTextArea profiles={profiles}
           value={draft.definitionOfDone}
-          onChange={(event) => setDraft((current) => ({ ...current, definitionOfDone: event.target.value }))}
+          onValueChange={(value) => setDraft((current) => ({ ...current, definitionOfDone: value }))}
           minHeight={textAreaHeight}
           inputPadding="md"
           leading="relaxed"
@@ -306,14 +310,14 @@ function DeliverableForm({
             <SectionHeading>Aufgabenbrief</SectionHeading>
             <p className="mt-2 text-xs leading-5 text-slate-500">Ergebnis und Abnahme beschreiben, ohne die Umsetzung unnötig vorzugeben.</p>
           </div>
-          <TaskBriefFields draft={draft} setDraft={setDraft} />
+          <TaskBriefFields draft={draft} profiles={data.profiles} setDraft={setDraft} />
         </section>
 
         <UiField>
           Zusätzlicher Kontext <span className="font-normal text-slate-400">(optional)</span>
-          <UiTextArea
+          <TaskMentionTextArea profiles={data.profiles}
             value={draft.description}
-            onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+            onValueChange={(value) => setDraft((current) => ({ ...current, description: value }))}
             minHeight="md"
             inputPadding="md"
             leading="relaxed"
@@ -422,9 +426,9 @@ function StrategicItemForm({
 
         <UiField>
           Kontext <span className="font-normal text-slate-400">(optional)</span>
-          <UiTextArea
+          <TaskMentionTextArea profiles={data.profiles}
             value={draft.description}
-            onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+            onValueChange={(value) => setDraft((current) => ({ ...current, description: value }))}
             minHeight="md"
             inputPadding="md"
             leading="relaxed"
@@ -440,9 +444,9 @@ function StrategicItemForm({
             </div>
             <UiField>
               Zielbild
-              <UiTextArea
+              <TaskMentionTextArea profiles={data.profiles}
                 value={draft.intendedOutcome}
-                onChange={(event) => setDraft((current) => ({ ...current, intendedOutcome: event.target.value }))}
+                onValueChange={(value) => setDraft((current) => ({ ...current, intendedOutcome: value }))}
                 minHeight="sm"
                 inputPadding="md"
                 leading="relaxed"
@@ -451,9 +455,9 @@ function StrategicItemForm({
             </UiField>
             <UiField>
               Erfolgskriterien
-              <UiTextArea
+              <TaskMentionTextArea profiles={data.profiles}
                 value={draft.acceptanceCriteria}
-                onChange={(event) => setDraft((current) => ({ ...current, acceptanceCriteria: event.target.value }))}
+                onValueChange={(value) => setDraft((current) => ({ ...current, acceptanceCriteria: value }))}
                 minHeight="md"
                 inputPadding="md"
                 leading="relaxed"
@@ -462,9 +466,9 @@ function StrategicItemForm({
             </UiField>
             <UiField>
               Scope &amp; Grenzen
-              <UiTextArea
+              <TaskMentionTextArea profiles={data.profiles}
                 value={draft.scopeConstraints}
-                onChange={(event) => setDraft((current) => ({ ...current, scopeConstraints: event.target.value }))}
+                onValueChange={(value) => setDraft((current) => ({ ...current, scopeConstraints: value }))}
                 minHeight="sm"
                 inputPadding="md"
                 leading="relaxed"
@@ -587,9 +591,9 @@ function SubIssueForm({
 
       <UiField>
         Kontext <span className="font-normal text-slate-400">(optional)</span>
-        <UiTextArea
+        <TaskMentionTextArea profiles={data.profiles}
           value={draft.description}
-          onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+          onValueChange={(value) => setDraft((current) => ({ ...current, description: value }))}
           minHeight="lg"
           inputPadding="md"
           leading="relaxed"
@@ -715,7 +719,7 @@ export function NewTaskDialog({
   const selectedInitiative = initiatives.find((initiative) => initiative.id === draft.parentTaskId);
   const deliverableNeedsStructure = false;
   const subIssueNeedsParent = draft.taskType === "sub_issue" && !draft.parentTaskId;
-  const invalidTitle = draft.title.trim().length < 3;
+  const invalidTitle = codepointLength(draft.title.trim()) < 3;
   const canCreate = !invalidTitle && !deliverableNeedsStructure && !subIssueNeedsParent;
   const titleError = taskCreationTitleError(draft.title, titleTouched || submitAttempted);
   const validationReason = submitAttempted && !invalidTitle
@@ -774,6 +778,8 @@ export function NewTaskDialog({
             }
             return;
           }
+          const lengthErrors = validatePlanningFields({ ...draft, id: "" });
+          if (lengthErrors.length) { setSubmitError(lengthErrors[0].message); return; }
           setSubmitError("");
           onCreate(draft, { onError: setSubmitError });
         }}

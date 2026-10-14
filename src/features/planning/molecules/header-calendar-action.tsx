@@ -91,6 +91,7 @@ export function HeaderCalendarAction({
           selectedDate={state.selectedDate}
           showWorkweek={Boolean(apiClient)}
           viewMonth={state.viewMonth}
+          workweekDateKey={state.workweekReferenceDate}
           workweeks={state.workweeks}
         />,
         document.body,

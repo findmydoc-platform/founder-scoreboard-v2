@@ -16,6 +16,7 @@ import { useTaskComments } from "@/features/tasks/hooks/use-task-comments";
 import { useTaskRelationships } from "@/features/tasks/hooks/use-task-relationships";
 import { classifyTaskGitHubSyncResponse } from "@/lib/github-sync/contract";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
+import { loadGitHubAppBrowserSnapshot, startGitHubAppConnect } from "@/features/tasks/model/github-app-browser-api";
 
 type UseTaskDetailWorkflowOptions = {
   task: Task;
@@ -59,7 +60,7 @@ export function useTaskDetailWorkflow({
   const [taskBlockers, setTaskBlockers] = useState(blockers);
   const [taskSubIssues, setTaskSubIssues] = useState(subIssues);
   const [subIssueDialogOpen, setSubIssueDialogOpen] = useState(false);
-  const [currentProfile, setCurrentProfile] = useState<Pick<Profile, "id" | "name" | "platformRole"> | null>(initialCurrentProfile);
+  const currentProfile = initialCurrentProfile;
   const [githubInstallationAvailable, setGithubInstallationAvailable] = useState(false);
   const [githubUserConnected, setGithubUserConnected] = useState(false);
   const [waitingGitHubCommentCount, setWaitingGitHubCommentCount] = useState(0);
@@ -104,21 +105,18 @@ export function useTaskDetailWorkflow({
     if (isLocalLoginSimulationEnabled()) return;
 
     let active = true;
-    apiClient.getAuthSnapshot().then((snapshot) => {
+    loadGitHubAppBrowserSnapshot(apiClient).then((snapshot) => {
       if (!active) return;
       setGithubInstallationAvailable(snapshot.githubInstallationAvailable);
       setGithubUserConnected(snapshot.githubUserConnected);
       setWaitingGitHubCommentCount(snapshot.waitingGitHubCommentCount);
       if (snapshot.githubUserConnected) setGithubReconnectFailed(false);
-      const login = snapshot.githubLogin;
-      const profile = profiles.find((item) => item.githubLogin === login);
-      setCurrentProfile(profile || initialCurrentProfile);
     });
 
     return () => {
       active = false;
     };
-  }, [apiClient, initialCurrentProfile, profiles, source]);
+  }, [apiClient]);
 
   const reconnectGitHub = async () => {
     setError("");
@@ -127,12 +125,7 @@ export function useTaskDetailWorkflow({
       setError("GitHub ist in der lokalen Entwicklung deaktiviert.");
       return;
     }
-    const { error: githubError } = await apiClient.startGitHubAppConnect();
-
-    if (githubError) {
-      setGithubReconnectFailed(true);
-      setError("GitHub-Anmeldung konnte nicht gestartet werden.");
-    }
+    startGitHubAppConnect();
   };
 
   const updateTask = (patch: Partial<Task>) => {

@@ -1,3 +1,5 @@
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
+import { WorkspaceAccessError } from "@/lib/workspace-identity";
 import { createHash, randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type { AuthenticatedProfile } from "@/lib/types";
@@ -191,6 +193,11 @@ export async function requireTeamPlanningItemScope(
       code: "AUTHORIZATION_UNAVAILABLE",
       error: "Planning-API-Token konnte nicht geprüft werden.",
     };
+  }
+
+  try { await requireWorkspaceAccess({ profileId: authenticated.profile.id }); }
+  catch (error) {
+    return { ok: false, status: error instanceof WorkspaceAccessError ? error.status : 503, code: "AUTHORIZATION_UNAVAILABLE", error: "Workspace-Zugang des Token-Inhabers ist nicht freigegeben." };
   }
 
   return {

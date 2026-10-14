@@ -1,4 +1,3 @@
-export type Role = "admin" | "member" | "viewer";
 export type PlatformRole = "ceo" | "founder" | "deputy" | "viewer";
 export type ReviewStatus = "not_requested" | "requested" | "accepted" | "partial" | "changes_requested";
 export type ReviewDecision = Exclude<ReviewStatus, "not_requested" | "requested">;
@@ -34,7 +33,6 @@ export type PlanningItemRaciAssignment = {
 export type Profile = {
   id: string;
   name: string;
-  role: Role;
   platformRole: PlatformRole;
   orgRole: string;
   githubLogin: string;
@@ -44,6 +42,7 @@ export type Profile = {
   focus?: string;
   weeklyCapacity: number;
   color?: string;
+  avatarUrl?: string;
   googleChatUserId?: string;
   googleChatDmSpace?: string;
   notificationsEnabled?: boolean;
@@ -70,6 +69,8 @@ export type LinkedPullRequest = {
 };
 
 export type Task = {
+  // Planning startup omits detail-only briefs until the task detail API hydrates them.
+  detailAvailability?: "summary";
   id: string;
   order: number;
   title: string;
@@ -105,6 +106,7 @@ export type Task = {
   reviewStatus: ReviewStatus;
   reviewOwnerProfileId?: string;
   reviewRequestedAt?: string;
+  reviewEvidenceExceptionNote?: string;
   scorePoints: number;
   scoreFinal: boolean;
   githubRepo: string;
@@ -311,6 +313,8 @@ export type TaskReview = {
   points: number;
   comment: string;
   checklist: TaskReviewChecklist;
+  githubDeliveryStatus?: GitHubCommentDeliveryStatus;
+  githubCommentUrl?: string;
   createdAt: string;
 };
 

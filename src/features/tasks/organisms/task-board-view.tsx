@@ -5,7 +5,7 @@ import { TaskCard } from "@/features/tasks/molecules/task-card";
 import { groupDirectChildrenByParent } from "@/features/tasks/model/task-card-presentation";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { normalizeStatus } from "@/lib/status";
-import type { Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 
 type TaskBoardViewProps = {
   statuses: TaskStatus[];
@@ -18,7 +18,7 @@ type TaskBoardViewProps = {
   selectedTaskId?: string | null;
   dragOverStatus: TaskStatus | null;
   canChangeTaskStatus: (task: Task) => boolean;
-  ownerColorForTask: (task: Task) => string;
+  assigneeProfileForTask: (task: Task) => Profile | undefined;
   onOpenTask: (taskId: string) => void;
   onCreateTask: (defaults: Partial<NewTaskDraft>) => void;
   onChangeTaskStatus: (task: Task, status: TaskStatus) => void;
@@ -27,6 +27,7 @@ type TaskBoardViewProps = {
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
   statusOptionsForTask: (task: Task) => TaskStatus[];
+  viewerOpenSubIssueIdsByDeliverableId: Record<string, string[]>;
   showParentContext?: boolean;
 };
 
@@ -41,7 +42,7 @@ export function TaskBoardView({
   selectedTaskId = null,
   dragOverStatus,
   canChangeTaskStatus,
-  ownerColorForTask,
+  assigneeProfileForTask,
   onOpenTask,
   onCreateTask,
   onChangeTaskStatus,
@@ -50,6 +51,7 @@ export function TaskBoardView({
   onDragStart,
   onDragEnd,
   statusOptionsForTask,
+  viewerOpenSubIssueIdsByDeliverableId,
   showParentContext = false,
 }: TaskBoardViewProps) {
   const directChildrenByParent = groupDirectChildrenByParent(allTasks);
@@ -148,7 +150,7 @@ export function TaskBoardView({
                   <TaskCard
                     key={task.id}
                     task={task}
-                    ownerColor={ownerColorForTask(task)}
+                    assigneeProfile={assigneeProfileForTask(task)}
                     relations={relations}
                     allTasks={allTasks}
                     blockers={blockers}
@@ -158,6 +160,7 @@ export function TaskBoardView({
                     onDragStart={canUpdateStatus && onDragStart ? onDragStart : undefined}
                     onDragEnd={onDragEnd}
                     statusOptions={canUpdateStatus ? statusOptionsForTask(task) : undefined}
+                    viewerOpenSubIssueIds={viewerOpenSubIssueIdsByDeliverableId[task.id] || []}
                     showParentContext={showParentContext}
                     isSelected={selectedTaskId === task.id}
                     isDragging={draggedTaskId === task.id}

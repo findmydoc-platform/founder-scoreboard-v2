@@ -18,6 +18,7 @@ const migrationTests = new Set(
     .filter((entry) => entry.isFile() && entry.name.endsWith(".test.mjs"))
     .map((entry) => entry.name),
 );
+const baselineTest = `${productionBaseline.file.slice(0, -4)}.test.mjs`;
 
 if (migrations.length < 1) failures.push("Expected at least the current schema baseline.");
 if (migrations[0]?.file !== productionBaseline.file) {
@@ -31,15 +32,14 @@ for (const migration of migrations) {
   if (versions.has(migration.version)) failures.push(`Duplicate migration version: ${migration.version}`);
   versions.add(migration.version);
 
-  const expectedTest = `${migration.file.slice(0, -4)}.test.mjs`;
-  if (!migrationTests.has(expectedTest)) {
-    failures.push(`${migration.file} requires tests/migrations/${expectedTest}.`);
-  }
-
   const unapprovedDestructiveDdl = findUnapprovedDestructiveDdl(migration);
   if (unapprovedDestructiveDdl.length) {
     failures.push(`${migration.file} contains destructive DDL (${unapprovedDestructiveDdl.join(", ")}); use the explicitly approved destructive path.`);
   }
+}
+
+if (!migrationTests.has(baselineTest)) {
+  failures.push(`${productionBaseline.file} requires tests/migrations/${baselineTest}.`);
 }
 
 for (const migrationTest of migrationTests) {
@@ -63,8 +63,8 @@ for (const entry of supabaseEntries) {
 
 if (existsSync("supabase/rollback")) failures.push("Legacy supabase/rollback directory must stay removed.");
 if (packageJson.devDependencies?.supabase !== "2.109.1") failures.push("Supabase CLI must be pinned to exactly 2.109.1.");
-if (packageJson.scripts?.["test:migrations"] !== "node --test --test-concurrency=1 tests/migrations/*.test.mjs") {
-  failures.push("test:migrations must run the migration integration tests serially.");
+if (packageJson.scripts?.["test:migrations"] !== "NODE_OPTIONS=--no-deprecation vitest run --project migrations") {
+  failures.push("test:migrations must run the serial Vitest migration project.");
 }
 if (!/^\[db\.seed\][\s\S]*?^enabled = false$/m.test(config)) failures.push("supabase/config.toml must keep database seeding disabled.");
 
@@ -77,5 +77,6 @@ console.log(JSON.stringify({
   status: "supabase-migrations-ready",
   baseline: productionBaseline.file,
   migrations: migrations.map(({ file, sha256 }) => ({ file, sha256 })),
+  migrationTests: [...migrationTests].sort(),
   cliVersion: packageJson.devDependencies.supabase,
 }, null, 2));

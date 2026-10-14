@@ -21,6 +21,10 @@ import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { loadNotionDecisionLog } from "@/lib/notion-decision-log";
 import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
+import { redirect } from "next/navigation";
+import { getServerAuthSupabase } from "@/lib/supabase-server";
+import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
+import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
 
 async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
   const supabase = getServerSupabase();
@@ -55,6 +59,7 @@ async function loadPlanningWorkspacePageData(
     loadPlanningHeaderData(supabase, {
       currentProfileId: profile?.id || null,
       platformRole: profile?.platformRole || null,
+      slots: workspace === "planning" && profile ? ["quickLinks", "calendarEvents"] : undefined,
       sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
     }),
   ]);
@@ -119,8 +124,9 @@ async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
 
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
   if (requiresSupabaseAuth()) {
-    const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
+    const auth = await getServerPlanningAuth();
     if (!auth.ok) {
+      redirectForWorkspaceGate(auth.code);
       return (
         <PlanningApp
           initialData={emptyPlanningShellState}
@@ -130,6 +136,32 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
           authRequired
           initialAuthUser={auth.user}
           initialAuthError={auth.error}
+        />
+      );
+    }
+
+    if (initialWorkspace === "administration") {
+      if (!auth.authority?.capabilities.manageAdministratorEligibility) redirect("/planning");
+      const sessionSupabase = await getServerAuthSupabase();
+      if (!sessionSupabase) return <WorkspaceDataUnavailablePage workspace="administration" authUserEmail={auth.user?.email || ""} />;
+      const administration = await createSupabaseAdministrationReadModel(sessionSupabase).load({
+        capabilities: auth.authority.capabilities,
+      });
+      if (administration.status !== "ready") {
+        return <WorkspaceDataUnavailablePage workspace="administration" authUserEmail={auth.user?.email || ""} />;
+      }
+      return (
+        <PlanningApp
+          initialData={emptyPlanningShellState}
+          initialHeaderData={emptyPlanningHeaderData}
+          initialWorkspace="administration"
+          initialAdministrationModel={administration.model}
+          initialAdministratorAccess={auth.authority.administratorAccess}
+          source="supabase"
+          authRequired
+          initialAuthUser={auth.user}
+          initialCurrentProfile={auth.profile}
+          initialProtectedDataLoaded
         />
       );
     }
@@ -149,6 +181,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
           authRequired
           initialAuthUser={auth.user}
           initialCurrentProfile={auth.profile}
+          initialAdministratorAccess={auth.authority?.administratorAccess}
           initialProtectedDataLoaded
         />
       );
@@ -168,6 +201,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
           authRequired
           initialAuthUser={auth.user}
           initialCurrentProfile={auth.profile}
+          initialAdministratorAccess={auth.authority?.administratorAccess}
           initialProtectedDataLoaded
         />
       );
@@ -187,6 +221,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
           authRequired
           initialAuthUser={auth.user}
           initialCurrentProfile={auth.profile}
+          initialAdministratorAccess={auth.authority?.administratorAccess}
           initialProtectedDataLoaded
         />
       );
@@ -205,6 +240,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
           authRequired
           initialAuthUser={auth.user}
           initialCurrentProfile={auth.profile}
+          initialAdministratorAccess={auth.authority?.administratorAccess}
           initialProtectedDataLoaded
         />
       );
@@ -223,11 +259,14 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
         authRequired
         initialAuthUser={auth.user}
         initialCurrentProfile={auth.profile}
+        initialAdministratorAccess={auth.authority?.administratorAccess}
         initialProtectedDataLoaded
         initialDecisionLogResult={decisionLog.decisionLog}
       />
     );
   }
+
+  if (initialWorkspace === "administration") redirect("/planning");
 
   if (initialWorkspace === "backlog") {
     const backlog = await loadBacklogPageData();

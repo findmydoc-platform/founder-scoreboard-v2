@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, RotateCcw } from "lucide-react";
+import { AlertTriangle, Check, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { clearTaskReviewDraft, useTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
+import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
 import {
   reviewChecklistScore,
   reviewDecisionConsequence,
@@ -11,7 +12,8 @@ import {
 } from "@/features/reviews/model/task-review-state";
 import type { Profile, ReviewDecision, Task, TaskReviewChecklist } from "@/lib/types";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { classNames, UiButton, UiNotice, UiTextArea } from "@/shared/atoms/ui-primitives";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
+import { classNames, UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 const reviewChecks: Array<{
   key: keyof TaskReviewChecklist;
@@ -151,6 +153,18 @@ export function TaskReviewRail({
           </dl>
         </div>
 
+        {task.reviewEvidenceExceptionNote ? (
+          <UiNotice id="task-review-evidence-exception" tabIndex={-1} tone="warning" className="mt-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <div>
+                <div className="font-semibold">Ausnahme beim Nachweis</div>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-5 [overflow-wrap:anywhere]"><LinkifiedText value={task.reviewEvidenceExceptionNote} /></p>
+              </div>
+            </div>
+          </UiNotice>
+        ) : null}
+
         {!canReview ? (
           <UiNotice tone="info" className="mt-4">
             Das Issue ist im Review und schreibgeschützt. Die Entscheidung liegt bei {reviewOwnerLabel(task, profiles)}.
@@ -223,8 +237,9 @@ export function TaskReviewRail({
               Review-Kommentar
             </label>
             <p className="mt-1 text-xs leading-5 text-slate-500">Bei kleiner oder grundlegender Nacharbeit verpflichtend.</p>
-            <UiTextArea
+            <TaskMentionTextArea
               id={`review-comment-${task.id}`}
+              profiles={profiles}
               value={draft.comment}
               disabled={pending}
               minHeight="md"
@@ -232,8 +247,8 @@ export function TaskReviewRail({
               leading="relaxed"
               className="mt-2 w-full bg-white"
               placeholder="Was kann bestehen bleiben, was muss geändert werden?"
-              onChange={(event) => {
-                setDraft((current) => ({ ...current, comment: event.target.value }));
+              onValueChange={(value) => {
+                setDraft((current) => ({ ...current, comment: value }));
               }}
             />
 
@@ -295,10 +310,11 @@ export function TaskReviewRail({
             ) : (
               <div className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3">
                 <label htmlFor={`review-withdraw-${task.id}`} className="text-xs font-semibold text-slate-800">Grund für das Zurückziehen</label>
-                <UiTextArea
+                <TaskMentionTextArea
                   id={`review-withdraw-${task.id}`}
+                  profiles={profiles}
                   value={withdrawReason}
-                  onChange={(event) => setWithdrawReason(event.target.value)}
+                  onValueChange={setWithdrawReason}
                   disabled={pending}
                   minHeight="sm"
                   placeholder="Warum wird das Review beendet?"

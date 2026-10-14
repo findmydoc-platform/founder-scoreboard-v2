@@ -1,6 +1,11 @@
+import { validateStoredPlanningContent } from "./planning-item-content-server";
+import type { ContentLengthError, IssueContentTask } from "@/lib/github-issue-content";
 import { createHash } from "node:crypto";
 import type { AuthenticatedProfile, Task } from "@/lib/types";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import {
+  validReviewEvidenceUrl,
+} from "@/features/reviews/model/review-evidence";
 import type { getServerSupabase } from "@/lib/supabase";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { isOperationalLeadRole } from "@/lib/platform";
@@ -40,12 +45,13 @@ import {
 } from "@/features/planning-items/model/planning-item-normalization";
 import type { ActorContext } from "./actor-context";
 import type { PlanningError, PlanningItems, PlanningItemChanges, PlanningResult, ReviseItem } from "./planning-items";
+import { parseTeamPlanningDependency } from "./planning-items-team-dependency-contract";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 type UnknownRecord = Record<string, unknown>;
 type DatabaseRow = Record<string, unknown>;
 export type PlanningItemReplayType = TeamPlanningItemType;
-type PlanningItemPatchField = TeamPlanningItemPatchField | "evidenceLink" | "sprintId";
+type PlanningItemPatchField = TeamPlanningItemPatchField | "sprintId";
 
 type StrategyRow = {
   task_id: string;
@@ -62,7 +68,7 @@ type RaciRow = {
 };
 
 type TargetLoadResult =
-  | { ok: true; itemType: TeamPlanningItemType; row: DatabaseRow; strategy?: StrategyRow; raciAssignments: RaciRow[] }
+  | { ok: true; itemType: TeamPlanningItemType; row: DatabaseRow; strategy?: StrategyRow; raciAssignments: RaciRow[]; hasValidReviewEvidence: boolean }
   | { ok: false; status: 404; error: string };
 
 export type PlanningItemSystemEffect = {
@@ -73,6 +79,7 @@ export type PlanningItemSystemEffect = {
 };
 
 export type PlanningItemUpdatePreview = {
+  lengthErrors?: ContentLengthError[];
   itemId: string;
   itemType: TeamPlanningItemType;
   expectedUpdatedAt: string;
@@ -106,6 +113,7 @@ const fieldsByType: Record<TeamPlanningItemType, Set<PlanningItemPatchField>> = 
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
     "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "priority", "workstream", "fixedDate",
     "hours", "evidenceLink", "sprintId", "status",
+    "evidenceExceptionNote",
   ]),
   sub_issue: new Set([
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
@@ -245,6 +253,7 @@ function publicTask(row: DatabaseRow): UnknownRecord {
     reviewStatus: itemType === "deliverable" ? String(row.review_status || "not_requested") : "not_requested",
     reviewOwnerProfileId: itemType === "deliverable" ? String(row.review_owner_profile_id || "") : "",
     reviewRequestedAt: itemType === "deliverable" ? String(row.review_requested_at || "") : "",
+    evidenceExceptionNote: itemType === "deliverable" ? String(row.review_evidence_exception_note || "") : "",
     scorePoints: itemType === "deliverable" ? Number(row.score_points || 0) : 0,
     scoreFinal: itemType === "deliverable" && Boolean(row.score_final),
     scoreRelevant: itemType === "deliverable" && Boolean(row.score_relevant),
@@ -289,6 +298,7 @@ export function parsePlanningItemPatchPayload(
   const unknownKey = Object.keys(raw).find((key) => (
     key !== "expectedUpdatedAt"
     && key !== "itemType"
+    && key !== "dependency"
     && key !== "githubSync"
     && key !== "githubSyncMode"
     && !allowedPatchFields.has(key as PlanningItemPatchField)
@@ -297,6 +307,23 @@ export function parsePlanningItemPatchPayload(
   if (hasOwn(raw, "itemType")) return { ok: false as const, error: "itemType ist unveränderlich und darf nicht gepatcht werden." };
   if (typeof raw.expectedUpdatedAt !== "string" || Number.isNaN(Date.parse(raw.expectedUpdatedAt))) {
     return { ok: false as const, error: "expectedUpdatedAt muss ein gültiger Zeitstempel sein." };
+  }
+  if (hasOwn(raw, "dependency")) {
+    const mixedField = Object.keys(raw).find((key) => key !== "expectedUpdatedAt" && key !== "dependency");
+    if (mixedField) {
+      return { ok: false as const, error: "Ändere eine Aufgabenabhängigkeit separat von weiteren Feldern." };
+    }
+    const dependency = parseTeamPlanningDependency(raw.dependency);
+    if (!dependency.ok) return { ok: false as const, error: dependency.error };
+    return {
+      ok: true as const,
+      expectedUpdatedAt: raw.expectedUpdatedAt,
+      presentFields: [] as PlanningItemPatchField[],
+      raw,
+      dependency: dependency.dependency,
+      githubSync: null,
+      githubSyncMode: null,
+    };
   }
   const hasGitHubSync = hasOwn(raw, "githubSync");
   let githubSync: PlanningItemGitHubSyncCommand | null = null;
@@ -313,29 +340,40 @@ export function parsePlanningItemPatchPayload(
     (key): key is PlanningItemPatchField => allowedPatchFields.has(key as PlanningItemPatchField),
   );
   if (!presentFields.length && !githubSync) return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld oder githubSync." };
-  return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null };
+  return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, dependency: null, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null };
 }
 
-async function loadTarget(
+export async function loadPlanningItemUpdateTarget(
   supabase: SupabaseServer,
   itemId: string,
 ): Promise<TargetLoadResult> {
   const taskResult = await supabase
     .from(ACTIVE_TASKS_TABLE)
-    .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,fixed_date,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
+    .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,evidence_link,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,fixed_date,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,review_evidence_exception_note,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
     .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID)
     .eq("id", itemId)
     .maybeSingle();
   if (taskResult.error) throw new Error(taskResult.error.message);
   if (!taskResult.data) return { ok: false, status: 404, error: "Planungselement wurde nicht gefunden oder ist im Papierkorb." };
   const itemType = taskTypeFromRow(taskResult.data as DatabaseRow);
-  if (itemType !== "initiative") return { ok: true, itemType, row: taskResult.data as DatabaseRow, raciAssignments: [] };
+  if (itemType === "deliverable") {
+    const evidenceResult = await supabase.rpc("has_valid_planning_review_evidence", { p_task_id: itemId });
+    if (evidenceResult.error) throw new Error(evidenceResult.error.message);
+    return {
+      ok: true,
+      itemType,
+      row: taskResult.data as DatabaseRow,
+      raciAssignments: [],
+      hasValidReviewEvidence: evidenceResult.data === true,
+    };
+  }
+  if (itemType !== "initiative") return { ok: true, itemType, row: taskResult.data as DatabaseRow, raciAssignments: [], hasValidReviewEvidence: false };
   const [strategyResult, raciResult] = await Promise.all([
     supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").eq("task_id", itemId).maybeSingle<StrategyRow>(),
     supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").eq("task_id", itemId).order("sort_order").returns<RaciRow[]>(),
   ]);
   if (strategyResult.error || raciResult.error) throw new Error(strategyResult.error?.message || raciResult.error?.message || "Initiative konnte nicht geladen werden.");
-  return { ok: true, itemType, row: taskResult.data as DatabaseRow, strategy: strategyResult.data || undefined, raciAssignments: raciResult.data || [] };
+  return { ok: true, itemType, row: taskResult.data as DatabaseRow, strategy: strategyResult.data || undefined, raciAssignments: raciResult.data || [], hasValidReviewEvidence: false };
 }
 
 function appendSystemEffect(effects: PlanningItemSystemEffect[], field: string, before: unknown, after: unknown, reason: string) {
@@ -365,7 +403,11 @@ function validatePermission(actor: AuthenticatedProfile, itemType: TeamPlanningI
   });
   const briefFields = presentFields.filter((field) => founderTaskBriefFields.has(field));
   if (briefFields.length && !permissions.canEditBrief) errors.push("Founder können den Aufgabenbrief nur bei eigenen oder zugewiesenen Aufgaben bearbeiten.");
-  const protectedFields = presentFields.filter((field) => !founderTaskBriefFields.has(field) && field !== "parentTaskId" && field !== "status");
+  const protectedFields = presentFields.filter((field) => !founderTaskBriefFields.has(field)
+    && field !== "parentTaskId"
+    && field !== "status"
+    && field !== "evidenceLink"
+    && field !== "evidenceExceptionNote");
   if (protectedFields.length) errors.push(`Diese Aufgabenfelder sind geschützt: ${protectedFields.join(", ")}.`);
   if (presentFields.includes("parentTaskId") && !permissions.canReparentSubIssue) errors.push("Dieses Sub-Issue darf nur von CEO, Deputy oder der aktuellen Zuständigkeit verschoben werden.");
   return errors;
@@ -382,14 +424,15 @@ function normalizePatch(raw: UnknownRecord, presentFields: PlanningItemPatchFiel
     const value = raw[field];
     let result: { ok: true; value: unknown } | { ok: false; error: string };
     switch (field) {
-      case "title": result = normalizePatchText(value, 240, true); break;
+      case "title": result = normalizePatchText(value, undefined, true); break;
       case "description":
       case "problemStatement":
       case "intendedOutcome":
       case "scopeConstraints":
       case "evidenceRequired":
-      case "evidenceLink":
-      case "definitionOfDone": result = normalizePatchText(value, 4_000); break;
+            case "definitionOfDone": result = normalizePatchText(value); break;
+      case "evidenceLink": result = normalizePatchText(value, 4_000); break;
+      case "evidenceExceptionNote": result = normalizePatchText(value, 2_000); break;
       case "acceptanceCriteria": result = normalizePatchAcceptanceCriteria(value); break;
       case "priority": result = normalizePatchPriority(value); break;
       case "status": {
@@ -478,7 +521,7 @@ export async function buildPlanningItemUpdatePreview({
   parsed: Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
   supabase: SupabaseServer;
 }): Promise<{ ok: true; preview: PlanningItemUpdatePreview } | { ok: false; status: 403 | 404 | 409; error: string }> {
-  const target = await loadTarget(supabase, itemId);
+  const target = await loadPlanningItemUpdateTarget(supabase, itemId);
   if (!target.ok) return target;
   if (Date.parse(String(target.row.updated_at || "")) !== Date.parse(parsed.expectedUpdatedAt)) {
     return { ok: false, status: 409, error: "Planungselement wurde zwischenzeitlich geändert. Bitte Kontext erneut laden." };
@@ -576,6 +619,9 @@ export async function buildPlanningItemUpdatePreview({
   };
   const changedFields = parsed.presentFields.filter((field) => fieldChanged(field) || (field === "status" && rewritesLegacySubIssueStatus));
   const statusChanged = changedFields.includes("status") && (target.itemType === "deliverable" || target.itemType === "sub_issue");
+  if (changedFields.includes("evidenceExceptionNote") && normalizedPatch.status !== "Review") {
+    errors.push("evidenceExceptionNote ist nur zusammen mit dem Status Review zulässig.");
+  }
   const taskUpdateRequested = (target.itemType === "deliverable" || target.itemType === "sub_issue") && changedFields.length > 0;
   const completedReopen = statusChanged
     && changedFields.length === 1
@@ -676,6 +722,12 @@ export async function buildPlanningItemUpdatePreview({
     if (target.itemType === "deliverable" && startsTaskReviewRequest(statusPayload)) {
       if (target.row.approval_status !== "approved") errors.push("Nur freigegebene Deliverables können in Review gegeben werden.");
       if (target.row.score_final) errors.push("Final bewertete Aufgaben müssen über „Review erneut öffnen“ zurück in Review gegeben werden.");
+      const evidenceExceptionNote = String(normalizedPatch.evidenceExceptionNote || "").trim();
+      const hasValidReviewEvidence = target.hasValidReviewEvidence
+        || validReviewEvidenceUrl(String(normalizedPatch.evidenceLink || ""));
+      if (!hasValidReviewEvidence && !evidenceExceptionNote) {
+        errors.push("Ergänze vor der Review-Anfrage einen Evidence-Link oder dokumentiere das Ergebnis ohne Link.");
+      }
       const sprint = sprints.get(String(target.row.sprint_id || ""));
       if (sprint?.score_locked) errors.push("Sprint-Score ist bereits gelockt.");
 
@@ -704,6 +756,16 @@ export async function buildPlanningItemUpdatePreview({
         resultingItem.scoreFinal = false;
         resultingItem.reviewOwnerProfileId = reviewOwnerProfileId;
         resultingItem.reviewRequestedAt = reviewRequestedAt;
+        resultingItem.evidenceExceptionNote = hasValidReviewEvidence ? "" : evidenceExceptionNote;
+        appendSystemEffect(
+          systemEffects,
+          "evidenceExceptionNote",
+          currentItem.evidenceExceptionNote,
+          resultingItem.evidenceExceptionNote,
+          hasValidReviewEvidence
+            ? "Vorhandener Nachweis macht eine Ausnahmebegründung überflüssig."
+            : "Review ohne Link braucht eine bestätigte Ausnahmebegründung.",
+        );
         systemEffects.push({
           field: "notification",
           before: null,
@@ -714,6 +776,8 @@ export async function buildPlanningItemUpdatePreview({
     }
   }
 
+  const lengthErrors = await validateStoredPlanningContent(supabase, { ...resultingItem, id: itemId, taskType: target.itemType } as IssueContentTask);
+  errors.push(...lengthErrors.map((error) => error.message));
   const parentChanged = changedFields.includes("parentTaskId");
   if (parentChanged && (target.itemType === "deliverable" || target.itemType === "sub_issue") && changedFields.length > 1) {
     errors.push("Ändere die übergeordnete Planungsebene separat von weiteren Feldern.");
@@ -748,6 +812,7 @@ export async function buildPlanningItemUpdatePreview({
       expectedUpdatedAt: parsed.expectedUpdatedAt,
       currentItem,
       normalizedPatch,
+      ...(lengthErrors.length ? { lengthErrors } : {}),
       resultingItem,
       changedFields,
       systemEffects,
@@ -840,110 +905,6 @@ export function planningItemReviseCommand(
   return { kind: "reviseItem", itemId, expectedRevision, changes };
 }
 
-export type BrowserReviseWriter =
-  | Readonly<{
-    kind: "strategic";
-    params: Readonly<{
-      taskId: string;
-      expectedUpdatedAt: string;
-      patch: UnknownRecord;
-      strategy: UnknownRecord | null;
-      raciAssignments: readonly UnknownRecord[] | null;
-    }>;
-  }>
-  | Readonly<{
-    kind: "delivery";
-    params: Readonly<{
-      taskId: string;
-      expectedUpdatedAt: string;
-      taskPatch: UnknownRecord;
-      notePresent: boolean;
-      note: string | null;
-      dependencyPresent: boolean;
-      dependencyNote: string | null;
-      activityMessages: readonly string[];
-      notifications: readonly UnknownRecord[];
-    }>;
-  }>;
-
-type BrowserReviseDependencies = Readonly<{
-  supabase: SupabaseServer;
-  actor: ActorContext;
-  writer: BrowserReviseWriter;
-}>;
-
-function reviseError(error: unknown): PlanningError {
-  const code = error && typeof error === "object" && "code" in error ? String(error.code || "") : "";
-  const message = error && typeof error === "object" && "message" in error ? String(error.message || "") : "";
-  if (code === "P0001") return { code: "conflict", reason: "revision" };
-  if (code === "P0003") return { code: "conflict", reason: "state", details: { reviseState: "trashed" } };
-  if (code === "P0008") return { code: "conflict", reason: "state", details: { reviseState: "parentApproval" } };
-  if (code === "P0010") return { code: "conflict", reason: "state", details: { reviseState: "reviewLocked" } };
-  if (code === "P0015") return { code: "conflict", reason: "state", details: { reviseState: "sprintLocked" } };
-  if (code === "P0016") return { code: "conflict", reason: "state", details: { reviseState: "completedLocked" } };
-  if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
-  if (code === "P0006") return { code: "forbidden", reason: "reviseNotAllowed" };
-  if (code === "23503" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "profileNotFound" }] };
-  if (code === "23505" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "assignmentDuplicated" }] };
-  if (code === "22023" || code === "23514") return { code: "invalidCommand", issues: [{ path: "command.changes", reason: "persistenceValidation" }] };
-  return { code: "dependencyUnavailable", dependency: "database", retryable: true };
-}
-
-export function createBrowserRevisePlanningItems(dependencies: BrowserReviseDependencies): PlanningItems {
-  return {
-    async run(invocation) {
-      if (invocation.actor.profileId !== dependencies.actor.profileId) return { ok: false, error: { code: "forbidden", reason: "actorMismatch" } };
-      if (invocation.command.kind !== "reviseItem") return { ok: false, error: { code: "invalidCommand", issues: [{ path: "command.kind", reason: "reviseItemRequired" }] } };
-      if ("parentId" in invocation.command.changes) return { ok: false, error: { code: "invalidCommand", issues: [{ path: "command.changes.parentId", reason: "useChangeParentAction" }] } };
-      if (invocation.mode === "preview") return {
-        ok: true,
-        status: "previewed",
-        items: [],
-        changes: [{ field: "reviseItem", before: null, after: invocation.command.changes }],
-        effects: [{ kind: "audit", description: "Record the planning item revision" }],
-        warnings: [],
-      };
-      const writer = dependencies.writer;
-      const result = writer.kind === "strategic"
-        ? await dependencies.supabase.rpc("update_browser_planning_item_transaction", {
-          p_task_id: writer.params.taskId,
-          p_expected_updated_at: writer.params.expectedUpdatedAt,
-          p_patch: writer.params.patch,
-          p_strategy: writer.params.strategy,
-          p_raci_assignments: writer.params.raciAssignments,
-          p_actor_profile_id: invocation.actor.profileId,
-          p_request_ip: invocation.requestMetadata?.requestIp || null,
-          p_user_agent: invocation.requestMetadata?.userAgent || null,
-        })
-        : await dependencies.supabase.rpc("update_browser_planning_task_transaction", {
-          p_task_id: writer.params.taskId,
-          p_expected_updated_at: writer.params.expectedUpdatedAt,
-          p_task_patch: writer.params.taskPatch,
-          p_note_present: writer.params.notePresent,
-          p_note: writer.params.note,
-          p_dependency_present: writer.params.dependencyPresent,
-          p_dependency_note: writer.params.dependencyNote,
-          p_activity_messages: writer.params.activityMessages,
-          p_notifications: writer.params.notifications,
-          p_actor_profile_id: invocation.actor.profileId,
-        });
-      if (result.error) return { ok: false, error: reviseError(result.error) };
-      return {
-        ok: true,
-        status: "committed",
-        items: [],
-        changes: [{ field: "browserReviseTransaction", before: null, after: result.data }],
-        effects: [{ kind: "audit", description: "Record the planning item revision", status: "applied" }],
-        replayed: false,
-      };
-    },
-  };
-}
-
-export function browserReviseTransactionFromResult(result: Extract<PlanningResult, { ok: true }>) {
-  return result.changes.find((change) => change.field === "browserReviseTransaction")?.after;
-}
-
 export type TeamReviseTransaction = Readonly<{
   replayed?: boolean;
   itemType?: PlanningItemReplayType;
@@ -954,12 +915,6 @@ export type TeamReviseTransaction = Readonly<{
   projectionOperationId?: string;
 }>;
 
-type StoredTeamReviseRequest = Readonly<{
-  request_hash: string;
-  response: TeamReviseTransaction | null;
-  contract_version: number | null;
-}>;
-
 type TeamReviseDependencies = Readonly<{
   supabase: SupabaseServer;
   actor: ActorContext;
@@ -968,11 +923,6 @@ type TeamReviseDependencies = Readonly<{
   parsed: Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
   preparedPreview?: PlanningItemUpdatePreview;
   onPreview?: (preview: PlanningItemUpdatePreview) => void;
-  dispatchGitHubProjections?: (
-    supabase: SupabaseServer,
-    operationId: string,
-  ) => Promise<Map<string, PlanningItemGitHubSyncResult>>;
-  scheduleAfter?: (callback: () => Promise<void>) => void;
 }>;
 
 function teamReviseChange(transaction: TeamReviseTransaction) {
@@ -991,6 +941,9 @@ function teamReviseProviderError(error: unknown): PlanningError {
   if (["P0005", "P0006", "P0007"].includes(code)) return { code: "forbidden", reason: "planningTokenRejected" };
   if (["P0008", "P0010"].includes(code)) return { code: "conflict", reason: "state" };
   if (["P0014", "P0015"].includes(code)) return { code: "conflict", reason: "state" };
+  if (code === "P0017") {
+    return { code: "conflict", reason: "state", details: { planningReviewReason: "evidenceRequired" } };
+  }
   if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
   if (["22023", "23514"].includes(code)) return { code: "invalidCommand", issues: [{ path: "command.changes", reason: "persistenceValidation" }] };
   return { code: "dependencyUnavailable", dependency: "database", retryable: true };
@@ -1016,54 +969,6 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
         return { ok: false, error: { code: "invalidCommand", issues: [{ path: "idempotencyKey", reason: "idempotencyKeyRequired" }] } };
       }
       const idempotencyKey = invocation.idempotencyKey || "";
-      const existing = invocation.mode === "commit" ? await dependencies.supabase
-        .from("team_planning_item_update_requests")
-        .select("request_hash,response,contract_version")
-        .eq("token_id", dependencies.tokenId)
-        .eq("idempotency_key", idempotencyKey)
-        .maybeSingle() : { data: null, error: null };
-      if (existing.error) return { ok: false, error: teamReviseProviderError(existing.error) };
-      const stored = existing.data as StoredTeamReviseRequest | null;
-      if (stored) {
-        if (Number(stored.contract_version || 1) < 3) {
-          return { ok: false, error: { code: "conflict", reason: "idempotency" } };
-        }
-        const itemType = stored.response?.itemType;
-        if (!itemType) return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: false } };
-        if (itemType === "epic" && !["ceo", "deputy"].includes(invocation.actor.platformRole)) {
-          return { ok: false, error: { code: "forbidden", reason: "reviseEpicRequiresOperationalLead" } };
-        }
-        const requestHash = planningItemUpdateHash({
-          itemId: dependencies.itemId,
-          itemType,
-          expectedUpdatedAt: dependencies.parsed.expectedUpdatedAt,
-          patch: dependencies.parsed.raw,
-        });
-        if (requestHash !== stored.request_hash) return { ok: false, error: { code: "conflict", reason: "idempotency" } };
-        let replayResponse = stored.response;
-        if (dependencies.parsed.githubSyncMode === "wait" && dependencies.dispatchGitHubProjections) {
-          await dependencies.dispatchGitHubProjections(
-            dependencies.supabase,
-            `team-update:${dependencies.tokenId}:${idempotencyKey}`,
-          );
-          const refreshed = await dependencies.supabase
-            .from("team_planning_item_update_requests")
-            .select("response")
-            .eq("token_id", dependencies.tokenId)
-            .eq("idempotency_key", idempotencyKey)
-            .single();
-          if (refreshed.error) return { ok: false, error: teamReviseProviderError(refreshed.error) };
-          replayResponse = (refreshed.data as { response: TeamReviseTransaction }).response;
-        }
-        return {
-          ok: true,
-          status: "committed",
-          items: [],
-          changes: [teamReviseChange({ ...replayResponse, replayed: true })],
-          effects: [],
-          replayed: true,
-        };
-      }
 
       const prepared = dependencies.preparedPreview ? { ok: true as const, preview: dependencies.preparedPreview } : await buildPlanningItemUpdatePreview({
           actor: { id: invocation.actor.profileId, platformRole: invocation.actor.platformRole } as AuthenticatedProfile,
@@ -1092,7 +997,7 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
       };
 
       const metadata = invocation.requestMetadata;
-      const { data, error } = await dependencies.supabase.rpc("update_team_planning_item_with_projection_transaction", {
+      const { data, error } = await dependencies.supabase.rpc("update_team_planning_item_with_review_evidence_transaction_v1", {
         p_token_id: dependencies.tokenId,
         p_profile_id: invocation.actor.profileId,
         p_item_type: preview.itemType,
@@ -1104,28 +1009,14 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
         p_changed_fields: preview.changedFields,
         p_system_effects: preview.systemEffects,
         p_projection_command: dependencies.parsed.githubSync || null,
+        p_evidence_exception_note: String(preview.normalizedPatch.evidenceExceptionNote || "") || null,
         p_request_ip: metadata?.requestIp || null,
         p_user_agent: metadata?.userAgent || null,
       });
       if (error) return { ok: false, error: teamReviseProviderError(error) };
-      let transaction = data as TeamReviseTransaction | null;
+      const transaction = data as TeamReviseTransaction | null;
       if (!transaction) return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: false } };
 
-      const syncMode = dependencies.parsed.githubSyncMode;
-      if (syncMode && transaction.projectionOperationId) {
-        const projectionOperationId = transaction.projectionOperationId;
-        if (syncMode === "wait") {
-          if (!dependencies.dispatchGitHubProjections) return { ok: false, error: { code: "dependencyUnavailable", dependency: "github", retryable: true } };
-          const results = await dependencies.dispatchGitHubProjections(dependencies.supabase, projectionOperationId);
-          transaction = { ...transaction, githubSync: results.get(preview.itemId) };
-        } else {
-          if (dependencies.scheduleAfter && dependencies.dispatchGitHubProjections) {
-            dependencies.scheduleAfter(async () => {
-              await dependencies.dispatchGitHubProjections!(dependencies.supabase, projectionOperationId);
-            });
-          }
-        }
-      }
       return {
         ok: true,
         status: "committed",

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  editableTeamWorkweekDraft,
   emptyTeamWorkweekWindows,
   nextMondayIso,
   validatePrivateTeamWorkweekDraft,
@@ -9,6 +10,7 @@ import {
   type PrivateTeamWorkweekDraft,
   type PrivateTeamWorkweekVersion,
   type TeamWorkweekDayKey,
+  type TeamWorkweekEditBase,
   type TeamWorkweekConflict,
   type TeamWorkweekWindow,
 } from "../model/team-workweek-draft";
@@ -41,10 +43,16 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     };
   }, []);
 
-  const applyVersion = useCallback((nextVersion: PrivateTeamWorkweekVersion | null, emptyEffectiveFrom = nextMondayIso()) => {
-    const nextDraft = nextVersion
-      ? { effectiveFrom: nextVersion.effectiveFrom, windows: nextVersion.windows }
-      : initialDraft(emptyEffectiveFrom);
+  const applyVersion = useCallback((
+    nextVersion: PrivateTeamWorkweekVersion | null,
+    emptyEffectiveFrom = nextMondayIso(),
+    editBase: TeamWorkweekEditBase | null = null,
+  ) => {
+    const nextDraft = editableTeamWorkweekDraft({
+      editBase,
+      minimumEffectiveFrom: emptyEffectiveFrom,
+      version: nextVersion,
+    });
     setVersion(nextVersion);
     setDraft(nextDraft);
     setBaseline(nextDraft);
@@ -58,6 +66,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         version?: PrivateTeamWorkweekVersion | null;
         publication?: OwnTeamWorkweekPublication | null;
         latestPublished?: OwnTeamWorkweekPublication | null;
+        editBase?: TeamWorkweekEditBase | null;
         minimumEffectiveFrom?: string;
         error?: string;
       }>("/api/team-workweek/private-draft", { cache: "no-store", useDevProfileOverride: false });
@@ -68,7 +77,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         setPublication(body.publication || null);
         setLatestPublished(body.latestPublished || null);
         setMinimumEffectiveFrom(body.minimumEffectiveFrom);
-        applyVersion(body.version, body.minimumEffectiveFrom);
+        applyVersion(body.version, body.minimumEffectiveFrom, body.editBase || null);
       }
       const conflictResponse = await apiClient.requestJson<{ conflict?: TeamWorkweekConflict | null; error?: string }>(
         "/api/team-workweek/conflict",
@@ -154,7 +163,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         applyVersion(saved);
         setPublication(null);
         setMessageTone("success");
-        setMessage("Neue private Wochenversion gespeichert. Im Team und in Google bleibt sie unveröffentlicht.");
+        setMessage("Änderung privat gespeichert. Im Team und in Google bleibt sie bis zur Veröffentlichung unverändert.");
       }
       return true;
     } catch (error) {
@@ -171,7 +180,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   const publish = async () => {
     if (!version || dirty) {
       setMessageTone("warning");
-      setMessage(dirty ? "Speichere die private Version vor der Veröffentlichung." : "Bereite zuerst eine private Grundwoche vor.");
+      setMessage(dirty ? "Speichere die Änderung vor der Veröffentlichung." : "Ändere und speichere zuerst deine Arbeitswoche.");
       return false;
     }
     setPending(true);
@@ -223,15 +232,15 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
           : "";
         setMessageTone("warning");
         setMessage(body?.publication?.recovery === "reconnect"
-          ? `Die neue Grundwoche bleibt privat; die bisherige Teamversion bleibt sichtbar. Verbinde Google erneut.${lastSuccessfulSync}`
+          ? `Die geänderte Arbeitswoche bleibt privat; der bisherige Teamstand bleibt sichtbar. Verbinde Google erneut.${lastSuccessfulSync}`
           : body?.publication?.recovery === "identity_conflict"
-            ? `Die neue Grundwoche bleibt privat; die bisherige Teamversion bleibt sichtbar. Ein Google-Eintrag wurde seit dem letzten Sync geändert und wird nicht überschrieben.${lastSuccessfulSync}`
-            : `Synchronisierung verzögert. Die neue Grundwoche bleibt privat, die bisherige Teamversion bleibt sichtbar und der Vorgang kann sicher wiederholt werden.${lastSuccessfulSync}`);
+            ? `Die geänderte Arbeitswoche bleibt privat; der bisherige Teamstand bleibt sichtbar. Ein Google-Eintrag wurde seit dem letzten Sync geändert und wird nicht überschrieben.${lastSuccessfulSync}`
+            : `Synchronisierung verzögert. Die geänderte Arbeitswoche bleibt privat, der bisherige Teamstand bleibt sichtbar und der Vorgang kann sicher wiederholt werden.${lastSuccessfulSync}`);
         return false;
       }
       await load();
       setMessageTone("success");
-      setMessage("Grundwoche wurde mit Google synchronisiert und im Team veröffentlicht.");
+      setMessage("Arbeitswoche wurde mit Google synchronisiert und im Team veröffentlicht.");
       window.dispatchEvent(new Event(TEAM_WORKWEEK_PUBLISHED_EVENT));
       return true;
     } catch (error) {
@@ -311,7 +320,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       await load();
       if (body.reconciliation.state === "updated") {
         setMessageTone("success");
-        setMessage("Google-Änderung wurde als neue Wochenversion ab dem nächsten Montag bestätigt.");
+        setMessage("Google-Änderung wurde für die Bearbeitung ab dem nächsten Montag übernommen.");
         window.dispatchEvent(new Event(TEAM_WORKWEEK_PUBLISHED_EVENT));
         return true;
       }

@@ -114,7 +114,7 @@ GitHub itself does not automatically redeliver failed HTTP deliveries. Inspect t
 3. No GitHub Actions secret is required for webhook recovery. Vercel supplies `CRON_SECRET` as the bearer credential for the production Cron invocation.
 4. Configure the GitHub App webhook URL as `https://founder-ops.findmydoc.eu/api/github/webhooks`, use `application/json`, keep SSL verification enabled, use the same high-entropy webhook secret, and subscribe to `issues`, `issue_comment`, `sub_issues`, and `issue_dependencies`.
 5. Configure a separate organization webhook at the same URL with `application/json`, SSL verification, and the same secret. Subscribe that organization webhook only to `projects_v2_item`; GitHub exposes this event to organization webhooks, not GitHub App webhooks.
-6. Grant the GitHub App the existing least-privilege Issue and organization Project access needed for read/write projection calls.
+6. Grant the GitHub App the existing least-privilege Issue and organization Project access needed for read/write projection calls, plus read access to organization members for `@all` team validation.
 7. Keep the App installation restricted to the approved repositories and add a platform firewall or rate-limit rule for `/api/github/webhooks`.
 8. Verify a signed `ping`, an authorized structured Issue edit, a locked or unauthorized edit that is corrected, comment create/edit/delete, one managed Project field, one sub-issue change, and one dependency change. Confirm both journal completion and the final FounderOps/GitHub state.
 9. Confirm the Vercel Cron Job runs after production deployment and that its invocation reports no projection dispatch failure and zero outstanding or terminal deliveries before relying on the scheduled path.

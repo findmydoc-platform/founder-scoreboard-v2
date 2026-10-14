@@ -40,6 +40,7 @@ type GitHubRequestBaseOptions = {
   body?: unknown;
   apiVersion?: string;
   cache?: RequestCache;
+  signal?: AbortSignal;
   errorMessage: string;
   allowedStatuses?: readonly number[];
 };
@@ -186,8 +187,10 @@ export async function githubRequest(url: string, options: GitHubRequestOptions) 
         headers: githubHeaders(options.token, options.apiVersion),
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
         ...(options.cache ? { cache: options.cache } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
       });
     } catch {
+      if (options.signal?.aborted) throw networkError(options.errorMessage, method);
       if (attempt < maximumAttempts) {
         await wait(fallbackReadRetryDelayMs);
         continue;

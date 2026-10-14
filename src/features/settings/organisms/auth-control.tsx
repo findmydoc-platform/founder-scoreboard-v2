@@ -1,9 +1,12 @@
 "use client";
 
-import { SiGithub } from "@icons-pack/react-simple-icons";
+import { SiGithub, SiGoogle } from "@icons-pack/react-simple-icons";
 import type { User } from "@supabase/supabase-js";
-import { Check, Settings } from "lucide-react";
+import { Check, Settings, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
+import { AdministratorCountdown } from "@/features/administrator-access/molecules/administrator-countdown";
+import { UiButton } from "@/shared/atoms/ui-primitives";
 
 export type TestProfileMenuOption = {
   id: string;
@@ -22,6 +25,13 @@ export function AuthControl({
   onSignIn,
   onSignOut,
   onOpenProfile,
+  administratorAccess,
+  administratorAccessBusy = false,
+  administratorRemainingSeconds = 0,
+  canOpenAdministration = false,
+  onActivateAdministrator,
+  onEndAdministrator,
+  onOpenAdministration,
   testProfileOptions = [],
   activeTestProfileId = "",
   onTestProfileChange,
@@ -32,6 +42,13 @@ export function AuthControl({
   onSignIn: () => void;
   onSignOut: () => void;
   onOpenProfile?: () => void;
+  administratorAccess?: AdministratorAccessSnapshot;
+  administratorAccessBusy?: boolean;
+  administratorRemainingSeconds?: number;
+  canOpenAdministration?: boolean;
+  onActivateAdministrator?: () => void;
+  onEndAdministrator?: () => void;
+  onOpenAdministration?: () => void;
   testProfileOptions?: TestProfileMenuOption[];
   activeTestProfileId?: string;
   onTestProfileChange?: (profileId: string) => void;
@@ -42,8 +59,33 @@ export function AuthControl({
   const menuRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [loginMode, setLoginMode] = useState<string | null>(null);
+  const [workspaceAccountResult, setWorkspaceAccountResult] = useState<{ userId: string; linked: boolean; workspaceEmail?: string; workspaceAvatarUrl?: string } | null>(null);
+  const userId = user?.id;
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/login-mode", { cache: "no-store" }).then(response => response.json()).then(data => {
+      if (active) setLoginMode(data.mode);
+    }).catch(() => { if (active) setLoginMode("unavailable"); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!userId || loginMode === "legacy") return;
+    let active = true;
+    fetch("/api/auth/account-state", { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(data => {
+      if (active) setWorkspaceAccountResult(data ? { ...data, userId } : null);
+    }).catch(() => { if (active) setWorkspaceAccountResult(null); });
+    return () => { active = false; };
+  }, [userId, loginMode]);
+  const loginReady = loginMode === "legacy" || loginMode === "linking" || loginMode === "google";
+  const googleLogin = loginMode !== "legacy";
+  const workspaceAccount = workspaceAccountResult?.userId === user?.id ? workspaceAccountResult : null;
+
   const githubLogin = getUserMetadataString(user, "user_name") || getUserMetadataString(user, "preferred_username");
-  const avatarUrl = getUserMetadataString(user, "avatar_url");
+  const avatarUrl = loginMode === "legacy" ? getUserMetadataString(user, "avatar_url") : workspaceAccount?.linked ? workspaceAccount.workspaceAvatarUrl || "" : "";
+  const avatarAlt = loginMode === "legacy" ? "" : "Google-Profilbild";
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
+  const visibleAvatarUrl = avatarUrl === failedAvatarUrl ? "" : avatarUrl;
   const displayName = getUserMetadataString(user, "full_name") || getUserMetadataString(user, "name") || githubLogin || user?.email || "";
   const activeTestProfile = testProfileOptions.find((profile) => profile.id === activeTestProfileId) || null;
 
@@ -83,17 +125,20 @@ export function AuthControl({
 
   if (!user) {
     return (
+      <div className="grid gap-4">
       <button
         type="button"
         onClick={onSignIn}
-        disabled={busy}
+        disabled={busy || !loginReady}
         className={variant === "gate"
           ? "inline-flex h-12 w-full items-center justify-center gap-3 rounded-[5px] bg-[#1557ff] px-4 text-base font-medium text-white shadow-sm transition hover:bg-[#0d47e5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1557ff] disabled:cursor-not-allowed disabled:opacity-60"
           : "inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"}
       >
-        <SiGithub size={variant === "gate" ? 21 : 17} aria-hidden="true" />
-        {busy ? "GitHub wird geöffnet..." : "Mit GitHub anmelden"}
+        {googleLogin ? <SiGoogle size={variant === "gate" ? 21 : 17} aria-hidden="true" /> : <SiGithub size={variant === "gate" ? 21 : 17} aria-hidden="true" />}
+        {!loginReady ? loginMode === "unavailable" ? "Anmeldung nicht verfügbar" : "Anmeldung wird geprüft..." : busy ? "Anmeldung wird geöffnet..." : googleLogin ? "Mit Google anmelden" : "Mit GitHub anmelden"}
       </button>
+      {loginMode === "linking" && <a className="inline-flex min-h-11 items-center text-sm text-blue-700 underline" href="/auth/link-google">Bestehendes Konto mit Google verknüpfen</a>}
+      </div>
     );
   }
 
@@ -101,9 +146,9 @@ export function AuthControl({
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <div className="flex min-w-0 items-center gap-3">
-          {avatarUrl ? (
+          {visibleAvatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover" />
+            <img src={visibleAvatarUrl} alt={avatarAlt} onError={() => setFailedAvatarUrl(visibleAvatarUrl)} className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover" />
           ) : (
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700">
               {displayName.slice(0, 1).toUpperCase() || "?"}
@@ -111,7 +156,7 @@ export function AuthControl({
           )}
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold text-slate-950">{displayName}</div>
-            <div className="truncate text-xs text-slate-500">{githubLogin ? `@${githubLogin}` : user.email || "GitHub angemeldet"}</div>
+            <div className="truncate text-xs text-slate-500">{workspaceAccount?.workspaceEmail || (loginMode === "legacy" ? user.email || "GitHub angemeldet" : "Workspace-Adresse wird geprüft")}</div>
           </div>
           <button
             type="button"
@@ -155,11 +200,12 @@ export function AuthControl({
           <span className="grid h-8 w-8 place-items-center rounded-full bg-emerald-50 text-[10px] font-bold text-emerald-800">
             {activeTestProfile.initials}
           </span>
-        ) : avatarUrl ? (
+        ) : visibleAvatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={avatarUrl}
-            alt=""
+            src={visibleAvatarUrl}
+            alt={avatarAlt}
+            onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
             className="h-8 w-8 rounded-full bg-slate-100 object-cover"
           />
         ) : (
@@ -178,11 +224,12 @@ export function AuthControl({
         >
           <div className="grid gap-4">
             <div className="flex min-w-0 items-center gap-3">
-              {avatarUrl ? (
+              {visibleAvatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={avatarUrl}
-                  alt=""
+                  src={visibleAvatarUrl}
+                  alt={avatarAlt}
+                  onError={() => setFailedAvatarUrl(visibleAvatarUrl)}
                   className="h-11 w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover"
                 />
               ) : (
@@ -191,10 +238,12 @@ export function AuthControl({
                 </div>
               )}
               <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Angemeldet mit GitHub</div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">FounderOps-Konto</div>
                 <div className="mt-1 truncate font-semibold text-slate-950">{displayName}</div>
-                {githubLogin && <div className="truncate text-xs text-slate-500">@{githubLogin}</div>}
-                {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
+                {workspaceAccount?.linked && <div className="truncate text-xs text-emerald-700">Google verbunden</div>}
+                {workspaceAccount?.workspaceEmail ? <div className="truncate text-xs text-slate-500">{workspaceAccount.workspaceEmail}</div>
+                  : loginMode === "legacy" && user.email ? <div className="truncate text-xs text-slate-500">{user.email}</div>
+                    : <div className="truncate text-xs text-slate-500">Workspace-Adresse wird geprüft</div>}
               </div>
             </div>
             {testProfileOptions.length > 0 && onTestProfileChange ? (
@@ -218,7 +267,7 @@ export function AuthControl({
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">EA</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold">Eigene Ansicht</span>
-                      <span className="block truncate text-xs text-slate-500">Mit deinem GitHub-Konto</span>
+                      <span className="block truncate text-xs text-slate-500">Mit deinem eigenen Konto</span>
                     </span>
                     {!activeTestProfileId ? <Check size={16} className="shrink-0 text-blue-700" aria-hidden="true" /> : null}
                   </button>
@@ -255,6 +304,38 @@ export function AuthControl({
                 </div>
               </div>
             ) : null}
+            {(administratorAccess?.eligible || canOpenAdministration) ? (
+              <div className="grid gap-2 border-y border-slate-100 py-3">
+                <div className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Administration</div>
+                {administratorAccess?.active ? (
+                  <>
+                    <AdministratorCountdown remainingSeconds={administratorRemainingSeconds} className="text-red-950 [&_svg]:text-red-600" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <UiButton variant="blue" disabled={administratorAccessBusy} onClick={() => { setOpen(false); onOpenAdministration?.(); }}>
+                        <ShieldCheck size={16} aria-hidden="true" />Öffnen
+                      </UiButton>
+                      <UiButton variant="red" disabled={administratorAccessBusy} onClick={() => { setOpen(false); onEndAdministrator?.(); }}>
+                        Adminzugang beenden
+                      </UiButton>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {administratorAccess?.eligible && (
+                      <UiButton variant="primary" size="lg" disabled={administratorAccessBusy} onClick={() => { setOpen(false); onActivateAdministrator?.(); }} data-tour-id="activate-administrator-access">
+                        <ShieldCheck size={16} aria-hidden="true" />Adminzugang für 60 Minuten aktivieren
+                      </UiButton>
+                    )}
+                    {canOpenAdministration && (
+                      <UiButton disabled={administratorAccessBusy} onClick={() => { setOpen(false); onOpenAdministration?.(); }}>
+                        Personen & Zugänge öffnen
+                      </UiButton>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : null}
+            {loginMode === "linking" && workspaceAccount?.linked === false && <a className="min-h-11 rounded border border-blue-200 p-3 text-blue-800" href="/auth/link-google">Google-Konto verknüpfen</a>}
             <button
               type="button"
               data-account-menu-autofocus={testProfileOptions.length > 0 ? undefined : true}

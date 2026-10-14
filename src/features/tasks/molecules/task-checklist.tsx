@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckSquare, Square } from "lucide-react";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
 
 type ChecklistLine = {
   checked: boolean;
@@ -42,24 +43,34 @@ export function TaskChecklist({
   return (
     <div className="grid gap-1.5">
       {lines.map((line, index) => (
-        <button
+        <div
           key={`${line.raw}-${index}`}
-          type="button"
-          disabled={!onChange}
-          onClick={() => {
-            if (!onChange) return;
-            const nextLines = lines.map((item, itemIndex) => (itemIndex === index ? { ...item, checked: !item.checked } : item));
-            onChange(serializeChecklist(nextLines));
-          }}
-          className="group flex items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm leading-6 text-slate-700 hover:bg-slate-50 disabled:cursor-default disabled:hover:bg-transparent"
+          role="group"
+          aria-label={line.text}
+          className="group flex min-w-0 items-start gap-2 rounded-md text-sm leading-6 text-slate-700"
         >
-          {line.checked ? (
-            <CheckSquare size={16} className="mt-1 shrink-0 text-blue-600" />
-          ) : (
-            <Square size={16} className="mt-1 shrink-0 text-slate-400 group-hover:text-slate-600" />
-          )}
-          <span className={line.checked ? "text-slate-500 line-through decoration-slate-300" : ""}>{line.text}</span>
-        </button>
+          <button
+            type="button"
+            disabled={!onChange}
+            aria-pressed={line.checked}
+            aria-label={line.checked ? "Kriterium als offen markieren" : "Kriterium als erledigt markieren"}
+            onClick={() => {
+              if (!onChange) return;
+              const nextLines = lines.map((item, itemIndex) => (itemIndex === index ? { ...item, checked: !item.checked } : item));
+              onChange(serializeChecklist(nextLines));
+            }}
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-md hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-default"
+          >
+            {line.checked ? (
+              <CheckSquare size={16} className="text-blue-600" aria-hidden="true" />
+            ) : (
+              <Square size={16} className="text-slate-400 group-hover:text-slate-600" aria-hidden="true" />
+            )}
+          </button>
+          <span className={`min-w-0 py-2 [overflow-wrap:anywhere] ${line.checked ? "text-slate-500 line-through decoration-slate-300" : ""}`}>
+            <LinkifiedText value={line.text} />
+          </span>
+        </div>
       ))}
     </div>
   );

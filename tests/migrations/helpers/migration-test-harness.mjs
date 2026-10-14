@@ -1,8 +1,8 @@
-import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import pg from "pg";
+import { expect } from "vitest";
 
 const supabaseCli = resolve(process.cwd(), "node_modules", ".bin", "supabase");
 
@@ -34,8 +34,10 @@ function runSupabase(args, { capture = false } = {}) {
 }
 
 export async function resetLocalDatabaseTo(version) {
-  assert.match(version, /^\d{14}$/u);
-  await runSupabase(["db", "reset", "--local", "--version", version, "--no-seed"]);
+  expect(version).toMatch(/^\d{14}$/u);
+  await runSupabase(["db", "reset", "--local", "--version", version, "--no-seed"], {
+    capture: true,
+  });
 }
 
 async function localDatabaseUrl() {
@@ -71,7 +73,7 @@ export async function applyMigration(client, migrationFile) {
 export async function snapshotRows(client, { table, columns, orderBy }) {
   const identifiers = [table, ...columns, ...orderBy];
   for (const identifier of identifiers) {
-    assert.match(identifier, /^[a-z_][a-z0-9_]*$/u);
+    expect(identifier).toMatch(/^[a-z_][a-z0-9_]*$/u);
   }
   const selected = columns.map((column) => `"${column}"`).join(", ");
   const ordering = orderBy.map((column) => `"${column}"`).join(", ");
@@ -85,5 +87,5 @@ export async function snapshotRows(client, { table, columns, orderBy }) {
 }
 
 export function assertRowsPreserved(before, after) {
-  assert.deepEqual(after, before);
+  expect(after).toEqual(before);
 }

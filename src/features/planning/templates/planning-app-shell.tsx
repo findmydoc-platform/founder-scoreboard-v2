@@ -14,17 +14,22 @@ import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
+import type { AdministratorAccessController } from "@/features/administrator-access/hooks/use-administrator-access-controller";
+import type { AdministrationWorkspaceModel } from "@/features/administration/model/administration-read-model";
 
 type PlanningAppShellProps = {
   authRequired: boolean;
   controller: PlanningAppController;
+  administratorAccessController: AdministratorAccessController;
+  initialAdministrationModel?: AdministrationWorkspaceModel | null;
+  onAdministratorAccessInvalid: () => void;
   source: "supabase";
   decisionLogResult?: NotionDecisionLogResult;
   initialBacklogModel?: BacklogModel;
   initialSprintModel?: SprintWorkspaceModel;
 };
 
-export function PlanningAppShell({ authRequired, controller, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningAppShellProps) {
+export function PlanningAppShell({ authRequired, controller, administratorAccessController, initialAdministrationModel = null, onAdministratorAccessInvalid, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningAppShellProps) {
   const {
     authAvailable,
     authBusy,
@@ -130,13 +135,14 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
           authAvailable={authAvailable}
           authUserEmail={authUser?.email || ""}
           currentPlatformRole={currentProfile?.platformRole || ""}
+          canAccessAdministration={administratorAccessController.authority.capabilities.manageAdministratorEligibility}
           mobileOpen={mobileNavOpen}
           onMobileClose={() => setMobileNavOpen(false)}
         />
       ) : null}
 
       <main className={focusModeActive ? "min-w-0" : "app-sidebar-main"}>
-        <PlanningHeader controller={controller} />
+        <PlanningHeader controller={controller} administratorAccessController={administratorAccessController} />
 
         <FeatureTourProvider
           apiClient={controller.apiClient}
@@ -175,7 +181,16 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
           />
         )}
 
-        <PlanningWorkspaceRenderer controller={controller} source={source} decisionLogResult={decisionLogResult} initialBacklogModel={initialBacklogModel} initialSprintModel={initialSprintModel} />
+        <PlanningWorkspaceRenderer
+          controller={controller}
+          administrationCapabilities={administratorAccessController.authority.capabilities}
+          initialAdministrationModel={initialAdministrationModel}
+          onAdministratorAccessInvalid={onAdministratorAccessInvalid}
+          source={source}
+          decisionLogResult={decisionLogResult}
+          initialBacklogModel={initialBacklogModel}
+          initialSprintModel={initialSprintModel}
+        />
       </main>
 
       <PlanningOverlayLayer controller={controller} />

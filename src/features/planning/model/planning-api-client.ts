@@ -46,9 +46,26 @@ export function requestPlanningShellStateRevision(apiClient: BrowserApiClient) {
   return apiClient.requestJson<{ error?: string; revision?: PlanningTaskRevision }>("/api/planning-revision");
 }
 
-export function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: readonly PlanningHeaderSlotKey[], options: { signal?: AbortSignal } = {}) {
+export async function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: readonly PlanningHeaderSlotKey[], options: { signal?: AbortSignal } = {}) {
   const query = slots?.length ? `?slots=${encodeURIComponent(slots.join(","))}` : "";
-  return apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, options);
+  const controller = new AbortController();
+  const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
+  const timeout = setTimeout(() => controller.abort(new DOMException("Header request timed out.", "TimeoutError")), 15_000);
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+  try {
+    return await Promise.race([
+      apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, { signal }),
+      aborted,
+    ]);
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", onAbort);
+  }
 }
 
 function strategicStatus(status: string) {
@@ -180,7 +197,7 @@ export function updateSprintCommitmentRequest(apiClient: BrowserApiClient, commi
 }
 
 export function updateProfileRequest(apiClient: BrowserApiClient, profileId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; profile?: Profile; notificationPreferences?: NotificationPreference[] }>(`/api/profiles/${profileId}`, {
+  return apiClient.requestJson<{ error?: string; profile?: Partial<Profile>; notificationPreferences?: NotificationPreference[] }>(`/api/profiles/${profileId}`, {
     method: "PATCH",
     json: payload,
   });
@@ -198,7 +215,7 @@ export function updateOwnProfileSettingsRequest(apiClient: BrowserApiClient, pay
   });
 }
 
-export function updateFounderOpsReviewWindowRequest(
+export function updateSprintReviewWindowRequest(
   apiClient: BrowserApiClient,
   expectedReviewObjectionWindowHours: number,
   reviewObjectionWindowHours: number,
@@ -207,36 +224,9 @@ export function updateFounderOpsReviewWindowRequest(
     error?: string;
     project?: { id: string; reviewObjectionWindowHours: number };
     sprints?: Array<{ id: string; reviewDueAt: string }>;
-  }>("/api/founderops-settings", {
+  }>("/api/sprints/review-window", {
     method: "PATCH",
     json: { expectedReviewObjectionWindowHours, reviewObjectionWindowHours },
-  });
-}
-
-export function updateFounderOpsGitHubProjectRequest(
-  apiClient: BrowserApiClient,
-  expectedGithubProjectOwner: string,
-  expectedGithubProjectNumber: number,
-  githubProjectOwner: string,
-  githubProjectNumber: number,
-) {
-  return apiClient.requestJson<{
-    error?: string;
-    project?: { id: string; githubProjectOwner: string; githubProjectNumber: number };
-    validation?: {
-      title: string;
-      url: string;
-      repositories: string[];
-      fields: Array<{ name: string; dataType: string }>;
-    };
-  }>("/api/founderops-settings/github-project", {
-    method: "PATCH",
-    json: {
-      expectedGithubProjectOwner,
-      expectedGithubProjectNumber,
-      githubProjectOwner,
-      githubProjectNumber,
-    },
   });
 }
 
@@ -264,21 +254,6 @@ export function createFounderEventRequest(apiClient: BrowserApiClient, payload: 
 export function updateFounderEventRequest(apiClient: BrowserApiClient, eventId: number, payload: unknown) {
   return apiClient.requestJson<{ error?: string; event?: FounderEvent }>(`/api/events/${eventId}`, {
     method: "PATCH",
-    json: payload,
-  });
-}
-
-export function notificationDeliveryStatusRequest(apiClient: BrowserApiClient) {
-  return apiClient.requestJson<{
-    googleChat?: { webhookConfigured?: boolean; apiConfigured?: boolean; deliveryEnabled?: boolean; ready?: boolean; mode?: "direct-dm" | "space-webhook" | "not-configured" };
-    googleChatConfigured?: boolean;
-    pending?: number;
-  }>("/api/notifications/deliver");
-}
-
-export function runNotificationDeliveryRequest(apiClient: BrowserApiClient, payload: Record<string, unknown>) {
-  return apiClient.requestJson<{ error?: string; sent?: number; failed?: number; skipped?: number }>("/api/notifications/deliver", {
-    method: "POST",
     json: payload,
   });
 }

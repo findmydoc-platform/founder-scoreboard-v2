@@ -13,24 +13,23 @@ import type {
   DbTaskLink,
   DbTaskRelation,
 } from "@/lib/planning-row-types";
-import { taskRowSelect } from "@/lib/planning-row-types";
+import { taskRowColumns, taskRowSelect } from "@/lib/planning-row-types";
 import { mapProfile, mapProfileUiPreference } from "@/lib/planning-profile-mappers";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { mapSprint } from "@/lib/planning-sprint-mappers";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS } from "@/lib/sprint-review-window";
 import type { Profile, Project } from "@/lib/types";
+import { withWorkspaceProfileAvatars } from "./workspace-profile-avatars";
 
 export const planningProjectId = "findmydoc-founder-execution";
-export const planningProfileSelect = "id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled";
+export const planningProfileSelect = "id,name,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color";
 
 type ProjectRow = {
   id: string;
   name: string;
   range_label: string | null;
   review_objection_window_hours: number | null;
-  github_project_owner: string | null;
-  github_project_number: number | null;
 };
 
 export function mapPlanningProject(row: ProjectRow): Project {
@@ -39,8 +38,8 @@ export function mapPlanningProject(row: ProjectRow): Project {
     name: row.name,
     range: row.range_label || "",
     reviewObjectionWindowHours: Number(row.review_objection_window_hours || DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS),
-    githubProjectOwner: row.github_project_owner || "findmydoc-platform",
-    githubProjectNumber: Number(row.github_project_number || 21),
+    githubProjectOwner: "",
+    githubProjectNumber: 0,
   };
 }
 
@@ -57,6 +56,25 @@ export function mapPlanningItemRows(rows: DbTask[], people: Profile[], links: Db
   }));
   const approvalById = new Map(items.map((item) => [item.id, item.approvalStatus]));
   return items.map((item) => item.parentTaskId ? { ...item, parentApprovalStatus: approvalById.get(item.parentTaskId) || null } : item);
+}
+
+// Description, DoD, AC, dependencies and strategy remain in the summary because
+// Planning uses them for search, structure and attention signals. Problem
+// statement stays in the DB projection for legacy Sub-Issue description fallback.
+const planningSummarySelect = `${taskRowColumns.filter((column) => ![
+  "intended_outcome", "scope_constraints", "evidence_required",
+].includes(column)).join(",")}, task_dependencies(note)`;
+
+export function mapPlanningSummaryRows(...args: Parameters<typeof mapPlanningItemRows>) {
+  return mapPlanningItemRows(...args).map((item) => ({
+    ...item,
+    problemStatement: "",
+    intendedOutcome: "",
+    scopeConstraints: "",
+    evidenceRequired: "",
+    note: "",
+    detailAvailability: "summary" as const,
+  }));
 }
 
 export async function loadPlanningItemsForReadModel(supabase: SupabaseClient) {
@@ -87,9 +105,9 @@ export async function loadPlanningWorkspaceModel(
 ): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
   const [projectResult, profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult] = await Promise.all([
-    supabase.from("projects").select("id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number").eq("id", planningProjectId).single<ProjectRow>(),
+    supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<ProjectRow>(),
     supabase.from("profiles").select(planningProfileSelect).order("name"),
-    supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", planningProjectId).order("sort_order").order("id"),
+    supabase.from(ACTIVE_TASKS_TABLE).select(planningSummarySelect).eq("project_id", planningProjectId).order("sort_order").order("id"),
     supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"),
     supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order"),
     supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"),
@@ -100,8 +118,8 @@ export async function loadPlanningWorkspaceModel(
   if (projectResult.error || !projectResult.data || profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error || sprintResult.error || relationResult.error || preferenceResult.error) {
     return { status: "unavailable" };
   }
-  const people = ((profileResult.data || []) as DbProfile[]).map(mapProfile);
-  const items = mapPlanningItemRows(
+  const people = await withWorkspaceProfileAvatars(((profileResult.data || []) as DbProfile[]).map(mapProfile));
+  const items = mapPlanningSummaryRows(
     (itemResult.data || []) as unknown as DbTask[],
     people,
     (linkResult.data || []) as DbTaskLink[],

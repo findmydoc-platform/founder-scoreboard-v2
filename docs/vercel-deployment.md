@@ -71,7 +71,7 @@ GOOGLE_CHAT_DELIVERY_ENABLED=false
 FOUNDEROPS_DELIVERY_SECRET=
 ```
 
-The FounderOps Google Workspace OAuth values belong only to Vercel Development and Production; do not expose them to Preview. `GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY` is a dedicated base64 value that decodes to exactly 32 bytes and must not reuse `GITHUB_TOKEN_ENCRYPTION_KEY`. Personal Google access and refresh tokens stay encrypted in the service-role-only Supabase vault and never belong in Vercel or Keeper.
+Configure Google Workspace OAuth values only for the environments explicitly approved for their purpose. An isolated Preview may use the approved client after its provider callback and application return URLs are registered. Calendar connections require separately approved Preview configuration. `GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY` is a dedicated base64 value that decodes to exactly 32 bytes and must not reuse `GITHUB_TOKEN_ENCRYPTION_KEY`. Personal Google access and refresh tokens stay encrypted in the service-role-only Supabase vault and never belong in Vercel or Keeper.
 
 For operational in-app delivery, set `GOOGLE_CHAT_WEBHOOK_URL` to the incoming webhook of the renamed `FounderOps` Google Chat space and set `GOOGLE_CHAT_DELIVERY_ENABLED=true` only after a controlled test. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase, and stay out of the release channel.
 
@@ -133,7 +133,9 @@ GitHub Actions executes the production flow in this order:
 
 The production migration ledger is initialized to this baseline and records every later applied migration. The deploy script fails closed when the baseline entry is missing, which prevents the current-schema baseline from being replayed over production.
 
-All later schema changes start with `pnpm run db:migration:new -- <clear_name>` and are committed under `supabase/migrations/`. Add the matching `tests/migrations/<migration-name>.test.mjs`, then run `pnpm run verify:migrations`, `pnpm run test:migrations`, and a fresh `pnpm run db:reset` before opening a pull request. Production rollback is forward-only by default: add a corrective migration. Backup restoration and migration-history repair require an explicitly approved incident procedure; the pipeline contains no automatic schema rollback.
+All later schema changes start with `pnpm run db:migration:new <clear_name>` and are committed under `supabase/migrations/`. Add `tests/migrations/<migration-name>.test.mjs` only for data transformations, deletion risk, non-additive structural changes, or authorization boundaries. Ordinary additive changes do not require a migration-specific test. Run `pnpm run verify:migrations`, `pnpm run test:migrations`, and a fresh `pnpm run db:reset` before opening a pull request. Production rollback is forward-only by default: add a corrective migration. Backup restoration and migration-history repair require an explicitly approved incident procedure; the pipeline contains no automatic schema rollback.
+
+Migration-specific tests have the same lifetime as the migration they exercise. Before a validated baseline squash, list the tests that the squash supersedes and explicitly propose removing them with the old migrations. Move durable RLS, permission, or data-integrity behavior into normal integration tests first. The baseline rebuild test remains and changes with the baseline.
 
 Configure all three production database secrets from the values shown under **Connect > Session pooler** in Supabase. To update the password from local `.env.local` without printing it, run from the repository root:
 
@@ -172,6 +174,7 @@ Before production GitHub features work, configure the GitHub App owned by `findm
 - Set `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_INSTALLATION_ID`, and either `GITHUB_APP_PRIVATE_KEY` or `GITHUB_APP_PRIVATE_KEY_PATH`.
 - Set `GITHUB_TOKEN_ENCRYPTION_KEY` to a base64 value that decodes to exactly 32 bytes.
 - Configure the GitHub App user authorization callback URL as `https://founder-ops.findmydoc.eu/api/github-app/callback`.
+- Grant the GitHub App read access to organization members so FounderOps can validate the configured team for `@all`. Keep the existing least-privilege Issue and organization Project permissions.
 - Set a high-entropy `GITHUB_APP_WEBHOOK_SECRET` and the stable numeric `GITHUB_WEBHOOK_ORGANIZATION_ID` in Vercel Production before the deployment that enables inbound delivery. If either is added after a merge deployment, rerun the protected production workflow on `main` before configuring GitHub. Do not copy the production secret into Preview; preview delivery requires a separate GitHub App or webhook configuration and secret.
 - Configure the GitHub App webhook URL as `https://founder-ops.findmydoc.eu/api/github/webhooks`, use `application/json`, keep SSL verification enabled, and subscribe to Issues, Issue comment, Sub-issues, and Issue dependencies events.
 - Configure a separate organization webhook at the same URL with the same secret, `application/json`, and SSL verification, and subscribe it only to Projects v2 item events. GitHub does not expose `projects_v2_item` to GitHub App webhooks.
@@ -223,3 +226,13 @@ Check after a successful deployment:
 - GitHub Actions job logs show no production errors.
 
 Useful commands are not part of the operator flow anymore; use the GitHub Actions run and summary instead.
+
+## Preview authentication and database isolation
+
+Production and Preview use the same Vercel project with separate environment variables. Preview deployment is optional. If no Supabase endpoint or key is assigned to Preview, the workflow skips its build and deployment. A partial configuration remains an error, including alternative Supabase variable names that the guard cannot validate. To enable deployment, configure an isolated hosted Supabase project and matching legacy anon/service-role JWT keys for Preview. `REQUIRE_SUPABASE_AUTH` must remain `true`. The workflow validates these settings before building and rejects the production project reference configured in `PRODUCTION_SUPABASE_PROJECT_REF`. Update that reference when the production database changes.
+
+Preview Google login enforces the same Workspace group, verified identity, profile binding and session rules as Production. Register the isolated Supabase provider callback in the approved Google client, and the exact protected deployment return URL in the isolated Supabase Auth settings. Configure the existing Workspace reader federation to trust only this Vercel project and its approved environments. Keep deployment protection enabled. Never copy production sessions or integration credentials into a test environment.
+
+Set a trusted HTTPS `APP_URL`, or leave it unset in Preview to use the platform-provided `VERCEL_URL`. Request Host headers cannot select a login return origin. Production still requires its configured `APP_URL`.
+
+Set `NOTION_DECISION_LOG_ENABLED=false` in an isolated test deployment to prevent Notion requests without replacing or deleting existing sensitive credentials. The integration remains enabled by default.

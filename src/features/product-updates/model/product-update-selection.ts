@@ -22,6 +22,7 @@ export function productUpdateIsActive(
   update: ProductUpdateDefinition,
   now = new Date(),
 ) {
+  if (update.draft) return false;
   const expiresAt = new Date(`${update.expiresAt}T23:59:59.999Z`);
   return Number.isFinite(expiresAt.getTime()) && expiresAt >= now;
 }

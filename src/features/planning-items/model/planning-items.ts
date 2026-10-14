@@ -192,6 +192,9 @@ export type PlanningAction =
     itemId: PlanningItemId;
     expectedRevision: PlanningRevision;
     reviewerProfileId?: ProfileId;
+    evidenceLinks?: readonly string[];
+    evidenceExceptionNote?: string;
+    mentionRecipientProfileIds?: readonly ProfileId[];
   }>
   | Readonly<{
     kind: "decideReview";
@@ -200,13 +203,18 @@ export type PlanningAction =
     decision: Extract<PlanningReviewStatus, "accepted" | "partial" | "changes_requested">;
     note: string;
     checklist: PlanningReviewChecklist;
+    mentionRecipientProfileIds?: readonly ProfileId[];
   }>
   | (VersionedItemReference & Readonly<{
     kind: "withdrawReview";
     reason: string;
+    mentionRecipientProfileIds?: readonly ProfileId[];
   }>)
   | (VersionedItemReference & Readonly<{
     kind: "reopenReview";
+    evidenceLinks?: readonly string[];
+    evidenceExceptionNote?: string;
+    mentionRecipientProfileIds?: readonly ProfileId[];
   }>)
   | Readonly<{
     kind: "assignSprint";

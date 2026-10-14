@@ -13,7 +13,7 @@ import type {
 
 export const taskDetailReadLimits = {
   ancestorDepth: 3,
-  children: 200,
+  children: 200, // Page and ID-batch size; direct children are loaded completely.
   comments: 200,
   externalComments: 300,
   blockers: 200,

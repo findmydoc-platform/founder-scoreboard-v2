@@ -6,17 +6,19 @@ import { TaskStatusControl, TaskStatusBadge } from "@/features/tasks/atoms/task-
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskTypeIndicator, taskTypeColorClassName } from "@/features/tasks/atoms/task-type-indicator";
 import { assigneeOptions, priorityOptions } from "@/features/tasks/model/task-form-options";
-import { formatDate, profileNameById, taskAssigneeLabel } from "@/lib/display";
-import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
-import type { Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import {
+  activeTaskDetailDependencyRows,
+  taskDetailOperationalHeaderView,
+  type TaskDetailRelationshipRow,
+} from "@/features/tasks/model/task-detail-operational-header-view";
+import { formatDate, taskAssigneeLabel } from "@/lib/display";
+import { priorityBadgeTone } from "@/lib/status";
+import type { Profile, Task, TaskStatus } from "@/lib/types";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiBadge } from "@/shared/atoms/ui-primitives";
 
-export type TaskDetailRelationshipRow = {
-  relation: TaskRelation;
-  task?: Task;
-};
+export type { TaskDetailRelationshipRow } from "@/features/tasks/model/task-detail-operational-header-view";
 
 export type TaskDetailOperationalHeaderProps = {
   task: Task;
@@ -152,12 +154,6 @@ function DependencyBandRow({
   );
 }
 
-function activeDependencyRows(rows: TaskDetailRelationshipRow[]): Array<TaskDetailRelationshipRow & { task: Task }> {
-  return rows.filter((row): row is TaskDetailRelationshipRow & { task: Task } => (
-    Boolean(row.task) && normalizeStatus(row.task?.status || "") !== "Erledigt"
-  ));
-}
-
 function ReviewDependencyList({
   icon,
   label,
@@ -197,8 +193,8 @@ export function TaskDetailDependencyBand({
   variant = "band",
   waitsOn,
 }: TaskDetailDependencyBandProps) {
-  const activeWaitsOn = activeDependencyRows(waitsOn);
-  const activeBlocks = activeDependencyRows(blocks);
+  const activeWaitsOn = activeTaskDetailDependencyRows(waitsOn);
+  const activeBlocks = activeTaskDetailDependencyRows(blocks);
 
   if (variant === "review") {
     return (
@@ -300,54 +296,42 @@ export function TaskDetailOperationalHeader({
 }: TaskDetailOperationalHeaderProps) {
   const generatedTitleId = useId();
   const resolvedTitleId = titleId || generatedTitleId;
-  const hierarchyTask = task.taskType === "deliverable" ? initiative || parentTask : parentTask;
-  const hierarchyFallback = task.taskType === "initiative"
-    ? "Ohne Epic"
-    : task.taskType === "deliverable"
-      ? "Ohne Initiative"
-      : task.taskType === "sub_issue"
-        ? "Parent fehlt"
-        : "";
-  const accountableAssignment = task.raciAssignments?.find((assignment) => assignment.role === "accountable");
-  const initiativeAccountableAssignment = initiative?.raciAssignments?.find((assignment) => assignment.role === "accountable");
-  const accountableLabel = task.taskType === "initiative"
-    ? profileNameById(profiles, accountableAssignment?.profileId || "")
-    : task.taskType === "deliverable" && initiative
-      ? profileNameById(profiles, initiativeAccountableAssignment?.profileId || initiative.ownerId)
-      : "";
-  const directChildren = subIssues.filter((item) => item.parentTaskId === task.id);
-  const completedChildren = directChildren.filter((item) => normalizeStatus(item.status) === "Erledigt").length;
-  const directChildLabel = task.taskType === "epic" ? "Initiativen" : task.taskType === "initiative" ? "Deliverables" : "Sub-Issues";
-  const targetDate = task.taskType === "deliverable" ? task.fixedDate : task.targetDate;
-  const showTargetDate = canManageTaskMeta || Boolean(targetDate);
+  const view = taskDetailOperationalHeaderView({
+    task,
+    initiative,
+    parentTask,
+    profiles,
+    subIssues,
+    canManageTaskMeta,
+  });
 
   return (
     <header aria-labelledby={resolvedTitleId} className={classNames("bg-white", className)}>
       <div className="grid min-w-0 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:col-start-1 sm:row-start-1">
           <TaskTypeIndicator taskType={task.taskType} className={taskTypeColorClassName(task.taskType)} />
-          {task.taskType !== "epic" && (hierarchyTask || hierarchyFallback) && (
+          {task.taskType !== "epic" && (view.hierarchyTask || view.hierarchyFallback) && (
             <span className="inline-flex min-w-0 max-w-full items-center gap-2 normal-case tracking-normal">
               <span className="hidden sm:inline" aria-hidden="true">·</span>
-              {hierarchyTask ? (
+              {view.hierarchyTask ? (
                 <TaskReferenceLink
-                  task={hierarchyTask}
+                  task={view.hierarchyTask}
                   onOpenTask={onOpenTask}
                   showIcon={false}
                   className="min-w-0 max-w-full text-slate-600"
                 >
-                  <span className="min-w-0 break-words">{hierarchyTask.title}</span>
+                  <span className="min-w-0 break-words">{view.hierarchyTask.title}</span>
                 </TaskReferenceLink>
               ) : (
-                <span className="text-slate-600">{hierarchyFallback}</span>
+                <span className="text-slate-600">{view.hierarchyFallback}</span>
               )}
             </span>
           )}
-          {accountableLabel && (
+          {view.accountableLabel && (
             <span className="inline-flex items-center gap-2 whitespace-nowrap normal-case tracking-normal">
               <span className="hidden sm:inline" aria-hidden="true">·</span>
               <span className="text-slate-600">
-                Accountable: {accountableLabel}
+                Accountable: {view.accountableLabel}
               </span>
             </span>
           )}
@@ -406,10 +390,10 @@ export function TaskDetailOperationalHeader({
               </OperationalFact>
             ))}
 
-            {showTargetDate && (canManageTaskMeta ? (
+            {view.showTargetDate && (canManageTaskMeta ? (
               <OperationalFact label={task.taskType === "deliverable" ? "Fixtermin" : "Ziel"} icon={<CalendarDays size={16} />}>
                 <CustomDatePicker
-                  value={targetDate || ""}
+                  value={view.targetDate || ""}
                   disabled={pending}
                   className="h-8 w-36 text-sm"
                   aria-label={task.taskType === "deliverable" ? "Fixtermin ändern" : "Zieltermin ändern"}
@@ -417,11 +401,11 @@ export function TaskDetailOperationalHeader({
                 />
               </OperationalFact>
             ) : (
-              <OperationalFact label={task.taskType === "deliverable" ? "Fixtermin" : "Ziel"} icon={<CalendarDays size={16} />}>{formatDate(targetDate || "", { includeYear: true })}</OperationalFact>
+              <OperationalFact label={task.taskType === "deliverable" ? "Fixtermin" : "Ziel"} icon={<CalendarDays size={16} />}>{formatDate(view.targetDate || "", { includeYear: true })}</OperationalFact>
             ))}
 
-            {subIssuesKnown && directChildren.length > 0 && (
-              <DirectChildProgress completed={completedChildren} label={directChildLabel} total={directChildren.length} />
+            {subIssuesKnown && view.directChildCount > 0 && (
+              <DirectChildProgress completed={view.completedChildCount} label={view.directChildLabel} total={view.directChildCount} />
             )}
           </>
         ) : null}

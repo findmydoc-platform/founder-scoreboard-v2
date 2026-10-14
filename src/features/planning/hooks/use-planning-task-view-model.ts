@@ -9,15 +9,17 @@ type UsePlanningTaskViewModelOptions = {
   currentProfile: Profile | null;
   data: PlanningShellState;
   filters: PlanningFilters;
+  includeAssignedSubIssueParents?: boolean;
 };
 
 export function usePlanningTaskViewModel({
   currentProfile,
   data,
   filters,
+  includeAssignedSubIssueParents = false,
 }: UsePlanningTaskViewModelOptions) {
   return useMemo(
-    () => buildPlanningTaskTableViewModel({ currentProfile, data, filters }),
-    [currentProfile, data, filters],
+    () => buildPlanningTaskTableViewModel({ currentProfile, data, filters, includeAssignedSubIssueParents }),
+    [currentProfile, data, filters, includeAssignedSubIssueParents],
   );
 }
