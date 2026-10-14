@@ -28,6 +28,7 @@ export type PlanningBootstrapStateOptions = {
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
   initialAuthError?: string;
+  operationalCorrection?: boolean;
 };
 
 export function usePlanningBootstrapState({
@@ -40,6 +41,7 @@ export function usePlanningBootstrapState({
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
   initialAuthError = "",
+  operationalCorrection = false,
 }: PlanningBootstrapStateOptions) {
   const safeInitialData = useMemo(() => normalizePlanningShellState(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
@@ -104,13 +106,14 @@ export function usePlanningBootstrapState({
     workspace,
   });
   const canManageTaskMeta = requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
+  const canCorrectOperationally = operationalCorrection;
   const canManageFinalTaskStatus = requestContext.currentProfile?.platformRole === "ceo";
   const canChangeTaskStatus = useCallback((task: Task) => (
     task.reviewStatus !== "requested"
     &&
     (normalizeStatus(task.status) !== "Erledigt" || canManageFinalTaskStatus)
-    && (canManageTaskMeta || taskBelongsToProfile(task, requestContext.currentProfile))
-  ), [canManageFinalTaskStatus, canManageTaskMeta, requestContext.currentProfile]);
+    && (canManageTaskMeta || canCorrectOperationally || taskBelongsToProfile(task, requestContext.currentProfile))
+  ), [canCorrectOperationally, canManageFinalTaskStatus, canManageTaskMeta, requestContext.currentProfile]);
   const dataRefresh = useCurrentWorkspaceModelRefresh({
     apiClient: requestContext.apiClient,
     authUser: auth.authUser,
@@ -142,6 +145,7 @@ export function usePlanningBootstrapState({
     ...viewState,
     authAvailable,
     canChangeTaskStatus,
+    canCorrectOperationally,
     canManageFinalTaskStatus,
     canManageTaskMeta,
     currentProfileId,

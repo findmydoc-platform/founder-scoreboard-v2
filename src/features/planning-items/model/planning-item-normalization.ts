@@ -1,3 +1,5 @@
+import { codepointLength, contentLengthError } from "@/lib/github-issue-content";
+import { planningCriteria } from "./planning-item-content";
 import { cleanText } from "@/lib/api-input";
 import { normalizeLookup, slugify } from "@/lib/slug";
 import {
@@ -57,12 +59,12 @@ export function validatePlanningItemField(key: PlanningItemFieldKey, value: unkn
 
   if (rule.kind === "string") {
     if (typeof value !== "string") return "muss Text sein";
-    if ("minLength" in rule && value.trim().length < rule.minLength) return `muss mindestens ${rule.minLength} Zeichen enthalten`;
-    if (value.length > rule.maxLength) return `darf höchstens ${rule.maxLength} Zeichen enthalten`;
+    if ("minLength" in rule && codepointLength(value.trim()) < rule.minLength) return `muss mindestens ${rule.minLength} Zeichen enthalten`;
+    if (codepointLength(value) > rule.maxLength) return `darf höchstens ${rule.maxLength} Zeichen enthalten`;
     return "";
   }
   if (rule.kind === "string-or-string-array") {
-    if (typeof value === "string") return value.length <= rule.maxLength ? "" : `darf höchstens ${rule.maxLength} Zeichen enthalten`;
+    if (typeof value === "string") return codepointLength(value) <= rule.maxLength ? "" : `darf höchstens ${rule.maxLength} Zeichen enthalten`;
     if (Array.isArray(value) && value.every((item) => typeof item === "string")) return "";
     return "muss Text oder eine Liste aus Texten sein";
   }
@@ -90,14 +92,16 @@ export type StrictPatchNormalization<T> =
   | { ok: true; value: T }
   | { ok: false; error: string };
 
-function optionalPatchText(value: unknown, maxLength: number): StrictPatchNormalization<string | null> {
+function optionalPatchText(value: unknown, maxLength?: number): StrictPatchNormalization<string | null> {
   if (value === null) return { ok: true, value: null };
   if (typeof value !== "string") return { ok: false, error: "muss Text oder null sein" };
-  const text = cleanText(value, maxLength);
+  const text = value.trim();
+  const lengthError = maxLength === undefined ? null : contentLengthError("text", text, maxLength, "Der Text");
+  if (lengthError) return { ok: false, error: lengthError.message };
   return { ok: true, value: text || null };
 }
 
-export function normalizePatchText(value: unknown, maxLength: number, required = false): StrictPatchNormalization<string | null> {
+export function normalizePatchText(value: unknown, maxLength?: number, required = false): StrictPatchNormalization<string | null> {
   const normalized = optionalPatchText(value, maxLength);
   if (!normalized.ok) return normalized;
   if (required && !normalized.value) return { ok: false, error: "darf nicht leer sein" };
@@ -106,15 +110,11 @@ export function normalizePatchText(value: unknown, maxLength: number, required =
 
 export function normalizePatchAcceptanceCriteria(value: unknown): StrictPatchNormalization<string | null> {
   if (value === null) return { ok: true, value: null };
-  if (typeof value === "string") return normalizePatchText(value, 6_000);
+  if (typeof value === "string") return normalizePatchText(value);
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
     return { ok: false, error: "muss Text, eine Textliste oder null sein" };
   }
-  const text = value
-    .map((item) => cleanText(item, 1_000))
-    .filter(Boolean)
-    .join("\n");
-  return { ok: true, value: text || null };
+  return normalizePatchText(planningCriteria(value));
 }
 
 export function normalizePatchDate(value: unknown): StrictPatchNormalization<string | null> {

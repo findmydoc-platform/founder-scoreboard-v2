@@ -36,3 +36,11 @@ export function isUsefulActivity(activity: Pick<TaskActivity, "action">) {
     && activity.action !== "task.github_comments_imported"
     && !activity.action.startsWith("task.focus_");
 }
+
+export function isReviewDecisionActivity(activity: Pick<TaskActivity, "action" | "message">) {
+  if (activity.action === "task.review") return true;
+  const message = repairGermanText(activity.message).trim();
+  return message.startsWith("Review finalisiert:")
+    || message.startsWith("Kleine Nacharbeit angefordert:")
+    || message.startsWith("Grundlegende Nacharbeit angefordert:");
+}

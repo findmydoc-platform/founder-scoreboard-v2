@@ -35,7 +35,16 @@ export function usePlanningDerivedState({
   view,
   workspace,
 }: UsePlanningDerivedStateOptions) {
-  const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters });
+  const {
+    metrics,
+    viewerOpenSubIssueIdsByDeliverableId,
+    visibleTasks,
+  } = usePlanningTaskViewModel({
+    currentProfile,
+    data,
+    filters,
+    includeAssignedSubIssueParents: view === "board" && planningLevel === "deliverable",
+  });
   const filtersAvailable = planningWorkspaces.includes(workspace);
   const headerActions = usePlanningHeaderActions({
     currentProfile,
@@ -54,6 +63,7 @@ export function usePlanningDerivedState({
     headerActions,
     metrics,
     statusGuardTask,
+    viewerOpenSubIssueIdsByDeliverableId,
     visibleTasks,
   };
 }

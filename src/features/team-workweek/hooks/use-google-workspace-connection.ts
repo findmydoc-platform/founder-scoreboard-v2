@@ -22,7 +22,6 @@ const EMPTY_DISCONNECT: GoogleWorkspaceDisconnectView = {
   futureSeriesCount: 0,
   pendingSeriesCount: 0,
   teamVisibilityWillBeDisabled: false,
-  connectionWillBeRevoked: true,
 };
 
 function callbackErrorFromLocation() {
@@ -101,7 +100,7 @@ export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient) {
     setMessage("");
     try {
       const { response, body } = await apiClient.requestJson<{
-        result?: { state: "completed" | "cleaning" | "cleanup_pending" | "revoke_pending"; recovery: "retry" | "reconnect" | null };
+        result?: { state: "completed" | "cleaning" | "cleanup_pending" | "remove_pending"; recovery: "retry" | "reconnect" | null };
         error?: string;
       }>("/api/google-workspace/disconnect", {
         method: "POST",
@@ -116,7 +115,7 @@ export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient) {
         setMessage(body.result.state === "completed"
           ? "Google-Verbindung getrennt. Die Grundwoche bleibt privat und inaktiv erhalten."
           : body.result.recovery === "reconnect"
-            ? "Der externe Widerruf ist bestätigt. Die Grundwoche ist nicht mehr im Team sichtbar; markierte Serien warten auf eine spätere Bereinigung."
+            ? "Die Google-Verbindung muss erneuert werden, bevor die Trennung fortgesetzt werden kann."
             : "Die Trennung ist noch nicht vollständig bestätigt. Bereits bestätigte Schritte werden beim nächsten Versuch nicht wiederholt.");
       }
       return body.result.state === "completed";

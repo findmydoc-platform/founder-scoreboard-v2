@@ -99,6 +99,61 @@ test("compact Sub-Issue creation keeps optional work brief fields for the edit f
   });
 });
 
+test("manual Deliverable creation excludes the client-only GitHub flag from the API payload", () => {
+  const payload = taskCreationRequestPayload({
+    creationRequestId: "019fb484-68c2-7000-8000-000000000002",
+    title: "Create policy for AI content",
+    description: "Optional context",
+    problemStatement: "The policy is missing.",
+    intendedOutcome: "The policy is approved.",
+    scopeConstraints: "Website content only.",
+    acceptanceCriteria: "Labels are documented.",
+    evidenceRequired: "Link the approved policy.",
+    taskType: "deliverable",
+    parentTaskId: "initiative-one",
+    assignee: "founder-one",
+    priority: "P2",
+    status: "Offen",
+    workstream: "Legal",
+    fixedDate: "2026-09-06",
+    targetDate: "",
+    hours: 4,
+    definitionOfDone: "The policy is published.",
+    createGitHubIssue: true,
+    approveNow: false,
+    githubRepo: "findmydoc-platform/management",
+    relationType: "blocked_by",
+    relatedTaskId: "",
+    relationNote: "",
+  });
+
+  assert.deepEqual(payload, {
+    creationRequestId: "019fb484-68c2-7000-8000-000000000002",
+    title: "Create policy for AI content",
+    description: "Optional context",
+    problemStatement: "The policy is missing.",
+    intendedOutcome: "The policy is approved.",
+    scopeConstraints: "Website content only.",
+    acceptanceCriteria: "Labels are documented.",
+    evidenceRequired: "Link the approved policy.",
+    taskType: "deliverable",
+    parentTaskId: "initiative-one",
+    ownerId: "founder-one",
+    priority: "P2",
+    status: "Offen",
+    workstream: "Legal",
+    fixedDate: "2026-09-06",
+    targetDate: "",
+    hours: 4,
+    definitionOfDone: "The policy is published.",
+    approveNow: false,
+    githubRepo: "findmydoc-platform/management",
+    relationType: "blocked_by",
+    relatedTaskId: "",
+    relationNote: "",
+  });
+});
+
 test("standard task API accepts optional Sub-Issue work brief fields but rejects operational fields", () => {
   const allowed = {
     creationRequestId: "019fb484-68c2-7000-8000-000000000001",

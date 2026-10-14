@@ -2,13 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  buildPlanningItemUpdatePreview,
-  createBrowserRevisePlanningItems,
-  parsePlanningItemPatchPayload,
-  planningItemReviseCommand,
-  type PlanningItemUpdatePreview,
-} from "@/features/planning-items/model/planning-item-update";
+import { createPlanningItemRevision } from "@/features/planning-items/model/planning-item-revision";
 import { dispatchPlanningGitHubProjections } from "@/features/planning-items/model/planning-items-github-projection";
 import {
   createPlanningReviewPlanningItems,
@@ -24,7 +18,6 @@ import {
   removePlanningRelationshipCommand,
 } from "@/features/planning-items/model/planning-items-relationships";
 import type { ActorContext, PlatformRole } from "@/features/planning-items/model/actor-context";
-import type { AuthenticatedProfile } from "@/lib/types";
 import { getGitHubIssue } from "./github";
 import { getGitHubAppInstallationToken } from "./github-app";
 import {
@@ -639,101 +632,18 @@ function actorContext(value: GitHubPlanningActor): ActorContext {
   };
 }
 
-function authenticatedProfile(value: GitHubPlanningActor): AuthenticatedProfile {
-  return {
-    id: value.profileId,
-    name: value.name,
-    platformRole: value.platformRole,
-  } as AuthenticatedProfile;
-}
-
-function browserTaskPatch(
-  preview: PlanningItemUpdatePreview,
-) {
-  const patch = { ...preview.dbPatch } as Record<string, unknown>;
-  const effectColumns: Record<string, string> = {
-    scoreFinal: "score_final",
-    scorePoints: "score_points",
-    reviewStatus: "review_status",
-    reviewOwnerProfileId: "review_owner_profile_id",
-    reviewRequestedAt: "review_requested_at",
-    githubIssueSyncStatus: "github_issue_sync_status",
-  };
-  for (const effect of preview.systemEffects) {
-    const column = effectColumns[effect.field];
-    if (column) patch[column] = effect.after === "" ? null : effect.after;
-  }
-  if (preview.changedFields.length) {
-    patch.github_issue_sync_status = "not_synced";
-    patch.github_issue_sync_error = null;
-  }
-  return patch;
-}
-
 async function applyTaskUpdate(
   supabase: SupabaseClient,
   task: GitHubPlanningTaskSnapshot,
-  actorValue: GitHubPlanningActor,
+  actor: GitHubPlanningActor,
   patch: Readonly<Record<string, unknown>>,
 ) {
-  const parsed = parsePlanningItemPatchPayload(
-    { expectedUpdatedAt: task.updatedAt, ...patch },
-    { allowWebhookProjectionFields: true },
-  );
-  if (!parsed.ok) return false;
-  const prepared = await buildPlanningItemUpdatePreview({
-    actor: authenticatedProfile(actorValue),
-    itemId: task.id,
-    parsed,
-    supabase,
-  });
-  if (!prepared.ok || prepared.preview.errors.length) return false;
-  if (!prepared.preview.changedFields.length) return true;
-  const context = actorContext(actorValue);
-  const activities = prepared.preview.systemEffects.flatMap((effect) => {
-    const after = effect.after && typeof effect.after === "object" && !Array.isArray(effect.after)
-      ? effect.after as Record<string, unknown>
-      : null;
-    return effect.field === "activity" && typeof after?.message === "string" ? [after.message] : [];
-  });
-  const taskPatch = browserTaskPatch(prepared.preview);
-  if (prepared.preview.changedFields.includes("evidenceLink")) {
-    const evidenceLink = text(prepared.preview.normalizedPatch.evidenceLink);
-    taskPatch.evidence_link = evidenceLink || null;
-    taskPatch.evidence_links = evidenceLink ? [evidenceLink] : [];
-  }
-  const result = await createBrowserRevisePlanningItems({
-    supabase,
-    actor: context,
-    writer: {
-      kind: "delivery",
-      params: {
-        taskId: task.id,
-        expectedUpdatedAt: task.updatedAt,
-        taskPatch,
-        notePresent: false,
-        note: null,
-        dependencyPresent: false,
-        dependencyNote: null,
-        activityMessages: activities,
-        notifications: [],
-      },
-    },
-  }).run({
-    actor: context,
-    mode: "commit",
-    command: planningItemReviseCommand(
-      task.id,
-      task.taskType,
-      task.updatedAt,
-      prepared.preview.normalizedPatch,
-    ),
-  });
+  const result = await createPlanningItemRevision(supabase).commitGitHubRevision({ task, actor, patch });
   if (!result.ok) {
     if (result.error.code === "dependencyUnavailable") throw new Error("FounderOps planning update dependency is unavailable.");
     return false;
   }
-  return result.status === "committed";
+  return true;
 }
 
 async function requestReview(

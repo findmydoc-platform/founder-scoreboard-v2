@@ -151,7 +151,7 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
 
   useEffect(() => {
     if (release.seenAt || !release.notificationId) return;
-    void platformReleaseRequest(`/api/team/platform-releases/v1/releases/${encodeURIComponent(release.version)}/seen`, { method: "POST" }).catch(() => undefined);
+    void platformReleaseRequest<{ ok?: boolean }>(`/api/team/platform-releases/v1/releases/${encodeURIComponent(release.version)}/seen`, { method: "POST" }).catch(() => undefined);
   }, [release.notificationId, release.seenAt, release.version]);
 
   return (

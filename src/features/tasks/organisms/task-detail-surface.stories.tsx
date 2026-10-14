@@ -1,0 +1,382 @@
+import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import { useState, useTransition } from "react";
+import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-data-loader";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
+import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
+import type { PlanningShellState, Profile } from "@/lib/types";
+import { TaskDetailSurface } from "./task-detail-surface";
+
+const profiles: Profile[] = [
+  { id: "sebastian", name: "Sebastian Schütze", platformRole: "ceo", orgRole: "CEO", githubLogin: "SebastianSchuetze", weeklyCapacity: 40 },
+  { id: "volkan", name: "Mehmet Volkan Kablan", platformRole: "founder", orgRole: "Engineering", githubLogin: "MehmetVolkan", weeklyCapacity: 40 },
+  { id: "volker", name: "Volker Beispiel", platformRole: "founder", orgRole: "Operations", githubLogin: "volker", weeklyCapacity: 32 },
+];
+
+const task = taskDetailStoryTask({
+  id: "mention-task",
+  title: "Review-Prozess für die nächste Produktphase vorbereiten",
+  description: "Der Review-Prozess soll für Founder und Deputies klar, nachvollziehbar und direkt mit GitHub verbunden sein.",
+  problemStatement: "Entscheidungen und Rückfragen liegen derzeit an mehreren Stellen.",
+  intendedOutcome: "Review, Kommentar und Zustellung sind in einer Aktivität nachvollziehbar.",
+  scopeConstraints: "Keine neue Navigation und keine Änderung an bestehenden Rollen.",
+  acceptanceCriteria: "Review-Kommentare unterstützen Erwähnungen\nBenachrichtigungen springen an die Fundstelle",
+  evidenceRequired: "Screenshot der Aktivität und erfolgreiche GitHub-Zustellung",
+  definitionOfDone: "Desktop und Mobile geprüft\nKontraste erfüllen WCAG 2.2 AA",
+  assignee: "sebastian",
+  owner: "sebastian",
+  githubRepo: "findmydoc-platform/management",
+  githubIssueNumber: 418,
+  githubIssueUrl: "https://github.com/findmydoc-platform/management/issues/418",
+  githubIssueSyncStatus: "synced",
+  githubIssueLastSyncedAt: "2026-09-24T09:30:00.000Z",
+});
+
+const reviewTask = taskDetailStoryTask({
+  ...task,
+  id: "mention-review-task",
+  status: "Review",
+  reviewStatus: "requested",
+  reviewOwnerProfileId: "sebastian",
+  reviewRequestedAt: "2026-09-24T11:30:00.000Z",
+});
+
+const meta = {
+  component: TaskDetailSurface,
+  decorators: [(Story) => (
+    <main className="min-h-screen bg-slate-100 p-6">
+      <div className="mx-auto max-w-[1320px] rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <Story />
+      </div>
+    </main>
+  )],
+  parameters: { layout: "fullscreen" },
+  tags: ["domain:tasks", "layer:organism", "status:stable"],
+  title: "Features/Tasks/Organisms/TaskDetailSurface",
+  args: {
+    surface: "page",
+    task,
+    comments: [{
+      id: 1,
+      taskId: task.id,
+      profileId: "volkan",
+      comment: "Die Prüfkriterien sind abgestimmt. Bitte die GitHub-Zustellung im Review mitprüfen.",
+      githubDeliveryStatus: "delivered",
+      githubCommentUrl: "https://github.com/findmydoc-platform/management/issues/418#issuecomment-1",
+      createdAt: "2026-09-24T10:15:00.000Z",
+    }],
+    externalComments: [],
+    activities: [{
+      id: 1,
+      taskId: task.id,
+      action: "task.status_changed",
+      actorProfileId: "sebastian",
+      message: "Status geändert: Offen → In Arbeit",
+      createdAt: "2026-09-24T09:45:00.000Z",
+    }],
+    reviews: [],
+    blockers: [],
+    subIssues: [],
+    teamProfiles: profiles,
+    sprints: [],
+    allTasks: [task],
+    relations: [],
+    currentProfile: { id: "sebastian", name: "Sebastian Schütze", platformRole: "ceo" },
+    pending: false,
+    githubInstallationAvailable: true,
+    onRequestDiscardAction: (action) => action(),
+    onUpdate: fn(),
+    onAddComment: fn(),
+    onUploadAttachment: fn(async () => ""),
+    onImportGitHubComments: fn(),
+    onReportBlocker: fn(async () => ({ ok: true as const })),
+    onCreateSubIssue: fn(),
+    onOpenTask: fn(),
+    onSyncGitHub: fn(),
+    onReview: fn(),
+    onReopenReview: fn(),
+    onWithdrawReview: fn(),
+    onWithdraw: fn(),
+    onAddRelation: fn(async () => ({ ok: true as const })),
+    onRemoveRelation: fn(),
+    onDecideApproval: fn(),
+  },
+} satisfies Meta<typeof TaskDetailSurface>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const ActivityMentionPicker: Story = {
+  args: {
+    activities: [],
+    comments: [],
+    requestedCommentTarget: "comment:new",
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const textbox = await canvas.findByRole("textbox", { name: "Kommentar oder Update" });
+    textbox.scrollIntoView({ block: "center" });
+    await userEvent.type(textbox, "@");
+    await expect(canvas.getByRole("listbox", { name: "Person erwähnen" })).toBeVisible();
+    await expect(canvas.getByRole("option", { name: "@all, Alle Personen in FounderOps, 3 Personen" })).toBeVisible();
+  },
+};
+
+export const ReviewMentionPicker: Story = {
+  args: {
+    task: reviewTask,
+    allTasks: [reviewTask],
+  },
+  parameters: {
+    a11y: { test: "todo" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const textbox = await canvas.findByRole("textbox", { name: "Review-Kommentar" });
+    await userEvent.type(textbox, "@");
+    canvasElement.ownerDocument.defaultView?.scrollTo({ top: 390 });
+    await expect(canvas.getByRole("listbox", { name: "Person erwähnen" })).toBeVisible();
+  },
+};
+
+export const OversizedBrief: Story = {
+  args: {
+    task: { ...task, problemStatement: "Prüfbarer Kontext. ".repeat(3641) },
+    onUpdate: fn(async () => ({ ok: true as const, task: {} })),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.type(title, " aktualisiert");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(canvas.getByRole("alert")).toHaveTextContent("maximal 65.536 Zeichen");
+    await expect(canvas.getByRole("textbox", { name: "Problem" })).toHaveValue(args.task.problemStatement);
+    await expect(args.onUpdate).not.toHaveBeenCalled();
+  },
+};
+
+export const CorrectOversizedBrief: Story = {
+  args: OversizedBrief.args,
+  play: async (context) => {
+    await OversizedBrief.play!(context);
+    const canvas = within(context.canvasElement);
+    const problem = canvas.getByRole("textbox", { name: "Problem" });
+    await userEvent.clear(problem);
+    await userEvent.type(problem, "Vollständiger, gekürzter Kontext.");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(context.args.onUpdate).toHaveBeenCalledWith(expect.objectContaining({ problemStatement: "Vollständiger, gekürzter Kontext." }));
+  },
+};
+
+export const SummaryLoading: Story = {
+  args: { task: { ...task, detailAvailability: "summary" }, detailDataLoading: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("status")).toHaveTextContent("Aufgabendetails werden geladen");
+    await expect(canvas.queryByRole("button", { name: /bearbeiten/i })).not.toBeInTheDocument();
+    await expect(canvas.queryByText(task.problemStatement!)).not.toBeInTheDocument();
+  },
+};
+
+export const SummaryFailure: Story = {
+  args: { task: { ...task, detailAvailability: "summary" }, detailDataError: "Task-Details konnten nicht geladen werden.", onRetryDetailData: fn() },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("status")).toHaveTextContent("Task-Details konnten nicht geladen werden.");
+    await expect(canvas.queryByRole("button", { name: /bearbeiten/i })).not.toBeInTheDocument();
+  },
+};
+
+function SummaryRefreshHarness({ failFirst = false, failSave = false, ...args }: React.ComponentProps<typeof TaskDetailSurface> & { failFirst?: boolean; failSave?: boolean }) {
+  const [data, setData] = useState<PlanningShellState>(() => ({ ...emptyPlanningShellState, tasks: [{ ...task, detailAvailability: "summary" as const }] }));
+  const [requests, setRequests] = useState(0);
+  const [dirty, setDirty] = useState(false);
+  const [, startTransition] = useTransition();
+  const [apiClient] = useState(() => {
+    let attempts = 0;
+    return {
+    requestBlob: async () => { throw new Error("Unexpected blob request"); },
+    requestForm: async () => { throw new Error("Unexpected form request"); },
+    requestJson: async <T,>() => {
+      attempts += 1;
+      setRequests((count) => count + 1);
+      if (failFirst && attempts === 1) return { response: new Response(null, { status: 503 }), body: { error: "Details vorübergehend nicht verfügbar." } as T };
+      return {
+        response: new Response(null, { status: 200 }),
+        body: { taskDetail: {
+          revision: "revision", project: emptyPlanningShellState.project, item: task,
+          ancestors: [], children: [], relatedItems: [], people: [], sprints: [],
+          discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+        } } as T,
+      };
+    },
+  } satisfies BrowserApiClient;
+  });
+  const selectedTask = data.tasks[0];
+  const loader = useTaskDetailDataLoader({ apiClient, applyPlanningShellStateUpdate: setData, selectedTask, source: "supabase", startTransition });
+  return (
+    <>
+      <button onClick={() => setData((current) => ({ ...current, tasks: [{ ...task, detailAvailability: "summary" }] }))}>Refresh workspace summary</button>
+      <output aria-label="Detail requests">{requests}</output>
+      <output aria-label="Unsaved draft">{String(dirty)}</output>
+      <TaskDetailSurface {...args} task={selectedTask} detailDataLoading={loader.selectedTaskDetailLoading} detailDataError={loader.selectedTaskDetailError} onRetryDetailData={loader.retrySelectedTaskDetail} onOverviewDirtyChange={setDirty} onUpdate={failSave ? async () => {
+        setData((current) => ({ ...current, tasks: [{ ...task, detailAvailability: "summary" }] }));
+        return { ok: false, status: 409, error: "Aufgabe wurde zwischenzeitlich geändert." };
+      } : args.onUpdate} />
+    </>
+  );
+}
+
+export const HydratesAgainAfterWorkspaceRefresh: Story = {
+  render: (args) => <SummaryRefreshHarness {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
+    await waitFor(() => expect(canvas.getByLabelText("Detail requests")).toHaveTextContent(/^1$/));
+    await userEvent.click(canvas.getByRole("button", { name: "Refresh workspace summary" }));
+    await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
+    await waitFor(() => expect(canvas.getByLabelText("Detail requests")).toHaveTextContent(/^2$/));
+  },
+};
+
+export const RetriesFailedSummaryHydration: Story = {
+  render: (args) => <SummaryRefreshHarness {...args} failFirst />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("Details vorübergehend nicht verfügbar.")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Erneut laden" }));
+    await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
+    await waitFor(() => expect(canvas.getByLabelText("Detail requests")).toHaveTextContent(/^2$/));
+    await expect(canvas.queryByRole("button", { name: "Erneut laden" })).not.toBeInTheDocument();
+  },
+};
+
+export const PreservesDraftAfterRefreshAndFailedSave: Story = {
+  render: (args) => <SummaryRefreshHarness {...args} failSave />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(task.problemStatement!)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.type(title, " Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Refresh workspace summary" }));
+    await expect(canvas.getByRole("textbox", { name: "Titel" })).toHaveValue(`${task.title} Entwurf`);
+    await expect(canvas.getByLabelText("Unsaved draft")).toHaveTextContent("true");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(canvas.getByRole("alert")).toHaveTextContent("Aufgabe wurde zwischenzeitlich geändert.");
+    await expect(canvas.getByRole("textbox", { name: "Titel" })).toHaveValue(`${task.title} Entwurf`);
+    await expect(canvas.getByLabelText("Unsaved draft")).toHaveTextContent("true");
+  },
+};
+
+export const PlainTextUrls: Story = {
+  args: {
+    task: {
+      ...task,
+      title: "Arbeitsbrief prüfen: https://example.com/title.",
+      problemStatement: "Prüfgrundlage steht unter https://example.com/problem.",
+      acceptanceCriteria: "- [ ] Kriterien unter https://example.com/criteria, prüfen",
+      evidenceRequired: "Nachweis: https://example.com/evidence.",
+    },
+    comments: [{
+      id: 2,
+      taskId: task.id,
+      profileId: "volkan",
+      comment: "Rückfrage dazu: https://example.com/comment.",
+      githubDeliveryStatus: "delivered",
+      githubCommentUrl: "",
+      createdAt: "2026-09-24T10:15:00.000Z",
+    }],
+    activities: [{
+      id: 2,
+      taskId: task.id,
+      action: "task.status_changed",
+      actorProfileId: "sebastian",
+      message: "Status geändert: Offen → In Arbeit. Details: https://example.com/activity.",
+      createdAt: "2026-09-24T09:45:00.000Z",
+    }],
+    requestedCommentTarget: "comment:2",
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    const taskTitle = canvas.getByRole("heading", { level: 1 });
+    const problemLink = canvas.getByRole("link", { name: "https://example.com/problem (öffnet in neuem Tab)" });
+    const evidenceLink = canvas.getByRole("link", { name: "https://example.com/evidence (öffnet in neuem Tab)" });
+
+    await expect(taskTitle).toHaveTextContent("Arbeitsbrief prüfen: https://example.com/title.");
+    await expect(within(taskTitle).queryByRole("link")).not.toBeInTheDocument();
+    await expect(problemLink).toHaveAttribute("href", "https://example.com/problem");
+    await expect(evidenceLink).toHaveAttribute("href", "https://example.com/evidence");
+    await userEvent.click(canvas.getByRole("tab", { name: /Aktivität/ }));
+    await expect(canvas.getByRole("link", { name: "https://example.com/comment (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://example.com/comment");
+    await expect(canvas.getByRole("link", { name: "https://example.com/activity (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://example.com/activity");
+  },
+};
+
+const evidenceParent = taskDetailStoryTask({
+  ...task, id: "evidence-parent", title: "Kontaktwege für den Launch prüfen",
+  problemStatement: "Alle Kontaktwege sollen zum richtigen Formular führen.",
+  intendedOutcome: "", scopeConstraints: "", evidenceRequired: "", evidenceLinks: [], linkedPullRequests: [],
+  acceptanceCriteria: "Alle definierten Kontaktwege führen zum richtigen Formular.\nWeiterleitungen funktionieren auf allen relevanten Endgeräten.",
+  definitionOfDone: "Funktionierende Kontaktwege sind mit einem kurzen Test dokumentiert.",
+});
+const sharedPR = { title: "Kontaktformular anbinden", repository: "example/web", number: 42,
+  url: "https://github.com/example/web/pull/42", status: "merged" as const };
+const evidenceChildren = [
+  taskDetailStoryTask({ id: "form", title: "Kontaktformular prüfen", taskType: "sub_issue", parentTaskId: evidenceParent.id,
+    evidenceLinks: ["https://example.com/form-test"], linkedPullRequests: [sharedPR,
+      { ...sharedPR, title: "Formularvalidierung ergänzen", number: 43, url: "https://github.com/example/web/pull/43", status: "open" }] }),
+  taskDetailStoryTask({ id: "redirect", title: "Weiterleitungen prüfen", taskType: "sub_issue", parentTaskId: evidenceParent.id,
+    evidenceLinks: ["https://example.com/redirect-test"], linkedPullRequests: [sharedPR,
+      { ...sharedPR, title: "Kontaktlinks korrigieren", number: 44, url: "https://github.com/example/web/pull/44" }] }),
+];
+
+export const InheritedEvidenceWithoutParentLink: Story = {
+  args: { task: evidenceParent, subIssues: evidenceChildren, allTasks: [evidenceParent, ...evidenceChildren], comments: [], activities: [] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const disclosure = canvas.getByLabelText("Nachweise aus Sub-Issues: 5");
+    await expect(disclosure).toBeVisible();
+    await expect(canvas.queryByText("Noch keine Links hinterlegt.")).not.toBeInTheDocument();
+    await expect(canvas.queryByText("Noch keine Pull Requests mit dem GitHub Issue verknüpft.")).not.toBeInTheDocument();
+    await userEvent.click(disclosure);
+    await expect(canvas.getByText("Kontaktformular anbinden")).toBeVisible();
+    await expect(canvas.getAllByRole("link").filter((link) => link.getAttribute("href") === sharedPR.url)).toHaveLength(1);
+  },
+};
+
+export const RequestReviewWithInheritedEvidence: Story = {
+  args: {
+    ...InheritedEvidenceWithoutParentLink.args,
+    task: { ...evidenceParent, reviewOwnerProfileId: "volkan" },
+    onUpdate: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole("combobox", { name: "Status ändern" }));
+    await userEvent.click(page.getByRole("option", { name: /^Review$/ }));
+    await expect(args.onUpdate).toHaveBeenCalledWith({ status: "Review" });
+    await expect(page.queryByRole("heading", { name: "Nachweis vor Review" })).not.toBeInTheDocument();
+  },
+};
+
+export const RequestReviewWithoutEvidence: Story = {
+  args: {
+    ...InheritedEvidenceWithoutParentLink.args,
+    task: { ...evidenceParent, reviewOwnerProfileId: "volkan" },
+    subIssues: [],
+    onUpdate: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole("combobox", { name: "Status ändern" }));
+    await userEvent.click(page.getByRole("option", { name: /^Review$/ }));
+    await expect(page.getByRole("heading", { name: "Nachweis vor Review" })).toBeVisible();
+    await expect(args.onUpdate).not.toHaveBeenCalled();
+  },
+};

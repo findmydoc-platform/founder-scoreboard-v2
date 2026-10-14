@@ -44,6 +44,50 @@ test("planning task view model combines fields with AND and quick values with OR
   assert.deepEqual(buildPlanningTaskTableViewModel({ currentProfile: null, data, filters: { ...filters, query: "missing" } }).visibleTasks, []);
 });
 
+test("planning task search includes initiative, sprint, and review owner without changing empty search order", async () => {
+  const { buildPlanningTaskTableViewModel } = await importTestModule(
+    "src/features/planning/model/planning-task-table-view-model.ts",
+    {
+      "@/features/planning/model/planning-app-model": {
+        isThisWeek: () => false,
+        sortTasks: (tasks) => tasks,
+        taskText: (task) => `${task.title} ${task.description}`,
+      },
+      "@/features/tasks/model/task-attention-signals": {
+        taskHasCriticalAttention: () => false,
+        taskHasMissingEvidenceAttention: () => false,
+      },
+      "@/lib/platform": platformMock,
+      "@/lib/status": statusMock,
+    },
+  );
+  const data = {
+    tasks: [
+      { id: "initiative", taskType: "initiative", title: "Launch", description: "", status: "Offen", strategy: { goal: "Roadmap" } },
+      { id: "deliverable", taskType: "deliverable", parentTaskId: "initiative", title: "Website", description: "", status: "Offen", sprintId: "s1", reviewOwnerProfileId: "p1" },
+    ],
+    sprints: [{ id: "s1", name: "Sprint Sieben" }],
+    profiles: [{ id: "p1", name: "Ada Lovelace" }],
+    taskRelations: [],
+  };
+  const filters = {
+    query: "", assignee: "Alle", status: "Alle", priority: "Alle", review: "Alle", initiativeId: "Alle",
+    quick: [], sprintId: "Alle", workstream: "Alle", risk: "Alle", targetFrom: "", targetTo: "",
+  };
+  const visibleIds = (query) => buildPlanningTaskTableViewModel({
+    currentProfile: null,
+    data,
+    filters: { ...filters, query },
+  }).visibleTasks.map((task) => task.id);
+
+  assert.deepEqual(visibleIds(""), ["initiative", "deliverable"]);
+  assert.deepEqual(visibleIds("   "), ["initiative", "deliverable"]);
+  assert.deepEqual(visibleIds("Launch"), ["initiative", "deliverable"]);
+  assert.deepEqual(visibleIds("Roadmap"), ["deliverable"]);
+  assert.deepEqual(visibleIds("Sprint Sieben"), ["deliverable"]);
+  assert.deepEqual(visibleIds("Ada Lovelace"), ["deliverable"]);
+});
+
 test("sprint task table filters review and score and sorts deterministically", async () => {
   const { buildSprintTaskTableRows, DEFAULT_SPRINT_TASK_FILTERS } = await importTestModule(
     "src/features/sprint/model/sprint-task-table-view-model.ts",

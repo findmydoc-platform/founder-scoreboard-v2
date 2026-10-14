@@ -1,5 +1,7 @@
 "use client";
 
+import { validatePlanningFields } from "@/features/planning-items/model/planning-item-content";
+
 import { useEffect, useMemo, useState } from "react";
 import type { TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
 import {
@@ -18,12 +20,14 @@ export function useTaskDetailController({
   task,
   currentProfile,
   unrestricted = false,
+  operationalCorrection = false,
   onUpdate,
   onOverviewDirtyChange,
 }: {
   task: Task;
   currentProfile?: TaskDetailProfile | null;
   unrestricted?: boolean;
+  operationalCorrection?: boolean;
   onUpdate: (patch: Partial<Task>) => Promise<TaskUpdateResult> | void;
   onOverviewDirtyChange?: (dirty: boolean) => void;
 }) {
@@ -34,7 +38,7 @@ export function useTaskDetailController({
   const [overviewError, setOverviewError] = useState("");
   const [blockerDraft, setBlockerDraft] = useState({ reason: "", impact: "", needsHelpFrom: "" });
   const [relationDraft, setRelationDraft] = useState<TaskRelationshipDraft>({ relationType: "blocked_by", relatedTaskId: "", note: "" });
-  const permissions = taskDetailPermissions({ task, profile: currentProfile, unrestricted });
+  const permissions = taskDetailPermissions({ task, profile: currentProfile, unrestricted, operationalCorrection });
   const overviewPermissions = useMemo(() => ({
     canEditBrief: permissions.canEditBrief,
     canEditChecklist: permissions.canEditChecklist,
@@ -66,6 +70,12 @@ export function useTaskDetailController({
     const patch = taskOverviewPatch(overviewBaseline, overviewDraft, overviewPermissions);
     if (!Object.keys(patch).length) return false;
 
+    const resultingTask = { ...overviewBaseline, ...patch };
+    const lengthErrors = validatePlanningFields(resultingTask.taskType === "initiative" ? {
+      ...resultingTask, intendedOutcome: overviewDraft.strategyGoal,
+      acceptanceCriteria: overviewDraft.strategySuccessCriteria, scopeConstraints: overviewDraft.strategyScopeConstraints,
+    } : resultingTask);
+    if (lengthErrors.length) { setOverviewError(lengthErrors[0].message); return false; }
     setOverviewSaving(true);
     setOverviewError("");
     try {

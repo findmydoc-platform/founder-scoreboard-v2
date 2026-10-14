@@ -1,3 +1,6 @@
+import { codepointLength } from "@/lib/github-issue-content";
+import { planningText, planningContentFromRow } from "./planning-item-content";
+import { validateStoredPlanningContent } from "./planning-item-content-server";
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requirePlanningContributor } from "@/lib/authz";
@@ -8,6 +11,7 @@ import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { PlanningItemRaciAssignment, Task, TaskRelation, TaskRelationType, TaskType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
+import { newlyMentionedProfilesByField } from "@/lib/mentions";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { isReviewStateLocked, reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
@@ -105,6 +109,36 @@ function validIsoDate(value?: string) {
     : "";
 }
 
+type CreateMentionField = Readonly<{ key: string; current: string }>;
+type CreateMentionProfile = Readonly<{ id: string; name: string; github_login?: string | null }>;
+
+export function buildCreateMentionNotifications(input: Readonly<{
+  taskId: string;
+  taskTitle: string;
+  actorProfileId: string | null;
+  fields: readonly CreateMentionField[];
+  profiles: readonly CreateMentionProfile[];
+}>) {
+  const profileRows = input.profiles.map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    githubLogin: profile.github_login || "",
+  }));
+  return newlyMentionedProfilesByField(
+    input.fields.map((field) => ({ ...field, previous: "" })),
+    profileRows,
+  ).map((mention) => createNotificationPayload("task.mention", {
+    actorProfileId: input.actorProfileId,
+    recipientProfileId: mention.profileId,
+    entityType: "task",
+    entityId: input.taskId,
+    title: `In einem Aufgabenfeld erwähnt: ${input.taskTitle}`,
+    body: mention.excerpt,
+    dedupeKey: `task.mention:field:${input.taskId}:${mention.fieldKey}:created:${mention.profileId}`,
+    targetPath: `/tasks/${encodeURIComponent(input.taskId)}?focus=field:${mention.fieldKey}`,
+  }));
+}
+
 export async function handleBrowserTaskCreate(request: NextRequest) {
   const context = await requireJsonApiContext<CreateTaskPayload>(request, requirePlanningContributor, {});
   if (!context.ok) return context.response;
@@ -119,8 +153,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (isStrategic && !isOperationalLeadRole(permission.profile?.platformRole)) {
     return apiError(requestedType === "epic" ? "Epics können nur von CEO oder Deputy erstellt werden." : "Initiativen können nur von CEO oder Deputy erstellt werden.", 403);
   }
-  const title = cleanText(payload.title, 240);
-  if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
+  const title = planningText(payload.title);
+  if (codepointLength(title) < 3) return apiError("Titel ist erforderlich.", 400);
   const creationRequestId = cleanText(payload.creationRequestId, 64);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(creationRequestId)) {
     return apiError("Erstellungsanfrage ist ungültig. Bitte Dialog neu öffnen.", 400);
@@ -137,6 +171,13 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     if (payload.targetDate && !targetDate) return apiError("Zieldatum ist ungültig.", 400);
     const idBase = `${permission.profile?.id || "planning"}-${slugify(title, { maxLength: 70 }) || "neues-planungselement"}`;
     const id = `${idBase}-${creationRequestId.replaceAll("-", "").slice(0, 12)}`;
+    const lengthErrors = await validateStoredPlanningContent(supabase, {
+      id, title, taskType: requestedType, description: planningText(payload.description),
+      intendedOutcome: planningText(payload.strategy?.goal || payload.intendedOutcome),
+      scopeConstraints: planningText(payload.strategy?.scopeConstraints || payload.scopeConstraints),
+      acceptanceCriteria: planningText(payload.strategy?.successCriteria || payload.acceptanceCriteria),
+    });
+    if (lengthErrors.length) return NextResponse.json({ error: lengthErrors[0].message, lengthErrors }, { status: 400 });
     const owner = profileId(payload.ownerId) || permission.profile?.id || "";
     const suppliedRaciAssignments = (payload.raciAssignments || []).map((assignment, index) => ({
       profileId: profileId(assignment.profileId),
@@ -156,7 +197,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
         project_id: "findmydoc-founder-execution",
         task_type: requestedType,
         title,
-        description: cleanText(payload.description, 4000),
+        description: planningText(payload.description),
         status,
         priority: requestedType === "initiative" && payload.priority && priorities.has(payload.priority) ? payload.priority : "P2",
         owner,
@@ -166,10 +207,32 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
         sort_order: 0,
       };
     const strategicStrategy = requestedType === "initiative" ? {
-        goal: cleanText(payload.strategy?.goal || payload.intendedOutcome, 4000),
-        successCriteria: cleanText(payload.strategy?.successCriteria || payload.acceptanceCriteria, 6000),
-        scopeConstraints: cleanText(payload.strategy?.scopeConstraints || payload.scopeConstraints, 4000),
+        goal: planningText(payload.strategy?.goal || payload.intendedOutcome),
+        successCriteria: planningText(payload.strategy?.successCriteria || payload.acceptanceCriteria),
+        scopeConstraints: planningText(payload.strategy?.scopeConstraints || payload.scopeConstraints),
       } : null;
+    const strategicMentionFields = [
+      { key: "description", current: strategicItem.description },
+      ...(strategicStrategy ? [
+        { key: "strategy-goal", current: strategicStrategy.goal },
+        { key: "strategy-success", current: strategicStrategy.successCriteria },
+        { key: "strategy-scope", current: strategicStrategy.scopeConstraints },
+      ] : []),
+    ];
+    let strategicMentionNotifications: ReturnType<typeof buildCreateMentionNotifications> = [];
+    if (strategicMentionFields.some((field) => field.current.includes("@"))) {
+      const { data: mentionProfiles, error: mentionProfilesError } = await supabase
+        .from("profiles")
+        .select("id,name,github_login");
+      if (mentionProfilesError) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
+      strategicMentionNotifications = buildCreateMentionNotifications({
+        taskId: id,
+        taskTitle: title,
+        actorProfileId: permission.profile?.id || null,
+        fields: strategicMentionFields,
+        profiles: mentionProfiles || [],
+      });
+    }
     const actor = actorContextFromSessionAuth({ ok: true, profile: permission.profile });
     if (!actor.ok) return apiError("Planungselement konnte nicht erstellt werden.", 500);
     const planningItems = createBrowserCreatePlanningItems({
@@ -181,6 +244,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
           item: strategicItem,
           strategy: strategicStrategy,
           raciAssignments: requestedType === "initiative" ? raciAssignments : [],
+          notifications: strategicMentionNotifications,
         },
       },
     });
@@ -222,9 +286,9 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     let responseTask = mapTaskRow(created, profileNameById, {
         strategy: requestedType === "initiative" ? {
           task_id: id,
-          goal: cleanText(payload.strategy?.goal || payload.intendedOutcome, 4000),
-          success_criteria: cleanText(payload.strategy?.successCriteria || payload.acceptanceCriteria, 6000),
-          scope_constraints: cleanText(payload.strategy?.scopeConstraints || payload.scopeConstraints, 4000),
+          goal: planningText(payload.strategy?.goal || payload.intendedOutcome),
+          success_criteria: planningText(payload.strategy?.successCriteria || payload.acceptanceCriteria),
+          scope_constraints: planningText(payload.strategy?.scopeConstraints || payload.scopeConstraints),
         } : undefined,
         raciAssignments: requestedType === "initiative" ? raciAssignments.map((assignment) => ({
           task_id: id,
@@ -350,12 +414,12 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     id,
     creationRequestId,
     title,
-    description: cleanText(payload.description, 4000),
-    problemStatement: cleanText(payload.problemStatement, 4000),
-    intendedOutcome: cleanText(payload.intendedOutcome, 4000),
-    scopeConstraints: cleanText(payload.scopeConstraints, 4000),
-    acceptanceCriteria: cleanText(payload.acceptanceCriteria, 6000),
-    evidenceRequired: cleanText(payload.evidenceRequired, 4000),
+    description: planningText(payload.description),
+    problemStatement: planningText(payload.problemStatement),
+    intendedOutcome: planningText(payload.intendedOutcome),
+    scopeConstraints: planningText(payload.scopeConstraints),
+    acceptanceCriteria: planningText(payload.acceptanceCriteria),
+    evidenceRequired: planningText(payload.evidenceRequired),
     status,
     priority,
     owner: assignee,
@@ -365,7 +429,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     sortOrder: 0,
     fixedDate: taskType === "deliverable" ? fixedDate : null,
     hours: taskType === "sub_issue" ? 0 : Math.max(0, Math.min(200, Math.round(Number(payload.hours || 0)))),
-    definitionOfDone: cleanText(payload.definitionOfDone, 4000),
+    definitionOfDone: planningText(payload.definitionOfDone),
     sprintId: null,
     reviewOwnerProfileId,
     taskType,
@@ -373,8 +437,33 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     scoreRelevant,
     githubRepo: githubRepository.repository,
   });
+  const lengthErrors = await validateStoredPlanningContent(supabase, planningContentFromRow(insert));
+  if (lengthErrors.length) return NextResponse.json({ error: lengthErrors[0].message, lengthErrors }, { status: 400 });
+
 
   const notifications: Array<Record<string, string | null>> = [];
+  const createMentionFields = [
+    { key: "description", current: String(insert.description || "") },
+    { key: "problem", current: String(insert.problem_statement || "") },
+    { key: "outcome", current: String(insert.intended_outcome || "") },
+    { key: "scope", current: String(insert.scope_constraints || "") },
+    { key: "acceptance", current: String(insert.acceptance_criteria || "") },
+    { key: "evidence-required", current: String(insert.evidence_required || "") },
+    { key: "definition-of-done", current: String(insert.definition_of_done || "") },
+  ];
+  if (createMentionFields.some((field) => field.current.includes("@"))) {
+    const { data: mentionProfiles, error: mentionProfilesError } = await supabase
+      .from("profiles")
+      .select("id,name,github_login");
+    if (mentionProfilesError) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
+    notifications.push(...buildCreateMentionNotifications({
+      taskId: id,
+      taskTitle: title,
+      actorProfileId: permission.profile?.id || null,
+      fields: createMentionFields,
+      profiles: mentionProfiles || [],
+    }));
+  }
   if (taskType === "deliverable" && !payload.approveNow) {
     const { data: leads, error: leadError } = await supabase
       .from("profiles")

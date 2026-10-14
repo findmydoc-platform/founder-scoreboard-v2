@@ -22,10 +22,6 @@ export function isActiveDeputy(profile?: Pick<Profile, "platformRole" | "deputyF
   return true;
 }
 
-export function canConfigureFounderOpsGitHubProject(profile?: Pick<Profile, "platformRole"> | null) {
-  return profile?.platformRole === "ceo";
-}
-
 export function reviewLabel(status: Task["reviewStatus"]) {
   const labels: Record<Task["reviewStatus"], string> = {
     not_requested: "Nicht angefragt",

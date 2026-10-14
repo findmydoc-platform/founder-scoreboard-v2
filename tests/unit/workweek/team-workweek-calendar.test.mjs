@@ -58,6 +58,25 @@ test("Monday version changes select historical and future published versions by 
   assert.equal(model.selectCalendarWorkweek([history, current, prepared], "one", "2026-09-07")?.id, "prepared");
 });
 
+test("the current workweek matrix uses the same validity projection as the calendar", () => {
+  const current = publication("current", "one", "2026-08-31", "2026-09-06", 2, windows({
+    monday: [{ start: "09:00", end: "17:00" }],
+  }));
+  const prepared = publication("prepared", "one", "2026-09-07", null, 3, windows({
+    monday: [{ start: "10:00", end: "18:00" }],
+  }));
+
+  const rows = model.projectCurrentCalendarWorkweekRows({
+    calendarWorkweeks: [current, prepared],
+    dateKey: "2026-09-06",
+    profiles,
+  });
+
+  assert.equal(rows[0].workweek?.id, "current");
+  assert.equal(rows[0].workweek?.windows.monday[0].start, "09:00");
+  assert.equal(rows[1].workweek, null);
+});
+
 test("split windows count a person once and Jetzt uses inclusive start and exclusive end", () => {
   const calendarWorkweeks = [
     publication("one-current", "one", "2026-08-24", null, 1, windows({

@@ -7,6 +7,7 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 let policyDecision = { kind: "update", patch: { title: "Changed title" } };
 
 let domainAllowed = true;
+let domainResult = { ok: true, status: "committed" };
 
 const dispatched = [];
 
@@ -16,33 +17,14 @@ const relationshipRuns = [];
 
 const processor = await importTestModule("src/lib/github-planning-webhook.ts", {
   "server-only": {},
-  "@/features/planning-items/model/planning-item-update": {
-    parsePlanningItemPatchPayload: (raw) => ({
-      ok: true,
-      expectedUpdatedAt: raw.expectedUpdatedAt,
-      presentFields: Object.keys(raw).filter((field) => field !== "expectedUpdatedAt"),
-      raw,
-    }),
-    buildPlanningItemUpdatePreview: async ({ parsed, itemId }) => ({
-      ok: true,
-      preview: {
-        itemId,
-        itemType: "deliverable",
-        expectedUpdatedAt: parsed.expectedUpdatedAt,
-        normalizedPatch: parsed.raw,
-        changedFields: ["title"],
-        systemEffects: [{ field: "githubIssueSyncStatus", after: "not_synced" }],
-        dbPatch: { title: parsed.raw.title },
-        errors: domainAllowed ? [] : ["forbidden"],
+  "@/features/planning-items/model/planning-item-revision": {
+    createPlanningItemRevision: () => ({
+      commitGitHubRevision: async (input) => {
+        if (!domainAllowed) return { ok: false, error: { code: "rejected" } };
+        domainRuns.push(input);
+        return domainResult;
       },
     }),
-    createBrowserRevisePlanningItems: () => ({
-      run: async (invocation) => {
-        domainRuns.push(invocation);
-        return { ok: true, status: "committed" };
-      },
-    }),
-    planningItemReviseCommand: (itemId, itemType, expectedRevision, patch) => ({ itemId, itemType, expectedRevision, patch }),
   },
   "@/features/planning-items/model/planning-items-github-projection": {
     dispatchPlanningGitHubProjections: async ({ operationId }) => {
@@ -197,6 +179,7 @@ function fixture(options = {}) {
 test.beforeEach(() => {
   policyDecision = { kind: "update", patch: { title: "Changed title" } };
   domainAllowed = true;
+  domainResult = { ok: true, status: "committed" };
   dispatched.length = 0;
   domainRuns.length = 0;
   relationshipRuns.length = 0;
@@ -212,6 +195,10 @@ test("an authorized human change runs the FounderOps command and immediately pro
   });
   assert.deepEqual(result, { kind: "processed", reason: "founderops_updated" });
   assert.equal(domainRuns.length, 1);
+  assert.deepEqual(domainRuns[0], {
+    task: taskSnapshot(), actor: { profileId: "founder-one", name: "Founder One", platformRole: "founder" },
+    patch: { title: "Changed title" },
+  });
   assert.deepEqual(calls.enqueued, ["task-one"]);
   assert.deepEqual(dispatched, ["github-webhook:delivery-one"]);
   assert.equal(calls.finalized.at(-1).statusReason, "founderops_updated");
@@ -321,4 +308,25 @@ test("missing mappings are ignored and ambiguous mappings fail closed", async ()
     store: ambiguous.store,
   }), { kind: "failed", reason: "ambiguous_task_mapping" });
   assert.equal(ambiguous.calls.finalized.at(-1).status, "failed");
+});
+
+
+test("an unchanged revision still projects and finalizes the delivery", async () => {
+  domainResult = { ok: true, status: "unchanged" };
+  const { store, calls } = fixture();
+  const result = await processor.processGitHubPlanningWebhookDelivery({ deliveryId: "delivery-one", supabase: {}, store, loadIssue: async () => issueSnapshot() });
+  assert.deepEqual(result, { kind: "processed", reason: "founderops_updated" });
+  assert.deepEqual(calls.enqueued, ["task-one"]);
+  assert.deepEqual(dispatched, ["github-webhook:delivery-one"]);
+  assert.equal(calls.finalized.at(-1).statusReason, "founderops_updated");
+});
+
+test("an unavailable revision dependency schedules a retry with the existing error", async () => {
+  domainResult = { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: true } };
+  const { store, calls } = fixture();
+  const result = await processor.processGitHubPlanningWebhookDelivery({ deliveryId: "delivery-one", supabase: {}, store, loadIssue: async () => issueSnapshot() });
+  assert.deepEqual(result, { kind: "retry_scheduled", reason: "processing_error" });
+  assert.deepEqual(calls.enqueued, []);
+  assert.deepEqual(dispatched, []);
+  assert.equal(calls.finalized.at(-1).lastError, "FounderOps planning update dependency is unavailable.");
 });

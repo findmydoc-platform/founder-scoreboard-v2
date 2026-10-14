@@ -6,14 +6,15 @@ import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-composer";
 import { TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
 import type { TaskCommentTimelineItem } from "@/features/tasks/molecules/task-comment-timeline";
-import { isUsefulActivity } from "@/features/tasks/model/task-comment-timeline-policy";
-import { githubTaskCommentTarget, localTaskCommentTarget } from "@/features/tasks/model/task-comment-target";
-import type { Profile, Sprint, Task, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
+import { isReviewDecisionActivity, isUsefulActivity } from "@/features/tasks/model/task-comment-timeline-policy";
+import { githubTaskCommentTarget, localTaskCommentTarget, taskReviewTarget } from "@/features/tasks/model/task-comment-target";
+import type { Profile, Sprint, Task, TaskActivity, TaskComment, TaskExternalComment, TaskReview } from "@/lib/types";
 
 type Props = {
   comments: TaskComment[];
   externalComments?: TaskExternalComment[];
   activities?: TaskActivity[];
+  reviews?: TaskReview[];
   profiles: Profile[];
   tasks?: Task[];
   sprints?: Sprint[];
@@ -34,11 +35,11 @@ type Props = {
   onUploadAttachment?: (file: File) => Promise<string>;
 };
 
-function buildTimeline(comments: TaskComment[], externalComments: TaskExternalComment[], activities: TaskActivity[]): TaskCommentTimelineItem[] {
-  const visibleActivities = activities.filter(isUsefulActivity);
+function buildTimeline(comments: TaskComment[], externalComments: TaskExternalComment[], activities: TaskActivity[], reviews: TaskReview[]): TaskCommentTimelineItem[] {
+  const visibleActivities = activities.filter((activity) => isUsefulActivity(activity) && !isReviewDecisionActivity(activity));
   return [
     ...visibleActivities.map((activity) => ({
-      id: `activity-${activity.id}`,
+      id: `activity:${activity.id}`,
       type: "activity" as const,
       createdAt: activity.createdAt,
       activity,
@@ -74,6 +75,19 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
       githubDeliveryStatus: "delivered" as const,
       githubCommentUrl: comment.htmlUrl,
     })),
+    ...reviews.map((review) => ({
+      id: taskReviewTarget(review.id),
+      type: "review" as const,
+      createdAt: review.createdAt,
+      review,
+      profileId: review.reviewerProfileId,
+      comment: review.comment,
+      authorLogin: "",
+      authorAvatarUrl: "",
+      htmlUrl: "",
+      githubDeliveryStatus: review.githubDeliveryStatus,
+      githubCommentUrl: review.githubCommentUrl,
+    })),
   ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
 }
 
@@ -81,6 +95,7 @@ export function TaskCommentThread({
   comments,
   externalComments = [],
   activities = [],
+  reviews = [],
   profiles,
   tasks = [],
   sprints = [],
@@ -100,10 +115,10 @@ export function TaskCommentThread({
   onImportGitHubComments,
   onUploadAttachment,
 }: Props) {
-  const visibleActivities = activities.filter(isUsefulActivity);
+  const visibleActivities = activities.filter((activity) => isUsefulActivity(activity) && !isReviewDecisionActivity(activity));
   const commentCount = comments.length + externalComments.length;
-  const activityCount = visibleActivities.length;
-  const timeline = buildTimeline(comments, externalComments, visibleActivities);
+  const activityCount = visibleActivities.length + reviews.length;
+  const timeline = buildTimeline(comments, externalComments, visibleActivities, reviews);
   const labelsById = useMemo(() => new Map([
     ...profiles.map((profile) => [profile.id, profile.name] as const),
     ...tasks.map((task) => [task.id, task.title] as const),
@@ -111,7 +126,7 @@ export function TaskCommentThread({
   ]), [profiles, sprints, tasks]);
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 p-4">
+    <section className="min-w-0 rounded-lg border border-slate-200 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950">

@@ -16,6 +16,10 @@ export const platformReleaseChangeKinds = ["feature", "fix", "maintenance"] as c
 export const platformReleaseSections = ["dashboard", "platform", "public"] as const;
 export const platformReleaseFormFactors = ["desktop", "mobile", "tablet"] as const;
 
+// Native releases preserve full Git messages. The ingest caps the entire JSON body at 2 MB,
+// so a message within that byte budget must also fit this UTF-16 code-unit ceiling.
+const maximumCommitMessageLength = 2_000_000;
+
 export type PlatformReleaseComponentKey = keyof typeof platformReleaseComponentCatalog;
 export type PlatformReleaseChangeKind = (typeof platformReleaseChangeKinds)[number];
 
@@ -210,7 +214,7 @@ function validComponent(value: unknown, schemaVersion: 2 | 3, version: string): 
     && Array.isArray(value.commits) && value.commits.length <= 1000 && value.commits.every((commit) => (
       isObject(commit)
       && typeof commit.bump === "string"
-      && typeof commit.message === "string" && commit.message.length <= 1000
+      && typeof commit.message === "string" && commit.message.length <= maximumCommitMessageLength
         && typeof commit.sha === "string" && (schemaVersion === 2 ? /^[a-f0-9]{7,64}$/i : /^[a-f0-9]{40}$/).test(commit.sha)
         && isHttpUrl(commit.url)
       && (schemaVersion === 2 || isExactGitHubUrl(commit.url, `/${catalogEntry.repository}/commit/${commit.sha}`))

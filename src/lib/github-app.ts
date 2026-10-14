@@ -5,6 +5,7 @@ import type { AuthenticatedProfile } from "./types";
 
 const tokenRefreshWindowMs = 5 * 60 * 1000;
 const oauthStateTtlMs = 10 * 60 * 1000;
+const githubAppOperationalTimeoutMs = 4_000;
 
 type GitHubAppUserTokenRow = {
   profile_id: string;
@@ -49,6 +50,13 @@ let cachedInstallationToken: { token: string; expiresAt: number } | null = null;
 export class GitHubAppConfigurationError extends Error {}
 export class GitHubAppUserTokenRequiredError extends Error {}
 
+export type GitHubAppOperationalStatus = Readonly<{
+  available: boolean;
+  state: "ready" | "configuration_required" | "unavailable";
+  description: string;
+  nextStep: string;
+}>;
+
 function env(name: string) {
   return process.env[name]?.trim() || "";
 }
@@ -72,7 +80,11 @@ async function githubAppPrivateKey() {
   // Keep runtime-only private key files out of Next's static output trace.
   const runtimeImport = Function("specifier", "return import(specifier)") as (specifier: string) => Promise<typeof import("node:fs/promises")>;
   const { readFile } = await runtimeImport("node:fs/promises");
-  return readFile(resolvePrivateKeyPath(keyPath), "utf8");
+  try {
+    return await readFile(resolvePrivateKeyPath(keyPath), "utf8");
+  } catch {
+    throw new GitHubAppConfigurationError("Der private Schlüssel der GitHub App konnte nicht gelesen werden.");
+  }
 }
 
 function tokenEncryptionKey() {
@@ -106,7 +118,13 @@ async function githubAppJwt() {
     iss: requireEnv("GITHUB_APP_ID"),
   });
   const data = `${header}.${payload}`;
-  const signature = createSign("RSA-SHA256").update(data).sign(await githubAppPrivateKey(), "base64url");
+  let signature: string;
+  try {
+    signature = createSign("RSA-SHA256").update(data).sign(await githubAppPrivateKey(), "base64url");
+  } catch (error) {
+    if (error instanceof GitHubAppConfigurationError) throw error;
+    throw new GitHubAppConfigurationError("Der private Schlüssel der GitHub App ist ungültig.");
+  }
   return `${data}.${signature}`;
 }
 
@@ -240,6 +258,50 @@ export async function getGitHubAppInstallationToken() {
   return cachedInstallationToken.token;
 }
 
+export async function getGitHubAppOperationalStatus(
+  { timeoutMs = githubAppOperationalTimeoutMs }: { timeoutMs?: number } = {},
+): Promise<GitHubAppOperationalStatus> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
+
+  try {
+    const installationId = requireEnv("GITHUB_APP_INSTALLATION_ID");
+    await githubJson<{ id: number }>(
+      `https://api.github.com/app/installations/${encodeURIComponent(installationId)}`,
+      {
+        token: await githubAppJwt(),
+        method: "GET",
+        operation: "read",
+        signal: controller.signal,
+        errorMessage: "GitHub-App-Installation konnte nicht geprüft werden",
+      },
+    );
+    return {
+      available: true,
+      state: "ready",
+      description: "Die GitHub App ist erreichbar und die Installation ist verfügbar.",
+      nextStep: "",
+    };
+  } catch (error) {
+    if (error instanceof GitHubAppConfigurationError) {
+      return {
+        available: false,
+        state: "configuration_required",
+        description: "Die serverseitige GitHub-App-Konfiguration ist unvollständig.",
+        nextStep: "GitHub-App-ID, Installation und privaten Schlüssel in der Laufzeitkonfiguration prüfen.",
+      };
+    }
+    return {
+      available: false,
+      state: "unavailable",
+      description: "Die GitHub-App-Installation ist momentan nicht erreichbar.",
+      nextStep: "Installation, Berechtigungen und GitHub-Verfügbarkeit prüfen.",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function storeGitHubAppUserToken({
   supabase,
   profile,
@@ -251,7 +313,8 @@ export async function storeGitHubAppUserToken({
   githubUser: GitHubUser;
   token: GitHubAppTokenResponse;
 }) {
-  if (normalizeLogin(githubUser.login) !== normalizeLogin(profile.githubLogin || "")) {
+  const configuredLogin = await loadConfiguredGitHubLogin(supabase, profile.id);
+  if (!configuredLogin || normalizeLogin(githubUser.login) !== normalizeLogin(configuredLogin)) {
     throw new Error("GitHub-Verbindung passt nicht zum angemeldeten Teamprofil.");
   }
   if (!token.access_token) throw new Error("GitHub-App-Token fehlt.");
@@ -285,6 +348,17 @@ async function loadTokenRow(supabase: SupabaseClient, profile: AuthenticatedProf
 
   if (error) throw new Error(`GitHub-App-Verbindung konnte nicht gelesen werden: ${error.message}`);
   return data || null;
+}
+
+async function loadConfiguredGitHubLogin(supabase: SupabaseClient, profileId: string) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("github_login")
+    .eq("id", profileId)
+    .maybeSingle<{ github_login: string | null }>();
+
+  if (error) throw new Error(`Technische GitHub-Zuordnung konnte nicht gelesen werden: ${error.message}`);
+  return data?.github_login?.trim() || "";
 }
 
 async function refreshGitHubAppUserToken(supabase: SupabaseClient, profile: AuthenticatedProfile, row: GitHubAppUserTokenRow) {
@@ -321,10 +395,12 @@ async function refreshGitHubAppUserToken(supabase: SupabaseClient, profile: Auth
 }
 
 export async function getGitHubUserTokenForProfile(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
-  if (!profile?.id || !profile.githubLogin) throw userTokenRequired();
+  if (!profile?.id) throw userTokenRequired();
+  const configuredLogin = await loadConfiguredGitHubLogin(supabase, profile.id);
+  if (!configuredLogin) throw userTokenRequired();
   const row = await loadTokenRow(supabase, profile);
   if (!row || row.revoked_at) throw userTokenRequired();
-  if (normalizeLogin(row.github_login) !== normalizeLogin(profile.githubLogin)) {
+  if (normalizeLogin(row.github_login) !== normalizeLogin(configuredLogin)) {
     throw userTokenRequired("GitHub-Verbindung passt nicht zum angemeldeten Teamprofil. Bitte verbinde GitHub erneut.");
   }
   if (expiresSoon(row.access_token_expires_at)) {
@@ -350,12 +426,12 @@ export async function getGitHubUserTokenForProfile(supabase: SupabaseClient, pro
 }
 
 export async function getGitHubUserConnectionStatus(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
-  if (!profile?.id || !profile.githubLogin) {
-    return { connected: false, githubLogin: profile?.githubLogin || "", needsReconnect: true, expiresAt: null as string | null };
-  }
+  if (!profile?.id) return { connected: false, needsReconnect: true, expiresAt: null as string | null };
+  const configuredLogin = await loadConfiguredGitHubLogin(supabase, profile.id);
+  if (!configuredLogin) return { connected: false, needsReconnect: true, expiresAt: null as string | null };
   const row = await loadTokenRow(supabase, profile);
-  if (!row || row.revoked_at || normalizeLogin(row.github_login) !== normalizeLogin(profile.githubLogin)) {
-    return { connected: false, githubLogin: profile.githubLogin, needsReconnect: true, expiresAt: null as string | null };
+  if (!row || row.revoked_at || normalizeLogin(row.github_login) !== normalizeLogin(configuredLogin)) {
+    return { connected: false, needsReconnect: true, expiresAt: null as string | null };
   }
 
   try {
@@ -364,18 +440,16 @@ export async function getGitHubUserConnectionStatus(supabase: SupabaseClient, pr
       const refreshed = await loadTokenRow(supabase, profile);
       return {
         connected: true,
-        githubLogin: refreshed?.github_login || profile.githubLogin,
         needsReconnect: false,
         expiresAt: refreshed?.access_token_expires_at || null,
       };
     }
   } catch {
-    return { connected: false, githubLogin: row.github_login, needsReconnect: true, expiresAt: row.access_token_expires_at };
+    return { connected: false, needsReconnect: true, expiresAt: row.access_token_expires_at };
   }
 
   return {
     connected: true,
-    githubLogin: row.github_login,
     needsReconnect: false,
     expiresAt: row.access_token_expires_at,
   };

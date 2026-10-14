@@ -18,8 +18,8 @@ export function PlatformReleaseSidebarCard({ compact = false, mobile = false, on
 
   useEffect(() => {
     let active = true;
-    void platformReleaseRequest("/api/team/platform-releases/v1/releases")
-      .then(async (response) => response.ok ? response.json() as Promise<{ releases?: PlatformReleaseRecord[] }> : null)
+    void platformReleaseRequest<{ releases?: PlatformReleaseRecord[] }>("/api/team/platform-releases/v1/releases")
+      .then(({ response, body }) => response.ok ? body : null)
       .then((payload) => {
         if (active && payload?.releases?.[0]) setRelease(payload.releases[0]);
       })

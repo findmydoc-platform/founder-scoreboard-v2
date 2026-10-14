@@ -13,7 +13,8 @@ test("root workspace preferences normalize legacy values without accepting route
   assert.equal(rootWorkspaceFromPreference("profile"), "profile");
   assert.equal(rootWorkspaceFromPreference("mine"), "planning");
   assert.equal(rootWorkspaceFromPreference("execution"), "planning");
-  assert.equal(rootWorkspaceFromPreference("settings"), "notifications");
+  assert.equal(rootWorkspaceFromPreference("settings"), "planning");
+  assert.equal(rootWorkspaceFromPreference("administration"), "planning");
   assert.equal(rootWorkspaceFromPreference("unknown"), "planning");
   assert.equal(rootWorkspaceFromPreference(undefined), "planning");
 });
@@ -60,8 +61,10 @@ async function loadPlanningAuthServer({ supabase, authzResult }) {
   return importTestModule("src/lib/planning-auth-server.ts", {
     "@/features/planning/model/workspace-routes": workspacePreferences,
     "./authz": {
-      async requirePlatformRoleForUser() {
-        return authzResult;
+      async requireTeamMemberForSession() {
+        return authzResult.ok
+          ? { ...authzResult, user: { id: "auth-user", user_metadata: {} } }
+          : { ...authzResult, user: null };
       },
     },
     "./supabase-server": {

@@ -96,7 +96,7 @@ async function authorizeDigestGeneration(request: NextRequest) {
   }
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return { ok: false as const, status: permission.status, error: permission.error };
+  if (!permission.ok) return permission;
   return { ok: true as const };
 }
 

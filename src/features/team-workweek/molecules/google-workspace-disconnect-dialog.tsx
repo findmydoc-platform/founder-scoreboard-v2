@@ -44,7 +44,7 @@ export function GoogleWorkspaceDisconnectDialog({
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
               <li>{disconnect.futureSeriesCount} zukünftige eindeutig markierte Google-Serie{disconnect.futureSeriesCount === 1 ? "" : "n"} entfernen oder am letzten vergangenen Vorkommen beenden.</li>
               <li>Deine Arbeitswoche aus der Teamansicht nehmen und nur für dich als inaktive private Konfiguration behalten.</li>
-              <li>Erst nach bestätigter Kalenderbereinigung die Google-Freigabe widerrufen und die gespeicherten Tokens entfernen.</li>
+              <li>Nach bestätigter Kalenderbereinigung die lokale Kalenderverbindung und ihre gespeicherten Tokens entfernen. Die Freigabe bei Google bleibt bestehen, bis du sie dort selbst widerrufst.</li>
             </ul>
             <p className="mt-3 text-sm leading-6 text-slate-600">
               Vergangene FounderOps-Vorkommen und gewöhnliche Kalendertermine bleiben unverändert. Eine spätere Verbindung veröffentlicht die Woche nicht automatisch.

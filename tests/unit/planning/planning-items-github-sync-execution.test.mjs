@@ -23,6 +23,7 @@ const projectionOrder = [];
 const persistedFailures = [];
 
 const preflightFailures = new Map();
+const projectionFailures = new Map();
 
 const syncModel = await importTestModule(
   "src/features/planning-items/model/planning-items-github-sync.ts",
@@ -55,6 +56,7 @@ const syncModel = await importTestModule(
             },
           };
         }
+        if (projectionFailures.has(input.taskId)) return projectionFailures.get(input.taskId);
         activeProjections += 1;
         maximumActiveProjections = Math.max(maximumActiveProjections, activeProjections);
         projectionOrder.push(input.taskId);
@@ -166,4 +168,23 @@ test("wait execution reports local ineligibility before installation-token failu
   assert.equal(results.get("task-proposed").status, "notEligible");
   assert.equal(results.get("task-proposed").code, "github_sync_not_approved");
   assert.equal(persistedFailures.length, 0);
+});
+
+
+test("wait execution preserves structured content errors from the final projection", async () => {
+  installationTokenError = null;
+  preflightFailures.clear();
+  const lengthErrors = [{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1, message: "Body too long" }];
+  projectionFailures.set("oversized", { ok: false, code: "github_content_too_long", error: "Body too long", retryable: false, lengthErrors });
+  try {
+    const results = await syncModel.executePlanningItemGitHubSyncs({
+      supabase: {}, actorProfileId: "profile-1",
+      targets: [{ itemId: "oversized", itemType: "sub_issue", command: { createIfMissing: false } }],
+    });
+    assert.deepEqual(results.get("oversized"), {
+      status: "notEligible", code: "github_content_too_long", error: "Body too long", retryable: false, lengthErrors,
+    });
+  } finally {
+    projectionFailures.clear();
+  }
 });

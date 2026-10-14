@@ -1,10 +1,11 @@
 import type { NextRequest } from "next/server";
+import { authzError } from "@/lib/api-response";
 import { requireTeamMember } from "@/lib/authz";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export async function POST(request: NextRequest, context: RouteContext<"/api/team/platform-releases/v1/releases/[version]/seen">) {
   const auth = await requireTeamMember(request);
-  if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: auth.status });
+  if (!auth.ok) return authzError(auth, { ok: false });
   if (!auth.profile) return Response.json({ ok: true });
   const { version } = await context.params;
   if (!/^v\d+\.\d+\.\d+$/.test(version)) return Response.json({ ok: false, error: "Ungültige Version." }, { status: 400 });

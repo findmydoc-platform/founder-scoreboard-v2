@@ -104,8 +104,11 @@ test("unrelated Founder receives no status right for a Deliverable", () => {
   assert.equal(permissions.canUpdateStatus, false);
 });
 
-test("review owner can open review without receiving task edit rights", () => {
-  const permissions = taskDetailPermissions({ task: deliverableTask, profile: { id: "reviewer-1", name: "Reviewer", platformRole: "founder" } });
+test("review owner can perform an active review without receiving task edit rights", () => {
+  const permissions = taskDetailPermissions({
+    task: { ...deliverableTask, status: "Review", reviewStatus: "requested", scoreFinal: false },
+    profile: { id: "reviewer-1", name: "Reviewer", platformRole: "founder" },
+  });
   assert.equal(permissions.canOpenReview, true);
   assert.equal(permissions.canEditBrief, false);
 });
@@ -151,6 +154,23 @@ test("completed items keep comments and the explicit reopen transition but lock 
 test("Viewer remains fully read-only", () => {
   const permissions = taskDetailPermissions({ task, profile: { id: "reviewer-1", name: "Viewer", platformRole: "viewer" } });
   assert.equal(Object.values(permissions).some(Boolean), false);
+});
+
+test("active administrator can correct open work without final, review, or creation rights", () => {
+  const permissions = taskDetailPermissions({
+    task: deliverableTask,
+    profile: { id: "admin-viewer", name: "Admin Viewer", platformRole: "viewer" },
+    operationalCorrection: true,
+  });
+
+  assert.equal(permissions.canEditBrief, true);
+  assert.equal(permissions.canManageTaskMeta, true);
+  assert.equal(permissions.canUpdateWorkingStatus, true);
+  assert.equal(permissions.canCreateSubIssue, false);
+  assert.equal(permissions.canManageFinalStatus, false);
+  assert.equal(permissions.canManageReviewOwner, false);
+  assert.equal(permissions.canOpenReview, false);
+  assert.equal(permissions.canReopenSubIssue, false);
 });
 
 test("status options expose only the role-allowed Sub-Issue transitions", () => {

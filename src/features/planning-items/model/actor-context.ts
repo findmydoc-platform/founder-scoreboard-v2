@@ -22,7 +22,16 @@ export type ActorContext = Readonly<{
       scopes: readonly PlanningScope[];
     }>
     | Readonly<{ kind: "localDevelopment" }>;
+  capabilities?: Readonly<{ operationalCorrection: boolean }>;
 }>;
+
+export function hasOperationalCorrection(actor: ActorContext) {
+  return actor.credential.kind === "session" && actor.capabilities?.operationalCorrection === true;
+}
+
+export function isOperationalActor(actor: ActorContext) {
+  return actor.platformRole === "ceo" || actor.platformRole === "deputy" || hasOperationalCorrection(actor);
+}
 
 export function isPlatformRole(value: unknown): value is PlatformRole {
   return typeof value === "string" && PLATFORM_ROLES.includes(value as PlatformRole);

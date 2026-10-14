@@ -16,33 +16,14 @@ const relationshipRuns = [];
 
 const processor = await importTestModule("src/lib/github-planning-webhook.ts", {
   "server-only": {},
-  "@/features/planning-items/model/planning-item-update": {
-    parsePlanningItemPatchPayload: (raw) => ({
-      ok: true,
-      expectedUpdatedAt: raw.expectedUpdatedAt,
-      presentFields: Object.keys(raw).filter((field) => field !== "expectedUpdatedAt"),
-      raw,
-    }),
-    buildPlanningItemUpdatePreview: async ({ parsed, itemId }) => ({
-      ok: true,
-      preview: {
-        itemId,
-        itemType: "deliverable",
-        expectedUpdatedAt: parsed.expectedUpdatedAt,
-        normalizedPatch: parsed.raw,
-        changedFields: ["title"],
-        systemEffects: [{ field: "githubIssueSyncStatus", after: "not_synced" }],
-        dbPatch: { title: parsed.raw.title },
-        errors: domainAllowed ? [] : ["forbidden"],
-      },
-    }),
-    createBrowserRevisePlanningItems: () => ({
-      run: async (invocation) => {
-        domainRuns.push(invocation);
+  "@/features/planning-items/model/planning-item-revision": {
+    createPlanningItemRevision: () => ({
+      commitGitHubRevision: async (input) => {
+        if (!domainAllowed) return { ok: false, error: { code: "rejected" } };
+        domainRuns.push(input);
         return { ok: true, status: "committed" };
       },
     }),
-    planningItemReviseCommand: (itemId, itemType, expectedRevision, patch) => ({ itemId, itemType, expectedRevision, patch }),
   },
   "@/features/planning-items/model/planning-items-github-projection": {
     dispatchPlanningGitHubProjections: async ({ operationId }) => {

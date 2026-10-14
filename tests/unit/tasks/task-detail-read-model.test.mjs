@@ -56,7 +56,12 @@ function createSupabaseFixture(options = {}) {
       const ids = call.in.find(([field]) => field === "id")?.[1];
       if (id === "target") return { data: options.missingTarget ? null : target, error: null };
       if (id === "parent") return { data: rows.parent, error: null };
-      if (parentId === "target") return { data: [rows.child], error: null };
+      if (parentId === "target") {
+        let data = options.children || [rows.child];
+        if (call.range) data = data.slice(call.range[0], call.range[1] + 1);
+        if (call.limits.length) data = data.slice(0, call.limits[0]);
+        return { data, error: null };
+      }
       if (ids) return { data: ids.includes("related") ? [rows.related] : [], error: null };
       throw new Error("Task read was not constrained to an item, parent, or related IDs.");
     }
@@ -85,6 +90,13 @@ function createSupabaseFixture(options = {}) {
     if (call.table === "task_blockers") return { data: [], error: null };
     if (call.table === "task_audit_timeline") return { data: [{ id: 2, task_id: "target" }], error: null };
     if (call.table === "task_reviews") return { data: [], error: null };
+    if (call.table === "task_links") {
+      const ids = call.in.find(([field]) => field === "task_id")?.[1] || [];
+      let data = (options.links || []).filter((link) => ids.includes(link.task_id));
+      if (call.range) data = data.slice(call.range[0], call.range[1] + 1);
+      else data = data.slice(0, 1000);
+      return { data, error: null };
+    }
     return { data: [], error: null };
   }
 
@@ -99,6 +111,8 @@ function createSupabaseFixture(options = {}) {
         in(field, value) { call.in.push([field, value]); return query; },
         order(field, options) { call.orders.push([field, options]); return query; },
         limit(value) { call.limits.push(value); return query; },
+        range(from, to) { call.range = [from, to]; return query; },
+        returns() { return query; },
         maybeSingle() { return query; },
         single() { return query; },
         then(resolve, reject) { return Promise.resolve(resultFor(call)).then(resolve, reject); },
@@ -108,13 +122,9 @@ function createSupabaseFixture(options = {}) {
   };
 }
 
-const mapTaskRow = (row) => ({
-  id: row.id,
-  taskType: row.task_type,
-  parentTaskId: row.parent_task_id,
-  approvalStatus: row.approval_status,
-  updatedAt: row.updated_at,
-});
+const { mapTaskRow } = await importTestModule("src/lib/planning-task-mappers.ts");
+const { subIssueEvidenceSummary } = await importTestModule("src/features/tasks/model/sub-issue-evidence.ts");
+const { taskHasValidReviewEvidence } = await importTestModule("src/features/reviews/model/review-evidence.ts");
 
 const { createSupabaseTaskDetailReadModel } = await importTestModule(
   "src/features/tasks/server/task-detail-read-model-supabase.ts",
@@ -203,4 +213,37 @@ test("task detail read model exposes degraded areas instead of empty-domain ambi
   assert.deepEqual(result.model.relationships, []);
   assert.deepEqual(result.model.discussion.comments, []);
   assert.deepEqual(result.model.activity, []);
+});
+
+test("task detail includes inherited evidence after the first 200 direct Sub-Issues", async () => {
+  const children = Array.from({ length: 201 }, (_, index) => ({
+    id: `child-${String(index + 1).padStart(3, "0")}`,
+    title: `Sub-Issue ${index + 1}`, task_type: "sub_issue", parent_task_id: "target", sort_order: index,
+  }));
+  const supabase = createSupabaseFixture({ children, links: [{
+    id: 1, task_id: "child-201", type: "evidence", label: "Test report", url: "https://example.com/proof", position: 0, metadata: {},
+  }] });
+  const result = await createSupabaseTaskDetailReadModel(supabase).load(
+    { itemId: "target" }, { authorized: true, actorProfileId: "person" },
+  );
+  assert.equal(result.status, "ready");
+  const evidence = subIssueEvidenceSummary(result.model.item, result.model.children);
+  assert.equal(evidence.count, 1);
+  assert.equal(evidence.groups[0].source.id, "child-201");
+  assert.deepEqual(evidence.groups[0].entries.map(({ url }) => url), ["https://example.com/proof"]);
+  assert.equal(taskHasValidReviewEvidence(result.model.item, result.model.children), true);
+  assert.deepEqual(result.model.item.evidenceLinks, []);
+});
+
+test("task detail loads evidence links beyond the server response page", async () => {
+  const links = Array.from({ length: 1001 }, (_, index) => ({
+    id: index + 1, task_id: "child", type: index === 1000 ? "evidence" : "github_issue",
+    label: "Reference", url: `https://example.com/reference/${index}`, position: index, metadata: {},
+  }));
+  const result = await createSupabaseTaskDetailReadModel(createSupabaseFixture({ links })).load(
+    { itemId: "target" }, { authorized: true, actorProfileId: "person" },
+  );
+  assert.equal(result.status, "ready");
+  assert.equal(subIssueEvidenceSummary(result.model.item, result.model.children).count, 1);
+  assert.equal(taskHasValidReviewEvidence(result.model.item, result.model.children), true);
 });

@@ -118,3 +118,25 @@ test("dispatcher reports a failed finalization instead of claiming completion", 
   assert.equal(result.retryScheduled, 0);
   assert.equal(result.failed, 1);
 });
+
+
+test("outbox persists and reloads nonretryable content diagnostics without loss", async () => {
+  executionResult = {
+    status: "notEligible", code: "github_content_too_long", error: "Body too long", retryable: false,
+    lengthErrors: [{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1, message: "Body too long" }],
+  };
+  let stored;
+  const supabase = {
+    async rpc(name, params) {
+      if (name === "claim_planning_github_projection_requests") return { data: [claimedRequest()], error: null };
+      assert.equal(params.p_succeeded, true);
+      stored = structuredClone(params.p_result);
+      return { data: { ...claimedRequest(), status: "completed", result: stored }, error: null };
+    },
+    from() { return { select() { return this; }, eq() { return this; }, async order() { return { data: [{ task_id: "task-1", result: stored }], error: null }; } }; },
+  };
+  const dispatched = await projection.dispatchPlanningGitHubProjections({ supabase });
+  assert.equal(dispatched.retryScheduled, 0);
+  const reloaded = await projection.loadPlanningGitHubProjectionResults(supabase, "team-update:token:key");
+  assert.deepEqual(reloaded.get("task-1"), executionResult);
+});

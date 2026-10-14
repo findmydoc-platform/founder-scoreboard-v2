@@ -11,30 +11,35 @@ import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
+import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import { loadPlanningTrashTaskDetail } from "@/lib/planning-trash-detail";
 import type { AuthenticatedProfile } from "@/lib/types";
+import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
 
 type Props = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ returnTo?: string | string[]; comment?: string | string[] }>;
+  searchParams: Promise<{ returnTo?: string | string[]; comment?: string | string[]; focus?: string | string[] }>;
 };
 
 export default async function TaskPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { returnTo, comment } = await searchParams;
+  const { returnTo, comment, focus } = await searchParams;
   const safeReturnTo = safeTaskDetailReturnTo(returnTo);
-  const requestedCommentTarget = parseTaskCommentTarget(comment);
+  const requestedCommentTarget = parseTaskCommentTarget(focus) || parseTaskCommentTarget(comment);
   let authProfile: AuthenticatedProfile | null = null;
   let authUser: User | null = null;
+  let administratorAccess: AdministratorAccessSnapshot | undefined;
   const authRequired = requiresSupabaseAuth();
   if (authRequired) {
-    const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
+    const auth = await getServerPlanningAuth();
     if (!auth.ok) {
+      redirectForWorkspaceGate(auth.code);
       return <PlanningApp initialData={emptyPlanningShellState} initialHeaderData={emptyPlanningHeaderData} initialWorkspace="planning" source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;
     }
     authProfile = auth.profile;
     authUser = auth.user;
+    administratorAccess = auth.authority?.administratorAccess;
   }
 
   const supabase = getServerSupabase();
@@ -79,6 +84,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
       authRequired={authRequired}
       initialAuthUser={authUser}
       initialCurrentProfile={authProfile}
+      initialAdministratorAccess={administratorAccess}
       initialDetailDataError={taskDetailResult.status === "degraded"
         ? taskDetailDegradationMessage(taskDetailResult.unavailable)
         : ""}

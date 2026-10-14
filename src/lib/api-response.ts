@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { AuthErrorCode } from "./auth-error-contract";
 import type { AuthzResult } from "./authz";
 import { getServerSupabase } from "./supabase";
 
@@ -9,22 +10,30 @@ type ApiAuthorization = (request: NextRequest) => AuthzResult | Promise<AuthzRes
 
 type ApiContextResult =
   | { ok: true; supabase: ServerSupabase; permission: SuccessfulAuthzResult }
-  | { ok: false; response: NextResponse; status: number; error: string };
+  | { ok: false; response: NextResponse; status: number; error: string; code?: AuthErrorCode };
 
 type ApiJsonContextResult<T> =
   | { ok: true; supabase: ServerSupabase; permission: SuccessfulAuthzResult; payload: T }
-  | { ok: false; response: NextResponse; status: number; error: string };
+  | { ok: false; response: NextResponse; status: number; error: string; code?: AuthErrorCode };
 
 type ApiContextOptions = {
   supabaseUnavailableMessage?: string;
 };
+type AuthzErrorFields = Record<string, unknown> & { code?: never; error?: never };
 
 export function apiError(error: string, status: number) {
   return NextResponse.json({ error }, { status });
 }
 
-export function authzError(permission: FailedAuthzResult) {
-  return apiError(permission.error, permission.status);
+export function authzError(permission: FailedAuthzResult, fields: AuthzErrorFields = {}) {
+  const safeFields = { ...fields } as Record<string, unknown>;
+  delete safeFields.code;
+  delete safeFields.error;
+  return NextResponse.json({
+    ...safeFields,
+    ...(permission.code ? { code: permission.code } : {}),
+    error: permission.error,
+  }, { status: permission.status });
 }
 
 export function supabaseUnavailable(message = "Supabase env is not configured.") {
@@ -49,6 +58,7 @@ export async function requireApiContext(
       response: authzError(permission),
       status: permission.status,
       error: permission.error,
+      code: permission.code,
     };
   }
 

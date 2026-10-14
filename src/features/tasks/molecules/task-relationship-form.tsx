@@ -1,9 +1,10 @@
 "use client";
 
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { UiButton, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import { UiButton } from "@/shared/atoms/ui-primitives";
 import { relationTypeLabel } from "@/lib/display";
-import type { TaskRelationType } from "@/lib/types";
+import type { Profile, TaskRelationType } from "@/lib/types";
 
 export type TaskRelationshipDraft = {
   relationType: TaskRelationType;
@@ -17,6 +18,7 @@ type TaskRelationshipFormProps = {
   allowedRelationTypes: TaskRelationType[];
   duplicateRelation: boolean;
   pending: boolean;
+  profiles: Profile[];
   error?: string;
   className: string;
   onRelationDraftChange: (patch: Partial<TaskRelationshipDraft>) => void;
@@ -29,6 +31,7 @@ export function TaskRelationshipForm({
   allowedRelationTypes,
   duplicateRelation,
   pending,
+  profiles,
   error = "",
   className,
   onRelationDraftChange,
@@ -67,11 +70,14 @@ export function TaskRelationshipForm({
         aria-label="Verknüpftes Item"
         options={[{ value: "", label: "Aufgabe auswählen" }, ...relationTargetOptions]}
       />
-      <UiTextInput
+      <TaskMentionTextArea
+        profiles={profiles}
         value={relationDraft.note}
-        onChange={(event) => onRelationDraftChange({ note: event.target.value })}
+        onValueChange={(value) => onRelationDraftChange({ note: value })}
         disabled={pending}
         inputPadding="md"
+        minHeight="sm"
+        className="min-h-9"
         aria-label="Optionaler Beziehungshinweis"
         placeholder="Optionaler Hinweis"
       />

@@ -8,6 +8,7 @@ import { TaskDiscardChangesDialog } from "@/features/tasks/molecules/task-discar
 import { TaskDetailPanelHeader } from "@/features/tasks/molecules/task-detail-panel-header";
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
 import { clearTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
+import type { ReviewEvidenceSubmission } from "@/features/reviews/model/review-evidence";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import type { ApprovalDecisionAction, AuthenticatedProfile, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
 
@@ -20,6 +21,7 @@ type Props = {
   reviews: TaskReview[];
   detailDataError: string;
   detailDataLoading: boolean;
+  onRetryDetailData?: () => void;
   commentImportNotice: string;
   commentImportPending: boolean;
   blockers: TaskBlocker[];
@@ -29,6 +31,7 @@ type Props = {
   allTasks: Task[];
   relations: TaskRelation[];
   currentProfile?: Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | null;
+  operationalCorrection?: boolean;
   source: "supabase";
   pending: boolean;
   error?: string;
@@ -45,7 +48,7 @@ type Props = {
   onCreateSubIssue: () => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onReview: (task: Task, decision: ReviewDecision, score: number, checklist: TaskReviewChecklist, comment: string) => Promise<boolean> | boolean | void;
-  onReopenReview: (task: Task) => void;
+  onReopenReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onWithdrawReview: (task: Task, reason: string) => Promise<boolean> | boolean | void;
   onWithdraw: (reason: string) => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;

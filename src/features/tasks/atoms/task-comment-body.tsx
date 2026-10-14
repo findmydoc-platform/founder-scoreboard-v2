@@ -27,10 +27,11 @@ const markdownComponents: Components = {
       <a
         href={safe}
         target={external ? "_blank" : undefined}
-        rel={external ? "noreferrer" : undefined}
-        className="font-semibold text-blue-600 underline-offset-2 [overflow-wrap:anywhere] hover:text-blue-700 hover:underline"
+        rel={external ? "noopener noreferrer" : undefined}
+        className="font-semibold text-blue-600 underline-offset-2 [overflow-wrap:anywhere] hover:text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       >
         {children}
+        {external ? <span className="sr-only"> (öffnet in neuem Tab)</span> : null}
       </a>
     );
   },

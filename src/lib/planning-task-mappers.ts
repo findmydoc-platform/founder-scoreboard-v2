@@ -84,9 +84,9 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     ? null
     : row.approval_status || "proposed";
   const taskLinks = taskLinkProjection(row, options.taskLinks);
-  const evidenceLinks = isDeliverable ? taskLinks.evidenceLinks : [];
-  // Sub-Issues intentionally keep their GitHub projection and linked pull
-  // requests, while evidence gates remain a Deliverable-only concern.
+  const evidenceLinks = isStrategic ? [] : taskLinks.evidenceLinks;
+  // Sub-Issue evidence remains on its source; review and scoring stay
+  // Deliverable-only concerns.
   const linkedPullRequests = isStrategic ? [] : taskLinks.linkedPullRequests;
   const status = taskType === "sub_issue"
     ? normalizeSubIssueStatus(row.status || "Offen")
@@ -119,7 +119,7 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     dodTemplateVersion: isDeliverable ? row.dod_template_version || "founder-deliverable-v2" : "",
     definitionOfDone: row.definition_of_done || "",
     dependsOn: row.task_dependencies?.map((item) => item.note).join("; ") || "",
-    evidenceLink: isDeliverable ? evidenceLinks[0] || row.evidence_link || "" : "",
+    evidenceLink: isStrategic ? "" : evidenceLinks[0] || row.evidence_link || "",
     evidenceLinks,
     linkedPullRequests,
     issueNumber: row.issue_number || "",
@@ -131,6 +131,7 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     reviewStatus: isDeliverable ? row.review_status || "not_requested" : "not_requested",
     reviewOwnerProfileId: isDeliverable ? row.review_owner_profile_id || "" : "",
     reviewRequestedAt: isDeliverable ? row.review_requested_at || "" : "",
+    reviewEvidenceExceptionNote: isDeliverable ? row.review_evidence_exception_note || "" : "",
     scorePoints: isDeliverable ? row.score_points || 0 : 0,
     scoreFinal: isDeliverable && Boolean(row.score_final),
     githubRepo: isStrategic ? "" : row.github_repo || "findmydoc-platform/management",
@@ -195,6 +196,9 @@ export function mapTask(
 }
 
 export function mapTaskReview(row: DbTaskReview): TaskReview {
+  const delivery = Array.isArray(row.task_review_github_deliveries)
+    ? row.task_review_github_deliveries[0]
+    : row.task_review_github_deliveries;
   return {
     id: row.id,
     taskId: row.task_id,
@@ -204,6 +208,8 @@ export function mapTaskReview(row: DbTaskReview): TaskReview {
     points: Number(row.points || 0),
     comment: row.comment || "",
     checklist: row.checklist || {},
+    githubDeliveryStatus: delivery?.status as TaskReview["githubDeliveryStatus"],
+    githubCommentUrl: delivery?.github_comment_url || "",
     createdAt: row.created_at,
   };
 }

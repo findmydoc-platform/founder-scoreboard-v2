@@ -80,4 +80,56 @@ test("inflation restores every day and preserves ordered wall-clock windows", ()
   ]);
   assert.deepEqual(windows.sunday, [{ start: "00:00", end: "23:59" }]);
   assert.deepEqual(windows.wednesday, []);
+  assert.deepEqual(model.inflatePublishedTeamWorkweekWindows([
+    { weekday: 1, startMinute: 540, endMinute: 1020 },
+  ]).monday, [{ start: "09:00", end: "17:00" }]);
+});
+
+test("editing a published workweek prefills its windows at the next valid Monday", () => {
+  const publishedWindows = model.emptyTeamWorkweekWindows();
+  publishedWindows.monday = [{ start: "09:00", end: "17:00" }];
+  publishedWindows.friday = [{ start: "09:00", end: "14:00" }];
+
+  assert.deepEqual(model.editableTeamWorkweekDraft({
+    editBase: { windows: publishedWindows },
+    minimumEffectiveFrom: "2026-09-14",
+    version: null,
+  }), {
+    effectiveFrom: "2026-09-14",
+    windows: publishedWindows,
+  });
+});
+
+test("an existing private edit wins over the published base", () => {
+  const versionWindows = model.emptyTeamWorkweekWindows();
+  versionWindows.tuesday = [{ start: "08:00", end: "12:00" }];
+  const publishedWindows = model.emptyTeamWorkweekWindows();
+  publishedWindows.monday = [{ start: "09:00", end: "17:00" }];
+
+  assert.deepEqual(model.editableTeamWorkweekDraft({
+    editBase: { windows: publishedWindows },
+    minimumEffectiveFrom: "2026-09-14",
+    version: {
+      id: "private-1",
+      effectiveFrom: "2026-09-21",
+      timezone: "Europe/Berlin",
+      status: "preparing",
+      createdAt: "2026-09-07T10:00:00.000Z",
+      windows: versionWindows,
+    },
+  }), {
+    effectiveFrom: "2026-09-21",
+    windows: versionWindows,
+  });
+});
+
+test("the first workweek starts empty at the next valid Monday", () => {
+  assert.deepEqual(model.editableTeamWorkweekDraft({
+    editBase: null,
+    minimumEffectiveFrom: "2026-09-14",
+    version: null,
+  }), {
+    effectiveFrom: "2026-09-14",
+    windows: model.emptyTeamWorkweekWindows(),
+  });
 });

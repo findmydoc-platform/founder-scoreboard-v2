@@ -28,7 +28,7 @@ function ChildRow({ item, onOpenTask }: { item: Task; onOpenTask: (taskId: strin
         </TaskReferenceLink>
         <p className="mt-1 text-xs text-slate-500">{taskAssigneeLabel(item)}</p>
       </div>
-      <span className="hidden self-center text-xs font-medium text-slate-400 sm:block">Öffnen</span>
+            <span className="hidden self-center text-xs font-medium text-slate-500 sm:block">Öffnen</span>
     </article>
   );
 }

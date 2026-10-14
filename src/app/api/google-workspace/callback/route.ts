@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   try {
     if (!code || !stateValue) throw new Error("Google Workspace callback is incomplete.");
-    const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
+    const auth = await getServerPlanningAuth();
     if (!auth.ok || !auth.profile) throw new Error("FounderOps session is unavailable.");
     const state = verifyBoundGoogleWorkspaceState(stateValue, {
       userId: auth.user.id,
