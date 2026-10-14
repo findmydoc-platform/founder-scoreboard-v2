@@ -11,8 +11,8 @@ it("persists a fixed date only for deliverables and rejects legacy schedule fiel
       values ('integration-schedule-project', 'Integration schedule project')
     `);
     await client.query(`
-      insert into public.profiles (id, name, role, platform_role)
-      values ('integration-schedule-founder', 'Integration Founder', 'member', 'founder')
+      insert into public.profiles (id, name, platform_role)
+      values ('integration-schedule-founder', 'Integration Founder', 'founder')
     `);
     await client.query(`
       insert into public.tasks (

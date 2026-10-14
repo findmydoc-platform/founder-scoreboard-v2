@@ -8,6 +8,7 @@ import { createGitHubIssueComment, GitHubApiError, listGitHubIssueComments } fro
 import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "./github-app";
 import { resolveGitHubIssueNumber } from "./github-issue-reference";
 import { canonicalizeProfileMentionsForGitHub } from "./mentions";
+import { loadGitHubMentionTeam } from "./github-mention-team-config";
 import type { AuthenticatedProfile, GitHubCommentDeliveryStatus, PlatformRole } from "./types";
 import type { GitHubCommentDeliverySummary } from "./github-sync/contract";
 
@@ -76,6 +77,7 @@ function retryAt(attempts: number) {
 
 function createGitHubCommentBodyResolver(supabase: SupabaseClient) {
   let profilesPromise: Promise<ProfileRow[]> | null = null;
+  let teamPromise: ReturnType<typeof loadGitHubMentionTeam> | null = null;
 
   return async (comment: string) => {
     if (!comment.includes("@")) return comment;
@@ -86,8 +88,9 @@ function createGitHubCommentBodyResolver(supabase: SupabaseClient) {
       if (error) throw new Error(`GitHub-Erwähnungen konnten nicht aufgelöst werden: ${error.message}`);
       return (data || []) as ProfileRow[];
     })();
+    teamPromise ||= loadGitHubMentionTeam(supabase);
 
-    const profiles = await profilesPromise;
+    const [profiles, team] = await Promise.all([profilesPromise, teamPromise]);
     return canonicalizeProfileMentionsForGitHub(
       comment,
       profiles.map((profile) => ({
@@ -95,6 +98,7 @@ function createGitHubCommentBodyResolver(supabase: SupabaseClient) {
         name: profile.name,
         githubLogin: profile.github_login,
       })),
+      team,
     );
   };
 }

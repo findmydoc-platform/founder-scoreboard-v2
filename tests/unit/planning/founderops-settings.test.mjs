@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const settingsState = await importTestModule(
-  "src/features/settings/model/founderops-settings-state.ts",
+  "src/features/sprint/model/sprint-review-settings-state.ts",
   {
     "@/lib/sprint-review-window": {
       sprintReviewDueAt: (endDate, hours) => `${endDate}:${hours}`,
@@ -46,22 +46,4 @@ test("FounderOps settings derive only missing unlocked deadlines", () => {
   const merged = settingsState.applyReviewWindowHours(data, 96);
 
   assert.equal(merged.sprints[0].reviewDueAt, "2026-07-31:96");
-});
-
-test("FounderOps settings replace only the GitHub Project target", () => {
-  const data = {
-    project: {
-      id: "project",
-      githubProjectOwner: "findmydoc-platform",
-      githubProjectNumber: 21,
-      reviewObjectionWindowHours: 48,
-    },
-    sprints: [],
-  };
-
-  const merged = settingsState.applyGitHubProjectSettings(data, "another-org", 7);
-
-  assert.equal(merged.project.githubProjectOwner, "another-org");
-  assert.equal(merged.project.githubProjectNumber, 7);
-  assert.equal(merged.project.reviewObjectionWindowHours, 48);
 });

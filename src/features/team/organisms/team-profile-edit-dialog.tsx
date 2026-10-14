@@ -59,7 +59,7 @@ export function TeamProfileEditDialog({
           <div>
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Personeneinstellungen</div>
             <h3 className="mt-1 text-lg font-semibold text-slate-950">{draftProfile.name}</h3>
-            <p className="mt-1 text-sm leading-6 text-slate-500">CEO-Verwaltung für Rolle, Kapazität, GitHub-Zuordnung und Vertretung.</p>
+            <p className="mt-1 text-sm leading-6 text-slate-500">CEO-Verwaltung für Plattformrolle, Organisationsrolle, Kapazität und Vertretung.</p>
           </div>
           <UiButton type="button" onClick={onClose} size="iconXs" className="text-slate-500" aria-label="Dialog schließen">
             <X className="h-4 w-4" />
@@ -84,15 +84,6 @@ export function TeamProfileEditDialog({
                 value={draftProfile.orgRole}
                 disabled={controlDisabled}
                 onChange={(event) => onPatch({ orgRole: event.target.value })}
-                textTone="muted"
-              />
-            </UiField>
-            <UiField>
-              GitHub-Login
-              <UiTextInput
-                value={draftProfile.githubLogin}
-                disabled={controlDisabled}
-                onChange={(event) => onPatch({ githubLogin: event.target.value })}
                 textTone="muted"
               />
             </UiField>

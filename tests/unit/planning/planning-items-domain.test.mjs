@@ -57,6 +57,7 @@ test("trusted server adapters create the three actor credential variants", () =>
         profileId: "profile-1",
         platformRole: "founder",
         credential: { kind: "session" },
+        capabilities: { operationalCorrection: false },
       },
     },
   );

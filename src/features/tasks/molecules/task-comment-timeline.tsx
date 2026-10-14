@@ -26,6 +26,8 @@ import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import { describeTaskActivity, type TaskActivityIconKey, type TaskActivityTone } from "@/features/tasks/model/task-activity-presentation";
 import { taskCommentElementId } from "@/features/tasks/model/task-comment-target";
 import type { GitHubCommentDeliveryStatus, Profile, TaskActivity } from "@/lib/types";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
+import type { TaskReview } from "@/lib/types";
 import { UiEmptyState } from "@/shared/atoms/ui-primitives";
 import { classNames } from "@/shared/atoms/ui-primitives";
 
@@ -61,6 +63,19 @@ export type TaskCommentTimelineItem =
       type: "github-comment";
       createdAt: string;
       message: string;
+      profileId: string;
+      comment: string;
+      authorLogin: string;
+      authorAvatarUrl: string;
+      htmlUrl: string;
+      githubDeliveryStatus?: GitHubCommentDeliveryStatus;
+      githubCommentUrl?: string;
+    }
+  | {
+      id: string;
+      type: "review";
+      createdAt: string;
+      review: TaskReview;
       profileId: string;
       comment: string;
       authorLogin: string;
@@ -232,6 +247,28 @@ export function TaskCommentTimeline({
               )}
             </div>
           </article>
+        ) : item.type === "review" ? (
+          <article id={taskCommentElementId(item.id)} key={item.id} className={classNames("flex min-w-0 gap-3 overflow-hidden rounded-md border bg-white px-3 py-3 text-sm transition", highlightedTarget === item.id ? "border-blue-300 ring-4 ring-blue-100" : "border-slate-200")}>
+            <ProfileAvatar profile={profileById(item.profileId)} />
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-slate-900">
+                  {item.review.decision === "accepted" ? "Review angenommen" : item.review.decision === "partial" ? "Kleine Nacharbeit" : "Grundlegende Nacharbeit"}
+                </span>
+                <span className="text-xs text-slate-500">{formatDateTime(item.createdAt)}</span>
+              </div>
+              <div className="mt-1 text-xs text-slate-600">{item.review.points}/10 Punkte · {profileName(item.profileId)}</div>
+              {item.comment ? <CommentBody value={item.comment} /> : null}
+              {deliveryHint(item.githubDeliveryStatus) ? (
+                <div className="mt-2 text-xs font-medium text-amber-800">{deliveryHint(item.githubDeliveryStatus)}</div>
+              ) : null}
+              {item.githubDeliveryStatus === "delivered" && item.githubCommentUrl ? (
+                <a href={item.githubCommentUrl} target="_blank" rel="noreferrer" aria-label="Review in GitHub öffnen (öffnet in neuem Tab)" className="mt-2 inline-flex text-xs font-semibold text-blue-600 hover:text-blue-700">
+                  In GitHub öffnen
+                </a>
+              ) : null}
+            </div>
+          </article>
         ) : (() => {
           const activity = describeTaskActivity(item.activity, { labelsById });
           const Icon = activityIcons[activity.icon];
@@ -246,10 +283,10 @@ export function TaskCommentTimeline({
               <div className="min-w-0 flex-1 overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-slate-800">{activity.title}</span>
-                  <span className="text-xs text-slate-400">{formatDateTime(item.createdAt)}</span>
+                  <span className="text-xs text-slate-500">{formatDateTime(item.createdAt)}</span>
                 </div>
-                {activity.detail && <div className="mt-1 text-sm leading-6 text-slate-600">{activity.detail}</div>}
-                <div className="mt-1 text-xs text-slate-400">durch {actorName}</div>
+                {activity.detail && <div className="mt-1 text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]"><LinkifiedText value={activity.detail} /></div>}
+                <div className="mt-1 text-xs text-slate-500">durch {actorName}</div>
               </div>
             </article>
           );

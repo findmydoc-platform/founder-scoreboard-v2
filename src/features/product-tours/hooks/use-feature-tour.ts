@@ -14,6 +14,7 @@ import {
   type FeatureTourRunClaim,
 } from "@/features/product-tours/model/feature-tour-run-state";
 import { selectNextFeatureTour } from "@/features/product-tours/model/feature-tour-selection";
+import { selectSubIssueEvidenceTourTask } from "@/features/product-tours/model/sub-issue-evidence-tour-task";
 
 export type FeatureTourProviderProps = {
   apiClient: BrowserApiClient;
@@ -213,6 +214,7 @@ export function useFeatureTour({
     const activeTour = tour;
     let active = true;
     let seenMarked = false;
+    let mentionDemoTextArea: HTMLTextAreaElement | null = null;
     const run: FeatureTourRunClaim = {
       driverStarted: false,
       tourId: activeTour.id,
@@ -221,8 +223,16 @@ export function useFeatureTour({
 
     const runIsActive = () => active;
 
+    const clearMentionDemo = () => {
+      if (!mentionDemoTextArea || (mentionDemoTextArea.value !== "@" && mentionDemoTextArea.value !== "@all ")) return;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(mentionDemoTextArea, "");
+      mentionDemoTextArea.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
     const failTour = (message: string) => {
       if (!runIsActive()) return;
+      clearMentionDemo();
       if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
       setRequestedTourId(null);
       setTourRequested(false);
@@ -272,7 +282,9 @@ export function useFeatureTour({
       }
 
       if (startingStepIndex === 0 && activeTour.openTaskDetail) {
-        const taskId = selectedTaskIdRef.current || tasksRef.current.find((task) => (
+        const taskId = activeTour.openSubIssueEvidence
+          ? selectSubIssueEvidenceTourTask(tasksRef.current, selectedTaskIdRef.current)?.id
+          : selectedTaskIdRef.current || tasksRef.current.find((task) => (
           !task.trashedAt
           && (!activeTour.openTaskShare || task.taskType === "deliverable" || task.taskType === "sub_issue")
         ))?.id;
@@ -281,6 +293,26 @@ export function useFeatureTour({
           return;
         }
         openTaskPanelRef.current(taskId);
+      }
+
+      if (startingStepIndex === 0 && activeTour.openSubIssueEvidence) {
+        const overviewTab = await waitForElement("[data-tour-id='task-detail-tab-overview']");
+        if (!runIsActive()) return;
+        if (!(overviewTab instanceof HTMLElement)) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+          return;
+        }
+        overviewTab.click();
+      }
+
+      if (startingStepIndex === 0 && activeTour.openTaskActivity) {
+        const activityTab = await waitForElement("[data-tour-id='task-detail-tab-activity']");
+        if (!runIsActive()) return;
+        if (!(activityTab instanceof HTMLElement)) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+          return;
+        }
+        activityTab.click();
       }
 
       const initialStep = tourSteps[0];
@@ -292,6 +324,25 @@ export function useFeatureTour({
       if (!trigger) {
         failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
         return;
+      }
+
+      if (startingStepIndex === 0 && activeTour.openTaskMentionMenu) {
+        if (!(trigger instanceof HTMLTextAreaElement) || trigger.value) {
+          failTour("Leere zuerst deinen Kommentarentwurf und starte die Hilfe-Tour erneut.");
+          return;
+        }
+        mentionDemoTextArea = trigger;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+        setter?.call(trigger, "@");
+        trigger.dispatchEvent(new Event("input", { bubbles: true }));
+        trigger.focus();
+        trigger.setSelectionRange(1, 1);
+        const mentionAllOption = await waitForElement(activeTour.requiredSelectors[1]);
+        if (!runIsActive()) return;
+        if (!mentionAllOption) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+          return;
+        }
       }
 
       if (startingStepIndex === 0 && activeTour.openTaskShare) {
@@ -370,6 +421,7 @@ export function useFeatureTour({
         stagePadding: 6,
         stageRadius: 8,
         onDestroyed: () => {
+          clearMentionDemo();
           if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
           setRequestedTourId(null);
           setResumeStepIndex(0);

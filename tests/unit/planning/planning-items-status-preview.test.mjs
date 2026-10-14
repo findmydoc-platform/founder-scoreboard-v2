@@ -124,6 +124,7 @@ function taskRow(overrides = {}) {
     review_status: "not_requested",
     review_owner_profile_id: "reviewer",
     review_requested_at: null,
+    review_evidence_exception_note: null,
     score_points: 4,
     score_final: false,
     score_relevant: false,
@@ -166,15 +167,24 @@ function supabaseFor(target, overrides = {}) {
     active_tasks: parents,
     sprints: overrides.sprints || [],
     planning_item_raci_assignments: overrides.raciAssignments || [],
+    task_links: overrides.taskLinks === undefined
+      ? [{ id: 1, task_id: target.id, type: "evidence", url: "https://example.com/evidence" }]
+      : overrides.taskLinks,
   };
 
   return {
+    async rpc(name) {
+      assert.equal(name, "has_valid_planning_review_evidence");
+      return { data: overrides.hasValidReviewEvidence ?? Boolean(target.evidence_link || rows.task_links.length), error: null };
+    },
     from(table) {
       return {
         select(columns) {
           const filters = [];
           const builder = {
             eq(column, value) { filters.push([column, value]); return this; },
+            in(column, values) { filters.push([column, values]); return this; },
+            limit(count) { this.limitCount = count; return this; },
             async maybeSingle() {
               if (table === "active_tasks" && columns.includes("problem_statement")) {
                 return { data: target, error: null };
@@ -183,7 +193,8 @@ function supabaseFor(target, overrides = {}) {
               return { data: null, error: null };
             },
             then(resolve, reject) {
-              const data = (rows[table] || []).filter((row) => filters.every(([column, value]) => row[column] === value));
+              let data = (rows[table] || []).filter((row) => filters.every(([column, value]) => Array.isArray(value) ? value.includes(row[column]) : row[column] === value));
+              if (this.limitCount) data = data.slice(0, this.limitCount);
               return Promise.resolve({ data, error: null }).then(resolve, reject);
             },
           };
@@ -239,6 +250,71 @@ test("Planning Items Review preview exposes the complete server-owned transition
   assert.equal(result.preview.systemEffects.some((effect) => effect.field === "activity"), true);
   assert.equal(result.preview.systemEffects.some((effect) => effect.field === "audit"), true);
   assert.equal(result.preview.systemEffects.some((effect) => effect.field === "githubIssueSyncStatus"), true);
+});
+
+test("Planning Items Review preview requires evidence or an explicit exception note", async () => {
+  const actor = { id: "ceo", name: "CEO", platformRole: "ceo" };
+  const withoutEvidence = await preview(actor, taskRow(), "Review", { taskLinks: [] });
+  assert.equal(withoutEvidence.ok, true);
+  assert.equal(withoutEvidence.preview.errors.some((error) => error.includes("Evidence-Link")), true);
+
+  const parsed = updates.parsePlanningItemPatchPayload({
+    expectedUpdatedAt: updatedAt,
+    status: "Review",
+    evidenceExceptionNote: "Ergebnis wurde im Founder-Meeting abgenommen.",
+  });
+  assert.equal(parsed.ok, true);
+  const withException = await updates.buildPlanningItemUpdatePreview({
+    actor,
+    itemId: "task-1",
+    parsed,
+    supabase: supabaseFor(taskRow(), { taskLinks: [] }),
+  });
+  assert.equal(withException.ok, true);
+  assert.deepEqual(withException.preview.errors, []);
+  assert.equal(withException.preview.resultingItem.evidenceExceptionNote, "Ergebnis wurde im Founder-Meeting abgenommen.");
+});
+
+test("Planning Items Review preview accepts legacy evidence and a valid link in the same patch", async () => {
+  const actor = { id: "ceo", name: "CEO", platformRole: "ceo" };
+  const legacy = await preview(
+    actor,
+    taskRow({ evidence_link: "https://example.com/legacy-evidence" }),
+    "Review",
+    { taskLinks: [] },
+  );
+  assert.equal(legacy.ok, true);
+  assert.deepEqual(legacy.preview.errors, []);
+
+  const parsed = updates.parsePlanningItemPatchPayload({
+    expectedUpdatedAt: updatedAt,
+    status: "Review",
+    evidenceLink: "https://example.com/current-evidence",
+  });
+  assert.equal(parsed.ok, true);
+  const samePatch = await updates.buildPlanningItemUpdatePreview({
+    actor,
+    itemId: "task-1",
+    parsed,
+    supabase: supabaseFor(taskRow(), { taskLinks: [] }),
+  });
+  assert.equal(samePatch.ok, true);
+  assert.deepEqual(samePatch.preview.errors, []);
+  assert.equal(samePatch.preview.resultingItem.evidenceLink, "https://example.com/current-evidence");
+});
+
+test("Planning Items Review preview accepts inherited evidence without adding a parent link or exception", async () => {
+  const result = await preview(
+    { id: "ceo", name: "CEO", platformRole: "ceo" },
+    taskRow(),
+    "Review",
+    { taskLinks: [], hasValidReviewEvidence: true },
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.preview.errors, []);
+  assert.equal(result.preview.resultingItem.evidenceLink, "");
+  assert.equal(result.preview.resultingItem.evidenceExceptionNote, "");
+  assert.equal(Object.hasOwn(result.preview.dbPatch, "evidence_link"), false);
 });
 
 test("identical status remains a successful no-op even while review is active", async () => {
@@ -420,4 +496,26 @@ test("Review preview rejects missing owners and locked Sprints", async () => {
   );
   assert.equal(lockedSprint.ok, true);
   assert.equal(lockedSprint.preview.errors.some((error) => error.includes("gelockt")), true);
+});
+
+test("Update preview validates the full merged brief and retains a long patch", async () => {
+  const target = taskRow({ problem_statement: "p".repeat(40_000) });
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, intendedOutcome: "😀".repeat(30_000) });
+  assert.equal(parsed.ok, true);
+  const result = await updates.buildPlanningItemUpdatePreview({ actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target) });
+  assert.equal(result.ok, true);
+  assert.equal(Array.from(result.preview.normalizedPatch.intendedOutcome).length, 30_000);
+  assert.equal(result.preview.resultingItem.problemStatement.length, 40_000);
+  assert.equal(result.preview.lengthErrors[0].field, "githubBody");
+  assert.ok(result.preview.errors.length > 0);
+});
+
+test("an invalid update preview retains the full input and exposes structured length errors", async () => {
+  const target = taskRow();
+  const intendedOutcome = "x".repeat(65_537);
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, intendedOutcome });
+  const result = await updates.buildPlanningItemUpdatePreview({ actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target) });
+  assert.equal(result.ok, true);
+  assert.equal(result.preview.normalizedPatch.intendedOutcome?.length, 65_537);
+  assert.equal(result.preview.lengthErrors.find((error) => error.field === "intendedOutcome").excess, 1);
 });

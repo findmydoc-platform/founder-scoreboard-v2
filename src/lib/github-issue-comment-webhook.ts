@@ -2,8 +2,9 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { githubCommentMarkerId } from "@/features/tasks/model/github-comment-delivery-policy";
+import { githubCommentMarkerId, githubReviewMarkerId } from "@/features/tasks/model/github-comment-delivery-policy";
 import { resolveGitHubCommentMentionSnapshot } from "@/lib/github-comment-mention-snapshot";
+import { loadGitHubMentionTeam } from "@/lib/github-mention-team-config";
 import { getGitHubAppInstallationToken } from "./github-app";
 import { getGitHubIssueComment, isGitHubIssueApiUrl } from "./github";
 
@@ -67,6 +68,7 @@ export type GitHubIssueCommentWebhookStore = {
   claim(deliveryId: string, lockToken: string): Promise<ClaimedGitHubIssueCommentDelivery | null>;
   resolveTask(repository: string, issueNumber: number): Promise<TaskMapping>;
   hasLocalComment(taskId: string, commentId: number): Promise<boolean>;
+  hasLocalReview(taskId: string, reviewId: number): Promise<boolean>;
   applyProjection(
     deliveryId: string,
     lockToken: string,
@@ -169,6 +171,17 @@ export function createSupabaseGitHubIssueCommentWebhookStore(
       return Boolean(data);
     },
 
+    async hasLocalReview(taskId, reviewId) {
+      const { data, error } = await supabase
+        .from("task_reviews")
+        .select("id")
+        .eq("task_id", taskId)
+        .eq("id", reviewId)
+        .maybeSingle<{ id: number }>();
+      if (error) throw new Error(`FounderOps review marker could not be reconciled: ${error.message}`);
+      return Boolean(data);
+    },
+
     async applyProjection(deliveryId, lockToken, input) {
       const comment = input.comment;
       let actorProfileId = "";
@@ -176,7 +189,7 @@ export function createSupabaseGitHubIssueCommentWebhookStore(
       let baselineMentionRecipientProfileIds: string[] = [];
       let baselineSourceUpdatedAt: string | null = null;
       if (input.operation === "upsert" && comment) {
-        const [{ data: profiles, error: profilesError }, { data: existingComment, error: existingCommentError }] = await Promise.all([
+        const [{ data: profiles, error: profilesError }, { data: existingComment, error: existingCommentError }, mentionTeam] = await Promise.all([
           supabase.from("profiles").select("id,name,github_login"),
           supabase
             .from("task_external_comments")
@@ -184,6 +197,7 @@ export function createSupabaseGitHubIssueCommentWebhookStore(
             .eq("source", "github")
             .eq("external_id", String(comment.commentId))
             .maybeSingle(),
+          loadGitHubMentionTeam(supabase),
         ]);
         if (profilesError) throw new Error(`GitHub mention profiles could not be loaded: ${profilesError.message}`);
         if (existingCommentError) throw new Error(`GitHub mention baseline could not be loaded: ${existingCommentError.message}`);
@@ -195,6 +209,7 @@ export function createSupabaseGitHubIssueCommentWebhookStore(
             name: profile.name,
             githubLogin: profile.github_login,
           })),
+          team: mentionTeam,
           existing: existingComment ? {
             authorLogin: existingComment.author_login,
             body: existingComment.body,
@@ -207,6 +222,7 @@ export function createSupabaseGitHubIssueCommentWebhookStore(
         mentionRecipientProfileIds = mentionSnapshot.mentionRecipientProfileIds;
         baselineMentionRecipientProfileIds = mentionSnapshot.baselineMentionRecipientProfileIds;
         baselineSourceUpdatedAt = mentionSnapshot.baselineSourceUpdatedAt;
+        comment.body = mentionSnapshot.normalizedBody;
       }
       const { data, error } = await supabase.rpc("apply_github_issue_comment_webhook_projection_with_mentions", {
         p_delivery_id: deliveryId,
@@ -384,7 +400,11 @@ export async function processGitHubIssueCommentWebhookDelivery({
     const comment = await loadComment(delivery);
     const normalized = normalizedComment(comment, delivery);
     const markerId = githubCommentMarkerId(normalized.body);
-    if (markerId && await store.hasLocalComment(task.taskId, markerId)) {
+    const reviewMarkerId = githubReviewMarkerId(normalized.body);
+    const mirrored = markerId
+      ? await store.hasLocalComment(task.taskId, markerId)
+      : reviewMarkerId ? await store.hasLocalReview(task.taskId, reviewMarkerId) : false;
+    if (mirrored) {
       const projection = await store.applyProjection(delivery.deliveryId, lockToken, {
         operation: "suppress",
         taskId: task.taskId,

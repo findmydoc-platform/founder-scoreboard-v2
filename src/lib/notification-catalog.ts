@@ -30,6 +30,7 @@ export type NotificationPayloadInput = {
   title: string;
   body?: string;
   dedupeKey?: string | null;
+  targetPath?: string | null;
 };
 
 export function isKnownNotificationType(type: string): type is NotificationType {
@@ -50,6 +51,7 @@ export function createNotificationPayload(type: NotificationType, input: Notific
     title: input.title,
     body: input.body || "",
     ...(input.dedupeKey ? { dedupe_key: input.dedupeKey } : {}),
+    ...(input.targetPath ? { target_path: input.targetPath } : {}),
   };
 }
 

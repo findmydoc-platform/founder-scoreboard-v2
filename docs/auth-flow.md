@@ -2,6 +2,8 @@
 
 This document is the source of truth for the FounderOps web authentication flow. It covers the Supabase session, role authorization, reload-stable GitHub App connections, and the UI states shown during reconnects.
 
+The staged Google migration and its operational prerequisites are specified in [Google Workspace access](google-workspace-access.md). The private database mode controls the login provider. GitHub sign-in remains available only during the legacy/linking stages; after cutover it is an integration only.
+
 ## Principles
 
 - Supabase owns the user session and refresh token through SSR-compatible auth cookies.
@@ -22,7 +24,7 @@ flowchart TD
   B --> C["Server component reads Supabase cookies"]
   C --> D{"Valid Supabase user?"}
   D -- "No" --> E["Render login gate without planning data"]
-  D -- "Yes" --> F["Map user through profiles.auth_user_id or profiles.github_login"]
+  D -- "Yes" --> F["Check Workspace access, then map profiles.auth_user_id"]
   F --> G{"Allowed platform_role?"}
   G -- "No" --> H["Render access error without planning data"]
   G -- "Yes" --> I["Load planning data on the server"]
@@ -31,28 +33,28 @@ flowchart TD
   K --> L["Client checks /api/github-app/status with Supabase bearer token"]
 ```
 
-## Supabase GitHub Login
+## Supabase application login
 
-Supabase GitHub login is only the application login path. It restores the FounderOps session after reloads and maps the user to a team profile. It is not used as the GitHub API credential for FounderOps GitHub operations.
+Supabase owns application login and session restoration. Google is the final application provider. GitHub login remains only for the controlled migration stages. Neither provider session supplies GitHub API credentials.
 
 ```mermaid
 sequenceDiagram
   participant U as User
   participant UI as Browser UI
   participant SB as Supabase Auth
-  participant GH as GitHub OAuth
+  participant GH as Configured OAuth provider
   participant CB as /auth/callback
   participant APP as FounderOps App
 
-  U->>UI: Click "Mit GitHub anmelden"
-  UI->>SB: signInWithOAuth(provider=github, scopes=repo read:user user:email)
+  U->>UI: Click configured sign-in action
+  UI->>SB: Server starts OAuth with operation-specific scopes
   SB->>GH: Redirect to GitHub OAuth
   GH->>SB: OAuth code
   SB->>CB: Redirect with code and next path
   CB->>SB: exchangeCodeForSession(code)
   SB-->>CB: Set Supabase auth cookies
   CB->>APP: Redirect to safe relative next path
-  APP->>APP: Verify session and role before loading data
+  APP->>APP: Verify Workspace access, profile and role before data
 ```
 
 ## GitHub App Connect: Author Connection
@@ -144,6 +146,15 @@ sequenceDiagram
 - Laptop standby then resume: the proxy and client refresh paths refresh the Supabase session. `/api/github-app/status` refreshes a soon-expiring GitHub App user access token when possible.
 - Missing, revoked, expired, or mismatched GitHub App user connection: issue sync remains available. A locally saved comment waits for its original author's connection and is retried after OAuth reconnect or a later task/bulk sync. It must not start OAuth only because a task was opened.
 - Expired or revoked Supabase session: the app clears protected client state and returns to the login gate.
+
+## Browser Session Recovery
+
+- Supabase owns proactive access-token refresh. The browser API client asks the Supabase session adapter for the current session immediately before each app request.
+- An API guard may return `session_invalid_before_effect` only when authentication failed before the route parsed its payload or started an effect.
+- The browser may refresh and replay exactly once when it attached the rejected bearer token itself and the request is `GET`, `HEAD`, or a JSON request with an already serialized body.
+- Form data, streams, bodyless mutations, caller-provided authorization, unmarked `401` responses, and failures after an effect are never replayed automatically.
+- A replay may use only a refreshed session for the same Supabase user. If login state changes to another user while recovery is running, the old request is abandoned.
+- Retryable refresh failures preserve the local session. Permanent failures and a second marked `401` clear it only when the rejected session is still current, so a newer session is never signed out by stale work.
 
 ## Token Handling
 

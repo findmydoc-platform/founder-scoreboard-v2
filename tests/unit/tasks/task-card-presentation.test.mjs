@@ -34,3 +34,17 @@ test("direct child labels follow the planning hierarchy", async () => {
   assert.equal(presentation.directChildPluralLabel("deliverable"), "Sub-Issues");
   assert.equal(presentation.directChildPluralLabel("sub_issue"), "Sub-Issues");
 });
+
+test("task card resolves the assignee by stable profile id before display name", async () => {
+  const presentation = await importTestModule("src/features/tasks/model/task-card-presentation.ts", {
+    "@/lib/status": { normalizeStatus: (status) => status },
+  });
+  const profiles = [
+    { id: "first", name: "Ada" },
+    { id: "second", name: "Ben" },
+  ];
+  assert.equal(presentation.taskAssigneeProfile({ assigneeId: "second", assignee: "Ada" }, profiles), profiles[1]);
+  assert.equal(presentation.taskAssigneeProfile({ assigneeId: "missing", assignee: "Ada" }, profiles), undefined);
+  assert.equal(presentation.taskAssigneeProfile({ assigneeId: "", assignee: "Ada" }, profiles), profiles[0]);
+  assert.equal(presentation.taskAssigneeProfile({ assigneeId: "", assignee: "" }, profiles), undefined);
+});

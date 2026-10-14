@@ -62,7 +62,7 @@ for (const entry of supabaseEntries) {
 }
 
 if (existsSync("supabase/rollback")) failures.push("Legacy supabase/rollback directory must stay removed.");
-if (packageJson.devDependencies?.supabase !== "2.109.1") failures.push("Supabase CLI must be pinned to exactly 2.109.1.");
+if (packageJson.devDependencies?.supabase !== "2.115.0") failures.push("Supabase CLI must be pinned to exactly 2.115.0.");
 if (packageJson.scripts?.["test:migrations"] !== "NODE_OPTIONS=--no-deprecation vitest run --project migrations") {
   failures.push("test:migrations must run the serial Vitest migration project.");
 }

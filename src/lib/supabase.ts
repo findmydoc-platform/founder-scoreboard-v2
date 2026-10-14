@@ -55,21 +55,6 @@ export function getServerSupabase() {
   return serverClient;
 }
 
-export function getSupabaseForToken(token: string) {
-  const url = runtimeSupabaseUrl();
-  const anonKey = runtimeSupabaseAnonKey();
-  if (!url || !anonKey) return null;
-
-  return createClient(url, anonKey, {
-    auth: { persistSession: false },
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  });
-}
-
 export function requiresSupabaseAuth() {
   const localAuthDisabled = runtimeEnv("NODE_ENV") === "development"
     && runtimeEnv("VERCEL") !== "1"

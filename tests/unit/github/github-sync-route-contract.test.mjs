@@ -126,6 +126,33 @@ test("sync route preserves API context infrastructure status metadata", async ()
   assert.deepEqual(projectionCalls, []);
 });
 
+test("sync route preserves a marked pre-effect session failure", async () => {
+  tokenCalls = 0;
+  projectionCalls = [];
+  const markedResponse = {
+    status: 401,
+    async json() {
+      return {
+        code: "session_invalid_before_effect",
+        error: "Anmeldung ungültig oder abgelaufen.",
+      };
+    },
+  };
+  apiContext = {
+    ok: false,
+    status: 401,
+    code: "session_invalid_before_effect",
+    error: "Anmeldung ungültig oder abgelaufen.",
+    response: markedResponse,
+  };
+
+  const response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
+
+  assert.equal(response, markedResponse);
+  assert.equal(tokenCalls, 0);
+  assert.deepEqual(projectionCalls, []);
+});
+
 test("sync route rejects strategic items before token acquisition", async () => {
   payload = { createIfMissing: false };
   activeTaskType = "initiative";

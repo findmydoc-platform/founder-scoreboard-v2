@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { requirePlanningContributor } from "@/lib/authz";
+import { mentionedProfileIds } from "@/lib/mentions";
 import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
 import {
   createPlanningReviewPlanningItems,
@@ -19,11 +20,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const actor = actorContextFromSessionAuth({ ok: true, profile: apiContext.permission.profile });
   if (!actor.ok) return apiError("Nur die Zuständigkeit, CEO oder Deputy können dieses Review zurückziehen.", 403);
   const { id } = await context.params;
+  const { data: profiles, error: profilesError } = await apiContext.supabase.from("profiles").select("id,name,github_login");
+  if (profilesError) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
+  const mentionRecipientProfileIds = mentionedProfileIds(
+    parsed.value.reason,
+    (profiles || []).map((profile) => ({ id: profile.id, name: profile.name, githubLogin: profile.github_login })),
+  );
   const metadata = auditRequestMetadata(request);
   const result = await createPlanningReviewPlanningItems(apiContext.supabase).run({
     actor: actor.actor,
     mode: "commit",
-    command: withdrawPlanningReviewCommand(id, parsed.value.expectedUpdatedAt, parsed.value.reason),
+    command: withdrawPlanningReviewCommand(id, parsed.value.expectedUpdatedAt, parsed.value.reason, mentionRecipientProfileIds),
     requestMetadata: {
       requestIp: metadata.request_ip || undefined,
       userAgent: metadata.user_agent || undefined,

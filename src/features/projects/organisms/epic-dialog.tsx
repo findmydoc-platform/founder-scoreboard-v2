@@ -1,5 +1,8 @@
 "use client";
 
+import { validatePlanningFields } from "@/features/planning-items/model/planning-item-content";
+import { codepointLength } from "@/lib/github-issue-content";
+
 import { X } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import type { EpicStatus } from "@/features/projects/model/epic-contract";
@@ -52,7 +55,7 @@ export function EpicDialog({
   const [error, setError] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
-  const titleLength = draft.title.trim().length;
+  const titleLength = codepointLength(draft.title.trim());
   const canSave = titleLength >= 3;
   const editing = Boolean(draft.id);
   const heading = editing ? "Meilenstein bearbeiten" : "Neuer Meilenstein";
@@ -70,6 +73,8 @@ export function EpicDialog({
       }
       return;
     }
+    const lengthErrors = validatePlanningFields({ ...draft, id: "", taskType: "epic" });
+    if (lengthErrors.length) { setError(lengthErrors[0].message); requestAnimationFrame(() => errorRef.current?.focus()); return; }
     setPending(true);
     setError("");
     try {
@@ -146,7 +151,6 @@ export function EpicDialog({
                 value={draft.title}
                 required
                 minLength={3}
-                maxLength={240}
                 aria-describedby={titleError ? titleValidationId : undefined}
                 aria-invalid={titleError ? true : undefined}
                 disabled={pending}
@@ -164,7 +168,6 @@ export function EpicDialog({
               Gemeinsames Ziel
               <UiTextArea
                 value={draft.description}
-                maxLength={4000}
                 disabled={pending}
                 onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
                 minHeight="xl"

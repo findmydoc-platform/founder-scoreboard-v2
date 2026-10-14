@@ -14,8 +14,11 @@ export type FeatureTourDefinition = {
   openHelpMenu?: boolean;
   openProfileProcessSettings?: boolean;
   openProfileApiSettings?: boolean;
+  openTaskActivity?: boolean;
   openTaskDetail?: boolean;
+  openTaskMentionMenu?: boolean;
   openTaskShare?: boolean;
+  openSubIssueEvidence?: boolean;
   productUpdateId?: string;
   requiredSelectors: readonly string[];
   startWorkspace?: AppWorkspace;
@@ -36,14 +39,124 @@ export const issueSharingTourId = "issue-sharing-v1";
 export const modalOverlayStackTourId = "modal-overlay-stack-v1";
 export const githubProjectSettingsTourId = "github-project-settings-v1";
 export const taskEvidenceLinksTourId = "task-evidence-links-v1";
+export const subIssueEvidenceTourId = "sub-issue-evidence-v1";
 export const unifiedPlanningHierarchyTourId = "unified-planning-hierarchy-v1";
 export const planningApiV2TourId = "planning-api-v2";
 export const mobileResponsiveWorkspacesTourId = "mobile-responsive-workspaces-v1";
 export const platformReleasesTourId = "platform-releases-v1";
 export const githubIssueWebhookSyncTourId = "github-issue-webhook-sync-v1";
 export const teamWorkweekTourId = "team-workweek-v1";
+export const planningApiDependenciesTourId = "planning-api-dependencies-v1";
+export const administrationWorkspaceTourId = "administration-workspace-v1";
+export const taskMentionsTourId = "task-mentions-v1";
 
 export const featureTours: readonly FeatureTourDefinition[] = [
+  {
+    id: subIssueEvidenceTourId,
+    productUpdateId: "2026-10-13-sub-issue-evidence",
+    startWorkspace: "planning",
+    openTaskDetail: true,
+    openSubIssueEvidence: true,
+    requiredSelectors: ["[data-tour-id='task-evidence-links']"],
+    steps: [{
+      element: () => document.querySelector("[data-tour-id='task-sub-issue-evidence-summary']")
+        || document.querySelector("[data-tour-id='task-evidence-links']")!,
+      popover: {
+        title: "Sub-Issue-Nachweise öffnen",
+        description: "Klappe die Zeile „Nachweise aus Sub-Issues“ auf. Über den Namen öffnest du die Quellaufgabe. Ein mehrfach verknüpfter Link erscheint einmal mit seinen weiteren Quellen. Ohne solche Links bleibt hier der normale Nachweisbereich.",
+        side: "bottom",
+        align: "start",
+        doneBtnText: "Verstanden",
+      },
+    }] satisfies DriveStep[],
+  },
+  {
+    id: "google-workspace-login-v1",
+    productUpdateId: "2026-09-26-google-workspace-login",
+    startWorkspace: "planning",
+    requiredSelectors: ["[data-tour-id='account-menu-trigger']", "[data-tour-id='github-sync-trigger']"],
+    steps: [
+      { element: "[data-tour-id='account-menu-trigger']", popover: { title: "Dein FounderOps-Konto", description: "Öffne hier dein Profil oder melde dich aus FounderOps ab. Deine Kalender- und GitHub-Verbindungen verwaltest du unabhängig davon.", side: "bottom" } },
+      { element: "[data-tour-id='github-sync-trigger']", popover: { title: "GitHub separat verbinden", description: "Öffne hier den GitHub-Status. Fehlt deine Verbindung, kannst du sie dort für eigene Kommentare und Anhänge herstellen.", side: "bottom", doneBtnText: "Verstanden" } },
+    ],
+  },
+  {
+    id: taskMentionsTourId,
+    productUpdateId: "2026-09-24-founderops-mentions",
+    startWorkspace: "planning",
+    openTaskDetail: true,
+    openTaskActivity: true,
+    openTaskMentionMenu: true,
+    requiredSelectors: ["[data-tour-id='task-mention-composer']", "[data-tour-id='task-mention-all-option']"],
+    steps: [
+      {
+        element: "[data-tour-id='task-mention-composer']",
+        popover: {
+          title: "Personen direkt erwähnen",
+          description: "Tippe @ in Kommentare, Beschreibungen und Review-Texte. FounderOps schlägt passende Personen am Cursor vor.",
+          side: "top",
+          align: "start",
+        },
+      },
+      {
+        element: "[data-tour-id='task-mention-all-option']",
+        popover: {
+          title: "Alle mit @all erreichen",
+          description: "@all benachrichtigt alle Personen in FounderOps. Für GitHub nutzt FounderOps das konfigurierte Team oder fällt sichtbar auf einzelne Logins zurück.",
+          side: "right",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
+  {
+    id: administrationWorkspaceTourId,
+    productUpdateId: "2026-09-22-jit-administration",
+    startWorkspace: "planning",
+    openAccountMenu: true,
+    requiredSelectors: ["[data-tour-id='account-menu-trigger']"],
+    steps: [
+      {
+        element: "[data-tour-id='account-menu-trigger']",
+        popover: {
+          title: "Adminzugang im Profilmenü",
+          description: "Berechtigte Personen aktivieren hier den 60-Minuten-Zugang. Danach öffnet dasselbe Menü den technischen Administrationsbereich.",
+          side: "bottom",
+          align: "end",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
+  {
+    id: planningApiDependenciesTourId,
+    productUpdateId: "2026-09-13-planning-api-dependencies",
+    startWorkspace: "profile",
+    openProfileApiSettings: true,
+    requiredSelectors: ["[data-tour-id='profile-settings-api']", "[data-tour-id='founderops-planning-update-scope']"],
+    steps: [
+      {
+        element: "[data-tour-id='profile-settings-api']",
+        popover: {
+          title: "API-Zugänge öffnen",
+          description: "Hier verwaltest du die persönlichen Tokens für den FounderOps-Skill und andere Planungsintegrationen.",
+          side: "right",
+          align: "center",
+        },
+      },
+      {
+        element: "[data-tour-id='founderops-planning-update-scope']",
+        popover: {
+          title: "Abhängigkeiten freigeben",
+          description: "Der vorhandene Bearbeiten-Scope gilt jetzt auch für gerichtete Aufgabenabhängigkeiten. Vorschau und bestätigtes Speichern bleiben getrennt.",
+          side: "left",
+          align: "center",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: teamWorkweekTourId,
     productUpdateId: "2026-08-25-team-workweek",

@@ -49,7 +49,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
               <UiBadge tone={badge.tone}>{badge.label}</UiBadge>
             </div>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              Private Grundwoche für {profile.name}. Erst eine bestätigte Google-Synchronisierung macht sie im Team sichtbar.
+              Deine Arbeitswoche für {profile.name}. Erst eine bestätigte Google-Synchronisierung macht Änderungen im Team sichtbar.
             </p>
             {state.version && (
               <p className="mt-2 text-xs font-semibold text-slate-600">Gültig ab {formatDate(state.version.effectiveFrom)} · {state.version.timezone}</p>
@@ -74,7 +74,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
               </UiButton>
             )}
             <UiButton variant="primary" size="lg" onClick={() => setOpen(true)} disabled={state.pending && !state.version}>
-              {state.version ? "Grundwoche weiterführen" : state.latestPublished ? "Neue Version vorbereiten" : "Grundwoche vorbereiten"}
+              {state.version ? "Bearbeitung fortsetzen" : state.latestPublished ? "Arbeitswoche bearbeiten" : "Arbeitswoche einrichten"}
             </UiButton>
           </div>
         </div>

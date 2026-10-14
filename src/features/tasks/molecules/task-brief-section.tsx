@@ -4,6 +4,7 @@ import { Pencil, Save, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { TaskChecklist } from "@/features/tasks/molecules/task-checklist";
 import type { Task } from "@/lib/types";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
 import { UiButton, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 export type TaskBriefState = Pick<Task, "title" | "problemStatement" | "intendedOutcome" | "scopeConstraints" | "acceptanceCriteria" | "evidenceRequired" | "definitionOfDone">;
@@ -89,7 +90,7 @@ export function TaskBriefSection({
           />
         ) : (
           <p className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium leading-6 text-slate-700">
-            {brief.title}
+            <LinkifiedText value={brief.title} />
           </p>
         )}
       </div>
@@ -111,7 +112,7 @@ export function TaskBriefSection({
             />
           ) : (
             <p className="whitespace-pre-wrap rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
-              {String(brief[key] || "") || placeholder}
+              <LinkifiedText value={String(brief[key] || "") || placeholder} />
             </p>
           )}
         </div>

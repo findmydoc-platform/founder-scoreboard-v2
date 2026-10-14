@@ -9,6 +9,7 @@ import {
   ListOrdered,
   UserCircle,
   Users,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -44,6 +45,7 @@ export const appNavigationSections = [
   { id: "planning", label: "Planung" },
   { id: "steering", label: "Steuerung" },
   { id: "team-resources", label: "Team & Ressourcen" },
+  { id: "system", label: "System" },
 ] as const;
 
 type AppNavigationSection = (typeof appNavigationSections)[number]["id"];
@@ -61,6 +63,7 @@ export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "events", label: "Termine & Erinnerungen", icon: CalendarClock, href: "/events", navigationSection: "steering" },
   { id: "team", label: "Team", icon: Users, href: "/team", navigationSection: "team-resources" },
   { id: "notifications", label: "Benachrichtigungen", icon: Bell, href: "/notifications", navigationSection: "team-resources" },
+  { id: "administration", label: "Administration", icon: ShieldCheck, href: "/administration", navigationSection: "system" },
   { id: "tools", label: "Links & Tools", icon: Link2, href: "/tools", navigationSection: "team-resources" },
   { id: "profile", label: "Mein Profil", icon: UserCircle, href: "/profile", navigationSection: "team-resources", hidden: true },
 ];

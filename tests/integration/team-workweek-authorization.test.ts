@@ -21,8 +21,8 @@ it("lets every mapped role manage only its private workweek", async () => {
     );
     for (const member of members) {
       await client.query(
-        `insert into public.profiles (id, auth_user_id, name, role, platform_role)
-         values ($1, $2, $3, 'member', $4)`,
+        `insert into public.profiles (id, auth_user_id, name, platform_role)
+         values ($1, $2, $3, $4)`,
         [member.id, member.authUserId, `Integration ${member.role}`, member.role],
       );
     }

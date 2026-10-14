@@ -376,7 +376,6 @@ async function seedPlanningDatabase(status) {
     await upsertRows(client, "profiles", [
       "id",
       "name",
-      "role",
       "platform_role",
       "org_role",
       "github_login",
@@ -389,7 +388,6 @@ async function seedPlanningDatabase(status) {
     ], source.profiles.map((profile) => ({
       id: profile.id,
       name: profile.name,
-      role: profile.role,
       platform_role: profile.platformRole,
       org_role: nullable(profile.orgRole),
       github_login: nullable(profile.githubLogin),
@@ -400,6 +398,17 @@ async function seedPlanningDatabase(status) {
       weekly_capacity: profile.weeklyCapacity,
       profile_color: profile.color || "#64748b",
     })));
+    await upsertRows(client, "administrator_access_grants", [
+      "profile_id",
+      "eligible",
+      "active_until",
+    ], source.profiles
+      .filter((profile) => profile.id === "volkan" || profile.id === "sebastian")
+      .map((profile) => ({
+        profile_id: profile.id,
+        eligible: true,
+        active_until: null,
+      })), "profile_id");
     await upsertRows(client, "founder_events", [
       "id",
       "title",

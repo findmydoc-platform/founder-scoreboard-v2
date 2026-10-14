@@ -1,5 +1,7 @@
+import { GitHubContentLengthError } from "../github-issue-content";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deliverPendingGitHubComments } from "../github-comment-delivery";
+import { deliverPendingGitHubReviews } from "../github-review-delivery";
 import { connectGitHubSubIssue, listGitHubIssueLinkedPullRequests } from "../github";
 import {
   githubSyncStatePersistFailedMessage,
@@ -23,6 +25,7 @@ import {
 } from "./contract";
 import { projectTaskGitHubDependencies } from "./dependency-projection";
 import { projectTaskGitHubIssue } from "./issue-projection";
+import { loadGitHubMentionTeam } from "../github-mention-team-config";
 import { projectTaskToFounderOpsGitHubProject } from "./project-projection";
 
 type SyncProfileRow = {
@@ -358,10 +361,17 @@ export async function projectTaskToGitHub({
       throw new Error("GitHub-Sync konnte nicht gestartet werden: Die neue Aufgabenrevision fehlt.");
     }
 
+    const [{ data: mentionProfileRows, error: mentionProfilesError }, mentionTeam] = await Promise.all([
+      supabase.from("profiles").select("id,name,github_login"),
+      loadGitHubMentionTeam(supabase),
+    ]);
+    if (mentionProfilesError) throw new Error(`GitHub-Erwähnungen konnten nicht aufgelöst werden: ${mentionProfilesError.message}`);
     const issue = await projectTaskGitHubIssue({
       task,
       token: installationToken,
       assigneeLogin,
+      mentionProfiles: (mentionProfileRows || []).map((profile) => ({ id: profile.id, name: profile.name, githubLogin: profile.github_login })),
+      mentionTeam,
     });
     if (task.taskType === "deliverable") {
       await projectTaskGitHubDependencies({
@@ -442,6 +452,7 @@ export async function projectTaskToGitHub({
       supabase,
       taskId,
     }).catch(() => emptyCommentDelivery(1));
+    await deliverPendingGitHubReviews({ supabase, taskId }).catch(() => undefined);
     const notice = commentDeliveryNotice(commentDelivery);
     return {
       ok: true,
@@ -491,13 +502,13 @@ export async function projectTaskToGitHub({
         githubSyncStatePersistFailedMessage,
       );
     } else {
-      projectionResult = taskGitHubSyncFailure("github_sync_failed", message, {
+      projectionResult = taskGitHubSyncFailure(error instanceof GitHubContentLengthError ? "github_content_too_long" : "github_sync_failed", message, {
         githubIssueSyncStatus: "failed",
         githubIssueSyncError: message,
         updatedAt: typeof failurePersistence.data?.updated_at === "string"
           ? failurePersistence.data.updated_at
           : "",
-      });
+      }, error instanceof GitHubContentLengthError ? error.issues : undefined);
     }
   }
 

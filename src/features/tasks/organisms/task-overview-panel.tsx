@@ -12,9 +12,14 @@ import {
   evidenceLinkPresentation,
   parseEvidenceUrl,
 } from "@/features/tasks/model/task-evidence-links";
-import type { LinkedPullRequest, Task } from "@/lib/types";
+import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import { SubIssueEvidenceSection } from "@/features/tasks/molecules/sub-issue-evidence-section";
+import { subIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
+import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
+import type { LinkedPullRequest, Profile, Task } from "@/lib/types";
 import { formatDate } from "@/lib/display";
-import { classNames, UiButton, UiEmptyState, UiField, UiNotice, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { LinkifiedText } from "@/shared/atoms/linkified-text";
+import { classNames, UiButton, UiEmptyState, UiField, UiNotice, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 const overviewFields = [
   { key: "problemStatement", label: "Problem", placeholder: "Welches Problem löst diese Aufgabe und warum ist es wichtig?", permission: "canEditBrief" },
@@ -42,7 +47,9 @@ function ChecklistReadValue({ value }: { value: string }) {
           <span className="mt-1.5 grid h-4 w-4 shrink-0 place-items-center rounded border border-slate-300 bg-white" aria-hidden="true">
             {/^\s*[-*]?\s*\[[xX]\]/.test(line) ? <Check size={11} className="text-emerald-600" /> : null}
           </span>
-          <span>{line.replace(/^\s*[-*]?\s*\[[ xX]\]\s*/, "")}</span>
+          <span className="[overflow-wrap:anywhere]">
+            <LinkifiedText value={line.replace(/^\s*[-*]?\s*\[[ xX]\]\s*/, "")} />
+          </span>
         </li>
       ))}
     </ul>
@@ -73,7 +80,7 @@ function ReadSection({
       <h3 className="text-sm font-semibold text-slate-950">{label}</h3>
       {hasValue ? (
         <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
-          {checklist ? <ChecklistReadValue value={value} /> : value}
+          {checklist ? <ChecklistReadValue value={value} /> : <LinkifiedText value={value} />}
         </div>
       ) : <p className="mt-2 text-[15px] leading-7 text-slate-500">{emptyValue}</p>}
     </section>
@@ -184,20 +191,25 @@ function LinkedPullRequestsSection({
 function EvidenceGroups({
   evidenceLinks,
   linkedPullRequests,
+  inherited = { count: 0, groups: [] },
+  onOpenTask,
 }: {
   evidenceLinks: string[];
   linkedPullRequests: LinkedPullRequest[];
+  inherited?: ReturnType<typeof subIssueEvidenceSummary>;
+  onOpenTask?: (id: string) => void;
 }) {
   return (
     <div className="mt-3 grid gap-5">
-      <div>
+      {evidenceLinks.length > 0 || !inherited.count ? <div>
         <h4 className="mb-2 text-sm font-medium text-slate-600">Links</h4>
         <EvidenceLinksList links={evidenceLinks} />
-      </div>
-      <div>
+      </div> : null}
+      {linkedPullRequests.length > 0 || !inherited.count ? <div>
         <h4 className="mb-2 text-sm font-medium text-slate-600">Verknüpfte Pull Requests</h4>
         <LinkedPullRequestsList pullRequests={linkedPullRequests} />
-      </div>
+      </div> : null}
+      <SubIssueEvidenceSection {...inherited} onOpenTask={onOpenTask} />
     </div>
   );
 }
@@ -206,22 +218,26 @@ function ReviewEvidenceSection({
   evidenceLinks,
   evidenceRequired,
   linkedPullRequests,
+  inherited,
+  onOpenTask,
 }: {
   evidenceLinks: string[];
   evidenceRequired: string;
   linkedPullRequests: LinkedPullRequest[];
+  inherited: ReturnType<typeof subIssueEvidenceSummary>;
+  onOpenTask?: (id: string) => void;
 }) {
   return (
     <section
-      id="task-review-evidence"
+      id={taskMentionFieldTargetIds["evidence-required"]}
       data-tour-id="task-evidence-links"
       tabIndex={-1}
       className="scroll-mt-6 border-b border-slate-100 py-5 outline-none"
     >
       <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
       <div className="mt-2 text-[15px] leading-7 text-slate-700">
-        <p>{evidenceRequired.trim() || <span className="text-slate-500">Kein erwarteter Nachweis hinterlegt.</span>}</p>
-        <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} />
+        <p><LinkifiedText value={evidenceRequired.trim() || "Kein erwarteter Nachweis hinterlegt."} /></p>
+        <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} inherited={inherited} onOpenTask={onOpenTask} />
       </div>
     </section>
   );
@@ -229,6 +245,9 @@ function ReviewEvidenceSection({
 
 type Props = {
   task: Task;
+  subIssues?: Task[];
+  onOpenTask?: (id: string) => void;
+  profiles: Profile[];
   baseline: TaskOverviewDraft;
   draft: TaskOverviewDraft;
   permissions: TaskOverviewEditPermissions;
@@ -245,6 +264,9 @@ type Props = {
 
 export function TaskOverviewPanel({
   task,
+  subIssues = [],
+  onOpenTask,
+  profiles,
   baseline,
   draft,
   permissions,
@@ -269,6 +291,7 @@ export function TaskOverviewPanel({
   const evidenceInvalid = evidenceInvalidIndex >= 0;
   const evidenceLinks = draft.evidenceLinks.map((value) => value.trim()).filter((value) => Boolean(parseEvidenceUrl(value)));
   const linkedPullRequests = task.linkedPullRequests || [];
+  const inherited = subIssueEvidenceSummary(task, subIssues);
   const isSubIssue = task.taskType === "sub_issue";
   const isStrategic = task.taskType === "epic" || task.taskType === "initiative";
   const hasSubIssueBrief = isSubIssue && subIssueBriefFields.some(({ key }) => Boolean(draft[key].trim()));
@@ -278,10 +301,11 @@ export function TaskOverviewPanel({
   const hasReadContent = isStrategic
     ? Boolean(draft.description.trim() || draft.strategyGoal.trim() || draft.strategySuccessCriteria.trim() || draft.strategyScopeConstraints.trim() || riskContent)
     : isSubIssue
-    ? Boolean(draft.description.trim() || hasSubIssueBrief || linkedPullRequests.length > 0 || riskContent)
+    ? Boolean(draft.description.trim() || hasSubIssueBrief || evidenceLinks.length > 0 || linkedPullRequests.length > 0 || riskContent)
     : overviewFields.some(({ key }) => draft[key].trim())
       || evidenceLinks.length > 0
       || linkedPullRequests.length > 0
+      || inherited.count > 0
       || Boolean(riskContent);
   const flatReadOnly = flat && !editing;
 
@@ -370,11 +394,12 @@ export function TaskOverviewPanel({
               <>
                 <UiField>
                   Kontext <span className="font-normal text-slate-400">(optional)</span>
-                  <UiTextArea
+                  <TaskMentionTextArea
+                    profiles={profiles}
                     data-task-overview-field
                     value={draft.description}
                     disabled={saving}
-                    onChange={(event) => onChange({ description: event.target.value })}
+                    onValueChange={(value) => onChange({ description: value })}
                     minHeight="lg"
                     inputPadding="md"
                     leading="relaxed"
@@ -386,15 +411,15 @@ export function TaskOverviewPanel({
                     <legend className="px-1 text-sm font-semibold text-slate-950">Strategie</legend>
                     <UiField>
                       Zielbild
-                      <UiTextArea data-task-overview-field value={draft.strategyGoal} disabled={saving} onChange={(event) => onChange({ strategyGoal: event.target.value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welcher strategische Zustand soll erreicht werden?" />
+                      <TaskMentionTextArea profiles={profiles} data-task-overview-field value={draft.strategyGoal} disabled={saving} onValueChange={(value) => onChange({ strategyGoal: value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welcher strategische Zustand soll erreicht werden?" />
                     </UiField>
                     <UiField>
                       Erfolgskriterien
-                      <UiTextArea data-task-overview-field value={draft.strategySuccessCriteria} disabled={saving} onChange={(event) => onChange({ strategySuccessCriteria: event.target.value })} minHeight="lg" inputPadding="md" leading="relaxed" placeholder="Woran erkennen wir Erfolg?" />
+                      <TaskMentionTextArea profiles={profiles} data-task-overview-field value={draft.strategySuccessCriteria} disabled={saving} onValueChange={(value) => onChange({ strategySuccessCriteria: value })} minHeight="lg" inputPadding="md" leading="relaxed" placeholder="Woran erkennen wir Erfolg?" />
                     </UiField>
                     <UiField>
                       Scope &amp; Grenzen
-                      <UiTextArea data-task-overview-field value={draft.strategyScopeConstraints} disabled={saving} onChange={(event) => onChange({ strategyScopeConstraints: event.target.value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Was gehört dazu und was nicht?" />
+                      <TaskMentionTextArea profiles={profiles} data-task-overview-field value={draft.strategyScopeConstraints} disabled={saving} onValueChange={(value) => onChange({ strategyScopeConstraints: value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Was gehört dazu und was nicht?" />
                     </UiField>
                   </fieldset>
                 ) : null}
@@ -405,11 +430,12 @@ export function TaskOverviewPanel({
               <>
               <UiField>
                 Kontext <span className="font-normal text-slate-400">(optional)</span>
-                <UiTextArea
+                <TaskMentionTextArea
+                  profiles={profiles}
                   data-task-overview-field
                   value={draft.description}
                   disabled={saving}
-                  onChange={(event) => onChange({ description: event.target.value })}
+                  onValueChange={(value) => onChange({ description: value })}
                   minHeight="lg"
                   inputPadding="md"
                   leading="relaxed"
@@ -425,11 +451,12 @@ export function TaskOverviewPanel({
                 {subIssueBriefFields.map(({ key, label, placeholder }) => (
                   <UiField key={key}>
                     {label}
-                    <UiTextArea
+                    <TaskMentionTextArea
+                      profiles={profiles}
                       data-task-overview-field
                       value={draft[key]}
                       disabled={saving}
-                      onChange={(event) => onChange({ [key]: event.target.value })}
+                      onValueChange={(value) => onChange({ [key]: value })}
                       minHeight="lg"
                       inputPadding="md"
                       leading="relaxed"
@@ -443,11 +470,12 @@ export function TaskOverviewPanel({
           ) : overviewFields.map(({ key, label, placeholder, permission }) => permissions[permission] ? (
               <UiField key={key}>
                 {label}
-                <UiTextArea
+                <TaskMentionTextArea
+                  profiles={profiles}
                   data-task-overview-field
                   value={draft[key]}
                   disabled={saving}
-                  onChange={(event) => onChange({ [key]: event.target.value })}
+                  onValueChange={(value) => onChange({ [key]: value })}
                   minHeight={key === "note" ? "md" : "lg"}
                   inputPadding="md"
                   leading="relaxed"
@@ -528,12 +556,12 @@ export function TaskOverviewPanel({
           {!hasReadContent ? <UiEmptyState className="my-5">Für dieses Item ist noch keine Beschreibung hinterlegt.</UiEmptyState> : null}
           {isStrategic ? (
             <>
-              <ReadSection label="Kontext" value={draft.description} emptyValue="Kein strategischer Kontext hinterlegt." />
+              <ReadSection label="Kontext" value={draft.description} anchorId={taskMentionFieldTargetIds.description} emptyValue="Kein strategischer Kontext hinterlegt." />
               {task.taskType === "initiative" ? (
                 <>
-                  <ReadSection label="Zielbild" value={draft.strategyGoal} emptyValue="Kein Zielbild hinterlegt." />
-                  <ReadSection label="Erfolgskriterien" value={draft.strategySuccessCriteria} checklist emptyValue="Keine Erfolgskriterien hinterlegt." />
-                  <ReadSection label="Scope & Grenzen" value={draft.strategyScopeConstraints} emptyValue="Keine Scope-Grenzen hinterlegt." />
+                  <ReadSection label="Zielbild" value={draft.strategyGoal} anchorId={taskMentionFieldTargetIds["strategy-goal"]} emptyValue="Kein Zielbild hinterlegt." />
+                  <ReadSection label="Erfolgskriterien" value={draft.strategySuccessCriteria} anchorId={taskMentionFieldTargetIds["strategy-success"]} checklist emptyValue="Keine Erfolgskriterien hinterlegt." />
+                  <ReadSection label="Scope & Grenzen" value={draft.strategyScopeConstraints} anchorId={taskMentionFieldTargetIds["strategy-scope"]} emptyValue="Keine Scope-Grenzen hinterlegt." />
                 </>
               ) : null}
               {riskContent}
@@ -546,17 +574,17 @@ export function TaskOverviewPanel({
                     <span className="font-semibold text-slate-700">Arbeitsbrief.</span>{" "}
                     Diese Angaben sind optionaler Kontext. Für Sub-Issues entstehen daraus weder Review, Score noch verpflichtende Nachweise.
                   </UiNotice>
-                  {hasDistinctSubIssueContext ? <ReadSection label="Kontext" value={draft.description} /> : null}
-                  <ReadSection label="Problem" value={draft.problemStatement} />
-                  <ReadSection label="Zielbild" value={draft.intendedOutcome} />
-                  <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
-                  <ReadSection label="Abnahmekriterien" value={draft.acceptanceCriteria} checklist />
-                  <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} />
-                  <ReadSection label="Qualitätsstandard" value={draft.definitionOfDone} checklist />
+                  {hasDistinctSubIssueContext ? <ReadSection label="Kontext" value={draft.description} anchorId={taskMentionFieldTargetIds.description} /> : null}
+                  <ReadSection label="Problem" value={draft.problemStatement} anchorId={taskMentionFieldTargetIds.problem} />
+                  <ReadSection label="Zielbild" value={draft.intendedOutcome} anchorId={taskMentionFieldTargetIds.outcome} />
+                  <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} anchorId={taskMentionFieldTargetIds.scope} />
+                  <ReadSection label="Abnahmekriterien" value={draft.acceptanceCriteria} anchorId={taskMentionFieldTargetIds.acceptance} checklist />
+                  <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId={taskMentionFieldTargetIds["evidence-required"]} />
+                  <ReadSection label="Qualitätsstandard" value={draft.definitionOfDone} anchorId={taskMentionFieldTargetIds["definition-of-done"]} checklist />
                   {riskContent}
                 </>
               ) : (
-                <section className="grid gap-4 border-b border-slate-100 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <section id={taskMentionFieldTargetIds.description} className="grid scroll-mt-6 gap-4 border-b border-slate-100 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-950">Kontext</h3>
                     <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
@@ -567,32 +595,39 @@ export function TaskOverviewPanel({
                 </section>
               )}
               <LinkedPullRequestsSection compact pullRequests={linkedPullRequests} />
+              {evidenceLinks.length ? <section className="border-b border-slate-100 py-4">
+                <h3 className="mb-2 text-sm font-semibold text-slate-950">Nachweis-Links</h3>
+                <EvidenceLinksList links={evidenceLinks} />
+              </section> : null}
             </>
           ) : (
             <>
-              <ReadSection label="Problem" value={draft.problemStatement} />
+              <ReadSection label="Problem" value={draft.problemStatement} anchorId={taskMentionFieldTargetIds.problem} />
               <ReadSection
                 label="Zielbild"
                 value={draft.intendedOutcome}
-                anchorId="task-review-outcome"
+                anchorId={taskMentionFieldTargetIds.outcome}
                 emptyValue={flatReadOnly ? "Kein Zielbild hinterlegt." : undefined}
               />
-              <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
+              <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} anchorId={taskMentionFieldTargetIds.scope} />
               <ReadSection
                 label="Abnahmekriterien"
                 value={draft.acceptanceCriteria}
                 checklist
-                anchorId="task-review-acceptance"
+                anchorId={taskMentionFieldTargetIds.acceptance}
                 emptyValue={flatReadOnly ? "Keine Abnahmekriterien hinterlegt." : undefined}
               />
               {flatReadOnly ? (
                 <ReviewEvidenceSection
+                  key={task.id}
                   evidenceLinks={evidenceLinks}
                   evidenceRequired={draft.evidenceRequired}
                   linkedPullRequests={linkedPullRequests}
+                  inherited={inherited}
+                  onOpenTask={onOpenTask}
                 />
               ) : (
-                <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId="task-review-evidence" />
+                <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId={taskMentionFieldTargetIds["evidence-required"]} />
               )}
               {!flatReadOnly ? (
                 <section
@@ -600,7 +635,7 @@ export function TaskOverviewPanel({
                   className="border-b border-slate-100 py-5"
                 >
                   <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
-                  <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} />
+                  <EvidenceGroups key={task.id} evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} inherited={inherited} onOpenTask={onOpenTask} />
                 </section>
               ) : null}
               {flatReadOnly ? riskContent : null}
@@ -608,6 +643,7 @@ export function TaskOverviewPanel({
                 label="Qualitätsstandard"
                 value={draft.definitionOfDone}
                 checklist
+                anchorId={taskMentionFieldTargetIds["definition-of-done"]}
                 emptyValue={flatReadOnly ? "Kein Qualitätsstandard hinterlegt." : undefined}
               />
               {!flatReadOnly ? riskContent : null}

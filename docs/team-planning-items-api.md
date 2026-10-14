@@ -28,7 +28,7 @@ Every token includes:
 
 Optional, default-off scopes are issued only when selected while creating the token:
 
-- `write:planning-items:update` — update an existing item.
+- `write:planning-items:update` — update an existing item, including its directed task dependencies.
 - `write:planning-items:delete-empty` — CEO and Deputy only; delete an empty Epic.
 - `write:planning-items:github-sync` — request GitHub projection for a Deliverable or Sub-Issue only.
 
@@ -82,7 +82,18 @@ Token management is session-authorized; bearer-token planning operations use the
 
 ## Context and canonical references
 
-The v2 context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). Every list uses the same canonical projection. `parentTaskId` is the hierarchy reference, and Initiative strategy is available only through the nested `strategy` object. There is no `milestones` collection and no flat Initiative `goal`, `successCriteria`, or strategy-level `scopeConstraints` alias.
+The v2 context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). Every list uses the same canonical projection. `parentTaskId` is the hierarchy reference, and Initiative strategy is available only through the nested `strategy` object. The root `dependencies` list exposes only directed blocking relationships whose two endpoints are part of the returned planning context. There is no `milestones` collection, no flat Initiative `goal`, `successCriteria`, or strategy-level `scopeConstraints` alias, and no `relates_to` entry in `dependencies`.
+
+Each dependency is normalized independently of its storage direction:
+
+```json
+{
+  "relationshipId": 123,
+  "blockedItemId": "item-a",
+  "blockingItemId": "item-b",
+  "note": "Optional context"
+}
+```
 
 V2 rejects the retired `milestone` item type and the `milestoneId` and `packageId` parent fields. Path and parent references must use current planning-item IDs. It also refuses a replay receipt written under the older response contract.
 
@@ -158,11 +169,90 @@ PATCH processes only properties present in the request body. Omitted properties 
 
 Strategic items accept only strategic fields. They do not accept Review, score, Evidence gates, Sprint, repository, or GitHub fields. Deliverables retain their existing Review and scoring transitions. Sub-Issues retain their separate four-state status contract and never accept Review or Nacharbeit.
 
+Moving an approved Deliverable to `Review` requires a valid HTTP(S) evidence URL. Existing manual Evidence links, the legacy `evidenceLink` field, and linked pull requests count. GitHub Issue URLs do not. A client may provide `evidenceLink` in the same PATCH as the Review status:
+
+```json
+{
+  "expectedUpdatedAt": "2026-09-17T08:30:00.000Z",
+  "status": "Review",
+  "evidenceLink": "https://example.com/release-notes"
+}
+```
+
+If no link exists, the same request must include a non-empty `evidenceExceptionNote` with at most 2,000 characters. The note is valid for that Review request only and remains visible in the Review area. A later Review request checks the evidence again.
+
+```json
+{
+  "expectedUpdatedAt": "2026-09-17T08:30:00.000Z",
+  "status": "Review",
+  "evidenceExceptionNote": "The result was accepted in the founder meeting on 17 September 2026."
+}
+```
+
+Preview reports a missing link or note as a validation error. Commit repeats the check atomically. If evidence disappears between Preview and Commit, Commit returns `409 Conflict` with the same corrective message.
+
+## Directed dependencies
+
+Dependency changes use the existing update preview and commit endpoints and require `write:planning-items:update`. A dependency command must be the only patch field besides `expectedUpdatedAt`. Its direction is relative to the item ID in the request path.
+
+Preview an item that is blocked by another item:
+
+```json
+{
+  "expectedUpdatedAt": "2026-09-12T09:00:00.000Z",
+  "dependency": {
+    "operation": "add",
+    "direction": "blocked_by",
+    "relatedItemId": "item-b",
+    "note": "Wait for the rollout decision"
+  }
+}
+```
+
+Use `direction: "blocks"` when the item in the request path blocks `relatedItemId`. Notes are optional and limited to 500 characters. Preview validates and describes the operation without writing. Commit sends the same body to `PATCH /api/team/planning-items/v2/items/{id}` with a UUID `Idempotency-Key`.
+
+Remove a dependency by the `relationshipId` returned by context or a previous response:
+
+```json
+{
+  "expectedUpdatedAt": "2026-09-12T09:00:00.000Z",
+  "dependency": {
+    "operation": "remove",
+    "relationshipId": 123
+  }
+}
+```
+
+Preview and commit responses include the canonical relationship and whether storage changed:
+
+```json
+{
+  "dependencyChange": {
+    "operation": "add",
+    "changed": false,
+    "relationship": {
+      "relationshipId": 123,
+      "blockedItemId": "item-a",
+      "blockingItemId": "item-b",
+      "note": "Existing context"
+    }
+  }
+}
+```
+
+When previewing a new dependency, `relationshipId` is `null` because preview does not reserve or write a database ID. Commit and no-op responses return the stored positive ID.
+
+Adding an existing semantic dependency is a successful no-op, including the inverse `blocked_by`/`blocks` representation. The existing note is preserved, and no audit or GitHub sync effect is emitted. Replaying a committed removal with the same idempotency key returns its stored successful response. A new removal request for an already removed relationship returns `404 Not Found`.
+
+Dependency commands retain the existing relationship rules: CEO and Deputy can manage all allowed relationships; Founder access stays limited to outgoing `blocked_by` relationships for items they own, are assigned to, or manage as the Initiative Accountable. Self-links, missing or trashed endpoints, active or final Review locks, completed endpoints or parents, stale revisions, and relationships that do not belong to the path item are rejected exactly as in the FounderOps interface.
+
 ## GitHub projection
 
 GitHub projection is intentionally unavailable for Epics and Initiatives. The API rejects strategic GitHub commands before writing; no strategic item can create a GitHub queue, outbox entry, sync warning, comment import, or GitHub attachment.
 
 Deliverables and Sub-Issues retain the existing response contract. The Planning commit stores its GitHub projection request durably and atomically with the item and idempotency receipt. `wait` processes that stored request before returning; `async` returns `accepted` after the durable commit and only uses request-lifecycle work as a wake-up optimization. GitHub failure never rolls back a successful FounderOps create or update, and replaying the same idempotency key never creates another request.
+
+Update replay validates the stored contract, item, actor permissions, and request hash before processing any queued GitHub projection. A rejected replay does not start GitHub processing. Valid replay returns the stored Planning Item and, in `wait` mode, its refreshed projection status.
 
 ## Empty Epic deletion
 
@@ -181,3 +271,18 @@ Only an Epic with zero direct Initiative and Deliverable references can be delet
 The legacy hierarchy tables and v1 transport adapters were removed in the controlled cutover. Historical Initiative links and immutable delete replay receipts remain available under canonical storage names; they are not active planning write paths.
 
 The OpenAPI document is available at `/founderops-team-planning-items-v2-openapi.json`.
+
+
+## Lossless content limits
+
+Brief input is trimmed at its outer boundaries, but never truncated. Titles contain 3–240 Unicode codepoints. Emoji count as one codepoint; combining marks count separately. The API does not apply Unicode normalization. Acceptance-criteria arrays are joined with newlines without per-entry truncation.
+
+Epics and Initiatives accept up to 65,536 codepoints in each long-text field independently. Deliverables and Sub-Issues use the same per-field ceiling, plus a limit of 65,536 codepoints for the complete rendered GitHub issue body. That body includes Markdown section headers, list prefixes, resolved mentions, the public source link and the durable task marker. The rendered title, including its item-type prefix, has a separate 256-codepoint limit. A description hidden by a populated problem statement still receives the per-field check.
+
+Preview and commit use the same renderer. Updates validate the merged existing item and patch. Create previews use an ID with the same encoded length as the committed ID; commits derive the real ID from the existing actor, idempotency key and batch index contract. An invalid item rejects the entire create batch before the transaction.
+
+Existing error responses remain compatible. Content failures may additionally include `lengthErrors`, with `field`, `actual`, `maximum`, `excess` and `message`. Create responses include these per item; update responses include them beside the existing errors. Preview reports `valid: false`. Browser forms retain their draft after rejection and show the error beside the editor. Browser field checks share the codepoint rules; the server performs the authoritative rendered-body check using local projection configuration.
+
+Saving does not contact GitHub. The sync path validates the final outgoing payload again, including any preserved external Sub-Issue body. A content overflow returns `github_content_too_long`, HTTP 422, with `retryable: false`, before any GitHub mutation. Sync bookkeeping may record the failure; an already saved FounderOps edit is not rolled back. Changed mention-team availability or external GitHub content can therefore cause a later sync to fail even after local validation succeeded.
+
+Existing database text columns remain unchanged. Previously truncated text cannot be recovered by this change.

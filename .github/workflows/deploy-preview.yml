@@ -17,6 +17,7 @@ env:
   VERCEL_CLI_VERSION: 54.1.0
   EXPECTED_VERCEL_PROJECT_ID: prj_siACjDyULbkdJRqGgKlGSfkU8iMP
   NEXT_TELEMETRY_DISABLED: 1
+  PRODUCTION_SUPABASE_PROJECT_REF: wmccchyodlljkkytebwg
 
 defaults:
   run:
@@ -102,14 +103,19 @@ jobs:
           bash ./.github/scripts/deploy/assert-vercel-project-binding.sh
           pnpm dlx vercel@"${VERCEL_CLI_VERSION}" pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
-      - name: Build Vercel Output
+      - name: Verify isolated Preview database
+        id: preview_database
         if: steps.preview_guard.outputs.ready == 'true'
+        run: node scripts/verify-preview-environment.mjs --allow-unconfigured
+
+      - name: Build Vercel Output
+        if: steps.preview_guard.outputs.ready == 'true' && steps.preview_database.outputs.ready == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: pnpm dlx vercel@"${VERCEL_CLI_VERSION}" build --target=preview --token="$VERCEL_TOKEN"
 
       - name: Deploy Prebuilt Output to Vercel Preview
-        if: steps.preview_guard.outputs.ready == 'true'
+        if: steps.preview_guard.outputs.ready == 'true' && steps.preview_database.outputs.ready == 'true'
         id: vercel_preview
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -120,6 +126,8 @@ jobs:
         env:
           PREVIEW_READY: ${{ steps.preview_guard.outputs.ready }}
           PREVIEW_REASON: ${{ steps.preview_guard.outputs.reason }}
+          PREVIEW_DATABASE_READY: ${{ steps.preview_database.outputs.ready }}
+          PREVIEW_DATABASE_OUTCOME: ${{ steps.preview_database.outcome }}
           DEPLOYMENT_OUTCOME: ${{ steps.vercel_preview.outcome }}
           DEPLOYMENT_URL: ${{ steps.vercel_preview.outputs.deploymentUrl }}
         run: |
@@ -131,6 +139,12 @@ jobs:
               if [[ -n "$PREVIEW_REASON" ]]; then
                 echo "- **Details**: ${PREVIEW_REASON}"
               fi
+            elif [[ "$PREVIEW_DATABASE_OUTCOME" == "failure" ]]; then
+              echo "- **Status**: Failed"
+              echo "- **Reason**: preview database configuration failed isolation verification"
+            elif [[ "$PREVIEW_DATABASE_READY" == "false" ]]; then
+              echo "- **Status**: Skipped"
+              echo "- **Reason**: isolated Supabase backend is not configured"
             elif [[ "$DEPLOYMENT_OUTCOME" == "success" ]]; then
               echo "- **Status**: Success"
               echo "- **URL**: ${DEPLOYMENT_URL}"

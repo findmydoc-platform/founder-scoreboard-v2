@@ -38,7 +38,8 @@ async function loadRoute(run, payload) {
         supabase: {},
       }),
     },
-    "@/lib/authz": { requirePlanningContributor: () => ({}) },
+    "@/lib/authz": { requirePlanningContributorOrActiveAdministrator: () => ({}) },
+    "@/lib/supabase-user": { getSupabaseForToken: () => null },
     "@/features/planning-items/model/planning-actor-context-server": {
       actorContextFromSessionAuth: () => ({ ok: true, actor }),
     },
@@ -53,6 +54,59 @@ async function loadRoute(run, payload) {
     },
   });
 }
+
+async function loadAdministratorRoute(run, payload) {
+  const mutationClient = {};
+  return importTestModule("src/app/api/tasks/[id]/relationships/route.ts", {
+    "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
+    "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }) },
+    "@/lib/api-response": {
+      apiError: (error, status) => ({ body: { error }, status }),
+      authzError: (failure) => ({ body: { code: failure.code, error: failure.error }, status: failure.status }),
+      requireJsonApiContext: async () => ({
+        ok: true,
+        payload,
+        permission: {
+          profile: { id: "founder-one", platformRole: "founder" },
+          authority: { capabilities: { operationalCorrection: true } },
+        },
+        supabase: {},
+      }),
+    },
+    "@/lib/authz": {
+      bearerToken: () => "session-token",
+      requirePlanningContributorOrActiveAdministrator: () => ({}),
+      resolveAdministratorAccessFailure: async (client) => {
+        assert.equal(client, mutationClient);
+        return {
+          ok: false,
+          status: 403,
+          code: "administrator_access_expired",
+          error: "Der Adminzugang ist abgelaufen.",
+        };
+      },
+    },
+    "@/lib/supabase-user": { getSupabaseForToken: () => mutationClient },
+    "@/features/planning-items/model/planning-actor-context-server": {
+      actorContextFromSessionAuth: () => ({ ok: true, actor: administratorActor }),
+    },
+    "@/features/planning-items/model/planning-items-relationships": {
+      parseAddPlanningRelationshipPayload: (value) => ({ ok: true, value }),
+      parseRemovePlanningRelationshipPayload: (value) => ({ ok: true, value }),
+      addPlanningRelationshipCommand: (itemId, value) => ({ kind: "addRelationship", itemId, ...value }),
+      removePlanningRelationshipCommand: (itemId, value) => ({ kind: "removeRelationship", itemId, ...value }),
+      createPlanningRelationshipPlanningItems: () => ({ run }),
+      planningRelationshipError: () => ({ message: "Abhängigkeit konnte nicht gespeichert werden.", status: 500 }),
+      planningRelationshipFromResult: (result) => result.items[0],
+    },
+  });
+}
+
+const administratorActor = {
+  ...actor,
+  platformRole: "founder",
+  capabilities: { operationalCorrection: true },
+};
 
 function task(id, overrides = {}) {
   return {
@@ -91,7 +145,11 @@ function fixture({
   initiative = { id: "initiative-one", ownerId: "initiative-owner", accountableProfileId: "accountable-one" },
   reviewLocked = false,
   finalReviewLocked = false,
+  completedLocked = false,
   commitRelation = relation(),
+  commitChanged = true,
+  commitReplay = false,
+  commitItem = null,
   commitError = null,
 } = {}) {
   const calls = [];
@@ -100,7 +158,7 @@ function fixture({
     client: {
       async rpc(name, params) {
         calls.push([name, params]);
-        if (name === "prepare_planning_relationship_command") {
+        if (name === "prepare_planning_relationship_command" || name === "prepare_team_planning_dependency_command") {
           return {
             data: {
               source,
@@ -108,16 +166,25 @@ function fixture({
               relation: currentRelation,
               existingRelation,
               actorName,
+              teamDependency: name === "prepare_team_planning_dependency_command",
               initiative,
               reviewLocked,
               finalReviewLocked,
+              completedLocked,
             },
             error: null,
           };
         }
         return commitError
           ? { data: null, error: commitError }
-          : { data: { operation: params.p_operation, relation: commitRelation, affectedItemIds: [commitRelation.task_id, commitRelation.related_task_id] }, error: null };
+          : { data: {
+              operation: params.p_operation,
+              relation: commitRelation,
+              affectedItemIds: [commitRelation.task_id, commitRelation.related_task_id],
+              changed: commitChanged,
+              replayed: commitReplay,
+              ...(commitItem ? { item: commitItem, itemType: commitItem.task_type, commandKind: "dependency" } : {}),
+            }, error: null };
       },
     },
   };
@@ -186,6 +253,53 @@ test("payload parsing preserves relation types, trimming, optional revision, and
   assert.equal(model.parseRemovePlanningRelationshipPayload({ relationId: 0 }).error, "Abhängigkeit ist erforderlich.");
 });
 
+test("administrator relationship commits preserve a late access rejection", async () => {
+  const model = await loadModel();
+  const current = fixture({
+    commitError: { code: "42501", message: "active administrator access required" },
+  });
+  const planning = model.createPlanningRelationshipPlanningItems(current.client, {
+    mutationClient: current.client,
+    administratorAccess: true,
+  });
+
+  const result = await planning.run({
+    actor: administratorActor,
+    mode: "commit",
+    command: model.addPlanningRelationshipCommand("source", {
+      relationType: "blocked_by",
+      relatedTaskId: "target",
+      note: "Wait",
+      expectedUpdatedAt: "2026-08-12T10:00:00.000Z",
+    }),
+  });
+
+  assert.deepEqual(result.error, {
+    code: "forbidden",
+    reason: "administratorAccessRequired",
+  });
+});
+
+test("relationship routes return the named expiry contract after a late access rejection", async () => {
+  const route = await loadAdministratorRoute(
+    async () => ({
+      ok: false,
+      error: { code: "forbidden", reason: "administratorAccessRequired" },
+    }),
+    { relationType: "blocked_by", relatedTaskId: "target", note: "Wait" },
+  );
+
+  const response = await route.POST({}, { params: Promise.resolve({ id: "source" }) });
+
+  assert.deepEqual(response, {
+    status: 403,
+    body: {
+      code: "administrator_access_expired",
+      error: "Der Adminzugang ist abgelaufen.",
+    },
+  });
+});
+
 test("Preview and Commit use identical add policy and one atomic writer with deterministic effects", async () => {
   const model = await loadModel();
   for (const relationType of ["blocked_by", "blocks", "relates_to"]) {
@@ -208,9 +322,9 @@ test("Preview and Commit use identical add policy and one atomic writer with det
     assert.equal(committed.status, "committed");
     assert.deepEqual(preview.effects.map((effect) => effect.kind), ["audit", "githubProjection"]);
     assert.deepEqual(committed.effects.map((effect) => effect.kind), ["audit", "githubProjection"]);
-    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_relationship_transaction").length, 1);
+    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_relationship_transaction_v2").length, 1);
     const commit = current.calls.at(-1);
-    assert.deepEqual(commit, ["mutate_planning_relationship_transaction", {
+    assert.deepEqual(commit, ["mutate_planning_relationship_transaction_v2", {
       p_operation: "add",
       p_task_id: "source",
       p_related_task_id: "target",
@@ -219,6 +333,7 @@ test("Preview and Commit use identical add policy and one atomic writer with det
       p_note: "Wait",
       p_expected_updated_at: "2026-08-12T10:00:00.000Z",
       p_actor_profile_id: "ceo",
+      p_mention_recipient_profile_ids: [],
       p_request_ip: "test-ip",
       p_user_agent: "test-agent",
     }]);
@@ -271,7 +386,7 @@ test("Founder ownership and Accountable rights stay limited to outgoing blocked_
   assert.equal(incoming.error.code, "forbidden");
 });
 
-test("revision, duplicate, review, trash, not-found, and repeated request states stop before commit", async () => {
+test("team dependency duplicate add is a successful no-op while UI and invalid states keep their guards", async () => {
   const model = await loadModel();
   const add = model.addPlanningRelationshipCommand("source", {
     relationType: "blocked_by",
@@ -279,18 +394,62 @@ test("revision, duplicate, review, trash, not-found, and repeated request states
     note: "",
     expectedUpdatedAt: "2026-08-12T09:00:00.000Z",
   });
+  const duplicateFixture = fixture({ existingRelation: relation() });
+  const duplicate = await model.createPlanningRelationshipPlanningItems(duplicateFixture.client, { teamDependency: true }).run({
+    actor,
+    mode: "preview",
+    command: model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "Replacement" }),
+  });
+  assert.equal(duplicate.status, "previewed");
+  assert.deepEqual(duplicate.effects, []);
+  assert.equal(duplicate.warnings[0].code, "planningRelationshipAlreadyExists");
+  assert.deepEqual(duplicate.changes[0].before, duplicate.changes[0].after);
+
+  const duplicateWithStaleRevision = await model.createPlanningRelationshipPlanningItems(
+    duplicateFixture.client,
+    { teamDependency: true },
+  ).run({ actor, mode: "preview", command: add });
+  assert.equal(duplicateWithStaleRevision.status, "previewed");
+  assert.deepEqual(duplicateWithStaleRevision.effects, []);
+
+  const removedRelationship = fixture({ currentRelation: null });
+  const missingAfterRemove = await model.createPlanningRelationshipPlanningItems(removedRelationship.client, { teamDependency: true }).run({
+    actor,
+    mode: "preview",
+    command: model.removePlanningRelationshipCommand("source", {
+      relationId: 41,
+      expectedUpdatedAt: "2026-08-12T09:00:00.000Z",
+    }),
+  });
+  assert.equal(missingAfterRemove.error.code, "notFound");
+  assert.equal(missingAfterRemove.error.entity.kind, "relationship");
+
+  const unsupportedRemoval = await model.createPlanningRelationshipPlanningItems(fixture({
+    currentRelation: relation({ relation_type: "relates_to" }),
+  }).client, { teamDependency: true }).run({
+    actor,
+    mode: "preview",
+    command: model.removePlanningRelationshipCommand("source", { relationId: 41 }),
+  });
+  assert.equal(unsupportedRemoval.error.code, "notFound");
+
   const cases = [
     [fixture(), add, "conflict", "revision"],
     [fixture({ existingRelation: relation() }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
     [fixture({ reviewLocked: true }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
+    [fixture({ reviewLocked: true, finalReviewLocked: true }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
+    [fixture({ completedLocked: true }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
     [fixture({ source: task("source", { trashed_at: "2026-08-12T11:00:00.000Z" }) }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
+    [fixture({ related: task("target", { trashed_at: "2026-08-12T11:00:00.000Z" }) }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "conflict", "state"],
     [fixture({ related: null }), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "target", note: "" }), "notFound", undefined],
+    [fixture(), model.addPlanningRelationshipCommand("source", { relationType: "blocked_by", relatedTaskId: "source", note: "" }), "invalidCommand", undefined],
     [fixture({ currentRelation: null }), model.removePlanningRelationshipCommand("source", { relationId: 41 }), "notFound", undefined],
+    [fixture({ currentRelation: relation({ task_id: "other", related_task_id: "another" }) }), model.removePlanningRelationshipCommand("source", { relationId: 41 }), "forbidden", undefined],
   ];
   for (const [current, command, code, reason] of cases) {
     const result = await model.createPlanningRelationshipPlanningItems(current.client).run({ actor, mode: "commit", command });
     assert.equal(result.error.code, code);
     if (reason) assert.equal(result.error.reason, reason);
-    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_relationship_transaction").length, 0);
+    assert.equal(current.calls.filter(([name]) => name === "mutate_planning_relationship_transaction_v2").length, 0);
   }
 });

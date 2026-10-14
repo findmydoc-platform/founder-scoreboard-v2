@@ -7,6 +7,7 @@ import type {
   TaskGitHubProjectionResult,
   TaskGitHubSyncCommand,
 } from "@/lib/github-sync/contract";
+import type { ReviewEvidenceSubmission } from "@/features/reviews/model/review-evidence";
 
 export function decideTaskApprovalRequest(apiClient: BrowserApiClient, taskId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {
   return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${taskId}/approval`, {
@@ -168,10 +169,19 @@ export function withdrawTaskReviewRequest(apiClient: BrowserApiClient, taskId: s
   });
 }
 
-export function reopenTaskReviewRequest(apiClient: BrowserApiClient, taskId: string, expectedUpdatedAt: string) {
+export function reopenTaskReviewRequest(
+  apiClient: BrowserApiClient,
+  taskId: string,
+  expectedUpdatedAt: string,
+  evidence: ReviewEvidenceSubmission = {},
+) {
   return apiClient.requestJson<{ error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/reopen`, {
     method: "POST",
-    json: { expectedUpdatedAt },
+    json: {
+      expectedUpdatedAt,
+      evidenceLinks: evidence.evidenceLink ? [evidence.evidenceLink] : [],
+      evidenceExceptionNote: evidence.evidenceExceptionNote || "",
+    },
   });
 }
 

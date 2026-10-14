@@ -14,6 +14,7 @@ import type {
 } from "@/lib/types";
 import { reconcileNotificationEvents } from "@/lib/notification-resolution";
 import { isOperationalLeadRole } from "@/lib/platform";
+import { protectedToolPreviewUrl } from "@/lib/tool-preview-image";
 
 export const maxHeaderQuickLinks = 5;
 export const maxHeaderCalendarEvents = 200;
@@ -136,7 +137,7 @@ function normalizeQuickLinks(links: HeaderQuickLink[] | undefined): HeaderQuickL
     name: link.name,
     category: link.category,
     url: link.url,
-    previewImageUrl: link.previewImageUrl || "",
+    previewImageUrl: protectedToolPreviewUrl(link.previewImageUrl || ""),
   }));
 }
 
@@ -187,7 +188,7 @@ function mapHeaderQuickLink(row: HeaderQuickLinkRow): HeaderQuickLink {
     name: row.name,
     category: row.category,
     url: row.url || "",
-    previewImageUrl: row.preview_image_url || "",
+    previewImageUrl: protectedToolPreviewUrl(row.preview_image_url || ""),
   };
 }
 
@@ -229,7 +230,7 @@ export function projectHeaderQuickLinks(tools: FmdTool[]): HeaderQuickLink[] {
       name: tool.name,
       category: tool.category,
       url: tool.url,
-      previewImageUrl: tool.previewImageUrl || "",
+      previewImageUrl: protectedToolPreviewUrl(tool.previewImageUrl || ""),
     }));
 }
 
