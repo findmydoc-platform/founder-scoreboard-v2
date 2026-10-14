@@ -30,3 +30,24 @@ it("disconnect pins cohort selectors and actual UNTIL, includes remainders, and 
     expect((await client.query("select weekday,start_minute,end_minute from public.team_workweek_windows where version_id=$1",[result.retainedVersionId])).rows).toEqual([{weekday:7,start_minute:60,end_minute:240}]);
   });
 },30_000);
+
+
+it("disconnect preserves an elapsed legacy COUNT=1 second-fold master instead of deleting its history", async () => {
+  await withIsolatedLocalDatabase(async client => {
+    await client.query("insert into public.profiles(id,name,platform_role) values('fold-disconnect','Owner','founder')");
+    const version=(await client.query("insert into public.team_workweek_versions(owner_profile_id,effective_from) values('fold-disconnect','2025-10-20') returning id")).rows[0];
+    const window=(await client.query("insert into public.team_workweek_windows(version_id,weekday,start_minute,end_minute) values($1,7,120,180) returning id",[version.id])).rows[0];
+    const publication=(await client.query("insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,status,sync_state,published_at,last_sync_at) values($1,'fold-disconnect','2025-10-20','[{\"weekday\":7,\"startMinute\":120,\"endMinute\":180}]','published','confirmed',clock_timestamp(),clock_timestamp()) returning id",[version.id])).rows[0];
+    const series=(await client.query("insert into public.team_workweek_google_series(publication_id,source_window_id,owner_profile_id,google_event_id,state,confirmed_etag,confirmed_founderops_revision,last_confirmed_at) values($1,$2,'fold-disconnect','fopsfoldcount','confirmed','prior',1,clock_timestamp()) returning id",[publication.id,window.id])).rows[0];
+    const physical={id:"fopsfoldcount",start:{dateTime:"2025-10-26T01:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2025-10-26T02:00:00Z",timeZone:"Europe/Berlin"},recurrence:["RRULE:FREQ=WEEKLY;COUNT=1"],extendedProperties:{private:{founderopsWorkweekSeriesId:series.id,founderopsWorkweekRevision:"1"}}};
+    await client.query("update public.team_workweek_google_series set observed_payload=$2 where id=$1",[series.id,physical]);
+    await client.query("select set_config('request.jwt.claim.role','service_role',true)");await client.query("set local role service_role");
+    const operation=(await client.query("select public.prepare_google_workspace_disconnect('fold-disconnect') as result")).rows[0].result;
+    const target=(await client.query("select cleanup_action,effect_plan from public.google_workspace_disconnect_series where operation_id=$1",[operation.id])).rows[0];
+    expect(target.cleanup_action).toBe("truncate");
+    expect(target.effect_plan.cleanupDisposition).toBe("preserve");
+    expect(target.effect_plan.cleanupPayload.start).toEqual(physical.start);
+    expect(target.effect_plan.cleanupPayload.end).toEqual(physical.end);
+    expect(target.effect_plan.cleanupPayload.recurrence).toEqual(["RRULE:FREQ=WEEKLY;UNTIL=20251026T010000Z"]);
+  });
+},30_000);

@@ -13,13 +13,14 @@ function apiError(message, status) {
 
 function query(data, error = null) {
   let sourceFilter=false;
+  let automatic=false;
   return {
     select() { return this; },
-    eq(key) { if(key==="source_version_id")sourceFilter=true;return this; },
+    eq(key,value) { if(key==="source_version_id")sourceFilter=true;if(key==="origin" && value==="google_reconciliation")automatic=true;return this; },
     is() { return this; },
     order() { return this; },
     limit() { return this; },
-    maybeSingle() { return Promise.resolve({ data:sourceFilter?null:data, error }); },
+    maybeSingle() { return Promise.resolve({ data:sourceFilter?null:automatic?automaticVersionResult:data, error }); },
     returns() { return Promise.resolve({ data: data ? (Array.isArray(data) ? data : [data]) : [], error }); },
   };
 }
@@ -39,6 +40,8 @@ let postPayload = null;
 let postCalls = [];
 let latestPublicationResult = { data: latestPublication, error: null };
 let privateVersionResult=null;
+let automaticVersionResult=null;
+let automaticPublicationResult=null;
 
 const route = await importTestModule(
   "src/app/api/team-workweek/private-draft/route.ts",
@@ -68,7 +71,12 @@ const route = await importTestModule(
           if (table === "team_workweek_versions") return query(privateVersionResult);
           if (table === "team_workweek_google_conflicts") return query(null);
           if (table === "team_workweek_publications") {
-            return query(latestPublicationResult.data, latestPublicationResult.error);
+            const result=query(latestPublicationResult.data, latestPublicationResult.error);
+            let sourceId=null;
+            const filter=result.eq;
+            result.eq=function(key,value){if(key==="source_version_id")sourceId=value;return filter.call(this,key,value);};
+            result.maybeSingle=async()=>({data:sourceId==="published-owner"?latestPublication:sourceId && sourceId!==automaticVersionResult?.id?null:automaticPublicationResult,error:null});
+            return result;
           }
           throw new Error(`Unexpected table: ${table}`);
         },
@@ -79,6 +87,8 @@ const route = await importTestModule(
 
 test.beforeEach(() => {
   privateVersionResult=null;
+  automaticVersionResult=null;
+  automaticPublicationResult=null;
   latestPublicationResult = { data: latestPublication, error: null };
 });
 
@@ -163,4 +173,22 @@ test("the immediate API stores intent without accepting a client activation time
   assert.deepEqual(postCalls,[["create_private_immediate_team_workweek_version",{p_windows:[]}]]);
   postPayload={...postPayload,effectiveAt:"2026-10-14T10:00:00Z"};
   assert.equal((await route.POST({})).status,400);assert.equal(postCalls.length,1);
+});
+
+
+test.each(["none","private","published"])("an expired automatic Google correction offers owner restart with %s owner history", async ownerState => {
+  const existingDraft=ownerState==="private";
+  automaticVersionResult={id:"automatic-version",owner_profile_id:"profile-1",effective_from:"2026-10-12",activation_mode:"immediate",base_publication_id:latestPublication.id,base_publication_revision:4,timezone:"Europe/Berlin",status:"preparing",created_at:"2026-10-14T10:00:00Z",team_workweek_windows:[{weekday:1,start_minute:600,end_minute:1080}]};
+  automaticPublicationResult={...latestPublication,id:"automatic-operation",source_version_id:automaticVersionResult.id,status:"preparing",sync_state:"delayed",effective_at:"2026-10-14T10:03:00Z",attempt_generation:1};
+  if(ownerState!=="none")privateVersionResult={...automaticVersionResult,id:existingDraft?"owner-draft":"published-owner",team_workweek_windows:[{weekday:1,start_minute:480,end_minute:720}]};
+  vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-19T00:10:00Z"));
+  try{
+    const response=await route.GET({});const body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.restartAvailable,true);
+    assert.equal(body.version.id,existingDraft?"owner-draft":"automatic-version");
+    assert.deepEqual(body.version.windows.monday,[existingDraft?{start:"08:00",end:"12:00"}:{start:"10:00",end:"18:00"}]);
+    assert.equal(body.publication.id,"automatic-operation");
+    assert.doesNotMatch(JSON.stringify(body),/google_event_id|confirmed_etag/);
+  }finally{vi.useRealTimers();}
 });
