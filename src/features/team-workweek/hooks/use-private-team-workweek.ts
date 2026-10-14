@@ -23,6 +23,7 @@ function initialDraft(effectiveFrom = nextMondayIso()): PrivateTeamWorkweekDraft
 
 export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   const mounted = useRef(true);
+  const mutationPending = useRef(false);
   const [version, setVersion] = useState<PrivateTeamWorkweekVersion | null>(null);
   const [publication, setPublication] = useState<OwnTeamWorkweekPublication | null>(null);
   const [latestPublished, setLatestPublished] = useState<OwnTeamWorkweekPublication | null>(null);
@@ -141,13 +142,12 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     }));
   };
 
-  const save = async () => {
+  const saveDraft = async () => {
     const validation = validatePrivateTeamWorkweekDraft(draft, new Date(), minimumEffectiveFrom);
     if (!validation.ok) {
       setErrors(validation.errors);
-      return false;
+      return null;
     }
-    setPending(true);
     setMessage("");
     setErrors([]);
     try {
@@ -165,28 +165,38 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         setMessageTone("success");
         setMessage("Änderung privat gespeichert. Im Team und in Google bleibt sie bis zur Veröffentlichung unverändert.");
       }
-      return true;
+      return saved;
     } catch (error) {
       if (mounted.current) {
         setMessageTone("warning");
-        setMessage(error instanceof Error ? error.message : "Private Grundwoche konnte nicht gespeichert werden.");
+        setMessage(`${error instanceof Error ? error.message : "Private Grundwoche konnte nicht gespeichert werden."} Deine Eingaben bleiben hier erhalten. Versuche erneut zu speichern; die Veröffentlichung wurde nicht gestartet.`);
       }
-      return false;
+      return null;
+    }
+  };
+
+  const save = async () => {
+    if (mutationPending.current || pending) return false;
+    mutationPending.current = true;
+    setPending(true);
+    try {
+      return Boolean(await saveDraft());
     } finally {
+      mutationPending.current = false;
       if (mounted.current) setPending(false);
     }
   };
 
   const publish = async () => {
-    if (!version || dirty) {
-      setMessageTone("warning");
-      setMessage(dirty ? "Speichere die Änderung vor der Veröffentlichung." : "Ändere und speichere zuerst deine Arbeitswoche.");
-      return false;
-    }
+    if (mutationPending.current || pending) return false;
+    mutationPending.current = true;
     setPending(true);
     setMessage("");
     setErrors([]);
     try {
+      const publishingVersion = dirty || !version ? await saveDraft() : version;
+      if (!publishingVersion) return false;
+      setMessage("");
       const { response, body } = await apiClient.requestJson<{
         publication?: {
           id: string;
@@ -201,7 +211,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         error?: string;
       }>("/api/team-workweek/publish", {
         method: "POST",
-        json: { versionId: version.id },
+        json: { versionId: publishingVersion.id },
         useDevProfileOverride: false,
       });
       if (!response.ok && response.status !== 202) {
@@ -217,7 +227,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         if (body?.publication && mounted.current) {
           setPublication({
             id: body.publication.id,
-            effectiveFrom: version.effectiveFrom,
+            effectiveFrom: publishingVersion.effectiveFrom,
             status: body.publication.status,
             syncState: body.publication.syncState,
             publicationRevision: body.publication.publicationRevision,
@@ -246,10 +256,11 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     } catch (error) {
       if (mounted.current) {
         setMessageTone("warning");
-        setMessage(error instanceof Error ? error.message : "Grundwoche konnte nicht veröffentlicht werden.");
+        setMessage(`${error instanceof Error ? error.message : "Grundwoche konnte nicht veröffentlicht werden."} Deine gespeicherte Änderung bleibt erhalten. Der zuletzt bestätigte Teamstand bleibt hier sichtbar. Wiederhole die Veröffentlichung, um den Stand zu prüfen.`);
       }
       return false;
     } finally {
+      mutationPending.current = false;
       if (mounted.current) setPending(false);
     }
   };

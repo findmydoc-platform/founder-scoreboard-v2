@@ -20,7 +20,7 @@ export function HeaderCalendarAction({
 }: {
   apiClient?: BrowserApiClient;
   events: HeaderDataSlot<HeaderCalendarEvent[]>;
-  onOpenTeam: () => void;
+  onOpenTeam: (editWorkweek?: boolean) => void;
   profiles: Profile[];
 }) {
   const state = useHeaderCalendar({ apiClient, onOpenTeam });

@@ -15,7 +15,7 @@ type PlanningHeaderDataActionsProps = {
   onDismissNotification?: (eventId: number) => void;
   calendar?: Readonly<{
     apiClient?: BrowserApiClient;
-    onOpenTeam: () => void;
+    onOpenTeam: (editWorkweek?: boolean) => void;
     profiles: Profile[];
   }>;
 };
@@ -32,7 +32,7 @@ export function PlanningHeaderDataActions({
   const [localNotificationsOpen, setLocalNotificationsOpen] = useState(false);
   const notificationPopoverOpen = notificationsOpen ?? localNotificationsOpen;
   const toggleNotifications = onToggleNotifications || (() => setLocalNotificationsOpen((value) => !value));
-  const openTeam = calendar?.onOpenTeam || (() => window.location.assign("/team"));
+  const openTeam = calendar?.onOpenTeam || ((editWorkweek = false) => window.location.assign(editWorkweek ? "/team?workweek=edit" : "/team"));
 
   return (
     <>

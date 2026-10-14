@@ -74,3 +74,20 @@ export const KeepsMobileDaySelectionAndMissingSchedulesDistinct: Story = {
     await expect(canvas.getByRole("tab", { name: "Sonntag" })).toHaveFocus();
   },
 };
+
+export const KeepsEmptyDayLabelsInsideCompactCells: Story = {
+  args: { ...ShowsTheCurrentPublishedWorkweek.args, compact: true },
+  render: (args) => <div style={{ width: 900, maxWidth: "100vw" }}><TeamWorkweekMatrix {...args} /></div>,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const table = canvas.getByRole("table");
+    const emptyCells = within(table).getAllByRole("cell", { name: "Kein Arbeitszeitfenster" });
+    for (const cell of emptyCells) {
+      const textRange = document.createRange();
+      textRange.selectNodeContents(cell);
+      for (const rect of Array.from(textRange.getClientRects())) {
+        await expect(rect.right).toBeLessThanOrEqual(cell.getBoundingClientRect().right);
+      }
+    }
+  },
+};

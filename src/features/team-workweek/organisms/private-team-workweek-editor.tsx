@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import type { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
 import { TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
 import { formatDate } from "@/lib/display";
@@ -20,15 +20,21 @@ export function PrivateTeamWorkweekEditor({
   profile,
   state,
   onClose,
+  restoreFocusRef,
 }: {
   apiClient: BrowserApiClient;
   profile: Profile;
   state: WorkweekState;
   onClose: () => void;
+  restoreFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const [discardOpen, setDiscardOpen] = useState(false);
-  const requestClose = () => state.dirty ? setDiscardOpen(true) : onClose();
-  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardOpen });
+  const requestClose = () => {
+    if (state.pending) return;
+    if (state.dirty) setDiscardOpen(true);
+    else onClose();
+  };
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardOpen || state.pending, restoreFocusRef });
 
   return (
     <>
@@ -150,8 +156,8 @@ export function PrivateTeamWorkweekEditor({
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
               <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
-              <UiButton className="whitespace-nowrap px-2 text-xs" variant="primary" size="md" data-autofocus aria-label="Änderung privat speichern" onClick={() => void state.save()} disabled={state.pending || !state.dirty}>
-                {state.pending ? "Speichert …" : "Speichern"}
+              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Änderung privat speichern" onClick={() => void state.save()} disabled={state.pending || !state.dirty}>
+                Privat speichern
               </UiButton>
               <UiButton
                 variant="primary"
@@ -159,9 +165,9 @@ export function PrivateTeamWorkweekEditor({
                 className="whitespace-nowrap px-2 text-xs"
                 aria-label="Änderung in Google & Team veröffentlichen"
                 onClick={() => void state.publish().then((published) => published && onClose())}
-                disabled={state.pending || state.dirty || !state.version}
+                disabled={state.pending}
               >
-                Veröffentlichen
+                {state.pending ? "Bitte warten …" : "Veröffentlichen"}
               </UiButton>
             </div>
           </footer>

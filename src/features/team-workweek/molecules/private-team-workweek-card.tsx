@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
 import { berlinTodayIso, TEAM_WORKWEEK_DAYS } from "../model/team-workweek-draft";
 import { PrivateTeamWorkweekEditor } from "../organisms/private-team-workweek-editor";
@@ -19,8 +19,14 @@ function conflictWindows(windows: Array<Readonly<{ weekday: number; startMinute:
   }).join(" · ");
 }
 
-export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: BrowserApiClient; profile: Profile }) {
-  const [open, setOpen] = useState(false);
+export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = false, onEditorRequestHandled }: { apiClient: BrowserApiClient; profile: Profile; editorRequested?: boolean; onEditorRequestHandled?: () => void }) {
+  const editorTriggerRef = useRef<HTMLButtonElement>(null);
+  const [localOpen, setOpen] = useState(false);
+  const open = localOpen || editorRequested;
+  const closeEditor = () => {
+    setOpen(false);
+    onEditorRequestHandled?.();
+  };
   const state = usePrivateTeamWorkweek(apiClient);
   const syncDelayed = state.publication?.syncState === "delayed";
   const reconciliationState = state.latestPublished?.googleReconciliationState;
@@ -70,13 +76,13 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
               <p className="mt-2 text-xs font-semibold text-amber-700">Der Google-Abgleich ist verzögert. Der bestätigte Teamstand bleibt aktiv.</p>
             )}
           </div>
-          <div className="flex flex-col gap-2 sm:items-end">
+          <div ref={(node) => { editorTriggerRef.current = node?.querySelector<HTMLButtonElement>("[data-workweek-editor-trigger]") || null; }} className="flex flex-col gap-2 sm:items-end">
             {state.latestPublished && !state.version && (
               <UiButton variant="secondary" size="lg" onClick={() => void state.reconcile()} disabled={state.pending}>
                 App-Termine in Google prüfen
               </UiButton>
             )}
-            <UiButton variant="primary" size="lg" onClick={() => setOpen(true)} disabled={state.pending && !state.version}>
+            <UiButton data-workweek-editor-trigger variant="primary" size="lg" onClick={() => setOpen(true)} disabled={state.pending && !state.version}>
               {state.version ? "Bearbeitung fortsetzen" : state.latestPublished ? "Arbeitswoche bearbeiten" : "Arbeitswoche einrichten"}
             </UiButton>
           </div>
@@ -109,7 +115,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
           </section>
         )}
       </UiPanel>
-      {open && <PrivateTeamWorkweekEditor apiClient={apiClient} profile={profile} state={state} onClose={() => setOpen(false)} />}
+      {open && <PrivateTeamWorkweekEditor apiClient={apiClient} profile={profile} state={state} onClose={closeEditor} restoreFocusRef={editorTriggerRef} />}
     </>
   );
 }
