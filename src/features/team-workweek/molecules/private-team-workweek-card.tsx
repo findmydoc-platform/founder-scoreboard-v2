@@ -30,6 +30,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
   const state = usePrivateTeamWorkweek(apiClient);
   const syncDelayed = state.publication?.syncState === "delayed";
   const reconciliationState = state.latestPublished?.googleReconciliationState;
+  const showConfirmedTeamBaseline = Boolean(state.conflict || syncDelayed || reconciliationState === "conflict" || reconciliationState === "delayed");
   const latestIsPrepared = Boolean(state.latestPublished && (state.latestPublished.effectiveAt ? new Date(state.latestPublished.effectiveAt) > new Date() : state.latestPublished.effectiveFrom > berlinTodayIso()));
   const badge = syncDelayed
     ? { tone: "amber" as const, label: "Synchronisierung verzögert" }
@@ -55,7 +56,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
               <UiBadge tone={badge.tone}>{badge.label}</UiBadge>
             </div>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              {state.version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : state.latestPublished ? "Veröffentlichte Arbeitszeiten für " + profile.name + ". Bestätigt in Team und Google." : "Deine Arbeitszeiten fehlen noch."}
+              {state.version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : state.latestPublished ? showConfirmedTeamBaseline ? "Letzter bestätigter Teamstand bleibt sichtbar." : "Veröffentlichte Arbeitszeiten für " + profile.name + ". Bestätigt in Team und Google." : "Deine Arbeitszeiten fehlen noch."}
             </p>
             {state.version && (
               <p className="mt-2 text-xs font-semibold text-slate-600">{state.version.activationMode === "immediate" ? "Beginn wird bei Veröffentlichung bestätigt" : `Gültig ab ${formatDate(state.version.effectiveFrom)}`} · {state.version.timezone}</p>
@@ -95,19 +96,19 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <div className="rounded-lg border border-white/80 bg-white p-3">
                 <div className="text-sm font-semibold text-slate-950">Meine FounderOps-Variante</div>
-                <div className="mt-1 text-xs text-slate-600">Gültig ab {formatDate(state.conflict.founderops.effectiveFrom)}</div>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{conflictWindows(state.conflict.founderops.windows)}</p>
+                {state.conflict.founderops.supported !== false && <div className="mt-1 text-xs text-slate-600">{state.conflict.founderops.activationMode === "immediate" ? "Beginn wird nach Bestätigung festgelegt" : `Gültig ab ${formatDate(state.conflict.founderops.effectiveFrom)}`}</div>}
+                <p className="mt-2 text-sm leading-6 text-slate-700">{state.conflict.founderops.supported === false ? "Diese FounderOps-Variante kann derzeit nicht übernommen werden." : conflictWindows(state.conflict.founderops.windows)}</p>
                 <UiButton className="mt-3 w-full sm:w-auto" variant="primary" onClick={() => void state.resolveConflict("founderops")}
-                  disabled={state.pending || (state.conflict.state === "resolving" && state.conflict.decision !== "founderops")}>
+                  disabled={state.pending || state.conflict.founderops.supported === false || (state.conflict.state === "resolving" && state.conflict.decision !== "founderops")}>
                   FounderOps übernehmen
                 </UiButton>
               </div>
               <div className="rounded-lg border border-white/80 bg-white p-3">
                 <div className="text-sm font-semibold text-slate-950">Google-Variante</div>
-                <div className="mt-1 text-xs text-slate-600">Gültig ab {formatDate(state.conflict.google.effectiveFrom)}</div>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{conflictWindows(state.conflict.google.windows)}</p>
+                {state.conflict.google.supported !== false && <div className="mt-1 text-xs text-slate-600">{state.conflict.google.activationMode === "immediate" ? "Beginn wird nach Bestätigung festgelegt" : `Gültig ab ${formatDate(state.conflict.google.effectiveFrom)}`}</div>}
+                <p className="mt-2 text-sm leading-6 text-slate-700">{state.conflict.google.supported === false ? "Diese Google-Änderung lässt sich keiner eindeutigen Grundwoche zuordnen." : conflictWindows(state.conflict.google.windows)}</p>
                 <UiButton className="mt-3 w-full sm:w-auto" variant="secondary" onClick={() => void state.resolveConflict("google")}
-                  disabled={state.pending || (state.conflict.state === "resolving" && state.conflict.decision !== "google")}>
+                  disabled={state.pending || state.conflict.google.supported === false || (state.conflict.state === "resolving" && state.conflict.decision !== "google")}>
                   Google übernehmen
                 </UiButton>
               </div>

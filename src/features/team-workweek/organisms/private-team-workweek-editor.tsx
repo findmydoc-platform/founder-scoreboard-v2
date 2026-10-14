@@ -150,7 +150,9 @@ export function PrivateTeamWorkweekEditor({
                 )}
                 {state.draft.activationMode === "immediate" && state.immediateAllowed ? (
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {state.publication?.effectiveAt
+                    {state.restartAvailable
+                      ? "Beginne mit dem aktuellen Stand neu. Deine Eingaben bleiben erhalten."
+                      : state.publication?.effectiveAt
                       ? state.publicationExpired
                         ? "Der geplante Beginn ist abgelaufen. Wiederhole die Veröffentlichung; ein neuer zukünftiger Beginn wird bestätigt."
                         : `Geplanter Beginn: ${formatTeamWorkweekActivation(state.publication.effectiveAt)}. Erst nach vollständiger Bestätigung gültig.`
@@ -170,6 +172,11 @@ export function PrivateTeamWorkweekEditor({
                 )}
               </section>
 
+              {(state.restartAvailable || state.restartContextPending) && (
+                <UiButton className="justify-self-start whitespace-normal text-left" variant="secondary" onClick={() => void state.restart()} disabled={state.pending}>
+                  {state.restartContextPending ? "Aktuellen Stand laden" : "Mit aktuellem Stand neu beginnen"}
+                </UiButton>
+              )}
               {state.errors.length > 0 && (
                 <UiNotice tone="danger" role="alert">
                   <div className="font-semibold">Bitte korrigiere deine Arbeitswoche:</div>
@@ -196,8 +203,8 @@ export function PrivateTeamWorkweekEditor({
                 size="md"
                 className="whitespace-nowrap px-2 text-xs"
                 aria-label="Änderung in Google & Team veröffentlichen"
-                onClick={() => void state.publish().then((published) => published && onClose())}
-                disabled={state.pending}
+                onClick={() => void state.publish().then((result) => (result === true || result === "conflict") && onClose())}
+                disabled={state.pending || state.restartContextPending}
               >
                 {state.pending ? "Bitte warten …" : "Veröffentlichen"}
               </UiButton>

@@ -52,6 +52,7 @@ function query(result) {
     order() { return this; },
     limit() { return this; },
     maybeSingle: async () => result,
+    returns: async () => ({...result,data:result.data?(Array.isArray(result.data)?result.data:[result.data]):[]}),
     then(resolve) { return Promise.resolve(result).then(resolve); },
   };
 }

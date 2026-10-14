@@ -12,6 +12,8 @@ import {
   observeGoogleWorkweekSeriesForDisconnect,
 } from "./google-workspace-disconnect-core";
 import { ensureGoogleWorkweekSeriesTransition } from "./team-workweek-publication-core";
+import { cleanupGoogleWorkweekEffect, type PreparedWorkweekEffect } from "./team-workweek-immediate-effects";
+import { compensateTeamWorkweekGeneration } from "./team-workweek-compensation";
 
 type DisconnectOperationRow = Readonly<{
   id: string;
@@ -35,6 +37,7 @@ type DisconnectTargetRow = Readonly<{
   cleanup_action: "delete" | "truncate";
   recurrence_count: number | null;
   state: "pending" | "confirmed";
+  effect_plan?: PreparedWorkweekEffect | null;
 }>;
 
 export type GoogleWorkspaceDisconnectView = Readonly<{
@@ -68,7 +71,7 @@ async function openOperation(serviceSupabase: SupabaseClient, ownerProfileId: st
 async function targets(serviceSupabase: SupabaseClient, operationId: string) {
   const response = await serviceSupabase
     .from("google_workspace_disconnect_series")
-    .select("id,series_id,calendar_id,google_event_id,expected_etag,expected_founderops_revision,cleanup_action,recurrence_count,state")
+    .select("id,series_id,calendar_id,google_event_id,expected_etag,expected_founderops_revision,cleanup_action,recurrence_count,state,effect_plan")
     .eq("operation_id", operationId)
     .order("google_event_id", { ascending: true })
     .returns<DisconnectTargetRow[]>();
@@ -188,6 +191,16 @@ async function cleanupOperation({
   const operationTargets = await targets(serviceSupabase, operation.id);
   for (const target of operationTargets) {
     if (target.state === "confirmed") continue;
+    if(target.effect_plan){
+      const result=await cleanupGoogleWorkweekEffect({accessToken,effect:target.effect_plan,now});
+      if(result.state==="delayed"){
+        await recordDelay(serviceSupabase,operation.id,target.id,result.errorClass,now().toISOString());
+        return result.errorClass;
+      }
+      const confirmation=await serviceSupabase.rpc("confirm_google_workspace_disconnect_series",{p_target_id:target.id,p_expected_etag:target.expected_etag,p_confirmed_etag:result.etag,p_observed_at:result.observedAt});
+      if(confirmation.error)throw new GoogleWorkspaceDisconnectError("conflict","Physische Kalenderbereinigung konnte nicht bestätigt werden.");
+      continue;
+    }
     const identity = {
       calendarId: target.calendar_id,
       googleEventId: target.google_event_id,
@@ -276,7 +289,20 @@ export async function disconnectGoogleWorkspace({
   serviceSupabase: SupabaseClient;
 }) {
   let operation = await openOperation(serviceSupabase, ownerProfileId);
-  if (!operation) {
+  if (!operation || operation.state==="cleaning" || operation.state==="cleanup_pending") {
+    const pending=await serviceSupabase.from("team_workweek_publications").select("id,attempt_generation,effective_at").eq("owner_profile_id",ownerProfileId).eq("status","preparing");
+    if(pending.error)throw new GoogleWorkspaceDisconnectError("unavailable","Laufende Veröffentlichung konnte nicht geprüft werden.");
+    for(const publication of pending.data||[]){
+      if(!publication.attempt_generation || !publication.effective_at || Date.parse(publication.effective_at)>now().getTime())throw new GoogleWorkspaceDisconnectError("conflict","Schließe zuerst die laufende Veröffentlichung ab.");
+      let accessToken:string;
+      try{accessToken=await getAccessToken(serviceSupabase,ownerProfileId);}catch{return {state:"cleanup_pending" as const,recovery:"reconnect" as const};}
+      const failure=await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attempt_generation,serviceSupabase,now});
+      if(failure)return {state:"cleanup_pending" as const,recovery:failure==="oauth_reconnect_required"?"reconnect" as const:"retry" as const};
+      const retired=await serviceSupabase.rpc("retire_compensated_workweek_for_disconnect",{p_owner_profile_id:ownerProfileId,p_publication_id:publication.id,p_generation:publication.attempt_generation});
+      if(retired.error)throw new GoogleWorkspaceDisconnectError("conflict","Bereinigte Veröffentlichung konnte noch nicht abgeschlossen werden.");
+    }
+  }
+  if (!operation || ((operation.state==="cleaning" || operation.state==="cleanup_pending") && !(await targets(serviceSupabase,operation.id)).length)) {
     const prepared = await serviceSupabase.rpc("prepare_google_workspace_disconnect", {
       p_owner_profile_id: ownerProfileId,
     });

@@ -109,6 +109,12 @@ test("ordinary events and instance exceptions never enter the known-series read 
   assert.doesNotMatch(calls[0], /singleEvents|instances|syncToken|timeMin|privateExtendedProperty/);
 });
 
+test("a legacy managed UTC endpoint is interpreted in its declared Berlin timezone",async()=>{
+  const series=known();
+  const result=await reconciliation.observeGoogleWorkweek({accessToken:"token",series:[series],now,wait:noWait,fetchImpl:async()=>Response.json(event(series,{etag:'"metadata-etag"',start:{dateTime:"2026-08-31T07:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2026-08-31T15:00:00Z",timeZone:"Europe/Berlin"}}))});
+  assert.equal(result.state,"unchanged");
+});
+
 test("a deleted recurring master removes only its known workweek window", async () => {
   const monday = known();
   const wednesday = known({
