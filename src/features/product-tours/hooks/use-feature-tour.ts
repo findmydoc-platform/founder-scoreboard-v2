@@ -425,6 +425,20 @@ export function useFeatureTour({
       let stepTransitionPending = false;
       let guideOwner: HTMLElement | null = null;
       let ownerFocus: HTMLElement | null = null;
+      let tourFinished = false;
+      const finishTour = () => {
+        if (tourFinished) return;
+        tourFinished = true;
+        if (guideOwner?.isConnected) {
+          guideOwner.removeAttribute("data-active-feature-guide");
+          const target = ownerFocus?.isConnected ? ownerFocus : guideOwner.querySelector<HTMLElement>("button:not([disabled]):not([tabindex='-1'])");
+          window.requestAnimationFrame(() => target?.focus({ preventScroll: true }));
+        }
+        clearMentionDemo();
+        if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
+        setRequestedTourId(null);
+        setResumeStepIndex(0);
+      };
       const driverObject = driver({
         allowClose: true,
         animate: !activeTour.openWorkweekEditor,
@@ -435,17 +449,11 @@ export function useFeatureTour({
         showProgress: true,
         stagePadding: 6,
         stageRadius: 8,
-        onDestroyed: () => {
-          if (guideOwner?.isConnected) {
-            guideOwner.removeAttribute("data-active-feature-guide");
-            const target = ownerFocus?.isConnected ? ownerFocus : guideOwner.querySelector<HTMLElement>("button:not([disabled])");
-            window.requestAnimationFrame(() => target?.focus({ preventScroll: true }));
-          }
-          clearMentionDemo();
-          if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
-          setRequestedTourId(null);
-          setResumeStepIndex(0);
-        },
+        onDestroyStarted: activeTour.openWorkweekEditor ? (_element, _step, options) => {
+          options.driver.destroy();
+          finishTour();
+        } : undefined,
+        onDestroyed: finishTour,
         steps: tourSteps.map((step, index) => {
           const stepIndex = startingStepIndex + index;
           return ({
@@ -474,6 +482,7 @@ export function useFeatureTour({
             },
             onDoneClick: (_element, _step, opts) => {
               opts.driver.destroy();
+              if (activeTour.openWorkweekEditor) finishTour();
               if (activeTour.doneWorkspace) {
                 setWorkspace(activeTour.doneWorkspace);
               }

@@ -495,7 +495,7 @@ export const ConfirmsTheActualStartAndRetainedNextChange: Story = {
   args: { profile, apiClient: client({ immediateAllowed: true, preparedSuccessor: { ...latestPublished, id: "retained", effectiveFrom: "2026-10-19" }, publish: {
     result: { ...latestPublished, id: "correction", publicationRevision: 3, status: "published", syncState: "confirmed", recovery: null,
       activationMode: "immediate", effectiveAt: "2026-10-14T12:03:00Z", effectiveUntil: "2026-10-18T22:00:00Z" },
-    after: { version: null, publication: null, latestPublished, immediateAllowed: true, minimumEffectiveFrom: "2026-10-26", editBase: { windows: publishedWindows } },
+    after: { version: null, publication: null, latestPublished: { ...latestPublished, id: "correction", publicationRevision: 3, activationMode: "immediate", effectiveAt: "2026-10-14T12:03:00Z", effectiveUntil: "2026-10-18T22:00:00Z", lastSyncAt: "2026-10-14T12:00:00Z" }, immediateAllowed: true, minimumEffectiveFrom: "2026-10-26", editBase: { windows: publishedWindows } },
   } }) },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -760,5 +760,31 @@ export const LeavesUnsavedInputsIntactWhenTheGuideCloses: Story = {
     await waitFor(() => expect(page.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" }).contains(canvasElement.ownerDocument.activeElement)).toBe(true));
     await userEvent.keyboard("{Escape}");
     await expect(await page.findByRole("alertdialog", { name: "Ungespeicherte Änderungen verwerfen?" })).toBeVisible();
+  },
+};
+
+export const ReleasesTheGuideEvenBeforeDriversFirstFrame: Story = {
+  args: { profile, apiClient: client({ immediateAllowed: true }) },
+  render: ({ apiClient }) => <WorkweekGuide apiClient={apiClient} />,
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(await page.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    await waitFor(() => expect(page.getByRole("button", { name: "Editor schließen" })).toHaveFocus());
+    const requestFrame = window.requestAnimationFrame;
+    const queuedFrames: FrameRequestCallback[] = [];
+    window.requestAnimationFrame = (callback) => queuedFrames.push(callback);
+    try {
+      window.dispatchEvent(new CustomEvent("fmd:start-feature-tour", { detail: { tourId: "workweek-current-publication-v1" } }));
+      const guide = await page.findByRole("dialog", { name: "Beginn bewusst wählen" });
+      await userEvent.click(within(guide).getByRole("button", { name: "Tour schließen" }));
+    } finally {
+      window.requestAnimationFrame = requestFrame;
+      queuedFrames.forEach((callback) => requestFrame(callback));
+    }
+    await waitFor(() => expect(page.getByRole("button", { name: "Editor schließen" })).toHaveFocus());
+    window.dispatchEvent(new CustomEvent("fmd:start-feature-tour", { detail: { tourId: "workweek-current-publication-v1" } }));
+    const restartedGuide = await page.findByRole("dialog", { name: "Beginn bewusst wählen" });
+    await userEvent.click(within(restartedGuide).getByRole("button", { name: "Tour schließen" }));
+    await waitFor(() => expect(page.getByRole("button", { name: "Editor schließen" })).toHaveFocus());
   },
 };
