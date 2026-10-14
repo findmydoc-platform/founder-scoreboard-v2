@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
+  berlinTodayIso,
   flattenTeamWorkweekWindows,
   inflatePublishedTeamWorkweekWindows,
   inflateTeamWorkweekWindows,
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("team_workweek_versions")
-    .select("id,owner_profile_id,effective_from,activation_mode,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
+    .select("id,owner_profile_id,effective_from,activation_mode,base_publication_id,base_publication_revision,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
     .eq("status", "preparing")
     .eq("origin", "owner")
     .order("created_at", { ascending: false })
@@ -77,6 +78,8 @@ export async function GET(request: NextRequest) {
       owner_profile_id: string;
       effective_from: string;
       activation_mode?: "immediate" | "future_monday";
+      base_publication_id?: string | null;
+      base_publication_revision?: number | null;
       timezone: "Europe/Berlin";
       status: "preparing";
       created_at: string;
@@ -108,6 +111,7 @@ export async function GET(request: NextRequest) {
     version: privateVersion ? {
       id: privateVersion.id,
       effectiveFrom: privateVersion.effective_from,
+      ...(privateVersion.base_publication_id ? {basePublicationId:privateVersion.base_publication_id,basePublicationRevision:privateVersion.base_publication_revision} : {}),
       ...(privateVersion.activation_mode ? { activationMode: privateVersion.activation_mode } : {}),
       timezone: privateVersion.timezone,
       status: privateVersion.status,
@@ -116,7 +120,9 @@ export async function GET(request: NextRequest) {
     } : null,
     publication: privateVersion ? publicationPayload(publication?.data || null) : null,
     latestPublished: publicationPayload(latestPublished),
+    immediateAllowed: !latestPublished || (latestPublished.effective_at ? new Date(latestPublished.effective_at) <= new Date() : latestPublished.effective_from <= berlinTodayIso()),
     editBase: latestPublished ? {
+      basePublicationId:latestPublished.id,basePublicationRevision:latestPublished.publication_revision,
       windows: inflatePublishedTeamWorkweekWindows(latestPublished.windows || []),
     } : null,
     minimumEffectiveFrom: nextVersionMondayIso(latestPublished?.effective_from || null),
@@ -133,20 +139,25 @@ export async function POST(request: NextRequest) {
   if (!validation.ok) return apiError(validation.errors[0], 400);
 
   const { data, error } = validation.draft.activationMode === "immediate"
-    ? await supabase.rpc("create_private_immediate_team_workweek_version", { p_windows: flattenTeamWorkweekWindows(validation.draft.windows) })
-    : await supabase.rpc("create_private_team_workweek_version", {
+    ? validation.draft.basePublicationId
+      ? await supabase.rpc("create_private_current_team_workweek_version", { p_windows: flattenTeamWorkweekWindows(validation.draft.windows),
+        p_base_publication_id: validation.draft.basePublicationId, p_base_publication_revision: validation.draft.basePublicationRevision })
+      : await supabase.rpc("create_private_immediate_team_workweek_version", { p_windows: flattenTeamWorkweekWindows(validation.draft.windows) })
+    : validation.draft.basePublicationId
+      ? await supabase.rpc("create_private_monday_team_workweek_version", { p_effective_from:validation.draft.effectiveFrom, p_windows:flattenTeamWorkweekWindows(validation.draft.windows), p_base_publication_id:validation.draft.basePublicationId,p_base_publication_revision:validation.draft.basePublicationRevision })
+      : await supabase.rpc("create_private_team_workweek_version", {
       p_effective_from: validation.draft.effectiveFrom,
       p_windows: flattenTeamWorkweekWindows(validation.draft.windows),
     });
   if (error) {
-    const status = error.code === "22023" ? 400 : error.code === "42501" ? 403 : error.code === "P0003" ? 409 : 503;
+    const status = error.code === "22023" ? 400 : error.code === "42501" ? 403 : error.code === "P0003" || error.code === "P0004" ? 409 : 503;
     return apiError(
       status === 400
         ? "Grundwoche ist ungültig."
         : status === 403
           ? "Keine Berechtigung für diese Grundwoche."
           : status === 409
-            ? "Google-Abgleich zuerst abschließen."
+            ? "Die Ausgangsversion hat sich geändert oder ein Abgleich läuft. Lade die Arbeitswoche erneut."
             : "Grundwoche konnte nicht gespeichert werden.",
       status,
     );

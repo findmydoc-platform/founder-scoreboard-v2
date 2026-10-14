@@ -8,7 +8,7 @@ import {
   type GoogleWorkweekSeriesResult,
   type PreparedWorkweekPublication,
 } from "./team-workweek-publication-core";
-import { cleanupGoogleWorkweekEffect, ensureGoogleWorkweekEffect } from "./team-workweek-immediate-effects";
+import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, ensureGoogleWorkweekEffect } from "./team-workweek-immediate-effects";
 import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
 import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
 
@@ -148,6 +148,7 @@ export async function publishTeamWorkweek({
   ensureTransition = ensureGoogleWorkweekSeriesTransition,
   ensureEffect = ensureGoogleWorkweekEffect,
   cleanupEffect = cleanupGoogleWorkweekEffect,
+  discoverInstance = discoverGoogleWorkweekInstance,
   now = () => new Date(),
   transitionsFirst = false,
 }: {
@@ -158,6 +159,7 @@ export async function publishTeamWorkweek({
   ensureTransition?: typeof ensureGoogleWorkweekSeriesTransition;
   ensureEffect?: typeof ensureGoogleWorkweekEffect;
   cleanupEffect?: typeof cleanupGoogleWorkweekEffect;
+  discoverInstance?: typeof discoverGoogleWorkweekInstance;
   now?: () => Date;
   transitionsFirst?: boolean;
 }): Promise<TeamWorkweekPublicationResult> {
@@ -195,10 +197,10 @@ export async function publishTeamWorkweek({
     };
   }
 
-  if (publication.activationMode === "immediate") {
+  if (publication.effects !== undefined) {
     const delayed = async (errorClass: TeamWorkweekPublicationDelayClass) => ({
       ...await markDelayed(serviceSupabase, publication.id, errorClass, now().toISOString()),
-      activationMode: "immediate" as const, effectiveAt: publication.effectiveAt,
+      activationMode: publication.activationMode, effectiveAt: publication.effectiveAt,
     });
     const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
     if (expired()) {
@@ -206,8 +208,9 @@ export async function publishTeamWorkweek({
         if (effect.state === "cleaned") continue;
         const result = await cleanupEffect({ accessToken, effect, now });
         if (result.state === "delayed") return await delayed(result.errorClass);
-        const cleanup = await serviceSupabase.rpc("confirm_team_workweek_effect_cleanup", {
-          p_effect_id: effect.id, p_generation: effect.generation,
+        const restoring = effect.operation && effect.operation !== "create" && !(effect.instanceOf && !effect.expectedEtag);
+        const cleanup = await serviceSupabase.rpc(restoring ? "confirm_team_workweek_effect_restoration" : "confirm_team_workweek_effect_cleanup", {
+          p_effect_id: effect.id, p_generation: effect.generation, ...(restoring ? {p_etag:result.etag} : {}),
         });
         if (cleanup.error) return await delayed("storage_failed");
       }
@@ -228,16 +231,37 @@ export async function publishTeamWorkweek({
       publication = replanned.data;
       if (expired()) return await delayed("provider_unavailable");
     }
-    for (const effect of publication.effects || []) {
-      if (expired()) return await delayed("provider_unavailable");
-      if (effect.state === "confirmed") continue;
+    const syncEffect = async (effect: NonNullable<PreparedWorkweekPublication["effects"]>[number]): Promise<TeamWorkweekPublicationDelayClass | null> => {
+      if (expired()) return "provider_unavailable";
+      if (effect.state === "confirmed") return null;
+      if (effect.instanceOf && !effect.expectedEtag) {
+        const observed = await discoverInstance({accessToken,effect});
+        if (observed.state === "delayed") return observed.errorClass;
+        const bound = await serviceSupabase.rpc("bind_team_workweek_crossing_instance", {
+          p_effect_id:effect.id,p_generation:effect.generation,p_event_id:observed.eventId,p_etag:observed.etag,p_original_payload:observed.originalPayload,
+        });
+        if (bound.error || !bound.data || bound.data.id !== effect.id) return "storage_failed";
+        effect = bound.data;
+      }
       const result = await ensureEffect({ accessToken, effect, now });
-      if (result.state === "delayed") return await delayed(result.errorClass);
-      if (expired()) return await delayed("provider_unavailable");
+      if (result.state === "delayed") return result.errorClass;
+      if (expired()) return "provider_unavailable";
       const confirmation = await serviceSupabase.rpc("confirm_team_workweek_effect", {
         p_effect_id: effect.id, p_generation: effect.generation, p_etag: result.etag, p_payload: effect.payload,
       });
-      if (confirmation.error) return await delayed("storage_failed");
+      if (confirmation.error) return "storage_failed";
+      return null;
+    };
+    const effects = publication.effects || [];
+    const stages = [effects.filter((effect) => !effect.operation || effect.operation === "create"),
+      effects.filter((effect) => effect.kind === "crossing_instance"),
+      effects.filter((effect) => effect.operation && effect.operation !== "create" && effect.kind !== "crossing_instance")];
+    for (const stage of stages) {
+      for (let offset = 0; offset < stage.length; offset += 6) {
+        const results = await Promise.all(stage.slice(offset, offset + 6).map(syncEffect));
+        const failure = results.find((result) => result !== null);
+        if (failure) return await delayed(failure);
+      }
     }
     if (expired()) return await delayed("provider_unavailable");
     const finalized = await userSupabase.rpc("finalize_team_workweek_publication", { p_publication_id: publication.id });

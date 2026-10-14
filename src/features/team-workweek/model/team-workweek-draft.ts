@@ -21,12 +21,14 @@ export function currentTeamWorkweekDayKey(now = new Date()): TeamWorkweekDayKey 
   return TEAM_WORKWEEK_DAYS.find((day) => day.shortLabel.toLocaleLowerCase("de-DE") === shortLabel)?.key
     ?? TEAM_WORKWEEK_DAYS[0].key;
 }
-export type TeamWorkweekWindow = Readonly<{ start: string; end: string }>;
+export type TeamWorkweekWindow = Readonly<{ start: string; end: string; startsAt?: string; endsAt?: string }>;
 export type TeamWorkweekWindows = Record<TeamWorkweekDayKey, TeamWorkweekWindow[]>;
 
 export type WorkweekActivationMode = "immediate" | "future_monday";
 
 export type PrivateTeamWorkweekVersion = Readonly<{
+  basePublicationId?: string;
+  basePublicationRevision?: number;
   activationMode?: WorkweekActivationMode;
   id: string;
   effectiveFrom: string;
@@ -37,12 +39,16 @@ export type PrivateTeamWorkweekVersion = Readonly<{
 }>;
 
 export type PrivateTeamWorkweekDraft = Readonly<{
+  basePublicationId?: string;
+  basePublicationRevision?: number;
   activationMode?: WorkweekActivationMode;
   effectiveFrom: string;
   windows: TeamWorkweekWindows;
 }>;
 
 export type TeamWorkweekEditBase = Readonly<{
+  basePublicationId?: string;
+  basePublicationRevision?: number;
   windows: TeamWorkweekWindows;
 }>;
 
@@ -101,6 +107,7 @@ export function editableTeamWorkweekDraft({
   return {
     effectiveFrom: version?.effectiveFrom || minimumEffectiveFrom,
     ...(version?.activationMode ? { activationMode: version.activationMode } : {}),
+    ...((version?.basePublicationId || editBase?.basePublicationId) ? { basePublicationId: version?.basePublicationId || editBase?.basePublicationId, basePublicationRevision: version?.basePublicationRevision || editBase?.basePublicationRevision } : {}),
     windows: cloneTeamWorkweekWindows(version?.windows || editBase?.windows || emptyTeamWorkweekWindows()),
   };
 }
@@ -174,9 +181,13 @@ export function validatePrivateTeamWorkweekDraft(
 ) {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const errors: string[] = [];
-  if (Object.keys(input).some((key) => !["effectiveFrom", "windows", "activationMode"].includes(key))) {
+  if (Object.keys(input).some((key) => !["effectiveFrom", "windows", "activationMode", "basePublicationId", "basePublicationRevision"].includes(key))) {
     errors.push("Die Anfrage enthält nicht unterstützte Felder.");
   }
+  if ((input.basePublicationId !== undefined || input.basePublicationRevision !== undefined) && (
+    typeof input.basePublicationId !== "string" || !/^[0-9a-f-]{36}$/i.test(input.basePublicationId)
+    || !Number.isInteger(input.basePublicationRevision) || Number(input.basePublicationRevision) < 1
+  )) errors.push("Die veröffentlichte Ausgangsversion ist ungültig.");
   const activationMode = input.activationMode;
   if (activationMode !== undefined && activationMode !== "immediate" && activationMode !== "future_monday") {
     errors.push("Der Gültigkeitsmodus ist ungültig.");
@@ -232,7 +243,7 @@ export function validatePrivateTeamWorkweekDraft(
 
   return errors.length
     ? { ok: false as const, errors }
-    : { ok: true as const, draft: { effectiveFrom, windows, ...(activationMode ? { activationMode: activationMode as WorkweekActivationMode } : {}) } satisfies PrivateTeamWorkweekDraft };
+    : { ok: true as const, draft: { effectiveFrom, windows, ...(typeof input.basePublicationId === "string" ? { basePublicationId: input.basePublicationId, basePublicationRevision: Number(input.basePublicationRevision) } : {}), ...(activationMode ? { activationMode: activationMode as WorkweekActivationMode } : {}) } satisfies PrivateTeamWorkweekDraft };
 }
 
 export function flattenTeamWorkweekWindows(windows: TeamWorkweekWindows) {

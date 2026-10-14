@@ -33,12 +33,12 @@ export function selectVisibleTeamWorkweeks<T extends VisibilityCandidate>(rows: 
 
   return [...byOwner.values()].flatMap((ownerRows) => {
     const current = ownerRows
-      .filter((row) => (row.effectiveAt ? new Date(row.effectiveAt) <= now : row.effectiveFrom <= today) && (!row.effectiveTo || row.effectiveTo >= today))
-      .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom)
+      .filter((row) => (row.effectiveAt ? new Date(row.effectiveAt) <= now : row.effectiveFrom <= today) && (row.effectiveUntil ? new Date(row.effectiveUntil) > now : (!row.effectiveTo || row.effectiveTo >= today)))
+      .sort((left, right) => (right.effectiveAt || right.effectiveFrom).localeCompare(left.effectiveAt || left.effectiveFrom)
         || right.publicationRevision - left.publicationRevision)[0];
     const prepared = ownerRows
       .filter((row) => row.effectiveAt ? new Date(row.effectiveAt) > now : row.effectiveFrom > today)
-      .sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom)
+      .sort((left, right) => (left.effectiveAt || left.effectiveFrom).localeCompare(right.effectiveAt || right.effectiveFrom)
         || left.publicationRevision - right.publicationRevision)[0];
     return [current ? { ...current, phase: "current" as const } : null, prepared ? { ...prepared, phase: "prepared" as const } : null]
       .filter((entry): entry is T & { phase: "current" | "prepared" } => Boolean(entry));

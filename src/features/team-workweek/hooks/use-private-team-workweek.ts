@@ -31,6 +31,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   const [publication, setPublication] = useState<OwnTeamWorkweekPublication | null>(null);
   const [latestPublished, setLatestPublished] = useState<OwnTeamWorkweekPublication | null>(null);
   const [conflict, setConflict] = useState<TeamWorkweekConflict | null>(null);
+  const [immediateAllowed, setImmediateAllowed] = useState(false);
   const [minimumEffectiveFrom, setMinimumEffectiveFrom] = useState(() => nextMondayIso());
   const [draft, setDraft] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
   const [baseline, setBaseline] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
@@ -73,6 +74,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         latestPublished?: OwnTeamWorkweekPublication | null;
         editBase?: TeamWorkweekEditBase | null;
         minimumEffectiveFrom?: string;
+        immediateAllowed?: boolean;
         error?: string;
       }>("/api/team-workweek/private-draft", { cache: "no-store", useDevProfileOverride: false });
       if (!response.ok || body?.version === undefined || typeof body.minimumEffectiveFrom !== "string") {
@@ -82,7 +84,8 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         setPublication(body.publication || null);
         setLatestPublished(body.latestPublished || null);
         setMinimumEffectiveFrom(body.minimumEffectiveFrom);
-        applyVersion(body.version, body.minimumEffectiveFrom, body.editBase || null, !body.latestPublished);
+        setImmediateAllowed(body.immediateAllowed ?? !body.latestPublished);
+        applyVersion(body.version, body.minimumEffectiveFrom, body.editBase || null, body.immediateAllowed ?? !body.latestPublished);
       }
       const conflictResponse = await apiClient.requestJson<{ conflict?: TeamWorkweekConflict | null; error?: string }>(
         "/api/team-workweek/conflict",
@@ -110,7 +113,17 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   useEffect(() => {
     const effectiveAt = latestPublished?.effectiveAt;
     if (!effectiveAt || new Date(effectiveAt).getTime() <= Date.now()) return;
-    const timeout = window.setTimeout(() => setLatestPublished((current) => current ? { ...current } : null), Math.min(2_147_483_647, new Date(effectiveAt).getTime() - Date.now() + 100));
+    let timeout: number;
+    const refreshAtBoundary = () => {
+      const remaining = new Date(effectiveAt).getTime() - Date.now();
+      if (remaining > 0) {
+        timeout = window.setTimeout(refreshAtBoundary, Math.min(2_147_483_647, remaining + 100));
+        return;
+      }
+      setLatestPublished((current) => current ? { ...current } : null);
+      setImmediateAllowed(true);
+    };
+    refreshAtBoundary();
     return () => window.clearTimeout(timeout);
   }, [latestPublished?.effectiveAt]);
 
@@ -177,7 +190,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       const { response, body } = await apiClient.requestJson<{
         version?: Omit<PrivateTeamWorkweekVersion, "windows">;
         error?: string;
-      }>("/api/team-workweek/private-draft", { method: "POST", json: validation.draft, useDevProfileOverride: false });
+      }>("/api/team-workweek/private-draft", { method: "POST", json: { ...validation.draft, ...(validation.draft.activationMode === "immediate" && latestPublished ? { basePublicationId: validation.draft.basePublicationId || latestPublished.id, basePublicationRevision: validation.draft.basePublicationRevision || latestPublished.publicationRevision } : {}) }, useDevProfileOverride: false });
       if (!response.ok || !body?.version) {
         throw new Error(body?.error || "Private Grundwoche konnte nicht gespeichert werden.");
       }
@@ -406,6 +419,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     message,
     messageTone,
     minimumEffectiveFrom,
+    immediateAllowed,
     pending,
     publication,
     publicationExpired: Boolean(publication?.effectiveAt && new Date(publication.effectiveAt).getTime() <= publicationClock),

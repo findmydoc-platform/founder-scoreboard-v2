@@ -17,6 +17,7 @@ import {
   eventsByCalendarDay,
   firstCalendarDayOfMonth,
   projectCalendarWorktimes,
+  calendarWindowLabel,
   weekdayForDate,
   type CalendarTeamWorkweek,
 } from "@/features/team-workweek/model/team-workweek-calendar";
@@ -326,7 +327,7 @@ export function HeaderCalendarDialog({
                             <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: profile.color || "#64748b" }} aria-hidden="true" />
                             <div className="min-w-0">
                               <p className="truncate text-sm font-semibold text-slate-950">{profile.name}</p>
-                              <p className="mt-0.5 text-xs text-slate-500">{windows.map((window) => `${window.start}–${window.end}`).join(" · ")}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{windows.map(calendarWindowLabel).join(" · ")}</p>
                             </div>
                           </div>
                           {workingNow ? <UiBadge className="shrink-0 gap-1" tone="emerald" size="xs"><Clock3 size={12} aria-hidden="true" />Jetzt eingeplant</UiBadge> : null}

@@ -121,11 +121,13 @@ export function selectCalendarWorkweek(
   workweeks: CalendarTeamWorkweek[],
   ownerProfileId: string,
   dateKey: string,
+  now?: Date,
 ) {
   return workweeks
     .filter((workweek) => workweek.ownerProfileId === ownerProfileId)
+    .filter((workweek) => !now || ((!workweek.effectiveAt || new Date(workweek.effectiveAt) <= now) && (!workweek.effectiveUntil || new Date(workweek.effectiveUntil) > now)))
     .filter((workweek) => (workweek.effectiveAt ? berlinDateKey(new Date(workweek.effectiveAt)) : workweek.effectiveFrom) <= dateKey && (!workweek.effectiveTo || workweek.effectiveTo >= dateKey))
-    .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom)
+    .sort((left, right) => (right.effectiveAt || right.effectiveFrom).localeCompare(left.effectiveAt || left.effectiveFrom)
       || right.publicationRevision - left.publicationRevision)[0] || null;
 }
 
@@ -149,13 +151,52 @@ function minuteForClock(value: string) {
   return hour * 60 + minute;
 }
 
+const civilFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TEAM_WORKWEEK_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+});
+
+function civilStamp(instant: number) {
+  const parts = Object.fromEntries(civilFormatter.formatToParts(new Date(instant)).map((part) => [part.type, part.value]));
+  return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+}
+
+function berlinCivilInstant(dateKey: string, clock: string) {
+  const nominal = Date.parse(`${dateKey}T${clock}:00Z`);
+  const guess = nominal - (civilStamp(nominal) - nominal);
+  const candidates = [guess - 3_600_000, guess, guess + 3_600_000];
+  const exact = candidates.filter((candidate) => civilStamp(candidate) === nominal);
+  if (exact.length) return Math.min(...exact);
+  // RFC5545's pre-transition offset normalizes a spring-gap civil time forward.
+  return candidates.filter((candidate) => civilStamp(candidate) > nominal)
+    .sort((left, right) => civilStamp(left) - civilStamp(right))[0];
+}
+
 export function calendarWindowsForDate(workweek: CalendarTeamWorkweek, dateKey: string) {
-  const windows = workweek.windows[weekdayForDate(dateKey).key];
-  if (!workweek.effectiveAt || berlinDateKey(new Date(workweek.effectiveAt)) !== dateKey) return windows;
-  const minute = berlinClockMinute(new Date(workweek.effectiveAt));
-  return windows.filter((window) => minuteForClock(window.end) > minute)
-    .map((window) => ({ ...window, start: minuteForClock(window.start) < minute
-      ? `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}` : window.start }));
+  const startDate = workweek.effectiveAt ? berlinDateKey(new Date(workweek.effectiveAt)) : workweek.effectiveFrom;
+  const endDate = workweek.effectiveUntil ? berlinDateKey(new Date(workweek.effectiveUntil)) : workweek.effectiveTo;
+  if (dateKey < startDate || (endDate && dateKey > endDate)) return [];
+  const lower = workweek.effectiveAt ? new Date(workweek.effectiveAt).getTime() : -Infinity;
+  const upper = workweek.effectiveUntil ? new Date(workweek.effectiveUntil).getTime() : Infinity;
+  const clock = (instant: number) => {
+    const minute = berlinClockMinute(new Date(instant));
+    return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+  };
+  return workweek.windows[weekdayForDate(dateKey).key].flatMap((window) => {
+    const start = Math.max(berlinCivilInstant(dateKey, window.start), lower);
+    const end = Math.min(berlinCivilInstant(dateKey, window.end), upper);
+    if (start >= end) return [];
+    const offsetChanged = civilStamp(start) - start !== civilStamp(end) - end
+      || Math.floor(berlinCivilInstant(dateKey,clock(start))/60_000) !== Math.floor(start/60_000)
+      || Math.floor(berlinCivilInstant(dateKey,clock(end))/60_000) !== Math.floor(end/60_000);
+    return [{start:clock(start),end:clock(end), ...(offsetChanged ? {startsAt:new Date(start).toISOString(),endsAt:new Date(end).toISOString()} : {})}];
+  });
+}
+
+export function calendarWindowLabel(window: Readonly<{start:string;end:string;startsAt?:string;endsAt?:string}>) {
+  if (!window.startsAt || !window.endsAt) return `${window.start}–${window.end}`;
+  const format = (value:string) => new Intl.DateTimeFormat("de-DE", {timeZone:TEAM_WORKWEEK_TIMEZONE,hour:"2-digit",minute:"2-digit",timeZoneName:"short"}).format(new Date(value));
+  return `${format(window.startsAt)}–${format(window.endsAt)}`;
 }
 
 export function isMinuteInsideWindow(minute: number, window: Readonly<{ start: string; end: string }>) {
@@ -177,13 +218,17 @@ export function projectCalendarWorktimes({
   const minute = berlinClockMinute(now);
 
   return profiles.flatMap((profile) => {
-    const workweek = selectCalendarWorkweek(calendarWorkweeks, profile.id, dateKey);
-    const windows = workweek ? calendarWindowsForDate(workweek, dateKey) : [];
+    const segments = calendarWorkweeks.filter((entry) => entry.ownerProfileId === profile.id);
+    const windows = segments.flatMap((entry) => calendarWindowsForDate(entry, dateKey)).sort((left, right) => left.start.localeCompare(right.start));
     if (!windows.length) return [];
     return [{
       profile,
       windows,
-      workingNow: dateKey === todayKey && (!workweek?.effectiveAt || new Date(workweek.effectiveAt) <= now) && windows.some((window) => isMinuteInsideWindow(minute, window)),
+      workingNow: dateKey === todayKey && segments.some((entry) => (!entry.effectiveAt || new Date(entry.effectiveAt) <= now)
+        && (!entry.effectiveUntil || new Date(entry.effectiveUntil) > now)
+        && calendarWindowsForDate(entry, dateKey).some((window) => window.startsAt && window.endsAt
+          ? now.getTime() >= new Date(window.startsAt).getTime() && now.getTime() < new Date(window.endsAt).getTime()
+          : isMinuteInsideWindow(minute, window))),
     }];
   });
 }
