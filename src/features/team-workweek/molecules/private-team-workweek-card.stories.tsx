@@ -548,7 +548,7 @@ export const ExposesVariantsAfterAnAutosavedPublicationConflict: Story = {
     await expect(canvas.getByText("Montag: 09:00–18:00")).toBeVisible();
     await expect(canvas.getByText("Montag: 08:00–16:00")).toBeVisible();
     await expect(canvas.getByRole("button", { name: "FounderOps übernehmen" })).toBeEnabled();
-    await expect(canvas.getByRole("button", { name: "Bearbeitung fortsetzen" })).toHaveFocus();
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Bearbeitung fortsetzen" })).toHaveFocus());
   },
 };
 
