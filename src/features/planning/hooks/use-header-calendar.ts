@@ -13,6 +13,7 @@ import type { BrowserApiClient } from "@/lib/browser-api-client";
 type TeamWorkweekCalendarResponse = Readonly<{
   calendarWorkweeks?: CalendarTeamWorkweek[];
   currentWorkweeks?: CalendarTeamWorkweek[];
+  workweeks?: Array<{effectiveAt?: string | null}>;
   error?: string;
   referenceDate?: string;
 }>;
@@ -22,7 +23,7 @@ export function useHeaderCalendar({
   onOpenTeam,
 }: {
   apiClient?: BrowserApiClient;
-  onOpenTeam: () => void;
+  onOpenTeam: (editWorkweek?: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"events" | "workweek">("events");
@@ -31,6 +32,7 @@ export function useHeaderCalendar({
   const [viewMonth, setViewMonth] = useState(() => firstCalendarDayOfMonth(berlinDateKey()));
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
+  const [nextActivationAt, setNextActivationAt] = useState<string | null>(null);
   const [calendarWorkweeks, setCalendarWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
   const [workweeks, setWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
   const [workweekReferenceDate, setWorkweekReferenceDate] = useState(() => berlinDateKey());
@@ -53,6 +55,7 @@ export function useHeaderCalendar({
       }
       if (requestId !== latestRequest.current) return;
       setWorkweeks(body.currentWorkweeks);
+      setNextActivationAt((body.workweeks || []).flatMap((workweek) => workweek.effectiveAt && new Date(workweek.effectiveAt) > new Date() ? [workweek.effectiveAt] : []).sort()[0] || null);
       setWorkweekReferenceDate(body.referenceDate);
       setCalendarWorkweeks((current) => {
         const retained = current.filter((workweek) => (
@@ -85,6 +88,12 @@ export function useHeaderCalendar({
   }, [apiClient, loadVisibleRange, open]);
 
   useEffect(() => {
+    if (!open || !nextActivationAt) return;
+    const timeout = window.setTimeout(() => { setNow(new Date()); void loadVisibleRange(); }, Math.min(2_147_483_647, Math.max(0, new Date(nextActivationAt).getTime() - Date.now()) + 100));
+    return () => window.clearTimeout(timeout);
+  }, [loadVisibleRange, nextActivationAt, open]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -94,9 +103,9 @@ export function useHeaderCalendar({
     setOpen(true);
   }, []);
   const closeCalendar = useCallback(() => setOpen(false), []);
-  const openTeamWorkspace = useCallback(() => {
+  const openTeamWorkspace = useCallback((editWorkweek = false) => {
     setOpen(false);
-    onOpenTeam();
+    onOpenTeam(editWorkweek);
   }, [onOpenTeam]);
 
   return {

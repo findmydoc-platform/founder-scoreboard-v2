@@ -10,6 +10,7 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
   const mounted = useRef(true);
   const [workweeks, setWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
   const [referenceDate, setReferenceDate] = useState(() => berlinDateKey());
+  const [nextActivationAt, setNextActivationAt] = useState<string | null>(null);
   const [today, setToday] = useState(() => berlinDateKey());
   const [pending, setPending] = useState(true);
   const [message, setMessage] = useState("");
@@ -28,6 +29,7 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
     try {
       const { response, body } = await apiClient.requestJson<{
         currentWorkweeks?: CalendarTeamWorkweek[];
+        workweeks?: Array<{effectiveAt?: string | null}>;
         error?: string;
         referenceDate?: string;
       }>("/api/team-workweek/team", { cache: "no-store" });
@@ -36,6 +38,7 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
       }
       if (mounted.current) {
         setWorkweeks(body.currentWorkweeks);
+        setNextActivationAt((body.workweeks || []).flatMap((workweek) => workweek.effectiveAt && new Date(workweek.effectiveAt) > new Date() ? [workweek.effectiveAt] : []).sort()[0] || null);
         setReferenceDate(body.referenceDate);
         setHasLoadedSuccessfully(true);
       }
@@ -57,6 +60,12 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
       window.removeEventListener(TEAM_WORKWEEK_PUBLISHED_EVENT, reload);
     };
   }, [load, today]);
+
+  useEffect(() => {
+    if (!nextActivationAt) return;
+    const timeout = window.setTimeout(() => void load(), Math.min(2_147_483_647, Math.max(0, new Date(nextActivationAt).getTime() - Date.now()) + 100));
+    return () => window.clearTimeout(timeout);
+  }, [load, nextActivationAt]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setToday(berlinDateKey()), 60_000);

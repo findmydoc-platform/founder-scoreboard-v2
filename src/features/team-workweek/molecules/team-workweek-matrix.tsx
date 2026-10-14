@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, type KeyboardEvent } from "react";
-import { currentTeamWorkweekDayKey, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
+import { currentTeamWorkweekDayKey, formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS, type TeamWorkweekDayKey } from "../model/team-workweek-draft";
 import { projectCurrentCalendarWorkweekRows, type CalendarTeamWorkweek } from "../model/team-workweek-calendar";
 import { teamWorkweekProfiles } from "../model/team-workweek-matrix";
 import { formatDate } from "@/lib/display";
@@ -131,10 +131,10 @@ export function TeamWorkweekMatrix({
                       <p className="truncate text-sm font-semibold text-slate-950">{profile.name}</p>
                       {workweek ? (
                         <p className="mt-0.5 text-xs font-medium leading-4 text-slate-500">
-                          Bestätigt {formatDate(workweek.lastSyncAt.slice(0, 10))}
+                          {workweek.effectiveAt ? `Gültig ab ${formatTeamWorkweekActivation(workweek.effectiveAt)}` : `Bestätigt ${formatDate(workweek.lastSyncAt.slice(0, 10))}`}
                         </p>
                       ) : (
-                        <p className="mt-0.5 whitespace-nowrap text-xs font-medium leading-4 text-slate-500">Nicht veröffentlicht</p>
+                        <p className="mt-0.5 text-xs font-medium leading-4 text-slate-500">Keine veröffentlichten Arbeitszeiten</p>
                       )}
                     </div>
                   </div>
@@ -155,7 +155,7 @@ export function TeamWorkweekMatrix({
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-medium text-slate-600">Frei</span>
+                      <span className="text-sm font-medium text-slate-600">Kein Arbeitszeitfenster</span>
                     )}
                   </div>
                 </li>
@@ -192,10 +192,10 @@ export function TeamWorkweekMatrix({
                       <span className="block truncate text-sm font-semibold text-slate-950">{profile.name}</span>
                       {workweek ? (
                         <span className="mt-1 block text-xs font-medium leading-4 text-slate-500">
-                          Bestätigt {formatDate(workweek.lastSyncAt.slice(0, 10))}
+                          {workweek.effectiveAt ? `Gültig ab ${formatTeamWorkweekActivation(workweek.effectiveAt)}` : `Bestätigt ${formatDate(workweek.lastSyncAt.slice(0, 10))}`}
                         </span>
                       ) : (
-                        <span className="mt-0.5 block whitespace-nowrap text-xs font-medium leading-4 text-slate-500">Nicht veröffentlicht</span>
+                        <span className="mt-0.5 block text-xs font-medium leading-4 text-slate-500">Keine veröffentlichten Arbeitszeiten</span>
                       )}
                     </span>
                   </div>
@@ -203,7 +203,7 @@ export function TeamWorkweekMatrix({
                 {TEAM_WORKWEEK_DAYS.map((day) => {
                   const windows = workweek?.windows[day.key] || [];
                   return (
-                    <DataCell key={day.key} className={classNames("align-top text-slate-700", compact ? "px-1.5 py-2 text-xs" : "text-sm")}>
+                    <DataCell key={day.key} aria-label={workweek && !windows.length ? "Kein Arbeitszeitfenster" : undefined} className={classNames("align-top text-slate-700", compact ? "px-1.5 py-2 text-xs" : "text-sm")}>
                       {!workweek ? (
                         <span className="text-slate-300" aria-label={`${profile.name}, ${day.label}: keine veröffentlichte Arbeitswoche`}>—</span>
                       ) : windows.length ? (
@@ -222,7 +222,7 @@ export function TeamWorkweekMatrix({
                           ))}
                         </span>
                       ) : (
-                        <span className="font-medium text-slate-600">Frei</span>
+                        <span className="block break-words font-medium text-slate-600" title="Kein Arbeitszeitfenster">{compact ? "Kein Zeitfenster" : "Kein Arbeitszeitfenster"}</span>
                       )}
                     </DataCell>
                   );

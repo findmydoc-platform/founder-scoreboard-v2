@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 import { TeamWorkweekMatrix } from "./team-workweek-matrix";
 
 const meta = {
@@ -22,6 +22,14 @@ export const ShowsTheCurrentPublishedWorkweek: Story = {
       githubLogin: "sebastian",
       weeklyCapacity: 40,
       color: "#2563eb",
+    }, {
+      id: "ozan",
+      name: "Ozan",
+      platformRole: "founder",
+      orgRole: "Founder",
+      githubLogin: "ozan",
+      weeklyCapacity: 40,
+      color: "#ef4444",
     }],
     workweeks: [{
       id: "current-publication",
@@ -45,6 +53,41 @@ export const ShowsTheCurrentPublishedWorkweek: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0);
-    await expect(canvas.getAllByText("Frei").length).toBeGreaterThan(0);
+    await expect(canvas.getAllByText("Kein Arbeitszeitfenster").length).toBeGreaterThan(0);
+    await expect(canvas.getAllByText("Keine veröffentlichten Arbeitszeiten").length).toBeGreaterThan(0);
+    await expect(canvas.queryByText("Frei")).not.toBeInTheDocument();
+  },
+};
+
+export const KeepsMobileDaySelectionAndMissingSchedulesDistinct: Story = {
+  args: ShowsTheCurrentPublishedWorkweek.args,
+  parameters: { viewport: { defaultViewport: "mobile1" } },
+  globals: { viewport: { value: "mobile1" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const saturday = canvas.getByRole("tab", { name: "Samstag" });
+    await userEvent.click(saturday);
+    const panel = within(canvas.getByRole("tabpanel"));
+    await expect(panel.getByText("Kein Arbeitszeitfenster")).toBeVisible();
+    await expect(panel.getByText("Keine veröffentlichten Arbeitszeiten")).toBeVisible();
+    await userEvent.keyboard("{ArrowRight}");
+    await expect(canvas.getByRole("tab", { name: "Sonntag" })).toHaveFocus();
+  },
+};
+
+export const KeepsEmptyDayLabelsInsideCompactCells: Story = {
+  args: { ...ShowsTheCurrentPublishedWorkweek.args, compact: true },
+  render: (args) => <div style={{ width: 900, maxWidth: "100vw" }}><TeamWorkweekMatrix {...args} /></div>,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const table = canvas.getByRole("table");
+    const emptyCells = within(table).getAllByRole("cell", { name: "Kein Arbeitszeitfenster" });
+    for (const cell of emptyCells) {
+      const textRange = document.createRange();
+      textRange.selectNodeContents(cell);
+      for (const rect of Array.from(textRange.getClientRects())) {
+        await expect(rect.right).toBeLessThanOrEqual(cell.getBoundingClientRect().right);
+      }
+    }
   },
 };

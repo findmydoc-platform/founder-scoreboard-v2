@@ -17,6 +17,7 @@ import {
   eventsByCalendarDay,
   firstCalendarDayOfMonth,
   projectCalendarWorktimes,
+  calendarWindowLabel,
   weekdayForDate,
   type CalendarTeamWorkweek,
 } from "@/features/team-workweek/model/team-workweek-calendar";
@@ -98,7 +99,7 @@ export function HeaderCalendarDialog({
   now: Date;
   onActiveTabChange: (tab: "events" | "workweek") => void;
   onClose: () => void;
-  onOpenTeam: () => void;
+  onOpenTeam: (editWorkweek?: boolean) => void;
   onSelectedDateChange: (dateKey: string) => void;
   onViewMonthChange: (monthKey: string) => void;
   pending: boolean;
@@ -315,7 +316,7 @@ export function HeaderCalendarDialog({
                   <div className="mt-5 border-t border-slate-100 pt-4">
                     <div className="flex items-center justify-between gap-3">
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Arbeitszeiten</h4>
-                      <span className="text-xs text-slate-400">laut Regelwoche</span>
+                      <span className="text-xs text-slate-400">geplant · keine Live-Präsenz</span>
                     </div>
                     {message ? <UiNotice className="mt-2" tone="warning" size="xs">{calendarWorkweeks.length ? "Aktualisierung verzögert. Zuletzt bestätigte Arbeitszeiten bleiben sichtbar." : message}</UiNotice> : null}
                     {pending && !calendarWorkweeks.length ? <UiEmptyState className="mt-2 px-3 py-4" tone="muted">Arbeitszeiten werden geladen.</UiEmptyState> : null}
@@ -326,13 +327,13 @@ export function HeaderCalendarDialog({
                             <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: profile.color || "#64748b" }} aria-hidden="true" />
                             <div className="min-w-0">
                               <p className="truncate text-sm font-semibold text-slate-950">{profile.name}</p>
-                              <p className="mt-0.5 text-xs text-slate-500">{windows.map((window) => `${window.start}–${window.end}`).join(" · ")}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{windows.map(calendarWindowLabel).join(" · ")}</p>
                             </div>
                           </div>
-                          {workingNow ? <UiBadge className="shrink-0 gap-1" tone="emerald" size="xs"><Clock3 size={12} aria-hidden="true" />Jetzt</UiBadge> : null}
+                          {workingNow ? <UiBadge className="shrink-0 gap-1" tone="emerald" size="xs"><Clock3 size={12} aria-hidden="true" />Jetzt eingeplant</UiBadge> : null}
                         </article>
                       ))}
-                      {!selectedWorktimes.length && !pending ? <UiEmptyState className="px-3 py-4" tone="muted">Niemand eingeplant.</UiEmptyState> : null}
+                      {!selectedWorktimes.length && !pending && (!message || calendarWorkweeks.length > 0) ? <UiEmptyState className="px-3 py-4" tone="muted">Niemand eingeplant.</UiEmptyState> : null}
                     </div>
                   </div>
                 ) : null}
@@ -341,7 +342,7 @@ export function HeaderCalendarDialog({
           ) : (
             <div id={`${tabId}-workweek-panel`} role="tabpanel" aria-labelledby={`${tabId}-workweek`} className="p-2.5 sm:p-4">
               <p className="sr-only" role="status" aria-live="polite">{pending ? "Team-Arbeitswoche wird aktualisiert." : message || "Team-Arbeitswoche wurde geladen."}</p>
-              {message ? <UiNotice className="mb-3" tone="warning" size="xs">{workweeks.length ? "Aktualisierung verzögert. Zuletzt bestätigte Grundwochen bleiben sichtbar." : message}</UiNotice> : null}
+              {message ? <UiNotice className="mb-3" tone="warning" size="xs">{workweeks.length ? "Aktualisierung verzögert. Zuletzt bestätigte Zeiten." : message}</UiNotice> : null}
               {pending && !workweeks.length ? <UiEmptyState className="min-h-48" tone="muted">Team-Arbeitswoche wird geladen.</UiEmptyState> : null}
               {(!message || workweeks.length > 0) && (!pending || workweeks.length > 0) ? (
                 <TeamWorkweekMatrix compact dateKey={workweekDateKey} profiles={profiles} workweeks={workweeks} />
@@ -350,8 +351,9 @@ export function HeaderCalendarDialog({
           )}
         </div>
 
-        <footer className="flex shrink-0 justify-start border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
-          <UiButton className="min-h-11 w-full justify-center text-blue-700 sm:w-auto sm:justify-start" variant="ghost" onClick={onOpenTeam}>Im Team öffnen</UiButton>
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+          <UiButton className="min-h-11 w-full justify-center text-blue-700 sm:w-auto sm:justify-start" variant="ghost" onClick={() => onOpenTeam()}>Im Team öffnen</UiButton>
+          {showWorkweek && activeTab === "workweek" && <UiButton className="min-h-11 w-full sm:w-auto" variant="primary" onClick={() => onOpenTeam(true)}>Meine Arbeitswoche bearbeiten</UiButton>}
         </footer>
       </section>
     </div>

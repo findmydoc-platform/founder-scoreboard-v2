@@ -9,8 +9,9 @@ import {
   observeGoogleWorkweek,
   type GoogleWorkweekObservation,
   type GoogleWorkweekReconciliationResult,
-  type KnownGoogleWorkweekSeries,
 } from "./team-workweek-reconciliation-core";
+import { captureObservedTeamWorkweekConflict } from "./team-workweek-conflicts";
+import { loadTeamWorkweekObservationContext } from "./team-workweek-observation-context";
 import { publishTeamWorkweek, TeamWorkweekPublicationError } from "./team-workweek-publication";
 
 type ReconciliationErrorClass =
@@ -26,7 +27,9 @@ type ReconciliationErrorClass =
 type ReconciliationStatus = Readonly<{
   state: "unchanged" | "updated" | "delayed" | "conflict";
   lastSuccessfulSyncAt: string | null;
-  recovery: "retry" | "reconnect" | "resolve_conflict" | null;
+  recovery: "retry" | "reconnect" | "resolve_conflict" | "restart" | null;
+  effectiveAt?: string | null;
+  effectiveUntil?: string | null;
 }>;
 
 type PublicationRow = Readonly<{
@@ -41,24 +44,6 @@ type PublicationRow = Readonly<{
 type PreparingPublicationRow = PublicationRow & Readonly<{ status: "preparing" }>;
 type PreparingReconciliationRow = PreparingPublicationRow & Readonly<{ predecessor_publication_id: string | null }>;
 
-type SeriesRow = Readonly<{
-  id: string;
-  calendar_id: "primary";
-  google_event_id: string;
-  confirmed_etag: string | null;
-  confirmed_founderops_revision: number | null;
-  provider_state: "active" | "deleted";
-  team_workweek_windows: Readonly<{
-    weekday: number;
-    start_minute: number;
-    end_minute: number;
-  }> | Array<Readonly<{
-    weekday: number;
-    start_minute: number;
-    end_minute: number;
-  }>>;
-}>;
-
 export class TeamWorkweekReconciliationError extends Error {
   constructor(
     readonly code: "not_found" | "forbidden" | "conflict" | "unavailable",
@@ -69,39 +54,11 @@ export class TeamWorkweekReconciliationError extends Error {
   }
 }
 
-function firstRelation<T>(value: T | T[]) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function knownSeries(rows: SeriesRow[]): KnownGoogleWorkweekSeries[] | null {
-  const output: KnownGoogleWorkweekSeries[] = [];
-  for (const row of rows) {
-    const window = firstRelation(row.team_workweek_windows);
-    if (row.provider_state !== "active" || !row.confirmed_etag || !row.confirmed_founderops_revision || !window) return null;
-    output.push({
-      id: row.id,
-      calendarId: row.calendar_id,
-      googleEventId: row.google_event_id,
-      confirmedEtag: row.confirmed_etag,
-      confirmedFounderopsRevision: row.confirmed_founderops_revision,
-      weekday: window.weekday,
-      startMinute: window.start_minute,
-      endMinute: window.end_minute,
-    });
-  }
-  return output.sort((left, right) => (
-    left.weekday - right.weekday
-    || left.startMinute - right.startMinute
-    || left.endMinute - right.endMinute
-    || left.id.localeCompare(right.id)
-  ));
-}
-
 function reconciliationFingerprint(
   observations: GoogleWorkweekObservation[],
   windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>>,
 ) {
-  return createHash("sha256").update(JSON.stringify({ observations, windows })).digest("hex");
+  return createHash("sha256").update(JSON.stringify({ observations: observations.map(({seriesId,observedEtag,founderopsRevision,providerState})=>({seriesId,observedEtag,founderopsRevision,providerState})), windows })).digest("hex");
 }
 
 async function recordFailure(
@@ -186,9 +143,11 @@ async function finishPublication({
       : error instanceof TeamWorkweekPublicationError && error.code === "reconnect_required"
         ? "oauth_reconnect_required"
         : "storage_failed";
-    const state = errorClass === "founderops_changed" ? "conflict" : "delayed";
+    const state = "delayed";
     await recordFailure(serviceSupabase, statusPublication, state, errorClass, observedAt);
-    return delayedStatus({ last_sync_at: previousLastSyncAt }, errorClass);
+    return errorClass === "founderops_changed"
+      ? { state: "delayed", lastSuccessfulSyncAt: previousLastSyncAt, recovery: "restart" }
+      : delayedStatus({ last_sync_at: previousLastSyncAt }, errorClass);
   }
 
   if (publication.status === "published") {
@@ -196,7 +155,7 @@ async function finishPublication({
       id: publication.id,
       publication_revision: publication.publicationRevision,
     }, publication.lastSyncAt || now().toISOString());
-    return { state: "updated", lastSuccessfulSyncAt: publication.lastSyncAt, recovery: null };
+    return { state: "updated", lastSuccessfulSyncAt: publication.lastSyncAt, recovery: null, effectiveAt:publication.effectiveAt,effectiveUntil:publication.effectiveUntil };
   }
   const errorClass: ReconciliationErrorClass = publication.recovery === "reconnect"
     ? "oauth_reconnect_required"
@@ -276,32 +235,11 @@ export async function reconcileTeamWorkweek({
     });
   }
 
-  const publicationResponse = await serviceSupabase
-    .from("team_workweek_publications")
-    .select("id,source_version_id,owner_profile_id,effective_from,publication_revision,last_sync_at")
-    .eq("owner_profile_id", ownerProfileId)
-    .eq("status", "published")
-    .is("effective_to", null)
-    .order("publication_revision", { ascending: false })
-    .limit(1)
-    .maybeSingle<PublicationRow>();
-  if (publicationResponse.error) throw new TeamWorkweekReconciliationError("unavailable", "Veröffentlichte Grundwoche ist nicht verfügbar.");
-  if (!publicationResponse.data) throw new TeamWorkweekReconciliationError("not_found", "Noch keine veröffentlichte Grundwoche vorhanden.");
-  const publication = publicationResponse.data;
-
-  const seriesResponse = await serviceSupabase
-    .from("team_workweek_google_series")
-    .select("id,calendar_id,google_event_id,confirmed_etag,confirmed_founderops_revision,provider_state,team_workweek_windows!inner(weekday,start_minute,end_minute)")
-    .eq("publication_id", publication.id)
-    .eq("state", "confirmed")
-    .order("id", { ascending: true });
-  if (seriesResponse.error) throw new TeamWorkweekReconciliationError("unavailable", "Google-Zuordnungen sind nicht verfügbar.");
-  const series = knownSeries((seriesResponse.data || []) as SeriesRow[]);
-  if (!series) {
-    const observedAt = now().toISOString();
-    await recordFailure(serviceSupabase, publication, "conflict", "provider_identity_mismatch", observedAt);
-    return delayedStatus(publication, "provider_identity_mismatch");
-  }
+  let context: Awaited<ReturnType<typeof loadTeamWorkweekObservationContext>>;
+  try { context=await loadTeamWorkweekObservationContext(serviceSupabase,ownerProfileId,now()); }
+  catch { throw new TeamWorkweekReconciliationError("unavailable","Bestätigte App-Arbeitswoche ist nicht verfügbar."); }
+  if(!context) throw new TeamWorkweekReconciliationError("not_found","Noch keine aktuell gültige App-Arbeitswoche vorhanden.");
+  const {publication,series,logicalWindows}=context;
 
   let accessToken: string;
   try {
@@ -316,7 +254,15 @@ export async function reconcileTeamWorkweek({
     return delayedStatus(publication, errorClass);
   }
 
-  const observation = await observe({ accessToken, now, series });
+  if(context.partialGoogleState){
+    await recordFailure(serviceSupabase,publication,"delayed","provider_unavailable",now().toISOString());
+    return delayedStatus(publication,"provider_unavailable");
+  }
+  const observation = await observe({ accessToken, now, series, logicalWindows });
+  if(observation.state==="conflict" && observation.observations){
+    await captureObservedTeamWorkweekConflict(serviceSupabase,ownerProfileId,publication,observation);
+    return delayedStatus(publication,"founderops_changed");
+  }
   if (observation.state === "delayed" || observation.state === "conflict") {
     const errorClass = errorClassForObservation(observation);
     await recordFailure(serviceSupabase, publication, observation.state, errorClass, observation.observedAt);
@@ -346,6 +292,10 @@ export async function reconcileTeamWorkweek({
     p_observed_at: observation.observedAt,
   });
   if (preparedResponse.error || !preparedResponse.data || typeof preparedResponse.data.versionId !== "string") {
+    if(preparedResponse.error?.code==="P0003") {
+      await captureObservedTeamWorkweekConflict(serviceSupabase,ownerProfileId,publication,observation);
+      return delayedStatus(publication,"founderops_changed");
+    }
     const errorClass: ReconciliationErrorClass = preparedResponse.error?.code === "P0003"
       || preparedResponse.error?.code === "P0004"
       ? "founderops_changed"
@@ -360,14 +310,6 @@ export async function reconcileTeamWorkweek({
     return delayedStatus(publication, errorClass);
   }
 
-  const pendingResponse = await serviceSupabase
-    .from("team_workweek_publications")
-    .select("id,source_version_id,owner_profile_id,effective_from,publication_revision,last_sync_at,status,predecessor_publication_id")
-    .eq("source_version_id", preparedResponse.data.versionId)
-    .maybeSingle<PreparingReconciliationRow>();
-  if (pendingResponse.error || !pendingResponse.data) {
-    throw new TeamWorkweekReconciliationError("unavailable", "Vorbereiteter Google-Abgleich ist nicht verfügbar.");
-  }
   return await finishPublication({
     now,
     previousLastSyncAt: publication.last_sync_at,

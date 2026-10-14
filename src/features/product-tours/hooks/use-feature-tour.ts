@@ -281,6 +281,19 @@ export function useFeatureTour({
         return;
       }
 
+      if (startingStepIndex === 0 && activeTour.openWorkweekEditor) {
+        const existingEditor = findVisibleTourElement("[data-tour-id='workweek-validity']");
+        if (!existingEditor) {
+          const ownerAction = await waitForElement("[data-workweek-editor-trigger]");
+          if (!runIsActive()) return;
+          if (!(ownerAction instanceof HTMLButtonElement) || ownerAction.disabled) {
+            failTour("Die Arbeitswoche konnte nicht geöffnet werden. Bitte versuche es erneut.");
+            return;
+          }
+          ownerAction.click();
+        }
+      }
+
       if (startingStepIndex === 0 && activeTour.openTaskDetail) {
         const taskId = activeTour.openSubIssueEvidence
           ? selectSubIssueEvidenceTourTask(tasksRef.current, selectedTaskIdRef.current)?.id
@@ -410,9 +423,25 @@ export function useFeatureTour({
       const { driver } = await import("driver.js");
       if (!runIsActive()) return;
       let stepTransitionPending = false;
+      let guideOwner: HTMLElement | null = null;
+      let ownerFocus: HTMLElement | null = null;
+      let tourFinished = false;
+      const finishTour = () => {
+        if (tourFinished) return;
+        tourFinished = true;
+        if (guideOwner?.isConnected) {
+          guideOwner.removeAttribute("data-active-feature-guide");
+          const target = ownerFocus?.isConnected ? ownerFocus : guideOwner.querySelector<HTMLElement>("button:not([disabled]):not([tabindex='-1'])");
+          window.requestAnimationFrame(() => target?.focus({ preventScroll: true }));
+        }
+        clearMentionDemo();
+        if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
+        setRequestedTourId(null);
+        setResumeStepIndex(0);
+      };
       const driverObject = driver({
         allowClose: true,
-        animate: true,
+        animate: !activeTour.openWorkweekEditor,
         doneBtnText: "Fertig",
         nextBtnText: "Weiter",
         prevBtnText: "Zurück",
@@ -420,23 +449,40 @@ export function useFeatureTour({
         showProgress: true,
         stagePadding: 6,
         stageRadius: 8,
-        onDestroyed: () => {
-          clearMentionDemo();
-          if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
-          setRequestedTourId(null);
-          setResumeStepIndex(0);
-        },
+        onDestroyStarted: activeTour.openWorkweekEditor ? (_element, _step, options) => {
+          options.driver.destroy();
+          finishTour();
+        } : undefined,
+        onDestroyed: finishTour,
         steps: tourSteps.map((step, index) => {
           const stepIndex = startingStepIndex + index;
           return ({
           ...step,
           popover: {
             ...step.popover,
-            onPopoverRender: () => {
+            onPopoverRender: (popover, options) => {
+              if (activeTour.openWorkweekEditor) {
+                const element = options.driver.getActiveElement();
+                const owner = element?.closest<HTMLElement>("[role='dialog'][aria-modal='true']");
+                if (owner) {
+                  if (!guideOwner) ownerFocus = document.activeElement instanceof HTMLElement && owner.contains(document.activeElement) ? document.activeElement : null;
+                  guideOwner = owner;
+                  owner.setAttribute("data-active-feature-guide", "true");
+                  owner.append(popover.wrapper);
+                  const overlay = document.querySelector(".driver-overlay");
+                  if (overlay) owner.append(overlay);
+                  else window.requestAnimationFrame(() => {
+                    const currentOverlay = document.querySelector(".driver-overlay");
+                    if (currentOverlay && guideOwner?.isConnected) guideOwner.append(currentOverlay);
+                  });
+                  popover.closeButton.setAttribute("aria-label", "Tour schließen");
+                }
+              }
               if (stepIndex === 0) markSeen().catch(() => undefined);
             },
             onDoneClick: (_element, _step, opts) => {
               opts.driver.destroy();
+              if (activeTour.openWorkweekEditor) finishTour();
               if (activeTour.doneWorkspace) {
                 setWorkspace(activeTour.doneWorkspace);
               }

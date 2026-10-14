@@ -1,9 +1,9 @@
 "use client";
 
 import { Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
-import { TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
+import { formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
 import { formatDate } from "@/lib/display";
 import { GoogleWorkspaceConnectionCard } from "../molecules/google-workspace-connection-card";
 import { TeamWorkweekDiscardDialog } from "../molecules/team-workweek-discard-dialog";
@@ -20,21 +20,38 @@ export function PrivateTeamWorkweekEditor({
   profile,
   state,
   onClose,
+  restoreFocusRef,
 }: {
   apiClient: BrowserApiClient;
   profile: Profile;
   state: WorkweekState;
   onClose: () => void;
+  restoreFocusRef?: RefObject<HTMLElement | null>;
 }) {
+  const validityFocusRef = useRef<HTMLInputElement>(null);
+  const restartFocusRequested = useRef(false);
+
   const [discardOpen, setDiscardOpen] = useState(false);
-  const requestClose = () => state.dirty ? setDiscardOpen(true) : onClose();
-  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardOpen });
+  const hasTransitionClockLabel = state.draft.windows.sunday.some((window) =>
+    [window.start, window.end].some((clock) => clock >= "02:00" && clock < "03:00"));
+  const requestClose = () => {
+    if (state.pending) return;
+    if (state.dirty) setDiscardOpen(true);
+    else onClose();
+  };
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardOpen || state.pending, restoreFocusRef });
+  useEffect(() => {
+    if (restartFocusRequested.current && !state.pending && !state.restartAvailable && !state.restartContextPending) {
+      restartFocusRequested.current = false;
+      (validityFocusRef.current || dialogRef.current)?.focus({ preventScroll: true });
+    }
+  }, [dialogRef, state.pending, state.restartAvailable, state.restartContextPending]);
 
   return (
     <>
       <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="private-workweek-editor-title" className="fixed inset-0 z-40">
         <button type="button" tabIndex={-1} aria-label="Arbeitswochen-Editor schließen" className="absolute inset-0 cursor-default bg-slate-950/30 backdrop-blur-[1px]" onClick={requestClose} />
-        <aside className="absolute inset-y-0 right-0 z-10 flex w-full max-w-[440px] flex-col overflow-hidden border-l border-slate-200 bg-slate-50 shadow-2xl">
+        <aside className="absolute inset-y-0 right-0 z-10 flex w-full max-w-[440px] flex-col overflow-clip border-l border-slate-200 bg-slate-50 shadow-2xl">
           <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -55,7 +72,7 @@ export function PrivateTeamWorkweekEditor({
               <section className="overflow-hidden rounded-lg border border-slate-200 bg-white" aria-labelledby="workweek-windows-title">
                 <div className="px-3 py-2.5">
                   <h3 id="workweek-windows-title" className="text-sm font-semibold text-slate-950">Arbeitszeitfenster</h3>
-                  <p className="mt-0.5 text-xs leading-5 text-slate-500">Mehrere Fenster sind möglich. Ohne Fenster bleibt der Tag frei.</p>
+                  <p className="mt-0.5 text-xs leading-5 text-slate-500">Mehrere Fenster sind möglich. Ohne Fenster ist keine Arbeitszeit eingeplant.</p>
                 </div>
                 <div className="divide-y divide-slate-100 border-t border-slate-100">
                   {TEAM_WORKWEEK_DAYS.map((day) => (
@@ -100,7 +117,7 @@ export function PrivateTeamWorkweekEditor({
                           ))}
                         </div>
                       )}
-                      {!state.draft.windows[day.key].length && <p className="py-2 text-sm text-slate-600">Freier Tag</p>}
+                      {!state.draft.windows[day.key].length && <p className="py-2 text-sm text-slate-600">Kein Arbeitszeitfenster</p>}
                       <UiButton
                         className={state.draft.windows[day.key].length
                           ? "col-start-2 mt-1 justify-self-start max-[359px]:col-start-1 max-[359px]:row-start-3 min-[400px]:col-start-3 min-[400px]:row-start-1 min-[400px]:mt-0"
@@ -116,24 +133,59 @@ export function PrivateTeamWorkweekEditor({
                     </div>
                   ))}
                 </div>
+                {hasTransitionClockLabel && (
+                  <p className="border-t border-slate-100 px-3 py-2 text-xs leading-5 text-slate-500">
+                    Sonntagszeiten zwischen 02:00 und 03:00: Doppelte Uhrzeiten zählen beim ersten Vorkommen; fehlende Uhrzeiten werden eine Stunde später eingeplant. Leere Fenster entfallen; überschneidende Zeiten werden zusammengefasst.
+                  </p>
+                )}
               </section>
 
-              <section className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 id="workweek-validity-title" className="text-sm font-semibold text-slate-950">Gültigkeitsbeginn</h3>
-                    <p className="mt-0.5 text-xs leading-5 text-slate-500">Montag, frühestens {formatDate(state.minimumEffectiveFrom)}</p>
+              <section data-tour-id="workweek-validity" className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
+                <h3 id="workweek-validity-title" className="text-sm font-semibold text-slate-950">Gültigkeitsbeginn</h3>
+                {state.immediateAllowed && (
+                  <fieldset className="mt-2 grid gap-1" disabled={state.pending}>
+                    <legend className="sr-only">Gültigkeitsbeginn wählen</legend>
+                    <label className="flex min-h-11 items-center gap-2 text-sm text-slate-800">
+                      <input ref={validityFocusRef} type="radio" name="workweek-activation-mode" value="immediate" checked={state.draft.activationMode === "immediate"}
+                        onChange={() => state.setActivationMode("immediate")} className="h-4 w-4 accent-blue-600" />
+                      Nach Bestätigung · aktuelle Woche
+                    </label>
+                    <label className="flex min-h-11 items-center gap-2 text-sm text-slate-800">
+                      <input type="radio" name="workweek-activation-mode" value="future_monday" checked={state.draft.activationMode !== "immediate"}
+                        onChange={() => state.setActivationMode("future_monday")} className="h-4 w-4 accent-blue-600" />
+                      Zukünftiger Montag
+                    </label>
+                  </fieldset>
+                )}
+                {state.draft.activationMode === "immediate" && state.immediateAllowed ? (
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {state.restartAvailable
+                      ? "Beginne mit dem aktuellen Stand neu. Deine Eingaben bleiben erhalten."
+                      : state.publication?.effectiveAt
+                      ? state.publicationExpired
+                        ? "Der geplante Beginn ist abgelaufen. Wiederhole die Veröffentlichung; ein neuer zukünftiger Beginn wird bestätigt."
+                        : `Geplanter Beginn: ${formatTeamWorkweekActivation(state.publication.effectiveAt)}. Erst nach vollständiger Bestätigung gültig.`
+                      : "2–3 Minuten Vorlauf. Der genaue Beginn wird bestätigt; vergangene Zeiten bleiben unverändert."}
+                  </p>
+                ) : (
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs leading-5 text-slate-500">Montag, frühestens {formatDate(state.minimumEffectiveFrom)}</p>
+                    <CustomDatePicker value={state.draft.effectiveFrom} onChange={state.setEffectiveFrom} disabled={state.pending}
+                      aria-label="Gültigkeitsbeginn der Arbeitswoche" className="h-9 w-full sm:w-[180px] [@media(pointer:coarse)]:h-11" />
                   </div>
-                  <CustomDatePicker
-                    value={state.draft.effectiveFrom}
-                    onChange={state.setEffectiveFrom}
-                    disabled={state.pending}
-                    aria-label="Gültigkeitsbeginn der Arbeitswoche"
-                    className="h-9 w-full sm:w-[180px] [@media(pointer:coarse)]:h-11"
-                  />
-                </div>
+                )}
+                {state.draft.activationMode === "immediate" && state.preparedSuccessor && (
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Geplante Änderung am {new Intl.DateTimeFormat("de-DE", { timeZone: TEAM_WORKWEEK_TIMEZONE, day: "2-digit", month: "short", year: "numeric" }).format(new Date(state.preparedSuccessor.effectiveAt || `${state.preparedSuccessor.effectiveFrom}T12:00:00Z`))} bleibt erhalten. Diese Korrektur gilt bis dahin.
+                  </p>
+                )}
               </section>
 
+              {(state.restartAvailable || state.restartContextPending) && (
+                <UiButton className="justify-self-start whitespace-normal text-left" variant="secondary" onClick={() => { restartFocusRequested.current = true; void state.restart(); }} disabled={state.pending}>
+                  {state.restartContextPending ? "Aktuellen Stand laden" : "Mit aktuellem Stand neu beginnen"}
+                </UiButton>
+              )}
               {state.errors.length > 0 && (
                 <UiNotice tone="danger" role="alert">
                   <div className="font-semibold">Bitte korrigiere deine Arbeitswoche:</div>
@@ -146,22 +198,25 @@ export function PrivateTeamWorkweekEditor({
 
           <footer className="border-t border-slate-200 bg-white px-3 py-2.5 sm:px-4">
             <p className="mb-2 text-xs leading-4 text-slate-500">
-              Änderungen gelten ab {formatDate(state.draft.effectiveFrom)} und werden erst nach dem Google-Abgleich veröffentlicht.
+              {state.draft.activationMode === "immediate"
+                ? `${state.preparedSuccessor ? "" : "Gilt dauerhaft. "}Bei Verzögerung wird ein neuer zukünftiger Beginn geplant.`
+                : `Änderungen gelten ab ${formatDate(state.draft.effectiveFrom)} und werden erst nach dem Google-Abgleich veröffentlicht.`}
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
               <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
-              <UiButton className="whitespace-nowrap px-2 text-xs" variant="primary" size="md" data-autofocus aria-label="Änderung privat speichern" onClick={() => void state.save()} disabled={state.pending || !state.dirty}>
-                {state.pending ? "Speichert …" : "Speichern"}
+              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Änderung privat speichern" onClick={() => void state.save()} disabled={state.pending || !state.dirty}>
+                Privat speichern
               </UiButton>
               <UiButton
                 variant="primary"
                 size="md"
                 className="whitespace-nowrap px-2 text-xs"
+                data-tour-id="workweek-publish"
                 aria-label="Änderung in Google & Team veröffentlichen"
-                onClick={() => void state.publish().then((published) => published && onClose())}
-                disabled={state.pending || state.dirty || !state.version}
+                onClick={() => void state.publish().then((result) => (result === true || result === "conflict") && onClose())}
+                disabled={state.pending || state.restartContextPending}
               >
-                Veröffentlichen
+                {state.pending ? "Bitte warten …" : "Veröffentlichen"}
               </UiButton>
             </div>
           </footer>

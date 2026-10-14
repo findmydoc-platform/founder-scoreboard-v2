@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
-import { berlinTodayIso, TEAM_WORKWEEK_DAYS } from "../model/team-workweek-draft";
+import { berlinTodayIso, formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS } from "../model/team-workweek-draft";
 import { PrivateTeamWorkweekEditor } from "../organisms/private-team-workweek-editor";
 import { formatDate } from "@/lib/display";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -19,12 +19,19 @@ function conflictWindows(windows: Array<Readonly<{ weekday: number; startMinute:
   }).join(" · ");
 }
 
-export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: BrowserApiClient; profile: Profile }) {
-  const [open, setOpen] = useState(false);
+export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = false, onEditorRequestHandled }: { apiClient: BrowserApiClient; profile: Profile; editorRequested?: boolean; onEditorRequestHandled?: () => void }) {
+  const editorTriggerRef = useRef<HTMLButtonElement>(null);
+  const [localOpen, setOpen] = useState(false);
+  const open = localOpen || editorRequested;
+  const closeEditor = () => {
+    setOpen(false);
+    onEditorRequestHandled?.();
+  };
   const state = usePrivateTeamWorkweek(apiClient);
   const syncDelayed = state.publication?.syncState === "delayed";
   const reconciliationState = state.latestPublished?.googleReconciliationState;
-  const latestIsPrepared = Boolean(state.latestPublished && state.latestPublished.effectiveFrom > berlinTodayIso());
+  const showConfirmedTeamBaseline = Boolean(state.conflict || syncDelayed || reconciliationState === "conflict" || reconciliationState === "delayed");
+  const latestIsPrepared = Boolean(state.latestPublished && (state.latestPublished.effectiveAt ? new Date(state.latestPublished.effectiveAt) > new Date() : state.latestPublished.effectiveFrom > berlinTodayIso()));
   const badge = syncDelayed
     ? { tone: "amber" as const, label: "Synchronisierung verzögert" }
     : reconciliationState === "conflict"
@@ -32,12 +39,12 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
       : reconciliationState === "delayed"
         ? { tone: "amber" as const, label: "Synchronisierung verzögert" }
         : state.version
-          ? { tone: "amber" as const, label: "In Vorbereitung" }
+          ? { tone: "amber" as const, label: "Privater Entwurf" }
           : latestIsPrepared
-            ? { tone: "blue" as const, label: "Für Montag vorbereitet" }
+            ? { tone: "blue" as const, label: state.latestPublished?.effectiveAt ? "Beginn bestätigt" : "Für Montag vorbereitet" }
             : state.latestPublished
               ? { tone: "emerald" as const, label: "Veröffentlicht" }
-              : { tone: "slate" as const, label: "Noch nicht vorbereitet" };
+              : { tone: "slate" as const, label: "Arbeitszeiten fehlen" };
 
   return (
     <>
@@ -49,16 +56,19 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
               <UiBadge tone={badge.tone}>{badge.label}</UiBadge>
             </div>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              Deine Arbeitswoche für {profile.name}. Erst eine bestätigte Google-Synchronisierung macht Änderungen im Team sichtbar.
+              {state.version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : state.latestPublished ? showConfirmedTeamBaseline ? "Letzter bestätigter Teamstand bleibt sichtbar." : "Veröffentlichte Arbeitszeiten für " + profile.name + ". Bestätigt in Team und Google." : "Deine Arbeitszeiten fehlen noch."}
             </p>
             {state.version && (
-              <p className="mt-2 text-xs font-semibold text-slate-600">Gültig ab {formatDate(state.version.effectiveFrom)} · {state.version.timezone}</p>
+              <p className="mt-2 text-xs font-semibold text-slate-600">{state.version.activationMode === "immediate" ? "Beginn wird bei Veröffentlichung bestätigt" : `Gültig ab ${formatDate(state.version.effectiveFrom)}`} · {state.version.timezone}</p>
             )}
             {state.latestPublished && (
               <p className="mt-2 text-xs font-semibold text-slate-600">
-                {latestIsPrepared ? "Vorbereitet" : "Zuletzt veröffentlicht"}: gültig ab {formatDate(state.latestPublished.effectiveFrom)}
+                {latestIsPrepared ? "Vorbereitet" : "Zuletzt veröffentlicht"}: gültig ab {state.latestPublished.effectiveAt ? formatTeamWorkweekActivation(state.latestPublished.effectiveAt) : formatDate(state.latestPublished.effectiveFrom)}
                 {state.latestPublished.lastSyncAt ? ` · letzter erfolgreicher Sync ${formatDate(state.latestPublished.lastSyncAt.slice(0, 10))}` : ""}
               </p>
+            )}
+            {state.latestPublished && !state.version && (
+              <p className="mt-2 text-xs leading-5 text-slate-500">Geprüft werden nur von FounderOps angelegte Google-Serien.</p>
             )}
             {reconciliationState === "conflict" && !state.version && (
               <p className="mt-2 text-xs font-semibold text-amber-700">Eine Google-Serienänderung ist nicht eindeutig. Der bestätigte Teamstand bleibt aktiv.</p>
@@ -67,13 +77,13 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
               <p className="mt-2 text-xs font-semibold text-amber-700">Der Google-Abgleich ist verzögert. Der bestätigte Teamstand bleibt aktiv.</p>
             )}
           </div>
-          <div className="flex flex-col gap-2 sm:items-end">
+          <div ref={(node) => { editorTriggerRef.current = node?.querySelector<HTMLButtonElement>("[data-workweek-editor-trigger]") || null; }} className="flex flex-col gap-2 sm:items-end">
             {state.latestPublished && !state.version && (
               <UiButton variant="secondary" size="lg" onClick={() => void state.reconcile()} disabled={state.pending}>
-                Google abgleichen
+                App-Termine in Google prüfen
               </UiButton>
             )}
-            <UiButton variant="primary" size="lg" onClick={() => setOpen(true)} disabled={state.pending && !state.version}>
+            <UiButton data-workweek-editor-trigger variant="primary" size="lg" onClick={() => setOpen(true)} disabled={state.pending && !state.version}>
               {state.version ? "Bearbeitung fortsetzen" : state.latestPublished ? "Arbeitswoche bearbeiten" : "Arbeitswoche einrichten"}
             </UiButton>
           </div>
@@ -86,19 +96,19 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <div className="rounded-lg border border-white/80 bg-white p-3">
                 <div className="text-sm font-semibold text-slate-950">Meine FounderOps-Variante</div>
-                <div className="mt-1 text-xs text-slate-600">Gültig ab {formatDate(state.conflict.founderops.effectiveFrom)}</div>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{conflictWindows(state.conflict.founderops.windows)}</p>
+                {state.conflict.founderops.supported !== false && <div className="mt-1 text-xs text-slate-600">{state.conflict.founderops.activationMode === "immediate" ? "Beginn wird nach Bestätigung festgelegt" : `Gültig ab ${formatDate(state.conflict.founderops.effectiveFrom)}`}</div>}
+                <p className="mt-2 text-sm leading-6 text-slate-700">{state.conflict.founderops.supported === false ? "Diese FounderOps-Variante kann derzeit nicht übernommen werden." : conflictWindows(state.conflict.founderops.windows)}</p>
                 <UiButton className="mt-3 w-full sm:w-auto" variant="primary" onClick={() => void state.resolveConflict("founderops")}
-                  disabled={state.pending || (state.conflict.state === "resolving" && state.conflict.decision !== "founderops")}>
+                  disabled={state.pending || state.conflict.founderops.supported === false || (state.conflict.state === "resolving" && state.conflict.decision !== "founderops")}>
                   FounderOps übernehmen
                 </UiButton>
               </div>
               <div className="rounded-lg border border-white/80 bg-white p-3">
                 <div className="text-sm font-semibold text-slate-950">Google-Variante</div>
-                <div className="mt-1 text-xs text-slate-600">Gültig ab {formatDate(state.conflict.google.effectiveFrom)}</div>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{conflictWindows(state.conflict.google.windows)}</p>
+                {state.conflict.google.supported !== false && <div className="mt-1 text-xs text-slate-600">{state.conflict.google.activationMode === "immediate" ? "Beginn wird nach Bestätigung festgelegt" : `Gültig ab ${formatDate(state.conflict.google.effectiveFrom)}`}</div>}
+                <p className="mt-2 text-sm leading-6 text-slate-700">{state.conflict.google.supported === false ? "Diese Google-Änderung lässt sich keiner eindeutigen Grundwoche zuordnen." : conflictWindows(state.conflict.google.windows)}</p>
                 <UiButton className="mt-3 w-full sm:w-auto" variant="secondary" onClick={() => void state.resolveConflict("google")}
-                  disabled={state.pending || (state.conflict.state === "resolving" && state.conflict.decision !== "google")}>
+                  disabled={state.pending || state.conflict.google.supported === false || (state.conflict.state === "resolving" && state.conflict.decision !== "google")}>
                   Google übernehmen
                 </UiButton>
               </div>
@@ -106,7 +116,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile }: { apiClient: Bro
           </section>
         )}
       </UiPanel>
-      {open && <PrivateTeamWorkweekEditor apiClient={apiClient} profile={profile} state={state} onClose={() => setOpen(false)} />}
+      {open && <PrivateTeamWorkweekEditor apiClient={apiClient} profile={profile} state={state} onClose={closeEditor} restoreFocusRef={editorTriggerRef} />}
     </>
   );
 }

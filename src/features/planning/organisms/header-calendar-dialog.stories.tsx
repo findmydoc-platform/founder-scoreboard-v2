@@ -96,6 +96,7 @@ export const KeepsTheSelectedDaySeparateFromTheCurrentWorkweek: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("08:00–12:00")).toBeInTheDocument();
+    await expect(canvas.getByText("geplant · keine Live-Präsenz")).toBeVisible();
     await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
     await expect(canvas.getAllByText("10:00–18:00").length).toBeGreaterThan(0);
     await expect(canvas.queryByText("08:00–12:00")).not.toBeInTheDocument();

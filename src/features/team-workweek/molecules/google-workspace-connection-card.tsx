@@ -51,11 +51,12 @@ export function GoogleWorkspaceConnectionCard({
                 {pending ? "Wird geprüft" : googleWorkspaceConnectionLabel(connection.state)}
               </UiBadge>
             </div>
-            {!compact && (
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-                {profile.name} verbindet den eigenen primären Google-Kalender mit FounderOps. Die Verbindung allein veröffentlicht keine Arbeitswoche und erstellt keine Termine.
-              </p>
-            )}
+            <p className={classNames("mt-1 max-w-3xl text-slate-500", compact ? "text-xs leading-5" : "text-sm leading-6")}>
+              Hier veröffentlichte Zeiten werden in Google eingetragen. Selbst angelegte Google-Termine werden nicht automatisch übernommen.
+            </p>
+            <p className={classNames("mt-1 text-slate-500", compact ? "text-xs leading-5" : "text-sm leading-6")}>
+              Die Verbindung allein veröffentlicht keine Arbeitszeiten.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {message && (
@@ -107,7 +108,7 @@ export function GoogleWorkspaceConnectionCard({
             </UiNotice>
           ) : connected ? (
             <UiNotice size={compact ? "compact" : "sm"} tone="success">
-              Zugriff auf eigene Kalendereinträge. OAuth-Tokens bleiben verschlüsselt und serverseitig.
+              Google verbunden für {profile.name}. Arbeitszeiten veröffentlichst du im eigenen Editor.
             </UiNotice>
           ) : (
             <UiNotice size={compact ? "compact" : "sm"} tone="neutral">

@@ -221,7 +221,7 @@ export function PlanningHeader({ controller, administratorAccessController }: { 
             onDismissNotification={dismissNotification}
             calendar={{
               apiClient: actualProfile ? controller.apiClient : undefined,
-              onOpenTeam: () => setWorkspace("team"),
+              onOpenTeam: (editWorkweek) => setWorkspace("team", { editWorkweek }),
               profiles: data.profiles,
             }}
           />

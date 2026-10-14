@@ -133,3 +133,12 @@ test("the first workweek starts empty at the next valid Monday", () => {
     windows: model.emptyTeamWorkweekWindows(),
   });
 });
+
+
+test("immediate drafts save only intent and never accept an activation instant", () => {
+  const value = { ...draft(), activationMode: "immediate" };
+  const result = model.validatePrivateTeamWorkweekDraft(value, new Date("2026-10-14T10:00:00Z"));
+  assert.equal(result.ok, true);
+  assert.equal(result.draft.activationMode, "immediate");
+  assert.equal(model.validatePrivateTeamWorkweekDraft({ ...value, effectiveAt: "2026-10-14T10:00:00Z" }).ok, false);
+});

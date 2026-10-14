@@ -106,3 +106,17 @@ test("the mention update retains its tour and JIT administration keeps its accou
   assert.match(tourSource, /productUpdateId: "2026-09-22-jit-administration"/);
   assert.match(tourSource, /\[data-tour-id='account-menu-trigger'\]/);
 });
+
+test("current-week publication guidance has a live thirty-day update, matching screenshot and dedicated editor tour", async () => {
+  const registry = JSON.parse(await readFile("src/features/product-updates/model/product-updates.json", "utf8"));
+  const update = registry.find(({ id }) => id === "2026-10-14-workweek-current-publication");
+  assert.ok(update);
+  assert.notEqual(update.draft, true);
+  assert.equal(update.featureTourId, "workweek-current-publication-v1");
+  assert.equal((Date.parse(update.expiresAt) - Date.parse(update.releasedAt)) / 86400000, 30);
+  const screenshot = await readFile(`public${update.slides[0].image.src}`);
+  assert.equal(screenshot.subarray(1, 4).toString("ascii"), "PNG");
+  assert.equal(screenshot.readUInt32BE(16), update.slides[0].image.width);
+  assert.equal(screenshot.readUInt32BE(20), update.slides[0].image.height);
+  assert.equal(productUpdateSelection.selectActiveProductUpdates([update], new Date("2026-11-14T00:00:00Z")).length, 0);
+});

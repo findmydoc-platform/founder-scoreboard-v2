@@ -2,12 +2,13 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadTeamWorkweekObservationContext } from "./team-workweek-observation-context";
 import { nextVersionMondayIso } from "../model/team-workweek-draft";
 import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
 import {
   observeGoogleWorkweek,
   type GoogleWorkweekObservation,
-  type KnownGoogleWorkweekSeries,
+  type GoogleWorkweekReconciliationResult,
 } from "./team-workweek-reconciliation-core";
 import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
 import {
@@ -17,15 +18,8 @@ import {
 
 type Window = Readonly<{ weekday: number; startMinute: number; endMinute: number }>;
 
-type PublicationRow = Readonly<{
-  id: string;
-  owner_profile_id: string;
-  effective_from: string;
-  publication_revision: number;
-  windows: Array<{ weekday: number; startMinute: number; endMinute: number }>;
-}>;
-
 type VersionRow = Readonly<{
+  activation_mode?: "immediate" | "future_monday";
   id: string;
   owner_profile_id: string;
   effective_from: string;
@@ -33,18 +27,10 @@ type VersionRow = Readonly<{
   team_workweek_windows: Array<{ weekday: number; start_minute: number; end_minute: number }>;
 }>;
 
-type SeriesRow = Readonly<{
-  id: string;
-  calendar_id: "primary";
-  google_event_id: string;
-  confirmed_etag: string | null;
-  confirmed_founderops_revision: number | null;
-  provider_state: "active" | "deleted";
-  team_workweek_windows: { weekday: number; start_minute: number; end_minute: number }
-    | Array<{ weekday: number; start_minute: number; end_minute: number }>;
-}>;
-
 type ConflictRow = Readonly<{
+  google_variant_supported?: boolean;
+  app_variant_supported?: boolean;
+  founderops_binding_snapshot?: unknown;
   id: string;
   owner_profile_id: string;
   base_publication_id: string;
@@ -69,8 +55,8 @@ export type TeamWorkweekConflictView = Readonly<{
   state: "open" | "resolving";
   decision: "founderops" | "google" | null;
   observedAt: string;
-  founderops: Readonly<{ effectiveFrom: string; windows: Window[] }>;
-  google: Readonly<{ effectiveFrom: string; windows: Window[] }>;
+  founderops: Readonly<{ effectiveFrom: string; windows: Window[]; supported?: boolean; activationMode?: "immediate" | "future_monday" }> ;
+  google: Readonly<{ effectiveFrom: string; windows: Window[]; supported?: boolean; activationMode?: "immediate" | "future_monday" }> ;
 }>;
 
 export class TeamWorkweekConflictError extends Error {
@@ -117,49 +103,12 @@ function observationFingerprint(observations: GoogleWorkweekObservation[]) {
   })));
 }
 
-function knownSeries(rows: SeriesRow[]): KnownGoogleWorkweekSeries[] | null {
-  const result: KnownGoogleWorkweekSeries[] = [];
-  for (const row of rows) {
-    const window = firstRelation(row.team_workweek_windows);
-    if (row.provider_state !== "active" || !row.confirmed_etag || !row.confirmed_founderops_revision || !window) return null;
-    result.push({
-      id: row.id,
-      calendarId: row.calendar_id,
-      googleEventId: row.google_event_id,
-      confirmedEtag: row.confirmed_etag,
-      confirmedFounderopsRevision: row.confirmed_founderops_revision,
-      weekday: window.weekday,
-      startMinute: window.start_minute,
-      endMinute: window.end_minute,
-    });
-  }
-  return result;
-}
-
-async function loadObservationContext(serviceSupabase: SupabaseClient, ownerProfileId: string) {
-  const publicationResponse = await serviceSupabase
-    .from("team_workweek_publications")
-    .select("id,owner_profile_id,effective_from,publication_revision,windows")
-    .eq("owner_profile_id", ownerProfileId)
-    .eq("status", "published")
-    .is("effective_to", null)
-    .order("publication_revision", { ascending: false })
-    .limit(1)
-    .maybeSingle<PublicationRow>();
-  if (publicationResponse.error) {
-    throw new TeamWorkweekConflictError("unavailable", "Bestätigte Grundwoche ist nicht verfügbar.");
-  }
-  if (!publicationResponse.data) throw new TeamWorkweekConflictError("not_found", "Noch keine bestätigte Grundwoche vorhanden.");
-  const seriesResponse = await serviceSupabase
-    .from("team_workweek_google_series")
-    .select("id,calendar_id,google_event_id,confirmed_etag,confirmed_founderops_revision,provider_state,team_workweek_windows!inner(weekday,start_minute,end_minute)")
-    .eq("publication_id", publicationResponse.data.id)
-    .eq("state", "confirmed")
-    .order("id", { ascending: true });
-  if (seriesResponse.error) throw new TeamWorkweekConflictError("unavailable", "Google-Zuordnungen sind nicht verfügbar.");
-  const series = knownSeries((seriesResponse.data || []) as SeriesRow[]);
-  if (!series) throw new TeamWorkweekConflictError("stale", "Google-Zuordnung muss zuerst neu beobachtet werden.");
-  return { publication: publicationResponse.data, series };
+async function loadObservationContext(serviceSupabase:SupabaseClient,ownerProfileId:string,now:Date){
+  let context:Awaited<ReturnType<typeof loadTeamWorkweekObservationContext>>;
+  try {context=await loadTeamWorkweekObservationContext(serviceSupabase,ownerProfileId,now);}
+  catch {throw new TeamWorkweekConflictError("unavailable","Bestätigte App-Arbeitswoche ist nicht verfügbar.");}
+  if(!context) throw new TeamWorkweekConflictError("not_found","Noch keine aktuell gültige App-Arbeitswoche vorhanden.");
+  return context;
 }
 
 async function observeCurrentGoogle({
@@ -168,14 +117,16 @@ async function observeCurrentGoogle({
   observe,
   ownerProfileId,
   serviceSupabase,
+  context: providedContext,
 }: {
   getAccessToken: typeof getGoogleWorkspaceAccessToken;
   now: () => Date;
   observe: typeof observeGoogleWorkweek;
   ownerProfileId: string;
   serviceSupabase: SupabaseClient;
+  context?: Awaited<ReturnType<typeof loadObservationContext>>;
 }) {
-  const context = await loadObservationContext(serviceSupabase, ownerProfileId);
+  const context = providedContext || await loadObservationContext(serviceSupabase, ownerProfileId,now());
   let accessToken: string;
   try {
     accessToken = await getAccessToken(serviceSupabase, ownerProfileId);
@@ -190,8 +141,8 @@ async function observeCurrentGoogle({
         : "provider_unavailable",
     );
   }
-  const observation = await observe({ accessToken, now, series: context.series });
-  if (observation.state === "delayed" || observation.state === "conflict") {
+  const observation = await observe({ accessToken, now, series: context.series,logicalWindows:context.logicalWindows,verifyKnownPayloads:context.partialGoogleState });
+  if (observation.state === "delayed" || (observation.state === "conflict" && !observation.observations)) {
     throw new TeamWorkweekConflictError(
       observation.state === "conflict" ? "stale" : "unavailable",
       observation.state === "conflict"
@@ -222,24 +173,38 @@ export async function detectTeamWorkweekParallelConflict({
 }): Promise<{ state: "clear" | "google_only" | "conflict"; conflict?: { id: string; conflictRevision: number } }> {
   const versionResponse = await serviceSupabase
     .from("team_workweek_versions")
-    .select("id,owner_profile_id,effective_from,origin,team_workweek_windows(weekday,start_minute,end_minute)")
+    .select("id,owner_profile_id,effective_from,activation_mode,origin,team_workweek_windows(weekday,start_minute,end_minute)")
     .eq("id", versionId)
     .eq("owner_profile_id", ownerProfileId)
     .maybeSingle<VersionRow>();
   if (versionResponse.error || !versionResponse.data) throw new TeamWorkweekConflictError("not_found", "Private Grundwoche wurde nicht gefunden.");
   if (versionResponse.data.origin !== "owner") return { state: "clear" };
+  const operation = await serviceSupabase.from("team_workweek_publications")
+    .select("id,status,attempt_generation")
+    .eq("owner_profile_id", ownerProfileId).eq("source_version_id", versionId)
+    .in("status", ["preparing", "published"]).maybeSingle<{id:string;status:string;attempt_generation:number}>();
+  if (operation.error) throw new TeamWorkweekConflictError("unavailable", "Veröffentlichungsstatus konnte nicht geladen werden.");
+  if (operation.data && operation.data.attempt_generation > 0) return {state:"clear"};
+
 
   let current: Awaited<ReturnType<typeof observeCurrentGoogle>>;
   try {
-    current = await observeCurrentGoogle({ getAccessToken, now, observe, ownerProfileId, serviceSupabase });
+    const context=await loadObservationContext(serviceSupabase,ownerProfileId,now());
+    // Verify retained physical cutoffs before a fresh owner publication. Partial
+    // Google state is neither imported as a template nor reported as confirmed.
+    current = await observeCurrentGoogle({ getAccessToken, now, observe, ownerProfileId, serviceSupabase,context });
   } catch (error) {
     if (error instanceof TeamWorkweekConflictError && error.code === "not_found") return { state: "clear" };
     throw error;
   }
+  if(current.observation.state==="conflict"){
+    const conflict=await captureObservedTeamWorkweekConflict(serviceSupabase,ownerProfileId,current.publication,current.observation);
+    return {state:"conflict",conflict};
+  }
   if (current.observation.state === "unchanged") {
     const confirmed = await serviceSupabase.rpc("apply_google_team_workweek_observations", {
       p_publication_id: current.publication.id,
-      p_expected_publication_revision: current.publication.publication_revision,
+      p_publication_revision: current.publication.publication_revision,
       p_observations: current.observation.observations,
       p_observed_at: current.observation.observedAt,
     });
@@ -256,7 +221,7 @@ export async function detectTeamWorkweekParallelConflict({
   const founderopsChanged = JSON.stringify(founderopsWindows) !== JSON.stringify(canonicalWindows(current.publication.windows || []));
   if (!founderopsChanged) return { state: "google_only" };
 
-  const googleFingerprint = observationFingerprint(current.observation.observations);
+  const googleFingerprint = observationFingerprint(current.observation.observations || []);
   const founderopsFingerprint = fingerprint({ effectiveFrom: versionResponse.data.effective_from, windows: founderopsWindows });
   const created = await serviceSupabase.rpc("create_team_workweek_google_conflict", {
     p_owner_profile_id: ownerProfileId,
@@ -265,7 +230,7 @@ export async function detectTeamWorkweekParallelConflict({
     p_founderops_version_id: versionResponse.data.id,
     p_google_effective_from: nextVersionMondayIso(current.publication.effective_from, now()),
     p_google_windows: current.observation.windows,
-    p_google_observations: current.observation.observations,
+    p_google_observations: current.observation.observations || [],
     p_google_fingerprint: googleFingerprint,
     p_founderops_fingerprint: founderopsFingerprint,
     p_observed_at: current.observation.observedAt,
@@ -282,15 +247,15 @@ function conflictView(row: ConflictRow): TeamWorkweekConflictView {
     state: row.state === "resolved" ? "resolving" : row.state,
     decision: row.decision,
     observedAt: row.observed_at,
-    founderops: { effectiveFrom: founderopsVersion.effective_from, windows: versionWindows(founderopsVersion) },
-    google: { effectiveFrom: row.google_effective_from, windows: canonicalWindows(row.google_windows) },
+    founderops: { effectiveFrom: founderopsVersion.effective_from, windows: versionWindows(founderopsVersion),supported:row.app_variant_supported??true,activationMode:founderopsVersion.activation_mode||"future_monday" },
+    google: { effectiveFrom: row.google_effective_from, windows: canonicalWindows(row.google_windows),supported:row.google_variant_supported??true,activationMode:"immediate" },
   };
 }
 
 export async function getOpenTeamWorkweekConflict(serviceSupabase: SupabaseClient, ownerProfileId: string) {
   const response = await serviceSupabase
     .from("team_workweek_google_conflicts")
-    .select("id,owner_profile_id,base_publication_id,base_publication_revision,founderops_version_id,google_effective_from,google_windows,google_observations,google_fingerprint,founderops_fingerprint,conflict_revision,state,decision,resolution_version_id,observed_at,team_workweek_versions!team_workweek_google_conflicts_founderops_version_id_fkey(id,owner_profile_id,effective_from,origin,team_workweek_windows(weekday,start_minute,end_minute))")
+    .select("id,owner_profile_id,base_publication_id,base_publication_revision,founderops_version_id,google_effective_from,google_windows,google_observations,google_fingerprint,founderops_fingerprint,founderops_binding_snapshot,google_variant_supported,app_variant_supported,conflict_revision,state,decision,resolution_version_id,observed_at,team_workweek_versions!team_workweek_google_conflicts_founderops_version_id_fkey(id,owner_profile_id,effective_from,activation_mode,origin,team_workweek_windows(weekday,start_minute,end_minute))")
     .eq("owner_profile_id", ownerProfileId)
     .in("state", ["open", "resolving"])
     .order("created_at", { ascending: false })
@@ -325,7 +290,7 @@ export async function resolveTeamWorkweekConflict({
 }) {
   const conflictResponse = await serviceSupabase
     .from("team_workweek_google_conflicts")
-    .select("id,owner_profile_id,base_publication_id,base_publication_revision,founderops_version_id,google_effective_from,google_windows,google_observations,google_fingerprint,founderops_fingerprint,conflict_revision,state,decision,resolution_version_id,observed_at,team_workweek_versions!team_workweek_google_conflicts_founderops_version_id_fkey(id,owner_profile_id,effective_from,origin,team_workweek_windows(weekday,start_minute,end_minute))")
+    .select("id,owner_profile_id,base_publication_id,base_publication_revision,founderops_version_id,google_effective_from,google_windows,google_observations,google_fingerprint,founderops_fingerprint,founderops_binding_snapshot,google_variant_supported,app_variant_supported,conflict_revision,state,decision,resolution_version_id,observed_at,team_workweek_versions!team_workweek_google_conflicts_founderops_version_id_fkey(id,owner_profile_id,effective_from,activation_mode,origin,team_workweek_windows(weekday,start_minute,end_minute))")
     .eq("id", conflictId)
     .eq("owner_profile_id", ownerProfileId)
     .maybeSingle<ConflictRow>();
@@ -334,7 +299,7 @@ export async function resolveTeamWorkweekConflict({
   if (conflict.conflict_revision !== conflictRevision) throw new TeamWorkweekConflictError("stale", "Konfliktentscheidung ist veraltet.");
 
   const founderopsVersion = firstRelation(conflict.team_workweek_versions);
-  const currentFounderopsFingerprint = fingerprint({
+  const currentFounderopsFingerprint = conflict.founderops_binding_snapshot ? conflict.founderops_fingerprint : fingerprint({
     effectiveFrom: founderopsVersion.effective_from,
     windows: versionWindows(founderopsVersion),
   });
@@ -342,13 +307,27 @@ export async function resolveTeamWorkweekConflict({
     throw new TeamWorkweekConflictError("stale", "FounderOps-Stand wurde nach der Konflikterkennung geändert.");
   }
 
+  if((decision==="google" && conflict.google_variant_supported===false) || (decision==="founderops" && conflict.app_variant_supported===false)) throw new TeamWorkweekConflictError("stale","Diese Variante lässt sich aus der Google-Änderung nicht sicher übernehmen.");
+  if(conflict.resolution_version_id){
+    const operation=await serviceSupabase.from("team_workweek_publications").select("id,status,attempt_generation").eq("owner_profile_id",ownerProfileId).eq("source_version_id",conflict.resolution_version_id).in("status",["preparing","published"]).maybeSingle<{attempt_generation:number}>();
+    if(operation.error) throw new TeamWorkweekConflictError("unavailable","Auflösungsstatus ist nicht verfügbar.");
+    if(operation.data?.attempt_generation){
+      if(conflict.decision!==decision) throw new TeamWorkweekConflictError("stale","Konflikt wurde bereits anders entschieden.");
+      const publication=await publish({serviceSupabase,userSupabase,versionId:conflict.resolution_version_id,now});
+      if(publication.status==="published"){
+        const completed=await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution",{p_conflict_id:conflictId,p_owner_profile_id:ownerProfileId,p_conflict_revision:conflictRevision,p_resolved_at:publication.lastSyncAt || now().toISOString()});
+        if(completed.error) throw new TeamWorkweekConflictError("unavailable","Bestätigte Konfliktauflösung konnte nicht abgeschlossen werden.");
+      }
+      return publication;
+    }
+  }
   const current = await observeCurrentGoogle({ getAccessToken, now, observe, ownerProfileId, serviceSupabase });
   let versionId = conflict.resolution_version_id;
   if (!versionId) {
-    if (current.publication.id !== conflict.base_publication_id || current.observation.state !== "changed") {
+    if (current.publication.id !== conflict.base_publication_id || !(current.observation.state === "changed" || (current.observation.state==="conflict" && current.observation.observations))) {
       throw new TeamWorkweekConflictError("stale", "Google- oder FounderOps-Stand wurde zwischenzeitlich geändert.");
     }
-    const googleFingerprint = observationFingerprint(current.observation.observations);
+    const googleFingerprint = observationFingerprint(current.observation.observations || []);
     if (googleFingerprint !== conflict.google_fingerprint) {
       throw new TeamWorkweekConflictError("stale", "Google-Stand wurde nach der Konflikterkennung erneut geändert.");
     }
@@ -358,7 +337,7 @@ export async function resolveTeamWorkweekConflict({
       p_owner_profile_id: ownerProfileId,
       p_conflict_revision: conflictRevision,
       p_decision: decision,
-      p_google_observations: current.observation.observations,
+      p_google_observations: current.observation.observations || [],
       p_google_fingerprint: googleFingerprint,
       p_founderops_fingerprint: currentFounderopsFingerprint,
       p_resolution_fingerprint: resolutionFingerprint,
@@ -374,19 +353,19 @@ export async function resolveTeamWorkweekConflict({
     if (current.publication.id !== conflict.base_publication_id) {
       throw new TeamWorkweekConflictError("stale", "Bestätigter FounderOps-Stand wurde zwischenzeitlich geändert.");
     }
-    const googleFingerprint = observationFingerprint(current.observation.observations);
+    const googleFingerprint = observationFingerprint(current.observation.observations || []);
     if (googleFingerprint !== conflict.google_fingerprint) {
       const refreshed = await serviceSupabase.rpc("refresh_team_workweek_google_conflict_resolution", {
         p_conflict_id: conflictId,
         p_owner_profile_id: ownerProfileId,
         p_conflict_revision: conflictRevision,
         p_decision: decision,
-        p_google_observations: current.observation.observations,
+        p_google_observations: current.observation.observations || [],
         p_google_fingerprint: googleFingerprint,
         p_observed_at: current.observation.observedAt,
       });
       if (refreshed.error) {
-        throw new TeamWorkweekConflictError("unavailable", "Geänderte Google-Basis konnte nicht neu bestätigt werden.");
+        throw new TeamWorkweekConflictError(refreshed.error.code==="P0004"?"stale":"unavailable", "Google wurde erneut geändert. Bereinige den bisherigen Versuch und prüfe die Variante erneut.");
       }
       throw new TeamWorkweekConflictError("stale", "Google wurde erneut geändert. Prüfe die gewählte Variante und bestätige sie erneut.");
     }
@@ -404,4 +383,13 @@ export async function resolveTeamWorkweekConflict({
     if (completed.error) throw new TeamWorkweekConflictError("unavailable", "Bestätigte Konfliktauflösung konnte nicht abgeschlossen werden.");
   }
   return publication;
+}
+
+export async function captureObservedTeamWorkweekConflict(serviceSupabase:SupabaseClient,ownerProfileId:string,publication:{id:string;publication_revision:number},observation:Extract<GoogleWorkweekReconciliationResult,{state:"conflict"|"changed"}>){
+  if(!observation.observations) throw new TeamWorkweekConflictError("stale","Google-Zuordnung ist nicht eindeutig.");
+  const captured=await serviceSupabase.rpc("capture_team_workweek_physical_conflict",{p_owner_profile_id:ownerProfileId,p_base_publication_id:publication.id,p_base_publication_revision:publication.publication_revision,
+    p_google_windows:observation.state==="changed"?observation.windows:[],p_google_observations:observation.observations,p_google_fingerprint:observationFingerprint(observation.observations),
+    p_google_variant_supported:observation.state==="changed",p_app_variant_supported:observation.state==="changed" || Boolean(observation.appRestoreSupported),p_observed_at:observation.observedAt});
+  if(captured.error || !captured.data?.id) throw new TeamWorkweekConflictError("unavailable","Google-Konflikt konnte nicht gespeichert werden.");
+  return captured.data as {id:string;conflictRevision:number};
 }
