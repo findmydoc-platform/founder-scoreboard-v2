@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
   }));
   const allCalendarWorkweeks = (data || []).map(calendarWorkweek);
   const currentWorkweeks = [...new Set(allCalendarWorkweeks.map(({ ownerProfileId }) => ownerProfileId))]
-    .map((ownerProfileId) => selectCalendarWorkweek(allCalendarWorkweeks, ownerProfileId, referenceDate))
+    .map((ownerProfileId) => selectCalendarWorkweek(allCalendarWorkweeks, ownerProfileId, referenceDate, now))
     .filter((workweek): workweek is CalendarTeamWorkweek => workweek !== null && (!workweek.effectiveAt || new Date(workweek.effectiveAt) <= now));
   const calendarWorkweeks = requestedRange.range
     ? allCalendarWorkweeks

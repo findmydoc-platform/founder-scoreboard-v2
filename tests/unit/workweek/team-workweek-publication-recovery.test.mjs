@@ -312,3 +312,19 @@ test("a lost immediate finalization response replays the committed instant after
   });
   assert.equal(result.status,"published");assert.equal(result.effectiveAt,"2026-10-14T10:03:00Z");assert.equal(result.recovery,null);
 });
+
+test("a confirmed same-week correction retains the baseline until its exact boundary",()=>{
+  const rows=[{id:"old",ownerProfileId:"p",effectiveFrom:"2026-10-12",effectiveAt:"2026-10-14T07:00:00Z",effectiveUntil:"2026-10-14T10:03:00Z",effectiveTo:"2026-10-14",publicationRevision:1},{id:"new",ownerProfileId:"p",effectiveFrom:"2026-10-12",effectiveAt:"2026-10-14T10:03:00Z",effectiveTo:null,publicationRevision:2}];
+  assert.deepEqual(publishedModel.selectVisibleTeamWorkweeks(rows,"2026-10-14",new Date("2026-10-14T10:02:59Z")).map(({id,phase})=>[id,phase]),[["old","current"],["new","prepared"]]);
+  assert.deepEqual(publishedModel.selectVisibleTeamWorkweeks(rows,"2026-10-14",new Date("2026-10-14T10:03:00Z")).map(({id,phase})=>[id,phase]),[["new","current"]]);
+});
+
+test("lost partial predecessor updates are restored before a later candidate resumes",async()=>{
+  let clock=new Date("2026-10-14T10:04:00Z");const events=[];
+  const effect={id:"cutoff",calendarId:"primary",googleEventId:"fopsabc123",generation:1,state:"confirmed",confirmedEtag:'"cut"',operation:"update",kind:"predecessor_cutoff",expectedEtag:'"old"',expectedPayload:{id:"fopsabc123"},payload:{id:"fopsabc123"}};
+  const first={...publication,activationMode:"immediate",effectiveAt:"2026-10-14T10:03:00Z",attemptGeneration:1,effects:[effect]};let restored=false;
+  const userSupabase={async rpc(name){events.push(name);if(name==="prepare_team_workweek_publication")return {data:restored?{...first,effectiveAt:"2026-10-14T10:07:00Z",attemptGeneration:2,effects:[]}:first,error:null};if(name==="finalize_team_workweek_publication")return {data:{...first,status:"published",syncState:"confirmed",effectiveAt:"2026-10-14T10:07:00Z"},error:null};throw new Error(name);}};
+  const serviceSupabase={async rpc(name,args){events.push(name);assert.equal(name,"confirm_team_workweek_effect_restoration");assert.equal(args.p_etag,'"restored"');restored=true;return {data:null,error:null};}};
+  const result=await publicationServer.publishTeamWorkweek({versionId:publication.sourceVersionId,userSupabase,serviceSupabase,now:()=>clock,cleanupEffect:async()=>({state:"confirmed",etag:'"restored"',observedAt:clock.toISOString()})});
+  assert.equal(result.status,"published");assert.deepEqual(events,["prepare_team_workweek_publication","confirm_team_workweek_effect_restoration","prepare_team_workweek_publication","finalize_team_workweek_publication"]);
+});

@@ -5,6 +5,8 @@ export const authenticatedFunctionAllowlist = Object.freeze([
   "public.administrator_access_snapshot()",
   "public.administrator_directory_snapshot()",
   "public.claim_notification_delivery(p_event_ids bigint[], p_limit integer, p_test_delivery text, p_recipient_profile_id text)",
+  "public.create_private_monday_team_workweek_version(p_effective_from date, p_windows jsonb, p_base_publication_id uuid, p_base_publication_revision integer)",
+  "public.create_private_current_team_workweek_version(p_windows jsonb, p_base_publication_id uuid, p_base_publication_revision integer)",
   "public.create_private_immediate_team_workweek_version(p_windows jsonb)",
   "public.create_private_team_workweek_version(p_effective_from date, p_windows jsonb)",
   "public.current_platform_role()",
@@ -102,6 +104,8 @@ export const mappedOwnerTeamWorkweekReadPolicies = Object.freeze([
 export const mappedOwnerTeamWorkweekFunctions = Object.freeze([
   "create_private_team_workweek_version",
   "create_private_immediate_team_workweek_version",
+  "create_private_current_team_workweek_version",
+  "create_private_monday_team_workweek_version",
   "prepare_team_workweek_publication",
   "finalize_team_workweek_publication",
 ]);

@@ -228,6 +228,13 @@ export async function detectTeamWorkweekParallelConflict({
     .maybeSingle<VersionRow>();
   if (versionResponse.error || !versionResponse.data) throw new TeamWorkweekConflictError("not_found", "Private Grundwoche wurde nicht gefunden.");
   if (versionResponse.data.origin !== "owner") return { state: "clear" };
+  const operation = await serviceSupabase.from("team_workweek_publications")
+    .select("id,status,attempt_generation")
+    .eq("owner_profile_id", ownerProfileId).eq("source_version_id", versionId)
+    .in("status", ["preparing", "published"]).maybeSingle<{id:string;status:string;attempt_generation:number}>();
+  if (operation.error) throw new TeamWorkweekConflictError("unavailable", "Veröffentlichungsstatus konnte nicht geladen werden.");
+  if (operation.data && operation.data.attempt_generation > 0) return {state:"clear"};
+
 
   let current: Awaited<ReturnType<typeof observeCurrentGoogle>>;
   try {

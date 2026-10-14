@@ -149,3 +149,37 @@ test("the repeated Berlin DST hour cannot claim activity before the actual insta
   const result=model.projectCalendarWorktimes({calendarWorkweeks:[workweek],profiles:[{id:"p",name:"P"}],dateKey:"2026-10-25",now:new Date("2026-10-25T00:45:00Z")});
   assert.equal(result[0].workingNow,false);
 });
+
+
+test("same-day replacements retain elapsed windows and choose the new template only after their instant",()=>{
+  const oldWindows={monday:[],tuesday:[],wednesday:[{start:"09:00",end:"17:00"}],thursday:[],friday:[],saturday:[],sunday:[]};
+  const rows=[{id:"old",ownerProfileId:"p",effectiveFrom:"2026-10-12",effectiveAt:"2026-10-12T00:00:00Z",effectiveUntil:"2026-10-14T10:03:00Z",effectiveTo:"2026-10-14",timezone:"Europe/Berlin",publicationRevision:1,lastSyncAt:"2026-10-12T00:00:00Z",windows:oldWindows},{id:"new",ownerProfileId:"p",effectiveFrom:"2026-10-12",effectiveAt:"2026-10-14T10:03:00Z",effectiveTo:null,timezone:"Europe/Berlin",publicationRevision:2,lastSyncAt:"2026-10-14T10:00:00Z",windows:{...oldWindows,wednesday:[{start:"13:00",end:"18:00"}]}}];
+  const projected=model.projectCalendarWorktimes({calendarWorkweeks:rows,profiles:[{id:"p",name:"P"}],dateKey:"2026-10-14",now:new Date("2026-10-14T10:04:00Z")});
+  assert.deepEqual(projected[0].windows,[{start:"09:00",end:"12:03"},{start:"13:00",end:"18:00"}]);
+});
+
+test("replacement inside the repeated hour retains the first 02:45 segment as historical planned time",()=>{
+  const windows={monday:[],tuesday:[],wednesday:[],thursday:[],friday:[],saturday:[],sunday:[{start:"01:00",end:"04:00"}]};
+  const old={id:"old-fold",ownerProfileId:"p",effectiveFrom:"2026-10-19",effectiveUntil:"2026-10-25T01:30:00Z",effectiveTo:"2026-10-25",timezone:"Europe/Berlin",publicationRevision:1,lastSyncAt:"2026-10-19T00:00:00Z",windows};
+  const result=model.projectCalendarWorktimes({calendarWorkweeks:[old],profiles:[{id:"p",name:"P"}],dateKey:"2026-10-25",now:new Date("2026-10-25T00:45:00Z")});
+  assert.equal(result[0].workingNow,true);
+  assert.equal(result[0].windows[0].endsAt,"2026-10-25T01:30:00.000Z");
+  assert.match(model.calendarWindowLabel(result[0].windows[0]),/MESZ.*MEZ/);
+});
+
+
+test("repeated same-week corrections keep three non-overlapping day segments and switch exactly at each boundary",()=>{
+  const base={ownerProfileId:"p",effectiveFrom:"2026-10-12",timezone:"Europe/Berlin",lastSyncAt:"2026-10-14T07:00:00Z"};
+  const windows={monday:[],tuesday:[],wednesday:[{start:"09:00",end:"18:00"}],thursday:[],friday:[],saturday:[],sunday:[]};
+  const rows=[
+    {...base,id:"one",publicationRevision:1,effectiveAt:"2026-10-12T00:00:00Z",effectiveUntil:"2026-10-14T10:03:00Z",effectiveTo:"2026-10-14",windows},
+    {...base,id:"two",publicationRevision:2,effectiveAt:"2026-10-14T10:03:00Z",effectiveUntil:"2026-10-14T12:03:00Z",effectiveTo:"2026-10-14",windows},
+    {...base,id:"three",publicationRevision:3,effectiveAt:"2026-10-14T12:03:00Z",effectiveTo:null,windows},
+  ];
+  assert.equal(model.selectCalendarWorkweek(rows,"p","2026-10-14",new Date("2026-10-14T10:02:59Z")).id,"one");
+  assert.equal(model.selectCalendarWorkweek(rows,"p","2026-10-14",new Date("2026-10-14T10:03:00Z")).id,"two");
+  assert.equal(model.selectCalendarWorkweek(rows,"p","2026-10-14",new Date("2026-10-14T12:03:00Z")).id,"three");
+  const result=model.projectCalendarWorktimes({calendarWorkweeks:rows,profiles:[{id:"p",name:"P"}],dateKey:"2026-10-14",now:new Date("2026-10-14T12:03:00Z")});
+  assert.deepEqual(result[0].windows,[{start:"09:00",end:"12:03"},{start:"12:03",end:"14:03"},{start:"14:03",end:"18:00"}]);
+  assert.equal(result[0].workingNow,true);
+});

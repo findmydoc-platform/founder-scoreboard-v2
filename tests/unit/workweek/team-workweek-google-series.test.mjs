@@ -216,3 +216,33 @@ test("a lost immediate insert response observes the same exact payload and never
   const repeated=await core.ensureGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl});
   assert.equal(repeated.state,"confirmed");assert.equal(inserts,1);assert.deepEqual(stored.recurrence,["RRULE:FREQ=WEEKLY"]);
 });
+
+test("predecessor cutoffs retain master times, use If-Match, and restore an expired provisional update",async()=>{
+  const core=await import("../../../src/features/team-workweek/server/team-workweek-immediate-effects.ts");
+  const before={id:"fopsabc0123",start:{dateTime:"2026-10-07T07:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2026-10-07T15:00:00Z",timeZone:"Europe/Berlin"},recurrence:["RRULE:FREQ=WEEKLY"],extendedProperties:{private:{founderopsWorkweekSeriesId:"old",founderopsWorkweekRevision:"1"}}};
+  const payload={...before,recurrence:["RRULE:FREQ=WEEKLY;COUNT=2"],status:"confirmed",extendedProperties:{private:{...before.extendedProperties.private,founderopsWorkweekTransitionId:"cutoff"}}};
+  const effect={id:"cutoff",calendarId:"primary",googleEventId:before.id,generation:1,operation:"update",kind:"predecessor_cutoff",expectedPayload:before,expectedEtag:'"old"',payload,state:"pending",confirmedEtag:null};
+  let stored={...before,etag:'"old"'};const calls=[];
+  const fetchImpl=async(_url,init={})=>{calls.push(init);if(init.method){stored={...JSON.parse(init.body),etag:'"updated"'};}return Response.json(stored);};
+  const changed=await core.ensureGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl});
+  assert.equal(changed.state,"confirmed");assert.equal(calls[1].method,"PUT");assert.equal(calls[1].headers["if-match"],'"old"');assert.deepEqual(stored.start,before.start);
+  const restored=await core.cleanupGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl});
+  assert.equal(restored.state,"confirmed");assert.deepEqual(stored.recurrence,["RRULE:FREQ=WEEKLY"]);assert.equal(stored.extendedProperties.private.founderopsWorkweekTransitionId,undefined);
+});
+
+test("the actual crossing instance is discovered before any write and a zero-occurrence cancellation is reversible",async()=>{
+  const core=await import("../../../src/features/team-workweek/server/team-workweek-immediate-effects.ts");
+  const before={id:"fopsmaster",start:{dateTime:"2026-10-25T00:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2026-10-25T02:00:00Z",timeZone:"Europe/Berlin"},extendedProperties:{private:{founderopsWorkweekSeriesId:"old",founderopsWorkweekRevision:"1"}}};
+  const crossing={id:"crossing",calendarId:"primary",googleEventId:"fopsmaster",generation:2,operation:"update",instanceOf:"fopsmaster",originalStart:"2026-10-25T00:00:00Z",expectedPayload:before,expectedEtag:null,payload:{...before,end:{...before.end,dateTime:"2026-10-25T01:30:00Z"}},state:"pending",confirmedEtag:null};
+  const observed=await core.discoverGoogleWorkweekInstance({accessToken:"token",effect:crossing,fetchImpl:async(_url,init)=>{assert.equal(init.method,undefined);return Response.json({items:[{...before,id:"fopsmaster_20261025T000000Z",etag:'"instance"',recurringEventId:"fopsmaster",originalStartTime:{dateTime:before.start.dateTime}}]});}});
+  assert.equal(observed.state,"observed");assert.equal(observed.eventId,"fopsmaster_20261025T000000Z");assert.equal(observed.originalPayload.start.dateTime,"2026-10-25T00:00:00Z");
+  const original={...before,recurrence:["RRULE:FREQ=WEEKLY"]};
+  const cancelled={...original,status:"cancelled",extendedProperties:{private:{...original.extendedProperties.private,founderopsWorkweekTransitionId:"zero"}}};
+  const effect={...crossing,id:"zero",instanceOf:null,expectedPayload:original,expectedEtag:'"old"',payload:cancelled,operation:"cancel"};
+  let stored={...original,etag:'"old"'};
+  const fetchImpl=async(_url,init={})=>{if(init.method==="PUT")stored={...JSON.parse(init.body),etag:'"changed"'};return Response.json(stored);};
+  assert.equal((await core.ensureGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl})).state,"confirmed");
+  assert.equal(stored.status,"cancelled");
+  assert.equal((await core.cleanupGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl})).state,"confirmed");
+  assert.equal(stored.status,"confirmed");assert.equal(stored.start.dateTime,original.start.dateTime);
+});

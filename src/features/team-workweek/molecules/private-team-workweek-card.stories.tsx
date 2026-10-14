@@ -43,6 +43,7 @@ const latestPublished = {
 };
 
 type ClientOptions = {
+  immediateAllowed?: boolean;
   googleConnected?: boolean;
   editBase?: { windows: typeof publishedWindows } | null;
   reconciliation?: Record<string, unknown>;
@@ -59,6 +60,7 @@ type ClientOptions = {
 
 function client(options: ClientOptions = {}): BrowserApiClient {
   let privateBody = {
+    ...(options.immediateAllowed !== undefined ? {immediateAllowed:options.immediateAllowed} : {}),
     editBase: options.editBase === undefined ? { windows: publishedWindows } : options.editBase,
     latestPublished: options.latestPublished === undefined ? latestPublished : options.latestPublished,
     minimumEffectiveFrom: nextMondayIso(),
@@ -400,5 +402,22 @@ export const PublishesFirstWorkweekWithItsConfirmedInstant: Story = {
     await waitFor(()=>expect(canvas.queryByRole("dialog")).not.toBeInTheDocument());
     await expect(canvas.getByText(/Arbeitswoche bestätigt\. Gültig ab 14\.10\.2026, 12:03 MESZ/)).toBeVisible();
     await expect(canvas.getByText(/gültig ab 14\.10\.2026, 12:03 MESZ/)).toBeVisible();
+  },
+};
+
+
+export const ReplacesAnActiveScheduleWithAnExplicitConfirmedBoundary: Story = {
+  args:{profile,apiClient:client({immediateAllowed:true,latestPublished:{...latestPublished,id:"11111111-1111-4111-8111-111111111111"},publish:{
+    result:{...latestPublished,id:"replacement",publicationRevision:2,activationMode:"immediate",effectiveAt:"2026-10-14T12:03:00Z",status:"published",syncState:"confirmed",recovery:null},
+    after:{version:null,publication:null,editBase:{windows:publishedWindows},minimumEffectiveFrom:nextMondayIso(),immediateAllowed:true,latestPublished:{...latestPublished,id:"replacement",publicationRevision:2,activationMode:"immediate",effectiveAt:"2026-10-14T12:03:00Z"}},
+  }})},
+  play:async({canvasElement})=>{
+    const canvas=within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button",{name:"Arbeitswoche bearbeiten"}));
+    await expect(canvas.getByRole("radio",{name:/Nach Bestätigung/})).toBeChecked();
+    await userEvent.click(canvas.getByRole("button",{name:"Mittwoch: Fenster hinzufügen"}));
+    await userEvent.click(canvas.getByRole("button",{name:"Änderung in Google & Team veröffentlichen"}));
+    await waitFor(()=>expect(canvas.queryByRole("dialog")).not.toBeInTheDocument());
+    await expect(canvas.getByText(/Arbeitswoche bestätigt\. Gültig ab 14\.10\.2026, 14:03 MESZ/)).toBeVisible();
   },
 };

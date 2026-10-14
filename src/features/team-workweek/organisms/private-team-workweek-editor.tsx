@@ -126,7 +126,7 @@ export function PrivateTeamWorkweekEditor({
 
               <section className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
                 <h3 id="workweek-validity-title" className="text-sm font-semibold text-slate-950">Gültigkeitsbeginn</h3>
-                {!state.latestPublished && (
+                {state.immediateAllowed && (
                   <fieldset className="mt-2 grid gap-1" disabled={state.pending}>
                     <legend className="sr-only">Gültigkeitsbeginn wählen</legend>
                     <label className="flex min-h-11 items-center gap-2 text-sm text-slate-800">
@@ -141,7 +141,7 @@ export function PrivateTeamWorkweekEditor({
                     </label>
                   </fieldset>
                 )}
-                {state.draft.activationMode === "immediate" && !state.latestPublished ? (
+                {state.draft.activationMode === "immediate" && state.immediateAllowed ? (
                   <p className="mt-1 text-xs leading-5 text-slate-500">
                     {state.publication?.effectiveAt
                       ? state.publicationExpired
