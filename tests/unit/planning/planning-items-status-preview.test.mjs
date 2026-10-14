@@ -173,6 +173,10 @@ function supabaseFor(target, overrides = {}) {
   };
 
   return {
+    async rpc(name) {
+      assert.equal(name, "has_valid_planning_review_evidence");
+      return { data: overrides.hasValidReviewEvidence ?? Boolean(target.evidence_link || rows.task_links.length), error: null };
+    },
     from(table) {
       return {
         select(columns) {
@@ -297,6 +301,20 @@ test("Planning Items Review preview accepts legacy evidence and a valid link in 
   assert.equal(samePatch.ok, true);
   assert.deepEqual(samePatch.preview.errors, []);
   assert.equal(samePatch.preview.resultingItem.evidenceLink, "https://example.com/current-evidence");
+});
+
+test("Planning Items Review preview accepts inherited evidence without adding a parent link or exception", async () => {
+  const result = await preview(
+    { id: "ceo", name: "CEO", platformRole: "ceo" },
+    taskRow(),
+    "Review",
+    { taskLinks: [], hasValidReviewEvidence: true },
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.preview.errors, []);
+  assert.equal(result.preview.resultingItem.evidenceLink, "");
+  assert.equal(result.preview.resultingItem.evidenceExceptionNote, "");
+  assert.equal(Object.hasOwn(result.preview.dbPatch, "evidence_link"), false);
 });
 
 test("identical status remains a successful no-op even while review is active", async () => {

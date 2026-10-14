@@ -125,6 +125,9 @@ test("context returns only canonical blocking dependencies between visible plann
       { id: "blocked", title: "Blocked", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2", evidence_link: "https://example.com/legacy" },
       { id: "blocker", title: "Blocker", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2", github_issue_url: "https://github.com/findmydoc-platform/management/issues/1" },
       { id: "linked", title: "Linked", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2" },
+      { id: "inherited", title: "Inherited", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2" },
+      { id: "child", title: "Child", task_type: "sub_issue", parent_task_id: "inherited", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2" },
+      { id: "unrelated-child", title: "Unrelated", task_type: "sub_issue", parent_task_id: "linked", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2" },
     ],
     planning_item_strategy: [],
     planning_item_raci_assignments: [],
@@ -136,7 +139,11 @@ test("context returns only canonical blocking dependencies between visible plann
     ],
     task_comments: [],
     task_external_comments: [],
-    task_links: [{ task_id: "linked", type: "evidence", url: "https://example.com/evidence", metadata: {} }],
+    task_links: [
+      { task_id: "linked", type: "evidence", url: "https://example.com/evidence", metadata: {} },
+      { task_id: "child", type: "evidence", url: "https://example.com/child-evidence", metadata: {} },
+      { task_id: "unrelated-child", type: "evidence", url: "https://example.com/unrelated-evidence", metadata: {} },
+    ],
   };
   const supabase = {
     from(table) {
@@ -175,6 +182,8 @@ test("context returns only canonical blocking dependencies between visible plann
   assert.equal(evidenceByItem.get("blocked"), true);
   assert.equal(evidenceByItem.get("blocker"), false);
   assert.equal(evidenceByItem.get("linked"), true);
+  assert.equal(evidenceByItem.get("inherited"), true);
+  assert.equal(evidenceByItem.get("child"), false);
 });
 
 test("the v2 OpenAPI contract documents dependencies and review evidence", async () => {

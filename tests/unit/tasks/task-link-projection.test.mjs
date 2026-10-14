@@ -111,7 +111,7 @@ test("Sub-Issue context falls back to the legacy description field", () => {
   assert.equal(taskWithParallelContext.problemStatement, "Legacy Sub-Issue description");
 });
 
-test("Sub-Issue read model restores the legacy brief while ignoring active review, score, and evidence links", () => {
+test("Sub-Issue read model exposes evidence while keeping review and score deliverable-only", () => {
   const task = mapTaskRow({
     id: "sub-legacy",
     task_type: "sub_issue",
@@ -141,8 +141,8 @@ test("Sub-Issue read model restores the legacy brief while ignoring active revie
   });
 
   assert.equal(task.status, "In Arbeit");
-  assert.deepEqual(task.evidenceLinks, []);
-  assert.equal(task.evidenceLink, "");
+  assert.deepEqual(task.evidenceLinks, ["https://legacy.example/proof"]);
+  assert.equal(task.evidenceLink, "https://legacy.example/proof");
   assert.equal(task.evidenceRequired, "Legacy proof");
   assert.equal(task.reviewStatus, "not_requested");
   assert.equal(task.reviewOwnerProfileId, "");
