@@ -134,7 +134,7 @@ export function TeamWorkweekMatrix({
                           Bestätigt {formatDate(workweek.lastSyncAt.slice(0, 10))}
                         </p>
                       ) : (
-                        <p className="mt-0.5 whitespace-nowrap text-xs font-medium leading-4 text-slate-500">Nicht veröffentlicht</p>
+                        <p className="mt-0.5 text-xs font-medium leading-4 text-slate-500">Keine veröffentlichten Arbeitszeiten</p>
                       )}
                     </div>
                   </div>
@@ -155,7 +155,7 @@ export function TeamWorkweekMatrix({
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm font-medium text-slate-600">Frei</span>
+                      <span className="text-sm font-medium text-slate-600">Kein Arbeitszeitfenster</span>
                     )}
                   </div>
                 </li>
@@ -195,7 +195,7 @@ export function TeamWorkweekMatrix({
                           Bestätigt {formatDate(workweek.lastSyncAt.slice(0, 10))}
                         </span>
                       ) : (
-                        <span className="mt-0.5 block whitespace-nowrap text-xs font-medium leading-4 text-slate-500">Nicht veröffentlicht</span>
+                        <span className="mt-0.5 block text-xs font-medium leading-4 text-slate-500">Keine veröffentlichten Arbeitszeiten</span>
                       )}
                     </span>
                   </div>
@@ -222,7 +222,7 @@ export function TeamWorkweekMatrix({
                           ))}
                         </span>
                       ) : (
-                        <span className="font-medium text-slate-600">Frei</span>
+                        <span className="font-medium text-slate-600">Kein Arbeitszeitfenster</span>
                       )}
                     </DataCell>
                   );

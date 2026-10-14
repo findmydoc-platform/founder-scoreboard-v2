@@ -337,7 +337,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       }
       if (body.reconciliation.state === "unchanged") {
         setMessageTone("success");
-        setMessage("Google und FounderOps sind auf demselben bestätigten Stand.");
+        setMessage("Die von FounderOps angelegten Google-Serien sind unverändert. Selbst angelegte Google-Termine wurden nicht übernommen.");
         return true;
       }
       const lastSuccessfulSync = body.reconciliation.lastSuccessfulSyncAt
