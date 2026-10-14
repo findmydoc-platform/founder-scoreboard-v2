@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
-import { berlinTodayIso, TEAM_WORKWEEK_DAYS } from "../model/team-workweek-draft";
+import { berlinTodayIso, formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS } from "../model/team-workweek-draft";
 import { PrivateTeamWorkweekEditor } from "../organisms/private-team-workweek-editor";
 import { formatDate } from "@/lib/display";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -30,7 +30,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
   const state = usePrivateTeamWorkweek(apiClient);
   const syncDelayed = state.publication?.syncState === "delayed";
   const reconciliationState = state.latestPublished?.googleReconciliationState;
-  const latestIsPrepared = Boolean(state.latestPublished && state.latestPublished.effectiveFrom > berlinTodayIso());
+  const latestIsPrepared = Boolean(state.latestPublished && (state.latestPublished.effectiveAt ? new Date(state.latestPublished.effectiveAt) > new Date() : state.latestPublished.effectiveFrom > berlinTodayIso()));
   const badge = syncDelayed
     ? { tone: "amber" as const, label: "Synchronisierung verzögert" }
     : reconciliationState === "conflict"
@@ -40,7 +40,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
         : state.version
           ? { tone: "amber" as const, label: "Privater Entwurf" }
           : latestIsPrepared
-            ? { tone: "blue" as const, label: "Für Montag vorbereitet" }
+            ? { tone: "blue" as const, label: state.latestPublished?.effectiveAt ? "Beginn bestätigt" : "Für Montag vorbereitet" }
             : state.latestPublished
               ? { tone: "emerald" as const, label: "Veröffentlicht" }
               : { tone: "slate" as const, label: "Arbeitszeiten fehlen" };
@@ -58,11 +58,11 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
               {state.version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : state.latestPublished ? "Veröffentlichte Arbeitszeiten für " + profile.name + ". Bestätigt in Team und Google." : "Deine Arbeitszeiten fehlen noch."}
             </p>
             {state.version && (
-              <p className="mt-2 text-xs font-semibold text-slate-600">Gültig ab {formatDate(state.version.effectiveFrom)} · {state.version.timezone}</p>
+              <p className="mt-2 text-xs font-semibold text-slate-600">{state.version.activationMode === "immediate" ? "Beginn wird bei Veröffentlichung bestätigt" : `Gültig ab ${formatDate(state.version.effectiveFrom)}`} · {state.version.timezone}</p>
             )}
             {state.latestPublished && (
               <p className="mt-2 text-xs font-semibold text-slate-600">
-                {latestIsPrepared ? "Vorbereitet" : "Zuletzt veröffentlicht"}: gültig ab {formatDate(state.latestPublished.effectiveFrom)}
+                {latestIsPrepared ? "Vorbereitet" : "Zuletzt veröffentlicht"}: gültig ab {state.latestPublished.effectiveAt ? formatTeamWorkweekActivation(state.latestPublished.effectiveAt) : formatDate(state.latestPublished.effectiveFrom)}
                 {state.latestPublished.lastSyncAt ? ` · letzter erfolgreicher Sync ${formatDate(state.latestPublished.lastSyncAt.slice(0, 10))}` : ""}
               </p>
             )}

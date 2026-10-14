@@ -12,6 +12,8 @@ export type CalendarTeamWorkweek = Readonly<{
   id: string;
   ownerProfileId: string;
   effectiveFrom: string;
+  effectiveAt?: string | null;
+  effectiveUntil?: string | null;
   effectiveTo: string | null;
   timezone: typeof TEAM_WORKWEEK_TIMEZONE;
   publicationRevision: number;
@@ -122,7 +124,7 @@ export function selectCalendarWorkweek(
 ) {
   return workweeks
     .filter((workweek) => workweek.ownerProfileId === ownerProfileId)
-    .filter((workweek) => workweek.effectiveFrom <= dateKey && (!workweek.effectiveTo || workweek.effectiveTo >= dateKey))
+    .filter((workweek) => (workweek.effectiveAt ? berlinDateKey(new Date(workweek.effectiveAt)) : workweek.effectiveFrom) <= dateKey && (!workweek.effectiveTo || workweek.effectiveTo >= dateKey))
     .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom)
       || right.publicationRevision - left.publicationRevision)[0] || null;
 }
@@ -147,6 +149,15 @@ function minuteForClock(value: string) {
   return hour * 60 + minute;
 }
 
+export function calendarWindowsForDate(workweek: CalendarTeamWorkweek, dateKey: string) {
+  const windows = workweek.windows[weekdayForDate(dateKey).key];
+  if (!workweek.effectiveAt || berlinDateKey(new Date(workweek.effectiveAt)) !== dateKey) return windows;
+  const minute = berlinClockMinute(new Date(workweek.effectiveAt));
+  return windows.filter((window) => minuteForClock(window.end) > minute)
+    .map((window) => ({ ...window, start: minuteForClock(window.start) < minute
+      ? `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}` : window.start }));
+}
+
 export function isMinuteInsideWindow(minute: number, window: Readonly<{ start: string; end: string }>) {
   return minute >= minuteForClock(window.start) && minute < minuteForClock(window.end);
 }
@@ -162,18 +173,17 @@ export function projectCalendarWorktimes({
   now?: Date;
   profiles: Profile[];
 }): CalendarWorktime[] {
-  const day = weekdayForDate(dateKey);
   const todayKey = berlinDateKey(now);
   const minute = berlinClockMinute(now);
 
   return profiles.flatMap((profile) => {
     const workweek = selectCalendarWorkweek(calendarWorkweeks, profile.id, dateKey);
-    const windows = workweek?.windows[day.key] || [];
+    const windows = workweek ? calendarWindowsForDate(workweek, dateKey) : [];
     if (!windows.length) return [];
     return [{
       profile,
       windows,
-      workingNow: dateKey === todayKey && windows.some((window) => isMinuteInsideWindow(minute, window)),
+      workingNow: dateKey === todayKey && (!workweek?.effectiveAt || new Date(workweek.effectiveAt) <= now) && windows.some((window) => isMinuteInsideWindow(minute, window)),
     }];
   });
 }

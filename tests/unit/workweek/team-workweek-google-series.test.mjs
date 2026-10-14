@@ -181,3 +181,38 @@ test("delayed provider states preserve the required recovery action", () => {
   assert.equal(publicationCore.googleWorkweekRecovery("oauth_reconnect_required"), "reconnect");
   assert.equal(publicationCore.googleWorkweekRecovery("provider_identity_mismatch"), "identity_conflict");
 });
+
+test("immediate projections confirm exact bounds and compensate only their own immutable effect", async () => {
+  const effect = { id: series.id, generation: 1, calendarId: "primary", googleEventId: series.googleEventId, state: "pending", confirmedEtag: null, payload: {
+    ...publicationCore.googleWorkweekSeriesEvent(publication, series),
+    start: {dateTime:"2026-10-14T12:03:00Z",timeZone:"Europe/Berlin"},
+    end: {dateTime:"2026-10-14T15:00:00Z",timeZone:"Europe/Berlin"},
+    recurrence: undefined,
+    extendedProperties:{private:{founderopsWorkweekEffectId:series.id,founderopsWorkweekGeneration:"1",founderopsWorkweekRevision:"1"}},
+  }};
+  const core = await import("../../../src/features/team-workweek/server/team-workweek-immediate-effects.ts");
+  const existing = {...effect.payload,etag:'"same"'};
+  const confirmation = await core.ensureGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl:async()=>Response.json(existing)});
+  assert.equal(confirmation.state,"confirmed");
+  const moved = await core.ensureGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl:async()=>Response.json({...existing,start:{...existing.start,dateTime:"2026-10-14T11:00:00Z"}})});
+  assert.deepEqual(moved,{state:"delayed",errorClass:"provider_identity_mismatch"});
+  const calls=[];
+  const cleanup=await core.cleanupGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl:async(_url,init={})=>{
+    calls.push(init);return init.method==="DELETE"?new Response(null,{status:204}):Response.json(existing);
+  }});
+  assert.equal(cleanup.state,"confirmed");assert.equal(calls[1].headers["if-match"],'"same"');
+  const protectedForeign=await core.cleanupGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl:async()=>Response.json({...existing,extendedProperties:{private:{}}})});
+  assert.equal(protectedForeign.errorClass,"provider_identity_mismatch");
+});
+
+test("a lost immediate insert response observes the same exact payload and never duplicates its event", async () => {
+  const core=await import("../../../src/features/team-workweek/server/team-workweek-immediate-effects.ts");
+  const payload={id:"fopsabc0123",start:{dateTime:"2026-03-27T08:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2026-03-27T16:00:00Z",timeZone:"Europe/Berlin"},recurrence:["RRULE:FREQ=WEEKLY"],extendedProperties:{private:{founderopsWorkweekEffectId:"durable",founderopsWorkweekGeneration:"2",founderopsWorkweekRevision:"1"}}};
+  const effect={id:"durable",calendarId:"primary",googleEventId:payload.id,generation:2,state:"pending",confirmedEtag:null,payload};
+  let stored=null,inserts=0;
+  const fetchImpl=async(_url,init={})=>{if(init.method==="POST"){inserts++;stored={...JSON.parse(init.body),etag:'"committed"'};throw new Error("lost after commit");}return stored?Response.json(stored):new Response(null,{status:404});};
+  const first=await core.ensureGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl});
+  assert.equal(first.state,"confirmed");assert.equal(first.etag,'"committed"');
+  const repeated=await core.ensureGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl});
+  assert.equal(repeated.state,"confirmed");assert.equal(inserts,1);assert.deepEqual(stored.recurrence,["RRULE:FREQ=WEEKLY"]);
+});

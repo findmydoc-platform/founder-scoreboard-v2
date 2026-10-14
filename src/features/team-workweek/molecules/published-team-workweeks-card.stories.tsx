@@ -46,3 +46,28 @@ export const RetainsAndNamesTheLastConfirmedScheduleAfterAnUpdateFails: Story = 
     await expect(canvas.queryByText("Keine veröffentlichten Arbeitszeiten")).not.toBeInTheDocument();
   },
 };
+
+function activatingClient(): BrowserApiClient {
+  let activationAt: string | null = null;
+  return {
+    requestJson: async () => {
+      activationAt ||= new Date(Date.now() + 500).toISOString();
+      const active = Date.now() >= new Date(activationAt).getTime();
+      return {response:new Response(null,{status:200}),body:{
+        referenceDate:new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Berlin",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()),
+        currentWorkweeks:active?[{...workweek,effectiveAt:activationAt}]:[],
+        workweeks:[{...workweek,effectiveAt:activationAt}],
+      }};
+    },
+  } as unknown as BrowserApiClient;
+}
+
+export const RefreshesAtTheConfirmedActivationBoundary: Story = {
+  args:{apiClient:activatingClient(),profiles:[profile]},
+  play:async({canvasElement})=>{
+    const canvas=within(canvasElement);
+    await expect(await canvas.findByText("Für die aktuelle Woche ist keine Arbeitswoche veröffentlicht.")).toBeVisible();
+    await waitFor(()=>expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0),{timeout:3000});
+    await expect(canvas.getAllByText(/Gültig ab/).length).toBeGreaterThan(0);
+  },
+};

@@ -133,3 +133,19 @@ test("FounderOps events are assigned to Europe/Berlin calendar dates", () => {
     endsAt: "2026-08-25T22:00:00.000Z",
   }), ["2026-08-25"]);
 });
+
+test("a first timestamped schedule clips activation-day history while retaining next week's regular template", () => {
+  const windows = model.emptyTeamWorkweekWindows ? model.emptyTeamWorkweekWindows() : {monday:[],tuesday:[],wednesday:[{start:"09:00",end:"17:00"}],thursday:[],friday:[],saturday:[],sunday:[]};
+  windows.wednesday=[{start:"09:00",end:"17:00"}];
+  const first={id:"first",ownerProfileId:"p",effectiveFrom:"2026-10-12",effectiveAt:"2026-10-14T10:03:00Z",effectiveTo:null,timezone:"Europe/Berlin",publicationRevision:1,lastSyncAt:"2026-10-14T10:00:00Z",windows};
+  assert.equal(model.selectCalendarWorkweek([first],"p","2026-10-13"),null);
+  assert.deepEqual(model.calendarWindowsForDate(first,"2026-10-14"),[{start:"12:03",end:"17:00"}]);
+  assert.deepEqual(model.calendarWindowsForDate(first,"2026-10-21"),[{start:"09:00",end:"17:00"}]);
+});
+
+test("the repeated Berlin DST hour cannot claim activity before the actual instant", () => {
+  const windows={monday:[],tuesday:[],wednesday:[],thursday:[],friday:[],saturday:[],sunday:[{start:"02:00",end:"04:00"}]};
+  const workweek={id:"dst",ownerProfileId:"p",effectiveFrom:"2026-10-19",effectiveAt:"2026-10-25T01:30:00Z",effectiveTo:null,timezone:"Europe/Berlin",publicationRevision:1,lastSyncAt:"2026-10-25T00:00:00Z",windows};
+  const result=model.projectCalendarWorktimes({calendarWorkweeks:[workweek],profiles:[{id:"p",name:"P"}],dateKey:"2026-10-25",now:new Date("2026-10-25T00:45:00Z")});
+  assert.equal(result[0].workingNow,false);
+});

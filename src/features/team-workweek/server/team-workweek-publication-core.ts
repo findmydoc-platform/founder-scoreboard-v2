@@ -25,6 +25,10 @@ export type PreparedWorkweekSeriesTransition = Readonly<{
 }>;
 
 export type PreparedWorkweekPublication = Readonly<{
+  activationMode?: "immediate" | "future_monday";
+  effectiveAt?: string | null;
+  attemptGeneration?: number;
+  effects?: import("./team-workweek-immediate-effects").PreparedWorkweekEffect[];
   id: string;
   sourceVersionId: string;
   ownerProfileId: string;

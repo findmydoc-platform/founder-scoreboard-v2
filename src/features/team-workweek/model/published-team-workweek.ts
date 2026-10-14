@@ -4,6 +4,8 @@ export type PublishedTeamWorkweek = Readonly<{
   id: string;
   ownerProfileId: string;
   effectiveFrom: string;
+  effectiveAt?: string | null;
+  effectiveUntil?: string | null;
   timezone: "Europe/Berlin";
   publishedAt: string;
   lastSyncAt: string;
@@ -15,11 +17,13 @@ export type PublishedTeamWorkweek = Readonly<{
 type VisibilityCandidate = Readonly<{
   ownerProfileId: string;
   effectiveFrom: string;
+  effectiveAt?: string | null;
+  effectiveUntil?: string | null;
   effectiveTo: string | null;
   publicationRevision: number;
 }>;
 
-export function selectVisibleTeamWorkweeks<T extends VisibilityCandidate>(rows: T[], today: string) {
+export function selectVisibleTeamWorkweeks<T extends VisibilityCandidate>(rows: T[], today: string, now = new Date()) {
   const byOwner = new Map<string, T[]>();
   for (const row of rows) {
     const ownerRows = byOwner.get(row.ownerProfileId) || [];
@@ -29,11 +33,11 @@ export function selectVisibleTeamWorkweeks<T extends VisibilityCandidate>(rows: 
 
   return [...byOwner.values()].flatMap((ownerRows) => {
     const current = ownerRows
-      .filter((row) => row.effectiveFrom <= today && (!row.effectiveTo || row.effectiveTo >= today))
+      .filter((row) => (row.effectiveAt ? new Date(row.effectiveAt) <= now : row.effectiveFrom <= today) && (!row.effectiveTo || row.effectiveTo >= today))
       .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom)
         || right.publicationRevision - left.publicationRevision)[0];
     const prepared = ownerRows
-      .filter((row) => row.effectiveFrom > today)
+      .filter((row) => row.effectiveAt ? new Date(row.effectiveAt) > now : row.effectiveFrom > today)
       .sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom)
         || left.publicationRevision - right.publicationRevision)[0];
     return [current ? { ...current, phase: "current" as const } : null, prepared ? { ...prepared, phase: "prepared" as const } : null]
