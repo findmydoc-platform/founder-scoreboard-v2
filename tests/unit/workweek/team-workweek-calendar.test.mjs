@@ -183,3 +183,17 @@ test("repeated same-week corrections keep three non-overlapping day segments and
   assert.deepEqual(result[0].windows,[{start:"09:00",end:"12:03"},{start:"12:03",end:"14:03"},{start:"14:03",end:"18:00"}]);
   assert.equal(result[0].workingNow,true);
 });
+
+test("spring normalization omits empty windows and unites strictly overlapping actual intervals",()=>{
+  const sunday=[{start:"02:00",end:"02:30"},{start:"02:30",end:"03:00"},{start:"03:00",end:"03:30"},{start:"03:30",end:"04:00"}];
+  const entry=publication("gap","one","2026-03-23",null,1,windows({sunday}));
+  assert.deepEqual(model.calendarWindowsForDate(entry,"2026-03-29").map(({start,end})=>({start,end})),[{start:"03:00",end:"03:30"},{start:"03:30",end:"04:00"}]);
+  const projected=model.projectCalendarWorktimes({calendarWorkweeks:[entry],profiles,dateKey:"2026-03-29",now:new Date("2026-03-29T01:15:00Z")});
+  assert.equal(projected[0].workingNow,true);
+});
+
+test("autumn endpoints select the first repeated label, never the second fold",()=>{
+  const entry=publication("fold","one","2026-10-19",null,1,windows({sunday:[{start:"02:15",end:"02:45"}]}));
+  const result=model.projectCalendarWorktimes({calendarWorkweeks:[entry],profiles,dateKey:"2026-10-25",now:new Date("2026-10-25T01:30:00Z")});
+  assert.equal(result[0].workingNow,false);
+});
