@@ -364,3 +364,31 @@ test("lost partial predecessor updates are restored before a later candidate res
   const result=await publicationServer.publishTeamWorkweek({versionId:publication.sourceVersionId,userSupabase,serviceSupabase,now:()=>clock,cleanupEffect:async()=>({state:"confirmed",etag:'"restored"',observedAt:clock.toISOString()})});
   assert.equal(result.status,"published");assert.deepEqual(events,["prepare_team_workweek_publication","prepare_team_workweek_effect_cleanup","prepare_team_workweek_effect_cleanup","prepare_team_workweek_effect_cleanup","confirm_team_workweek_planned_cleanup","prepare_team_workweek_publication","finalize_team_workweek_publication"]);
 });
+
+test("a failed database completion resumes confirmed effects without another Google write", async () => {
+  const prepared={...publication,activationMode:"future_monday",effectiveAt:"2099-01-11T23:00:00Z",attemptGeneration:1,effects:[{id:"confirmed-effect",calendarId:"primary",googleEventId:"managed",generation:1,state:"confirmed",confirmedEtag:"confirmed",operation:"create",kind:"weekly",payload:{}}]};
+  let finalizations=0;
+  const userSupabase={async rpc(name){
+    if(name==="prepare_team_workweek_publication")return {data:prepared,error:null};
+    if(name==="finalize_team_workweek_publication"){
+      finalizations++;
+      return finalizations===1?{data:null,error:{code:"23514"}}:{data:{...prepared,status:"published",syncState:"confirmed"},error:null};
+    }
+    throw new Error(name);
+  }};
+  const ensureEffect=vi.fn(()=>{throw new Error("confirmed Google writes must not repeat");});
+  const args={userSupabase,serviceSupabase:{},versionId:publication.sourceVersionId,ensureEffect};
+  await assert.rejects(publicationServer.publishTeamWorkweek(args),error=>error.code==="completion_pending");
+  const result=await publicationServer.publishTeamWorkweek(args);
+  assert.equal(result.id,prepared.id);assert.equal(result.status,"published");assert.equal(ensureEffect.mock.calls.length,0);
+});
+
+test("a fully superseded future interval never hides the replacement in the team overview",()=>{
+  const start="2099-01-11T23:00:00Z";
+  const base={ownerProfileId:"owner",effectiveFrom:"2099-01-12",effectiveAt:start,effectiveTo:null};
+  const rows=publishedModel.selectVisibleTeamWorkweeks([
+    {...base,id:"retired",effectiveUntil:start,publicationRevision:1},
+    {...base,id:"replacement",publicationRevision:2},
+  ],"2026-10-15",new Date("2026-10-15T12:00:00Z"));
+  assert.deepEqual(rows.map(row=>row.id),["replacement"]);
+});

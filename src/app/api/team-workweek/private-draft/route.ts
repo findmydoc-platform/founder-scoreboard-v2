@@ -85,6 +85,13 @@ export async function GET(request: NextRequest) {
 
   const requestedWeek = request.nextUrl.searchParams.get("week");
   if (requestedWeek && !selectedWorkweek(requestedWeek).ok) return apiError("Wähle die aktuelle oder eine zukünftige Woche.", 400);
+  const pendingResponse = await supabase.from("team_workweek_publications")
+    .select("id,source_version_id,effective_from,effective_at,write_journal_version,restart_requested_at")
+    .eq("owner_profile_id", context.permission.profile!.id)
+    .eq("status", "preparing")
+    .maybeSingle<{id:string;source_version_id:string;effective_from:string;effective_at:string|null;write_journal_version:number;restart_requested_at:string|null}>();
+  if (pendingResponse.error) return apiError("Offene Veröffentlichung konnte nicht geladen werden.", 503);
+  const pending = pendingResponse.data;
   let privateQuery = supabase
     .from("team_workweek_versions")
     .select("id,owner_profile_id,effective_from,selected_week_start,activation_mode,base_publication_id,base_publication_revision,successor_snapshot,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
@@ -136,7 +143,7 @@ export async function GET(request: NextRequest) {
       .eq("team_workweek_versions.origin", "google_reconciliation")
       .maybeSingle<PublicationRow>();
     if (automatic.error) return apiError("Vorbereiteter Google-Abgleich konnte nicht geladen werden.", 503);
-    if (automatic.data?.attempt_generation && automatic.data.effective_at && new Date(automatic.data.effective_at) <= new Date()) {
+    if (!requestedWeek && automatic.data?.attempt_generation && automatic.data.effective_at && new Date(automatic.data.effective_at) <= new Date()) {
       if (publication?.data?.status === "published") data = null;
       publication = automatic;
       if (!data) {
@@ -193,6 +200,11 @@ export async function GET(request: NextRequest) {
   if (weekResponse.error) return apiError("Die ausgewählte Arbeitswoche konnte nicht geladen werden.", 503);
 
   return NextResponse.json({
+    pendingPublication: pending ? {
+      id: pending.id, sourceVersionId: pending.source_version_id, effectiveFrom: pending.effective_from,
+      resumeAllowed: pending.write_journal_version === 1 && !pending.restart_requested_at
+        && Boolean(pending.effective_at && Date.parse(pending.effective_at) > Date.now()),
+    } : null,
     weekContext: weekResponse.data,
     restartAvailable: Boolean(privateVersion && (contextChanged || (publication?.data?.status === "preparing" && publication.data.attempt_generation && publication.data.effective_at))),
     version: privateVersion ? {
@@ -254,6 +266,14 @@ export async function POST(request: NextRequest) {
       p_windows: flattenTeamWorkweekWindows(validation.draft.windows),
     });
   if (error) {
+    if (error.code === "P0003" || error.code === "P0004") {
+      return NextResponse.json({
+        code: error.code === "P0003" ? "publication_pending" : "edit_context_stale",
+        error: error.code === "P0003"
+          ? "Eine frühere Veröffentlichung ist noch offen. Setze sie zuerst fort; deine Eingaben bleiben erhalten."
+          : "Die Ausgangsversion hat sich geändert. Lade den aktuellen Stand; deine Eingaben bleiben erhalten.",
+      }, { status: 409 });
+    }
     const status = error.code === "22023" ? 400 : error.code === "42501" ? 403 : error.code === "P0003" || error.code === "P0004" ? 409 : 503;
     return apiError(
       status === 400

@@ -37,6 +37,8 @@ const latestPublication = {
   team_workweek_google_reconciliation_status: null,
 };
 let postPayload = null;
+let rpcError = null;
+let pendingOwnerPublicationResult = null;
 let postCalls = [];
 let latestPublicationResult = { data: latestPublication, error: null };
 let privateVersionResult=null;
@@ -66,16 +68,18 @@ const route = await importTestModule(
     },
     "@/lib/supabase": {
       getSupabaseForToken: () => ({
-        async rpc(name,args) { postCalls.push([name,args]); return { data:{id:"first",activationMode:"immediate",effectiveFrom:"2026-10-12",status:"preparing",timezone:"Europe/Berlin"},error:null }; },
+        async rpc(name,args) { postCalls.push([name,args]); return { error:rpcError, data:{id:"first",activationMode:"immediate",effectiveFrom:"2026-10-12",status:"preparing",timezone:"Europe/Berlin"} }; },
         from(table) {
           if (table === "team_workweek_versions") return query(privateVersionResult);
           if (table === "team_workweek_google_conflicts") return query(null);
           if (table === "team_workweek_publications") {
             const result=query(latestPublicationResult.data, latestPublicationResult.error);
             let sourceId=null;
+            let pendingLookup=false;
+            const select=result.select;result.select=function(fields){pendingLookup=fields.includes("write_journal_version");return select.call(this,fields);};
             const filter=result.eq;
             result.eq=function(key,value){if(key==="source_version_id")sourceId=value;return filter.call(this,key,value);};
-            result.maybeSingle=async()=>({data:sourceId==="published-owner"?latestPublication:sourceId && sourceId!==automaticVersionResult?.id?null:automaticPublicationResult,error:null});
+            result.maybeSingle=async()=>({data:pendingLookup?pendingOwnerPublicationResult:sourceId==="published-owner"?latestPublication:sourceId && sourceId!==automaticVersionResult?.id?null:automaticPublicationResult,error:null});
             return result;
           }
           throw new Error(`Unexpected table: ${table}`);
@@ -86,6 +90,8 @@ const route = await importTestModule(
 );
 
 test.beforeEach(() => {
+  rpcError=null;
+  pendingOwnerPublicationResult=null;
   privateVersionResult=null;
   automaticVersionResult=null;
   automaticPublicationResult=null;
@@ -221,4 +227,29 @@ test.each(["none","private","published"])("an expired automatic Google correctio
     assert.equal(body.publication.id,"automatic-operation");
     assert.doesNotMatch(JSON.stringify(body),/google_event_id|confirmed_etag/);
   }finally{vi.useRealTimers();}
+});
+
+
+test.each([["P0003","publication_pending"],["P0004","edit_context_stale"]])("distinguishes save conflict %s",async (databaseCode,code)=>{
+  rpcError={code:databaseCode};
+  postPayload={effectiveFrom:draftModel.nextMondayIso(),activationMode:"immediate",windows:draftModel.emptyTeamWorkweekWindows()};
+  const result=await route.POST({});
+  assert.equal(result.status,409);
+  const body=await result.json();assert.equal(body.code,code);assert.equal(typeof body.error,"string");
+});
+
+test("an owner sees the open publication even while loading a different week",async()=>{
+  pendingOwnerPublicationResult={id:"pending-owner",source_version_id:"pending-source",effective_from:"2099-01-12",effective_at:"2099-01-11T23:00:00Z",write_journal_version:1,restart_requested_at:null};
+  const body=await(await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")})).json();
+  assert.deepEqual(body.pendingPublication,{id:"pending-owner",sourceVersionId:"pending-source",effectiveFrom:"2099-01-12",resumeAllowed:true});
+  pendingOwnerPublicationResult.restart_requested_at="2026-10-15T12:00:00Z";
+  const cancelled=await(await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")})).json();
+  assert.equal(cancelled.pendingPublication.resumeAllowed,false);
+});
+
+test("an expired automatic operation does not replace an explicitly selected week's draft",async()=>{
+  automaticVersionResult={id:"automatic-version",owner_profile_id:"profile-1",effective_from:"2026-10-12",activation_mode:"immediate",timezone:"Europe/Berlin",status:"preparing",created_at:"2026-10-14T10:00:00Z",team_workweek_windows:[]};
+  automaticPublicationResult={...latestPublication,id:"automatic-operation",source_version_id:automaticVersionResult.id,status:"preparing",sync_state:"delayed",effective_at:"2026-10-14T10:03:00Z",attempt_generation:1};
+  const body=await(await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")})).json();
+  assert.equal(body.version,null);
 });

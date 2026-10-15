@@ -12,6 +12,7 @@ it("replaces a confirmed future week while preserving the later plan and refusin
       values($1,'selected-week-owner',$2,'[]','published','confirmed',2,clock_timestamp(),clock_timestamp()) returning *`, [sources[1].id, sources[1].effective_from])).rows[0];
     const target = (await db.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,effective_to,windows,status,sync_state,publication_revision,published_at,last_sync_at,superseded_by_publication_id)
       values($1,'selected-week-owner',$2,$3::date-1,'[{"weekday":1,"startMinute":540,"endMinute":960}]','published','confirmed',1,clock_timestamp(),clock_timestamp(),$4) returning *`, [sources[0].id, sources[0].effective_from, sources[1].effective_from, later.id])).rows[0];
+    await db.query("update public.team_workweek_publications set effective_at=effective_from::timestamp at time zone 'Europe/Berlin',attempt_generation=1 where id=$1", [target.id]);
     const window = (await db.query("insert into public.team_workweek_windows(version_id,weekday,start_minute,end_minute) values($1,1,540,960) returning id",[sources[0].id])).rows[0];
     await db.query(`insert into public.team_workweek_google_series(publication_id,source_window_id,owner_profile_id,google_event_id,state,confirmed_etag,confirmed_founderops_revision,last_confirmed_at)
       values($1,$2,'selected-week-owner','fopsselectedtarget','confirmed','old-etag',1,clock_timestamp())`,[target.id,window.id]);
@@ -19,19 +20,20 @@ it("replaces a confirmed future week while preserving the later plan and refusin
     expect(context.basePublicationId).toBe(target.id);
     expect(context.windows).toEqual([{weekday:1,startMinute:540,endMinute:960}]);
     expect(context.effectiveUntil).toBeTruthy();
-    const save = async () => (await asAuthenticated(db,user,()=>db.query("select public.create_private_selected_team_workweek_version($1,'[]',$2) as version",[sources[0].effective_from,context.contextToken]))).rows[0].version;
+    const save = async () => (await asAuthenticated(db,user,()=>db.query(`select public.create_private_selected_team_workweek_version($1,'[{"weekday":1,"startMinute":600,"endMinute":1020}]',$2) as version`,[sources[0].effective_from,context.contextToken]))).rows[0].version;
     const draft = await save();
     const duplicate = await save();
     const prepared = (await asAuthenticated(db,user,()=>db.query("select public.prepare_team_workweek_publication($1,1) as publication",[draft.id]))).rows[0].publication;
     expect(prepared.predecessorPublicationId).toBe(target.id);
     expect(prepared.successorPublicationId).toBe(later.id);
     expect(new Date(prepared.effectiveUntil).getTime()).toBeGreaterThan(new Date(prepared.effectiveAt).getTime());
-    expect(prepared.effects).toHaveLength(1);
-    expect(prepared.effects[0]).toMatchObject({operation:"cancel",googleEventId:"fopsselectedtarget"});
+    expect(prepared.effects).toHaveLength(2);
+    expect(prepared.effects.find((effect:{operation:string})=>effect.operation==="cancel")).toMatchObject({operation:"cancel",googleEventId:"fopsselectedtarget"});
     await db.query("set local role service_role");
-    await db.query("select public.confirm_team_workweek_effect($1,1,'cancelled-etag',$2)",[prepared.effects[0].id,prepared.effects[0].payload]);
+    for (const effect of prepared.effects) await db.query("select public.confirm_team_workweek_effect($1,1,$2,$3)",[effect.id,effect.operation==='cancel'?'cancelled-etag':'new-etag',effect.payload]);
     await db.query("reset role");
     await asAuthenticated(db,user,()=>db.query("select public.finalize_team_workweek_publication($1)",[prepared.id]));
+    expect((await db.query("select windows from public.team_workweek_publications where id=$1",[prepared.id])).rows[0].windows).toEqual([{weekday:1,startMinute:600,endMinute:1020}]);
     expect((await db.query("select * from public.team_workweek_publications where id=$1",[later.id])).rows[0]).toEqual(later);
     const old = (await db.query("select effective_until,effective_to from public.team_workweek_publications where id=$1",[target.id])).rows[0];
     expect(old.effective_until.toISOString()).toBe(new Date(prepared.effectiveAt).toISOString());

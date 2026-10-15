@@ -68,6 +68,13 @@ export type OwnTeamWorkweekPublication = Readonly<{
   lastGoogleReconciliationAt: string | null;
 }>;
 
+export type PendingTeamWorkweekPublication = Readonly<{
+  id: string;
+  sourceVersionId: string;
+  effectiveFrom: string;
+  resumeAllowed: boolean;
+}>;
+
 export type TeamWorkweekConflict = Readonly<{
   id: string;
   conflictRevision: number;

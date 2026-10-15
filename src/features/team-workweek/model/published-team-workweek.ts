@@ -26,6 +26,8 @@ type VisibilityCandidate = Readonly<{
 export function selectVisibleTeamWorkweeks<T extends VisibilityCandidate>(rows: T[], today: string, now = new Date()) {
   const byOwner = new Map<string, T[]>();
   for (const row of rows) {
+    if (row.effectiveAt && row.effectiveUntil && Date.parse(row.effectiveUntil) <= Date.parse(row.effectiveAt)) continue;
+    if (row.effectiveTo && row.effectiveTo < row.effectiveFrom) continue;
     const ownerRows = byOwner.get(row.ownerProfileId) || [];
     ownerRows.push(row);
     byOwner.set(row.ownerProfileId, ownerRows);

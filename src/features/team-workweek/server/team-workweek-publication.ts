@@ -20,10 +20,11 @@ type PublicationErrorCode =
   | "forbidden"
   | "conflict"
   | "reconnect_required"
+  | "completion_pending"
   | "unavailable";
 
 export class TeamWorkweekPublicationError extends Error {
-  constructor(readonly code: PublicationErrorCode, message: string) {
+  constructor(readonly code: PublicationErrorCode, message: string, readonly completionPending = false) {
     super(message);
     this.name = "TeamWorkweekPublicationError";
   }
@@ -270,7 +271,11 @@ export async function publishTeamWorkweek({
     if (expired()) return await delayed("provider_unavailable");
     const finalized = await userSupabase.rpc("finalize_team_workweek_publication", { p_publication_id: publication.id });
     if (finalized.error?.code === "P0005") return await delayed("provider_unavailable");
-    if (finalized.error) throw publicationError(finalized.error);
+    if (finalized.error) {
+      const failure = publicationError(finalized.error);
+      if (failure.code === "unavailable") throw new TeamWorkweekPublicationError("completion_pending", "Google hat die Änderungen bestätigt. Der Abschluss in FounderOps ist noch offen. Setze die Veröffentlichung fort.", true);
+      throw new TeamWorkweekPublicationError(failure.code, failure.message, true);
+    }
     if (!isPublicationResult(finalized.data) || finalized.data.status !== "published") {
       throw new TeamWorkweekPublicationError("unavailable", "Veröffentlichungsstatus konnte nicht bestätigt werden.");
     }

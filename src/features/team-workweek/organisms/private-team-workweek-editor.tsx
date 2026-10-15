@@ -97,6 +97,13 @@ export function PrivateTeamWorkweekEditor({
                 {nextChange && <p className="mt-1 text-xs leading-5 text-slate-600">Gilt bis {nextChange}, spätere Planungen bleiben erhalten.</p>}
               </section>
 
+              {state.pendingPublication && <UiNotice tone="warning">
+                <p>Die Veröffentlichung ab {formatDate(state.pendingPublication.effectiveFrom)} ist noch offen. Deine aktuellen Eingaben bleiben erhalten.</p>
+                <UiButton className="mt-2 min-h-11 whitespace-normal text-left" variant="secondary" onClick={() => void state.resumePendingPublication()} disabled={state.pending}>
+                  {state.pendingPublication.resumeAllowed ? "Offene Veröffentlichung fortsetzen" : "Offene Veröffentlichung sicher neu beginnen"}
+                </UiButton>
+              </UiNotice>}
+
               <GoogleWorkspaceConnectionCard compact apiClient={apiClient} profile={profile} />
 
               <section className="overflow-hidden rounded-lg border border-slate-200 bg-white" aria-labelledby="workweek-windows-title">
@@ -170,14 +177,14 @@ export function PrivateTeamWorkweekEditor({
                 )}
               </section>
 
-              {state.mustRestartBeforeSaving && !state.message && (
+              {state.mustRestartBeforeSaving && !state.pendingPublication && !state.message && (
                 <UiNotice tone="warning">
                   Ein früherer Veröffentlichungsversuch ist noch offen. {state.restartAvailable
                     ? "Beginne mit dem aktuellen Stand neu, bevor du diese Änderungen speicherst oder veröffentlichst."
                     : "Der gespeicherte Versuch muss zuerst geklärt werden."} Deine Eingaben bleiben hier im Editor erhalten.
                 </UiNotice>
               )}
-              {(state.restartAvailable || state.restartContextPending) && (
+              {((state.restartAvailable && !state.pendingPublication) || state.restartContextPending) && (
                 <UiButton className="justify-self-start whitespace-normal text-left" variant="secondary" onClick={() => { restartFocusRequested.current = true; void state.restart(); }} disabled={state.pending}>
                   {state.restartContextPending ? "Aktuellen Stand laden" : "Mit aktuellem Stand neu beginnen"}
                 </UiButton>
@@ -199,7 +206,7 @@ export function PrivateTeamWorkweekEditor({
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
               <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
-              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Entwurf speichern" onClick={() => void state.save()} disabled={state.pending || state.weekExpired || !state.dirty || state.mustRestartBeforeSaving}>
+              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Entwurf speichern" onClick={() => void state.save()} disabled={state.pending || state.weekExpired || state.restartContextPending || !state.dirty || state.mustRestartBeforeSaving}>
                 Entwurf speichern
               </UiButton>
               <UiButton

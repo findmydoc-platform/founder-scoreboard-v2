@@ -7,7 +7,8 @@ import { useState } from "react";
 import { HeaderCalendarAction } from "@/features/planning/molecules/header-calendar-action";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
-import { workweekStart } from "../model/team-workweek-week";
+import { workweekLabel, workweekStart } from "../model/team-workweek-week";
+import { addCalendarDays } from "../model/team-workweek-calendar";
 import { nextMondayIso } from "../model/team-workweek-draft";
 import { PrivateTeamWorkweekCard } from "./private-team-workweek-card";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -49,6 +50,7 @@ const latestPublished = {
 };
 
 type ClientOptions = {
+  pendingPublication?: Record<string, unknown> | null;
   minimumEffectiveFrom?: string;
   preparedSuccessor?: Record<string, unknown> | null;
   immediateAllowed?: boolean;
@@ -75,6 +77,7 @@ type ClientOptions = {
 
 function client(options: ClientOptions = {}): BrowserApiClient {
   let privateBody = {
+    pendingPublication: options.pendingPublication || null,
     ...(options.restartAvailable !== undefined ? { restartAvailable: options.restartAvailable } : {}),
     preparedSuccessor: options.preparedSuccessor || null,
     ...(options.immediateAllowed !== undefined ? {immediateAllowed:options.immediateAllowed} : {}),
@@ -1060,5 +1063,115 @@ export const RestartsAnExpiredAutomaticGoogleCorrectionWithoutInventingAConflict
     await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("09:00");
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
     await expect(canvas.queryByText(/Arbeitswoche bestätigt/)).not.toBeInTheDocument();
+  },
+};
+
+
+export const ResumesAnEarlierPublicationWithoutPublishingTheViewedWeek: Story = {
+  args: { profile, apiClient: client() },
+  render: function EarlierPublicationRecovery() {
+    const [apiClient] = useState(() => {
+      const fallback = client();
+      let open = true;
+      return {
+        requestJson: fn(async (input: string | URL, init?: { method?: string; json?: Record<string, unknown> }) => {
+          const path = String(input);
+          if (path === "/api/team-workweek/publish") {
+            await expect(init?.json).toEqual({ versionId: "original-saved-plan" });
+            open = false;
+            return response({ publication: { id: "original-publication", status: "published", syncState: "confirmed" } });
+          }
+          const result = await fallback.requestJson<Record<string, unknown>>(input, init);
+          if (path.startsWith("/api/team-workweek/private-draft") && init?.method !== "POST") {
+            return response({ ...result.body, pendingPublication: open ? {
+              id: "original-publication", sourceVersionId: "original-saved-plan", effectiveFrom: nextMondayIso(), resumeAllowed: true,
+            } : null });
+          }
+          if (init?.method === "POST") throw new Error("current inputs must not be saved automatically");
+          return result;
+        }),
+      } as unknown as BrowserApiClient;
+    });
+    return <PrivateTeamWorkweekCard apiClient={apiClient} profile={profile} editorRequested editorWeek={addCalendarDays(nextMondayIso(), 7)} />;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const week = addCalendarDays(nextMondayIso(), 7);
+    await waitFor(() => expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveAttribute("title", workweekLabel(week)));
+    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Beginn"));
+    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Beginn"), "10:00");
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Offene Veröffentlichung fortsetzen" }));
+    await waitFor(() => expect(canvas.getByText(/Die frühere Veröffentlichung ist bestätigt/)).toBeVisible());
+    await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveAttribute("title", workweekLabel(week));
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("10:00");
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeEnabled();
+    await expect(canvas.queryByRole("button", { name: "Offene Veröffentlichung fortsetzen" })).not.toBeInTheDocument();
+  },
+};
+
+
+export const ShowsPendingCompletionAfterGoogleWasConfirmed: Story = {
+  args: { profile, apiClient: client() },
+  render: function PendingDatabaseCompletion() {
+    const [apiClient] = useState(() => {
+      const fallback = client();
+      let completionPending = false;
+      return { requestJson: async (input: string | URL, init?: {method?:string;json?:Record<string,unknown>}) => {
+        const path=String(input);
+        if(path === "/api/team-workweek/publish") {
+          completionPending=true;
+          return {response:new Response(null,{status:503}),body:{code:"completion_pending",completionPending:true,error:"Google hat die Änderungen bestätigt. Der Abschluss in FounderOps ist noch offen. Setze die Veröffentlichung fort."}};
+        }
+        const result=await fallback.requestJson<Record<string, unknown>>(input,init);
+        if(path.startsWith("/api/team-workweek/private-draft") && init?.method!=="POST")return response({...result.body,pendingPublication:completionPending?{id:"open",sourceVersionId:"private-saved",effectiveFrom:workweekStart(),resumeAllowed:true}:null});
+        return result;
+      }} as unknown as BrowserApiClient;
+    });
+    return <PrivateTeamWorkweekCard apiClient={apiClient} profile={profile} editorRequested />;
+  },
+  play: async ({canvasElement}) => {
+    const canvas=within(canvasElement);
+    await waitFor(()=>expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("09:00"));
+    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Beginn"));
+    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Beginn"),"10:00");
+    await userEvent.click(canvas.getByRole("button",{name:"Änderung in Google & Team veröffentlichen"}));
+    await waitFor(()=>expect(canvas.getByText(/Der Abschluss in FounderOps ist noch offen/)).toBeVisible());
+    await expect(canvas.getByRole("button",{name:"Offene Veröffentlichung fortsetzen"})).toBeEnabled();
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("10:00");
+    await expect(canvas.getByRole("button",{name:"Entwurf speichern"})).toBeDisabled();
+  },
+};
+
+export const PendingPublicationPreview: Story = {
+  args: {
+    profile, editorRequested: true, editorWeek: addCalendarDays(nextMondayIso(), 7),
+    apiClient: client({ googleConnected: true, pendingPublication: {
+      id: "open-publication", sourceVersionId: "saved-earlier-plan", effectiveFrom: nextMondayIso(), resumeAllowed: true,
+    } }),
+  },
+};
+
+function reconnectingPendingClient(): BrowserApiClient {
+  const base = client({ pendingPublication: {
+    id: "pending-reconnect", sourceVersionId: "earlier-plan", effectiveFrom: nextMondayIso(), resumeAllowed: true,
+  } });
+  return { requestJson: async (input, init) => String(input) === "/api/team-workweek/publish"
+    ? response({ publication: { status: "preparing", recovery: "reconnect" } })
+    : base.requestJson(input, init),
+  } as BrowserApiClient;
+}
+
+export const RetainsCurrentInputsWhenEarlierPublicationNeedsGoogleReconnection: Story = {
+  args: { profile, apiClient: reconnectingPendingClient(), editorRequested: true, editorWeek: addCalendarDays(nextMondayIso(), 7) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("09:00"));
+    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Beginn"));
+    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Beginn"), "10:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Offene Veröffentlichung fortsetzen" }));
+    await waitFor(() => expect(canvas.getByText(/Verbinde Google erneut, bevor du die offene Veröffentlichung fortsetzt/)).toBeVisible());
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("10:00");
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
   },
 };
