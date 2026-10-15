@@ -94,6 +94,23 @@ export const PreservesBothSidesOfAChangeInsideTheWeek: Story = {
   },
 };
 
+export const KeepsEarlierHoursVisibleWhenAPlanEndsInsideTheViewedWeek: Story = {
+  ...PreservesBothSidesOfAChangeInsideTheWeek,
+  args: {
+    ...PreservesBothSidesOfAChangeInsideTheWeek.args,
+    dateKey: "2026-10-18",
+    workweeks: [PreservesBothSidesOfAChangeInsideTheWeek.args!.workweeks![0]],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const panel = within(canvas.getByRole("tabpanel"));
+    await expect(panel.getByText("Arbeitszeiten veröffentlicht")).toBeVisible();
+    await expect(panel.queryByText("Diese Woche keine Zeiten geplant")).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("tab", { name: "Montag" }));
+    await expect(panel.getByText("09:00–17:00")).toBeVisible();
+  },
+};
+
 export const KeepsEmptyDayLabelsInsideCompactCells: Story = {
   args: { ...ShowsTheCurrentPublishedWorkweek.args, compact: true },
   render: (args) => <div style={{ width: 900, maxWidth: "100vw" }}><TeamWorkweekMatrix {...args} /></div>,

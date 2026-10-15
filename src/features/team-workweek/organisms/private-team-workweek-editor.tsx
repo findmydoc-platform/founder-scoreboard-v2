@@ -87,7 +87,7 @@ export function PrivateTeamWorkweekEditor({
                   disabled={state.pending || state.publication?.status === "preparing" || state.restartContextPending} />
                 <p className="mt-2 text-xs leading-5 text-slate-500">
                   {state.draft.activationMode === "immediate"
-                    ? "Gilt, sobald die Veröffentlichung abgeschlossen ist. Vergangene Zeiten bleiben unverändert."
+                    ? "Die Veröffentlichung kann ein paar Minuten dauern. Vergangene Zeiten bleiben unverändert."
                     : "Die Arbeitszeiten wiederholen sich ab dieser Woche."}
                 </p>
                 {state.weekExpired && !state.publication && <UiNotice className="mt-2" tone="warning">

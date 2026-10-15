@@ -43,8 +43,9 @@ export function TeamWorkweekMatrix({
       return [day.key, projectCalendarWorktimes({ calendarWorkweeks: workweeks, dateKey: date, profiles: [row.profile] })[0]?.windows || []];
     })),
   }));
-  const status = (row: typeof rows[number]) => row.future && !row.workweek
-    ? `Geplant ab ${formatDate(row.future.effectiveFrom)}` : row.workweek
+  const hasWeekTimes = (row: typeof rows[number]) => Object.values(row.days).some(windows => windows.length > 0);
+  const status = (row: typeof rows[number]) => row.future && !row.workweek && !hasWeekTimes(row)
+    ? `Geplant ab ${formatDate(row.future.effectiveFrom)}` : row.workweek || hasWeekTimes(row)
       ? "Arbeitszeiten veröffentlicht" : row.hasPublished ? "Diese Woche keine Zeiten geplant" : "Noch nicht veröffentlicht";
   const [selectedDayKey, setSelectedDayKey] = useState<TeamWorkweekDayKey>(() => weekdayForDate(dateKey).key || currentTeamWorkweekDayKey());
   const tabGroupId = useId();
