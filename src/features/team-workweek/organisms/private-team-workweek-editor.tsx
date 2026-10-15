@@ -94,7 +94,7 @@ export function PrivateTeamWorkweekEditor({
                   <p>Die ausgewählte Woche ist vorbei. Deine Eingaben bleiben erhalten.</p>
                   <UiButton className="mt-2" onClick={() => void state.carryIntoCurrentWeek()} disabled={state.pending}>Eingaben für diese Woche übernehmen</UiButton>
                 </UiNotice>}
-                {nextChange && <p className="mt-1 text-xs leading-5 text-slate-600">Gilt bis {nextChange}. Danach bleiben deine bereits geplanten Zeiten erhalten.</p>}
+                {nextChange && <p className="mt-1 text-xs leading-5 text-slate-600">Gilt bis {nextChange}, spätere Planungen bleiben erhalten.</p>}
               </section>
 
               <GoogleWorkspaceConnectionCard compact apiClient={apiClient} profile={profile} />

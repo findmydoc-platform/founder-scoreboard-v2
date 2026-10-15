@@ -530,10 +530,10 @@ export const RetainsThePreparedMondayDuringCurrentCorrections: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
-    await expect(canvas.getByText(/Danach bleiben deine bereits geplanten Zeiten erhalten/)).toBeVisible();
+    await expect(canvas.getByText(/spätere Planungen bleiben erhalten/)).toBeVisible();
     await expect(canvas.queryByText(/Gilt dauerhaft\./)).not.toBeInTheDocument();
     await userEvent.selectOptions(canvas.getByRole("combobox",{name:"Arbeitswoche auswählen"}),nextMondayIso());
-    await expect(canvas.queryByText(/Danach bleiben deine bereits geplanten Zeiten erhalten/)).not.toBeInTheDocument();
+    await expect(canvas.queryByText(/spätere Planungen bleiben erhalten/)).not.toBeInTheDocument();
   },
 };
 
@@ -622,7 +622,7 @@ export const RestartsWithCurrentContextAndRetainsUnsavedWindows: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" }));
     await expect(await canvas.findByText(/Neustart vorbereitet/)).toBeVisible();
     await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
-    await expect(canvas.getByText(/Danach bleiben deine bereits geplanten Zeiten erhalten/)).toBeVisible();
+    await expect(canvas.getByText(/spätere Planungen bleiben erhalten/)).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeEnabled();
     await expect(canvas.queryByRole("button", { name: "Mit aktuellem Stand neu beginnen" })).not.toBeInTheDocument();
     await waitFor(() => expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveFocus());
@@ -700,7 +700,7 @@ export const RestartsAMondayAgainstTheCurrentWeekAndKeepsItsSuccessor: Story = {
     await expect(await canvas.findByText("Entwurf gespeichert. Noch nicht veröffentlicht.")).toBeVisible();
     await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
     await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toBeInTheDocument();
-    await expect(canvas.getByText(/Danach bleiben deine bereits geplanten Zeiten erhalten/)).toBeVisible();
+    await expect(canvas.getByText(/spätere Planungen bleiben erhalten/)).toBeVisible();
   },
 };
 
@@ -788,7 +788,7 @@ export const BlocksPublicationUntilRestartContextCanBeReloaded: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand laden" }));
     await waitFor(() => expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled());
     await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
-    await expect(canvas.getByText(/Danach bleiben deine bereits geplanten Zeiten erhalten/)).toBeVisible();
+    await expect(canvas.getByText(/spätere Planungen bleiben erhalten/)).toBeVisible();
   },
 };
 
