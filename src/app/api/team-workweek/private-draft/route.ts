@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
   // Surface its expired operation through the same explicit owner restart action.
   if (!publication?.data || publication.data.status === "published") {
     const automatic = await supabase.from("team_workweek_publications")
-      .select("id,source_version_id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at),team_workweek_versions!inner(origin)")
+      .select("id,source_version_id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at),team_workweek_versions!team_workweek_publications_source_version_id_fkey!inner(origin)")
       .eq("owner_profile_id", context.permission.profile!.id)
       .eq("status", "preparing")
       .eq("team_workweek_versions.origin", "google_reconciliation")

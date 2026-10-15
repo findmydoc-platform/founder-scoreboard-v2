@@ -21,7 +21,7 @@ export async function restartPrivateTeamWorkweek({ownerProfileId,versionId,userS
     if(publication.error)throw new TeamWorkweekPublicationError("unavailable","Veröffentlichungsstatus konnte nicht geladen werden.");
     if (!publication.data) {
       publication = await serviceSupabase.from("team_workweek_publications")
-        .select("id,status,attempt_generation,effective_at,write_journal_version,team_workweek_versions!inner(origin)")
+        .select("id,status,attempt_generation,effective_at,write_journal_version,team_workweek_versions!team_workweek_publications_source_version_id_fkey!inner(origin)")
         .eq("owner_profile_id", ownerProfileId).eq("status", "preparing")
         .eq("team_workweek_versions.origin", "google_reconciliation")
         .maybeSingle<{id:string;status:string;attempt_generation:number;effective_at:string|null;write_journal_version?:number}>();
