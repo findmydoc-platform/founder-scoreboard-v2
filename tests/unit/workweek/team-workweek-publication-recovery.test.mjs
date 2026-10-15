@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { test } from "vitest";
+import { test, vi } from "vitest";
 
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
@@ -62,6 +62,42 @@ const transition = {
   recurrenceCount: 2,
   confirmedEtag: null,
 };
+
+test("keeps the provider claim until a late batch request settles even when another effect throws", async () => {
+  const effect = id => ({ id, calendarId: "primary", googleEventId: id, generation: 1, state: "pending", confirmedEtag: null,
+    payload: { id, start: { dateTime: "2099-01-12T09:00:00Z", timeZone: "Europe/Berlin" }, end: { dateTime: "2099-01-12T17:00:00Z", timeZone: "Europe/Berlin" }, extendedProperties: { private: { founderopsWorkweekEffectId: id } } } });
+  const first = effect("fopsearlythrow"), second = effect("fopslatebatch");
+  const prepared = { ...publication, activationMode: "immediate", effectiveAt: "2099-01-12T09:00:00Z", attemptGeneration: 1, writeJournalVersion: 1, effects: [first, second] };
+  let release, started;
+  const dispatched = new Promise(resolve => { started = resolve; });
+  let finished = false;
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (String(url).includes(first.id)) return Response.json({ ...first.payload, etag: "known" });
+    if (init?.method === "POST") { started(); return new Promise(resolve => { release = resolve; }); }
+    return new Response(null, { status: 404 });
+  });
+  const userSupabase = { async rpc(name) {
+    assert.equal(name, "prepare_team_workweek_publication");
+    return { data: prepared, error: null };
+  } };
+  const serviceSupabase = { async rpc(name, args) {
+    if (name === "claim_team_workweek_provider_operation") return { data: { state: "claimed", id: "batch-claim" }, error: null };
+    if (name === "record_team_workweek_provider_write") return { data: null, error: args.p_effect_id === first.id ? { code: "storage" } : null };
+    if (name === "confirm_team_workweek_effect") return { data: null, error: null };
+    if (name === "delay_team_workweek_publication") return { data: { ...prepared, syncState: "delayed" }, error: null };
+    if (name === "finish_team_workweek_provider_operation") { finished = true; return { data: { state: "settled" }, error: null }; }
+    throw new Error(name);
+  } };
+  try {
+    const result = publicationServer.publishTeamWorkweek({ serviceSupabase, userSupabase, versionId: publication.sourceVersionId }).catch(error => error);
+    await dispatched;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(finished, false);
+    release(Response.json({ ...second.payload, etag: "late" }));
+    assert.equal((await result).syncState, "delayed");
+    assert.equal(finished, true);
+  } finally { fetchSpy.mockRestore(); }
+});
 
 test("publication resumes pending transitions only after every replacement series is confirmed", async () => {
   let seriesConfirmed = false;

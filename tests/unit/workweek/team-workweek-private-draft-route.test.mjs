@@ -92,6 +92,16 @@ test.beforeEach(() => {
   latestPublicationResult = { data: latestPublication, error: null };
 });
 
+test.each(["delayed", "pending"])("a future Monday %s owner attempt exposes its server-guarded recovery", async syncState => {
+  privateVersionResult = { id: "owner-future", owner_profile_id: "profile-1", effective_from: "2099-01-12", activation_mode: "future_monday", timezone: "Europe/Berlin", status: "preparing", created_at: "2026-10-14T10:00:00Z", team_workweek_windows: [] };
+  automaticVersionResult = privateVersionResult;
+  automaticPublicationResult = { ...latestPublication, id: "owner-operation", source_version_id: privateVersionResult.id, effective_from: "2099-01-12", effective_at: "2099-01-11T23:00:00Z", attempt_generation: 1, status: "preparing", sync_state: syncState };
+  const body = await (await route.GET({})).json();
+  assert.equal(body.restartAvailable, true);
+  assert.equal(body.publication.id, "owner-operation");
+  assert.doesNotMatch(JSON.stringify(body), /provider_operations|provider_writes|google_event_id|confirmed_etag/);
+});
+
 test("a pinned successor mapping change offers explicit restart without exposing provider identities",async()=>{
   const future={...latestPublication,id:"future",source_version_id:"future-source",effective_from:"2030-04-01",effective_at:"2030-04-01T00:00:00+02:00",publication_revision:5,windows:[],team_workweek_google_series:[{id:"series",google_event_id:"managed",confirmed_etag:"old",state:"confirmed",provider_state:"active",projection_part:"legacy",source_window_ids:null}]};
   privateVersionResult={id:"private",owner_profile_id:"profile-1",effective_from:"2026-10-12",activation_mode:"immediate",base_publication_id:latestPublication.id,base_publication_revision:4,timezone:"Europe/Berlin",status:"preparing",created_at:"2026-10-14T10:00:00Z",team_workweek_windows:[],successor_snapshot:[{id:"future",revision:5,start:future.effective_at,until:null,effectiveTo:null,sourceVersionId:future.source_version_id,supersededBy:null,windows:[],series:[{id:"series",googleEventId:"managed",etag:"old",state:"confirmed",providerState:"active",part:"legacy",sources:null}]}]};

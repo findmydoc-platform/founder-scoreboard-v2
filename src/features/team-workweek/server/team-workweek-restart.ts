@@ -5,9 +5,10 @@ import { compensateTeamWorkweekGeneration } from "./team-workweek-compensation";
 import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
 import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
 import { TeamWorkweekPublicationError } from "./team-workweek-publication";
+import type { WorkweekRecoveryReason } from "./team-workweek-provider-operations";
 
 type VersionRow={id:string;owner_profile_id:string;effective_from:string;activation_mode:"immediate"|"future_monday";base_publication_id:string|null;base_publication_revision:number|null;timezone:"Europe/Berlin";created_at:string;retired_at:string|null;restarted_version_id:string|null;team_workweek_windows:Array<{weekday:number;start_minute:number;end_minute:number}>};
-export type TeamWorkweekRestartResult={version?:PrivateTeamWorkweekVersion;restart:{state:"ready"|"delayed";recovery:"retry"|"reconnect"|"identity_conflict"|null}};
+export type TeamWorkweekRestartResult={version?:PrivateTeamWorkweekVersion;restart:{state:"ready"|"delayed";recovery:"retry"|"reconnect"|"identity_conflict"|null;reason?:WorkweekRecoveryReason}};
 export async function restartPrivateTeamWorkweek({ownerProfileId,versionId,userSupabase,serviceSupabase,now=()=>new Date(),accessTokenForOwner=getGoogleWorkspaceAccessToken,compensate=compensateTeamWorkweekGeneration}:{ownerProfileId:string;versionId:string;userSupabase:SupabaseClient;serviceSupabase:SupabaseClient;now?:()=>Date;accessTokenForOwner?:typeof getGoogleWorkspaceAccessToken;compensate?:typeof compensateTeamWorkweekGeneration}):Promise<TeamWorkweekRestartResult>{
   const source=await serviceSupabase.from("team_workweek_versions").select("id,owner_profile_id,retired_at,restarted_version_id").eq("id",versionId).maybeSingle<Pick<VersionRow,"id"|"owner_profile_id"|"retired_at"|"restarted_version_id">>();
   if(source.error)throw new TeamWorkweekPublicationError("unavailable","Private Version konnte nicht geladen werden.");
@@ -16,26 +17,33 @@ export async function restartPrivateTeamWorkweek({ownerProfileId,versionId,userS
   if(!source.data.restarted_version_id){
     const conflict=await serviceSupabase.from("team_workweek_google_conflicts").select("resolution_version_id").eq("owner_profile_id",ownerProfileId).eq("founderops_version_id",versionId).eq("state","resolving").maybeSingle<{resolution_version_id:string}>();
     if(conflict.error)throw new TeamWorkweekPublicationError("unavailable","Konfliktstatus konnte nicht geladen werden.");
-    let publication=await serviceSupabase.from("team_workweek_publications").select("id,status,attempt_generation,effective_at").eq("source_version_id",conflict.data?.resolution_version_id||versionId).maybeSingle<{id:string;status:string;attempt_generation:number;effective_at:string|null}>();
+    let publication=await serviceSupabase.from("team_workweek_publications").select("id,status,attempt_generation,effective_at,write_journal_version").eq("source_version_id",conflict.data?.resolution_version_id||versionId).maybeSingle<{id:string;status:string;attempt_generation:number;effective_at:string|null;write_journal_version?:number}>();
     if(publication.error)throw new TeamWorkweekPublicationError("unavailable","Veröffentlichungsstatus konnte nicht geladen werden.");
     if (!publication.data) {
       publication = await serviceSupabase.from("team_workweek_publications")
-        .select("id,status,attempt_generation,effective_at,team_workweek_versions!inner(origin)")
+        .select("id,status,attempt_generation,effective_at,write_journal_version,team_workweek_versions!inner(origin)")
         .eq("owner_profile_id", ownerProfileId).eq("status", "preparing")
         .eq("team_workweek_versions.origin", "google_reconciliation")
-        .maybeSingle<{id:string;status:string;attempt_generation:number;effective_at:string|null}>();
+        .maybeSingle<{id:string;status:string;attempt_generation:number;effective_at:string|null;write_journal_version?:number}>();
       if (publication.error) throw new TeamWorkweekPublicationError("unavailable", "Vorbereiteter Google-Abgleich konnte nicht geladen werden.");
     }
 
     if(publication.data){
-      if(publication.data.status!=="preparing" || !publication.data.attempt_generation || !publication.data.effective_at || new Date(publication.data.effective_at)>now())throw new TeamWorkweekPublicationError("conflict","Die Veröffentlichung läuft noch. Lade ihren aktuellen Stand erneut.");
+      if(publication.data.status!=="preparing" || !publication.data.attempt_generation || !publication.data.effective_at)throw new TeamWorkweekPublicationError("conflict","Die Veröffentlichung läuft noch. Lade ihren aktuellen Stand erneut.");
+      const journaled=publication.data.write_journal_version!==undefined;
+      if(journaled){
+        const cancellation=await serviceSupabase.rpc("request_team_workweek_publication_restart",{p_publication_id:publication.data.id,p_owner_profile_id:ownerProfileId});
+        if(cancellation.error)throw new TeamWorkweekPublicationError("conflict","Der Veröffentlichungsversuch konnte noch nicht angehalten werden.");
+        if(cancellation.data?.state!=="ready" && cancellation.data?.reason!=="uncertain")return {restart:{state:"delayed",recovery:"retry",reason:cancellation.data?.reason||"in_progress"}};
+      }else if(new Date(publication.data.effective_at)>now())throw new TeamWorkweekPublicationError("conflict","Die Veröffentlichung läuft noch. Lade ihren aktuellen Stand erneut.");
       let token:string;
       try{token=await accessTokenForOwner(serviceSupabase,ownerProfileId);}catch(error){
         if(error instanceof GoogleWorkspaceOAuthContractError)return {restart:{state:"delayed",recovery:error.code==="provider_revoked" || error.code==="reconnect_required"?"reconnect":"retry"}};
         throw error;
       }
-      const failure=await compensate({accessToken:token,publicationId:publication.data.id,generation:publication.data.attempt_generation,serviceSupabase,now});
-      if(failure)return {restart:{state:"delayed",recovery:failure==="oauth_reconnect_required"?"reconnect":failure==="provider_identity_mismatch"?"identity_conflict":"retry"}};
+      let reason:WorkweekRecoveryReason|undefined;
+      const failure=await compensate({accessToken:token,publicationId:publication.data.id,generation:publication.data.attempt_generation,serviceSupabase,now,journaled,onRecoveryReason:value=>{reason=value;}});
+      if(failure)return {restart:{state:"delayed",recovery:failure==="oauth_reconnect_required"?"reconnect":failure==="provider_identity_mismatch"?"identity_conflict":"retry",...(reason?{reason}:{})}};
     }
   }
   const restarted=await userSupabase.rpc("restart_private_team_workweek_version",{p_version_id:versionId});

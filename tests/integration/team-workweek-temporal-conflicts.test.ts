@@ -15,7 +15,7 @@ it.each([["founderops","immediate"],["google","immediate"],["founderops","future
     const args=[captured.id,pub.publication_revision,decision,JSON.stringify(conflict.google_observations),conflict.google_fingerprint,conflict.founderops_fingerprint,"b".repeat(64)];
     const prepare=()=>client.query("select public.prepare_team_workweek_google_conflict_resolution($1,'conflict-owner',$2,$3,$4,$5,$6,$7,clock_timestamp()) as result",args);
     const prepared=(await prepare()).rows[0].result;expect((await prepare()).rows[0].result).toEqual({...prepared,replayed:true});await client.query("reset role");
-    const publication=(await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1) as result",[prepared.versionId]))).rows[0].result;
+    const publication=(await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1,1) as result",[prepared.versionId]))).rows[0].result;
     expect(publication.activationMode).toBe(mode);expect(publication.attemptGeneration).toBe(1);expect((await client.query("select windows from public.team_workweek_publications where id=$1",[publication.id])).rows[0].windows).toEqual([{weekday:1,startMinute:decision==="founderops"?600:660,endMinute:decision==="founderops"?1080:1140}]);
     for(const effect of publication.effects){await client.query("set local role service_role");await client.query("select public.confirm_team_workweek_effect($1,1,'confirmed',$2)",[effect.id,effect.payload]);await client.query("reset role");}
     await asAuthenticated(client,user,()=>client.query("select public.finalize_team_workweek_publication($1)",[publication.id]));
@@ -56,7 +56,7 @@ it("explicitly restarts an expired resolving conflict from its original private 
     const args=[captured.id,pub.publication_revision,decision,JSON.stringify(conflict.google_observations),conflict.google_fingerprint,conflict.founderops_fingerprint,"b".repeat(64)];
     const prepare=()=>client.query("select public.prepare_team_workweek_google_conflict_resolution($1,'conflict-owner',$2,$3,$4,$5,$6,$7,clock_timestamp()) as result",args);
     const prepared=(await prepare()).rows[0].result;expect((await prepare()).rows[0].result).toEqual({...prepared,replayed:true});await client.query("reset role");
-    const publication=(await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1) as result",[prepared.versionId]))).rows[0].result;
+    const publication=(await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1,1) as result",[prepared.versionId]))).rows[0].result;
     expect(publication.activationMode).toBe("immediate");expect(publication.attemptGeneration).toBe(1);expect((await client.query("select windows from public.team_workweek_publications where id=$1",[publication.id])).rows[0].windows).toEqual([{weekday:1,startMinute:660,endMinute:1140}]);
 
     await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '1 minute' where id=$1",[publication.id]);

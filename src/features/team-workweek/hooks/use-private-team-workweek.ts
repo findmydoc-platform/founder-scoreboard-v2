@@ -36,6 +36,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   const [publicationClock, setPublicationClock] = useState(() => Date.now());
   const [publication, setPublication] = useState<OwnTeamWorkweekPublication | null>(null);
   const [latestPublished, setLatestPublished] = useState<OwnTeamWorkweekPublication | null>(null);
+  const [currentEditBase, setCurrentEditBase] = useState<TeamWorkweekEditBase | null>(null);
   const [preparedSuccessor, setPreparedSuccessor] = useState<OwnTeamWorkweekPublication | null>(null);
   const [conflict, setConflict] = useState<TeamWorkweekConflict | null>(null);
   const [restartAvailable, setRestartAvailable] = useState(false);
@@ -49,6 +50,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   const [messageTone, setMessageTone] = useState<"success" | "warning">("success");
   const [errors, setErrors] = useState<string[]>([]);
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(baseline), [baseline, draft]);
+  const mustRestartBeforeSaving = Boolean(dirty && publication?.status === "preparing");
 
   useEffect(() => {
     mounted.current = true;
@@ -95,6 +97,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       if (mounted.current) {
         setPublication(body.publication || null);
         setLatestPublished(body.latestPublished || null);
+        setCurrentEditBase(body.editBase || null);
         setPreparedSuccessor(body.preparedSuccessor || null);
         setMinimumEffectiveFrom(body.minimumEffectiveFrom);
         setImmediateAllowed(body.immediateAllowed ?? !body.latestPublished);
@@ -210,6 +213,11 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   };
 
   const saveDraft = async () => {
+    if (mustRestartBeforeSaving) {
+      setMessageTone("warning");
+      setMessage("Ein früherer Veröffentlichungsversuch ist noch offen. Beginne mit dem aktuellen Stand neu; deine Eingaben bleiben hier erhalten.");
+      return null;
+    }
     const validation = validatePrivateTeamWorkweekDraft(draft, new Date(), minimumEffectiveFrom);
     if (!validation.ok) {
       setErrors(validation.errors);
@@ -218,10 +226,19 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     setMessage("");
     setErrors([]);
     try {
+      const { basePublicationId, basePublicationRevision, ...unboundDraft } = validation.draft;
+      const immediateBase = version?.activationMode === "future_monday" ? currentEditBase : {
+        basePublicationId: basePublicationId || currentEditBase?.basePublicationId || (currentEditBase ? latestPublished?.id : undefined),
+        basePublicationRevision: basePublicationRevision || currentEditBase?.basePublicationRevision || (currentEditBase ? latestPublished?.publicationRevision : undefined),
+      };
+      const saveInput = validation.draft.activationMode === "immediate" ? {
+        ...unboundDraft,
+        ...(immediateBase?.basePublicationId ? { basePublicationId: immediateBase.basePublicationId, basePublicationRevision: immediateBase.basePublicationRevision } : {}),
+      } : validation.draft;
       const { response, body } = await apiClient.requestJson<{
         version?: Omit<PrivateTeamWorkweekVersion, "windows">;
         error?: string;
-      }>("/api/team-workweek/private-draft", { method: "POST", json: { ...validation.draft, ...(validation.draft.activationMode === "immediate" && latestPublished ? { basePublicationId: validation.draft.basePublicationId || latestPublished.id, basePublicationRevision: validation.draft.basePublicationRevision || latestPublished.publicationRevision } : {}) }, useDevProfileOverride: false });
+      }>("/api/team-workweek/private-draft", { method: "POST", json: saveInput, useDevProfileOverride: false });
       if (!response.ok || !body?.version) {
         throw new Error(body?.error || "Private Grundwoche konnte nicht gespeichert werden.");
       }
@@ -263,7 +280,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       if (restartContextPending) return await load(draft);
       const { response, body } = await apiClient.requestJson<{
         version?: PrivateTeamWorkweekVersion;
-        restart?: { state: "ready" | "delayed"; recovery: "retry" | "reconnect" | "identity_conflict" | null };
+        restart?: { state: "ready" | "delayed"; recovery: "retry" | "reconnect" | "identity_conflict" | null; reason?: "in_progress" | "uncertain" | "legacy_untracked" };
         error?: string;
       }>("/api/team-workweek/restart", { method: "POST", json: { versionId: version.id }, useDevProfileOverride: false });
       if ((!response.ok && response.status !== 202) || !body?.restart) {
@@ -271,7 +288,13 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       }
       if (body.restart.state !== "ready") {
         setMessageTone("warning");
-        setMessage(body.restart.recovery === "reconnect"
+        setMessage(body.restart.reason === "legacy_untracked"
+          ? "Dieser ältere Versuch kann noch nicht sicher abgebrochen werden. Deine neuen Eingaben bleiben hier im Editor erhalten; der gespeicherte Versuch wird nicht automatisch verworfen."
+          : body.restart.reason === "in_progress"
+            ? "Neustart verzögert. Eine Google-Anfrage läuft noch. Deine Eingaben bleiben hier im Editor erhalten. Prüfe den Neustart später erneut."
+          : body.restart.reason === "uncertain"
+            ? "Neustart verzögert. Google hat die letzte Anfrage noch nicht eindeutig bestätigt. Deine Eingaben bleiben hier im Editor erhalten. Prüfe den Neustart später erneut."
+          : body.restart.recovery === "reconnect"
           ? "Neustart verzögert. Verbinde Google erneut. Deine Eingaben und der bestätigte Teamstand bleiben erhalten."
           : body.restart.recovery === "identity_conflict"
             ? "Ein Google-Eintrag wurde geändert. Der Neustart ist noch nicht bestätigt. Deine Eingaben und der bestätigte Teamstand bleiben erhalten."
@@ -509,6 +532,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     message,
     messageTone,
     minimumEffectiveFrom,
+    mustRestartBeforeSaving,
     immediateAllowed,
     pending,
     publication,

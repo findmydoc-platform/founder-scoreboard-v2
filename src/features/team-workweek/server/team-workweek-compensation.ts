@@ -2,9 +2,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, type PreparedWorkweekEffect } from "./team-workweek-immediate-effects";
 import type { TeamWorkweekPublicationDelayClass } from "./team-workweek-publication";
+import { claimProviderOperation, finishProviderOperation, providerWriteJournal, type WorkweekRecoveryReason } from "./team-workweek-provider-operations";
 
-/** Compensate only the immutable expired generation, recording actual retained history. */
-export async function compensateTeamWorkweekGeneration({accessToken,publicationId,generation,serviceSupabase,now=()=>new Date(),cleanupEffect=cleanupGoogleWorkweekEffect,discoverInstance=discoverGoogleWorkweekInstance}:{accessToken:string;publicationId:string;generation:number;serviceSupabase:SupabaseClient;now?:()=>Date;cleanupEffect?:typeof cleanupGoogleWorkweekEffect;discoverInstance?:typeof discoverGoogleWorkweekInstance}):Promise<TeamWorkweekPublicationDelayClass|null> {
+/** Compensate the immutable generation, recording actual retained history. */
+export async function compensateTeamWorkweekGeneration({accessToken,publicationId,generation,serviceSupabase,now=()=>new Date(),cleanupEffect=cleanupGoogleWorkweekEffect,discoverInstance=discoverGoogleWorkweekInstance,journaled=false,onRecoveryReason}:{accessToken:string;publicationId:string;generation:number;serviceSupabase:SupabaseClient;now?:()=>Date;cleanupEffect?:typeof cleanupGoogleWorkweekEffect;discoverInstance?:typeof discoverGoogleWorkweekInstance;journaled?:boolean;onRecoveryReason?:(reason:WorkweekRecoveryReason)=>void}):Promise<TeamWorkweekPublicationDelayClass|null> {
+  const claim=journaled?await claimProviderOperation({accessToken,publicationId,generation,serviceSupabase,now,purpose:"cleanup"}):null;
+  if(claim?.reason){onRecoveryReason?.(claim.reason);return claim.errorClass||"provider_unavailable";}
+  try {
   const prepare=async()=>{
     const result=await serviceSupabase.rpc("prepare_team_workweek_effect_cleanup",{p_publication_id:publicationId,p_generation:generation});
     return !result.error && Array.isArray(result.data?.effects) ? result.data.effects as PreparedWorkweekEffect[] : null;
@@ -31,11 +35,14 @@ export async function compensateTeamWorkweekGeneration({accessToken,publicationI
           effect=bound.data;
         }
       }
-      const result=await cleanupEffect({accessToken,effect,now});
+      const result=await cleanupEffect({accessToken,effect,now,...(claim?.id?{writeJournal:providerWriteJournal(serviceSupabase,claim.id,effect.id)}:{})});
       if(result.state==="delayed")return result.errorClass;
       const error=await confirm(effect,result.etag,result.preserved??false);
       if(error)return error;
     }
   }
   return null;
+  } finally {
+    if(claim?.id)await finishProviderOperation(serviceSupabase,claim.id);
+  }
 }

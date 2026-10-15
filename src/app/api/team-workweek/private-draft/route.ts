@@ -178,7 +178,7 @@ export async function GET(request: NextRequest) {
     })))));
 
   return NextResponse.json({
-    restartAvailable: Boolean(privateVersion && (contextChanged || (publication?.data?.attempt_generation && publication.data.effective_at && new Date(publication.data.effective_at)<=now))),
+    restartAvailable: Boolean(privateVersion && (contextChanged || (publication?.data?.status === "preparing" && publication.data.attempt_generation && publication.data.effective_at))),
     version: privateVersion ? {
       id: privateVersion.id,
       effectiveFrom: privateVersion.effective_from,

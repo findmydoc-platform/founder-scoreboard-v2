@@ -83,7 +83,7 @@ it("publishes first immediate workweeks only after service confirmation for ever
     for (const member of members) {
       const created = await asAuthenticated(client, member.authUserId, () => client.query("select public.create_private_immediate_team_workweek_version('[{\"weekday\":3,\"startMinute\":0,\"endMinute\":1439}]') as version"));
       expect(created.rows[0].version.activationMode).toBe("immediate");
-      const prepared = await asAuthenticated(client, member.authUserId, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [created.rows[0].version.id]));
+      const prepared = await asAuthenticated(client, member.authUserId, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [created.rows[0].version.id]));
       const publication = prepared.rows[0].publication;
       expect(new Date(publication.effectiveAt).getTime()).toBeGreaterThan(Date.now());
       expect(publication.attemptGeneration).toBe(1);
@@ -118,7 +118,7 @@ it("expired attempts require observed cleanup and a new generation, never retros
     const owner=members[0].authUserId;
     const created=await asAuthenticated(client,owner,()=>client.query("select public.create_private_immediate_team_workweek_version('[{\"weekday\":6,\"startMinute\":540,\"endMinute\":1020}]') as version"));
     const id=created.rows[0].version.id;
-    const prepared=await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1) as publication",[id]));
+    const prepared=await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1,1) as publication",[id]));
     const first=prepared.rows[0].publication;
     const foreign=await captureDatabaseError(client,()=>asAuthenticated(client,members[3].authUserId,()=>client.query("select public.finalize_team_workweek_publication($1)",[first.id])));
     expect(foreign).toMatchObject({code:"P0002"});
@@ -127,12 +127,12 @@ it("expired attempts require observed cleanup and a new generation, never retros
     await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '1 minute' where id=$1",[first.id]);
     const expired=await captureDatabaseError(client,()=>asAuthenticated(client,owner,()=>client.query("select public.finalize_team_workweek_publication($1)",[first.id])));
     expect(expired).toMatchObject({code:"P0005"});
-    const notReplanned=await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1) as publication",[id]));
+    const notReplanned=await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1,1) as publication",[id]));
     expect(notReplanned.rows[0].publication.attemptGeneration).toBe(1);
     await client.query("set local role service_role");
     for(const effect of first.effects)await client.query("select public.confirm_team_workweek_effect_cleanup($1,1)",[effect.id]);
     await client.query("reset role");
-    const replanned=await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1) as publication",[id]));
+    const replanned=await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1,1) as publication",[id]));
     const next=replanned.rows[0].publication;
     expect(next.attemptGeneration).toBe(2);
     expect(new Date(next.effectiveAt).getTime()).toBeGreaterThan(Date.now());

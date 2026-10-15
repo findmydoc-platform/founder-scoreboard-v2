@@ -9,7 +9,7 @@ it("pins one cleanup cutoff, retains actual elapsed history, and restarts withou
     await client.query("insert into public.profiles(id,auth_user_id,name,platform_role) values('history-owner',$1,'Owner','viewer')",[user]);
     const version=(await client.query("insert into public.team_workweek_versions(owner_profile_id,effective_from,activation_mode) values('history-owner',date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date,'immediate') returning *")).rows[0];
     await client.query("insert into public.team_workweek_windows(version_id,weekday,start_minute,end_minute) values($1,1,540,1020)",[version.id]);
-    const pub=(await client.query("insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,activation_mode,effective_at,attempt_generation,windows) values($1,'history-owner',$2,'immediate',clock_timestamp()-interval '1 minute',1,'[]') returning id",[version.id,version.effective_from])).rows[0];
+    const pub=(await client.query("insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,activation_mode,effective_at,attempt_generation,write_journal_version,windows) values($1,'history-owner',$2,'immediate',clock_timestamp()-interval '1 minute',1,1,'[]') returning id",[version.id,version.effective_from])).rows[0];
     await client.query("insert into public.team_workweek_publication_effects(publication_id,owner_profile_id,generation,kind,google_event_id,payload) values($1,'history-owner',1,'weekly',$2,$3)",[pub.id,payload.id,payload]);
     const cutoff={...payload,id:"fopsprevious01",recurrence:["RRULE:FREQ=WEEKLY;UNTIL=20261012T075959Z"]};
     await client.query("insert into public.team_workweek_publication_effects(publication_id,owner_profile_id,generation,kind,google_event_id,payload,operation,expected_payload,expected_etag) values($1,'history-owner',1,'predecessor_cutoff',$2,$3,'update',$4,'old')",[pub.id,cutoff.id,cutoff,{...payload,id:cutoff.id}]);
@@ -30,7 +30,7 @@ it("pins one cleanup cutoff, retains actual elapsed history, and restarts withou
     expect((await asAuthenticated(client,user,()=>client.query("select public.restart_private_team_workweek_version($1) as result",[version.id]))).rows[0].result).toEqual({...restarted,replayed:true});
     expect((await client.query("select * from public.team_workweek_publication_effects where publication_id=$1 order by id",[pub.id])).rows).toEqual(oldEffects);
     expect((await client.query("select weekday,start_minute,end_minute from public.team_workweek_windows where version_id=$1",[restarted.versionId])).rows).toEqual([{weekday:1,start_minute:540,end_minute:1020}]);
-    const error=await captureDatabaseError(client,()=>asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1)",[version.id])));
+    const error=await captureDatabaseError(client,()=>asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1,1)",[version.id])));
     expect(error).toMatchObject({code:"P0004"});
   });
 },30_000);
@@ -74,7 +74,7 @@ it.each(["immediate","future_monday"])("never extends the retained actual predec
     const actual={...payload,id:"fopsretained01",recurrence:["RRULE:FREQ=WEEKLY;UNTIL=20200907T080000Z"],extendedProperties:{private:{founderopsWorkweekSeriesId:series.id,founderopsWorkweekRevision:"1"}}};
     await client.query("update public.team_workweek_google_series set observed_payload=$2 where id=$1",[series.id,actual]);
     const draft=(await asAuthenticated(client,user,()=>mode==="immediate"?client.query("select public.create_private_current_team_workweek_version('[{\"weekday\":1,\"startMinute\":540,\"endMinute\":1020}]',$1,1) as result",[current.id]):client.query("select public.create_private_team_workweek_version(date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date+7,'[{\"weekday\":1,\"startMinute\":540,\"endMinute\":1020}]') as result"))).rows[0].result;
-    const plan=(await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1) as result",[draft.id]))).rows[0].result;
+    const plan=(await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1,1) as result",[draft.id]))).rows[0].result;
     expect(plan.effects.some((effect:{googleEventId:string})=>effect.googleEventId===actual.id)).toBe(false);
     expect((await client.query("select observed_payload,confirmed_etag from public.team_workweek_google_series where id=$1",[series.id])).rows[0]).toEqual({observed_payload:actual,confirmed_etag:"actual-cutoff"});
   });
@@ -89,8 +89,8 @@ it.each([
   await withIsolatedLocalDatabase(async client => {
     await client.query("insert into public.profiles(id,name,platform_role) values('count-owner','Owner','founder')");
     const version = (await client.query("insert into public.team_workweek_versions(owner_profile_id,effective_from,activation_mode) values('count-owner','2025-10-20','immediate') returning id")).rows[0];
-    const publication = (await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,activation_mode,effective_at,status,sync_state,attempt_generation,windows,cleanup_history)
-      values($1,'count-owner','2025-10-20','immediate',clock_timestamp()-interval '1 hour','preparing','delayed',1,'[]',jsonb_build_object('1',$2::text)) returning id`, [version.id, cutoff])).rows[0];
+    const publication = (await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,activation_mode,effective_at,status,sync_state,attempt_generation,write_journal_version,windows,cleanup_history)
+      values($1,'count-owner','2025-10-20','immediate',clock_timestamp()-interval '1 hour','preparing','delayed',1,1,'[]',jsonb_build_object('1',$2::text)) returning id`, [version.id, cutoff])).rows[0];
     const physical = { ...payload, start: { dateTime: "2025-10-26T01:00:00Z", timeZone: "Europe/Berlin" }, end: { dateTime: "2025-10-26T02:00:00Z", timeZone: "Europe/Berlin" }, recurrence: [`RRULE:FREQ=WEEKLY;COUNT=${count}`] };
     await client.query("insert into public.team_workweek_publication_effects(publication_id,owner_profile_id,generation,kind,google_event_id,payload,operation) values($1,'count-owner',1,'weekly',$2,$3,'create')", [publication.id, physical.id, physical]);
     await client.query("select set_config('request.jwt.claim.role','service_role',true)");
