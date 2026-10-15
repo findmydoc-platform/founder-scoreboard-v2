@@ -7,6 +7,7 @@ import { PrivateTeamWorkweekEditor } from "../organisms/private-team-workweek-ed
 import { formatDate } from "@/lib/display";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Profile } from "@/lib/types";
+import { selectedWorkweek, workweekStart } from "../model/team-workweek-week";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 function conflictWindows(windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>>) {
@@ -19,7 +20,7 @@ function conflictWindows(windows: Array<Readonly<{ weekday: number; startMinute:
   }).join(" · ");
 }
 
-export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = false, onEditorRequestHandled }: { apiClient: BrowserApiClient; profile: Profile; editorRequested?: boolean; onEditorRequestHandled?: () => void }) {
+export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = false, editorWeek, onEditorRequestHandled }: { apiClient: BrowserApiClient; profile: Profile; editorRequested?: boolean; editorWeek?: string; onEditorRequestHandled?: () => void }) {
   const editorTriggerRef = useRef<HTMLButtonElement>(null);
   const [localOpen, setOpen] = useState(false);
   const open = localOpen || editorRequested;
@@ -27,7 +28,8 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
     setOpen(false);
     onEditorRequestHandled?.();
   };
-  const state = usePrivateTeamWorkweek(apiClient);
+  const requestedWeek = editorRequested && editorWeek && selectedWorkweek(workweekStart(editorWeek)).ok ? workweekStart(editorWeek) : undefined;
+  const state = usePrivateTeamWorkweek(apiClient, requestedWeek);
   const syncDelayed = state.publication?.syncState === "delayed";
   const reconciliationState = state.latestPublished?.googleReconciliationState;
   const showConfirmedTeamBaseline = Boolean(state.conflict || syncDelayed || reconciliationState === "conflict" || reconciliationState === "delayed");
@@ -39,12 +41,12 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
       : reconciliationState === "delayed"
         ? { tone: "amber" as const, label: "Synchronisierung verzögert" }
         : state.version
-          ? { tone: "amber" as const, label: "Privater Entwurf" }
+          ? { tone: "amber" as const, label: "Entwurf gespeichert" }
           : latestIsPrepared
-            ? { tone: "blue" as const, label: state.latestPublished?.effectiveAt ? "Beginn bestätigt" : "Für Montag vorbereitet" }
+            ? { tone: "blue" as const, label: `Geplant ab ${formatDate(state.latestPublished!.effectiveFrom)}` }
             : state.latestPublished
               ? { tone: "emerald" as const, label: "Veröffentlicht" }
-              : { tone: "slate" as const, label: "Arbeitszeiten fehlen" };
+              : { tone: "slate" as const, label: "Noch nicht eingerichtet" };
 
   return (
     <>
@@ -56,20 +58,18 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
               <UiBadge tone={badge.tone}>{badge.label}</UiBadge>
             </div>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              {state.version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : state.latestPublished ? showConfirmedTeamBaseline ? "Letzter bestätigter Teamstand bleibt sichtbar." : "Veröffentlichte Arbeitszeiten für " + profile.name + ". Bestätigt in Team und Google." : "Deine Arbeitszeiten fehlen noch."}
+              {state.version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : state.latestPublished ? showConfirmedTeamBaseline ? "Letzter bestätigter Teamstand bleibt sichtbar." : latestIsPrepared ? "Die geplante Woche ist bereits im Kalender sichtbar." : "Deine Arbeitszeiten sind in Team und Google bestätigt." : "Deine Arbeitszeiten fehlen noch."}
             </p>
             {state.version && (
               <p className="mt-2 text-xs font-semibold text-slate-600">{state.version.activationMode === "immediate" ? "Beginn wird bei Veröffentlichung bestätigt" : `Gültig ab ${formatDate(state.version.effectiveFrom)}`} · {state.version.timezone}</p>
             )}
-            {state.latestPublished && (
-              <p className="mt-2 text-xs font-semibold text-slate-600">
-                {latestIsPrepared ? "Vorbereitet" : "Zuletzt veröffentlicht"}: gültig ab {state.latestPublished.effectiveAt ? formatTeamWorkweekActivation(state.latestPublished.effectiveAt) : formatDate(state.latestPublished.effectiveFrom)}
-                {state.latestPublished.lastSyncAt ? ` · letzter erfolgreicher Sync ${formatDate(state.latestPublished.lastSyncAt.slice(0, 10))}` : ""}
-              </p>
-            )}
-            {state.latestPublished && !state.version && (
-              <p className="mt-2 text-xs leading-5 text-slate-500">Geprüft werden nur von FounderOps angelegte Google-Serien.</p>
-            )}
+            {state.latestPublished && <details className="mt-2 text-xs leading-5 text-slate-500">
+              <summary className="min-h-6 cursor-pointer">Details zur Veröffentlichung</summary>
+              <p>Gültig ab {state.latestPublished.effectiveAt ? formatTeamWorkweekActivation(state.latestPublished.effectiveAt) : formatDate(state.latestPublished.effectiveFrom)}.</p>
+              {state.latestPublished.lastSyncAt && <p>Letzter erfolgreicher Abgleich: {formatDate(state.latestPublished.lastSyncAt.slice(0, 10))}.</p>}
+              <p>Geprüft werden nur von FounderOps angelegte Google-Serien.</p>
+              <UiButton className="mt-2" variant="secondary" size="sm" onClick={() => void state.reconcile()} disabled={state.pending}>App-Termine in Google prüfen</UiButton>
+            </details>}
             {reconciliationState === "conflict" && !state.version && (
               <p className="mt-2 text-xs font-semibold text-amber-700">Eine Google-Serienänderung ist nicht eindeutig. Der bestätigte Teamstand bleibt aktiv.</p>
             )}
@@ -78,12 +78,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
             )}
           </div>
           <div ref={(node) => { editorTriggerRef.current = node?.querySelector<HTMLButtonElement>("[data-workweek-editor-trigger]") || null; }} className="flex flex-col gap-2 sm:items-end">
-            {state.latestPublished && !state.version && (
-              <UiButton variant="secondary" size="lg" onClick={() => void state.reconcile()} disabled={state.pending}>
-                App-Termine in Google prüfen
-              </UiButton>
-            )}
-            <UiButton data-workweek-editor-trigger variant="primary" size="lg" onClick={() => setOpen(true)} disabled={state.pending && !state.version}>
+            <UiButton data-workweek-editor-trigger variant="primary" size="lg" onClick={() => { setOpen(true); if (latestIsPrepared && !state.version) void state.selectWeek(state.latestPublished!.effectiveFrom); }} disabled={state.pending && !state.version}>
               {state.version ? "Bearbeitung fortsetzen" : state.latestPublished ? "Arbeitswoche bearbeiten" : "Arbeitswoche einrichten"}
             </UiButton>
           </div>

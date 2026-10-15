@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   editableTeamWorkweekDraft,
+  inflatePublishedTeamWorkweekWindows,
   formatTeamWorkweekActivation,
   emptyTeamWorkweekWindows,
   nextMondayIso,
@@ -18,6 +19,7 @@ import {
 } from "../model/team-workweek-draft";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { berlinCivilInstant } from "../model/team-workweek-calendar";
+import { selectedWorkweek, workweekStart } from "../model/team-workweek-week";
 import { TEAM_WORKWEEK_PUBLISHED_EVENT } from "./use-published-team-workweeks";
 
 function confirmedActivation(effectiveAt?: string | null, effectiveUntil?: string | null) {
@@ -29,8 +31,10 @@ function initialDraft(effectiveFrom = nextMondayIso()): PrivateTeamWorkweekDraft
   return { effectiveFrom, windows: emptyTeamWorkweekWindows() };
 }
 
-export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
+export function usePrivateTeamWorkweek(apiClient: BrowserApiClient, initialWeek?: string) {
   const mounted = useRef(true);
+  const loadSequence = useRef(0);
+  const [weekContext, setWeekContext] = useState<null | { weekStart: string; contextToken: string; effectiveUntil: string | null; basePublicationId: string | null; basePublicationRevision: number | null; windows: Array<{weekday: number; startMinute: number; endMinute: number}> }>(null);
   const mutationPending = useRef(false);
   const [version, setVersion] = useState<PrivateTeamWorkweekVersion | null>(null);
   const [publicationClock, setPublicationClock] = useState(() => Date.now());
@@ -46,6 +50,21 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   const [draft, setDraft] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
   const [baseline, setBaseline] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
   const [pending, setPending] = useState(true);
+  const [publishing, setPublishing] = useState(false);
+  const [editingToday, setEditingToday] = useState(() => workweekStart());
+  const selectedWeekStart = version?.selectedWeekStart || (publication?.status === "preparing" && version?.activationMode === "future_monday" ? version.effectiveFrom : weekContext?.weekStart || (draft.activationMode === "immediate" ? workweekStart() : draft.effectiveFrom));
+  const weekExpired = selectedWeekStart < editingToday;
+  useEffect(() => {
+    let timer: number;
+    const schedule = () => {
+      timer = window.setTimeout(() => {
+        setEditingToday(workweekStart());
+        schedule();
+      }, Math.min(60_000, Math.max(100, berlinCivilInstant(nextMondayIso(), "00:00") - Date.now() + 100)));
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, []);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "warning">("success");
   const [errors, setErrors] = useState<string[]>([]);
@@ -76,11 +95,13 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     return nextDraft;
   }, []);
 
-  const load = useCallback(async (preservedDraft?: PrivateTeamWorkweekDraft) => {
+  const load = useCallback(async (preservedDraft?: PrivateTeamWorkweekDraft, requestedWeek?: string) => {
+    const sequence = ++loadSequence.current;
     setPending(true);
     setMessage("");
     try {
       const { response, body } = await apiClient.requestJson<{
+        weekContext?: NonNullable<typeof weekContext>;
         version?: PrivateTeamWorkweekVersion | null;
         publication?: OwnTeamWorkweekPublication | null;
         latestPublished?: OwnTeamWorkweekPublication | null;
@@ -90,11 +111,12 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         immediateAllowed?: boolean;
         restartAvailable?: boolean;
         error?: string;
-      }>("/api/team-workweek/private-draft", { cache: "no-store", useDevProfileOverride: false });
+      }>(`/api/team-workweek/private-draft${requestedWeek ? `?week=${requestedWeek}` : ""}`, { cache: "no-store", useDevProfileOverride: false });
       if (!response.ok || body?.version === undefined || typeof body.minimumEffectiveFrom !== "string") {
         throw new Error(body?.error || "Private Grundwoche konnte nicht geladen werden.");
       }
-      if (mounted.current) {
+      if (mounted.current && sequence === loadSequence.current) {
+        setWeekContext(body.weekContext || null);
         setPublication(body.publication || null);
         setLatestPublished(body.latestPublished || null);
         setCurrentEditBase(body.editBase || null);
@@ -102,8 +124,20 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         setMinimumEffectiveFrom(body.minimumEffectiveFrom);
         setImmediateAllowed(body.immediateAllowed ?? !body.latestPublished);
         setRestartAvailable(body.restartAvailable ?? false);
-        const refreshedDraft = applyVersion(body.version, body.minimumEffectiveFrom, body.editBase || null, body.immediateAllowed ?? !body.latestPublished);
-        if (preservedDraft) setDraft({ ...refreshedDraft, windows: preservedDraft.windows,
+        const chosen = body.weekContext && selectedWorkweek(body.weekContext.weekStart);
+        const loadedBase = body.weekContext ? {
+          basePublicationId: body.weekContext.basePublicationId || undefined,
+          basePublicationRevision: body.weekContext.basePublicationRevision || undefined,
+          windows: inflatePublishedTeamWorkweekWindows(body.weekContext.windows),
+        } : body.editBase || null;
+        const refreshedDraft = applyVersion(body.version, body.weekContext?.weekStart || body.minimumEffectiveFrom, loadedBase as TeamWorkweekEditBase | null, body.immediateAllowed ?? !body.latestPublished);
+        if (chosen?.ok && !body.version) {
+          refreshedDraft.effectiveFrom = chosen.weekStart;
+          refreshedDraft.activationMode = chosen.activationMode;
+          setDraft({ ...refreshedDraft });
+          setBaseline({ ...refreshedDraft });
+        }
+        if (preservedDraft) setDraft(body.weekContext ? { ...refreshedDraft, windows: preservedDraft.windows } : { ...refreshedDraft, windows: preservedDraft.windows,
           activationMode: preservedDraft.activationMode,
           effectiveFrom: preservedDraft.activationMode === "immediate" ? refreshedDraft.effectiveFrom : preservedDraft.effectiveFrom > body.minimumEffectiveFrom ? preservedDraft.effectiveFrom : body.minimumEffectiveFrom,
         });
@@ -115,26 +149,26 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       if (!conflictResponse.response.ok || conflictResponse.body?.conflict === undefined) {
         throw new Error(conflictResponse.body?.error || "Synchronisationskonflikt konnte nicht geladen werden.");
       }
-      if (mounted.current) {
+      if (mounted.current && sequence === loadSequence.current) {
         setConflict(conflictResponse.body.conflict || null);
         setRestartContextPending(false);
       }
       return true;
     } catch (error) {
-      if (mounted.current) {
+      if (mounted.current && sequence === loadSequence.current) {
         setMessageTone("warning");
         setMessage(error instanceof Error ? error.message : "Private Grundwoche konnte nicht geladen werden.");
       }
       return false;
     } finally {
-      if (mounted.current) setPending(false);
+      if (mounted.current && sequence === loadSequence.current) setPending(false);
     }
   }, [apiClient, applyVersion]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => void load(), 0);
+    const timeout = window.setTimeout(() => void load(undefined, initialWeek), 0);
     return () => window.clearTimeout(timeout);
-  }, [load]);
+  }, [load, initialWeek]);
 
   const boundarySource = preparedSuccessor || latestPublished;
   const nextPublicationBoundary = boundarySource
@@ -213,12 +247,13 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
   };
 
   const saveDraft = async () => {
+    if (weekExpired) { setErrors(["Die ausgewählte Woche ist vorbei. Übernimm deine Eingaben für diese Woche."]); return null; }
     if (mustRestartBeforeSaving) {
       setMessageTone("warning");
       setMessage("Ein früherer Veröffentlichungsversuch ist noch offen. Beginne mit dem aktuellen Stand neu; deine Eingaben bleiben hier erhalten.");
       return null;
     }
-    const validation = validatePrivateTeamWorkweekDraft(draft, new Date(), minimumEffectiveFrom);
+    const validation = validatePrivateTeamWorkweekDraft(draft, new Date(), weekContext ? nextMondayIso() : minimumEffectiveFrom);
     if (!validation.ok) {
       setErrors(validation.errors);
       return null;
@@ -238,7 +273,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       const { response, body } = await apiClient.requestJson<{
         version?: Omit<PrivateTeamWorkweekVersion, "windows">;
         error?: string;
-      }>("/api/team-workweek/private-draft", { method: "POST", json: saveInput, useDevProfileOverride: false });
+      }>("/api/team-workweek/private-draft", { method: "POST", json: weekContext ? { ...saveInput, selectedWeekStart: weekContext.weekStart, contextToken: weekContext.contextToken } : saveInput, useDevProfileOverride: false });
       if (!response.ok || !body?.version) {
         throw new Error(body?.error || "Private Grundwoche konnte nicht gespeichert werden.");
       }
@@ -313,7 +348,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         return false;
       }
       setMessageTone("success");
-      setMessage("Neustart vorbereitet. Eingaben bleiben erhalten. Prüfe den Gültigkeitsbeginn vor der Veröffentlichung.");
+      setMessage("Neustart vorbereitet. Eingaben bleiben erhalten. Prüfe die ausgewählte Woche vor der Veröffentlichung.");
       return true;
     } catch (error) {
       if (mounted.current) {
@@ -331,6 +366,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     if (restartContextPending || mutationPending.current || pending) return false;
     mutationPending.current = true;
     setPending(true);
+    setPublishing(true);
     setMessage("");
     setErrors([]);
     try {
@@ -408,6 +444,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
       }
       return false;
     } finally {
+      setPublishing(false);
       mutationPending.current = false;
       if (mounted.current) setPending(false);
     }
@@ -536,6 +573,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     immediateAllowed,
     pending,
     publication,
+    publishing,
     publicationExpired: Boolean(publication?.effectiveAt && new Date(publication.effectiveAt).getTime() <= publicationClock),
     reconcile,
     resolveConflict,
@@ -546,6 +584,11 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
     restartContextPending,
     save,
     publish,
+    selectWeek: (week: string) => load(undefined, week),
+    selectedWeekStart,
+    weekExpired,
+    carryIntoCurrentWeek: () => load(draft, workweekStart()),
+    weekContext,
     setEffectiveFrom,
     setActivationMode,
     setWindow,

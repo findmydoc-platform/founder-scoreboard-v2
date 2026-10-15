@@ -1,4 +1,6 @@
 export const authenticatedFunctionAllowlist = Object.freeze([
+  "public.team_workweek_edit_context(p_week_start date)",
+  "public.create_private_selected_team_workweek_version(p_week_start date, p_windows jsonb, p_context_token text)",
   "public.restart_private_team_workweek_version(p_version_id uuid)",
   "public.workspace_check_request()",
   "public.workspace_request_admitted()",
@@ -106,6 +108,8 @@ export const mappedOwnerTeamWorkweekReadPolicies = Object.freeze([
 ]);
 
 export const mappedOwnerTeamWorkweekFunctions = Object.freeze([
+  "team_workweek_edit_context",
+  "create_private_selected_team_workweek_version",
   "create_private_team_workweek_version",
   "create_private_immediate_team_workweek_version",
   "create_private_current_team_workweek_version",

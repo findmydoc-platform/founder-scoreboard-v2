@@ -54,7 +54,7 @@ export const ShowsTheCurrentPublishedWorkweek: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0);
     await expect(canvas.getAllByText("Kein Arbeitszeitfenster").length).toBeGreaterThan(0);
-    await expect(canvas.getAllByText("Keine veröffentlichten Arbeitszeiten").length).toBeGreaterThan(0);
+    await expect(canvas.getAllByText("Noch nicht veröffentlicht").length).toBeGreaterThan(0);
     await expect(canvas.queryByText("Frei")).not.toBeInTheDocument();
   },
 };
@@ -69,9 +69,28 @@ export const KeepsMobileDaySelectionAndMissingSchedulesDistinct: Story = {
     await userEvent.click(saturday);
     const panel = within(canvas.getByRole("tabpanel"));
     await expect(panel.getByText("Kein Arbeitszeitfenster")).toBeVisible();
-    await expect(panel.getByText("Keine veröffentlichten Arbeitszeiten")).toBeVisible();
+    await expect(panel.getByText("Noch nicht veröffentlicht")).toBeVisible();
     await userEvent.keyboard("{ArrowRight}");
     await expect(canvas.getByRole("tab", { name: "Sonntag" })).toHaveFocus();
+  },
+};
+
+export const PreservesBothSidesOfAChangeInsideTheWeek: Story = {
+  parameters: {viewport:{defaultViewport:"mobile1"}},
+  globals:{viewport:{value:"mobile1"}},
+  args:{dateKey:"2026-10-14",profiles:ShowsTheCurrentPublishedWorkweek.args!.profiles,
+    workweeks:[
+      {...ShowsTheCurrentPublishedWorkweek.args!.workweeks![0],id:"before",effectiveFrom:"2026-10-12",effectiveUntil:"2026-10-14T10:00:00Z",effectiveTo:"2026-10-14"},
+      {...ShowsTheCurrentPublishedWorkweek.args!.workweeks![0],id:"after",effectiveFrom:"2026-10-12",effectiveAt:"2026-10-14T10:00:00Z",publicationRevision:5},
+    ]},
+  play:async({canvasElement})=>{
+    const canvas=within(canvasElement);
+    const panel=within(canvas.getByRole("tabpanel"));
+    await expect(panel.getByText("09:00–12:00")).toBeVisible();
+    await expect(panel.getByText("12:00–17:00")).toBeVisible();
+    await userEvent.click(canvas.getByRole("tab",{name:"Montag"}));
+    await expect(panel.getByText("09:00–17:00")).toBeVisible();
+    await expect(panel.queryByText("12:00–17:00")).not.toBeInTheDocument();
   },
 };
 

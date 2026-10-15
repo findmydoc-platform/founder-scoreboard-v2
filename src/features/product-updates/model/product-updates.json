@@ -1,19 +1,19 @@
 [
   {
     "id": "2026-10-14-workweek-current-publication",
-    "releasedAt": "2026-10-14",
-    "expiresAt": "2026-11-13",
+    "releasedAt": "2026-10-15",
+    "expiresAt": "2026-11-14",
     "featureTourId": "workweek-current-publication-v1",
-    "title": "Arbeitszeiten noch diese Woche ändern",
-    "summary": "Öffne deine Arbeitswoche direkt aus dem Kalender. Änderungen können schon in der aktuellen Woche beginnen; vorbereitete spätere Änderungen bleiben erhalten.",
+    "title": "Arbeitswochen auswählen und geplante Zeiten ändern",
+    "summary": "Wähle die Woche, ab der deine Arbeitszeiten gelten. Auch bereits geplante Zeiten lassen sich ändern; spätere Pläne bleiben erhalten. Im Kalender kannst du zwischen den Wochen wechseln.",
     "slides": [
       {
         "id": "current-week-publication",
-        "title": "Den Beginn selbst wählen",
-        "description": "Wähle die aktuelle Woche oder einen zukünftigen Montag. Nach dem Google-Abgleich zeigt FounderOps den bestätigten Beginn. Mit Entwurf speichern bleiben deine Eingaben unveröffentlicht.",
+        "title": "Die passende Woche auswählen",
+        "description": "Wähle diese Woche oder eine spätere Woche. Vor der Veröffentlichung siehst du Zeitraum und Wochenstunden. Mit Entwurf speichern bleiben deine Eingaben unveröffentlicht.",
         "image": {
           "src": "/product-updates/2026-10-14-workweek-current-publication/workweek-editor.png",
-          "alt": "Arbeitswochen-Editor mit Auswahl für die aktuelle Woche, kurzem Vorlauf und getrennten Aktionen zum privaten Speichern und Veröffentlichen",
+          "alt": "Arbeitswochen-Editor mit Wochenauswahl, Google-Zielkalender und getrennten Aktionen zum Speichern eines Entwurfs und Veröffentlichen",
           "width": 440,
           "height": 900
         }

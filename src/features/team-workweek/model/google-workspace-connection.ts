@@ -2,6 +2,7 @@ export type GoogleWorkspaceConnectionState = "not_connected" | "connected" | "re
 
 export type GoogleWorkspaceConnectionStatus = Readonly<{
   state: GoogleWorkspaceConnectionState;
+  calendarLabel?: string | null;
   connectedAt: string | null;
   refreshedAt: string | null;
   lastUsedAt: string | null;

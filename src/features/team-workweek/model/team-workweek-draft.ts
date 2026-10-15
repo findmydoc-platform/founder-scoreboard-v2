@@ -27,6 +27,7 @@ export type TeamWorkweekWindows = Record<TeamWorkweekDayKey, TeamWorkweekWindow[
 export type WorkweekActivationMode = "immediate" | "future_monday";
 
 export type PrivateTeamWorkweekVersion = Readonly<{
+  selectedWeekStart?: string;
   basePublicationId?: string;
   basePublicationRevision?: number;
   activationMode?: WorkweekActivationMode;

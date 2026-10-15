@@ -60,9 +60,9 @@ export const featureTours: readonly FeatureTourDefinition[] = [
     requiredSelectors: ["[data-tour-id='workweek-validity']"],
     steps: [
       { element: "[data-tour-id='workweek-validity']", disableActiveInteraction: true,
-        popover: { progressText: "{{current}} von {{total}}", title: "Beginn bewusst wählen", description: "Wähle die aktuelle Woche oder einen zukünftigen Montag. Für die aktuelle Woche wird der genaue Beginn nach dem kurzen Vorlauf bestätigt." } },
+        popover: { progressText: "{{current}} von {{total}}", title: "Woche auswählen", description: "Wähle hier die aktuelle oder eine zukünftige Woche. Bereits geplante Zeiten werden zur Bearbeitung geladen. Spätere Pläne bleiben erhalten." } },
       { element: "[data-tour-id='workweek-publish']", disableActiveInteraction: true,
-        popover: { progressText: "{{current}} von {{total}}", title: "Entwurf speichern oder veröffentlichen", description: "Veröffentlichen speichert deine Eingaben und gleicht sie mit Google ab. Entwurf speichern sichert sie ohne Veröffentlichung. Diese Tour veröffentlicht nichts." } },
+        popover: { progressText: "{{current}} von {{total}}", title: "Entwurf speichern oder veröffentlichen", description: "Prüfe darüber Zeitraum und Wochenstunden. Entwurf speichern sichert deine Eingaben privat. Veröffentlichen übernimmt sie nach erfolgreichem Google-Abgleich. Diese Tour veröffentlicht nichts." } },
     ],
   },
   {

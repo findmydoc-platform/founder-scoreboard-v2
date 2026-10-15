@@ -118,5 +118,5 @@ test("current-week publication guidance has a live thirty-day update, matching s
   assert.equal(screenshot.subarray(1, 4).toString("ascii"), "PNG");
   assert.equal(screenshot.readUInt32BE(16), update.slides[0].image.width);
   assert.equal(screenshot.readUInt32BE(20), update.slides[0].image.height);
-  assert.equal(productUpdateSelection.selectActiveProductUpdates([update], new Date("2026-11-14T00:00:00Z")).length, 0);
+  assert.equal(productUpdateSelection.selectActiveProductUpdates([update], new Date("2026-11-15T00:00:00Z")).length, 0);
 });

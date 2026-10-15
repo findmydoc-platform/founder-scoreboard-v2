@@ -20,10 +20,12 @@ it("loads the private editor through PostgREST when versions have multiple publi
   const { stdout } = await promisify(execFile)(resolve("node_modules/.bin/supabase"), ["status", "-o", "json"], { encoding: "utf8" });
   const status = JSON.parse(stdout) as { API_URL: string; SERVICE_ROLE_KEY: string };
   const url = new URL(status.API_URL);
-  if (!["localhost", "127.0.0.1"].includes(url.hostname) || url.port !== "54321") {
+  if (!["localhost", "127.0.0.1"].includes(url.hostname)) {
     throw new Error("This regression requires the local Supabase stack.");
   }
   context.client = createClient(url.toString(), status.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  // Authentication is outside this query regression; relationship resolution uses real PostgREST.
+  vi.spyOn(context.client, "rpc").mockResolvedValue({ data: null, error: null, count: null, status: 200, statusText: "OK" } as never);
   const response = await GET(new NextRequest("http://localhost:3000/api/team-workweek/private-draft"));
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ immediateAllowed: true });

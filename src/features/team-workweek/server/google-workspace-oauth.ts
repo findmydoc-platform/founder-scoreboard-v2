@@ -120,11 +120,12 @@ export async function probeGoogleWorkspacePrimaryCalendar(accessToken: string) {
   url.searchParams.set("maxResults", "1");
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("showDeleted", "false");
-  url.searchParams.set("fields", "kind");
+  url.searchParams.set("fields", "kind,summary");
   url.searchParams.set("privateExtendedProperty", "founderOpsProbe=__never__");
   const response = await fetch(url, {
     headers: { authorization: `Bearer ${accessToken}` },
     cache: "no-store",
+    signal: AbortSignal.timeout(5000),
   });
   if (!response.ok) {
     throw new GoogleWorkspaceOAuthContractError(
@@ -132,6 +133,8 @@ export async function probeGoogleWorkspacePrimaryCalendar(accessToken: string) {
       "Der primäre Google-Kalender konnte nicht geprüft werden.",
     );
   }
+  const body = await response.json().catch(() => null) as { summary?: unknown } | null;
+  return typeof body?.summary === "string" ? body.summary.trim().slice(0, 254) || null : null;
 }
 
 function isoAfter(seconds: number, now = Date.now()) {
@@ -184,7 +187,14 @@ export async function getGoogleWorkspaceConnectionStatus(supabase: SupabaseClien
   if (error) {
     throw new GoogleWorkspaceOAuthContractError("invalid_token_response", "Google-Verbindungsstatus ist nicht verfügbar.");
   }
-  return googleWorkspaceConnectionStatus(data || null);
+  const status = googleWorkspaceConnectionStatus(data || null);
+  if (status.state !== "connected") return status;
+  try {
+    const token = await getGoogleWorkspaceAccessToken(supabase, profileId);
+    return { ...status, calendarLabel: await probeGoogleWorkspacePrimaryCalendar(token) };
+  } catch {
+    return { ...status, calendarLabel: null };
+  }
 }
 
 async function markGoogleWorkspaceConnectionError(

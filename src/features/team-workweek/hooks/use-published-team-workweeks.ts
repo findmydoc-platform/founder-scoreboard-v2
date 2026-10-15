@@ -1,13 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { berlinDateKey, type CalendarTeamWorkweek } from "../model/team-workweek-calendar";
+import { addCalendarDays, berlinDateKey, type CalendarTeamWorkweek } from "../model/team-workweek-calendar";
+import { workweekStart } from "../model/team-workweek-week";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 
 export const TEAM_WORKWEEK_PUBLISHED_EVENT = "founderops:team-workweek-published";
 
-export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
+export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient, initialDate?: string) {
   const mounted = useRef(true);
+  const sequence = useRef(0);
+  const [selectedDate, setSelectedDate] = useState(() => initialDate || berlinDateKey());
+  const [upcomingWorkweeks, setUpcomingWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
+  const [publishedOwnerIds, setPublishedOwnerIds] = useState<string[] | undefined>();
   const [workweeks, setWorkweeks] = useState<CalendarTeamWorkweek[]>([]);
   const [referenceDate, setReferenceDate] = useState(() => berlinDateKey());
   const [nextActivationAt, setNextActivationAt] = useState<string | null>(null);
@@ -24,32 +29,38 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
   }, []);
 
   const load = useCallback(async () => {
+    const requestId = ++sequence.current;
     setPending(true);
     setMessage("");
     try {
       const { response, body } = await apiClient.requestJson<{
         currentWorkweeks?: CalendarTeamWorkweek[];
+        calendarWorkweeks?: CalendarTeamWorkweek[];
+        upcomingWorkweeks?: CalendarTeamWorkweek[];
+        publishedOwnerIds?: string[];
         workweeks?: Array<{effectiveAt?: string | null}>;
         error?: string;
         referenceDate?: string;
-      }>("/api/team-workweek/team", { cache: "no-store" });
+      }>(`/api/team-workweek/team?from=${workweekStart(selectedDate)}&to=${addCalendarDays(workweekStart(selectedDate), 6)}`, { cache: "no-store" });
       if (!response.ok || !body?.currentWorkweeks || !body.referenceDate) {
         throw new Error(body?.error || "Veröffentlichte Grundwochen konnten nicht geladen werden.");
       }
-      if (mounted.current) {
-        setWorkweeks(body.currentWorkweeks);
+      if (mounted.current && requestId === sequence.current) {
+        setWorkweeks(body.calendarWorkweeks || body.currentWorkweeks);
+        setUpcomingWorkweeks([...(body.upcomingWorkweeks || [])].sort((a,b) => a.effectiveFrom.localeCompare(b.effectiveFrom)));
+        setPublishedOwnerIds(body.publishedOwnerIds);
         setNextActivationAt((body.workweeks || []).flatMap((workweek) => workweek.effectiveAt && new Date(workweek.effectiveAt) > new Date() ? [workweek.effectiveAt] : []).sort()[0] || null);
-        setReferenceDate(body.referenceDate);
+        setReferenceDate(body.calendarWorkweeks ? selectedDate : body.referenceDate);
         setHasLoadedSuccessfully(true);
       }
     } catch (error) {
-      if (mounted.current) {
+      if (mounted.current && requestId === sequence.current) {
         setMessage(error instanceof Error ? error.message : "Veröffentlichte Grundwochen konnten nicht geladen werden.");
       }
     } finally {
-      if (mounted.current) setPending(false);
+      if (mounted.current && requestId === sequence.current) setPending(false);
     }
-  }, [apiClient]);
+  }, [apiClient, selectedDate]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
@@ -72,5 +83,11 @@ export function usePublishedTeamWorkweeks(apiClient: BrowserApiClient) {
     return () => window.clearInterval(timer);
   }, []);
 
-  return { hasLoadedSuccessfully, load, message, pending, referenceDate, workweeks };
+  const selectDate = (date: string) => {
+    if (workweekStart(date) === workweekStart(selectedDate)) return;
+    setHasLoadedSuccessfully(false);
+    setWorkweeks([]);
+    setSelectedDate(date);
+  };
+  return { hasLoadedSuccessfully, load, message, pending, referenceDate, workweeks, selectedDate, selectDate, upcomingWorkweeks, publishedOwnerIds };
 }

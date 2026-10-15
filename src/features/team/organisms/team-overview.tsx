@@ -7,6 +7,7 @@ import { TeamMemberCard } from "@/features/team/molecules/team-member-card";
 import { TeamRoleSummary } from "@/features/team/molecules/team-role-summary";
 import { deputyLabel, teamMemberStats } from "@/features/team/model/team-profile-view-model";
 import { TeamProfileEditDialog } from "@/features/team/organisms/team-profile-edit-dialog";
+import { isIsoCalendarDate } from "@/features/team-workweek/model/team-workweek-calendar";
 import { PrivateTeamWorkweekCard } from "@/features/team-workweek/molecules/private-team-workweek-card";
 import { PublishedTeamWorkweeksCard } from "@/features/team-workweek/molecules/published-team-workweeks-card";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -31,6 +32,8 @@ export function TeamOverview({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const weekParameter = searchParams.get("week");
+  const week = weekParameter && isIsoCalendarDate(weekParameter) ? weekParameter : undefined;
   const closeWorkweekRequest = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("workweek");
@@ -61,11 +64,11 @@ export function TeamOverview({
     <div className="grid gap-4">
       <TeamRoleSummary profiles={data.profiles} today={today} />
 
-      {actualProfile && <PublishedTeamWorkweeksCard apiClient={apiClient} profiles={data.profiles} />}
-
       {actualProfile && (
-        <PrivateTeamWorkweekCard apiClient={apiClient} profile={actualProfile} editorRequested={searchParams.get("workweek") === "edit"} onEditorRequestHandled={closeWorkweekRequest} />
+        <PrivateTeamWorkweekCard apiClient={apiClient} profile={actualProfile} editorWeek={week} editorRequested={searchParams.get("workweek") === "edit"} onEditorRequestHandled={closeWorkweekRequest} />
       )}
+
+      {actualProfile && <PublishedTeamWorkweeksCard key={week || "current"} initialDate={week} apiClient={apiClient} profiles={data.profiles} />}
 
       <div className="grid gap-2">
         {data.profiles.map((profile) => (
