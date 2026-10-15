@@ -52,10 +52,7 @@ export function GoogleWorkspaceConnectionCard({
               </UiBadge>
             </div>
             <p className={classNames("mt-1 max-w-3xl text-slate-500", compact ? "text-xs leading-5" : "text-sm leading-6")}>
-              Hier veröffentlichte Zeiten werden in Google eingetragen. Selbst angelegte Google-Termine werden nicht automatisch übernommen.
-            </p>
-            <p className={classNames("mt-1 text-slate-500", compact ? "text-xs leading-5" : "text-sm leading-6")}>
-              Die Verbindung allein veröffentlicht keine Arbeitszeiten.
+              Erst Veröffentlichen trägt Arbeitszeiten in Google ein. Selbst angelegte Google-Termine werden nicht übernommen. Verbinden allein veröffentlicht nichts.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

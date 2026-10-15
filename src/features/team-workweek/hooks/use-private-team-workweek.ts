@@ -247,7 +247,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient) {
         applyVersion(saved);
         setPublication(null);
         setMessageTone("success");
-        setMessage("Änderung privat gespeichert. Im Team und in Google bleibt sie bis zur Veröffentlichung unverändert.");
+        setMessage("Entwurf gespeichert. Noch nicht veröffentlicht.");
       }
       return saved;
     } catch (error) {

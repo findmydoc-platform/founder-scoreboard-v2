@@ -10,7 +10,7 @@
       {
         "id": "current-week-publication",
         "title": "Den Beginn selbst wählen",
-        "description": "Wähle die aktuelle Woche oder einen zukünftigen Montag. Nach dem Google-Abgleich zeigt FounderOps den bestätigten Beginn. Mit Privat speichern bleiben deine Eingaben ein Entwurf.",
+        "description": "Wähle die aktuelle Woche oder einen zukünftigen Montag. Nach dem Google-Abgleich zeigt FounderOps den bestätigten Beginn. Mit Entwurf speichern bleiben deine Eingaben unveröffentlicht.",
         "image": {
           "src": "/product-updates/2026-10-14-workweek-current-publication/workweek-editor.png",
           "alt": "Arbeitswochen-Editor mit Auswahl für die aktuelle Woche, kurzem Vorlauf und getrennten Aktionen zum privaten Speichern und Veröffentlichen",

@@ -62,7 +62,7 @@ export const featureTours: readonly FeatureTourDefinition[] = [
       { element: "[data-tour-id='workweek-validity']", disableActiveInteraction: true,
         popover: { progressText: "{{current}} von {{total}}", title: "Beginn bewusst wählen", description: "Wähle die aktuelle Woche oder einen zukünftigen Montag. Für die aktuelle Woche wird der genaue Beginn nach dem kurzen Vorlauf bestätigt." } },
       { element: "[data-tour-id='workweek-publish']", disableActiveInteraction: true,
-        popover: { progressText: "{{current}} von {{total}}", title: "Veröffentlichen oder privat speichern", description: "Veröffentlichen speichert deine Eingaben und gleicht sie mit Google ab. Privat speichern hält sie als Entwurf zurück. Diese Tour veröffentlicht nichts." } },
+        popover: { progressText: "{{current}} von {{total}}", title: "Entwurf speichern oder veröffentlichen", description: "Veröffentlichen speichert deine Eingaben und gleicht sie mit Google ab. Entwurf speichern sichert sie ohne Veröffentlichung. Diese Tour veröffentlicht nichts." } },
     ],
   },
   {

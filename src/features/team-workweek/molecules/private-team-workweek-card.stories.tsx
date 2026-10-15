@@ -193,8 +193,7 @@ export const StartsTheFirstWorkweekEmpty: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche einrichten" }));
-    await expect(canvas.getByText("Hier veröffentlichte Zeiten werden in Google eingetragen. Selbst angelegte Google-Termine werden nicht automatisch übernommen.")).toBeVisible();
-    await expect(canvas.getByText("Die Verbindung allein veröffentlicht keine Arbeitszeiten.")).toBeVisible();
+    await expect(canvas.getByText("Erst Veröffentlichen trägt Arbeitszeiten in Google ein. Selbst angelegte Google-Termine werden nicht übernommen. Verbinden allein veröffentlicht nichts.")).toBeVisible();
     await expect((await canvas.findAllByText("Kein Arbeitszeitfenster")).length).toBeGreaterThan(0);
     await expect(canvas.queryByLabelText("Montag, Fenster 1, Beginn")).not.toBeInTheDocument();
     await expect(canvas.getByRole("radio", {name:/Nach Bestätigung/})).toBeChecked();
@@ -351,8 +350,8 @@ export const SavesPrivatelyWithoutPublication: Story = {
     const end = await canvas.findByLabelText("Montag, Fenster 1, Ende");
     await userEvent.clear(end);
     await userEvent.type(end, "18:00");
-    await userEvent.click(canvas.getByRole("button", { name: "Änderung privat speichern" }));
-    await expect(await canvas.findByText(/Änderung privat gespeichert/)).toHaveTextContent("Im Team und in Google bleibt sie bis zur Veröffentlichung unverändert");
+    await userEvent.click(canvas.getByRole("button", { name: "Entwurf speichern" }));
+    await expect(await canvas.findByText("Entwurf gespeichert. Noch nicht veröffentlicht.")).toBeVisible();
     await expect(canvas.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).toBeInTheDocument();
   },
 };
@@ -370,7 +369,7 @@ export const RetainsTheSavedDraftWhenPublicationIsDelayed: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
     await expect(await canvas.findByText(/Synchronisierung verzögert\. Google kann bereits vorläufige App-Termine/)).toHaveTextContent("der bisherige Teamstand bleibt sichtbar");
     await expect(end).toHaveValue("18:00");
-    await expect(canvas.getByRole("button", { name: "Änderung privat speichern" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
   },
 };
@@ -388,7 +387,7 @@ export const RetriesTheSavedRevisionAfterALostResponse: Story = {
     await userEvent.type(end, "18:00");
     await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
     await expect(await canvas.findByText(/Antwort der Veröffentlichung/)).toHaveTextContent("Wiederhole die Veröffentlichung, um den Stand zu prüfen");
-    await expect(canvas.getByRole("button", { name: "Änderung privat speichern" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
     await expect(end).toHaveValue("18:00");
     await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
     await expect(await canvas.findByText("Arbeitswoche wurde mit Google synchronisiert und im Team veröffentlicht.")).toBeInTheDocument();
@@ -403,7 +402,7 @@ export const ExplainsManagedSeriesBeforeAndAfterCheckingGoogle: Story = {
     await expect(await canvas.findByText("Die von FounderOps angelegten Google-Serien sind unverändert. Selbst angelegte Google-Termine wurden nicht übernommen.")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Arbeitswoche bearbeiten" }));
     await expect(await canvas.findByText("Verbunden")).toBeVisible();
-    await expect(canvas.getByText("Die Verbindung allein veröffentlicht keine Arbeitszeiten.")).toBeVisible();
+    await expect(canvas.getByText(/Verbinden allein veröffentlicht nichts/)).toBeVisible();
   },
 };
 
@@ -581,7 +580,7 @@ export const RestartsWithCurrentContextAndRetainsUnsavedWindows: Story = {
     await expect(await canvas.findByText(/Neustart vorbereitet/)).toBeVisible();
     await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
     await expect(canvas.getByText(/Geplante Änderung am 12. Jan. 2099 bleibt erhalten/)).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "Änderung privat speichern" })).toBeEnabled();
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeEnabled();
     await expect(canvas.queryByRole("button", { name: "Mit aktuellem Stand neu beginnen" })).not.toBeInTheDocument();
     await waitFor(() => expect(canvas.getByRole("radio", { name: /Nach Bestätigung/ })).toHaveFocus());
     await expect(canvas.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).toBeVisible();
@@ -605,7 +604,7 @@ export const RestartsADelayedMondayWithoutLosingCurrentWeekEdits: Story = {
     await userEvent.clear(end);
     await userEvent.type(end, "18:00");
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
-    await expect(canvas.getByRole("button", { name: "Änderung privat speichern" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
     await expect(canvas.queryByText(/Geplanter Beginn:/)).not.toBeInTheDocument();
     await expect(canvas.getByText(/Ein früherer Veröffentlichungsversuch ist noch offen/)).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" }));
@@ -652,8 +651,8 @@ export const RestartsAMondayAgainstTheCurrentWeekAndKeepsItsSuccessor: Story = {
     await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Ende"), "18:00");
     await userEvent.click(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" }));
     await expect(await canvas.findByText(/Neustart vorbereitet/)).toBeVisible();
-    await userEvent.click(canvas.getByRole("button", { name: "Änderung privat speichern" }));
-    await expect(await canvas.findByText(/Änderung privat gespeichert/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Entwurf speichern" }));
+    await expect(await canvas.findByText("Entwurf gespeichert. Noch nicht veröffentlicht.")).toBeVisible();
     await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
     await expect(canvas.getByRole("radio", { name: /Nach Bestätigung/ })).toBeChecked();
     await expect(canvas.getByText(/Geplante Änderung am 12. Jan. 2099 bleibt erhalten/)).toBeVisible();
@@ -720,7 +719,7 @@ export const KeepsAnUntrackedOlderAttemptBlocked: Story = {
     await expect(await canvas.findByText(/Dieser ältere Versuch kann noch nicht sicher abgebrochen werden/)).toBeVisible();
     await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
     await expect(canvas.getByRole("radio", { name: /Nach Bestätigung/ })).toBeChecked();
-    await expect(canvas.getByRole("button", { name: "Änderung privat speichern" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
     await expect(canvas.queryByText(/Neustart vorbereitet/)).not.toBeInTheDocument();
     await expect(canvas.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).toBeVisible();
@@ -809,7 +808,6 @@ export const OffersRestartOnlyForARecoverablePublication: Story = {
     await userEvent.click(await canvas.findByRole("button", { name: "Bearbeitung fortsetzen" }));
     await expect(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" })).toBeEnabled();
     await expect(canvas.getByText(/Bisheriger Teamstand sichtbar/)).toBeVisible();
-    await expect(canvas.getByText("Beginne mit dem aktuellen Stand neu. Deine Eingaben bleiben erhalten.")).toBeVisible();
     await expect(canvas.queryByText(/Wiederhole die Veröffentlichung/)).not.toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
   },
@@ -842,14 +840,14 @@ export const GuidesValidityAndPublicationInsideTheOwnerEditor: Story = {
     await expect(editor.contains(guide)).toBe(true);
     await waitFor(() => expect(within(guide).getByRole("button", { name: "Tour schließen" })).toBeVisible());
     await userEvent.click(within(guide).getByRole("button", { name: "Weiter" }));
-    const publishGuide = await page.findByRole("dialog", { name: "Veröffentlichen oder privat speichern" });
+    const publishGuide = await page.findByRole("dialog", { name: "Entwurf speichern oder veröffentlichen" });
     await expect(editor.contains(publishGuide)).toBe(true);
     for (let index = 0; index < 6; index++) {
       await userEvent.tab();
       await expect(publishGuide.contains(canvasElement.ownerDocument.activeElement)).toBe(true);
     }
     await userEvent.keyboard("{Escape}");
-    await waitFor(() => expect(page.queryByRole("dialog", { name: "Veröffentlichen oder privat speichern" })).not.toBeInTheDocument());
+    await waitFor(() => expect(page.queryByRole("dialog", { name: "Entwurf speichern oder veröffentlichen" })).not.toBeInTheDocument());
     await expect(editor).toBeVisible();
     await waitFor(() => expect(editor.contains(canvasElement.ownerDocument.activeElement)).toBe(true));
     await expect(page.queryByText(/Arbeitswoche bestätigt/)).not.toBeInTheDocument();

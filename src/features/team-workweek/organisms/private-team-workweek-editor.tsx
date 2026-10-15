@@ -56,7 +56,7 @@ export function PrivateTeamWorkweekEditor({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 id="private-workweek-editor-title" className="text-base font-semibold text-slate-950">Meine Arbeitswoche bearbeiten</h2>
-                <UiBadge size="xs" tone="amber">{state.publication?.syncState === "delayed" ? "Synchronisierung verzögert" : "Bearbeitung"}</UiBadge>
+                {state.publication?.syncState === "delayed" && <UiBadge size="xs" tone="amber">Synchronisierung verzögert</UiBadge>}
               </div>
               <p className="mt-0.5 text-xs leading-5 text-slate-500">
                 {profile.name} · {state.publication?.syncState === "delayed" ? "Bisheriger Teamstand sichtbar" : "Privat · nicht veröffentlicht"} · {TEAM_WORKWEEK_TIMEZONE}
@@ -158,15 +158,15 @@ export function PrivateTeamWorkweekEditor({
                   </fieldset>
                 )}
                 {state.draft.activationMode === "immediate" && state.immediateAllowed ? (
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {state.restartAvailable
-                      ? "Beginne mit dem aktuellen Stand neu. Deine Eingaben bleiben erhalten."
-                      : state.publication?.effectiveAt && !state.dirty
-                      ? state.publicationExpired
-                        ? "Der geplante Beginn ist abgelaufen. Wiederhole die Veröffentlichung; ein neuer zukünftiger Beginn wird bestätigt."
-                        : `Geplanter Beginn: ${formatTeamWorkweekActivation(state.publication.effectiveAt)}. Erst nach vollständiger Bestätigung gültig.`
-                      : "2–3 Minuten Vorlauf. Der genaue Beginn wird bestätigt; vergangene Zeiten bleiben unverändert."}
-                  </p>
+                  !state.restartAvailable && (
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      {state.publication?.effectiveAt && !state.dirty
+                        ? state.publicationExpired
+                          ? "Der geplante Beginn ist abgelaufen. Wiederhole die Veröffentlichung; ein neuer zukünftiger Beginn wird bestätigt."
+                          : `Geplanter Beginn: ${formatTeamWorkweekActivation(state.publication.effectiveAt)}. Erst nach vollständiger Bestätigung gültig.`
+                        : "2–3 Minuten Vorlauf. Der genaue Beginn wird bestätigt; vergangene Zeiten bleiben unverändert."}
+                    </p>
+                  )
                 ) : (
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs leading-5 text-slate-500">Montag, frühestens {formatDate(state.minimumEffectiveFrom)}</p>
@@ -211,8 +211,8 @@ export function PrivateTeamWorkweekEditor({
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
               <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
-              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Änderung privat speichern" onClick={() => void state.save()} disabled={state.pending || !state.dirty || state.mustRestartBeforeSaving}>
-                Privat speichern
+              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Entwurf speichern" onClick={() => void state.save()} disabled={state.pending || !state.dirty || state.mustRestartBeforeSaving}>
+                Entwurf speichern
               </UiButton>
               <UiButton
                 variant="primary"

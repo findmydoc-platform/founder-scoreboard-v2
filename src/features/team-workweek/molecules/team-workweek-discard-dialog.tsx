@@ -34,7 +34,7 @@ export function TeamWorkweekDiscardDialog({
           <div>
             <h2 id="workweek-discard-title" className="text-lg font-semibold text-slate-950">Ungespeicherte Änderungen verwerfen?</h2>
             <p id="workweek-discard-description" className="mt-2 text-sm leading-6 text-slate-600">
-              Deine Änderungen wurden noch nicht privat gespeichert.
+              Deine Änderungen wurden noch nicht als Entwurf gespeichert.
             </p>
           </div>
         </div>
