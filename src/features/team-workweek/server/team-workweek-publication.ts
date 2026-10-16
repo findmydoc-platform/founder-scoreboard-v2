@@ -7,11 +7,10 @@ import {
   googleWorkweekRecovery,
   type PreparedWorkweekPublication,
 } from "./team-workweek-publication-core";
-import { compensateTeamWorkweekGeneration } from "./team-workweek-compensation";
 import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, ensureGoogleWorkweekEffect, recoverGoogleWorkweekWrite } from "./team-workweek-immediate-effects";
 import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
 import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
-import { executeTeamWorkweekPublication, type WorkweekExecutionDelayClass } from "./team-workweek-execution";
+import { compensateTeamWorkweekGeneration, executeTeamWorkweekPublication, type WorkweekExecutionDelayClass } from "./team-workweek-execution";
 
 type PublicationErrorCode =
   | "invalid_request"
@@ -212,7 +211,7 @@ export async function publishTeamWorkweek({
     });
     const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
     if (expired()) {
-      const compensation = await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attemptGeneration!,serviceSupabase,now,cleanupEffect,discoverInstance,journaled:publication.writeJournalVersion!==undefined});
+      const compensation = await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attemptGeneration!,serviceSupabase,now,cleanupEffect,discoverInstance,recoverWrite,journaled:publication.writeJournalVersion!==undefined});
       if(compensation)return await delayed(compensation);
       const replanned = await userSupabase.rpc("prepare_team_workweek_publication", { p_version_id: versionId, p_write_journal_version: 1 });
       if (replanned.error) throw publicationError(replanned.error);

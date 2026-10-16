@@ -1,4 +1,4 @@
-import {expect,it} from "vitest";
+import {expect,it,vi} from "vitest";
 import {importTestModule} from "../../helpers/vitest-module.mjs";
 const {TeamWorkweekPublicationError}=await importTestModule("src/features/team-workweek/server/team-workweek-publication.ts",{"server-only":{},"./google-workspace-oauth":{getGoogleWorkspaceAccessToken:async()=>"token"}});
 const restart=await importTestModule("src/features/team-workweek/server/team-workweek-restart.ts",{"server-only":{},"./team-workweek-publication":{TeamWorkweekPublicationError}});
@@ -47,4 +47,50 @@ it("reports uncertain provider recovery without creating a new private version",
   input.compensate=async args=>{args.onRecoveryReason("uncertain");return "provider_unavailable";};
   expect(await restart.restartPrivateTeamWorkweek(input)).toEqual({restart:{state:"delayed",recovery:"retry",reason:"uncertain"}});
   expect(calls.some(([name])=>name==="restart_private_team_workweek_version")).toBe(false);
+});
+
+
+it.each(["confirmed", "delayed"])("restarts through real cleanup and the selected recovery adapter when uncertain recovery is %s", async state => {
+  const { input, calls } = clients({ journalVersion: 1, future: true });
+  delete input.compensate;
+  const originalFrom = input.serviceSupabase.from;
+  input.serviceSupabase.from = table => table === "team_workweek_provider_writes" ? {
+    select() { return this; }, eq() { return this; }, async in() {
+      return { data: [{ team_workweek_publication_effects: {
+        id: "effect", google_event_id: "fopsrecovercleanup", generation: 2, kind: "series", operation: "create",
+        payload: { id: "fopsrecovercleanup" }, state: "pending", confirmed_etag: null,
+      } }], error: null };
+    },
+  } : originalFrom(table);
+  let claims = 0;
+  let recovered = false;
+  input.serviceSupabase.rpc = async (name, args) => {
+    calls.push([name, args]);
+    if (name === "request_team_workweek_publication_restart") return { data: { state: "ready" }, error: null };
+    if (name === "claim_team_workweek_provider_operation") return { data: ++claims === 1
+      ? { state: "uncertain", id: "old", purpose: "cleanup", abandon: true }
+      : { state: "claimed", id: "new" }, error: null };
+    if (name === "finish_team_workweek_provider_operation") return { data: { state: "settled" }, error: null };
+    if (name === "prepare_team_workweek_effect_cleanup") return { data: { effects: [] }, error: null };
+    throw new Error(name);
+  };
+  input.recoverWrite = async ({ effect, purpose, abandon }) => {
+    expect(effect.id).toBe("effect");
+    expect(purpose).toBe("cleanup");
+    expect(abandon).toBe(true);
+    recovered = true;
+    return state === "confirmed" ? { state, etag: "absent", observedAt: "2026-10-14T10:01:00Z" }
+      : { state, errorClass: "provider_unavailable" };
+  };
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(null, { status: 503 }));
+  try {
+    const result = await restart.restartPrivateTeamWorkweek(input);
+    expect(recovered).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    if (state === "confirmed") expect(result.restart).toEqual({ state: "ready", recovery: null });
+    else {
+      expect(result.restart).toEqual({ state: "delayed", recovery: "retry", reason: "uncertain" });
+      expect(calls.some(([name]) => name === "restart_private_team_workweek_version")).toBe(false);
+    }
+  } finally { fetchSpy.mockRestore(); }
 });
