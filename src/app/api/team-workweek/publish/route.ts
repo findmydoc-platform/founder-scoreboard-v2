@@ -30,7 +30,7 @@ function publicationFailureResponse(error: unknown) {
         : error.code === "conflict"
           ? 409
           : 503;
-  return apiError(error.message, status);
+  return NextResponse.json({ error: error.message, code: error.code, ...(error.completionPending ? { completionPending: true } : {}) }, { status });
 }
 
 export async function POST(request: NextRequest) {

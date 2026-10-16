@@ -20,7 +20,7 @@ it("publishes a managed Google correction through current activation while retai
     await client.query("set local role service_role");
     const prepared=(await client.query("select public.prepare_google_team_workweek_reconciliation('reconcile-owner',$1,1,$2,$3,'[{\"weekday\":1,\"startMinute\":600,\"endMinute\":1080}]',$4,clock_timestamp()) as result",[current.id,futureSource.effective_from,JSON.stringify([{seriesId:series.id,priorEtag:"old-etag",observedEtag:"new-etag",founderopsRevision:1,providerState:"active",observedPayload:observed}]),"a".repeat(64)])).rows[0].result;
     await client.query("reset role");
-    const publication=(await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1) as publication",[prepared.versionId]))).rows[0].publication;
+    const publication=(await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1,1) as publication",[prepared.versionId]))).rows[0].publication;
     expect(publication.activationMode).toBe("immediate");
     expect(publication.successorPublicationId).toBe(future.id);
     expect(publication.effects.find((effect:{kind:string})=>effect.kind==="predecessor_cutoff").expectedPayload.start).toEqual(observed.start);
@@ -50,8 +50,8 @@ it.each(["ceo", "founder", "deputy", "viewer"])("lets the mapped %s owner restar
     await client.query("insert into public.team_workweek_windows(version_id,weekday,start_minute,end_minute) values($1,1,480,720)",[privateDraft.id]);
     const automatic=(await client.query(`insert into public.team_workweek_versions(owner_profile_id,effective_from,activation_mode,origin,base_publication_id,base_publication_revision,google_reconciliation_source_publication_id,google_reconciliation_fingerprint)
       values('automatic-owner',$1,'immediate','google_reconciliation',$2,1,$2,$3) returning id`,[successorSource.effective_from,old.id,'b'.repeat(64)])).rows[0];
-    const pending=(await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,activation_mode,effective_at,predecessor_publication_id,windows,status,sync_state,attempt_generation,publication_revision)
-      values($1,'automatic-owner',$2,'immediate',clock_timestamp()-interval '2 hours',$3,'[]','preparing','delayed',1,3) returning id`,[automatic.id,successorSource.effective_from,old.id])).rows[0];
+    const pending=(await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,activation_mode,effective_at,predecessor_publication_id,windows,status,sync_state,attempt_generation,write_journal_version,publication_revision)
+      values($1,'automatic-owner',$2,'immediate',clock_timestamp()-interval '2 hours',$3,'[]','preparing','delayed',1,1,3) returning id`,[automatic.id,successorSource.effective_from,old.id])).rows[0];
     await client.query("update public.team_workweek_publications set effective_until=clock_timestamp()-interval '1 hour' where id=$1",[old.id]);
     await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '1 hour' where id=$1",[current.id]);
     for(const user of [foreign,unmapped]) expect(await captureDatabaseError(client,()=>asAuthenticated(client,user,()=>client.query("select public.restart_private_team_workweek_version($1)",[privateDraft.id])))).toMatchObject({code:"42501"});
@@ -67,7 +67,7 @@ it.each(["ceo", "founder", "deputy", "viewer"])("lets the mapped %s owner restar
     expect((await client.query("select status,deactivation_reason from public.team_workweek_publications where id=$1",[pending.id])).rows[0]).toEqual({status:"inactive",deactivation_reason:"private_restart"});
     expect((await client.query("select weekday,start_minute,end_minute from public.team_workweek_windows where version_id=$1",[restart.versionId])).rows).toEqual([{weekday:1,start_minute:480,end_minute:720}]);
     expect((await asAuthenticated(client,owner,()=>client.query("select public.restart_private_team_workweek_version($1) as result",[privateDraft.id]))).rows[0].result).toEqual({...restart,replayed:true});
-    const publication=(await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1) as result",[restart.versionId]))).rows[0].result;
+    const publication=(await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1,1) as result",[restart.versionId]))).rows[0].result;
     expect(publication.predecessorPublicationId).toBe(current.id);
     expect(new Date(publication.effectiveAt).getTime()).toBeGreaterThan(Date.now());
     expect(publication.status).toBe("preparing");

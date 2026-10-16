@@ -3,13 +3,15 @@
 import { Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
-import { formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
+import { TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
 import { formatDate } from "@/lib/display";
 import { GoogleWorkspaceConnectionCard } from "../molecules/google-workspace-connection-card";
 import { TeamWorkweekDiscardDialog } from "../molecules/team-workweek-discard-dialog";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Profile } from "@/lib/types";
-import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
+import { WorkweekPicker } from "../molecules/workweek-picker";
+import { workweekLabel } from "../model/team-workweek-week";
+import { addCalendarDays, berlinDateKey } from "../model/team-workweek-calendar";
 import { UiBadge, UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
@@ -28,10 +30,22 @@ export function PrivateTeamWorkweekEditor({
   onClose: () => void;
   restoreFocusRef?: RefObject<HTMLElement | null>;
 }) {
-  const validityFocusRef = useRef<HTMLInputElement>(null);
+  const validityFocusRef = useRef<HTMLSelectElement>(null);
   const restartFocusRequested = useRef(false);
 
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [requestedWeek, setRequestedWeek] = useState<string | null>(null);
+  const selectWeek = (week: string) => {
+    if (week === state.selectedWeekStart) return;
+    if (state.dirty) { setRequestedWeek(week); setDiscardOpen(true); }
+    else void state.selectWeek(week);
+  };
+  const hours = TEAM_WORKWEEK_DAYS.flatMap(day => state.draft.windows[day.key]).reduce((total, window) => {
+    const minute = (clock: string) => Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3));
+    return total + Math.max(0, minute(window.end) - minute(window.start));
+  }, 0) / 60;
+  const nextChange = state.weekContext?.effectiveUntil
+    ? formatDate(addCalendarDays(berlinDateKey(new Date(state.weekContext.effectiveUntil)), -1)) : null;
   const hasTransitionClockLabel = state.draft.windows.sunday.some((window) =>
     [window.start, window.end].some((clock) => clock >= "02:00" && clock < "03:00"));
   const requestClose = () => {
@@ -56,10 +70,10 @@ export function PrivateTeamWorkweekEditor({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 id="private-workweek-editor-title" className="text-base font-semibold text-slate-950">Meine Arbeitswoche bearbeiten</h2>
-                <UiBadge size="xs" tone="amber">{state.publication?.syncState === "delayed" ? "Synchronisierung verzögert" : "Bearbeitung"}</UiBadge>
+                {state.publication?.syncState === "delayed" && <UiBadge size="xs" tone="amber">Synchronisierung verzögert</UiBadge>}
               </div>
               <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                {profile.name} · {state.publication?.syncState === "delayed" ? "Bisheriger Teamstand sichtbar" : "Privat · nicht veröffentlicht"} · {TEAM_WORKWEEK_TIMEZONE}
+                {profile.name} · {state.publication?.syncState === "delayed" ? "Bisheriger Teamstand sichtbar" : "Entwurf"} · {TEAM_WORKWEEK_TIMEZONE}
               </p>
             </div>
             <UiButton size="iconLg" aria-label="Editor schließen" onClick={requestClose}><X size={18} /></UiButton>
@@ -67,6 +81,29 @@ export function PrivateTeamWorkweekEditor({
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
             <div className="grid gap-3">
+              <section data-tour-id="workweek-validity" className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
+                <h3 id="workweek-validity-title" className="sr-only">Arbeitswoche auswählen</h3>
+                <WorkweekPicker value={state.selectedWeekStart} onChange={selectWeek} focusRef={validityFocusRef}
+                  disabled={state.pending || state.publication?.status === "preparing" || state.restartContextPending} />
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  {state.draft.activationMode === "immediate"
+                    ? "Die Veröffentlichung kann ein paar Minuten dauern. Vergangene Zeiten bleiben unverändert."
+                    : "Die Arbeitszeiten wiederholen sich ab dieser Woche."}
+                </p>
+                {state.weekExpired && !state.publication && <UiNotice className="mt-2" tone="warning">
+                  <p>Die ausgewählte Woche ist vorbei. Deine Eingaben bleiben erhalten.</p>
+                  <UiButton className="mt-2" onClick={() => void state.carryIntoCurrentWeek()} disabled={state.pending}>Eingaben für diese Woche übernehmen</UiButton>
+                </UiNotice>}
+                {nextChange && <p className="mt-1 text-xs leading-5 text-slate-600">Gilt bis {nextChange}, spätere Planungen bleiben erhalten.</p>}
+              </section>
+
+              {state.pendingPublication && <UiNotice tone="warning">
+                <p>Die Veröffentlichung ab {formatDate(state.pendingPublication.effectiveFrom)} ist noch offen. Deine aktuellen Eingaben bleiben erhalten.</p>
+                <UiButton className="mt-2 min-h-11 whitespace-normal text-left" variant="secondary" onClick={() => void state.resumePendingPublication()} disabled={state.pending}>
+                  {state.pendingPublication.resumeAllowed ? "Offene Veröffentlichung fortsetzen" : "Offene Veröffentlichung sicher neu beginnen"}
+                </UiButton>
+              </UiNotice>}
+
               <GoogleWorkspaceConnectionCard compact apiClient={apiClient} profile={profile} />
 
               <section className="overflow-hidden rounded-lg border border-slate-200 bg-white" aria-labelledby="workweek-windows-title">
@@ -95,7 +132,7 @@ export function PrivateTeamWorkweekEditor({
                                   disabled={state.pending}
                                   aria-label={`${day.label}, Fenster ${index + 1}, Beginn`}
                                   onChange={(event) => state.setWindow(day.key, index, { start: event.target.value })}
-                                  className="h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 [@media(pointer:coarse)]:h-11"
+                                  className="h-11 w-full min-w-0 rounded-md border border-slate-200 bg-white px-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:h-9 [@media(pointer:coarse)]:h-11"
                                 />
                               </label>
                               <span className="text-xs font-semibold text-slate-400" aria-hidden="true">–</span>
@@ -107,7 +144,7 @@ export function PrivateTeamWorkweekEditor({
                                   disabled={state.pending}
                                   aria-label={`${day.label}, Fenster ${index + 1}, Ende`}
                                   onChange={(event) => state.setWindow(day.key, index, { end: event.target.value })}
-                                  className="h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 [@media(pointer:coarse)]:h-11"
+                                  className="h-11 w-full min-w-0 rounded-md border border-slate-200 bg-white px-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:h-9 [@media(pointer:coarse)]:h-11"
                                 />
                               </label>
                               <UiButton size="iconMd" variant="red" aria-label={`${day.label}, Fenster ${index + 1} entfernen`} onClick={() => state.removeWindow(day.key, index)} disabled={state.pending}>
@@ -140,48 +177,14 @@ export function PrivateTeamWorkweekEditor({
                 )}
               </section>
 
-              <section data-tour-id="workweek-validity" className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
-                <h3 id="workweek-validity-title" className="text-sm font-semibold text-slate-950">Gültigkeitsbeginn</h3>
-                {state.immediateAllowed && (
-                  <fieldset className="mt-2 grid gap-1" disabled={state.pending}>
-                    <legend className="sr-only">Gültigkeitsbeginn wählen</legend>
-                    <label className="flex min-h-11 items-center gap-2 text-sm text-slate-800">
-                      <input ref={validityFocusRef} type="radio" name="workweek-activation-mode" value="immediate" checked={state.draft.activationMode === "immediate"}
-                        onChange={() => state.setActivationMode("immediate")} className="h-4 w-4 accent-blue-600" />
-                      Nach Bestätigung · aktuelle Woche
-                    </label>
-                    <label className="flex min-h-11 items-center gap-2 text-sm text-slate-800">
-                      <input type="radio" name="workweek-activation-mode" value="future_monday" checked={state.draft.activationMode !== "immediate"}
-                        onChange={() => state.setActivationMode("future_monday")} className="h-4 w-4 accent-blue-600" />
-                      Zukünftiger Montag
-                    </label>
-                  </fieldset>
-                )}
-                {state.draft.activationMode === "immediate" && state.immediateAllowed ? (
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {state.restartAvailable
-                      ? "Beginne mit dem aktuellen Stand neu. Deine Eingaben bleiben erhalten."
-                      : state.publication?.effectiveAt
-                      ? state.publicationExpired
-                        ? "Der geplante Beginn ist abgelaufen. Wiederhole die Veröffentlichung; ein neuer zukünftiger Beginn wird bestätigt."
-                        : `Geplanter Beginn: ${formatTeamWorkweekActivation(state.publication.effectiveAt)}. Erst nach vollständiger Bestätigung gültig.`
-                      : "2–3 Minuten Vorlauf. Der genaue Beginn wird bestätigt; vergangene Zeiten bleiben unverändert."}
-                  </p>
-                ) : (
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs leading-5 text-slate-500">Montag, frühestens {formatDate(state.minimumEffectiveFrom)}</p>
-                    <CustomDatePicker value={state.draft.effectiveFrom} onChange={state.setEffectiveFrom} disabled={state.pending}
-                      aria-label="Gültigkeitsbeginn der Arbeitswoche" className="h-9 w-full sm:w-[180px] [@media(pointer:coarse)]:h-11" />
-                  </div>
-                )}
-                {state.draft.activationMode === "immediate" && state.preparedSuccessor && (
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Geplante Änderung am {new Intl.DateTimeFormat("de-DE", { timeZone: TEAM_WORKWEEK_TIMEZONE, day: "2-digit", month: "short", year: "numeric" }).format(new Date(state.preparedSuccessor.effectiveAt || `${state.preparedSuccessor.effectiveFrom}T12:00:00Z`))} bleibt erhalten. Diese Korrektur gilt bis dahin.
-                  </p>
-                )}
-              </section>
-
-              {(state.restartAvailable || state.restartContextPending) && (
+              {state.mustRestartBeforeSaving && !state.pendingPublication && !state.message && (
+                <UiNotice tone="warning">
+                  Ein früherer Veröffentlichungsversuch ist noch offen. {state.restartAvailable
+                    ? "Beginne mit dem aktuellen Stand neu, bevor du diese Änderungen speicherst oder veröffentlichst."
+                    : "Der gespeicherte Versuch muss zuerst geklärt werden."} Deine Eingaben bleiben hier im Editor erhalten.
+                </UiNotice>
+              )}
+              {((state.restartAvailable && !state.pendingPublication) || state.restartContextPending) && (
                 <UiButton className="justify-self-start whitespace-normal text-left" variant="secondary" onClick={() => { restartFocusRequested.current = true; void state.restart(); }} disabled={state.pending}>
                   {state.restartContextPending ? "Aktuellen Stand laden" : "Mit aktuellem Stand neu beginnen"}
                 </UiButton>
@@ -197,15 +200,14 @@ export function PrivateTeamWorkweekEditor({
           </div>
 
           <footer className="border-t border-slate-200 bg-white px-3 py-2.5 sm:px-4">
-            <p className="mb-2 text-xs leading-4 text-slate-500">
-              {state.draft.activationMode === "immediate"
-                ? `${state.preparedSuccessor ? "" : "Gilt dauerhaft. "}Bei Verzögerung wird ein neuer zukünftiger Beginn geplant.`
-                : `Änderungen gelten ab ${formatDate(state.draft.effectiveFrom)} und werden erst nach dem Google-Abgleich veröffentlicht.`}
+            <p className="mb-2 text-xs leading-5 text-slate-600" aria-live="polite">
+              {state.publishing ? "Deine Arbeitszeiten werden veröffentlicht. Das kann ein paar Minuten dauern."
+                : `${hours ? `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 }).format(hours)} Stunden pro Woche` : "Keine Arbeitszeiten geplant"} · ${workweekLabel(state.selectedWeekStart)}`}
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
               <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
-              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Änderung privat speichern" onClick={() => void state.save()} disabled={state.pending || !state.dirty}>
-                Privat speichern
+              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Entwurf speichern" onClick={() => void state.save()} disabled={state.pending || state.weekExpired || state.restartContextPending || !state.dirty || state.mustRestartBeforeSaving}>
+                Entwurf speichern
               </UiButton>
               <UiButton
                 variant="primary"
@@ -214,7 +216,7 @@ export function PrivateTeamWorkweekEditor({
                 data-tour-id="workweek-publish"
                 aria-label="Änderung in Google & Team veröffentlichen"
                 onClick={() => void state.publish().then((result) => (result === true || result === "conflict") && onClose())}
-                disabled={state.pending || state.restartContextPending}
+                disabled={state.pending || state.weekExpired || state.restartContextPending || state.mustRestartBeforeSaving}
               >
                 {state.pending ? "Bitte warten …" : "Veröffentlichen"}
               </UiButton>
@@ -225,11 +227,15 @@ export function PrivateTeamWorkweekEditor({
 
       <TeamWorkweekDiscardDialog
         open={discardOpen}
-        onKeepEditing={() => setDiscardOpen(false)}
+        onKeepEditing={() => { setDiscardOpen(false); setRequestedWeek(null); }}
         onDiscard={() => {
           state.reset();
           setDiscardOpen(false);
-          onClose();
+          if (requestedWeek) {
+            const week = requestedWeek;
+            setRequestedWeek(null);
+            void state.selectWeek(week);
+          } else onClose();
         }}
       />
     </>

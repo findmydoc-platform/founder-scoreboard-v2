@@ -41,7 +41,7 @@ export function GoogleWorkspaceConnectionCard({
   return (
     <>
       <UiPanel padding={compact ? "sm" : "md"} aria-labelledby="google-workspace-connection-title">
-        <div className={classNames("flex flex-col sm:flex-row sm:items-start sm:justify-between", compact ? "gap-2" : "gap-4")}>
+        <div className={classNames(compact ? "flex items-start justify-between gap-2" : "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between")}>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 id="google-workspace-connection-title" className={classNames("font-semibold text-slate-950", compact ? "text-sm" : "text-base")}>
@@ -51,14 +51,14 @@ export function GoogleWorkspaceConnectionCard({
                 {pending ? "Wird geprüft" : googleWorkspaceConnectionLabel(connection.state)}
               </UiBadge>
             </div>
+            {connected && <p className="mt-1 break-words text-xs font-medium text-slate-700">
+              Zielkalender: {connection.calendarLabel || "Primärer Kalender des verbundenen Google-Kontos"}
+            </p>}
             <p className={classNames("mt-1 max-w-3xl text-slate-500", compact ? "text-xs leading-5" : "text-sm leading-6")}>
-              Hier veröffentlichte Zeiten werden in Google eingetragen. Selbst angelegte Google-Termine werden nicht automatisch übernommen.
-            </p>
-            <p className={classNames("mt-1 text-slate-500", compact ? "text-xs leading-5" : "text-sm leading-6")}>
-              Die Verbindung allein veröffentlicht keine Arbeitszeiten.
+              {compact ? "Erst Veröffentlichen trägt diese Zeiten in Google ein. Eigene Google-Termine werden nicht übernommen." : "Erst Veröffentlichen trägt Arbeitszeiten in Google ein. Selbst angelegte Google-Termine werden nicht übernommen. Verbinden allein veröffentlicht nichts."}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2">
             {message && (
               <UiButton size={compact ? "sm" : "lg"} onClick={() => void load()} disabled={pending}>
                 Erneut prüfen

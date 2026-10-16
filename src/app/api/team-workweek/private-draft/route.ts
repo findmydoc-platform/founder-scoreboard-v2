@@ -1,3 +1,4 @@
+import { selectedWorkweek, workweekStart } from "@/features/team-workweek/model/team-workweek-week";
 import { type NextRequest, NextResponse } from "next/server";
 import {
   berlinTodayIso,
@@ -41,11 +42,11 @@ type PublicationRow = Readonly<{
 }>;
 
 type PreparedSuccessorBinding={id:string;revision:number;start:string;until?:string|null;effectiveTo?:string|null;sourceVersionId?:string|null;supersededBy?:string|null;windows?:Array<{weekday:number;startMinute:number;endMinute:number}>;series?:Array<{id:string;googleEventId:string;etag:string|null;state:string;providerState:string;part:string;sources:number[]|null}>};
-function successorBindingKey(rows:PreparedSuccessorBinding[]){
+function successorBindingKey(rows:PreparedSuccessorBinding[], replacedId?: string | null){
   return JSON.stringify([...rows].sort((a,b)=>Date.parse(a.start)-Date.parse(b.start)||a.id.localeCompare(b.id)).map(row=>[
     row.id,row.revision,Date.parse(row.start),row.until?Date.parse(row.until):null,row.effectiveTo||null,row.sourceVersionId||null,row.supersededBy||null,
     (row.windows||[]).map(window=>[window.weekday,window.startMinute,window.endMinute]),
-    [...(row.series||[])].sort((a,b)=>a.id.localeCompare(b.id)).map(series=>[series.id,series.googleEventId,series.etag,series.state,series.providerState,series.part,series.sources?.map(String)??null]),
+    [...(row.series||[])].sort((a,b)=>a.id.localeCompare(b.id)).map(series=>[series.id,series.googleEventId,row.id===replacedId?null:series.etag,series.state,series.providerState,series.part,series.sources?.map(String)??null]),
   ]));
 }
 
@@ -82,12 +83,23 @@ export async function GET(request: NextRequest) {
   const supabase = authenticatedClient(request);
   if (!supabase) return apiError("Anmeldung erforderlich.", 401);
 
-  const privateResponse = await supabase
+  const requestedWeek = request.nextUrl.searchParams.get("week");
+  if (requestedWeek && !selectedWorkweek(requestedWeek).ok) return apiError("Wähle die aktuelle oder eine zukünftige Woche.", 400);
+  const pendingResponse = await supabase.from("team_workweek_publications")
+    .select("id,source_version_id,effective_from,effective_at,attempt_generation,write_journal_version,restart_requested_at,last_error_class")
+    .eq("owner_profile_id", context.permission.profile!.id)
+    .eq("status", "preparing")
+    .maybeSingle<{id:string;source_version_id:string;effective_from:string;effective_at:string|null;attempt_generation:number;write_journal_version:number;restart_requested_at:string|null;last_error_class:string|null}>();
+  if (pendingResponse.error) return apiError("Offene Veröffentlichung konnte nicht geladen werden.", 503);
+  const pending = pendingResponse.data;
+  let privateQuery = supabase
     .from("team_workweek_versions")
-    .select("id,owner_profile_id,effective_from,activation_mode,base_publication_id,base_publication_revision,successor_snapshot,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
+    .select("id,owner_profile_id,effective_from,selected_week_start,activation_mode,base_publication_id,base_publication_revision,successor_snapshot,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
     .eq("status", "preparing")
     .eq("origin", "owner")
-    .is("retired_at",null)
+    .is("retired_at",null);
+  if (requestedWeek) privateQuery = privateQuery.eq("effective_from", requestedWeek);
+  const privateResponse = await privateQuery
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(1)
@@ -95,6 +107,7 @@ export async function GET(request: NextRequest) {
       id: string;
       owner_profile_id: string;
       effective_from: string;
+      selected_week_start?: string | null;
       activation_mode?: "immediate" | "future_monday";
       base_publication_id?: string | null;
       base_publication_revision?: number | null;
@@ -124,18 +137,18 @@ export async function GET(request: NextRequest) {
   // Surface its expired operation through the same explicit owner restart action.
   if (!publication?.data || publication.data.status === "published") {
     const automatic = await supabase.from("team_workweek_publications")
-      .select("id,source_version_id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at),team_workweek_versions!inner(origin)")
+      .select("id,source_version_id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at),team_workweek_versions!team_workweek_publications_source_version_id_fkey!inner(origin)")
       .eq("owner_profile_id", context.permission.profile!.id)
       .eq("status", "preparing")
       .eq("team_workweek_versions.origin", "google_reconciliation")
       .maybeSingle<PublicationRow>();
     if (automatic.error) return apiError("Vorbereiteter Google-Abgleich konnte nicht geladen werden.", 503);
-    if (automatic.data?.attempt_generation && automatic.data.effective_at && new Date(automatic.data.effective_at) <= new Date()) {
+    if (!requestedWeek && automatic.data?.attempt_generation && automatic.data.effective_at && new Date(automatic.data.effective_at) <= new Date()) {
       if (publication?.data?.status === "published") data = null;
       publication = automatic;
       if (!data) {
         const source = await supabase.from("team_workweek_versions")
-          .select("id,owner_profile_id,effective_from,activation_mode,base_publication_id,base_publication_revision,successor_snapshot,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
+          .select("id,owner_profile_id,effective_from,selected_week_start,activation_mode,base_publication_id,base_publication_revision,successor_snapshot,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
           .eq("id", automatic.data.source_version_id!)
           .eq("origin", "google_reconciliation")
           .is("retired_at", null)
@@ -165,23 +178,39 @@ export async function GET(request: NextRequest) {
   const currentPublished = publications.filter((row) => startsAt(row) <= now.getTime()
     && (row.effective_until ? new Date(row.effective_until) > now : !row.effective_to || row.effective_to >= berlinTodayIso(now)))
     .sort((left, right) => right.publication_revision - left.publication_revision)[0] || null;
-  const preparedSuccessor = publications.filter((row) => startsAt(row) > now.getTime())
+  const preparedSuccessor = publications.filter((row) => startsAt(row) > now.getTime() && (!row.effective_until || Date.parse(row.effective_until) > startsAt(row)) && (!row.effective_to || row.effective_to >= row.effective_from))
     .sort((left, right) => startsAt(left) - startsAt(right))[0] || null;
   const latestPublished = currentPublished || preparedSuccessor;
-  const base=privateVersion?.activation_mode==="future_monday"?publications[0]:currentPublished;
+  const selectedPoint = privateVersion?.selected_week_start && privateVersion.activation_mode === "future_monday"
+    ? berlinCivilInstant(privateVersion.selected_week_start, "00:00") : now.getTime();
+  const base = privateVersion?.selected_week_start
+    ? publications.filter(row => startsAt(row) <= selectedPoint && (row.effective_until ? Date.parse(row.effective_until) > selectedPoint : !row.effective_to || row.effective_to >= (privateVersion.selected_week_start || berlinTodayIso(now))))
+      .sort((left, right) => right.publication_revision - left.publication_revision)[0] || null
+    : privateVersion?.activation_mode === "future_monday" ? publications[0] : currentPublished;
   const contextChanged=privateVersion && !publication?.data && (
     (privateVersion.base_publication_id||null)!==(base?.id||null)
     || (privateVersion.base_publication_revision||null)!==(base?.publication_revision||null)
-    || (privateVersion.successor_snapshot && successorBindingKey(privateVersion.successor_snapshot)!==successorBindingKey(publications.filter(row=>startsAt(row)>now.getTime()).map(row=>({
+    || (privateVersion.successor_snapshot && successorBindingKey(privateVersion.successor_snapshot, privateVersion.selected_week_start && privateVersion.activation_mode === "future_monday" ? privateVersion.base_publication_id : null)!==successorBindingKey(publications.filter(row=>startsAt(row)>now.getTime()).map(row=>({
       id:row.id,revision:row.publication_revision,start:new Date(startsAt(row)).toISOString(),until:row.effective_until,effectiveTo:row.effective_to,sourceVersionId:row.source_version_id,supersededBy:row.superseded_by_publication_id,windows:row.windows,
       series:row.team_workweek_google_series?.map(series=>({id:series.id,googleEventId:series.google_event_id,etag:series.confirmed_etag,state:series.state,providerState:series.provider_state,part:series.projection_part,sources:series.source_window_ids})),
-    })))));
+    })), privateVersion.selected_week_start && privateVersion.activation_mode === "future_monday" ? privateVersion.base_publication_id : null)));
+
+  const selectedWeek = requestedWeek || (privateVersion?.activation_mode === "future_monday" && privateVersion.effective_from >= workweekStart() ? privateVersion.effective_from : workweekStart());
+  const weekResponse = await supabase.rpc("team_workweek_edit_context", { p_week_start: selectedWeek });
+  if (weekResponse.error) return apiError("Die ausgewählte Arbeitswoche konnte nicht geladen werden.", 503);
 
   return NextResponse.json({
-    restartAvailable: Boolean(privateVersion && (contextChanged || (publication?.data?.attempt_generation && publication.data.effective_at && new Date(publication.data.effective_at)<=now))),
+    pendingPublication: pending ? {
+      id: pending.id, sourceVersionId: pending.source_version_id, effectiveFrom: pending.effective_from,
+      resumeAllowed: !pending.restart_requested_at && (pending.attempt_generation === 0
+        || (pending.write_journal_version === 1 && pending.last_error_class !== "provider_identity_mismatch" && Boolean(pending.effective_at && Date.parse(pending.effective_at) > Date.now()))),
+    } : null,
+    weekContext: weekResponse.data,
+    restartAvailable: Boolean(privateVersion && (contextChanged || (publication?.data?.status === "preparing" && publication.data.attempt_generation && publication.data.effective_at))),
     version: privateVersion ? {
       id: privateVersion.id,
       effectiveFrom: privateVersion.effective_from,
+      ...(privateVersion.selected_week_start ? { selectedWeekStart: privateVersion.selected_week_start } : {}),
       ...(privateVersion.base_publication_id ? {basePublicationId:privateVersion.base_publication_id,basePublicationRevision:privateVersion.base_publication_revision} : {}),
       ...(privateVersion.activation_mode ? { activationMode: privateVersion.activation_mode } : {}),
       timezone: privateVersion.timezone,
@@ -207,10 +236,25 @@ export async function POST(request: NextRequest) {
   const supabase = authenticatedClient(request);
   if (!supabase) return apiError("Anmeldung erforderlich.", 401);
 
-  const validation = validatePrivateTeamWorkweekDraft(await readJsonPayload<unknown>(request, null));
+  const payload = await readJsonPayload<unknown>(request, null);
+  const selection = payload && typeof payload === "object" && "selectedWeekStart" in payload
+    ? payload as Record<string, unknown> : null;
+  let draftInput = payload;
+  if (selection) {
+    const week = typeof selection.selectedWeekStart === "string" ? selectedWorkweek(selection.selectedWeekStart) : { ok: false as const };
+    if (!week.ok || typeof selection.contextToken !== "string" || !/^[a-f0-9]{32}$/.test(selection.contextToken)) {
+      return apiError("Wähle eine gültige Woche und lade ihren aktuellen Stand.", 400);
+    }
+    const { selectedWeekStart: _selectedWeekStart, contextToken: _contextToken, ...legacyInput } = selection;
+    void _selectedWeekStart; void _contextToken;
+    draftInput = { ...legacyInput, effectiveFrom: week.weekStart, activationMode: week.activationMode };
+  }
+  const validation = validatePrivateTeamWorkweekDraft(draftInput);
   if (!validation.ok) return apiError(validation.errors[0], 400);
 
-  const { data, error } = validation.draft.activationMode === "immediate"
+  const { data, error } = selection
+    ? await supabase.rpc("create_private_selected_team_workweek_version", { p_week_start: selection.selectedWeekStart, p_windows: flattenTeamWorkweekWindows(validation.draft.windows), p_context_token: selection.contextToken })
+    : validation.draft.activationMode === "immediate"
     ? validation.draft.basePublicationId
       ? await supabase.rpc("create_private_current_team_workweek_version", { p_windows: flattenTeamWorkweekWindows(validation.draft.windows),
         p_base_publication_id: validation.draft.basePublicationId, p_base_publication_revision: validation.draft.basePublicationRevision })
@@ -222,6 +266,14 @@ export async function POST(request: NextRequest) {
       p_windows: flattenTeamWorkweekWindows(validation.draft.windows),
     });
   if (error) {
+    if (error.code === "P0003" || error.code === "P0004") {
+      return NextResponse.json({
+        code: error.code === "P0003" ? "publication_pending" : "edit_context_stale",
+        error: error.code === "P0003"
+          ? "Eine frühere Veröffentlichung ist noch offen. Setze sie zuerst fort; deine Eingaben bleiben erhalten."
+          : "Die Ausgangsversion hat sich geändert. Lade den aktuellen Stand; deine Eingaben bleiben erhalten.",
+      }, { status: 409 });
+    }
     const status = error.code === "22023" ? 400 : error.code === "42501" ? 403 : error.code === "P0003" || error.code === "P0004" ? 409 : 503;
     return apiError(
       status === 400

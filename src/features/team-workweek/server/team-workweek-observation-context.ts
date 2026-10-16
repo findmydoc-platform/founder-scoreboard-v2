@@ -11,7 +11,7 @@ export type ObservationPublication = Readonly<{
   windows: Array<{weekday:number;startMinute:number;endMinute:number}>;
 }>;
 
-export async function loadTeamWorkweekObservationContext(supabase: SupabaseClient, owner: string, now: Date) {
+export async function loadTeamWorkweekObservationContext(supabase: SupabaseClient, owner: string, now: Date, publicationId?: string) {
   const publications = await supabase.from("team_workweek_publications")
     .select("id,source_version_id,owner_profile_id,effective_from,effective_to,effective_at,effective_until,attempt_generation,publication_revision,last_sync_at,windows")
     .eq("owner_profile_id",owner).eq("status","published").order("effective_from",{ascending:false}).order("publication_revision",{ascending:false})
@@ -19,7 +19,7 @@ export async function loadTeamWorkweekObservationContext(supabase: SupabaseClien
   if(publications.error) throw new Error("Confirmed workweek is unavailable.");
   const starts=(p:ObservationPublication)=>p.effective_at?Date.parse(p.effective_at):berlinCivilInstant(p.effective_from,"00:00");
   const ends=(p:ObservationPublication)=>p.effective_until?Date.parse(p.effective_until):p.effective_to?berlinCivilInstant(new Date(Date.parse(`${p.effective_to}T00:00:00Z`)+86400000).toISOString().slice(0,10),"00:00"):Infinity;
-  const publication=(publications.data || []).filter(p=>starts(p)<=now.getTime() && ends(p)>now.getTime()).sort((a,b)=>starts(b)-starts(a)||b.publication_revision-a.publication_revision)[0];
+  const publication=(publications.data || []).filter(p=>ends(p)>starts(p) && ends(p)>now.getTime() && (publicationId ? p.id===publicationId : starts(p)<=now.getTime())).sort((a,b)=>starts(b)-starts(a)||b.publication_revision-a.publication_revision)[0];
   if(!publication) return null;
   const seriesResponse=await supabase.from("team_workweek_google_series")
     .select("id,source_window_id,source_window_ids,projection_part,calendar_id,google_event_id,confirmed_etag,confirmed_founderops_revision,provider_state,observed_payload,team_workweek_windows!inner(weekday,start_minute,end_minute)")

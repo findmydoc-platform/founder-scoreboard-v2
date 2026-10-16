@@ -30,7 +30,7 @@ it("inserts a current correction before the prepared Monday without changing tha
     const storedCutoff = (await client.query(`insert into public.team_workweek_publication_effects(publication_id,owner_profile_id,generation,series_id,kind,operation,google_event_id,payload,expected_payload,state,confirmed_etag,observed_at)
       values($1,'successor-owner',1,$2,'predecessor_cutoff','update','fopsold001',$3,$4,'confirmed','bounded-etag',clock_timestamp()-interval '7 days') returning *`, [successor.rows[0].id, oldSeries.rows[0].id, boundedPayload, oldPayload])).rows[0];
     const draft = await asAuthenticated(client, user, () => client.query("select public.create_private_current_team_workweek_version('[{\"weekday\":7,\"startMinute\":60,\"endMinute\":240}]',$1,1) as version", [current.rows[0].id]));
-    const prepared = await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [draft.rows[0].version.id]));
+    const prepared = await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [draft.rows[0].version.id]));
     const publication = prepared.rows[0].publication;
     expect(publication.successorPublicationId).toBe(successor.rows[0].id);
     expect(new Date(publication.effectiveUntil).toISOString()).toBe((await client.query("select $1::date::timestamp at time zone 'Europe/Berlin' as boundary", [sources.rows[1].effective_from])).rows[0].boundary.toISOString());
@@ -72,13 +72,13 @@ it("inserts a current correction before the prepared Monday without changing tha
     await client.query("update public.team_workweek_publications set effective_until=clock_timestamp()-interval '1 minute' where id=$1", [current.rows[0].id]);
     await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '1 minute' where id=$1", [publication.id]);
     const repeatedDraft = await asAuthenticated(client, user, () => client.query("select public.create_private_current_team_workweek_version('[]',$1,3) as version", [publication.id]));
-    const repeated = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [repeatedDraft.rows[0].version.id]))).rows[0].publication;
+    const repeated = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [repeatedDraft.rows[0].version.id]))).rows[0].publication;
     expect(repeated.successorPublicationId).toBe(successor.rows[0].id);
     expect(repeated.effects.every((effect: { googleEventId: string }) => effect.googleEventId !== futureSeries.rows[0].google_event_id)).toBe(true);
     const cutoff = repeated.effects.find((effect: { kind: string }) => effect.kind === "predecessor_cutoff");
     if (masters.length) expect(cutoff.expectedPayload).toEqual(masters[0].payload);
     await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '1 minute' where id=$1", [repeated.id]);
-    const expired = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [repeatedDraft.rows[0].version.id]))).rows[0].publication;
+    const expired = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [repeatedDraft.rows[0].version.id]))).rows[0].publication;
     expect(expired.attemptGeneration).toBe(1);
     await client.query("set local role service_role");
     for (const effect of expired.effects as PreparedWorkweekEffect[]) {
@@ -88,7 +88,7 @@ it("inserts a current correction before the prepared Monday without changing tha
       await client.query("select public.confirm_team_workweek_effect_restoration($1,$2,$3)", [effect.id, effect.generation, restored.etag]);
     }
     await client.query("reset role");
-    const resumed = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [repeatedDraft.rows[0].version.id]))).rows[0].publication;
+    const resumed = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [repeatedDraft.rows[0].version.id]))).rows[0].publication;
     expect(resumed.attemptGeneration).toBe(2);
     expect(new Date(resumed.effectiveAt).getTime()).toBeGreaterThan(Date.now());
     expect(resumed.successorPublicationId).toBe(successor.rows[0].id);
@@ -108,7 +108,7 @@ it("inserts a current correction before the prepared Monday without changing tha
     const laterMonday = (await client.query("select date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date+14 as day")).rows[0].day;
     const laterDraft = (await asAuthenticated(client, user, () => client.query("select public.create_private_monday_team_workweek_version($1,'[]',$2,3) as version", [laterMonday, publication.id]))).rows[0].version;
     expect(laterDraft.basePublicationId).toBe(successor.rows[0].id);
-    const later = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [laterDraft.id]))).rows[0].publication;
+    const later = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [laterDraft.id]))).rows[0].publication;
     expect(later.predecessorPublicationId).toBe(successor.rows[0].id);
   });
 }, 30_000);
@@ -125,7 +125,7 @@ it("refuses a current candidate that would reach the successor before planning a
     const successor = (await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,status,sync_state,published_at,last_sync_at,publication_revision,activation_mode,effective_at)
       values($1,'boundary-owner',$2,'[]','published','confirmed',clock_timestamp(),clock_timestamp(),2,'immediate',date_trunc('minute',clock_timestamp())+interval '1 minute') returning *`, [nextSource.id, nextSource.effective_from])).rows[0];
     const draft = (await asAuthenticated(client, user, () => client.query("select public.create_private_current_team_workweek_version('[]',$1,1) as version", [old.id]))).rows[0].version;
-    const refused = await captureDatabaseError(client, () => asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1)", [draft.id])));
+    const refused = await captureDatabaseError(client, () => asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1)", [draft.id])));
     expect(refused).toMatchObject({ code: "P0004" });
     expect((await client.query("select count(*)::integer as count from public.team_workweek_publication_effects where owner_profile_id='boundary-owner'")).rows[0].count).toBe(0);
     expect((await client.query("select * from public.team_workweek_publications where id=$1", [successor.id])).rows[0]).toEqual(successor);
@@ -141,7 +141,7 @@ it.each(["before preparation", "before finalization", "unchanged"])("preserves a
     const future = await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,status,sync_state,published_at,last_sync_at,publication_revision)
       values($1,'future-only',$2,'[]','published','confirmed',clock_timestamp(),clock_timestamp(),1) returning id`, [source.rows[0].id, source.rows[0].effective_from]);
     const draft = (await asAuthenticated(client, user, () => client.query(`select public.create_private_immediate_team_workweek_version('[{"weekday":7,"startMinute":60,"endMinute":240}]') as version`))).rows[0].version;
-    const prepared = stage !== "before preparation" ? (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [draft.id]))).rows[0].publication : null;
+    const prepared = stage !== "before preparation" ? (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [draft.id]))).rows[0].publication : null;
     if (prepared) {
       expect(prepared.predecessorPublicationId).toBeNull();
       expect(prepared.successorPublicationId).toBe(future.rows[0].id);
@@ -164,17 +164,17 @@ it.each(["before preparation", "before finalization", "unchanged"])("preserves a
     await client.query("update public.team_workweek_publications set windows='[{\"weekday\":1,\"startMinute\":600,\"endMinute\":960}]' where id=$1", [future.rows[0].id]);
     const stale = await captureDatabaseError(client, () => asAuthenticated(client, user, () => prepared
       ? client.query("select public.finalize_team_workweek_publication($1)", [prepared.id])
-      : client.query("select public.prepare_team_workweek_publication($1)", [draft.id])));
+      : client.query("select public.prepare_team_workweek_publication($1,1)", [draft.id])));
     expect(stale).toMatchObject({ code: "P0004" });
     if (prepared) {
       await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '1 minute' where id=$1", [prepared.id]);
-      const cleanupOnly = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [draft.id]))).rows[0].publication;
+      const cleanupOnly = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [draft.id]))).rows[0].publication;
       expect(cleanupOnly.effects).toEqual(prepared.effects);
       expect(cleanupOnly.attemptGeneration).toBe(1);
       await client.query("set local role service_role");
       for (const effect of cleanupOnly.effects) await client.query("select public.confirm_team_workweek_effect_cleanup($1,$2)", [effect.id, effect.generation]);
       await client.query("reset role");
-      const noSilentReplan = await captureDatabaseError(client, () => asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1)", [draft.id])));
+      const noSilentReplan = await captureDatabaseError(client, () => asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1)", [draft.id])));
       expect(noSilentReplan).toMatchObject({ code: "P0004" });
     }
     expect((await client.query("select status from public.team_workweek_publications where id=$1", [future.rows[0].id])).rows[0].status).toBe("published");

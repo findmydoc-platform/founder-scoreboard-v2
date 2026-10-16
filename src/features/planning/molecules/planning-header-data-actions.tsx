@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { NotificationInbox } from "@/features/notifications/organisms/notification-inbox";
 import { HeaderCalendarAction } from "@/features/planning/molecules/header-calendar-action";
 import { FmdToolQuickLinks } from "@/features/tools/molecules/fmd-tool-quick-links";
@@ -15,7 +16,7 @@ type PlanningHeaderDataActionsProps = {
   onDismissNotification?: (eventId: number) => void;
   calendar?: Readonly<{
     apiClient?: BrowserApiClient;
-    onOpenTeam: (editWorkweek?: boolean) => void;
+    onOpenTeam: (editWorkweek?: boolean, week?: string) => void;
     profiles: Profile[];
   }>;
 };
@@ -28,11 +29,17 @@ export function PlanningHeaderDataActions({
   onDismissNotification,
   calendar,
 }: PlanningHeaderDataActionsProps) {
+  const router = useRouter();
   const [quickLinksOpen, setQuickLinksOpen] = useState(false);
   const [localNotificationsOpen, setLocalNotificationsOpen] = useState(false);
   const notificationPopoverOpen = notificationsOpen ?? localNotificationsOpen;
   const toggleNotifications = onToggleNotifications || (() => setLocalNotificationsOpen((value) => !value));
-  const openTeam = calendar?.onOpenTeam || ((editWorkweek = false) => window.location.assign(editWorkweek ? "/team?workweek=edit" : "/team"));
+  const openTeam = calendar?.onOpenTeam || ((editWorkweek = false, week?: string) => {
+    const params = new URLSearchParams();
+    if (editWorkweek) params.set("workweek", "edit");
+    if (week) params.set("week", week);
+    router.push(`/team${params.size ? `?${params}` : ""}`);
+  });
 
   return (
     <>

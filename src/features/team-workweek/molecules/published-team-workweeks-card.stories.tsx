@@ -66,8 +66,8 @@ export const RefreshesAtTheConfirmedActivationBoundary: Story = {
   args:{apiClient:activatingClient(),profiles:[profile]},
   play:async({canvasElement})=>{
     const canvas=within(canvasElement);
-    await expect(await canvas.findByText("Für die aktuelle Woche ist keine Arbeitswoche veröffentlicht.")).toBeVisible();
-    await waitFor(()=>expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0),{timeout:3000});
-    await expect(canvas.getAllByText(/Gültig ab/).length).toBeGreaterThan(0);
+    await expect(await canvas.findByText("Für diese Woche sind noch keine Arbeitszeiten veröffentlicht.")).toBeVisible();
+    await waitFor(()=>expect(canvas.getAllByText("Arbeitszeiten veröffentlicht").length).toBeGreaterThan(0),{timeout:3000});
+    await expect(canvas.getAllByText("Arbeitszeiten veröffentlicht").length).toBeGreaterThan(0);
   },
 };

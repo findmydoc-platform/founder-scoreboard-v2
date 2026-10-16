@@ -27,6 +27,7 @@ export type TeamWorkweekWindows = Record<TeamWorkweekDayKey, TeamWorkweekWindow[
 export type WorkweekActivationMode = "immediate" | "future_monday";
 
 export type PrivateTeamWorkweekVersion = Readonly<{
+  selectedWeekStart?: string;
   basePublicationId?: string;
   basePublicationRevision?: number;
   activationMode?: WorkweekActivationMode;
@@ -65,6 +66,13 @@ export type OwnTeamWorkweekPublication = Readonly<{
   lastSyncAt: string | null;
   googleReconciliationState: "confirmed" | "pending" | "delayed" | "conflict";
   lastGoogleReconciliationAt: string | null;
+}>;
+
+export type PendingTeamWorkweekPublication = Readonly<{
+  id: string;
+  sourceVersionId: string;
+  effectiveFrom: string;
+  resumeAllowed: boolean;
 }>;
 
 export type TeamWorkweekConflict = Readonly<{

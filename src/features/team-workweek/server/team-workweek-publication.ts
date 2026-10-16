@@ -12,6 +12,7 @@ import { compensateTeamWorkweekGeneration } from "./team-workweek-compensation";
 import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, ensureGoogleWorkweekEffect } from "./team-workweek-immediate-effects";
 import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
 import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
+import { claimProviderOperation, finishProviderOperation, providerWriteJournal } from "./team-workweek-provider-operations";
 
 type PublicationErrorCode =
   | "invalid_request"
@@ -19,10 +20,11 @@ type PublicationErrorCode =
   | "forbidden"
   | "conflict"
   | "reconnect_required"
+  | "completion_pending"
   | "unavailable";
 
 export class TeamWorkweekPublicationError extends Error {
-  constructor(readonly code: PublicationErrorCode, message: string) {
+  constructor(readonly code: PublicationErrorCode, message: string, readonly completionPending = false) {
     super(message);
     this.name = "TeamWorkweekPublicationError";
   }
@@ -167,7 +169,7 @@ export async function publishTeamWorkweek({
   transitionsFirst?: boolean;
 }): Promise<TeamWorkweekPublicationResult> {
   const preparedResponse = await userSupabase.rpc("prepare_team_workweek_publication", {
-    p_version_id: versionId,
+    p_version_id: versionId, p_write_journal_version: 1,
   });
   if (preparedResponse.error) throw publicationError(preparedResponse.error);
   if (!isPreparedPublication(preparedResponse.data)) {
@@ -209,9 +211,9 @@ export async function publishTeamWorkweek({
     });
     const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
     if (expired()) {
-      const compensation = await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attemptGeneration!,serviceSupabase,now,cleanupEffect,discoverInstance});
+      const compensation = await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attemptGeneration!,serviceSupabase,now,cleanupEffect,discoverInstance,journaled:publication.writeJournalVersion!==undefined});
       if(compensation)return await delayed(compensation);
-      const replanned = await userSupabase.rpc("prepare_team_workweek_publication", { p_version_id: versionId });
+      const replanned = await userSupabase.rpc("prepare_team_workweek_publication", { p_version_id: versionId, p_write_journal_version: 1 });
       if (replanned.error) throw publicationError(replanned.error);
       if (!isPreparedPublication(replanned.data) || replanned.data.status !== "preparing") {
         // A concurrent/lost finalization is never compensated or overwritten by a new attempt.
@@ -228,6 +230,11 @@ export async function publishTeamWorkweek({
       publication = replanned.data;
       if (expired()) return await delayed("provider_unavailable");
     }
+    const claim = publication.writeJournalVersion !== undefined ? await claimProviderOperation({
+      accessToken, publicationId: publication.id, generation: publication.attemptGeneration!, serviceSupabase, now, purpose: "publish",
+    }) : null;
+    if (claim?.reason) return await delayed(claim.errorClass || "provider_unavailable");
+    try {
     const syncEffect = async (effect: NonNullable<PreparedWorkweekPublication["effects"]>[number]): Promise<TeamWorkweekPublicationDelayClass | null> => {
       if (expired()) return "provider_unavailable";
       if (effect.state === "confirmed") return null;
@@ -240,7 +247,7 @@ export async function publishTeamWorkweek({
         if (bound.error || !bound.data || bound.data.id !== effect.id) return "storage_failed";
         effect = bound.data;
       }
-      const result = await ensureEffect({ accessToken, effect, now });
+      const result = await ensureEffect({ accessToken, effect, now, ...(claim?.id ? { writeJournal: providerWriteJournal(serviceSupabase, claim.id, effect.id) } : {}) });
       if (result.state === "delayed") return result.errorClass;
       if (expired()) return "provider_unavailable";
       const confirmation = await serviceSupabase.rpc("confirm_team_workweek_effect", {
@@ -255,7 +262,8 @@ export async function publishTeamWorkweek({
       effects.filter((effect) => effect.operation && effect.operation !== "create" && effect.kind !== "crossing_instance")];
     for (const stage of stages) {
       for (let offset = 0; offset < stage.length; offset += 6) {
-        const results = await Promise.all(stage.slice(offset, offset + 6).map(syncEffect));
+        const settled = await Promise.allSettled(stage.slice(offset, offset + 6).map(syncEffect));
+        const results = settled.map((result) => result.status === "fulfilled" ? result.value : "storage_failed" as const);
         const failure = results.find((result) => result !== null);
         if (failure) return await delayed(failure);
       }
@@ -263,11 +271,18 @@ export async function publishTeamWorkweek({
     if (expired()) return await delayed("provider_unavailable");
     const finalized = await userSupabase.rpc("finalize_team_workweek_publication", { p_publication_id: publication.id });
     if (finalized.error?.code === "P0005") return await delayed("provider_unavailable");
-    if (finalized.error) throw publicationError(finalized.error);
+    if (finalized.error) {
+      const failure = publicationError(finalized.error);
+      if (failure.code === "unavailable") throw new TeamWorkweekPublicationError("completion_pending", "Google hat die Änderungen bestätigt. Der Abschluss in FounderOps ist noch offen. Setze die Veröffentlichung fort.", true);
+      throw new TeamWorkweekPublicationError(failure.code, failure.message, true);
+    }
     if (!isPublicationResult(finalized.data) || finalized.data.status !== "published") {
       throw new TeamWorkweekPublicationError("unavailable", "Veröffentlichungsstatus konnte nicht bestätigt werden.");
     }
     return { ...finalized.data, recovery: null };
+    } finally {
+      if (claim?.id) await finishProviderOperation(serviceSupabase, claim.id);
+    }
   }
 
   const syncSeries = async () => {
@@ -350,7 +365,7 @@ export async function delayTeamWorkweekPublication({
   versionId: string;
 }): Promise<TeamWorkweekPublicationResult> {
   const preparedResponse = await userSupabase.rpc("prepare_team_workweek_publication", {
-    p_version_id: versionId,
+    p_version_id: versionId, p_write_journal_version: 1,
   });
   if (preparedResponse.error) throw publicationError(preparedResponse.error);
   if (!isPreparedPublication(preparedResponse.data)) {

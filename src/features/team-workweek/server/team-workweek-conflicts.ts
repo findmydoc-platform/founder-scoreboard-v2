@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadTeamWorkweekObservationContext } from "./team-workweek-observation-context";
-import { nextVersionMondayIso } from "../model/team-workweek-draft";
+import { berlinTodayIso, nextVersionMondayIso } from "../model/team-workweek-draft";
 import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
 import {
   observeGoogleWorkweek,
@@ -20,6 +20,8 @@ type Window = Readonly<{ weekday: number; startMinute: number; endMinute: number
 
 type VersionRow = Readonly<{
   activation_mode?: "immediate" | "future_monday";
+  base_publication_id?: string | null;
+  selected_week_start?: string | null;
   id: string;
   owner_profile_id: string;
   effective_from: string;
@@ -103,9 +105,9 @@ function observationFingerprint(observations: GoogleWorkweekObservation[]) {
   })));
 }
 
-async function loadObservationContext(serviceSupabase:SupabaseClient,ownerProfileId:string,now:Date){
+async function loadObservationContext(serviceSupabase:SupabaseClient,ownerProfileId:string,now:Date,publicationId?:string){
   let context:Awaited<ReturnType<typeof loadTeamWorkweekObservationContext>>;
-  try {context=await loadTeamWorkweekObservationContext(serviceSupabase,ownerProfileId,now);}
+  try {context=await loadTeamWorkweekObservationContext(serviceSupabase,ownerProfileId,now,publicationId);}
   catch {throw new TeamWorkweekConflictError("unavailable","Bestätigte App-Arbeitswoche ist nicht verfügbar.");}
   if(!context) throw new TeamWorkweekConflictError("not_found","Noch keine aktuell gültige App-Arbeitswoche vorhanden.");
   return context;
@@ -173,7 +175,7 @@ export async function detectTeamWorkweekParallelConflict({
 }): Promise<{ state: "clear" | "google_only" | "conflict"; conflict?: { id: string; conflictRevision: number } }> {
   const versionResponse = await serviceSupabase
     .from("team_workweek_versions")
-    .select("id,owner_profile_id,effective_from,activation_mode,origin,team_workweek_windows(weekday,start_minute,end_minute)")
+    .select("id,owner_profile_id,effective_from,activation_mode,base_publication_id,selected_week_start,origin,team_workweek_windows(weekday,start_minute,end_minute)")
     .eq("id", versionId)
     .eq("owner_profile_id", ownerProfileId)
     .maybeSingle<VersionRow>();
@@ -189,7 +191,7 @@ export async function detectTeamWorkweekParallelConflict({
 
   let current: Awaited<ReturnType<typeof observeCurrentGoogle>>;
   try {
-    const context=await loadObservationContext(serviceSupabase,ownerProfileId,now());
+    const context=await loadObservationContext(serviceSupabase,ownerProfileId,now(),versionResponse.data.base_publication_id || undefined);
     // Verify retained physical cutoffs before a fresh owner publication. Partial
     // Google state is neither imported as a template nor reported as confirmed.
     current = await observeCurrentGoogle({ getAccessToken, now, observe, ownerProfileId, serviceSupabase,context });
@@ -219,7 +221,10 @@ export async function detectTeamWorkweekParallelConflict({
 
   const founderopsWindows = versionWindows(versionResponse.data);
   const founderopsChanged = JSON.stringify(founderopsWindows) !== JSON.stringify(canonicalWindows(current.publication.windows || []));
-  if (!founderopsChanged) return { state: "google_only" };
+  const futureBase = current.publication.effective_at
+    ? Date.parse(current.publication.effective_at) > now().getTime()
+    : current.publication.effective_from > berlinTodayIso(now());
+  if (!founderopsChanged && !futureBase) return { state: "google_only" };
 
   const googleFingerprint = observationFingerprint(current.observation.observations || []);
   const founderopsFingerprint = fingerprint({ effectiveFrom: versionResponse.data.effective_from, windows: founderopsWindows });
@@ -228,7 +233,8 @@ export async function detectTeamWorkweekParallelConflict({
     p_base_publication_id: current.publication.id,
     p_base_publication_revision: current.publication.publication_revision,
     p_founderops_version_id: versionResponse.data.id,
-    p_google_effective_from: nextVersionMondayIso(current.publication.effective_from, now()),
+    p_google_effective_from: versionResponse.data.activation_mode === "future_monday"
+      ? versionResponse.data.effective_from : nextVersionMondayIso(current.publication.effective_from, now()),
     p_google_windows: current.observation.windows,
     p_google_observations: current.observation.observations || [],
     p_google_fingerprint: googleFingerprint,
@@ -248,14 +254,14 @@ function conflictView(row: ConflictRow): TeamWorkweekConflictView {
     decision: row.decision,
     observedAt: row.observed_at,
     founderops: { effectiveFrom: founderopsVersion.effective_from, windows: versionWindows(founderopsVersion),supported:row.app_variant_supported??true,activationMode:founderopsVersion.activation_mode||"future_monday" },
-    google: { effectiveFrom: row.google_effective_from, windows: canonicalWindows(row.google_windows),supported:row.google_variant_supported??true,activationMode:"immediate" },
+    google: { effectiveFrom: row.google_effective_from, windows: canonicalWindows(row.google_windows),supported:row.google_variant_supported??true,activationMode:founderopsVersion.selected_week_start && founderopsVersion.activation_mode === "future_monday" && row.google_effective_from === founderopsVersion.effective_from ? "future_monday" : "immediate" },
   };
 }
 
 export async function getOpenTeamWorkweekConflict(serviceSupabase: SupabaseClient, ownerProfileId: string) {
   const response = await serviceSupabase
     .from("team_workweek_google_conflicts")
-    .select("id,owner_profile_id,base_publication_id,base_publication_revision,founderops_version_id,google_effective_from,google_windows,google_observations,google_fingerprint,founderops_fingerprint,founderops_binding_snapshot,google_variant_supported,app_variant_supported,conflict_revision,state,decision,resolution_version_id,observed_at,team_workweek_versions!team_workweek_google_conflicts_founderops_version_id_fkey(id,owner_profile_id,effective_from,activation_mode,origin,team_workweek_windows(weekday,start_minute,end_minute))")
+    .select("id,owner_profile_id,base_publication_id,base_publication_revision,founderops_version_id,google_effective_from,google_windows,google_observations,google_fingerprint,founderops_fingerprint,founderops_binding_snapshot,google_variant_supported,app_variant_supported,conflict_revision,state,decision,resolution_version_id,observed_at,team_workweek_versions!team_workweek_google_conflicts_founderops_version_id_fkey(id,owner_profile_id,effective_from,activation_mode,base_publication_id,selected_week_start,origin,team_workweek_windows(weekday,start_minute,end_minute))")
     .eq("owner_profile_id", ownerProfileId)
     .in("state", ["open", "resolving"])
     .order("created_at", { ascending: false })
@@ -290,7 +296,7 @@ export async function resolveTeamWorkweekConflict({
 }) {
   const conflictResponse = await serviceSupabase
     .from("team_workweek_google_conflicts")
-    .select("id,owner_profile_id,base_publication_id,base_publication_revision,founderops_version_id,google_effective_from,google_windows,google_observations,google_fingerprint,founderops_fingerprint,founderops_binding_snapshot,google_variant_supported,app_variant_supported,conflict_revision,state,decision,resolution_version_id,observed_at,team_workweek_versions!team_workweek_google_conflicts_founderops_version_id_fkey(id,owner_profile_id,effective_from,activation_mode,origin,team_workweek_windows(weekday,start_minute,end_minute))")
+    .select("id,owner_profile_id,base_publication_id,base_publication_revision,founderops_version_id,google_effective_from,google_windows,google_observations,google_fingerprint,founderops_fingerprint,founderops_binding_snapshot,google_variant_supported,app_variant_supported,conflict_revision,state,decision,resolution_version_id,observed_at,team_workweek_versions!team_workweek_google_conflicts_founderops_version_id_fkey(id,owner_profile_id,effective_from,activation_mode,base_publication_id,selected_week_start,origin,team_workweek_windows(weekday,start_minute,end_minute))")
     .eq("id", conflictId)
     .eq("owner_profile_id", ownerProfileId)
     .maybeSingle<ConflictRow>();
@@ -321,7 +327,8 @@ export async function resolveTeamWorkweekConflict({
       return publication;
     }
   }
-  const current = await observeCurrentGoogle({ getAccessToken, now, observe, ownerProfileId, serviceSupabase });
+  const context = await loadObservationContext(serviceSupabase, ownerProfileId, now(), conflict.base_publication_id);
+  const current = await observeCurrentGoogle({ getAccessToken, now, observe, ownerProfileId, serviceSupabase, context });
   let versionId = conflict.resolution_version_id;
   if (!versionId) {
     if (current.publication.id !== conflict.base_publication_id || !(current.observation.state === "changed" || (current.observation.state==="conflict" && current.observation.observations))) {

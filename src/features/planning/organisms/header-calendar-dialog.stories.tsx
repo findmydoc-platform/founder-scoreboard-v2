@@ -24,6 +24,7 @@ const emptyWindows = {
 };
 
 function StoryDialog() {
+  const [selectedDate, setSelectedDate] = useState("2026-09-06");
   const [activeTab, setActiveTab] = useState<"events" | "workweek">("events");
   return (
     <HeaderCalendarDialog
@@ -58,12 +59,12 @@ function StoryDialog() {
       onActiveTabChange={setActiveTab}
       onClose={fn()}
       onOpenTeam={fn()}
-      onSelectedDateChange={fn()}
+      onSelectedDateChange={setSelectedDate}
       onViewMonthChange={fn()}
       pending={false}
       profiles={[profile]}
       restoreFocusRef={{ current: null }}
-      selectedDate="2026-09-06"
+      selectedDate={selectedDate}
       showWorkweek
       viewMonth="2026-09-01"
       workweekDateKey="2026-09-07"
@@ -92,14 +93,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const KeepsTheSelectedDaySeparateFromTheCurrentWorkweek: Story = {
+export const KeepsTheSelectedWeekWhenChangingTabs: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("08:00–12:00")).toBeInTheDocument();
     await expect(canvas.getByText("geplant · keine Live-Präsenz")).toBeVisible();
     await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
+    await expect(canvas.getAllByText("08:00–12:00").length).toBeGreaterThan(0);
+    await expect(canvas.queryByText("10:00–18:00")).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Nächste Woche" }));
     await expect(canvas.getAllByText("10:00–18:00").length).toBeGreaterThan(0);
-    await expect(canvas.queryByText("08:00–12:00")).not.toBeInTheDocument();
   },
 };
 

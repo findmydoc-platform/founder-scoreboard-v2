@@ -57,7 +57,7 @@ function query(result) {
   };
 }
 
-function detectionService(versionWindows, rpcCalls = []) {
+function detectionService(versionWindows, rpcCalls = [], future = false) {
   return {
     from(table) {
       if (table === "team_workweek_versions") return query({
@@ -66,6 +66,7 @@ function detectionService(versionWindows, rpcCalls = []) {
           owner_profile_id: "profile-1",
           effective_from: "2026-08-31",
           origin: "owner",
+          ...(future ? {base_publication_id:"11111111-1111-4111-8111-111111111111",activation_mode:"future_monday"} : {}),
           team_workweek_windows: versionWindows.map((window) => ({
             weekday: window.weekday,
             start_minute: window.startMinute,
@@ -78,7 +79,7 @@ function detectionService(versionWindows, rpcCalls = []) {
         data: {
           id: "11111111-1111-4111-8111-111111111111",
           owner_profile_id: "profile-1",
-          effective_from: "2026-08-24",
+          effective_from: future ? "2026-08-31" : "2026-08-24",
           publication_revision: 1,
           windows: baseWindows,
         },
@@ -332,4 +333,18 @@ test("a changed provider CAS refreshes the resolving conflict before an explicit
   assert.equal(publication.status, "preparing");
   assert.equal(publishes, 1);
   assert.equal(publicationInput.transitionsFirst, true);
+});
+
+
+test.each([{windows:baseWindows},{windows:[{weekday:2,startMinute:600,endMinute:900}]}])("checks the selected future predecessor before preparing replacement effects for %j", async ({windows}) => {
+  const calls=[];
+  const result=await conflicts.detectTeamWorkweekParallelConflict({
+    ownerProfileId:"profile-1", versionId:"33333333-3333-4333-8333-333333333333",
+    serviceSupabase:detectionService(windows,calls,true),
+    getAccessToken:async()=>"token", now,
+    observe:async()=>({state:"changed",observations,windows:googleWindows,observedAt:now().toISOString()}),
+  });
+  assert.equal(result.state,"conflict");
+  assert.equal(calls[0].name,"create_team_workweek_google_conflict");
+  assert.equal(calls[0].args.p_google_effective_from,"2026-08-31");
 });

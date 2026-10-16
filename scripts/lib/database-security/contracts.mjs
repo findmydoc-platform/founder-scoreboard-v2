@@ -1,4 +1,6 @@
 export const authenticatedFunctionAllowlist = Object.freeze([
+  "public.team_workweek_edit_context(p_week_start date)",
+  "public.create_private_selected_team_workweek_version(p_week_start date, p_windows jsonb, p_context_token text)",
   "public.restart_private_team_workweek_version(p_version_id uuid)",
   "public.workspace_check_request()",
   "public.workspace_request_admitted()",
@@ -19,6 +21,7 @@ export const authenticatedFunctionAllowlist = Object.freeze([
   "public.mutate_administrator_planning_relationship_transaction(p_operation text, p_task_id text, p_related_task_id text, p_relation_type text, p_relation_id bigint, p_note text, p_expected_updated_at timestamp with time zone, p_actor_profile_id text, p_request_ip text, p_user_agent text)",
   "public.mutate_administrator_planning_relationship_transaction_v2(p_operation text, p_task_id text, p_related_task_id text, p_relation_type text, p_relation_id bigint, p_note text, p_expected_updated_at timestamp with time zone, p_actor_profile_id text, p_mention_recipient_profile_ids text[], p_request_ip text, p_user_agent text)",
   "public.prepare_team_workweek_publication(p_version_id uuid)",
+  "public.prepare_team_workweek_publication(p_version_id uuid, p_write_journal_version integer)",
   "public.set_administrator_eligibility(p_profile_id text, p_eligible boolean)",
   "public.update_administration_github_project_transaction(p_project_id text, p_expected_owner text, p_expected_number integer, p_github_project_owner text, p_github_project_number integer, p_request_ip text, p_user_agent text)",
   "public.update_administration_github_project_transaction_v2(p_project_id text, p_expected_owner text, p_expected_number integer, p_expected_team_slug text, p_github_project_owner text, p_github_project_number integer, p_github_mention_team_slug text, p_request_ip text, p_user_agent text)",
@@ -52,6 +55,8 @@ export const serviceRoleOnlyTablePrivileges = Object.freeze([
   ["google_workspace_connections", Object.freeze(["SELECT", "INSERT", "UPDATE", "DELETE"])],
   ["google_workspace_disconnect_operations", Object.freeze(["SELECT", "INSERT", "UPDATE"])],
   ["google_workspace_disconnect_series", Object.freeze(["SELECT", "INSERT", "UPDATE"])],
+  ["team_workweek_provider_operations", Object.freeze(["SELECT", "INSERT", "UPDATE"])],
+  ["team_workweek_provider_writes", Object.freeze(["SELECT", "INSERT", "UPDATE"])],
   ["github_planning_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
   ["github_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
 ]);
@@ -103,6 +108,8 @@ export const mappedOwnerTeamWorkweekReadPolicies = Object.freeze([
 ]);
 
 export const mappedOwnerTeamWorkweekFunctions = Object.freeze([
+  "team_workweek_edit_context",
+  "create_private_selected_team_workweek_version",
   "create_private_team_workweek_version",
   "create_private_immediate_team_workweek_version",
   "create_private_current_team_workweek_version",

@@ -100,6 +100,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     referenceDate,
+    upcomingWorkweeks: allCalendarWorkweeks.filter(row => (row.effectiveAt ? Date.parse(row.effectiveAt) > now.getTime() : row.effectiveFrom > referenceDate) && (!row.effectiveUntil || Date.parse(row.effectiveUntil) > Date.parse(row.effectiveAt || `${row.effectiveFrom}T00:00:00Z`)) && (!row.effectiveTo || row.effectiveTo >= row.effectiveFrom)),
+    publishedOwnerIds: [...new Set(allCalendarWorkweeks.map(row => row.ownerProfileId))],
     workweeks,
     currentWorkweeks,
     ...(calendarWorkweeks ? { calendarWorkweeks } : {}),

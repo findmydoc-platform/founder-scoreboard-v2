@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { test } from "vitest";
+import { test, vi } from "vitest";
 
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
@@ -62,6 +62,42 @@ const transition = {
   recurrenceCount: 2,
   confirmedEtag: null,
 };
+
+test("keeps the provider claim until a late batch request settles even when another effect throws", async () => {
+  const effect = id => ({ id, calendarId: "primary", googleEventId: id, generation: 1, state: "pending", confirmedEtag: null,
+    payload: { id, start: { dateTime: "2099-01-12T09:00:00Z", timeZone: "Europe/Berlin" }, end: { dateTime: "2099-01-12T17:00:00Z", timeZone: "Europe/Berlin" }, extendedProperties: { private: { founderopsWorkweekEffectId: id } } } });
+  const first = effect("fopsearlythrow"), second = effect("fopslatebatch");
+  const prepared = { ...publication, activationMode: "immediate", effectiveAt: "2099-01-12T09:00:00Z", attemptGeneration: 1, writeJournalVersion: 1, effects: [first, second] };
+  let release, started;
+  const dispatched = new Promise(resolve => { started = resolve; });
+  let finished = false;
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (String(url).includes(first.id)) return Response.json({ ...first.payload, etag: "known" });
+    if (init?.method === "POST") { started(); return new Promise(resolve => { release = resolve; }); }
+    return new Response(null, { status: 404 });
+  });
+  const userSupabase = { async rpc(name) {
+    assert.equal(name, "prepare_team_workweek_publication");
+    return { data: prepared, error: null };
+  } };
+  const serviceSupabase = { async rpc(name, args) {
+    if (name === "claim_team_workweek_provider_operation") return { data: { state: "claimed", id: "batch-claim" }, error: null };
+    if (name === "record_team_workweek_provider_write") return { data: null, error: args.p_effect_id === first.id ? { code: "storage" } : null };
+    if (name === "confirm_team_workweek_effect") return { data: null, error: null };
+    if (name === "delay_team_workweek_publication") return { data: { ...prepared, syncState: "delayed" }, error: null };
+    if (name === "finish_team_workweek_provider_operation") { finished = true; return { data: { state: "settled" }, error: null }; }
+    throw new Error(name);
+  } };
+  try {
+    const result = publicationServer.publishTeamWorkweek({ serviceSupabase, userSupabase, versionId: publication.sourceVersionId }).catch(error => error);
+    await dispatched;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(finished, false);
+    release(Response.json({ ...second.payload, etag: "late" }));
+    assert.equal((await result).syncState, "delayed");
+    assert.equal(finished, true);
+  } finally { fetchSpy.mockRestore(); }
+});
 
 test("publication resumes pending transitions only after every replacement series is confirmed", async () => {
   let seriesConfirmed = false;
@@ -327,4 +363,32 @@ test("lost partial predecessor updates are restored before a later candidate res
   const serviceSupabase={async rpc(name,args){events.push(name);if(name==="prepare_team_workweek_effect_cleanup")return {data:{effects:[{...effect,state:restored?"cleaned":"confirmed",cleanupDisposition:"restore",cleanupPayload:effect.expectedPayload}]},error:null};assert.equal(name,"confirm_team_workweek_planned_cleanup");assert.equal(args.p_etag,'"restored"');assert.equal(args.p_preserved,false);restored=true;return {data:null,error:null};}};
   const result=await publicationServer.publishTeamWorkweek({versionId:publication.sourceVersionId,userSupabase,serviceSupabase,now:()=>clock,cleanupEffect:async()=>({state:"confirmed",etag:'"restored"',observedAt:clock.toISOString()})});
   assert.equal(result.status,"published");assert.deepEqual(events,["prepare_team_workweek_publication","prepare_team_workweek_effect_cleanup","prepare_team_workweek_effect_cleanup","prepare_team_workweek_effect_cleanup","confirm_team_workweek_planned_cleanup","prepare_team_workweek_publication","finalize_team_workweek_publication"]);
+});
+
+test("a failed database completion resumes confirmed effects without another Google write", async () => {
+  const prepared={...publication,activationMode:"future_monday",effectiveAt:"2099-01-11T23:00:00Z",attemptGeneration:1,effects:[{id:"confirmed-effect",calendarId:"primary",googleEventId:"managed",generation:1,state:"confirmed",confirmedEtag:"confirmed",operation:"create",kind:"weekly",payload:{}}]};
+  let finalizations=0;
+  const userSupabase={async rpc(name){
+    if(name==="prepare_team_workweek_publication")return {data:prepared,error:null};
+    if(name==="finalize_team_workweek_publication"){
+      finalizations++;
+      return finalizations===1?{data:null,error:{code:"23514"}}:{data:{...prepared,status:"published",syncState:"confirmed"},error:null};
+    }
+    throw new Error(name);
+  }};
+  const ensureEffect=vi.fn(()=>{throw new Error("confirmed Google writes must not repeat");});
+  const args={userSupabase,serviceSupabase:{},versionId:publication.sourceVersionId,ensureEffect};
+  await assert.rejects(publicationServer.publishTeamWorkweek(args),error=>error.code==="completion_pending");
+  const result=await publicationServer.publishTeamWorkweek(args);
+  assert.equal(result.id,prepared.id);assert.equal(result.status,"published");assert.equal(ensureEffect.mock.calls.length,0);
+});
+
+test("a fully superseded future interval never hides the replacement in the team overview",()=>{
+  const start="2099-01-11T23:00:00Z";
+  const base={ownerProfileId:"owner",effectiveFrom:"2099-01-12",effectiveAt:start,effectiveTo:null};
+  const rows=publishedModel.selectVisibleTeamWorkweeks([
+    {...base,id:"retired",effectiveUntil:start,publicationRevision:1},
+    {...base,id:"replacement",publicationRevision:2},
+  ],"2026-10-15",new Date("2026-10-15T12:00:00Z"));
+  assert.deepEqual(rows.map(row=>row.id),["replacement"]);
 });

@@ -22,6 +22,8 @@ import {
   type CalendarTeamWorkweek,
 } from "@/features/team-workweek/model/team-workweek-calendar";
 import { teamWorkweekProfiles } from "@/features/team-workweek/model/team-workweek-matrix";
+import { workweekStart } from "@/features/team-workweek/model/team-workweek-week";
+import { WorkweekNavigation } from "@/features/team-workweek/molecules/workweek-navigation";
 import { TeamWorkweekMatrix } from "@/features/team-workweek/molecules/team-workweek-matrix";
 import type { HeaderCalendarEvent, HeaderDataSlot, Profile } from "@/lib/types";
 import { classNames, UiBadge, UiButton, UiEmptyState, UiNotice } from "@/shared/atoms/ui-primitives";
@@ -99,7 +101,7 @@ export function HeaderCalendarDialog({
   now: Date;
   onActiveTabChange: (tab: "events" | "workweek") => void;
   onClose: () => void;
-  onOpenTeam: (editWorkweek?: boolean) => void;
+  onOpenTeam: (editWorkweek?: boolean, week?: string) => void;
   onSelectedDateChange: (dateKey: string) => void;
   onViewMonthChange: (monthKey: string) => void;
   pending: boolean;
@@ -341,11 +343,12 @@ export function HeaderCalendarDialog({
             </div>
           ) : (
             <div id={`${tabId}-workweek-panel`} role="tabpanel" aria-labelledby={`${tabId}-workweek`} className="p-2.5 sm:p-4">
+              <WorkweekNavigation value={selectedDate} onChange={(date) => selectDate(date)} />
               <p className="sr-only" role="status" aria-live="polite">{pending ? "Team-Arbeitswoche wird aktualisiert." : message || "Team-Arbeitswoche wurde geladen."}</p>
               {message ? <UiNotice className="mb-3" tone="warning" size="xs">{workweeks.length ? "Aktualisierung verzögert. Zuletzt bestätigte Zeiten." : message}</UiNotice> : null}
               {pending && !workweeks.length ? <UiEmptyState className="min-h-48" tone="muted">Team-Arbeitswoche wird geladen.</UiEmptyState> : null}
               {(!message || workweeks.length > 0) && (!pending || workweeks.length > 0) ? (
-                <TeamWorkweekMatrix compact dateKey={workweekDateKey} profiles={profiles} workweeks={workweeks} />
+                <TeamWorkweekMatrix key={selectedDate} compact dateKey={selectedDate || workweekDateKey} profiles={profiles} workweeks={calendarWorkweeks.length ? calendarWorkweeks : workweeks} upcomingWorkweeks={calendarWorkweeks} />
               ) : null}
             </div>
           )}
@@ -353,7 +356,7 @@ export function HeaderCalendarDialog({
 
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
           <UiButton className="min-h-11 w-full justify-center text-blue-700 sm:w-auto sm:justify-start" variant="ghost" onClick={() => onOpenTeam()}>Im Team öffnen</UiButton>
-          {showWorkweek && activeTab === "workweek" && <UiButton className="min-h-11 w-full sm:w-auto" variant="primary" onClick={() => onOpenTeam(true)}>Meine Arbeitswoche bearbeiten</UiButton>}
+          {showWorkweek && activeTab === "workweek" && <UiButton className="min-h-11 w-full sm:w-auto" variant="primary" disabled={workweekStart(selectedDate) < workweekStart(todayKey)} title={workweekStart(selectedDate) < workweekStart(todayKey) ? "Vergangene Wochen können nicht geändert werden." : undefined} onClick={() => onOpenTeam(true)}>Meine Arbeitswoche bearbeiten</UiButton>}
         </footer>
       </section>
     </div>

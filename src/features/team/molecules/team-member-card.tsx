@@ -86,6 +86,7 @@ function TeamMetric({
       <span
         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         title={definition.description}
+        role="img"
         aria-label={definition.description}
         tabIndex={0}
       >

@@ -172,18 +172,15 @@ export async function verifyAuthorizationSecurity(client, failures) {
      order by procedure.proname`,
     [mappedOwnerTeamWorkweekFunctions],
   );
-  const mappedOwnerFunctionByName = new Map(
-    mappedOwnerFunctionRows.rows.map((row) => [row.function_name, row]),
-  );
   for (const functionName of mappedOwnerTeamWorkweekFunctions) {
-    const procedure = mappedOwnerFunctionByName.get(functionName);
-    if (!procedure) {
+    const procedures = mappedOwnerFunctionRows.rows.filter((row) => row.function_name === functionName);
+    if (!procedures.length) {
       failures.push(`missing mapped-owner team-workweek function: ${functionName}`);
       continue;
     }
     if (
-      !/profile\.auth_user_id\s*=\s*auth\.uid\(\)/i.test(procedure.definition)
-      || /current_platform_role|platform_role|\bviewer\b/i.test(procedure.definition)
+      procedures.some((procedure) => !/profile\.auth_user_id\s*=\s*auth\.uid\(\)/i.test(procedure.definition)
+        || /current_platform_role|platform_role|\bviewer\b/i.test(procedure.definition))
     ) {
       failures.push(`team-workweek function is not role-independent and auth-bound: ${functionName}`);
     }
