@@ -34,7 +34,8 @@ const record = (db: pg.Client, operationId: string, effectId: string) => {
   return {beforeWrite:()=>outcome("dispatched"),outcome};
 };
 
-it.each([{deleted:false,expired:false},{deleted:true,expired:false},{deleted:false,expired:true},{deleted:true,expired:true}])(
+// The application-orchestration suite covers future attempts; retain the expired SQL-invariant cases.
+it.each([{deleted:false,expired:true},{deleted:true,expired:true}])(
   "restarts after a Google change before predecessor dispatch without overwriting it: %j", async ({deleted,expired}) => {
     await withIsolatedLocalDatabase(async db => {
       const {first,week,windows,draft,publication,predecessor} = await replacement(db);
