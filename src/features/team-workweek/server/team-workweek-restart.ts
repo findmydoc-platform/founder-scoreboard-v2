@@ -1,15 +1,35 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { inflateTeamWorkweekWindows, type PrivateTeamWorkweekVersion } from "../model/team-workweek-draft";
-import { compensateTeamWorkweekGeneration } from "./team-workweek-compensation";
+import { compensateTeamWorkweekGeneration } from "./team-workweek-execution";
 import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
 import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
 import { TeamWorkweekPublicationError } from "./team-workweek-publication";
 import type { WorkweekRecoveryReason } from "./team-workweek-provider-operations";
+import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, recoverGoogleWorkweekWrite } from "./team-workweek-immediate-effects";
 
 type VersionRow={id:string;owner_profile_id:string;effective_from:string;activation_mode:"immediate"|"future_monday";base_publication_id:string|null;base_publication_revision:number|null;timezone:"Europe/Berlin";created_at:string;retired_at:string|null;restarted_version_id:string|null;team_workweek_windows:Array<{weekday:number;start_minute:number;end_minute:number}>};
 export type TeamWorkweekRestartResult={version?:PrivateTeamWorkweekVersion;restart:{state:"ready"|"delayed";recovery:"retry"|"reconnect"|"identity_conflict"|null;reason?:WorkweekRecoveryReason}};
-export async function restartPrivateTeamWorkweek({ownerProfileId,versionId,userSupabase,serviceSupabase,now=()=>new Date(),accessTokenForOwner=getGoogleWorkspaceAccessToken,compensate=compensateTeamWorkweekGeneration}:{ownerProfileId:string;versionId:string;userSupabase:SupabaseClient;serviceSupabase:SupabaseClient;now?:()=>Date;accessTokenForOwner?:typeof getGoogleWorkspaceAccessToken;compensate?:typeof compensateTeamWorkweekGeneration}):Promise<TeamWorkweekRestartResult>{
+export async function restartPrivateTeamWorkweek({
+  ownerProfileId, versionId, userSupabase, serviceSupabase,
+  now = () => new Date(),
+  accessTokenForOwner = getGoogleWorkspaceAccessToken,
+  compensate = compensateTeamWorkweekGeneration,
+  cleanupEffect = cleanupGoogleWorkweekEffect,
+  discoverInstance = discoverGoogleWorkweekInstance,
+  recoverWrite = recoverGoogleWorkweekWrite,
+}: {
+  ownerProfileId: string;
+  versionId: string;
+  userSupabase: SupabaseClient;
+  serviceSupabase: SupabaseClient;
+  now?: () => Date;
+  accessTokenForOwner?: typeof getGoogleWorkspaceAccessToken;
+  compensate?: typeof compensateTeamWorkweekGeneration;
+  cleanupEffect?: typeof cleanupGoogleWorkweekEffect;
+  discoverInstance?: typeof discoverGoogleWorkweekInstance;
+  recoverWrite?: typeof recoverGoogleWorkweekWrite;
+}): Promise<TeamWorkweekRestartResult> {
   const source=await serviceSupabase.from("team_workweek_versions").select("id,owner_profile_id,retired_at,restarted_version_id").eq("id",versionId).maybeSingle<Pick<VersionRow,"id"|"owner_profile_id"|"retired_at"|"restarted_version_id">>();
   if(source.error)throw new TeamWorkweekPublicationError("unavailable","Private Version konnte nicht geladen werden.");
   if(!source.data)throw new TeamWorkweekPublicationError("not_found","Private Version ist nicht vorhanden.");
@@ -42,7 +62,7 @@ export async function restartPrivateTeamWorkweek({ownerProfileId,versionId,userS
         throw error;
       }
       let reason:WorkweekRecoveryReason|undefined;
-      const failure=await compensate({accessToken:token,publicationId:publication.data.id,generation:publication.data.attempt_generation,serviceSupabase,now,journaled,onRecoveryReason:value=>{reason=value;}});
+      const failure=await compensate({accessToken:token,publicationId:publication.data.id,generation:publication.data.attempt_generation,serviceSupabase,now,journaled,cleanupEffect,discoverInstance,recoverWrite,onRecoveryReason:value=>{reason=value;}});
       if(failure)return {restart:{state:"delayed",recovery:failure==="oauth_reconnect_required"?"reconnect":failure==="provider_identity_mismatch"?"identity_conflict":"retry",...(reason?{reason}:{})}};
     }
   }

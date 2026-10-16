@@ -13,7 +13,7 @@ import {
 } from "./google-workspace-disconnect-core";
 import { ensureGoogleWorkweekSeriesTransition } from "./team-workweek-publication-core";
 import { cleanupGoogleWorkweekEffect, type PreparedWorkweekEffect } from "./team-workweek-immediate-effects";
-import { compensateTeamWorkweekGeneration } from "./team-workweek-compensation";
+import { compensateTeamWorkweekGeneration } from "./team-workweek-execution";
 
 type DisconnectOperationRow = Readonly<{
   id: string;
