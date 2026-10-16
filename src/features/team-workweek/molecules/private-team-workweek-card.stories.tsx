@@ -1189,6 +1189,35 @@ export const ShowsPendingCompletionAfterGoogleWasConfirmed: Story = {
   },
 };
 
+export const ShowsSafeRestartImmediatelyAfterGoogleIdentityConflict: Story = {
+  args: { profile, editorRequested: true, apiClient: client({
+    googleConnected: true,
+    publish: {
+      result: { ...latestPublished, id: "identity-conflict-operation", status: "preparing", syncState: "delayed", recovery: "identity_conflict", effectiveAt: new Date(Date.now()+3600000).toISOString() },
+      after: { latestPublished, editBase: { windows: publishedWindows }, minimumEffectiveFrom: nextMondayIso(),
+        version: { ...restartedDraft, id: "private-saved", effectiveFrom: workweekStart(), selectedWeekStart: workweekStart(), windows: { ...publishedWindows, monday: [{ start: "10:00", end: "17:00" }] } },
+        publication: { ...latestPublished, id: "identity-conflict-operation", status: "preparing", syncState: "delayed" },
+        pendingPublication: { id: "identity-conflict-operation", sourceVersionId: "private-saved", effectiveFrom: workweekStart(), resumeAllowed: false },
+      },
+    },
+    restart: { after: { ...restartedContext, minimumEffectiveFrom: nextMondayIso(), preparedSuccessor: null }, result: { version: restartedDraft, restart: { state: "ready", recovery: null } } },
+  }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("09:00"));
+    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Beginn"));
+    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Beginn"), "10:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
+    await expect(await canvas.findByRole("button", { name: "Offene Veröffentlichung sicher neu beginnen" })).toBeEnabled();
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("10:00");
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Offene Veröffentlichung sicher neu beginnen" }));
+    await expect(await canvas.findByText(/Neustart vorbereitet/)).toBeVisible();
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("10:00");
+  },
+};
+
+
 export const PendingPublicationPreview: Story = {
   args: {
     profile, editorRequested: true, editorWeek: addCalendarDays(nextMondayIso(), 7),

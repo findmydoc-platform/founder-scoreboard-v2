@@ -483,6 +483,7 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient, initialWeek?
             lastGoogleReconciliationAt: null,
           });
         }
+        if (body?.publication?.recovery === "identity_conflict" && !await load(draft, selectedWeekStart)) return false;
         const lastSuccessfulSync = latestPublished?.lastSyncAt
           ? ` Letzter erfolgreicher Sync: ${new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(latestPublished.lastSyncAt))}.`
           : "";
