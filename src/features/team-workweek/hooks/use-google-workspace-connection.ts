@@ -43,6 +43,10 @@ export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient) {
   const mounted = useRef(true);
   const [connection, setConnection] = useState(EMPTY_CONNECTION);
   const [disconnectView, setDisconnectView] = useState(EMPTY_DISCONNECT);
+  const previewSequence = useRef(0);
+  const [previewPending, setPreviewPending] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
+  const [previewError, setPreviewError] = useState("");
   const [pending, setPending] = useState(true);
   const [message, setMessage] = useState("");
   const callbackError = useSyncExternalStore(subscribeToStaticLocation, callbackErrorFromLocation, () => "");
@@ -54,28 +58,47 @@ export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient) {
     };
   }, []);
 
+  const loadDisconnectPreview = useCallback(async () => {
+    const sequence = ++previewSequence.current;
+    setPreviewPending(true);
+    setPreviewReady(false);
+    setPreviewError("");
+    try {
+      const { response, body } = await apiClient.requestJson<{ disconnect?: GoogleWorkspaceDisconnectView; error?: string }>(
+        "/api/google-workspace/disconnect", { cache: "no-store", useDevProfileOverride: false },
+      );
+      if (!response.ok || !body?.disconnect) throw new Error(body?.error || "Trennungsvorschau konnte nicht geladen werden.");
+      if (mounted.current && sequence === previewSequence.current) {
+        setDisconnectView(body.disconnect);
+        setPreviewReady(true);
+      }
+    } catch (error) {
+      if (mounted.current && sequence === previewSequence.current) setPreviewError(error instanceof Error ? error.message : "Trennungsvorschau konnte nicht geladen werden.");
+    } finally {
+      if (mounted.current && sequence === previewSequence.current) setPreviewPending(false);
+    }
+  }, [apiClient]);
+
   const load = useCallback(async () => {
     setPending(true);
     setMessage("");
     try {
-      const statusRequest = apiClient.requestJson<{
+      const { response, body } = await apiClient.requestJson<{
         connection?: GoogleWorkspaceConnectionStatus;
+        disconnectPending?: boolean;
         error?: string;
       }>("/api/google-workspace/status", { cache: "no-store", useDevProfileOverride: false });
-      const disconnectRequest = apiClient.requestJson<{ disconnect?: GoogleWorkspaceDisconnectView; error?: string }>(
-        "/api/google-workspace/disconnect",
-        { cache: "no-store", useDevProfileOverride: false },
-      );
-      const [{ response, body }, disconnectResponse] = await Promise.all([statusRequest, disconnectRequest]);
       if (!response.ok || !body?.connection) {
         throw new Error(body?.error || "Google-Verbindungsstatus konnte nicht geladen werden.");
       }
-      if (disconnectResponse && (!disconnectResponse.response.ok || !disconnectResponse.body?.disconnect)) {
-        throw new Error(disconnectResponse.body?.error || "Trennungsvorschau konnte nicht geladen werden.");
-      }
       if (mounted.current) {
         setConnection(body.connection);
-        setDisconnectView(disconnectResponse?.body?.disconnect || EMPTY_DISCONNECT);
+        // Only an unfinished cleanup needs its details before the user opens the dialog.
+        if (body.disconnectPending) {
+          setDisconnectView({ ...EMPTY_DISCONNECT, state: "cleanup_pending" });
+          void loadDisconnectPreview();
+        }
+        else setDisconnectView(EMPTY_DISCONNECT);
       }
     } catch (error) {
       if (mounted.current) {
@@ -84,7 +107,7 @@ export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient) {
     } finally {
       if (mounted.current) setPending(false);
     }
-  }, [apiClient]);
+  }, [apiClient, loadDisconnectPreview]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
@@ -129,5 +152,5 @@ export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient) {
     }
   };
 
-  return { callbackError, connection, disconnectConnection, disconnectView, load, message, pending, startConnect };
+  return { callbackError, connection, disconnectConnection, disconnectView, load, loadDisconnectPreview, message, pending, previewPending, previewReady, previewError, startConnect };
 }

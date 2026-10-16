@@ -27,6 +27,7 @@ function supabaseQuery() {
       if (column === "status") queryStatuses.push(value);
       return this;
     },
+    or() { return this; },
     order() { return this; },
     returns() { return Promise.resolve({ data: rows, error: null }); },
   };
@@ -135,7 +136,7 @@ test("range responses stay additive, published-only, overlap-filtered, and provi
   const response = await route.GET(request("from=2026-08-24&to=2026-10-04"));
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.deepEqual(queryStatuses, ["published"]);
+  assert.ok(queryStatuses.length > 0 && queryStatuses.every(status => status === "published"));
   assert.equal(body.referenceDate, "2026-08-25");
   assert.equal(berlinTodayCalls, 1);
   assert.ok(Array.isArray(body.workweeks));

@@ -17,6 +17,7 @@ type CalendarResponse = {
 };
 
 type CalendarSnapshot = {
+  client?: BrowserApiClient;
   rangeKey: string;
   currentWorkweeks: CalendarTeamWorkweek[];
   calendarWorkweeks: CalendarTeamWorkweek[];
@@ -40,6 +41,8 @@ export function useWorkweekCalendarLoading({ apiClient, from, to, enabled, polic
   const [pending, setPending] = useState(enabled);
   const [message, setMessage] = useState("");
   const sequence = useRef(0);
+  // Component-local memory is discarded when its API client changes.
+  const cache = useRef<{ client?: BrowserApiClient; entries: Map<string, { body: CalendarResponse; savedAt: number; day: string; activation: number }> }>({ entries: new Map() });
   const rangeKey = `${from}/${to}`;
   const today = berlinDateKey(now);
   const failure = policy === "team-week"
@@ -52,6 +55,35 @@ export function useWorkweekCalendarLoading({ apiClient, from, to, enabled, polic
     setPending(true);
     setMessage("");
     try {
+      if (cache.current.client !== apiClient) cache.current = { client: apiClient, entries: new Map() };
+      const entries = cache.current.entries;
+      const apply = (body: CalendarResponse) => {
+        const currentWorkweeks = body.currentWorkweeks!;
+        const referenceDate = body.referenceDate!;
+        const calendarWorkweeks = body.calendarWorkweeks || currentWorkweeks;
+        setSnapshot((previous) => {
+          const retained = policy === "header-month" && previous?.client === apiClient ? (previous?.calendarWorkweeks || []).filter((workweek) => (
+            workweek.effectiveFrom > to || Boolean(workweek.effectiveTo && workweek.effectiveTo < from)
+          )) : [];
+          const byId = new Map(retained.map((workweek) => [workweek.id, workweek]));
+          for (const workweek of calendarWorkweeks) byId.set(workweek.id, workweek);
+          return {
+            client: apiClient,
+            rangeKey,
+            currentWorkweeks,
+            calendarWorkweeks: [...byId.values()],
+            upcomingWorkweeks: [...(body.upcomingWorkweeks || [])].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)),
+            publishedOwnerIds: body.publishedOwnerIds,
+            referenceDate,
+            hasCalendarRange: Boolean(body.calendarWorkweeks),
+            nextActivationAt: (body.workweeks || []).flatMap((workweek) => (
+              workweek.effectiveAt && new Date(workweek.effectiveAt).getTime() > Date.now() ? [workweek.effectiveAt] : []
+            )).sort()[0] || null,
+          };
+        });
+      };
+      const cached = entries.get(rangeKey);
+      if (cached && cached.day === berlinDateKey(new Date()) && Date.now() - cached.savedAt < 60_000 && Date.now() < cached.activation) apply(cached.body);
       const { response, body } = await apiClient.requestJson<CalendarResponse>(
         `/api/team-workweek/team?from=${from}&to=${to}`, { cache: "no-store" },
       );
@@ -60,28 +92,13 @@ export function useWorkweekCalendarLoading({ apiClient, from, to, enabled, polic
         throw new Error(body?.error || failure);
       }
       if (requestId !== sequence.current) return;
-      const currentWorkweeks = body.currentWorkweeks;
-      const referenceDate = body.referenceDate;
-      const calendarWorkweeks = body.calendarWorkweeks || currentWorkweeks;
-      setSnapshot((previous) => {
-        const retained = policy === "header-month" ? (previous?.calendarWorkweeks || []).filter((workweek) => (
-          workweek.effectiveFrom > to || Boolean(workweek.effectiveTo && workweek.effectiveTo < from)
-        )) : [];
-        const byId = new Map(retained.map((workweek) => [workweek.id, workweek]));
-        for (const workweek of calendarWorkweeks) byId.set(workweek.id, workweek);
-        return {
-          rangeKey,
-          currentWorkweeks,
-          calendarWorkweeks: [...byId.values()],
-          upcomingWorkweeks: [...(body.upcomingWorkweeks || [])].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)),
-          publishedOwnerIds: body.publishedOwnerIds,
-          referenceDate,
-          hasCalendarRange: Boolean(body.calendarWorkweeks),
-          nextActivationAt: (body.workweeks || []).flatMap((workweek) => (
-            workweek.effectiveAt && new Date(workweek.effectiveAt).getTime() > Date.now() ? [workweek.effectiveAt] : []
-          )).sort()[0] || null,
-        };
-      });
+      // A superseded response may neither replace the screen nor refill invalidated memory.
+      if (entries !== cache.current.entries) return;
+      const activation = Math.min(...(body.workweeks || []).flatMap(row => row.effectiveAt && Date.parse(row.effectiveAt) > Date.now() ? [Date.parse(row.effectiveAt)] : []));
+      entries.delete(rangeKey);
+      entries.set(rangeKey, { body, savedAt: Date.now(), day: berlinDateKey(new Date()), activation });
+      if (entries.size > 8) entries.delete(entries.keys().next().value!);
+      apply(body);
     } catch (error) {
       if (requestId === sequence.current) setMessage(error instanceof Error ? error.message : failure);
     } finally {
@@ -92,9 +109,12 @@ export function useWorkweekCalendarLoading({ apiClient, from, to, enabled, polic
   const invalidate = useCallback(() => { ++sequence.current; }, []);
 
   useEffect(() => {
-    if (!enabled) return;
-    const timeout = window.setTimeout(() => void load(), 0);
-    const reload = () => void load();
+    const timeout = enabled ? window.setTimeout(() => void load(), 0) : undefined;
+    const reload = () => {
+      cache.current.entries = new Map();
+      invalidate();
+      if (enabled) void load();
+    };
     window.addEventListener(TEAM_WORKWEEK_PUBLISHED_EVENT, reload);
     return () => {
       invalidate();
@@ -125,5 +145,5 @@ export function useWorkweekCalendarLoading({ apiClient, from, to, enabled, polic
     return () => window.clearInterval(timer);
   }, []);
 
-  return { snapshot, hasLoadedRange: snapshot?.rangeKey === rangeKey, pending, message, load, now };
+  return { snapshot: snapshot?.client === apiClient ? snapshot : null, hasLoadedRange: snapshot?.client === apiClient && snapshot?.rangeKey === rangeKey, pending, message, load, now };
 }

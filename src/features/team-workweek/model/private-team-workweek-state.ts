@@ -58,6 +58,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
   const [draft, setDraft] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
   const [baseline, setBaseline] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
   const [pending, setPending] = useState(true);
+  const [operating, setOperating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [editingToday, setEditingToday] = useState(() => workweekStart());
   const selectedWeekStart = version?.selectedWeekStart || (publication?.status === "preparing" && version?.activationMode === "future_monday" ? version.effectiveFrom : weekContext?.weekStart || (draft.activationMode === "immediate" ? workweekStart() : draft.effectiveFrom));
@@ -109,7 +110,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
     setPending(true);
     setMessage("");
     try {
-      const { response, body } = await transport.request<{
+      const draftRequest = transport.request<{
         weekContext?: NonNullable<typeof weekContext>;
         version?: PrivateTeamWorkweekVersion | null;
         publication?: OwnTeamWorkweekPublication | null;
@@ -122,13 +123,15 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
         restartAvailable?: boolean;
         error?: string;
       }>("load", { week: requestedWeek });
+      const [draftResponse, conflictResponse] = await Promise.all([
+        draftRequest,
+        transport.request<{ conflict?: TeamWorkweekConflict | null; error?: string }>("loadConflict"),
+      ]);
+      const { response, body } = draftResponse;
       if (!response.ok || body?.version === undefined || typeof body.minimumEffectiveFrom !== "string") {
         throw new Error(body?.error || "Private Grundwoche konnte nicht geladen werden.");
       }
       if (!mounted.current || sequence !== loadSequence.current) return false;
-      const conflictResponse = await transport.request<{ conflict?: TeamWorkweekConflict | null; error?: string }>(
-        "loadConflict",
-      );
       if (!conflictResponse.response.ok || conflictResponse.body?.conflict === undefined) {
         throw new Error(conflictResponse.body?.error || "Synchronisationskonflikt konnte nicht geladen werden.");
       }
@@ -295,6 +298,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
   const beginOperation = () => {
     if (mutationPending.current || pending) return false;
     mutationPending.current = true;
+    setOperating(true);
     ++loadSequence.current;
     setPending(true);
     return true;
@@ -303,6 +307,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
   const finishOperation = () => {
     mutationPending.current = false;
     if (mounted.current) {
+      setOperating(false);
       setPublishing(false);
       setPending(false);
     }
@@ -603,6 +608,10 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
   };
 
   const reset = () => {
+    // Discard also revokes reads that captured the inputs before confirmation.
+    if (mutationPending.current) return;
+    ++loadSequence.current;
+    setPending(false);
     setDraft(baseline);
     setErrors([]);
     setMessage("");
@@ -646,6 +655,8 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
   };
   const editor = {
     syncDelayed,
+    loading: pending && !operating,
+    closeBlocked: operating,
     canSelectWeek: !pending && publication?.status !== "preparing" && !contextRefreshRequired,
     canSave: !pending && !weekExpired && !contextRefreshRequired && dirty && !mustRestartBeforeSaving,
     canPublish: !pending && !weekExpired && !contextRefreshRequired && !mustRestartBeforeSaving,

@@ -25,6 +25,10 @@ export function GoogleWorkspaceConnectionCard({
     disconnectConnection,
     disconnectView,
     load,
+    loadDisconnectPreview,
+    previewPending,
+    previewReady,
+    previewError,
     message,
     pending,
     startConnect,
@@ -86,7 +90,7 @@ export function GoogleWorkspaceConnectionCard({
                 variant="red"
                 size={compact ? "iconMd" : "iconLg"}
                 disabled={pending}
-                onClick={() => setDisconnectOpen(true)}
+                onClick={() => { setDisconnectOpen(true); void loadDisconnectPreview(); }}
                 aria-label="Verbindung trennen"
                 title="Verbindung trennen"
               >
@@ -100,7 +104,9 @@ export function GoogleWorkspaceConnectionCard({
             <UiNotice size={compact ? "compact" : "sm"} tone="warning">{message || callbackError}</UiNotice>
           ) : cleanupPending ? (
             <UiNotice size={compact ? "compact" : "sm"} tone="warning">
-              Die Teamfreigabe ist inaktiv. {disconnectView.pendingSeriesCount} markierte Google-Serie{disconnectView.pendingSeriesCount === 1 ? " wartet" : "n warten"} noch auf bestätigte Bereinigung.
+              {disconnectView.pendingSeriesCount > 0
+                ? `Die Teamfreigabe ist inaktiv. ${disconnectView.pendingSeriesCount} markierte Google-Serie${disconnectView.pendingSeriesCount === 1 ? " wartet" : "n warten"} noch auf bestätigte Bereinigung.`
+                : "Die Trennung ist noch nicht vollständig bestätigt. Setze die Bereinigung fort."}
             </UiNotice>
           ) : reconnect ? (
             <UiNotice size={compact ? "compact" : "sm"} tone="warning">
@@ -121,6 +127,9 @@ export function GoogleWorkspaceConnectionCard({
         disconnect={disconnectView}
         open={disconnectOpen}
         pending={pending}
+        previewPending={previewPending}
+        previewReady={previewReady}
+        previewError={previewError}
         onCancel={() => setDisconnectOpen(false)}
         onConfirm={() => void confirmDisconnect()}
       />

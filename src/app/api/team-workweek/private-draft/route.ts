@@ -12,6 +12,7 @@ import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response
 import { bearerToken, requireTeamMember } from "@/lib/authz";
 import { berlinCivilInstant } from "@/features/team-workweek/model/team-workweek-calendar";
 import { getSupabaseForToken } from "@/lib/supabase-user";
+import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";
 
@@ -83,18 +84,37 @@ export async function GET(request: NextRequest) {
   const supabase = authenticatedClient(request);
   if (!supabase) return apiError("Anmeldung erforderlich.", 401);
 
+  const ownerProfileId = context.permission.profile?.id;
+  if (!ownerProfileId) return apiError("Gebundenes Teamprofil erforderlich.", 403);
+
   const requestedWeek = request.nextUrl.searchParams.get("week");
   if (requestedWeek && !selectedWorkweek(requestedWeek).ok) return apiError("Wähle die aktuelle oder eine zukünftige Woche.", 400);
-  const pendingResponse = await supabase.from("team_workweek_publications")
-    .select("id,source_version_id,effective_from,effective_at,attempt_generation,write_journal_version,restart_requested_at,last_error_class")
-    .eq("owner_profile_id", context.permission.profile!.id)
+  const automaticRequest = supabase.from("team_workweek_publications")
+    .select("id,source_version_id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at),team_workweek_versions!team_workweek_publications_source_version_id_fkey!inner(origin)")
+    .eq("owner_profile_id", ownerProfileId)
     .eq("status", "preparing")
-    .maybeSingle<{id:string;source_version_id:string;effective_from:string;effective_at:string|null;attempt_generation:number;write_journal_version:number;restart_requested_at:string|null;last_error_class:string|null}>();
-  if (pendingResponse.error) return apiError("Offene Veröffentlichung konnte nicht geladen werden.", 503);
-  const pending = pendingResponse.data;
+    .eq("team_workweek_versions.origin", "google_reconciliation")
+    .maybeSingle<PublicationRow>().then(result => result);
+  const selectedContextRequest = requestedWeek
+    ? supabase.rpc("team_workweek_edit_context", { p_week_start: requestedWeek }).then(result => result)
+    : null;
+  const publishedRequest = supabase
+    .from("team_workweek_publications")
+    .select("id,source_version_id,superseded_by_publication_id,effective_from,effective_to,effective_until,activation_mode,effective_at,status,sync_state,publication_revision,published_at,last_sync_at,windows,team_workweek_google_series(id,google_event_id,confirmed_etag,state,provider_state,projection_part,source_window_ids),team_workweek_google_reconciliation_status(state,last_observed_at)")
+    .eq("owner_profile_id", ownerProfileId)
+    .eq("status", "published")
+    .order("effective_from", { ascending: false })
+    .order("publication_revision", { ascending: false })
+    .returns<PublicationRow[]>().then(result => result);
+  const pendingRequest = supabase.from("team_workweek_publications")
+    .select("id,source_version_id,effective_from,effective_at,attempt_generation,write_journal_version,restart_requested_at,last_error_class")
+    .eq("owner_profile_id", ownerProfileId)
+    .eq("status", "preparing")
+    .maybeSingle<{id:string;source_version_id:string;effective_from:string;effective_at:string|null;attempt_generation:number;write_journal_version:number;restart_requested_at:string|null;last_error_class:string|null}>().then(result => result);
   let privateQuery = supabase
     .from("team_workweek_versions")
     .select("id,owner_profile_id,effective_from,selected_week_start,activation_mode,base_publication_id,base_publication_revision,successor_snapshot,timezone,status,created_at,team_workweek_windows(weekday,start_minute,end_minute)")
+    .eq("owner_profile_id", ownerProfileId)
     .eq("status", "preparing")
     .eq("origin", "owner")
     .is("retired_at",null);
@@ -117,6 +137,9 @@ export async function GET(request: NextRequest) {
       created_at: string;
       team_workweek_windows: Array<{ weekday: number; start_minute: number; end_minute: number }>;
     }>();
+  const pendingResponse = await pendingRequest;
+  if (pendingResponse.error) return apiError("Offene Veröffentlichung konnte nicht geladen werden.", 503);
+  const pending = pendingResponse.data;
   if (privateResponse.error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
   let data = privateResponse.data;
 
@@ -127,7 +150,9 @@ export async function GET(request: NextRequest) {
     .maybeSingle<PublicationRow>() : null;
   if (publication?.error) return apiError("Private Grundwoche konnte nicht geladen werden.", 503);
   if(data && !publication?.data){
-    const conflict=await supabase.from("team_workweek_google_conflicts").select("resolution_version_id").eq("founderops_version_id",data.id).eq("state","resolving").maybeSingle<{resolution_version_id:string}>();
+    const service = getServerServiceRoleSupabase();
+    if (!service) return apiError("Privater Konfliktstatus konnte nicht geladen werden.", 503);
+    const conflict=await service.from("team_workweek_google_conflicts").select("resolution_version_id").eq("owner_profile_id", ownerProfileId).eq("founderops_version_id",data.id).eq("state","resolving").maybeSingle<{resolution_version_id:string}>();
     if(conflict.error)return apiError("Privater Konfliktstatus konnte nicht geladen werden.",503);
     if(conflict.data?.resolution_version_id)publication=await supabase.from("team_workweek_publications").select("id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at)").eq("source_version_id",conflict.data.resolution_version_id).maybeSingle<PublicationRow>();
     if(publication?.error)return apiError("Private Veröffentlichung konnte nicht geladen werden.",503);
@@ -136,12 +161,7 @@ export async function GET(request: NextRequest) {
   // Automatic reconciliation can outlive its pinned current/successor context.
   // Surface its expired operation through the same explicit owner restart action.
   if (!publication?.data || publication.data.status === "published") {
-    const automatic = await supabase.from("team_workweek_publications")
-      .select("id,source_version_id,effective_from,activation_mode,effective_at,effective_until,attempt_generation,status,sync_state,publication_revision,published_at,last_sync_at,team_workweek_google_reconciliation_status(state,last_observed_at),team_workweek_versions!team_workweek_publications_source_version_id_fkey!inner(origin)")
-      .eq("owner_profile_id", context.permission.profile!.id)
-      .eq("status", "preparing")
-      .eq("team_workweek_versions.origin", "google_reconciliation")
-      .maybeSingle<PublicationRow>();
+    const automatic = await automaticRequest;
     if (automatic.error) return apiError("Vorbereiteter Google-Abgleich konnte nicht geladen werden.", 503);
     if (!requestedWeek && automatic.data?.attempt_generation && automatic.data.effective_at && new Date(automatic.data.effective_at) <= new Date()) {
       if (publication?.data?.status === "published") data = null;
@@ -160,15 +180,7 @@ export async function GET(request: NextRequest) {
   }
 
   const privateVersion = publication?.data?.status === "published" ? null : data;
-  const ownerProfileId = context.permission.profile?.id || data?.owner_profile_id || null;
-  const latestPublishedResponse = ownerProfileId ? await supabase
-    .from("team_workweek_publications")
-    .select("id,source_version_id,superseded_by_publication_id,effective_from,effective_to,effective_until,activation_mode,effective_at,status,sync_state,publication_revision,published_at,last_sync_at,windows,team_workweek_google_series(id,google_event_id,confirmed_etag,state,provider_state,projection_part,source_window_ids),team_workweek_google_reconciliation_status(state,last_observed_at)")
-    .eq("owner_profile_id", ownerProfileId)
-    .eq("status", "published")
-    .order("effective_from", { ascending: false })
-    .order("publication_revision", { ascending: false })
-    .returns<PublicationRow[]>() : null;
+  const latestPublishedResponse = await publishedRequest;
   if (latestPublishedResponse?.error) return apiError("Veröffentlichungsstatus konnte nicht geladen werden.", 503);
   const publications = latestPublishedResponse?.data || [];
   const now = new Date();
@@ -196,8 +208,24 @@ export async function GET(request: NextRequest) {
     })), privateVersion.selected_week_start && privateVersion.activation_mode === "future_monday" ? privateVersion.base_publication_id : null)));
 
   const selectedWeek = requestedWeek || (privateVersion?.activation_mode === "future_monday" && privateVersion.effective_from >= workweekStart() ? privateVersion.effective_from : workweekStart());
-  const weekResponse = await supabase.rpc("team_workweek_edit_context", { p_week_start: selectedWeek });
+  const weekResponse = await (selectedContextRequest || supabase.rpc("team_workweek_edit_context", { p_week_start: selectedWeek }));
   if (weekResponse.error) return apiError("Die ausgewählte Arbeitswoche konnte nicht geladen werden.", 503);
+
+  if (weekResponse.data) {
+    const selectedDate = selectedWeek === workweekStart(berlinTodayIso(now)) ? berlinTodayIso(now) : selectedWeek;
+    const point = selectedDate === berlinTodayIso(now) ? now.getTime() : berlinCivilInstant(selectedWeek, "00:00");
+    const selectedBase = publications.filter(row => startsAt(row) <= point
+      && (row.effective_until ? Date.parse(row.effective_until) > point : !row.effective_to || row.effective_to >= selectedDate))
+      .sort((left, right) => right.publication_revision - left.publication_revision)[0];
+    // Parallel reads may straddle another tab's publication. Never adopt a mixed base.
+    if ((weekResponse.data.basePublicationId ?? null) !== (selectedBase?.id ?? null)
+      || (weekResponse.data.basePublicationRevision ?? null) !== (selectedBase?.publication_revision ?? null)) {
+      return NextResponse.json({
+        code: "edit_context_stale",
+        error: "Die Arbeitswoche wurde während des Ladens geändert. Lade den aktuellen Stand erneut.",
+      }, { status: 409 });
+    }
+  }
 
   return NextResponse.json({
     pendingPublication: pending ? {

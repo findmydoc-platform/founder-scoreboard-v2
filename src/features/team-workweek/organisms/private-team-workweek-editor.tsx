@@ -49,11 +49,11 @@ export function PrivateTeamWorkweekEditor({
   const hasTransitionClockLabel = state.draft.windows.sunday.some((window) =>
     [window.start, window.end].some((clock) => clock >= "02:00" && clock < "03:00"));
   const requestClose = () => {
-    if (state.pending) return;
+    if (state.editor.closeBlocked) return;
     if (state.dirty) setDiscardOpen(true);
     else onClose();
   };
-  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardOpen || state.pending, restoreFocusRef });
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardOpen || state.editor.closeBlocked, restoreFocusRef });
   useEffect(() => {
     if (restartFocusRequested.current && state.editor.recoveryFinished) {
       restartFocusRequested.current = false;
@@ -76,11 +76,12 @@ export function PrivateTeamWorkweekEditor({
                 {profile.name} · {state.editor.syncDelayed ? "Bisheriger Teamstand sichtbar" : "Entwurf"} · {TEAM_WORKWEEK_TIMEZONE}
               </p>
             </div>
-            <UiButton size="iconLg" aria-label="Editor schließen" onClick={requestClose}><X size={18} /></UiButton>
+            <UiButton size="iconLg" aria-label="Editor schließen" onClick={requestClose} disabled={state.editor.closeBlocked}><X size={18} /></UiButton>
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
-            <div className="grid gap-3">
+            <div className="grid gap-3" aria-busy={state.editor.loading}>
+              {state.editor.loading && <p role="status" className="text-sm text-slate-600">Arbeitswoche wird geladen …</p>}
               <section data-tour-id="workweek-validity" className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
                 <h3 id="workweek-validity-title" className="sr-only">Arbeitswoche auswählen</h3>
                 <WorkweekPicker value={state.selectedWeekStart} onChange={selectWeek} focusRef={validityFocusRef}
@@ -199,7 +200,7 @@ export function PrivateTeamWorkweekEditor({
                 : `${hours ? `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 }).format(hours)} Stunden pro Woche` : "Keine Arbeitszeiten geplant"} · ${workweekLabel(state.selectedWeekStart)}`}
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
-              <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
+              <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.editor.closeBlocked}>Schließen</UiButton>
               <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Entwurf speichern" onClick={() => void state.save()} disabled={!state.editor.canSave}>
                 Entwurf speichern
               </UiButton>
@@ -212,7 +213,7 @@ export function PrivateTeamWorkweekEditor({
                 onClick={() => void state.publish().then((result) => (result === true || result === "conflict") && onClose())}
                 disabled={!state.editor.canPublish}
               >
-                {state.pending ? "Bitte warten …" : "Veröffentlichen"}
+                {state.publishing ? "Wird veröffentlicht …" : "Veröffentlichen"}
               </UiButton>
             </div>
           </footer>
