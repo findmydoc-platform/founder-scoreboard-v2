@@ -13,6 +13,8 @@ it("pins one cleanup cutoff, retains actual elapsed history, and restarts withou
     await client.query("insert into public.team_workweek_publication_effects(publication_id,owner_profile_id,generation,kind,google_event_id,payload) values($1,'history-owner',1,'weekly',$2,$3)",[pub.id,payload.id,payload]);
     const cutoff={...payload,id:"fopsprevious01",recurrence:["RRULE:FREQ=WEEKLY;UNTIL=20261012T075959Z"]};
     await client.query("insert into public.team_workweek_publication_effects(publication_id,owner_profile_id,generation,kind,google_event_id,payload,operation,expected_payload,expected_etag) values($1,'history-owner',1,'predecessor_cutoff',$2,$3,'update',$4,'old')",[pub.id,cutoff.id,cutoff,{...payload,id:cutoff.id}]);
+    // This scenario retains a predecessor cutoff that Google already confirmed.
+    await client.query("update public.team_workweek_publication_effects set state='confirmed',confirmed_etag='applied-cutoff',observed_at=clock_timestamp() where publication_id=$1 and kind='predecessor_cutoff'",[pub.id]);
     await client.query("select set_config('request.jwt.claim.role','service_role',true)");await client.query("set local role service_role");
     const plan=(await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result",[pub.id])).rows[0].result;
     expect(plan.effects.map((effect:{cleanupDisposition:string})=>effect.cleanupDisposition)).toEqual(["preserve"]);

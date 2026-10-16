@@ -86,10 +86,10 @@ export async function GET(request: NextRequest) {
   const requestedWeek = request.nextUrl.searchParams.get("week");
   if (requestedWeek && !selectedWorkweek(requestedWeek).ok) return apiError("Wähle die aktuelle oder eine zukünftige Woche.", 400);
   const pendingResponse = await supabase.from("team_workweek_publications")
-    .select("id,source_version_id,effective_from,effective_at,attempt_generation,write_journal_version,restart_requested_at")
+    .select("id,source_version_id,effective_from,effective_at,attempt_generation,write_journal_version,restart_requested_at,last_error_class")
     .eq("owner_profile_id", context.permission.profile!.id)
     .eq("status", "preparing")
-    .maybeSingle<{id:string;source_version_id:string;effective_from:string;effective_at:string|null;attempt_generation:number;write_journal_version:number;restart_requested_at:string|null}>();
+    .maybeSingle<{id:string;source_version_id:string;effective_from:string;effective_at:string|null;attempt_generation:number;write_journal_version:number;restart_requested_at:string|null;last_error_class:string|null}>();
   if (pendingResponse.error) return apiError("Offene Veröffentlichung konnte nicht geladen werden.", 503);
   const pending = pendingResponse.data;
   let privateQuery = supabase
@@ -203,7 +203,7 @@ export async function GET(request: NextRequest) {
     pendingPublication: pending ? {
       id: pending.id, sourceVersionId: pending.source_version_id, effectiveFrom: pending.effective_from,
       resumeAllowed: !pending.restart_requested_at && (pending.attempt_generation === 0
-        || (pending.write_journal_version === 1 && Boolean(pending.effective_at && Date.parse(pending.effective_at) > Date.now()))),
+        || (pending.write_journal_version === 1 && pending.last_error_class !== "provider_identity_mismatch" && Boolean(pending.effective_at && Date.parse(pending.effective_at) > Date.now()))),
     } : null,
     weekContext: weekResponse.data,
     restartAvailable: Boolean(privateVersion && (contextChanged || (publication?.data?.status === "preparing" && publication.data.attempt_generation && publication.data.effective_at))),

@@ -262,3 +262,12 @@ test("a pending legacy Monday publication resumes through publish while untracke
   pendingOwnerPublicationResult.attempt_generation=1;
   assert.equal((await(await route.GET(request)).json()).pendingPublication.resumeAllowed,false);
 });
+
+
+test("a persistent Google identity conflict offers restart instead of repeating the same future publication",async()=>{
+  pendingOwnerPublicationResult={id:"identity-pending",source_version_id:"identity-source",effective_from:"2099-01-12",effective_at:"2099-01-11T23:00:00Z",attempt_generation:1,write_journal_version:1,restart_requested_at:null,last_error_class:"provider_identity_mismatch"};
+  const body=await(await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")})).json();
+  assert.equal(body.pendingPublication.resumeAllowed,false);
+  assert.equal(body.pendingPublication.sourceVersionId,"identity-source");
+  assert.deepEqual(postCalls.at(-1),["team_workweek_edit_context",{p_week_start:"2099-01-19"}]);
+});
