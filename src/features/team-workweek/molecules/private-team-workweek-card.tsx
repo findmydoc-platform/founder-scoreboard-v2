@@ -68,7 +68,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
               <p>Gültig ab {state.latestPublished.effectiveAt ? formatTeamWorkweekActivation(state.latestPublished.effectiveAt) : formatDate(state.latestPublished.effectiveFrom)}.</p>
               {state.latestPublished.lastSyncAt && <p>Letzter erfolgreicher Abgleich: {formatDate(state.latestPublished.lastSyncAt.slice(0, 10))}.</p>}
               <p>Geprüft werden nur von FounderOps angelegte Google-Serien.</p>
-              <UiButton className="mt-2" variant="secondary" size="sm" onClick={() => void state.reconcile()} disabled={state.pending}>App-Termine in Google prüfen</UiButton>
+              {!latestIsPrepared && <UiButton className="mt-2" variant="secondary" size="sm" onClick={() => void state.reconcile()} disabled={state.pending}>App-Termine in Google prüfen</UiButton>}
             </details>}
             {reconciliationState === "conflict" && !state.version && (
               <p className="mt-2 text-xs font-semibold text-amber-700">Eine Google-Serienänderung ist nicht eindeutig. Der bestätigte Teamstand bleibt aktiv.</p>

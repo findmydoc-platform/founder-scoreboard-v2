@@ -459,6 +459,8 @@ export const NamesAPreparedFutureScheduleSeparatelyFromAPrivateDraft: Story = {
     await expect(await canvas.findByText(/Geplant ab 05. Jan./)).toBeVisible();
     await expect(canvas.getByText(/Die geplante Woche ist bereits im Kalender sichtbar/)).toBeVisible();
     await expect(canvas.queryByText("Privater Entwurf")).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByText("Details zur Veröffentlichung"));
+    await expect(canvas.queryByRole("button", {name:"App-Termine in Google prüfen"})).not.toBeInTheDocument();
   },
 };
 

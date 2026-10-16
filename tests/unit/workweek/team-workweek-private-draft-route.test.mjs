@@ -253,3 +253,12 @@ test("an expired automatic operation does not replace an explicitly selected wee
   const body=await(await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")})).json();
   assert.equal(body.version,null);
 });
+
+
+test("a pending legacy Monday publication resumes through publish while untracked modern attempts stay fenced",async()=>{
+  pendingOwnerPublicationResult={id:"legacy",source_version_id:"legacy-source",effective_from:"2099-01-12",effective_at:null,attempt_generation:0,write_journal_version:0,restart_requested_at:null};
+  const request={nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")};
+  assert.equal((await(await route.GET(request)).json()).pendingPublication.resumeAllowed,true);
+  pendingOwnerPublicationResult.attempt_generation=1;
+  assert.equal((await(await route.GET(request)).json()).pendingPublication.resumeAllowed,false);
+});

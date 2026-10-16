@@ -128,3 +128,55 @@ it("requires a new week selection when a saved current-week draft has aged into 
     expect((await db.query("select count(*)::integer as count from public.team_workweek_publication_effects where owner_profile_id='aged-week-owner'")).rows[0].count).toBe(0);
   });
 });
+
+
+it.each([{decision:"founderops",deleted:false},{decision:"google",deleted:false},{decision:"founderops",deleted:true}])("resolves a future base without moving the selected week: %j", async ({decision,deleted}) => {
+  await withIsolatedLocalDatabase(async db => {
+    const user="58000000-0000-4000-8000-000000000093",owner="future-conflict-owner";
+    await db.query("insert into auth.users(id) values($1)",[user]);
+    await db.query("insert into public.profiles(id,auth_user_id,name,platform_role) values($1,$2,'Owner','viewer')",[owner,user]);
+    const week=(await db.query("select (date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date+7)::text as week")).rows[0].week;
+    const save=async(windows:unknown)=>{
+      const context=(await asAuthenticated(db,user,()=>db.query("select public.team_workweek_edit_context($1) as value",[week]))).rows[0].value;
+      return (await asAuthenticated(db,user,()=>db.query("select public.create_private_selected_team_workweek_version($1,$2,$3) as value",[week,JSON.stringify(windows),context.contextToken]))).rows[0].value;
+    };
+    const original=await save([{weekday:1,startMinute:540,endMinute:960}]);
+    const first=(await asAuthenticated(db,user,()=>db.query("select public.prepare_team_workweek_publication($1,1) as value",[original.id]))).rows[0].value;
+    await db.query("select set_config('request.jwt.claim.role','service_role',true)");
+    await db.query("set local role service_role");
+    for(const effect of first.effects)await db.query("select public.confirm_team_workweek_effect($1,1,'first-etag',$2)",[effect.id,effect.payload]);
+    await db.query("reset role");
+    await asAuthenticated(db,user,()=>db.query("select public.finalize_team_workweek_publication($1)",[first.id]));
+    const draft=await save([{weekday:2,startMinute:600,endMinute:900}]);
+    const series=(await db.query("select * from public.team_workweek_google_series where publication_id=$1",[first.id])).rows[0];
+    const observedPayload={...first.effects[0].payload,
+      start:{...first.effects[0].payload.start,dateTime:new Date(Date.parse(first.effects[0].payload.start.dateTime)+3600000).toISOString()},
+      end:{...first.effects[0].payload.end,dateTime:new Date(Date.parse(first.effects[0].payload.end.dateTime)+3600000).toISOString()}};
+    const observations=[{seriesId:series.id,priorEtag:"first-etag",observedEtag:"external-etag",founderopsRevision:1,providerState:deleted?"deleted":"active",...(!deleted?{observedPayload}:{})}];
+    const googleWindows=[{weekday:1,startMinute:600,endMinute:1020}];
+    await db.query("select set_config('request.jwt.claim.role','service_role',true)");
+    await db.query("set local role service_role");
+    const conflict=deleted
+      ? (await db.query("select public.capture_team_workweek_physical_conflict($1,$2,1,'[]',$3,$4,false,true,clock_timestamp()) as value",[owner,first.id,JSON.stringify(observations),'a'.repeat(64)])).rows[0].value
+      : (await db.query("select public.create_team_workweek_google_conflict($1,$2,1,$3,$4,$5,$6,$7,$8) as value",[owner,first.id,draft.id,week,JSON.stringify(googleWindows),JSON.stringify(observations),'a'.repeat(64),'b'.repeat(64)])).rows[0].value;
+    const privateFingerprint=(await db.query("select founderops_fingerprint from public.team_workweek_google_conflicts where id=$1",[conflict.id])).rows[0].founderops_fingerprint;
+    const resolution=(await db.query("select public.prepare_team_workweek_google_conflict_resolution($1,$2,1,$3,$4,$5,$6,$7) as value",[conflict.id,owner,decision,JSON.stringify(observations),'a'.repeat(64),privateFingerprint,'c'.repeat(64)])).rows[0].value;
+    const row=(await db.query("select effective_from::text,selected_week_start::text,base_publication_id from public.team_workweek_versions where id=$1",[resolution.versionId])).rows[0];
+    expect(row).toEqual({effective_from:week,selected_week_start:week,base_publication_id:first.id});
+    await db.query("reset role");
+    const prepared=(await asAuthenticated(db,user,()=>db.query("select public.prepare_team_workweek_publication($1,1) as value",[resolution.versionId]))).rows[0].value;
+    expect(prepared.predecessorPublicationId).toBe(first.id);
+    if(deleted)expect(prepared.effects.every((effect:{operation:string})=>effect.operation==="create")).toBe(true);
+    else expect(prepared.effects.find((effect:{operation:string})=>effect.operation!=="create")).toMatchObject({expectedEtag:"external-etag",expectedPayload:observedPayload});
+    await db.query("set local role service_role");
+    for(const effect of prepared.effects)await db.query("select public.confirm_team_workweek_effect($1,1,'resolved-etag',$2)",[effect.id,effect.payload]);
+    await db.query("reset role");
+    await asAuthenticated(db,user,()=>db.query("select public.finalize_team_workweek_publication($1)",[prepared.id]));
+    await db.query("select set_config('request.jwt.claim.role','service_role',true)");
+    await db.query("set local role service_role");
+    await db.query("select public.complete_team_workweek_google_conflict_resolution($1,$2,1)",[conflict.id,owner]);
+    await db.query("reset role");
+    expect((await db.query("select windows from public.team_workweek_publications where id=$1",[prepared.id])).rows[0].windows).toEqual(decision==="google"?googleWindows:[{weekday:2,startMinute:600,endMinute:900}]);
+    expect((await db.query("select state from public.team_workweek_google_conflicts where id=$1",[conflict.id])).rows[0].state).toBe("resolved");
+  });
+});

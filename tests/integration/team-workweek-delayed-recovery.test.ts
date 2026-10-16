@@ -230,3 +230,22 @@ it.each(["cancellation", "finalization"])("serializes %s winning against a concu
     await first.end(); await second.end();
   }
 }, 30_000);
+
+
+it("fences a crashed dispatched worker before recovery without releasing its uncertain write on age alone",async()=>{
+  await withIsolatedLocalDatabase(async client=>{
+    const {publication}=await prepare(client);
+    const claim=(await service(client,()=>client.query("select public.claim_team_workweek_provider_operation($1,1,'publish') as result",[publication.id]))).rows[0].result;
+    await service(client,()=>client.query("select public.record_team_workweek_provider_write($1,$2,'dispatched')",[claim.id,publication.effects[0].id]));
+    await client.query("update public.team_workweek_provider_operations set created_at=clock_timestamp()-interval '1 minute' where id=$1",[claim.id]);
+    const recovery=(await service(client,()=>client.query("select public.claim_team_workweek_provider_operation($1,1,'publish') as result",[publication.id]))).rows[0].result;
+    expect(recovery).toMatchObject({state:"uncertain",id:claim.id,purpose:"publish",abandon:false});
+    expect(await captureDatabaseError(client,()=>service(client,()=>client.query("select public.record_team_workweek_provider_write($1,$2,'dispatched')",[claim.id,publication.effects[0].id])))).toMatchObject({code:"P0003"});
+    await service(client,()=>client.query("select public.record_team_workweek_provider_write($1,$2,'replaying')",[claim.id,publication.effects[0].id]));
+    expect((await service(client,()=>client.query("select public.finish_team_workweek_provider_operation($1) as result",[claim.id]))).rows[0].result.state).toBe("uncertain");
+    await service(client,()=>client.query("select public.record_team_workweek_provider_write($1,$2,'settled')",[claim.id,publication.effects[0].id]));
+    await service(client,()=>client.query("select public.record_team_workweek_provider_write($1,$2,'uncertain')",[claim.id,publication.effects[0].id]));
+    expect((await service(client,()=>client.query("select public.finish_team_workweek_provider_operation($1) as result",[claim.id]))).rows[0].result.state).toBe("settled");
+    expect((await service(client,()=>client.query("select public.claim_team_workweek_provider_operation($1,1,'publish') as result",[publication.id]))).rows[0].result.state).toBe("claimed");
+  });
+},30000);

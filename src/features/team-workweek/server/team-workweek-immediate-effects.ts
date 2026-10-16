@@ -83,7 +83,7 @@ function errorFor(response: Response): GoogleWorkweekSeriesResult {
     ? "oauth_reconnect_required" : "provider_unavailable" };
 }
 
-async function observe(fetchImpl: typeof fetch, accessToken: string, effect: PreparedWorkweekEffect, restoring = false) {
+async function observe(fetchImpl: typeof fetch, accessToken: string, effect: PreparedWorkweekEffect, restoring = false, cancellationFence = false) {
   try {
     const response = await fetchImpl(endpoint(effect), {
       headers: { authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: AbortSignal.timeout(8_000),
@@ -91,6 +91,10 @@ async function observe(fetchImpl: typeof fetch, accessToken: string, effect: Pre
     if (response.status === 404 || response.status === 410) return { state: "absent" as const };
     if (!response.ok) return errorFor(response);
     const event = await response.json().catch(() => null) as ObservedEvent | null;
+    if (event?.id === effect.googleEventId && event.status === "cancelled" && effect.operation === "create") {
+      if (cancellationFence && event.etag) return {state:"confirmed" as const,etag:event.etag};
+      if (restoring) return {state:"absent" as const};
+    }
     if (effect.cleanupPayload && matchesPayload(event,effect.cleanupPayload)) return {state:"cleaned" as const,etag:event!.etag!};
     if (matchesEffect(event, effect)) return { state: "confirmed" as const, etag: event!.etag! };
     if (effect.operation && effect.operation !== "create" && effect.expectedPayload && matchesPayload(event, effect.expectedPayload)
@@ -101,10 +105,10 @@ async function observe(fetchImpl: typeof fetch, accessToken: string, effect: Pre
   }
 }
 
-export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImpl = fetch, now = () => new Date(), writeJournal, readOnly = false }: {
-  accessToken: string; effect: PreparedWorkweekEffect; fetchImpl?: typeof fetch; now?: () => Date; writeJournal?: WorkweekProviderWriteJournal; readOnly?: boolean;
+export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImpl = fetch, now = () => new Date(), writeJournal, readOnly = false, cancellationFence = false }: {
+  accessToken: string; effect: PreparedWorkweekEffect; fetchImpl?: typeof fetch; now?: () => Date; writeJournal?: WorkweekProviderWriteJournal; readOnly?: boolean; cancellationFence?: boolean;
 }): Promise<GoogleWorkweekSeriesResult> {
-  const observed = await observe(fetchImpl, accessToken, effect);
+  const observed = await observe(fetchImpl, accessToken, effect, false, cancellationFence);
   if (observed.state === "cleaned") return {state:"delayed",errorClass:"provider_identity_mismatch"};
   if (observed.state === "confirmed") {
     await writeJournal?.outcome("settled");
@@ -121,7 +125,7 @@ export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImp
     }, writeJournal);
     if (response.ok) {
       const event = await response.json().catch(() => null) as ObservedEvent | null;
-      return matchesEffect(event, effect)
+      return (matchesEffect(event, effect) || (cancellationFence && event?.id===effect.googleEventId && event.status==="cancelled" && Boolean(event.etag)))
         ? { state: "confirmed", etag: event!.etag!, observedAt: now().toISOString() }
         : { state: "delayed", errorClass: "provider_identity_mismatch" };
     }
@@ -130,7 +134,7 @@ export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImp
   } catch {
     // A lost response does not prove that Google rejected the immutable mutation.
   }
-  const recovered = await observe(fetchImpl, accessToken, effect);
+  const recovered = await observe(fetchImpl, accessToken, effect, false, cancellationFence);
   if (recovered.state === "confirmed") await writeJournal?.outcome("settled");
   return recovered.state === "confirmed" ? { ...recovered, observedAt: now().toISOString() }
     : recovered.state === "delayed" ? recovered : { state: "delayed", errorClass: "provider_unavailable" };
@@ -232,4 +236,38 @@ export async function discoverGoogleWorkweekInstance({accessToken,effect,fetchIm
       ...(instance.reminders?{reminders:{useDefault:instance.reminders.useDefault}}:{}),...(instance.status?{status:instance.status}:{})};
     return {state:"observed",eventId:instance.id,etag:instance.etag!,originalPayload};
   } catch {return {state:"delayed",errorClass:"provider_unavailable"};}
+}
+
+
+/** Resolve a journaled dispatch using provider identity/CAS, never elapsed time alone. */
+export async function recoverGoogleWorkweekWrite({accessToken,effect,purpose,abandon=false,fetchImpl=fetch,now=()=>new Date(),writeJournal}:{
+  accessToken:string;effect:PreparedWorkweekEffect;purpose:"publish"|"cleanup";abandon?:boolean;
+  fetchImpl?:typeof fetch;now?:()=>Date;writeJournal:WorkweekProviderWriteJournal;
+}):Promise<GoogleWorkweekSeriesResult> {
+  if(purpose==="cleanup")return cleanupGoogleWorkweekEffect({accessToken,effect,fetchImpl,now,writeJournal});
+  if(!abandon)return ensureGoogleWorkweekEffect({accessToken,effect,fetchImpl,now,writeJournal});
+  const observed=await observe(fetchImpl,accessToken,effect,true);
+  if(observed.state==="confirmed" || observed.state==="baseline" && observed.etag!==effect.expectedEtag){
+    await writeJournal.outcome("settled");
+    return {state:"confirmed",etag:observed.etag,observedAt:now().toISOString()};
+  }
+  if(effect.operation==="create" && (observed.state==="absent" || observed.state==="delayed" && observed.errorClass==="provider_identity_mismatch")) {
+    // The deterministic ID remains occupied. An original POST arriving later
+    // cannot recreate this generation after cleanup.
+    return ensureGoogleWorkweekEffect({accessToken,effect:{...effect,payload:{...effect.payload,status:"cancelled"}},fetchImpl,now,writeJournal,cancellationFence:true});
+  }
+  if(observed.state!=="baseline" || !effect.expectedPayload || !effect.expectedEtag)return observed.state==="delayed"?observed:{state:"delayed",errorClass:"provider_identity_mismatch"};
+  try{
+    const response=await mutate(fetchImpl,`${endpoint(effect)}?sendUpdates=none`,{
+      method:"PUT",headers:{authorization:`Bearer ${accessToken}`,"content-type":"application/json","if-match":effect.expectedEtag},
+      body:JSON.stringify({...effect.expectedPayload,extendedProperties:{private:{...effect.expectedPayload.extendedProperties.private,founderopsWorkweekRecoveryFence:effect.id}}}),cache:"no-store",signal:AbortSignal.timeout(8_000),
+    },writeJournal);
+    if(!response.ok && response.status!==412 && response.status<500)return errorFor(response);
+  }catch{/* Observe the baseline and its rotated ETag before releasing the fence. */}
+  const fenced=await observe(fetchImpl,accessToken,effect,true);
+  if(fenced.state==="baseline" && fenced.etag!==effect.expectedEtag || fenced.state==="confirmed"){
+    await writeJournal.outcome("settled");
+    return {state:"confirmed",etag:fenced.etag,observedAt:now().toISOString()};
+  }
+  return fenced.state==="delayed"?fenced:{state:"delayed",errorClass:"provider_unavailable"};
 }
