@@ -65,6 +65,8 @@ type ClientOptions = {
     result: Record<string, unknown>;
   };
   failRestartContextOnce?: boolean;
+  failPublicationContextOnce?: boolean;
+  failPublicationConflictReadOnce?: boolean;
   restartAvailable?: boolean;
   restart?: { after: Record<string, unknown>; result: Record<string, unknown>; status?: number };
   conflict?: Record<string, unknown> | null;
@@ -88,6 +90,7 @@ function client(options: ClientOptions = {}): BrowserApiClient {
     version: options.version || null,
   };
   let failRestartContext = false;
+  let failConflictContext = false;
   let activeConflict = options.conflict || null;
   let losePublishResponse = Boolean(options.losePublishResponse);
   return {
@@ -122,6 +125,10 @@ function client(options: ClientOptions = {}): BrowserApiClient {
         return { response: new Response(null, { status: options.restart.status || 200 }), body: options.restart.result };
       }
       if (path === "/api/team-workweek/conflict") {
+        if (failConflictContext && init?.method !== "POST") {
+          failConflictContext = false;
+          return { body: { error: "Konfliktstand nicht erreichbar." }, response: new Response(null, { status: 503 }) };
+        }
         if (init?.method === "POST" && options.conflictResolution) {
           privateBody = options.conflictResolution.after as typeof privateBody;
           activeConflict = null;
@@ -139,6 +146,8 @@ function client(options: ClientOptions = {}): BrowserApiClient {
           throw new Error("Antwort der Veröffentlichung konnte nicht geladen werden.");
         }
         privateBody = options.publish.after as typeof privateBody;
+        failRestartContext = Boolean(options.failPublicationContextOnce);
+        failConflictContext = Boolean(options.failPublicationConflictReadOnce);
         return response({ publication: options.publish.result });
       }
       if (path === "/api/team-workweek/reconcile") {
@@ -1258,4 +1267,213 @@ export const RetainsCurrentInputsWhenEarlierPublicationNeedsGoogleReconnection: 
     await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("10:00");
     await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
   },
+};
+
+
+export const RequiresFreshContextAfterConfirmedPublication: Story = {
+  args: { profile, apiClient: client({ failPublicationContextOnce: true, publish: {
+    after: { editBase: { windows: publishedWindows }, latestPublished, minimumEffectiveFrom: nextMondayIso(), publication: null, version: null },
+    result: { ...latestPublished, recovery: null },
+  } }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Ende"));
+    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Ende"), "18:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
+    await expect(await canvas.findByText(/bestätigt.*aktuellen Stand.*erneut/i)).toBeVisible();
+    await expect(canvas.getByText("Stand nicht aktuell")).toBeVisible();
+    await expect(canvas.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).toBeVisible();
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand laden" }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled());
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+  },
+};
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => { resolve = complete; });
+  return { promise, resolve };
+}
+
+function OutOfOrderContext({ pause }: { pause: "draft" | "conflict" }) {
+  const [week, setWeek] = useState(nextMondayIso());
+  const [waiting, setWaiting] = useState(false);
+  const [released, setReleased] = useState(false);
+  const [fixture] = useState(() => {
+    const gate = deferred<void>();
+    const fallback = client();
+    let drafts = 0;
+    let conflicts = 0;
+    const apiClient = {
+      requestJson: async (input: string | URL, init?: { method?: string }) => {
+        const path = String(input);
+        const draftRead = path.startsWith("/api/team-workweek/private-draft") && init?.method !== "POST";
+        const conflictRead = path === "/api/team-workweek/conflict" && init?.method !== "POST";
+        const shouldPause = (draftRead && ++drafts === 1 && pause === "draft") || (conflictRead && ++conflicts === 1 && pause === "conflict");
+        const result = await fallback.requestJson<Record<string, unknown>>(input, init);
+        if (shouldPause) {
+          setWaiting(true);
+          await gate.promise;
+          setReleased(true);
+          if (pause === "conflict") return response({ conflict: {
+            id: "obsolete-conflict", conflictRevision: 1, state: "open", decision: null,
+            founderops: { effectiveFrom: nextMondayIso(), windows: [] },
+            google: { effectiveFrom: nextMondayIso(), windows: [] },
+          } });
+        }
+        if (draftRead && drafts > 1 && !shouldPause) {
+          const context = result.body?.weekContext as Record<string, unknown>;
+          return response({ ...result.body, weekContext: { ...context, windows: [{ weekday: 1, startMinute: 780, endMinute: 900 }] } });
+        }
+        return result;
+      },
+    } as unknown as BrowserApiClient;
+    return { apiClient, release: () => gate.resolve() };
+  });
+  return <>
+    {waiting && <button onClick={() => setWeek(addCalendarDays(nextMondayIso(), 7))}>Andere Woche öffnen</button>}
+    <button onClick={fixture.release}>Alte Antwort freigeben</button>
+    {released && <p>Alte Antwort abgeschlossen</p>}
+    <PrivateTeamWorkweekCard apiClient={fixture.apiClient} profile={profile} editorRequested editorWeek={week} />
+  </>;
+}
+
+export const CommitsDraftAndConflictAsOneEditingContext: Story = {
+  args: { profile, apiClient: client() },
+  render: () => <OutOfOrderContext pause="conflict" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole("button", { name: "Andere Woche öffnen" });
+    await expect(canvas.queryByLabelText("Montag, Fenster 1, Beginn")).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Andere Woche öffnen" }));
+    await waitFor(() => expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("13:00"));
+    await userEvent.click(canvas.getByRole("button", { name: "Alte Antwort freigeben" }));
+    await canvas.findByText("Alte Antwort abgeschlossen");
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("13:00");
+    await expect(canvas.getByText("Deine Arbeitszeiten sind in Team und Google bestätigt.")).toBeInTheDocument();
+    await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveAttribute("title", workweekLabel(addCalendarDays(nextMondayIso(), 7)));
+  },
+};
+
+export const IgnoresAnOlderDraftAfterAnotherWeekWasLoaded: Story = {
+  args: { profile, apiClient: client() },
+  render: () => <OutOfOrderContext pause="draft" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Andere Woche öffnen" }));
+    await waitFor(() => expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("13:00"));
+    await userEvent.click(canvas.getByRole("button", { name: "Alte Antwort freigeben" }));
+    await canvas.findByText("Alte Antwort abgeschlossen");
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("13:00");
+    await expect(canvas.getByText("Deine Arbeitszeiten sind in Team und Google bestätigt.")).toBeInTheDocument();
+    await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveAttribute("title", workweekLabel(addCalendarDays(nextMondayIso(), 7)));
+  },
+};
+
+export const RetainsAnotherWeeksEditsAfterResumeRefreshFails: Story = {
+  args: { profile, apiClient: client() },
+  render: function ResumeRefreshFailure() {
+    const [apiClient] = useState(() => {
+      const fallback = client();
+      let open = true;
+      let failNextRead = false;
+      return {
+        requestJson: async (input: string | URL, init?: { method?: string; json?: Record<string, unknown> }) => {
+          const path = String(input);
+          if (path === "/api/team-workweek/publish") {
+            if (!open) throw new Error("The earlier publication must not be sent again after confirmation");
+            await expect(init?.json).toEqual({ versionId: "earlier-saved-plan" });
+            open = false;
+            failNextRead = true;
+            return response({ publication: { status: "published", syncState: "confirmed" } });
+          }
+          if (init?.method === "POST") throw new Error("Retained inputs must not be saved as a recovery side effect");
+          if (path.startsWith("/api/team-workweek/private-draft")) {
+            if (failNextRead) {
+              failNextRead = false;
+              return { body: { error: "Kontext vorübergehend nicht erreichbar" }, response: new Response(null, { status: 503 }) };
+            }
+            const result = await fallback.requestJson<Record<string, unknown>>(input, init);
+            return response({ ...result.body, pendingPublication: open ? {
+              id: "earlier-publication", sourceVersionId: "earlier-saved-plan", effectiveFrom: nextMondayIso(), resumeAllowed: true,
+            } : null });
+          }
+          return fallback.requestJson(input, init);
+        },
+      } as unknown as BrowserApiClient;
+    });
+    return <PrivateTeamWorkweekCard apiClient={apiClient} profile={profile} editorRequested editorWeek={addCalendarDays(nextMondayIso(), 7)} />;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const week = addCalendarDays(nextMondayIso(), 7);
+    await waitFor(() => expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveAttribute("title", workweekLabel(week)));
+    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Ende"));
+    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Ende"), "18:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Offene Veröffentlichung fortsetzen" }));
+    await expect(await canvas.findByText(/Die frühere Veröffentlichung ist bestätigt. Lade den aktuellen Stand/)).toBeVisible();
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveAttribute("title", workweekLabel(week));
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand laden" }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeEnabled());
+    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveAttribute("title", workweekLabel(week));
+  },
+};
+
+export const AdmitsOnlyOneMutationWhilePublicationIsPending: Story = {
+  args: { profile, apiClient: client() },
+  render: function PendingPublication() {
+    const [mutations, setMutations] = useState(0);
+    const [fixture] = useState(() => {
+      const gate = deferred<void>();
+      const fallback = client();
+      return {
+        release: () => gate.resolve(),
+        apiClient: {
+          requestJson: async (input: string | URL, init?: { method?: string }) => {
+            if (String(input) === "/api/team-workweek/publish") {
+              setMutations(count => count + 1);
+              await gate.promise;
+              return response({ publication: { ...latestPublished, recovery: null } });
+            }
+            return fallback.requestJson(input, init);
+          },
+        } as unknown as BrowserApiClient,
+      };
+    });
+    return <>
+      <p>Veröffentlichungen: {mutations}</p>
+      <button onClick={fixture.release}>Google-Antwort bestätigen</button>
+      <PrivateTeamWorkweekCard apiClient={fixture.apiClient} profile={profile} editorRequested />
+    </>;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled());
+    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Ende"));
+    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Ende"), "18:00");
+    await userEvent.dblClick(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
+    await expect(await canvas.findByText("Veröffentlichungen: 1")).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Entwurf speichern" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Google-Antwort bestätigen" }));
+    await expect(await canvas.findByText("Arbeitswoche wurde mit Google synchronisiert und im Team veröffentlicht.")).toBeVisible();
+    await expect(canvas.getByText("Veröffentlichungen: 1")).toBeInTheDocument();
+  },
+};
+
+
+export const RetainsConfirmedBaselineWhenConflictRefreshFails: Story = {
+  ...RequiresFreshContextAfterConfirmedPublication,
+  args: { profile, apiClient: client({ failPublicationConflictReadOnce: true, publish: {
+    after: { editBase: { windows: { ...publishedWindows, monday: [{ start: "12:00", end: "16:00" }] } }, latestPublished: { ...latestPublished, effectiveFrom: nextMondayIso() }, minimumEffectiveFrom: nextMondayIso(), publication: null, version: null },
+    result: { ...latestPublished, recovery: null },
+  } }) },
 };
