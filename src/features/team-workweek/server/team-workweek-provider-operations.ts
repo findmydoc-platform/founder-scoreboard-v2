@@ -30,7 +30,7 @@ type EffectRow = {
   cleanup_payload: PreparedWorkweekEffect["cleanupPayload"];
 };
 
-async function observeUncertainOperation(serviceSupabase: SupabaseClient, operationId: string, purpose: "publish" | "cleanup", accessToken: string, now: () => Date, abandon: boolean) {
+async function observeUncertainOperation(serviceSupabase: SupabaseClient, operationId: string, purpose: "publish" | "cleanup", accessToken: string, now: () => Date, abandon: boolean, recoverWrite: typeof recoverGoogleWorkweekWrite) {
   const writes = await serviceSupabase.from("team_workweek_provider_writes")
     .select("effect_id,team_workweek_publication_effects(*)").eq("operation_id", operationId)
     .in("state", ["dispatched", "uncertain"]);
@@ -44,15 +44,15 @@ async function observeUncertainOperation(serviceSupabase: SupabaseClient, operat
       originalStart: row.original_start, ...(row.cleanup_at ? { cleanupAt: row.cleanup_at } : {}),
       cleanupDisposition: row.cleanup_disposition, cleanupPayload: row.cleanup_payload,
     };
-    const observed = await recoverGoogleWorkweekWrite({accessToken,effect,now,purpose,abandon,writeJournal:providerWriteJournal(serviceSupabase,operationId,effect.id,true)});
+    const observed = await recoverWrite({accessToken,effect,now,purpose,abandon,writeJournal:providerWriteJournal(serviceSupabase,operationId,effect.id,true)});
     if (observed.state !== "confirmed") return { settled: false, errorClass: observed.errorClass };
   }
   return { settled: await finishProviderOperation(serviceSupabase, operationId) };
 }
 
-export async function claimProviderOperation({ serviceSupabase, publicationId, generation, purpose, accessToken, now = () => new Date() }: {
+export async function claimProviderOperation({ serviceSupabase, publicationId, generation, purpose, accessToken, now = () => new Date(), recoverWrite = recoverGoogleWorkweekWrite }: {
   serviceSupabase: SupabaseClient; publicationId: string; generation: number; purpose: "publish" | "cleanup";
-  accessToken: string; now?: () => Date;
+  accessToken: string; now?: () => Date; recoverWrite?: typeof recoverGoogleWorkweekWrite;
 }): Promise<{ id: string; reason?: never } | { id?: never; reason: WorkweekRecoveryReason; errorClass?: ProviderFailure }> {
   const claim = () => serviceSupabase.rpc("claim_team_workweek_provider_operation", {
     p_publication_id: publicationId, p_generation: generation, p_purpose: purpose,
@@ -60,7 +60,7 @@ export async function claimProviderOperation({ serviceSupabase, publicationId, g
   let response = await claim();
   if (response.error) return { reason: "in_progress" };
   if (response.data?.state === "uncertain" && response.data.id) {
-    const observation = await observeUncertainOperation(serviceSupabase, response.data.id, response.data.purpose, accessToken, now, Boolean(response.data.abandon));
+    const observation = await observeUncertainOperation(serviceSupabase, response.data.id, response.data.purpose, accessToken, now, Boolean(response.data.abandon), recoverWrite);
     if (!observation.settled) return { reason: "uncertain", errorClass: observation.errorClass };
     response = await claim();
     if (response.error) return { reason: "in_progress" };

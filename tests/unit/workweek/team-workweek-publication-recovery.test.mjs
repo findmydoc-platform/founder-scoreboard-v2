@@ -392,3 +392,63 @@ test("a fully superseded future interval never hides the replacement in the team
   ],"2026-10-15",new Date("2026-10-15T12:00:00Z"));
   assert.deepEqual(rows.map(row=>row.id),["replacement"]);
 });
+
+
+test.each([false, true])("publication replays through its provider adapter and holds the claim through owner completion (completion fails: %s)", async (completionFails) => {
+  const effect = { id: "recover-effect", calendarId: "primary", googleEventId: "fopsrecover", generation: 1,
+    state: "confirmed", confirmedEtag: "confirmed", operation: "create", kind: "series",
+    payload: { id: "fopsrecover" } };
+  const prepared = { ...publication, activationMode: "immediate", effectiveAt: "2099-01-12T09:00:00Z",
+    attemptGeneration: 1, writeJournalVersion: 1, effects: [effect] };
+  let claimed = false;
+  let recovered = false;
+  let finalized = false;
+  let settled = false;
+  const serviceSupabase = {
+    from() {
+      return { select() { return this; }, eq() { return this; }, async in() {
+        return { data: [{ effect_id: effect.id, team_workweek_publication_effects: {
+          id: effect.id, google_event_id: effect.googleEventId, generation: 1, kind: effect.kind,
+          operation: effect.operation, payload: effect.payload, state: effect.state, confirmed_etag: effect.confirmedEtag,
+        } }], error: null };
+      } };
+    },
+    async rpc(name, args) {
+      if (name === "claim_team_workweek_provider_operation") {
+        if (!claimed) { claimed = true; return { data: { state: "uncertain", id: "old", purpose: "publish", abandon: false }, error: null }; }
+        assert.equal(recovered, true);
+        return { data: { state: "claimed", id: "new" }, error: null };
+      }
+      if (name === "finish_team_workweek_provider_operation") {
+        assert.equal(finalized, args.p_operation_id === "new");
+        if (args.p_operation_id === "new") settled = true;
+        return { data: { state: "settled" }, error: null };
+      }
+      throw new Error(name);
+    },
+  };
+  const userSupabase = { async rpc(name) {
+    if (name === "prepare_team_workweek_publication") return { data: prepared, error: null };
+    assert.equal(name, "finalize_team_workweek_publication");
+    assert.equal(recovered, true);
+    finalized = true;
+    return completionFails ? { data: null, error: { code: "23514" } }
+      : { data: { ...prepared, status: "published", syncState: "confirmed" }, error: null };
+  } };
+  // A single provider seam must serve replay and normal execution; no global HTTP is needed.
+  const execution = publicationServer.publishTeamWorkweek({ serviceSupabase, userSupabase,
+    versionId: publication.sourceVersionId,
+    recoverWrite: async ({ effect: recovering, purpose, abandon }) => {
+      assert.equal(recovering.id, effect.id);
+      assert.equal(purpose, "publish");
+      assert.equal(abandon, false);
+      recovered = true;
+      return { state: "confirmed", etag: "recovered", observedAt: "2026-10-16T10:00:00Z" };
+    },
+    ensureEffect: async () => { throw new Error("Confirmed effects must not be written again."); },
+  });
+  if (completionFails) await assert.rejects(execution, error => error.code === "completion_pending");
+  else assert.equal((await execution).status, "published");
+  assert.equal(settled, true);
+  assert.equal(finalized, true);
+});
