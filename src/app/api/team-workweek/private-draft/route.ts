@@ -211,6 +211,22 @@ export async function GET(request: NextRequest) {
   const weekResponse = await (selectedContextRequest || supabase.rpc("team_workweek_edit_context", { p_week_start: selectedWeek }));
   if (weekResponse.error) return apiError("Die ausgewählte Arbeitswoche konnte nicht geladen werden.", 503);
 
+  if (weekResponse.data) {
+    const selectedDate = selectedWeek === workweekStart(berlinTodayIso(now)) ? berlinTodayIso(now) : selectedWeek;
+    const point = selectedDate === berlinTodayIso(now) ? now.getTime() : berlinCivilInstant(selectedWeek, "00:00");
+    const selectedBase = publications.filter(row => startsAt(row) <= point
+      && (row.effective_until ? Date.parse(row.effective_until) > point : !row.effective_to || row.effective_to >= selectedDate))
+      .sort((left, right) => right.publication_revision - left.publication_revision)[0];
+    // Parallel reads may straddle another tab's publication. Never adopt a mixed base.
+    if ((weekResponse.data.basePublicationId ?? null) !== (selectedBase?.id ?? null)
+      || (weekResponse.data.basePublicationRevision ?? null) !== (selectedBase?.publication_revision ?? null)) {
+      return NextResponse.json({
+        code: "edit_context_stale",
+        error: "Die Arbeitswoche wurde während des Ladens geändert. Lade den aktuellen Stand erneut.",
+      }, { status: 409 });
+    }
+  }
+
   return NextResponse.json({
     pendingPublication: pending ? {
       id: pending.id, sourceVersionId: pending.source_version_id, effectiveFrom: pending.effective_from,

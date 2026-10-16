@@ -608,6 +608,10 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
   };
 
   const reset = () => {
+    // Discard also revokes reads that captured the inputs before confirmation.
+    if (mutationPending.current) return;
+    ++loadSequence.current;
+    setPending(false);
     setDraft(baseline);
     setErrors([]);
     setMessage("");

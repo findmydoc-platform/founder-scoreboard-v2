@@ -44,6 +44,8 @@ let latestPublicationResult = { data: latestPublication, error: null };
 let privateVersionResult=null;
 let apiContextResult=null;
 let serviceAvailable=true;
+let readWeekContext=null;
+let publicationGate=null;
 let automaticVersionResult=null;
 let automaticPublicationResult=null;
 
@@ -71,12 +73,13 @@ const route = await importTestModule(
     "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => serviceAvailable ? ({ from: () => query(null) }) : null },
     "@/lib/supabase": {
       getSupabaseForToken: () => ({
-        async rpc(name,args) { postCalls.push([name,args]); return { error:rpcError, data:{id:"first",activationMode:"immediate",effectiveFrom:"2026-10-12",status:"preparing",timezone:"Europe/Berlin"} }; },
+        async rpc(name,args) { postCalls.push([name,args]); if(name === "team_workweek_edit_context") return {data:readWeekContext,error:null}; return { error:rpcError, data:{id:"first",activationMode:"immediate",effectiveFrom:"2026-10-12",status:"preparing",timezone:"Europe/Berlin"} }; },
         from(table) {
           if (table === "team_workweek_versions") return query(privateVersionResult);
           if (table === "team_workweek_google_conflicts") return query(null);
           if (table === "team_workweek_publications") {
             const result=query(latestPublicationResult.data, latestPublicationResult.error);
+            if (publicationGate) result.returns=() => publicationGate.promise;
             let sourceId=null;
             let pendingLookup=false;
             const select=result.select;result.select=function(fields){pendingLookup=fields.includes("write_journal_version");return select.call(this,fields);};
@@ -96,6 +99,8 @@ test.beforeEach(() => {
   rpcError=null;
   apiContextResult=null;
   serviceAvailable=true;
+  readWeekContext=null;
+  publicationGate=null;
   pendingOwnerPublicationResult=null;
   privateVersionResult=null;
   automaticVersionResult=null;
@@ -290,4 +295,50 @@ test("retains a load error when the server conflict client is unavailable",async
   const response=await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft")});
   assert.equal(response.status,503);
   assert.deepEqual(await response.json(),{error:"Privater Konfliktstatus konnte nicht geladen werden."});
+});
+
+
+function deferredResult() {
+  let resolve;
+  const promise=new Promise(complete=>{resolve=complete;});
+  return {promise,resolve};
+}
+
+test.each(["different base", "new revision"])("rejects a mixed selected-week snapshot: %s",async change=>{
+  readWeekContext={weekStart:"2099-01-19",basePublicationId:"publication-1",basePublicationRevision:4,contextToken:"a".repeat(32),windows:[{weekday:1,startMinute:540,endMinute:1020}],effectiveUntil:null};
+  publicationGate=deferredResult();
+  const loading=route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")});
+  // The RPC has captured revision 4 before a second tab's publication read completes.
+  await Promise.resolve();
+  publicationGate.resolve({data:[{...latestPublication,id:change==="different base"?"publication-2":"publication-1",publication_revision:5,windows:[{weekday:1,startMinute:600,endMinute:1080}]}],error:null});
+  const result=await loading;
+  assert.equal(result.status,409);
+  assert.equal((await result.json()).code,"edit_context_stale");
+});
+
+test("accepts a selected-week context whose base and revision match the publication snapshot",async()=>{
+  readWeekContext={weekStart:"2099-01-19",basePublicationId:"publication-1",basePublicationRevision:4,contextToken:"a".repeat(32),windows:latestPublication.windows,effectiveUntil:null};
+  const result=await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")});
+  assert.equal(result.status,200);
+  const body=await result.json();
+  assert.equal(body.weekContext.basePublicationRevision,body.latestPublished.publicationRevision);
+});
+
+test("compares a future selected week with its own plan instead of today's publication",async()=>{
+  const future={...latestPublication,id:"future-base",effective_from:"2099-01-12",publication_revision:5};
+  latestPublicationResult={data:[future,latestPublication],error:null};
+  readWeekContext={weekStart:"2099-01-19",basePublicationId:"future-base",basePublicationRevision:5,contextToken:"a".repeat(32),windows:future.windows,effectiveUntil:null};
+  const result=await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")});
+  assert.equal(result.status,200);
+  const body=await result.json();
+  assert.equal(body.weekContext.basePublicationId,"future-base");
+  assert.equal(body.latestPublished.id,"publication-1");
+});
+
+test("accepts an empty first selected week without a published base",async()=>{
+  latestPublicationResult={data:[],error:null};
+  readWeekContext={weekStart:"2099-01-19",basePublicationId:null,basePublicationRevision:null,contextToken:"a".repeat(32),windows:[],effectiveUntil:null};
+  const result=await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft?week=2099-01-19")});
+  assert.equal(result.status,200);
+  assert.equal((await result.json()).weekContext.basePublicationId,null);
 });
