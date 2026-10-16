@@ -55,11 +55,11 @@ export function PrivateTeamWorkweekEditor({
   };
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardOpen || state.pending, restoreFocusRef });
   useEffect(() => {
-    if (restartFocusRequested.current && !state.pending && !state.restartAvailable && !state.restartContextPending) {
+    if (restartFocusRequested.current && state.editor.recoveryFinished) {
       restartFocusRequested.current = false;
       (validityFocusRef.current || dialogRef.current)?.focus({ preventScroll: true });
     }
-  }, [dialogRef, state.pending, state.restartAvailable, state.restartContextPending]);
+  }, [dialogRef, state.editor.recoveryFinished]);
 
   return (
     <>
@@ -70,10 +70,10 @@ export function PrivateTeamWorkweekEditor({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 id="private-workweek-editor-title" className="text-base font-semibold text-slate-950">Meine Arbeitswoche bearbeiten</h2>
-                {state.publication?.syncState === "delayed" && <UiBadge size="xs" tone="amber">Synchronisierung verzögert</UiBadge>}
+                {state.editor.syncDelayed && <UiBadge size="xs" tone="amber">Synchronisierung verzögert</UiBadge>}
               </div>
               <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                {profile.name} · {state.publication?.syncState === "delayed" ? "Bisheriger Teamstand sichtbar" : "Entwurf"} · {TEAM_WORKWEEK_TIMEZONE}
+                {profile.name} · {state.editor.syncDelayed ? "Bisheriger Teamstand sichtbar" : "Entwurf"} · {TEAM_WORKWEEK_TIMEZONE}
               </p>
             </div>
             <UiButton size="iconLg" aria-label="Editor schließen" onClick={requestClose}><X size={18} /></UiButton>
@@ -84,13 +84,13 @@ export function PrivateTeamWorkweekEditor({
               <section data-tour-id="workweek-validity" className="rounded-lg border border-slate-200 bg-white p-3" aria-labelledby="workweek-validity-title">
                 <h3 id="workweek-validity-title" className="sr-only">Arbeitswoche auswählen</h3>
                 <WorkweekPicker value={state.selectedWeekStart} onChange={selectWeek} focusRef={validityFocusRef}
-                  disabled={state.pending || state.publication?.status === "preparing" || state.restartContextPending} />
+                  disabled={!state.editor.canSelectWeek} />
                 <p className="mt-2 text-xs leading-5 text-slate-500">
                   {state.draft.activationMode === "immediate"
                     ? "Die Veröffentlichung kann ein paar Minuten dauern. Vergangene Zeiten bleiben unverändert."
                     : "Die Arbeitszeiten wiederholen sich ab dieser Woche."}
                 </p>
-                {state.weekExpired && !state.publication && <UiNotice className="mt-2" tone="warning">
+                {state.editor.showExpiredWeek && <UiNotice className="mt-2" tone="warning">
                   <p>Die ausgewählte Woche ist vorbei. Deine Eingaben bleiben erhalten.</p>
                   <UiButton className="mt-2" onClick={() => void state.carryIntoCurrentWeek()} disabled={state.pending}>Eingaben für diese Woche übernehmen</UiButton>
                 </UiNotice>}
@@ -100,7 +100,7 @@ export function PrivateTeamWorkweekEditor({
               {state.pendingPublication && <UiNotice tone="warning">
                 <p>Die Veröffentlichung ab {formatDate(state.pendingPublication.effectiveFrom)} ist noch offen. Deine aktuellen Eingaben bleiben erhalten.</p>
                 <UiButton className="mt-2 min-h-11 whitespace-normal text-left" variant="secondary" onClick={() => void state.resumePendingPublication()} disabled={state.pending}>
-                  {state.pendingPublication.resumeAllowed ? "Offene Veröffentlichung fortsetzen" : "Offene Veröffentlichung sicher neu beginnen"}
+                  {state.editor.pendingRecoveryLabel}
                 </UiButton>
               </UiNotice>}
 
@@ -177,16 +177,10 @@ export function PrivateTeamWorkweekEditor({
                 )}
               </section>
 
-              {state.mustRestartBeforeSaving && !state.pendingPublication && !state.message && (
-                <UiNotice tone="warning">
-                  Ein früherer Veröffentlichungsversuch ist noch offen. {state.restartAvailable
-                    ? "Beginne mit dem aktuellen Stand neu, bevor du diese Änderungen speicherst oder veröffentlichst."
-                    : "Der gespeicherte Versuch muss zuerst geklärt werden."} Deine Eingaben bleiben hier im Editor erhalten.
-                </UiNotice>
-              )}
-              {((state.restartAvailable && !state.pendingPublication) || state.restartContextPending) && (
+              {state.editor.openAttemptWarning && <UiNotice tone="warning">{state.editor.openAttemptWarning}</UiNotice>}
+              {state.editor.showRecovery && (
                 <UiButton className="justify-self-start whitespace-normal text-left" variant="secondary" onClick={() => { restartFocusRequested.current = true; void state.restart(); }} disabled={state.pending}>
-                  {state.restartContextPending ? "Aktuellen Stand laden" : "Mit aktuellem Stand neu beginnen"}
+                  {state.editor.recoveryLabel}
                 </UiButton>
               )}
               {state.errors.length > 0 && (
@@ -206,7 +200,7 @@ export function PrivateTeamWorkweekEditor({
             </p>
             <div className="grid w-full grid-cols-2 gap-1.5 min-[400px]:grid-cols-3">
               <UiButton className="whitespace-nowrap max-[399px]:hidden min-[400px]:inline-flex" size="md" onClick={requestClose} disabled={state.pending}>Schließen</UiButton>
-              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Entwurf speichern" onClick={() => void state.save()} disabled={state.pending || state.weekExpired || state.restartContextPending || !state.dirty || state.mustRestartBeforeSaving}>
+              <UiButton className="whitespace-nowrap px-2 text-xs" variant="secondary" size="md" aria-label="Entwurf speichern" onClick={() => void state.save()} disabled={!state.editor.canSave}>
                 Entwurf speichern
               </UiButton>
               <UiButton
@@ -216,7 +210,7 @@ export function PrivateTeamWorkweekEditor({
                 data-tour-id="workweek-publish"
                 aria-label="Änderung in Google & Team veröffentlichen"
                 onClick={() => void state.publish().then((result) => (result === true || result === "conflict") && onClose())}
-                disabled={state.pending || state.weekExpired || state.restartContextPending || state.mustRestartBeforeSaving}
+                disabled={!state.editor.canPublish}
               >
                 {state.pending ? "Bitte warten …" : "Veröffentlichen"}
               </UiButton>
