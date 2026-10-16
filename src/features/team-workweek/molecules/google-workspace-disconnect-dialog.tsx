@@ -11,12 +11,18 @@ export function GoogleWorkspaceDisconnectDialog({
   onConfirm,
   open,
   pending,
+  previewPending = false,
+  previewReady = true,
+  previewError = "",
 }: {
   disconnect: GoogleWorkspaceDisconnectView;
   onCancel: () => void;
   onConfirm: () => void;
   open: boolean;
   pending: boolean;
+  previewPending?: boolean;
+  previewReady?: boolean;
+  previewError?: string;
 }) {
   const dialogRef = useModalDialog<HTMLDivElement>({ open, onClose: onCancel, closeDisabled: pending });
   if (!open) return null;
@@ -28,7 +34,7 @@ export function GoogleWorkspaceDisconnectDialog({
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="google-disconnect-title"
-      aria-describedby="google-disconnect-description"
+      aria-describedby={previewReady ? "google-disconnect-description" : undefined}
       className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/40 p-4"
     >
       <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl">
@@ -38,7 +44,9 @@ export function GoogleWorkspaceDisconnectDialog({
           </span>
           <div>
             <h2 id="google-disconnect-title" className="text-lg font-semibold text-slate-950">Google-Verbindung wirklich trennen?</h2>
-            <p id="google-disconnect-description" className="mt-2 text-sm leading-6 text-slate-600">
+            {previewPending && <p role="status" className="mt-2 text-sm text-slate-600">Trennungsvorschau wird geladen …</p>}
+            {previewError && <p role="alert" className="mt-2 text-sm text-amber-800">{previewError} Schließe die Vorschau und versuche es erneut.</p>}
+            {previewReady && <><p id="google-disconnect-description" className="mt-2 text-sm leading-6 text-slate-600">
               FounderOps führt diese Schritte kontrolliert und wiederaufnehmbar aus:
             </p>
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
@@ -48,12 +56,12 @@ export function GoogleWorkspaceDisconnectDialog({
             </ul>
             <p className="mt-3 text-sm leading-6 text-slate-600">
               Vergangene FounderOps-Vorkommen und gewöhnliche Kalendertermine bleiben unverändert. Eine spätere Verbindung veröffentlicht die Woche nicht automatisch.
-            </p>
+            </p></>}
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4">
           <UiButton variant="secondary" size="lg" onClick={onCancel} disabled={pending}>Abbrechen</UiButton>
-          <UiButton variant="red" size="lg" data-autofocus onClick={onConfirm} disabled={pending}>
+          <UiButton variant="red" size="lg" data-autofocus onClick={onConfirm} disabled={pending || !previewReady || previewPending}>
             {pending ? "Trennung läuft …" : "Verbindung trennen"}
           </UiButton>
         </div>

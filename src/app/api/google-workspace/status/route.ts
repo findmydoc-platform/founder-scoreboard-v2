@@ -15,8 +15,13 @@ export async function GET(request: NextRequest) {
   if (!supabase) return apiError("Google-Verbindungsstatus ist nicht verfügbar.", 503);
 
   try {
-    const connection = await getGoogleWorkspaceConnectionStatus(supabase, profileId);
-    return NextResponse.json({ connection });
+    const [connection, cleanup] = await Promise.all([
+      getGoogleWorkspaceConnectionStatus(supabase, profileId),
+      supabase.from("google_workspace_disconnect_operations").select("id")
+        .eq("owner_profile_id", profileId).neq("state", "completed").limit(1),
+    ]);
+    if (cleanup.error) return apiError("Google-Verbindungsstatus ist nicht verfügbar.", 503);
+    return NextResponse.json({ connection, disconnectPending: Boolean(cleanup.data?.length) });
   } catch {
     return apiError("Google-Verbindungsstatus ist nicht verfügbar.", 503);
   }

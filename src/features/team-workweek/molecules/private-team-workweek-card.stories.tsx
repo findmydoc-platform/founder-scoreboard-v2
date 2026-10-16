@@ -1477,3 +1477,61 @@ export const RetainsConfirmedBaselineWhenConflictRefreshFails: Story = {
     result: { ...latestPublished, recovery: null },
   } }) },
 };
+
+
+export const LoadsDraftAndConflictTogether: Story = {
+  args: { profile, apiClient: client() },
+  render: function SlowWeekRead() {
+    const [fixture] = useState(() => {
+      const gate = deferred<void>();
+      const fallback = client();
+      let draftReads = 0;
+      let conflictReads = 0;
+      const apiClient = { requestJson: async (input: string | URL, init?: { method?: string }) => {
+        const path = String(input);
+        if (path === "/api/team-workweek/conflict" && init?.method !== "POST") {
+          if (++conflictReads > 1) gate.resolve();
+        }
+        if (path.startsWith("/api/team-workweek/private-draft") && init?.method !== "POST" && ++draftReads > 1) await gate.promise;
+        return fallback.requestJson(input, init);
+      } } as unknown as BrowserApiClient;
+      return { apiClient };
+    });
+    return <PrivateTeamWorkweekCard apiClient={fixture.apiClient} profile={profile} />;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    await userEvent.selectOptions(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" }), nextMondayIso());
+    await waitFor(() => expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toBeEnabled());
+    await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveValue(nextMondayIso());
+  },
+};
+
+export const CanCloseWhileAnotherWeekLoads: Story = {
+  args: { profile, apiClient: client() },
+  render: function SlowWeekRead() {
+    const [apiClient] = useState(() => {
+      const fallback = client();
+      return { requestJson: async (input: string | URL, init?: { method?: string }) => {
+        if (String(input).includes("private-draft?week=")) await new Promise(() => {});
+        return fallback.requestJson(input, init);
+      } } as unknown as BrowserApiClient;
+    });
+    return <PrivateTeamWorkweekCard apiClient={apiClient} profile={profile} />;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    await userEvent.selectOptions(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" }), nextMondayIso());
+    await expect(await canvas.findByRole("status")).toHaveTextContent("Arbeitswoche wird geladen");
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Editor schließen" }));
+    await expect(canvas.queryByRole("dialog")).not.toBeInTheDocument();
+  },
+};
+
+export const LoadingWeekPreview: Story = {
+  ...CanCloseWhileAnotherWeekLoads,
+  play: undefined,
+};

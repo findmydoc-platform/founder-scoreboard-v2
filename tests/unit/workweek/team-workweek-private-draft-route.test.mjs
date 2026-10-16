@@ -42,6 +42,8 @@ let pendingOwnerPublicationResult = null;
 let postCalls = [];
 let latestPublicationResult = { data: latestPublication, error: null };
 let privateVersionResult=null;
+let apiContextResult=null;
+let serviceAvailable=true;
 let automaticVersionResult=null;
 let automaticPublicationResult=null;
 
@@ -57,7 +59,7 @@ const route = await importTestModule(
     "@/lib/api-response": {
       apiError,
       readJsonPayload: async () => postPayload,
-      requireApiContext: async () => ({
+      requireApiContext: async () => apiContextResult || ({
         ok: true,
         permission: { profile: { id: "profile-1", platformRole: "founder" } },
       }),
@@ -66,6 +68,7 @@ const route = await importTestModule(
       bearerToken: () => "session-token",
       requireTeamMember: Symbol("requireTeamMember"),
     },
+    "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => serviceAvailable ? ({ from: () => query(null) }) : null },
     "@/lib/supabase": {
       getSupabaseForToken: () => ({
         async rpc(name,args) { postCalls.push([name,args]); return { error:rpcError, data:{id:"first",activationMode:"immediate",effectiveFrom:"2026-10-12",status:"preparing",timezone:"Europe/Berlin"} }; },
@@ -91,6 +94,8 @@ const route = await importTestModule(
 
 test.beforeEach(() => {
   rpcError=null;
+  apiContextResult=null;
+  serviceAvailable=true;
   pendingOwnerPublicationResult=null;
   privateVersionResult=null;
   automaticVersionResult=null;
@@ -270,4 +275,19 @@ test("a persistent Google identity conflict offers restart instead of repeating 
   assert.equal(body.pendingPublication.resumeAllowed,false);
   assert.equal(body.pendingPublication.sourceVersionId,"identity-source");
   assert.deepEqual(postCalls.at(-1),["team_workweek_edit_context",{p_week_start:"2099-01-19"}]);
+});
+
+
+test("rejects an unmapped session before opening any server-only conflict lookup",async()=>{
+  apiContextResult={ok:true,permission:{profile:null}};
+  const response=await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft")});
+  assert.equal(response.status,403);
+});
+
+test("retains a load error when the server conflict client is unavailable",async()=>{
+  privateVersionResult={id:"private",owner_profile_id:"profile-1",effective_from:"2099-01-12",status:"preparing",team_workweek_windows:[]};
+  serviceAvailable=false;
+  const response=await route.GET({nextUrl:new URL("http://localhost/api/team-workweek/private-draft")});
+  assert.equal(response.status,503);
+  assert.deepEqual(await response.json(),{error:"Privater Konfliktstatus konnte nicht geladen werden."});
 });

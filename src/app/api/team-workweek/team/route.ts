@@ -53,18 +53,27 @@ export async function GET(request: NextRequest) {
   const supabase = token ? getSupabaseForToken(token) : null;
   if (!supabase) return apiError("Anmeldung erforderlich.", 401);
 
-  const { data, error } = await supabase
-    .from("team_workweek_publications")
-    .select("id,owner_profile_id,effective_from,effective_to,effective_at,effective_until,timezone,published_at,last_sync_at,publication_revision,windows")
-    .eq("status", "published")
-    .order("effective_from", { ascending: false })
-    .order("publication_revision", { ascending: false })
-    .order("id", { ascending: false })
-    .returns<PublishedVersionRow[]>();
-  if (error) return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
-
   const now = new Date();
   const referenceDate = berlinTodayIso(now);
+  // Retain current and all future plans, plus history needed by the requested range.
+  const earliestDate = requestedRange.range && requestedRange.range.from < referenceDate ? requestedRange.range.from : referenceDate;
+  const [publications, owners] = await Promise.all([
+    supabase
+      .from("team_workweek_publications")
+      .select("id,owner_profile_id,effective_from,effective_to,effective_at,effective_until,timezone,published_at,last_sync_at,publication_revision,windows")
+      .eq("status", "published")
+      .or(`effective_to.is.null,effective_to.gte.${earliestDate}`)
+      .order("effective_from", { ascending: false })
+      .order("publication_revision", { ascending: false })
+      .order("id", { ascending: false })
+      .returns<PublishedVersionRow[]>(),
+    // An owner with historical hours is still published, even without a current plan.
+    supabase.from("team_workweek_publications").select("owner_profile_id").eq("status", "published")
+      .returns<Array<{ owner_profile_id: string }>>(),
+  ]);
+  const { data, error } = publications;
+  if (error || owners.error) return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
+
   const visible = selectVisibleTeamWorkweeks((data || []).map((row) => ({
     ownerProfileId: row.owner_profile_id,
     effectiveFrom: row.effective_from,
@@ -101,7 +110,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     referenceDate,
     upcomingWorkweeks: allCalendarWorkweeks.filter(row => (row.effectiveAt ? Date.parse(row.effectiveAt) > now.getTime() : row.effectiveFrom > referenceDate) && (!row.effectiveUntil || Date.parse(row.effectiveUntil) > Date.parse(row.effectiveAt || `${row.effectiveFrom}T00:00:00Z`)) && (!row.effectiveTo || row.effectiveTo >= row.effectiveFrom)),
-    publishedOwnerIds: [...new Set(allCalendarWorkweeks.map(row => row.ownerProfileId))],
+    publishedOwnerIds: [...new Set((owners.data || []).map(row => row.owner_profile_id))],
     workweeks,
     currentWorkweeks,
     ...(calendarWorkweeks ? { calendarWorkweeks } : {}),

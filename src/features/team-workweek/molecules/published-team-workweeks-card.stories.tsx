@@ -98,3 +98,29 @@ export const IgnoresAnOlderWeekResponse: Story = {
     await expect(canvas.getAllByText("11:00–17:00").length).toBeGreaterThan(0);
   },
 };
+
+
+function cachedWeekClient(): BrowserApiClient {
+  let reads = 0;
+  return { requestJson: async () => {
+    if (++reads > 2) await new Promise(() => {});
+    return { response: new Response(null, { status: 200 }), body: {
+      currentWorkweeks: [workweek], calendarWorkweeks: [workweek], referenceDate: "2026-09-07",
+    } };
+  } } as unknown as BrowserApiClient;
+}
+
+export const ShowsCachedWeekWhileRefreshing: Story = {
+  args: { apiClient: cachedWeekClient(), profiles: [profile], initialDate: "2026-09-07" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findAllByText("09:00–17:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Nächste Woche" }));
+    await canvas.findAllByText("09:00–17:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Vorherige Woche" }));
+    await expect(await canvas.findAllByText("09:00–17:00")).not.toHaveLength(0);
+    window.dispatchEvent(new Event("founderops:team-workweek-published"));
+    await userEvent.click(canvas.getByRole("button", { name: "Nächste Woche" }));
+    await expect(canvas.queryByText("09:00–17:00")).not.toBeInTheDocument();
+  },
+};
