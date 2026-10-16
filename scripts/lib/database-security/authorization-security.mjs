@@ -13,6 +13,16 @@ const planningContributorWritePolicySet = new Set(
 );
 
 export async function verifyAuthorizationSecurity(client, failures) {
+  const observationConfirmation = "public.apply_google_team_workweek_observations(uuid,integer,jsonb,timestamptz)";
+  const confirmationPrivileges = await client.query(
+    `select to_regprocedure($1) is not null as exists,
+       has_function_privilege('service_role', to_regprocedure($1), 'EXECUTE') as server_execute`,
+    [observationConfirmation],
+  );
+  if (!confirmationPrivileges.rows[0]?.exists || !confirmationPrivileges.rows[0]?.server_execute) {
+    failures.push(`missing server-executable workweek observation confirmation: ${observationConfirmation}`);
+  }
+
   const identityHelpers = await client.query(
     `select procedure.proname as function_name,
        procedure.proconfig,
