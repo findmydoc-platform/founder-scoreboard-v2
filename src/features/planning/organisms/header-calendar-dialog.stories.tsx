@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { useState } from "react";
+import { addCalendarDays, addCalendarMonths, berlinDateKey, firstCalendarDayOfMonth } from "@/features/team-workweek/model/team-workweek-calendar";
+import { useHeaderCalendar } from "../hooks/use-header-calendar";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { HeaderCalendarDialog } from "./header-calendar-dialog";
 
 const profile = {
@@ -135,5 +138,214 @@ export const KeepsAnInitialLoadErrorDistinctFromNoPublication: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByText("Arbeitszeiten konnten nicht geladen werden.").length).toBeGreaterThan(0);
     await expect(canvas.queryByText("Nicht veröffentlicht")).not.toBeInTheDocument();
+  },
+};
+
+
+function HookDialog({ apiClient }: { apiClient: BrowserApiClient }) {
+  const calendar = useHeaderCalendar({ apiClient, onOpenTeam: fn() });
+  return <>
+    <button onClick={calendar.openCalendar}>Kalender öffnen</button>
+    {calendar.open && <HeaderCalendarDialog
+      activeTab={calendar.activeTab} anchor={{ right: 12, top: 12 }}
+      calendarWorkweeks={calendar.calendarWorkweeks} desktopPopover={false}
+      eventSlot={{ data: [], error: "", state: "ready" }} message={calendar.message}
+      now={calendar.now} onActiveTabChange={calendar.setActiveTab} onClose={calendar.closeCalendar}
+      onOpenTeam={calendar.openTeamWorkspace} onSelectedDateChange={calendar.setSelectedDate}
+      onViewMonthChange={calendar.setViewMonth} pending={calendar.pending} profiles={[profile]}
+      restoreFocusRef={{ current: null }} selectedDate={calendar.selectedDate} showWorkweek
+      viewMonth={calendar.viewMonth} workweekDateKey={calendar.workweekReferenceDate} workweeks={calendar.workweeks}
+    />}
+  </>;
+}
+
+function calendarClient(mode: "refresh-failure" | "activation" | "publication"): BrowserApiClient {
+  let reads = 0;
+  let activationAt: string | undefined;
+  return { requestJson: async () => {
+    reads += 1;
+    activationAt ||= new Date(Date.now() + 120_000).toISOString();
+    if (mode === "refresh-failure" && reads > 1) return {
+      response: new Response(null, { status: 503 }), body: { error: "Arbeitszeiten konnten nicht geladen werden." },
+    };
+    const visible = mode === "activation" ? Date.now() >= Date.parse(activationAt) : mode !== "publication" || reads > 1;
+    const schedule = {
+      id: "loaded", ownerProfileId: profile.id, effectiveFrom: "2020-01-01", effectiveTo: null,
+      timezone: "Europe/Berlin", publicationRevision: 1, lastSyncAt: null,
+      windows: { ...emptyWindows, monday: [{ start: "09:00", end: "17:00" }] },
+    };
+    return { response: new Response(null, { status: 200 }), body: {
+      currentWorkweeks: visible ? [schedule] : [], calendarWorkweeks: visible ? [schedule] : [],
+      referenceDate: "2026-10-16", workweeks: mode === "activation" ? [{ effectiveAt: activationAt }] : [],
+    } };
+  } } as unknown as BrowserApiClient;
+}
+
+export const HookRetainsConfirmedHoursOnFailedPublicationRefresh: Story = {
+  render: () => <HookDialog apiClient={calendarClient("refresh-failure")} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
+    await canvas.findAllByText("09:00–17:00");
+    window.dispatchEvent(new Event("founderops:team-workweek-published"));
+    await expect(await canvas.findByText("Aktualisierung verzögert. Zuletzt bestätigte Zeiten.")).toBeVisible();
+    await expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0);
+  },
+};
+
+export const HookRefreshesPublishedHours: Story = {
+  render: () => <HookDialog apiClient={calendarClient("publication")} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
+    await canvas.findAllByText("Noch nicht veröffentlicht");
+    window.dispatchEvent(new Event("founderops:team-workweek-published"));
+    await canvas.findAllByText("09:00–17:00");
+  },
+};
+
+let crossActivationBoundary: () => void;
+
+export const HookRefreshesAtActivation: Story = {
+  beforeEach: () => {
+    const initialTime = Date.now();
+    const nativeTimeout = window.setTimeout.bind(window);
+    const nativeClearTimeout = window.clearTimeout.bind(window);
+    const scheduled = new Map<number, { due: number; run: () => void }>();
+    const nativeNow = Date.now;
+    const originalTimeout = window.setTimeout;
+    let clockTime = initialTime;
+    Date.now = () => clockTime;
+    // Control long browser deadlines while leaving interaction and polling timers real.
+    window.setTimeout = ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+      if (typeof handler !== "function" || delay < 60_000) return nativeTimeout(handler, delay, ...args);
+      const id = nativeTimeout(() => {}, 2_147_483_647);
+      scheduled.set(id, { due: Date.now() + delay, run: () => handler(...args) });
+      return id;
+    }) as typeof window.setTimeout;
+    crossActivationBoundary = () => {
+      const advancedTime = initialTime + 180_000;
+      clockTime = advancedTime;
+      for (const [id, timer] of scheduled) {
+        if (timer.due > advancedTime) continue;
+        scheduled.delete(id);
+        nativeClearTimeout(id);
+        timer.run();
+      }
+    };
+    return () => {
+      for (const id of scheduled.keys()) nativeClearTimeout(id);
+      window.setTimeout = originalTimeout;
+      Date.now = nativeNow;
+    };
+  },
+  render: () => <HookDialog apiClient={calendarClient("activation")} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
+    await canvas.findAllByText("Noch nicht veröffentlicht");
+    crossActivationBoundary();
+    await waitFor(() => expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0));
+  },
+};
+
+
+function outOfOrderClient(): BrowserApiClient {
+  let reads = 0;
+  return { requestJson: async () => {
+    const first = ++reads === 1;
+    if (first) await new Promise<void>((resolve) => window.addEventListener("fixture:release-calendar", () => resolve(), { once: true }));
+    const schedule = {
+      id: "range", ownerProfileId: profile.id, effectiveFrom: "2020-01-01", effectiveTo: null,
+      timezone: "Europe/Berlin", publicationRevision: 1, lastSyncAt: null,
+      windows: { ...emptyWindows, monday: [{ start: first ? "09:00" : "11:00", end: "17:00" }] },
+    };
+    return { response: new Response(null, { status: 200 }), body: {
+      currentWorkweeks: [schedule], calendarWorkweeks: [schedule], referenceDate: "2026-10-16",
+    } };
+  } } as unknown as BrowserApiClient;
+}
+
+export const HookIgnoresAnOlderMonthResponse: Story = {
+  render: () => <HookDialog apiClient={outOfOrderClient()} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+    await canvas.findByText("Arbeitszeiten werden geladen.");
+    await userEvent.click(canvas.getByRole("button", { name: "Nächster Monat" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
+    await canvas.findAllByText("11:00–17:00");
+    window.dispatchEvent(new Event("fixture:release-calendar"));
+    // Let the released browser transport settle before checking the visible range.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await expect(canvas.queryByText("09:00–17:00")).not.toBeInTheDocument();
+    await expect(canvas.getAllByText("11:00–17:00").length).toBeGreaterThan(0);
+  },
+};
+
+
+export const HookRejectsMissingSelectedRangeProjection: Story = {
+  render: () => <HookDialog apiClient={{ requestJson: async () => ({
+    response: new Response(null, { status: 200 }), body: { currentWorkweeks: [], referenceDate: "2026-10-16" },
+  }) } as unknown as BrowserApiClient} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
+    await canvas.findAllByText("Arbeitszeiten konnten nicht geladen werden.");
+    await expect(canvas.queryByText("Noch nicht veröffentlicht")).not.toBeInTheDocument();
+  },
+};
+
+function firstMondayOfVisibleMonth() {
+  const month = firstCalendarDayOfMonth(berlinDateKey());
+  const weekday = new Date(`${month}T12:00:00Z`).getUTCDay();
+  return addCalendarDays(month, (8 - weekday) % 7);
+}
+
+function retainedMonthClient(): BrowserApiClient {
+  let reads = 0;
+  const firstMonth = firstCalendarDayOfMonth(berlinDateKey());
+  return { requestJson: async () => {
+    reads += 1;
+    if (reads > 2) return { response: new Response(null, { status: 503 }), body: { error: "Arbeitszeiten konnten nicht geladen werden." } };
+    const month = reads === 1 ? firstMonth : addCalendarMonths(firstMonth, 1);
+    const schedule = {
+      id: month, ownerProfileId: profile.id,
+      effectiveFrom: reads === 1 ? firstMondayOfVisibleMonth() : month,
+      effectiveTo: reads === 1 ? addCalendarDays(firstMondayOfVisibleMonth(), 6) : addCalendarDays(addCalendarMonths(month, 1), -1),
+      timezone: "Europe/Berlin", publicationRevision: 1, lastSyncAt: null,
+      windows: { ...emptyWindows, monday: [{ start: reads === 1 ? "09:00" : "11:00", end: "17:00" }] },
+    };
+    return { response: new Response(null, { status: 200 }), body: {
+      currentWorkweeks: [schedule], calendarWorkweeks: [schedule], referenceDate: firstMonth,
+    } };
+  } } as unknown as BrowserApiClient;
+}
+
+export const HookRetainsOtherMonthsWhenReturningDuringAnOutage: Story = {
+  render: () => <HookDialog apiClient={retainedMonthClient()} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+    const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" }).format(new Date(`${firstMondayOfVisibleMonth()}T12:00:00Z`));
+    await userEvent.click(canvas.getByRole("button", { name: new RegExp(`^${dayLabel},`) }));
+    await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
+    await canvas.findAllByText("09:00–17:00");
+    await userEvent.click(canvas.getByRole("tab", { name: "Termine" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Nächster Monat" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Nächste Woche" }));
+    await canvas.findAllByText("11:00–17:00");
+    await userEvent.click(canvas.getByRole("tab", { name: "Termine" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Vorheriger Monat" }));
+    await userEvent.click(canvas.getByRole("button", { name: new RegExp(`^${dayLabel},`) }));
+    await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
+    await canvas.findByText("Aktualisierung verzögert. Zuletzt bestätigte Zeiten.");
+    await expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0);
+    await expect(canvas.queryByText("11:00–17:00")).not.toBeInTheDocument();
   },
 };

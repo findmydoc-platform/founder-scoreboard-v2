@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, waitFor, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 import { PublishedTeamWorkweeksCard } from "./published-team-workweeks-card";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 
@@ -69,5 +69,32 @@ export const RefreshesAtTheConfirmedActivationBoundary: Story = {
     await expect(await canvas.findByText("Für diese Woche sind noch keine Arbeitszeiten veröffentlicht.")).toBeVisible();
     await waitFor(()=>expect(canvas.getAllByText("Arbeitszeiten veröffentlicht").length).toBeGreaterThan(0),{timeout:3000});
     await expect(canvas.getAllByText("Arbeitszeiten veröffentlicht").length).toBeGreaterThan(0);
+  },
+};
+
+
+function changingWeekClient(): BrowserApiClient {
+  let reads = 0;
+  return { requestJson: async () => {
+    const first = ++reads === 1;
+    if (first) await new Promise<void>((resolve) => window.addEventListener("fixture:release-team-week", () => resolve(), { once: true }));
+    return { response: new Response(null, { status: 200 }), body: {
+      currentWorkweeks: [{ ...workweek, windows: { ...workweek.windows, monday: [{ start: first ? "09:00" : "11:00", end: "17:00" }] } }],
+      referenceDate: "2026-09-14",
+    } };
+  } } as unknown as BrowserApiClient;
+}
+
+export const IgnoresAnOlderWeekResponse: Story = {
+  args: { apiClient: changingWeekClient(), profiles: [profile], initialDate: "2026-09-07" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText("Arbeitswochen werden geladen.");
+    await userEvent.click(canvas.getByRole("button", { name: "Nächste Woche" }));
+    await canvas.findAllByText("11:00–17:00");
+    window.dispatchEvent(new Event("fixture:release-team-week"));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await expect(canvas.queryByText("09:00–17:00")).not.toBeInTheDocument();
+    await expect(canvas.getAllByText("11:00–17:00").length).toBeGreaterThan(0);
   },
 };
