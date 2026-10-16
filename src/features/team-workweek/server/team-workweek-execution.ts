@@ -7,10 +7,67 @@ import {
   type GoogleWorkweekSeriesResult,
   type PreparedWorkweekPublication,
 } from "./team-workweek-publication-core";
-import { discoverGoogleWorkweekInstance, ensureGoogleWorkweekEffect, recoverGoogleWorkweekWrite } from "./team-workweek-immediate-effects";
-import { claimProviderOperation, finishProviderOperation, providerWriteJournal } from "./team-workweek-provider-operations";
+import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, ensureGoogleWorkweekEffect, recoverGoogleWorkweekWrite, type PreparedWorkweekEffect } from "./team-workweek-immediate-effects";
+import { claimProviderOperation, finishProviderOperation, providerWriteJournal, type WorkweekRecoveryReason } from "./team-workweek-provider-operations";
 
 export type WorkweekExecutionDelayClass = Extract<GoogleWorkweekSeriesResult, { state: "delayed" }>["errorClass"] | "storage_failed";
+
+type ExecutionContext = Readonly<{
+  serviceSupabase: SupabaseClient;
+  accessToken: string;
+  now: () => Date;
+}>;
+
+async function withProviderOperation<Result>({
+  serviceSupabase, accessToken, now, publicationId, generation, purpose, journaled, recoverWrite,
+}: ExecutionContext & {
+  publicationId: string;
+  generation: number;
+  purpose: "publish" | "cleanup";
+  journaled: boolean;
+  recoverWrite: typeof recoverGoogleWorkweekWrite;
+}, execute: (operationId?: string) => Promise<Result>,
+blocked: (errorClass: WorkweekExecutionDelayClass, reason: WorkweekRecoveryReason) => Promise<Result>): Promise<Result> {
+  const claim = journaled ? await claimProviderOperation({
+    serviceSupabase, accessToken, now, publicationId, generation, purpose, recoverWrite,
+  }) : null;
+  if (claim?.reason) return await blocked(claim.errorClass || "provider_unavailable", claim.reason);
+  try {
+    return await execute(claim?.id);
+  } finally {
+    if (claim?.id) await finishProviderOperation(serviceSupabase, claim.id);
+  }
+}
+
+async function bindCrossingInstance({ serviceSupabase, accessToken, discoverInstance }: {
+  serviceSupabase: SupabaseClient;
+  accessToken: string;
+  discoverInstance: typeof discoverGoogleWorkweekInstance;
+}, effect: PreparedWorkweekEffect): Promise<PreparedWorkweekEffect | WorkweekExecutionDelayClass> {
+  const observed = await discoverInstance({ accessToken, effect });
+  if (observed.state === "delayed") return observed.errorClass;
+  const bound = await serviceSupabase.rpc("bind_team_workweek_crossing_instance", {
+    p_effect_id: effect.id, p_generation: effect.generation, p_event_id: observed.eventId,
+    p_etag: observed.etag, p_original_payload: observed.originalPayload,
+  });
+  return bound.error || bound.data?.id !== effect.id ? "storage_failed" : bound.data;
+}
+
+type ConfirmedEffect = Extract<GoogleWorkweekSeriesResult, { state: "confirmed" }> & { preserved?: boolean };
+
+async function mutateAndConfirmEffect({
+  serviceSupabase, accessToken, now, operationId, effect, mutate, confirm,
+}: ExecutionContext & {
+  operationId?: string;
+  effect: PreparedWorkweekEffect;
+  mutate: typeof ensureGoogleWorkweekEffect;
+  confirm: (result: ConfirmedEffect) => Promise<WorkweekExecutionDelayClass | null>;
+}): Promise<WorkweekExecutionDelayClass | null> {
+  const result = await mutate({ accessToken, effect, now,
+    ...(operationId ? { writeJournal: providerWriteJournal(serviceSupabase, operationId, effect.id) } : {}),
+  });
+  return result.state === "delayed" ? result.errorClass : await confirm(result);
+}
 
 // Completion and delay belong to the application, but execute while the provider claim is held.
 // Callers never construct operation IDs, write journals or effect confirmation evidence.
@@ -39,32 +96,28 @@ export async function executeTeamWorkweekPublication<Result>({
 }): Promise<Result> {
   if (publication.effects !== undefined) {
     const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
-    const claim = publication.writeJournalVersion !== undefined ? await claimProviderOperation({
-      accessToken, publicationId: publication.id, generation: publication.attemptGeneration!, serviceSupabase, now, purpose: "publish", recoverWrite,
-    }) : null;
-    if (claim?.reason) return await delayed(claim.errorClass || "provider_unavailable");
-    try {
+    return await withProviderOperation({
+      accessToken, publicationId: publication.id, generation: publication.attemptGeneration!, serviceSupabase, now,
+      purpose: "publish", journaled: publication.writeJournalVersion !== undefined, recoverWrite,
+    }, async operationId => {
       const syncEffect = async (effect: NonNullable<PreparedWorkweekPublication["effects"]>[number]): Promise<WorkweekExecutionDelayClass | null> => {
         if (expired()) return "provider_unavailable";
         if (effect.state === "confirmed") return null;
         if (effect.instanceOf && !effect.expectedEtag) {
-          const observed = await discoverInstance({ accessToken, effect });
-          if (observed.state === "delayed") return observed.errorClass;
-          const bound = await serviceSupabase.rpc("bind_team_workweek_crossing_instance", {
-            p_effect_id: effect.id, p_generation: effect.generation, p_event_id: observed.eventId,
-            p_etag: observed.etag, p_original_payload: observed.originalPayload,
-          });
-          if (bound.error || !bound.data || bound.data.id !== effect.id) return "storage_failed";
-          effect = bound.data;
+          const bound = await bindCrossingInstance({ serviceSupabase, accessToken, discoverInstance }, effect);
+          if (typeof bound === "string") return bound;
+          effect = bound;
         }
-        const result = await ensureEffect({ accessToken, effect, now, ...(claim?.id ? { writeJournal: providerWriteJournal(serviceSupabase, claim.id, effect.id) } : {}) });
-        if (result.state === "delayed") return result.errorClass;
-        if (expired()) return "provider_unavailable";
-        const confirmation = await serviceSupabase.rpc("confirm_team_workweek_effect", {
-          p_effect_id: effect.id, p_generation: effect.generation, p_etag: result.etag, p_payload: effect.payload,
+        return await mutateAndConfirmEffect({ serviceSupabase, accessToken, now, operationId, effect,
+          mutate: ensureEffect,
+          confirm: async result => {
+            if (expired()) return "provider_unavailable";
+            const confirmation = await serviceSupabase.rpc("confirm_team_workweek_effect", {
+              p_effect_id: effect.id, p_generation: effect.generation, p_etag: result.etag, p_payload: effect.payload,
+            });
+            return confirmation.error ? "storage_failed" : null;
+          },
         });
-        if (confirmation.error) return "storage_failed";
-        return null;
       };
       const effects = publication.effects || [];
       const stages = [effects.filter((effect) => !effect.operation || effect.operation === "create"),
@@ -80,9 +133,7 @@ export async function executeTeamWorkweekPublication<Result>({
       }
       if (expired()) return await delayed("provider_unavailable");
       return await complete();
-    } finally {
-      if (claim?.id) await finishProviderOperation(serviceSupabase, claim.id);
-    }
+    }, async errorClass => await delayed(errorClass));
   }
 
   const syncSeries = async () => {
@@ -142,4 +193,76 @@ export async function executeTeamWorkweekPublication<Result>({
   }
 
   return await complete();
+}
+
+
+/** Compensate one immutable generation, retaining only the history confirmed by PostgreSQL. */
+export async function compensateTeamWorkweekGeneration({
+  accessToken, publicationId, generation, serviceSupabase,
+  now = () => new Date(),
+  cleanupEffect = cleanupGoogleWorkweekEffect,
+  discoverInstance = discoverGoogleWorkweekInstance,
+  recoverWrite = recoverGoogleWorkweekWrite,
+  journaled = false,
+  onRecoveryReason,
+}: {
+  accessToken: string;
+  publicationId: string;
+  generation: number;
+  serviceSupabase: SupabaseClient;
+  now?: () => Date;
+  cleanupEffect?: typeof cleanupGoogleWorkweekEffect;
+  discoverInstance?: typeof discoverGoogleWorkweekInstance;
+  recoverWrite?: typeof recoverGoogleWorkweekWrite;
+  journaled?: boolean;
+  onRecoveryReason?: (reason: WorkweekRecoveryReason) => void;
+}): Promise<WorkweekExecutionDelayClass | null> {
+  return await withProviderOperation<WorkweekExecutionDelayClass | null>({
+    accessToken, publicationId, generation, serviceSupabase, now, purpose: "cleanup", journaled, recoverWrite,
+  }, async operationId => {
+    const prepare = async () => {
+      const result = await serviceSupabase.rpc("prepare_team_workweek_effect_cleanup", {
+        p_publication_id: publicationId, p_generation: generation,
+      });
+      return !result.error && Array.isArray(result.data?.effects) ? result.data.effects as PreparedWorkweekEffect[] : null;
+    };
+    const confirm = async (effect: PreparedWorkweekEffect, etag: string, preserved: boolean) => {
+      const result = await serviceSupabase.rpc("confirm_team_workweek_planned_cleanup", {
+        p_effect_id: effect.id, p_generation: generation, p_etag: etag, p_preserved: preserved,
+      });
+      return result.error ? "storage_failed" as const : null;
+    };
+    for (const stage of ["create", "crossing", "predecessor"] as const) {
+      // Earlier confirmations affect the next stage's cleanup plan and history disposition.
+      const effects = await prepare();
+      if (!effects) return "storage_failed";
+      for (let effect of effects) {
+        const kind = effect.operation === "create" ? "create" : effect.kind === "cleanup_crossing" ? "crossing" : "predecessor";
+        if (kind !== stage || effect.state === "cleaned") continue;
+        if (effect.kind === "cleanup_crossing") {
+          const parent = effects.find(item => item.id === effect.cleanupParentId);
+          if (!parent || parent.state !== "cleaned") return "storage_failed";
+          if (!parent.cleanupPreserved) {
+            const error = await confirm(effect, "absent", false);
+            if (error) return error;
+            continue;
+          }
+          if (!effect.expectedEtag) {
+            const bound = await bindCrossingInstance({ serviceSupabase, accessToken, discoverInstance }, effect);
+            if (typeof bound === "string") return bound;
+            effect = bound;
+          }
+        }
+        const error = await mutateAndConfirmEffect({ serviceSupabase, accessToken, now, operationId, effect,
+          mutate: cleanupEffect,
+          confirm: result => confirm(effect, result.etag, result.preserved ?? false),
+        });
+        if (error) return error;
+      }
+    }
+    return null;
+  }, async (errorClass, reason) => {
+    onRecoveryReason?.(reason);
+    return errorClass;
+  });
 }
