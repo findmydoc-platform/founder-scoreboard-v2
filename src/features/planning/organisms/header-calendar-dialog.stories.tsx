@@ -164,7 +164,7 @@ function calendarClient(mode: "refresh-failure" | "activation" | "publication"):
   let activationAt: string | undefined;
   return { requestJson: async () => {
     reads += 1;
-    activationAt ||= new Date(Date.now() + 600).toISOString();
+    activationAt ||= new Date(Date.now() + 120_000).toISOString();
     if (mode === "refresh-failure" && reads > 1) return {
       response: new Response(null, { status: 503 }), body: { error: "Arbeitszeiten konnten nicht geladen werden." },
     };
@@ -206,14 +206,49 @@ export const HookRefreshesPublishedHours: Story = {
   },
 };
 
+let crossActivationBoundary: () => void;
+
 export const HookRefreshesAtActivation: Story = {
+  beforeEach: () => {
+    const initialTime = Date.now();
+    const nativeTimeout = window.setTimeout.bind(window);
+    const nativeClearTimeout = window.clearTimeout.bind(window);
+    const scheduled = new Map<number, { due: number; run: () => void }>();
+    const nativeNow = Date.now;
+    const originalTimeout = window.setTimeout;
+    let clockTime = initialTime;
+    Date.now = () => clockTime;
+    // Control long browser deadlines while leaving interaction and polling timers real.
+    window.setTimeout = ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+      if (typeof handler !== "function" || delay < 60_000) return nativeTimeout(handler, delay, ...args);
+      const id = nativeTimeout(() => {}, 2_147_483_647);
+      scheduled.set(id, { due: Date.now() + delay, run: () => handler(...args) });
+      return id;
+    }) as typeof window.setTimeout;
+    crossActivationBoundary = () => {
+      const advancedTime = initialTime + 180_000;
+      clockTime = advancedTime;
+      for (const [id, timer] of scheduled) {
+        if (timer.due > advancedTime) continue;
+        scheduled.delete(id);
+        nativeClearTimeout(id);
+        timer.run();
+      }
+    };
+    return () => {
+      for (const id of scheduled.keys()) nativeClearTimeout(id);
+      window.setTimeout = originalTimeout;
+      Date.now = nativeNow;
+    };
+  },
   render: () => <HookDialog apiClient={calendarClient("activation")} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
     await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
     await canvas.findAllByText("Noch nicht veröffentlicht");
-    await waitFor(() => expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0), { timeout: 3000 });
+    crossActivationBoundary();
+    await waitFor(() => expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0));
   },
 };
 
