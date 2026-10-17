@@ -1,3 +1,4 @@
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import { berlinCivilInstant, calendarWindowsForDate } from "../model/team-workweek-calendar";
 import { inflatePublishedTeamWorkweekWindows } from "../model/team-workweek-draft";
 import type { WorkweekGooglePayload } from "./team-workweek-immediate-effects";
@@ -96,15 +97,13 @@ async function waitForRetry(attempt: number) {
 }
 
 async function readKnownEvent({
-  accessToken,
   fetchImpl,
   maxAttempts,
   now,
   series,
   wait,
 }: {
-  accessToken: string;
-  fetchImpl: typeof fetch;
+  fetchImpl: GoogleCalendarCapability["request"];
   maxAttempts: number;
   now: () => Date;
   series: KnownGoogleWorkweekSeries;
@@ -115,7 +114,7 @@ async function readKnownEvent({
     let response: Response;
     try {
       response = await fetchImpl(eventEndpoint(series), {
-        headers: { authorization: `Bearer ${accessToken}` },
+        headers: { },
         cache: "no-store",
       });
     } catch {
@@ -240,7 +239,7 @@ function sameWindows(
 
 export async function observeGoogleWorkweek({
   accessToken,
-  fetchImpl = fetch,
+  fetchImpl = accessToken.request,
   maxAttempts = 3,
   now = () => new Date(),
   series,
@@ -248,8 +247,8 @@ export async function observeGoogleWorkweek({
   verifyKnownPayloads = false,
   wait = waitForRetry,
 }: {
-  accessToken: string;
-  fetchImpl?: typeof fetch;
+  accessToken: GoogleCalendarCapability;
+  fetchImpl?: GoogleCalendarCapability["request"];
   maxAttempts?: number;
   now?: () => Date;
   series: KnownGoogleWorkweekSeries[];
@@ -268,7 +267,7 @@ export async function observeGoogleWorkweek({
   const windows: Array<Readonly<{ weekday: number; startMinute: number; endMinute: number }>> = [];
 
   for (const known of series) {
-    const result = await readKnownEvent({ accessToken, fetchImpl, maxAttempts, now, series: known, wait });
+    const result = await readKnownEvent({ fetchImpl, maxAttempts, now, series: known, wait });
     if (result.state === "delayed") return result;
     if (result.state === "deleted") {
       observations.push({
@@ -347,7 +346,7 @@ function samePhysicalSchedule(event: GoogleCalendarEvent, payload: WorkweekGoogl
 }
 
 async function observePhysicalProjection({accessToken,fetchImpl,maxAttempts,now,series,logicalWindows,wait,verifyKnownPayloads}: {
-  accessToken:string;fetchImpl:typeof fetch;maxAttempts:number;now:()=>Date;series:KnownGoogleWorkweekSeries[];
+  accessToken:GoogleCalendarCapability;fetchImpl:GoogleCalendarCapability["request"];maxAttempts:number;now:()=>Date;series:KnownGoogleWorkweekSeries[];
   logicalWindows?:KnownGoogleWorkweekWindow[];wait:(attempt:number)=>Promise<void>;
   verifyKnownPayloads:boolean;
 }): Promise<GoogleWorkweekReconciliationResult> {
@@ -357,7 +356,7 @@ async function observePhysicalProjection({accessToken,fetchImpl,maxAttempts,now,
   const events=new Map<string,GoogleCalendarEvent|null>();
   const observations:GoogleWorkweekObservation[]=[];
   for(const known of series){
-    const result=await readKnownEvent({accessToken,fetchImpl,maxAttempts,now,series:known,wait});
+    const result=await readKnownEvent({fetchImpl,maxAttempts,now,series:known,wait});
     if(result.state==="delayed") return result;
     const event=result.state==="deleted"?null:result.event;
     if(event && (event.status==="cancelled" ? event.id!==known.googleEventId || event.recurringEventId!==undefined : !eventIdentityMatches(event,known))) return {state:"conflict",errorClass:"provider_identity_mismatch",observedAt:timestamp};

@@ -1,3 +1,4 @@
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -14,7 +15,7 @@ export type WorkweekExecutionDelayClass = Extract<GoogleWorkweekSeriesResult, { 
 
 type ExecutionContext = Readonly<{
   serviceSupabase: SupabaseClient;
-  accessToken: string;
+  accessToken: GoogleCalendarCapability;
   now: () => Date;
 }>;
 
@@ -41,7 +42,7 @@ blocked: (errorClass: WorkweekExecutionDelayClass, reason: WorkweekRecoveryReaso
 
 async function bindCrossingInstance({ serviceSupabase, accessToken, discoverInstance }: {
   serviceSupabase: SupabaseClient;
-  accessToken: string;
+  accessToken: GoogleCalendarCapability;
   discoverInstance: typeof discoverGoogleWorkweekInstance;
 }, effect: PreparedWorkweekEffect): Promise<PreparedWorkweekEffect | WorkweekExecutionDelayClass> {
   const observed = await discoverInstance({ accessToken, effect });
@@ -83,7 +84,7 @@ export async function executeTeamWorkweekPublication<Result>({
 }: {
   serviceSupabase: SupabaseClient;
   publication: PreparedWorkweekPublication;
-  accessToken: string;
+  accessToken: GoogleCalendarCapability;
   complete: () => Promise<Result>;
   delayed: (errorClass: WorkweekExecutionDelayClass) => Promise<Result>;
   ensureEffect?: typeof ensureGoogleWorkweekEffect;
@@ -206,7 +207,7 @@ export async function compensateTeamWorkweekGeneration({
   journaled = false,
   onRecoveryReason,
 }: {
-  accessToken: string;
+  accessToken: GoogleCalendarCapability;
   publicationId: string;
   generation: number;
   serviceSupabase: SupabaseClient;

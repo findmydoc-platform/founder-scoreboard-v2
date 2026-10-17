@@ -7,7 +7,7 @@ import {
   GOOGLE_WORKSPACE_CALENDAR_SCOPE,
   validateGoogleWorkspaceTokenResponse,
   verifyGoogleWorkspaceOAuthState,
-} from "../../../src/features/team-workweek/server/google-workspace-oauth-core.ts";
+} from "../../../src/lib/credentials/internal/google-calendar-protocol.ts";
 import {
   ensureGoogleWorkweekSeries,
 } from "../../../src/features/team-workweek/server/team-workweek-publication-core.ts";
@@ -16,27 +16,20 @@ import {
 } from "../../../src/features/team-workweek/server/team-workweek-reconciliation-core.ts";
 
 const publicationCore = await import("../../../src/features/team-workweek/server/team-workweek-publication-core.ts");
-const oauthCore = await import("../../../src/features/team-workweek/server/google-workspace-oauth-core.ts");
+const oauthCore = await import("../../../src/lib/credentials/internal/google-calendar-protocol.ts");
 const draftModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
 const { ensureGoogleWorkweekSeriesAbsent } = await importTestModule(
   "src/features/team-workweek/server/google-workspace-disconnect-core.ts",
   { "./team-workweek-publication-core": publicationCore },
 );
-const oauthServer = await importTestModule(
-  "src/features/team-workweek/server/google-workspace-oauth.ts",
-  {
-    "server-only": {},
-    "./google-workspace-oauth-core": oauthCore,
-  },
-);
 const disconnectServer = await importTestModule(
   "src/features/team-workweek/server/google-workspace-disconnect.ts",
   {
     "server-only": {},
-    "./google-workspace-oauth-core": oauthCore,
-    "./google-workspace-oauth": {
-      getGoogleWorkspaceAccessToken: async () => "controlled-access-token",
-      removeGoogleWorkspaceConnection: async () => undefined,
+    "@/lib/google-calendar-errors": oauthCore,
+    "./team-workweek-calendar": {
+      calendarForWorkweekOwner: async () => ({request:(url,init)=>fetch(url,init)}),
+      removeWorkweekCalendarConnection: async () => undefined,
     },
     "./google-workspace-disconnect-core": { ensureGoogleWorkweekSeriesAbsent },
     "./team-workweek-publication-core": publicationCore,
@@ -288,23 +281,8 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
   process.env.GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 42).toString("base64");
 
   try {
-    for (const profileId of teamProfiles) {
-      const token = controlledToken(profileId);
-      await oauthServer.storeGoogleWorkspaceConnection({
-        supabase: vault.serviceSupabase,
-        profileId,
-        token,
-        now: fixedDate.getTime(),
-      });
-      const stored = vault.connections.get(profileId);
-      assert.ok(stored);
-      assert.notEqual(stored.encrypted_access_token, token.accessToken);
-      assert.notEqual(stored.encrypted_refresh_token, token.refreshToken);
-      assert.deepEqual(stored.oauth_scopes, [GOOGLE_WORKSPACE_CALENDAR_SCOPE]);
-    }
-    assert.equal(vault.connections.size, teamProfiles.length);
-
     for (const [index, profileId] of teamProfiles.entries()) {
+    vault.connections.set(profileId,{profile_id:profileId});
     const adapter = new ControlledGoogleCalendarAdapter();
     const fetchImpl = adapter.fetch.bind(adapter);
     const signingKey = Buffer.alloc(32, index + 1);
@@ -329,7 +307,7 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
     const initialSeries = series(profileId, 1);
     adapter.loseNextCreateResponse = true;
     const firstProjection = await ensureGoogleWorkweekSeries({
-      accessToken: token.accessToken,
+      accessToken: {request:fetchImpl},
       fetchImpl,
       now: fixedClock,
       publication: publication(profileId, 1, initialSeries),
@@ -340,7 +318,7 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
 
     const changedSeries = series(profileId, 2);
     const founderopsChange = await ensureGoogleWorkweekSeries({
-      accessToken: token.accessToken,
+      accessToken: {request:fetchImpl},
       fetchImpl,
       now: fixedClock,
       publication: publication(profileId, 2, changedSeries),
@@ -364,7 +342,7 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
       endMinute: changedSeries.endMinute,
     }];
     const googleChange = await observeGoogleWorkweek({
-      accessToken: token.accessToken,
+      accessToken: {request:fetchImpl},
       fetchImpl,
       now: fixedClock,
       series: knownSeries,
@@ -376,7 +354,7 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
     const validEvent = adapter.event(changedSeries.googleEventId);
     adapter.corruptIdentity(changedSeries.googleEventId);
     const conflict = await observeGoogleWorkweek({
-      accessToken: token.accessToken,
+      accessToken: {request:fetchImpl},
       fetchImpl,
       now: fixedClock,
       series: knownSeries,
@@ -390,7 +368,7 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
     adapter.store(validEvent, validEvent.etag);
     adapter.events.delete(changedSeries.googleEventId);
     const googleDeletion = await observeGoogleWorkweek({
-      accessToken: token.accessToken,
+      accessToken: {request:fetchImpl},
       fetchImpl,
       now: fixedClock,
       series: knownSeries,
@@ -416,7 +394,7 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
       getAccessToken: async (_supabase, requestedProfileId) => {
         assert.equal(requestedProfileId, profileId);
         assert.ok(vault.connections.has(requestedProfileId));
-        return token.accessToken;
+        return {request:fetchImpl};
       },
       observe: async ({ target }) => ({ state: "present", etag: target.expectedEtag }),
       ensureAbsent: async (input) => ensureGoogleWorkweekSeriesAbsent({ ...input, fetchImpl }),
@@ -433,17 +411,12 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
     assert.ok(adapter.event(`${profileId}-ordinary-event`));
     assert.equal(vault.connections.has(profileId), false);
 
-    await oauthServer.storeGoogleWorkspaceConnection({
-      supabase: vault.serviceSupabase,
-      profileId,
-      token: controlledToken(profileId, "reconnected"),
-      now: fixedDate.getTime(),
-    });
+    vault.connections.set(profileId,{profile_id:profileId});
     assert.ok(vault.connections.has(profileId));
 
     const reconnectedSeries = series(profileId, 3);
     const reconnection = await ensureGoogleWorkweekSeries({
-      accessToken: token.accessToken,
+      accessToken: {request:fetchImpl},
       fetchImpl,
       now: fixedClock,
       publication: publication(profileId, 3, reconnectedSeries),

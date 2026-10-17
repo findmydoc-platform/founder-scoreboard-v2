@@ -1,3 +1,6 @@
+import { authorizeGoogleCalendar, authorizeGoogleCalendarConnection } from "./internal/google-calendar";
+import type { GoogleCalendarCapability, GoogleCalendarInput, GoogleCalendarConnectionInput } from "./types";
+import type { GoogleWorkspaceConnectionStatus } from "@/features/team-workweek/model/google-workspace-connection";
 
 import { authorizeGitHubConnection } from "./internal/github-user-oauth";
 import type { GitHubConnectionInput, GitHubConnectionResult } from "./types";
@@ -25,12 +28,16 @@ import type { GitHubAppOperationalStatus } from "./types";
 export type {
   CredentialAction, CredentialActionInput, CredentialActionResult,
   CalendarCredentialInput, CalendarCredentialResult, CalendarReadCapability,
-  GitHubInstallationCapability, GitHubUserCapability,
+  GitHubInstallationCapability, GitHubUserCapability, GoogleCalendarCapability,
 } from "./types";
 
 
 export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
+export function authorizeCredentialAction(input: GoogleCalendarInput & {action:"google-calendar.workweek"}): Promise<{ok:true;calendar:GoogleCalendarCapability}>;
+export function authorizeCredentialAction(input: GoogleCalendarInput & {action:"google-calendar.connection.status"}): Promise<GoogleWorkspaceConnectionStatus>;
+export function authorizeCredentialAction(input: GoogleCalendarInput & {action:"google-calendar.connection.remove"}): Promise<{ok:true}>;
+export function authorizeCredentialAction(input: GoogleCalendarConnectionInput): Promise<{next:string;redirect?:string}>;
 export function authorizeCredentialAction(input:GitHubConnectionInput):Promise<GitHubConnectionResult>;
 export function authorizeCredentialAction(input:GitHubAuthoredCredentialInput|GitHubAttachmentInput):Promise<GitHubAuthoredCredentialResult>;
 export function authorizeCredentialAction(input:GitHubSessionInput & {action:"github.connection.status"}):Promise<GitHubConnectionStatus>;
@@ -52,7 +59,9 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
 
-export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState> {
+export function authorizeCredentialAction(input: GoogleCalendarInput | GoogleCalendarConnectionInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput): Promise<{ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string} | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState> {
+  if (input.action === "google-calendar.connection.start" || input.action === "google-calendar.connection.complete") return authorizeGoogleCalendarConnection(input as GoogleCalendarConnectionInput);
+  if (input.action === "google-calendar.workweek" || input.action === "google-calendar.connection.status" || input.action === "google-calendar.connection.remove") return authorizeGoogleCalendar(input as GoogleCalendarInput);
   if (input.credential.kind === "server-cookies") {
     if (input.action === "session.planning") return serverPlanningAuth();
     if (input.action === "session.home") return serverHomeWorkspace();

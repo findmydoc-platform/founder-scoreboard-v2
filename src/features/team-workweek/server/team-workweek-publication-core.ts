@@ -1,3 +1,4 @@
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 export const FOUNDEROPS_WORKWEEK_PROPERTY_KEY = "founderopsWorkweekSeriesId";
 export const FOUNDEROPS_WORKWEEK_TRANSITION_PROPERTY_KEY = "founderopsWorkweekTransitionId";
 
@@ -159,14 +160,14 @@ function confirmedEvent(
 }
 
 async function observeSeries(
-  fetchImpl: typeof fetch,
-  accessToken: string,
+  fetchImpl: GoogleCalendarCapability["request"],
+  accessToken: GoogleCalendarCapability,
   publication: Pick<PreparedWorkweekPublication, "publicationRevision">,
   series: PreparedWorkweekSeries,
 ) {
   try {
     const response = await fetchImpl(eventEndpoint(series), {
-      headers: { authorization: `Bearer ${accessToken}` },
+      headers: { },
       cache: "no-store",
     });
     if (response.status === 404) return { state: "absent" as const };
@@ -185,13 +186,13 @@ async function observeSeries(
 
 export async function ensureGoogleWorkweekSeries({
   accessToken,
-  fetchImpl = fetch,
+  fetchImpl = accessToken.request,
   now = () => new Date(),
   publication,
   series,
 }: {
-  accessToken: string;
-  fetchImpl?: typeof fetch;
+  accessToken: GoogleCalendarCapability;
+  fetchImpl?: GoogleCalendarCapability["request"];
   now?: () => Date;
   publication: PreparedWorkweekPublication;
   series: PreparedWorkweekSeries;
@@ -207,7 +208,6 @@ export async function ensureGoogleWorkweekSeries({
     response = await fetchImpl(collectionEndpoint(series), {
       method: "POST",
       headers: {
-        authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
       },
       body: JSON.stringify(googleWorkweekSeriesEvent(publication, series)),
@@ -273,13 +273,13 @@ function transitionObservation(event: GoogleCalendarEvent | null, transition: Pr
 }
 
 async function observeTransition(
-  fetchImpl: typeof fetch,
-  accessToken: string,
+  fetchImpl: GoogleCalendarCapability["request"],
+  accessToken: GoogleCalendarCapability,
   transition: PreparedWorkweekSeriesTransition,
 ) {
   try {
     const response = await fetchImpl(transitionEventEndpoint(transition), {
-      headers: { authorization: `Bearer ${accessToken}` },
+      headers: { },
       cache: "no-store",
     });
     if (response.status === 401 || response.status === 403) {
@@ -320,12 +320,12 @@ function transitionedEvent(event: GoogleCalendarEvent, transition: PreparedWorkw
 
 export async function ensureGoogleWorkweekSeriesTransition({
   accessToken,
-  fetchImpl = fetch,
+  fetchImpl = accessToken.request,
   now = () => new Date(),
   transition,
 }: {
-  accessToken: string;
-  fetchImpl?: typeof fetch;
+  accessToken: GoogleCalendarCapability;
+  fetchImpl?: GoogleCalendarCapability["request"];
   now?: () => Date;
   transition: PreparedWorkweekSeriesTransition;
 }): Promise<GoogleWorkweekSeriesResult> {
@@ -340,7 +340,6 @@ export async function ensureGoogleWorkweekSeriesTransition({
     response = await fetchImpl(transitionEventEndpoint(transition, true), {
       method: "PUT",
       headers: {
-        authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
         "if-match": transition.expectedEtag,
       },
