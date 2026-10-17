@@ -1,5 +1,3 @@
-import { vi } from "vitest";
-vi.mock("@/lib/supabase-user", async () => vi.importMock("@/lib/supabase"));
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
@@ -50,13 +48,7 @@ const route = await importTestModule(
       apiError,
       requireApiContext: async () => authResult,
     },
-    "@/lib/authz": {
-      bearerToken: () => "session-token",
-      requireTeamMember: Symbol("requireTeamMember"),
-    },
-    "@/lib/supabase": {
-      getSupabaseForToken: () => ({ from: () => supabaseQuery() }),
-    },
+    "@/lib/credentials": { authorizeCredentialAction: async () => authResult.permission },
   },
 );
 
@@ -67,7 +59,10 @@ function request(search = "") {
 test.beforeEach(() => {
   authResult = {
     ok: true,
-    permission: { profile: { id: "profile-1", platformRole: "founder" } },
+    permission: { profile: { id: "profile-1", platformRole: "founder" }, calendar: {
+      readPublications: () => supabaseQuery().eq("status", "published").returns(),
+      readPublishedOwners: () => supabaseQuery().eq("status", "published").returns(),
+    } },
   };
   berlinTodayCalls = 0;
   queryStatuses = [];

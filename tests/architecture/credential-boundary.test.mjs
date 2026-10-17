@@ -76,3 +76,13 @@ test("accepts explicitly type-only re-exports of protected modules", () => {
   fixture({ "src/route.ts": "export { type Client } from '@supabase/supabase-js';" },
     failures => assert.deepEqual(failures, []));
 });
+
+test("an exact legacy adapter edge does not admit another compatibility wrapper", () => {
+  fixture({
+    "src/legacy.ts": "export * from './lib/credentials/internal/provider';",
+    "src/new.ts": "export * from './lib/credentials/internal/provider';",
+  }, failures => {
+    assert.equal(failures.length, 1);
+    assert.match(failures[0], /src\/new.ts.*internal credential adapter/);
+  }, [{ from: "src/legacy.ts", to: "src/lib/credentials/internal/provider.ts" }]);
+});

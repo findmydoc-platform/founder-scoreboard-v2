@@ -44,7 +44,7 @@ it("denies direct table and Storage reads without a trusted request and preserve
   });
 });
 
-it.each(["wrong-token", "wrong-path", "expired"])("rejects %s permits", async scenario => {
+it.each(["wrong-token", "wrong-path", "wrong-method", "expired", "generation"])("rejects %s permits", async scenario => {
   await withIsolatedLocalDatabase(async client => {
     await client.query("insert into auth.users(id) values ($1)", [uid]);
     await client.query("insert into workspace_private.identity_bindings(user_id,google_subject) values ($1,'google-1')", [uid]);
@@ -52,8 +52,22 @@ it.each(["wrong-token", "wrong-path", "expired"])("rejects %s permits", async sc
     await client.query("insert into auth.sessions(id,user_id,created_at) values ($1,$2,clock_timestamp())", [sessionId, uid]);
     await client.query("select public.workspace_issue_permit($1,$2,$3,'GET','/profiles',$4)", [digest("permit"), uid, digest("token"), sessionId]);
     if (scenario === "expired") await client.query("update workspace_private.request_permits set expires_at = now()-interval '1 second'");
+    if (scenario === "generation") await client.query("update workspace_private.configuration set access_generation = access_generation + 1");
     await client.query("select set_config('request.method','GET',true),set_config('request.path',$1,true),set_config('request.headers',$2,true)", [scenario === "wrong-path" ? "/tasks" : "/profiles", JSON.stringify({ authorization: scenario === "wrong-token" ? "Bearer other" : "Bearer token", "x-founderops-workspace-permit": "permit" })]);
+    if (scenario === "wrong-method") await client.query("select set_config('request.method','POST',true)");
     expect(await captureDatabaseError(client, () => asAuthenticated(client, uid, () => client.query("select public.workspace_check_request()")))).toMatchObject({ code: "42501" });
+  });
+});
+
+it("denies permit issuance when the verified session was removed before issuance", async () => {
+  await withIsolatedLocalDatabase(async client => {
+    await client.query("insert into auth.users(id) values ($1)", [uid]);
+    await client.query("insert into workspace_private.identity_bindings(user_id,google_subject) values ($1,'google-1')", [uid]);
+    await client.query("update workspace_private.configuration set mode='google'");
+    await client.query("insert into auth.sessions(id,user_id,created_at) values ($1,$2,clock_timestamp())", [sessionId, uid]);
+    expect((await client.query("select public.workspace_session_allowed($1,$2) as allowed", [uid, sessionId])).rows[0].allowed).toBe(true);
+    await client.query("delete from auth.sessions where id=$1", [sessionId]);
+    expect(await captureDatabaseError(client, () => client.query("select public.workspace_issue_permit($1,$2,$3,'GET','/profiles',$4)", [digest("removed-session"), uid, digest("token"), sessionId]))).toMatchObject({ code: "42501" });
   });
 });
 

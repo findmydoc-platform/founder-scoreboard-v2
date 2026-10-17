@@ -2,6 +2,7 @@ import { test, expect, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test.each(["production", "preview"])("%s uses WIF, caches only the service credential and rechecks membership", async environment => {
+  vi.resetModules();
   vi.stubEnv("VERCEL_ENV", environment);
   vi.stubEnv("GOOGLE_AUTHORIZED_GROUP", "internal-tool-founder-ops-access@findmydoc.eu");
   vi.stubEnv("GOOGLE_WORKLOAD_IDENTITY_AUDIENCE", "configured-audience");

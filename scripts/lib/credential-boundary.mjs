@@ -24,7 +24,7 @@ export function verifyCredentialBoundary({ root, legacyEdges = [], protectedModu
       const resolved = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule;
       const to = resolved && !resolved.isExternalLibraryImport ? relative(resolved.resolvedFileName) : specifier;
       const edge = `${from} -> ${to}`;
-      if (to.startsWith(internalDirectory) && from !== publicEntry && !from.startsWith(internalDirectory)) {
+      if (to.startsWith(internalDirectory) && from !== publicEntry && !from.startsWith(internalDirectory) && !allowed.has(edge)) {
         failures.push(`${edge}: internal credential adapter is private`);
       }
       const sensitive = protectedModules.includes(to) || /^@supabase\//.test(to)

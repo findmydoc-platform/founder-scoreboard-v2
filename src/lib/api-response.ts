@@ -6,10 +6,10 @@ import { getServerSupabase } from "./supabase";
 type FailedAuthzResult = Extract<AuthzResult, { ok: false }>;
 type SuccessfulAuthzResult = Extract<AuthzResult, { ok: true }>;
 type ServerSupabase = NonNullable<ReturnType<typeof getServerSupabase>>;
-type ApiAuthorization = (request: NextRequest) => AuthzResult | Promise<AuthzResult>;
+type ApiAuthorization<T extends AuthzResult = AuthzResult> = (request: NextRequest) => T | Promise<T>;
 
-type ApiContextResult =
-  | { ok: true; supabase: ServerSupabase; permission: SuccessfulAuthzResult }
+type ApiContextResult<T extends AuthzResult = AuthzResult> =
+  | { ok: true; supabase: ServerSupabase; permission: Extract<T, { ok: true }> }
   | { ok: false; response: NextResponse; status: number; error: string; code?: AuthErrorCode };
 
 type ApiJsonContextResult<T> =
@@ -40,11 +40,11 @@ export function supabaseUnavailable(message = "Supabase env is not configured.")
   return apiError(message, 501);
 }
 
-export async function requireApiContext(
+export async function requireApiContext<T extends AuthzResult>(
   request: NextRequest,
-  authorize: ApiAuthorization,
+  authorize: ApiAuthorization<T>,
   options: ApiContextOptions = {},
-): Promise<ApiContextResult> {
+): Promise<ApiContextResult<T>> {
   const supabase = getServerSupabase();
   if (!supabase) {
     const error = options.supabaseUnavailableMessage || "Supabase env is not configured.";
@@ -62,7 +62,7 @@ export async function requireApiContext(
     };
   }
 
-  return { ok: true, supabase, permission };
+  return { ok: true, supabase, permission: permission as Extract<T, { ok: true }> };
 }
 
 export async function readJsonPayload<T>(request: NextRequest, fallback: T): Promise<T> {

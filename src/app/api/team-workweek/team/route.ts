@@ -7,24 +7,12 @@ import {
 import { berlinTodayIso, inflatePublishedTeamWorkweekWindows } from "@/features/team-workweek/model/team-workweek-draft";
 import { selectVisibleTeamWorkweeks } from "@/features/team-workweek/model/published-team-workweek";
 import { apiError, requireApiContext } from "@/lib/api-response";
-import { bearerToken, requireTeamMember } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase-user";
+import { authorizeCredentialAction } from "@/lib/credentials";
+import type { CalendarPublication } from "@/lib/credentials/types";
 
 export const dynamic = "force-dynamic";
 
-type PublishedVersionRow = Readonly<{
-  id: string;
-  owner_profile_id: string;
-  effective_from: string;
-  effective_at?: string | null;
-  effective_until?: string | null;
-  effective_to: string | null;
-  timezone: "Europe/Berlin";
-  published_at: string;
-  last_sync_at: string;
-  publication_revision: number;
-  windows: Array<{ weekday: number; startMinute: number; endMinute: number }>;
-}>;
+type PublishedVersionRow = CalendarPublication;
 
 function calendarWorkweek(row: PublishedVersionRow): CalendarTeamWorkweek {
   return {
@@ -42,34 +30,22 @@ function calendarWorkweek(row: PublishedVersionRow): CalendarTeamWorkweek {
 }
 
 export async function GET(request: NextRequest) {
-  const context = await requireApiContext(request, requireTeamMember);
+  const context = await requireApiContext(request, request => authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "calendar.read" }));
   if (!context.ok) return context.response;
   const requestedRange = validateCalendarWorkweekRange(
     request.nextUrl.searchParams.get("from"),
     request.nextUrl.searchParams.get("to"),
   );
   if (!requestedRange.ok) return apiError(requestedRange.error, 400);
-  const token = bearerToken(request);
-  const supabase = token ? getSupabaseForToken(token) : null;
-  if (!supabase) return apiError("Anmeldung erforderlich.", 401);
 
   const now = new Date();
   const referenceDate = berlinTodayIso(now);
   // Retain current and all future plans, plus history needed by the requested range.
   const earliestDate = requestedRange.range && requestedRange.range.from < referenceDate ? requestedRange.range.from : referenceDate;
   const [publications, owners] = await Promise.all([
-    supabase
-      .from("team_workweek_publications")
-      .select("id,owner_profile_id,effective_from,effective_to,effective_at,effective_until,timezone,published_at,last_sync_at,publication_revision,windows")
-      .eq("status", "published")
-      .or(`effective_to.is.null,effective_to.gte.${earliestDate}`)
-      .order("effective_from", { ascending: false })
-      .order("publication_revision", { ascending: false })
-      .order("id", { ascending: false })
-      .returns<PublishedVersionRow[]>(),
+    context.permission.calendar.readPublications(earliestDate),
     // An owner with historical hours is still published, even without a current plan.
-    supabase.from("team_workweek_publications").select("owner_profile_id").eq("status", "published")
-      .returns<Array<{ owner_profile_id: string }>>(),
+    context.permission.calendar.readPublishedOwners(),
   ]);
   const { data, error } = publications;
   if (error || owners.error) return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);

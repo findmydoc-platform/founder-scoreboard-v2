@@ -45,6 +45,8 @@ Calendar loading and the private workweek draft are the first end-to-end proof c
 
 The migration temporarily supports old and new internals while callers move. The exact legacy dependency and network-reference allowances are recorded in `scripts/lib/credential-boundary-policy.json`; #502 removes these allowances and the legacy delegation adapter. The inventory in `docs/credential-verification-inventory.md` maps each family to its migration ticket. The forwarding entry introduced by #488 is only the expand step and does not satisfy whole-application acceptance. It is not complete until the old verification exports and independent caller-side refresh paths are removed and the dependency rule rejects their reintroduction.
 
+The first production slice in #489 caches membership evidence for calendar reads. Role, account and binding checks remain live because their existing stronger mutable contracts must continue to hold. Browser and Proxy lifecycle migration remains assigned to #491 and #492.
+
 Process-local caches can repeat verification after cold starts or on other instances. Their deadlines still bound role and membership staleness. Cache effectiveness and total remaining network requests must be measured before adding shared storage.
 
 The broad refactor increases the importance of one stable public seam. Provider protocols remain internal adapters rather than public flags. Tests that only assert removed wiring are replaced by observable behavior tests at that seam; distinct database invariants retain focused coverage.
