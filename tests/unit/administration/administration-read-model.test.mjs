@@ -79,9 +79,8 @@ function createSupabaseFixture({ projectError = null } = {}) {
 
   return {
     calls,
-    async rpc(name) {
-      assert.equal(name, "administrator_directory_snapshot");
-      calls.push({ rpc: name });
+    async readDirectory() {
+      calls.push({ rpc: "administrator_directory_snapshot" });
       return {
         data: {
           people: data.profiles.map((profile) => ({
@@ -106,26 +105,9 @@ function createSupabaseFixture({ projectError = null } = {}) {
         error: null,
       };
     },
-    from(table) {
-      const call = { table, select: "" };
-      calls.push(call);
-      const query = {
-        select(value) { call.select = value; return query; },
-        eq() { return query; },
-        order() { return query; },
-        limit() { return query; },
-        maybeSingle() {
-          return Promise.resolve({
-            data: data[table]?.[0] || null,
-            error: table === "projects" ? projectError : null,
-          });
-        },
-        then(resolve, reject) {
-          return Promise.resolve({ data: data[table] || [], error: null }).then(resolve, reject);
-        },
-      };
-      return query;
-    },
+    async readNotificationEvents() { calls.push({ table: "notification_events" }); return { data: data.notification_events, error: null }; },
+    async readNotificationDeliveries() { calls.push({ table: "notification_deliveries" }); return { data: data.notification_deliveries, error: null }; },
+    async readProject() { calls.push({ table: "projects" }); return { data: data.projects[0], error: projectError }; },
   };
 }
 

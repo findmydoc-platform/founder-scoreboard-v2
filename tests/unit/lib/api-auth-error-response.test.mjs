@@ -2,40 +2,22 @@ import { vi } from "vitest";
 vi.mock("@/lib/supabase-user", async () => vi.importMock("@/lib/supabase"));
 vi.mock("@/lib/workspace-access", () => ({ requireWorkspaceAccess: async () => null }));
 import assert from "node:assert/strict";
-import { AuthRetryableFetchError } from "@supabase/supabase-js";
-import { beforeEach, test } from "vitest";
+import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
+import { afterEach, beforeEach, test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-let getUserResult;
-
-beforeEach(() => {
-  getUserResult = {
-    data: { user: null },
-    error: new Error("expired token"),
-  };
-});
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+let protocol;
+beforeEach(() => { protocol = administratorProtocol({ authError: 401 }); });
 
 const { apiError, authzError } = await importTestModule("src/lib/api-response.ts", {
   "./supabase": { getServerSupabase: () => ({}) },
 });
 
-const authz = await importTestModule("src/lib/authz.ts", {
-  "./local-development-auth": { isLocalLoginRequestAllowed: () => false },
-  "./platform": { isOperationalLeadRole: () => false },
-  "./supabase": {
-    getSupabaseForToken: () => ({
-      auth: {
-        getUser: async () => getUserResult,
-      },
-    }),
-    requiresSupabaseAuth: () => true,
-  },
-});
+const authz = await importTestModule("src/lib/authz.ts", { "server-only": {} });
 
 test("an invalid application session is marked for browser recovery", async () => {
-  const permission = await authz.requirePlanningContributor({
-    headers: new Headers({ authorization: "Bearer expired-token" }),
-  });
+  const permission = await authz.requirePlanningContributor(protocol.request());
   assert.deepEqual(permission, {
     ok: false,
     status: 401,
@@ -73,14 +55,9 @@ test("authorization response fields cannot forge the pre-effect marker", async (
 });
 
 test("a retryable Supabase Auth outage is not marked as an invalid session", async () => {
-  getUserResult = {
-    data: { user: null },
-    error: new AuthRetryableFetchError("Service temporarily unavailable", 503),
-  };
+  protocol.state.authError = 503;
 
-  const permission = await authz.requirePlanningContributor({
-    headers: new Headers({ authorization: "Bearer current-token" }),
-  });
+  const permission = await authz.requirePlanningContributor(protocol.request());
 
   assert.deepEqual(permission, {
     ok: false,

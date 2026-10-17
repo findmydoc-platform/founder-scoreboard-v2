@@ -4,7 +4,7 @@ This inventory describes the integration base for spec #487. It applies Parnas's
 
 ## Ownership and migration
 
-The only new public server entry is `authorizeCredentialAction` from `@/lib/credentials`. Its input contains a credential and a semantic action. No caller chooses an adapter, cache lifetime or verification mode. `credentials/types.ts` exports types without runtime secrets. `credentials/internal/` is private and marked server-only. In the expand phase, the internal `legacy-session.ts` delegates to unchanged `authz.ts`. Old entry points stay compatible only for explicitly listed existing dependency edges. They are temporary debt, removed in #502.
+The only new public server entry is `authorizeCredentialAction` from `@/lib/credentials`. Its input contains a credential and a semantic action. No caller chooses an adapter, cache lifetime or verification mode. `credentials/types.ts` exports types without runtime secrets. `credentials/internal/` is private and marked server-only. The shared session policy now lives in `credentials/internal/session-policy.ts`. Existing `authz.ts` guards delegate to the public seam, and `legacy-session.ts` returns only safe metadata from that policy. Two existing client-argument compatibility adapters remain internal until their sibling consumers migrate. Their one exact dependency allowance is temporary debt, removed in #502.
 
 The action result preserves the existing discriminated `ok` result, safe HTTP status, German message, optional error code and session authority. It exposes no Supabase client, provider token or service credential. The first adapter accepts Bearer request transport through existing guards. #491 adds cookie and browser lifecycle transport; personal and technical credential variants enter through later vertical slices. They must not become caller-selected verification strategies. The expand step added no cache or evidence claims. #489 adds `calendar.read` to this same entry. It returns a fixed calendar read capability with ordinary promises and data results, never an SDK query builder, Auth client or token. Subsequent families extend this same public entry.
 
@@ -21,7 +21,7 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | `src/lib/browser-session-adapter.ts`, `src/lib/supabase.ts`, browser API and feature hooks | Browser login/recovery/refresh/logout | Clear protected state, prevent late account replacement, server-owned refresh decisions | #492 |
 | `src/app/auth/login`, `callback`, `signout`, `google-link/start`; `src/app/api/auth/*` | PKCE/code exchange, Google login proof, OAuth state and link nonce | Redirect validation, exact identity, actual nonce consumption; no invented universal one-time-state rule | #491 |
 | `src/lib/workspace-access.ts`, `workspace-directory.ts`, `google-provider-proof.ts` | Workspace context, Google session, Directory service identity, provider token proof | Domain/group checks, session admission, non-deferred mutable checks, original 900-second role/membership deadline | #489, #491 |
-| Administrator access routes and `administrator-access` model | Session-only activation, eligibility, expiry, current capability | CEO governance remains separate; personal tokens never inherit activation | #493 |
+| Administrator access, eligibility, technical identity and directory routes; administration SSR; shared `authz.ts` guards | Exact session credential, authoritative profile, live administrator snapshot | Migrated in #493. Fixed actor/target-bound operations retain user JWT, RLS, grants and transaction checks. Ending and known expiry remain live. CEO governance and base planning roles remain separate from temporary correction. Personal tokens never inherit activation. | #493 implemented |
 | `src/lib/credentials/internal/personal-planning.ts`, `planning-items/token.ts`, `planning-items/workspace.ts`; token and Planning Items routes use the public seam | Personal token and owner-bound token-management capabilities | Migrated in #494. Token RPC remains authoritative for every authentication and data-capability use. Only Directory membership evidence is cached for 900 seconds from verification start. Capabilities bind operation, mode, actor, item target and accepted projection IDs; token management preserves owner checks, issuance limits and the one-time issuance response. | #494 |
 | Team workweek calendar route and publication reads | Verified session, exact per-operation database permits | Confirmed public schedule only, owner/range/history, distinct permits, database enforcement | #489 |
 | Private workweek draft GET and POST | Owner session, edit context, conflict revision | Five base user operations plus conditional reads, one selected context, stale-context 409, owner-bound save RPCs | #490 implemented |
@@ -44,6 +44,21 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | `src/app/api/auth/login-mode`, auth error pages, explicitly inert responses | Public configuration or no usable credential | Preserve public/inert contract; never treat these as authenticated actors | #491, #505 |
 | `src/lib/local-development-auth.ts`, local-login route and dev profile override | Development-only simulated profile | Existing host/environment gate; deny deployed entry points | #489, #491 |
 | `src/app/api/health/route.ts` | Existing public readiness probe using server database access | Return readiness/configuration booleans only, without granting a human actor or returning credentials | #499, #505 |
+
+## Shared role and administrator migration
+
+Issue #493 uses the same verified session/data context as the workweek adapters for all shared guard actions. The existing CEO/founder/deputy/viewer sets and `sessionAuthority` capability policy remain authoritative. Role reads stay live. A received active administrator snapshot cannot exceed its actual expiry. Required snapshot failure still denies administration; optional snapshot failure does not remove an otherwise granted planning role. Only permitted local host/environment combinations retain simulation, and simulation cannot activate administrator access.
+
+Administrator inspection, activation, ending, eligibility changes, technical identity updates and directory reads use fixed public actions. Mutation capabilities bind their target profile when issued and invoke only the existing user-bound RPCs. The directory capability supplies fixed reads for the directory, notification events, deliveries and the configured project. The feature retains mapping, filtering and provider-status orchestration. HTTP and SSR use the same policy. Neither path receives a client, token or generic query interface. Per-operation database authorization remains effective after activation ends or expires.
+
+One exact temporary edge from `authz.ts` to `credentials/internal/legacy-session-client.ts` preserves these existing client-argument consumers until their owning sibling migration:
+
+| Existing compatibility API | Remaining production consumers |
+| --- | --- |
+| `requireTeamMemberForSession(client)` | `src/app/api/tools/preview-image/route.ts` |
+| `resolveAdministratorAccessFailure(client)` | `src/features/planning-items/model/planning-item-revision.ts`, `src/app/api/tasks/[id]/relationships/route.ts`, `src/app/api/founderops-settings/github-project/route.ts`, `src/app/api/notifications/deliver/route.ts` |
+
+The existing server-only `bearerToken(request)` compatibility getter now selects the real request transport through the internal resolver. An explicit Authorization header takes precedence over cookies, and protected cookie mutations retain origin checks. The getter remains only for existing sibling resource migrations. No new credential kind or client-argument public action is introduced. #504/#505/#510 migrate their consumers; #502 removes the compatibility exports and exact allowance.
 
 ## GitHub installation migration
 

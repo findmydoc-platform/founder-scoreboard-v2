@@ -1,3 +1,5 @@
+import { authorizeAdministrator } from "./internal/administrator";
+import type { AdministratorCredentialInput, AdministratorCredentialResult } from "./types";
 import type { SessionLifecycleInput, SessionCookieResponseInput, SessionPlanningInput, SessionHomeInput, SessionLinkPageInput, ServerPlanningAuth, AppWorkspace, SessionLinkPageState } from "./session-types";
 import { serverPlanningAuth, serverHomeWorkspace, serverLinkPage } from "./internal/server-session-view";
 import { executeSessionLifecycle } from "./internal/session-lifecycle";
@@ -23,6 +25,7 @@ export type {
 
 export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
+export function authorizeCredentialAction(input: AdministratorCredentialInput): Promise<AdministratorCredentialResult>;
 export function authorizeCredentialAction(input: SessionPlanningInput): Promise<ServerPlanningAuth>;
 export function authorizeCredentialAction(input: SessionHomeInput): Promise<AppWorkspace>;
 export function authorizeCredentialAction(input: SessionLinkPageInput): Promise<SessionLinkPageState>;
@@ -36,7 +39,8 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {action: "workweek.private.write"}): Promise<PrivateDraftWriteResult>;
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
-export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState> {
+export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult> {
+  if (["administrator-access.read", "administrator-access.activate", "administrator-access.end", "administration.directory.read", "administration.eligibility.manage", "administration.technical.update"].includes(input.action)) return authorizeAdministrator(input as AdministratorCredentialInput);
   if (input.credential.kind === "server-cookies") {
     if (input.action === "session.planning") return serverPlanningAuth();
     if (input.action === "session.home") return serverHomeWorkspace();
