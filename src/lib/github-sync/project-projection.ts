@@ -53,14 +53,6 @@ type FounderOpsGitHubProjectFieldInput = {
   token: GitHubResourceCredential;
 };
 
-
-
-
-
-
-
-
-
 function sameCaseInsensitive(left: string, right: string) {
   return left.trim().localeCompare(right.trim(), undefined, { sensitivity: "accent" }) === 0;
 }
@@ -265,12 +257,6 @@ type ProjectMembershipData = {
     } | null;
   } | null;
 };
-
-
-
-
-
-
 
 export async function loadGitHubProjectSettings(supabase: SupabaseClient) {
   const { data, error } = await supabase

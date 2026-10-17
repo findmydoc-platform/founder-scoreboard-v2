@@ -28,8 +28,6 @@ export type GitHubSubIssueParentObservation = Readonly<{
   issueNumber: number;
 }> | null;
 
-
-
 export async function loadGitHubSubIssueParentObservation({
   childRepositoryFullName,
   childIssueNumber,

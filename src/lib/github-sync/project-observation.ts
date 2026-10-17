@@ -61,10 +61,6 @@ export type GitHubPlanningProjectObservation = Readonly<{
   changedFieldValue: GitHubPlanningFieldValue;
 }>;
 
-
-
-
-
 export async function loadGitHubPlanningProjectObservation({
   supabase,
   projectNodeId,

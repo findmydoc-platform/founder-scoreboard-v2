@@ -42,8 +42,6 @@ export type GitHubProjectValidation = {
   fields: ProjectField[];
 };
 
-
-
 export async function validateFounderOpsGitHubProject(owner: string, number: number, token: GitHubResourceCredential): Promise<GitHubProjectValidation> {
   if (!validGitHubProjectOwner(owner) || !validGitHubProjectNumber(number)) {
     throw new Error("GitHub-Organisation oder Project-Nummer ist ungültig.");

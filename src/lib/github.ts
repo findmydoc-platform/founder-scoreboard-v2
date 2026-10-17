@@ -38,8 +38,6 @@ function githubRawUrl(path: string, repository?: string | null) {
   return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-
-
 type SubIssueRelationshipData = {
   parentRepository?: {
     issue?: { id?: string; number?: number; url?: string } | null;
