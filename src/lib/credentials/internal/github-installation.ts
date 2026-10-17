@@ -1,3 +1,5 @@
+import { bindGitHubJob } from "./github-job";
+import { reassertDeliveryAdmission } from "./delivery-admission-scope";
 import { installationGraphqlDocuments } from "../../github-graphql-documents";
 import { allowedGitHubAssetUrl } from "../../github-asset-policy";
 import "server-only";
@@ -69,7 +71,8 @@ function configuration() {
   return { installationId, key };
 }
 
-async function installationToken(repositories: readonly string[]) {
+type JobBinding = Awaited<ReturnType<typeof bindGitHubJob>>;
+async function installationToken(repositories: readonly string[], job?: JobBinding) {
   const config = configuration();
   const key = `${config.key}:${repositories.join(",")}`;
   const cached = tokens.get(key);
@@ -78,8 +81,12 @@ async function installationToken(repositories: readonly string[]) {
   if (current) return current;
   const acquisition = (async () => {
     const jwt = await githubAppJwt();
+    const assertJob = job ? await job.reassert() : () => {};
+    const assertAdmission = await reassertDeliveryAdmission(job?.claim);
     // Configuration changes during async key loading cannot bind a token to a different installation.
     if (configuration().key !== config.key) throw new GitHubAppConfigurationError("GitHub-App-Konfiguration wurde geändert.");
+    assertJob();
+    assertAdmission();
     const body = await githubJson<{ token: string; expires_at: string }>(
       `https://api.github.com/app/installations/${config.installationId}/access_tokens`, {
         token: jwt, method: "POST", operation: "mutation",
@@ -133,24 +140,34 @@ export async function authorizeGitHubInstallation(input: GitHubInstallationInput
     throw new Error("GitHub-Ziel-Repository ist nicht freigegeben.");
   }
   const action = input.action;
+  if (action === "github.lifecycle.apply" && input.credential.kind !== "github-claimed-job") throw new Error("A claimed GitHub job is required for lifecycle access.");
   const organization = input.target.organization;
   const assetUrl = input.target.assetUrl;
   if ((action === "github.team.read" || action === "github.project.read") && (!organization || !/^[a-z\d](?:[a-z\d-]{0,38})$/i.test(organization))) throw new Error("GitHub-Organisation ist ungültig.");
   if (action === "github.asset.read" && (!assetUrl || !allowedGitHubAssetUrl(assetUrl))) throw new Error("GitHub-Anhang ist nicht freigegeben.");
   const binding = configuration().key;
+  const job = input.credential.kind === "github-claimed-job" ? await bindGitHubJob(input.credential.claim, action) : undefined;
   function assertBinding(credential: InstallationToken) {
     if (configuration().key !== binding) throw new GitHubAppConfigurationError("GitHub-App-Konfiguration wurde geändert.");
     if (Date.now() >= credential.expiresAt) throw new Error("GitHub-App-Installationstoken ist abgelaufen.");
   }
-  const initial = await installationToken(repositories);
+  const initial = await installationToken(repositories, job);
+  const assertInitialJob = job ? await job.reassert() : () => {};
+  const assertInitialAdmission = await reassertDeliveryAdmission(job?.claim);
   assertBinding(initial);
+  assertInitialJob();
+  assertInitialAdmission();
   const capability: GitHubInstallationCapability = Object.freeze({
     async asset(url: string) {
       if (configuration().key !== binding) throw new Error("GitHub-App-Konfiguration wurde geändert.");
       if (action !== "github.asset.read" || url !== assetUrl) throw new Error("GitHub-Aktion ist nicht freigegeben.");
-      const credential = await installationToken(repositories);
+      const credential = await installationToken(repositories, job);
       assertBinding(credential);
-      return fetchGitHubAsset(url, credential.token, () => assertBinding(credential));
+      return fetchGitHubAsset(url, credential.token, async () => {
+        const assertJob = job ? await job.reassert() : () => {};
+        const assertAdmission = await reassertDeliveryAdmission(job?.claim ?? null);
+        return () => { assertBinding(credential); assertJob(); assertAdmission(); };
+      });
     },
     async request(url: string, requestOptions: Omit<GitHubRequestOptions, "token">) {
       const options = { ...requestOptions, ...(requestOptions.body === undefined ? {} : { body: structuredClone(requestOptions.body) }) };
@@ -169,10 +186,14 @@ export async function authorizeGitHubInstallation(input: GitHubInstallationInput
         throw new Error("GitHub-Aktion ist nicht freigegeben.");
       }
       if (!permittedApiTarget(url, repositories, options, organization)) throw new Error("GitHub-Ziel ist nicht freigegeben.");
-      const credential = await installationToken(repositories);
+      const credential = await installationToken(repositories, job);
       assertBinding(credential);
       // No credential response or network failure replays a resource mutation.
-      return githubRequest(url, { ...options, token: credential.token } as GitHubRequestOptions, async () => () => assertBinding(credential));
+      return githubRequest(url, { ...options, token: credential.token } as GitHubRequestOptions, async () => {
+        const assertJob = job ? await job.reassert() : () => {};
+        const assertAdmission = await reassertDeliveryAdmission(job?.claim ?? null);
+        return () => { assertBinding(credential); assertJob(); assertAdmission(); };
+      });
     },
   });
   assertBinding(initial);
@@ -224,7 +245,7 @@ export async function installationOperationalStatus(): Promise<GitHubAppOperatio
 const maxGitHubAssetRedirects = 3;
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 
-async function fetchGitHubAsset(value: string, token: string, assertCurrent: () => void) {
+async function fetchGitHubAsset(value: string, token: string, authorizeDispatch: () => Promise<() => void>) {
   const initialUrl = allowedGitHubAssetUrl(value);
   if (!initialUrl) return null;
   let url: URL = initialUrl;
@@ -237,6 +258,7 @@ async function fetchGitHubAsset(value: string, token: string, assertCurrent: () 
     if (url.hostname === "github.com") headers.set("authorization", `Bearer ${token}`);
 
     // This URL passed the asset-host allowlist; every redirect is checked before the next request.
+    const assertCurrent = await authorizeDispatch();
     assertCurrent();
     const response: Response = await fetch(url, {
       method: "GET",

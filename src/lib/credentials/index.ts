@@ -1,3 +1,5 @@
+import { authorizeCronWebhook } from "./internal/cron-webhook";
+import type { CronWebhookInput, CronWebhookResult } from "./cron-types";
 import { authorizeAccount } from "./internal/account";
 import type { AccountCredentialInput, AccountCredentialResult } from "./account-types";
 import { authorizeReleaseIngest } from "./internal/release-ingest";
@@ -48,6 +50,7 @@ export type {
 
 export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
+export function authorizeCredentialAction(input: CronWebhookInput): Promise<CronWebhookResult>;
 export function authorizeCredentialAction(input: ReleaseIngestCredentialInput): Promise<ReleaseIngestCredentialResult>;
 export function authorizeCredentialAction(input: GitHubWebhookInput): Promise<GitHubWebhookResult>;
 export function authorizeCredentialAction(input: DecisionLogCredentialInput): Promise<DecisionLogCredentialResult>;
@@ -81,7 +84,8 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
 
-export function authorizeCredentialAction(input: AccountCredentialInput | ReleaseIngestCredentialInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | GoogleCalendarInput | GoogleCalendarConnectionInput | GitHubWebhookInput | DecisionLogCredentialInput | PlanningCredentialInput): Promise<AccountCredentialResult | ReleaseIngestCredentialResult | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string} | GitHubWebhookResult | DecisionLogCredentialResult | PlanningCredentialResult> {
+export function authorizeCredentialAction(input: CronWebhookInput | AccountCredentialInput | ReleaseIngestCredentialInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | GoogleCalendarInput | GoogleCalendarConnectionInput | GitHubWebhookInput | DecisionLogCredentialInput | PlanningCredentialInput): Promise<CronWebhookResult | AccountCredentialResult | ReleaseIngestCredentialResult | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string} | GitHubWebhookResult | DecisionLogCredentialResult | PlanningCredentialResult> {
+  if (input.action === "github.webhooks.drain") return input.credential.kind === "cron-request" ? authorizeCronWebhook(input) : Promise.resolve({ ok: false as const, status: 401 as const, error: "Ungültiger Cron-Secret." });
   if (input.action === "platform-release.ingest") return authorizeReleaseIngest(input);
   if (input.action === "github.webhook.accept") return input.credential.kind === "github-webhook-request" ? authorizeGitHubWebhook(input) : Promise.resolve({kind:"rejected" as const,status:403 as const,code:"github_webhook_unauthorized",message:"GitHub webhook credential is required."});
   if (input.action === "decision-log.read") return authorizeDecisionLog(input);
@@ -105,11 +109,14 @@ export function authorizeCredentialAction(input: AccountCredentialInput | Releas
   if (input.action==="github.attachment.write") return authorizeGitHubAttachment(input);
   if (input.action==="github.connection.status" || input.action==="github.connection.disconnect") return githubConnectionSession(input);
 
-  if (input.action.startsWith("github.") && input.credential.kind !== "github-installation") {
+  if (input.action.startsWith("github.") && input.credential.kind !== "github-installation" && input.credential.kind !== "github-claimed-job") {
     return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
   }
   if (input.action === "github.projection.apply" || input.action === "github.lifecycle.apply" || input.action === "github.issue.read" || input.action === "github.project.read" || input.action === "github.team.read" || input.action === "github.asset.read") return authorizeGitHubInstallation(input);
-  if (input.action === "github.installation.status") return installationOperationalStatus();
+  if (input.action === "github.installation.status") {
+    if (input.credential.kind !== "github-installation") return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
+    return installationOperationalStatus();
+  }
   if (input.credential.kind === "personal-planning-token") return authorizePersonalPlanning(input as PersonalPlanningCredentialInput);
   if (input.credential.kind !== "session-request") {
     return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
@@ -119,3 +126,5 @@ export function authorizeCredentialAction(input: AccountCredentialInput | Releas
   if (input.action === "calendar.read") return authorizeCalendar(input.credential.request);
   return authorizeLegacySession(input as CredentialActionInput);
 }
+
+export type { GitHubJobContext } from "./github-job-types";

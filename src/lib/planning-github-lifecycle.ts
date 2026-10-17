@@ -152,27 +152,14 @@ export async function drainPlanningGitHubLifecycleJobs({
   }
   if (!deliverableJobs.length) return summary;
 
-  let token: GitHubResourceCredential;
-  try {
-    token = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.lifecycle.apply", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
-  } catch (tokenError) {
-    const message = errorMessage(tokenError);
-    for (const job of deliverableJobs) {
-      try {
-        const finalized = await finalizeJob(supabase, job.id, lockToken, false, { error: message });
-        if (finalized.status === "failed") summary.failed += 1;
-        else summary.retryScheduled += 1;
-      } catch (finalizeError) {
-        summary.failed += 1;
-        summary.errors.push({ jobId: job.id, message: errorMessage(finalizeError) });
-      }
-    }
-    return summary;
-  }
-
-  for (const job of deliverableJobs) {
+  for (const sourceJob of deliverableJobs) {
+    const job = Object.freeze({ ...sourceJob });
     try {
-      await processJob(job, token);
+      const permission = await authorizeCredentialAction({
+        credential: { kind: "github-claimed-job", claim: Object.freeze({ family: "planning-lifecycle", id: job.id, lockToken }) },
+        action: "github.lifecycle.apply", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES },
+      });
+      await processJob(job, permission.github);
       await finalizeJob(supabase, job.id, lockToken, true, { statusReason: "delivered" });
       summary.completed += 1;
     } catch (jobError) {

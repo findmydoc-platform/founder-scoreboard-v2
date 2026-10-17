@@ -1,3 +1,4 @@
+import type { GitHubJobContext } from "./credentials/github-job-types";
 import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
 import "server-only";
 
@@ -479,8 +480,9 @@ export function createSupabaseGitHubPlanningWebhookStore(
 
 async function loadCurrentGitHubIssue(
   delivery: ClaimedGitHubPlanningDelivery,
+  claim: GitHubJobContext,
 ): Promise<GitHubPlanningIssueSnapshot> {
-  const token = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
+  const token = (await authorizeCredentialAction({ credential: { kind: "github-claimed-job", claim }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
   const issue = await getGitHubIssue(delivery.issueNumber, token, delivery.repositoryFullName);
   const nodeId = text(issue.node_id);
   const title = text(issue.title);
@@ -519,8 +521,9 @@ async function loadCurrentGitHubIssue(
 
 async function loadCurrentGitHubRelationship(
   delivery: ClaimedGitHubPlanningDelivery,
+  claim: GitHubJobContext,
 ): Promise<RelationshipObservation> {
-  const token = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
+  const token = (await authorizeCredentialAction({ credential: { kind: "github-claimed-job", claim }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
   const loadVersion = async ({
     repositoryFullName,
     issueNumber,
@@ -1090,10 +1093,10 @@ export async function processGitHubPlanningWebhookDelivery({
   deliveryId,
   supabase,
   store = createSupabaseGitHubPlanningWebhookStore(supabase),
-  loadIssue = loadCurrentGitHubIssue,
+  loadIssue: suppliedIssueLoader,
   loadIssueField,
   loadProject,
-  loadRelationship = loadCurrentGitHubRelationship,
+  loadRelationship: suppliedRelationshipLoader,
 }: {
   deliveryId: string;
   supabase: SupabaseClient;
@@ -1106,6 +1109,9 @@ export async function processGitHubPlanningWebhookDelivery({
   const lockToken = randomUUID();
   const delivery = await store.claim(deliveryId, lockToken);
   if (!delivery) return { kind: "skipped" };
+  const claim = Object.freeze({ family: "planning-webhook" as const, id: delivery.deliveryId, lockToken });
+  const loadIssue = suppliedIssueLoader || ((value: ClaimedGitHubPlanningDelivery) => loadCurrentGitHubIssue(value, claim));
+  const loadRelationship = suppliedRelationshipLoader || ((value: ClaimedGitHubPlanningDelivery) => loadCurrentGitHubRelationship(value, claim));
 
   try {
     if (delivery.senderType.toLowerCase() === "bot") {
@@ -1127,7 +1133,7 @@ export async function processGitHubPlanningWebhookDelivery({
           projectItemNodeId: projectDelivery.projectItemNodeId,
           contentNodeId: projectDelivery.projectContentNodeId,
           fieldNodeId: projectDelivery.projectFieldNodeId || null,
-          token: (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github,
+          token: (await authorizeCredentialAction({ credential: { kind: "github-claimed-job", claim }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github,
         })
       ));
       return processProjectDelivery({ delivery, lockToken, store, supabase, loadProject: projectLoader });
@@ -1183,7 +1189,7 @@ export async function processGitHubPlanningWebhookDelivery({
                 issueNumber: fieldDelivery.issueNumber,
                 issueNodeId: fieldDelivery.issueNodeId,
                 fieldName: managedFieldName,
-                token: (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github,
+                token: (await authorizeCredentialAction({ credential: { kind: "github-claimed-job", claim }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github,
               })
             )))(delivery, fieldName)),
             task,

@@ -1,9 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { apiError, supabaseUnavailable } from "@/lib/api-response";
-import { drainGitHubWebhookDeliveries } from "@/lib/github-webhook-drain";
-import { hasCronSecret, validateCronSecret } from "@/lib/maintenance-auth";
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { apiError } from "@/lib/api-response";
+import { authorizeCredentialAction } from "@/lib/credentials";
+import type { CronWebhookHealth } from "@/lib/credentials/cron-types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -30,29 +28,12 @@ function summarizeTerminalFailureReasons(rows: Array<{ reason?: string | null }>
     .sort((left, right) => left.reason.localeCompare(right.reason));
 }
 
-async function loadTerminalFailureReasons(supabase: SupabaseClient) {
-  const [planning, comments, projection, archivedPlanning, archivedComments] = await Promise.all([
-    supabase.from("github_planning_webhook_deliveries").select("status_reason").eq("status", "failed").is("archived_at", null),
-    supabase.from("github_webhook_deliveries").select("status_reason").eq("event_name", "issue_comment").eq("status", "failed").is("archived_at", null),
-    supabase.from("planning_github_projection_outbox").select("status_reason").eq("source_kind", "github_webhook").eq("status", "failed"),
-    supabase.from("github_planning_webhook_deliveries").select("archive_reason").eq("status", "failed").not("archived_at", "is", null),
-    supabase.from("github_webhook_deliveries").select("archive_reason").eq("event_name", "issue_comment").eq("status", "failed").not("archived_at", "is", null),
-  ]);
-  if (planning.error || comments.error || projection.error || archivedPlanning.error || archivedComments.error) {
-    throw new Error("GitHub webhook terminal failure reasons could not be loaded.");
-  }
+function terminalFailureSummary(health: CronWebhookHealth): TerminalFailureSummary {
+  const summarize = (values: Array<string | null>) => summarizeTerminalFailureReasons(values.map(reason => ({ reason })));
   return {
-    unresolved: {
-      planning: summarizeTerminalFailureReasons((planning.data || []).map((row) => ({ reason: row.status_reason }))),
-      comments: summarizeTerminalFailureReasons((comments.data || []).map((row) => ({ reason: row.status_reason }))),
-      projection: summarizeTerminalFailureReasons((projection.data || []).map((row) => ({ reason: row.status_reason }))),
-    },
-    archived: {
-      planning: summarizeTerminalFailureReasons((archivedPlanning.data || []).map((row) => ({ reason: row.archive_reason }))),
-      comments: summarizeTerminalFailureReasons((archivedComments.data || []).map((row) => ({ reason: row.archive_reason }))),
-      projection: [],
-    },
-  } satisfies TerminalFailureSummary;
+    unresolved: { planning: summarize(health.unresolved.planning), comments: summarize(health.unresolved.comments), projection: summarize(health.unresolved.projection) },
+    archived: { planning: summarize(health.archived.planning), comments: summarize(health.archived.comments), projection: [] },
+  };
 }
 
 function terminalFailureCount(reasons: TerminalFailureReason[]) {
@@ -60,29 +41,14 @@ function terminalFailureCount(reasons: TerminalFailureReason[]) {
 }
 
 export async function GET(request: NextRequest) {
-  if (!hasCronSecret()) {
-    return apiError("GitHub-Webhook-Cron ist nicht konfiguriert.", 503);
-  }
-  if (!validateCronSecret(request.headers.get("authorization"))) {
-    return apiError("Ungültiger Cron-Secret.", 401);
-  }
-  const supabase = getServerServiceRoleSupabase();
-  if (!supabase) return supabaseUnavailable();
-
+  const admission = await authorizeCredentialAction({ credential: { kind: "cron-request", request }, action: "github.webhooks.drain" });
+  if (!admission.ok) return apiError(admission.error, admission.status);
   try {
-    const deliveries = await drainGitHubWebhookDeliveries({ supabase, limit: 25 });
-    const [terminalFailureSummary, planningOutstanding, commentOutstanding, projectionOutstanding] = await Promise.all([
-      loadTerminalFailureReasons(supabase),
-      supabase.from("github_planning_webhook_deliveries").select("delivery_id", { count: "exact", head: true }).in("status", ["received", "processing", "retry_scheduled"]),
-      supabase.from("github_webhook_deliveries").select("delivery_id", { count: "exact", head: true }).eq("event_name", "issue_comment").in("status", ["received", "processing", "retry_scheduled"]),
-      supabase.from("planning_github_projection_outbox").select("id", { count: "exact", head: true }).eq("source_kind", "github_webhook").in("status", ["pending", "processing", "retry_scheduled"]),
-    ]);
-    const counts = [planningOutstanding, commentOutstanding, projectionOutstanding];
-    if (counts.some((result) => result.error || !Number.isSafeInteger(result.count) || Number(result.count) < 0)) {
-      throw new Error("GitHub webhook queue state could not be loaded.");
-    }
-    const terminalFailureReasons = terminalFailureSummary.unresolved;
-    const archivedTerminalFailureReasons = terminalFailureSummary.archived;
+    const deliveries = await admission.webhookDrain.run();
+    const health = await admission.webhookDrain.health();
+    const summary = terminalFailureSummary(health);
+    const terminalFailureReasons = summary.unresolved;
+    const archivedTerminalFailureReasons = summary.archived;
     const projectionTerminalFailed = terminalFailureCount(terminalFailureReasons.projection);
     const terminalFailed = terminalFailureCount(terminalFailureReasons.planning)
       + terminalFailureCount(terminalFailureReasons.comments)
@@ -103,12 +69,12 @@ export async function GET(request: NextRequest) {
       ...deliveries,
       projectionTerminalFailed,
       projectionDispatchFailed,
-      projectionOutstanding: Number(projectionOutstanding.count),
+      projectionOutstanding: health.outstanding.projection,
       terminalFailed,
       terminalFailureReasons,
       archivedTerminalFailed,
       archivedTerminalFailureReasons,
-      outstanding: Number(planningOutstanding.count) + Number(commentOutstanding.count) + Number(projectionOutstanding.count),
+      outstanding: health.outstanding.planning + health.outstanding.comments + health.outstanding.projection,
     }, { status: unhealthy ? 503 : 200 });
   } catch {
     return apiError("GitHub-Webhook-Ereignisse konnten nicht verarbeitet werden.", 500);

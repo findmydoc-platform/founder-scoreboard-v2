@@ -7,7 +7,7 @@ import type {
   PlanningItemGitHubSyncResult,
   TeamPlanningItemType,
 } from "@/features/planning-items/model/planning-items-contract";
-import { executePlanningItemGitHubSyncs } from "@/features/planning-items/model/planning-items-github-sync";
+import { executeClaimedPlanningItemGitHubSyncs } from "@/features/planning-items/model/planning-items-github-sync";
 
 type ProjectionRequest = Readonly<{
   id: string;
@@ -92,10 +92,12 @@ export async function dispatchPlanningGitHubProjections({
   let failed = 0;
 
   if (requests.length) {
-    for (const request of requests) {
+    for (const sourceRequest of requests) {
+      const request = Object.freeze({ ...sourceRequest });
       let result: PlanningItemGitHubSyncResult;
       try {
-        const executed = await executePlanningItemGitHubSyncs({
+        const executed = await executeClaimedPlanningItemGitHubSyncs({
+          claim: Object.freeze({ family: "planning-projection", id: request.id, lockToken }),
           supabase,
           actorProfileId: request.actor_profile_id || "",
           targets: [{
