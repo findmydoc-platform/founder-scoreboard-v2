@@ -452,3 +452,155 @@ test("trash withdrawal keeps proposer ownership and binds the following lifecycl
   expect(await permission.planning.runTrash("deliverable", call)).toMatchObject({ ok: false, error: { code: "forbidden" } });
   expect(await authorizeCredentialAction({ ...input, action: "planning.trash.restore" })).toMatchObject({ ok: false, status: 403 });
 });
+
+
+test("legacy Focus capabilities bind task ownership, entry and operation", async () => {
+  const protocol = administratorProtocol({ role: "founder" });
+  const authFetch = globalThis.fetch;
+  const writes = [];
+  let owner = "synthetic-profile";
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/active_tasks") return Response.json({ id: "focus-task", assignee: owner });
+    if (url.pathname === "/rest/v1/task_focus_items") {
+      if (request.method === "POST") { const body = await request.json(); writes.push(body); return Response.json({ ...body, id: 1 }); }
+      return Response.json([]);
+    }
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.focus.write", targetId: "focus-task" });
+  expect(permission.ok).toBe(true);
+  const values = { profileId: "foreign", focusDate: "2026-10-17", position: 1, nextStep: "Evidence", status: "planned" };
+  expect(await permission.planning.writeFocus(values)).toMatchObject({ error: { code: "42501" } });
+  expect(await permission.planning.writeFocus({ ...values, profileId: "synthetic-profile" })).toMatchObject({ error: null, data: { task_id: "focus-task" } });
+  expect(writes[0].profile_id).toBe("synthetic-profile");
+  expect(await permission.planning.deleteFocus()).toMatchObject({ error: { code: "42501" } });
+  owner = "foreign";
+  expect(await permission.planning.writeFocus({ ...values, profileId: "synthetic-profile" })).toMatchObject({ error: { code: "42501" } });
+  protocol.state.role = "viewer";
+  expect(await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.focus.write", targetId: "focus-task" })).toMatchObject({ ok: false, status: 403 });
+});
+
+
+test("Weekly self reports bind owner and meeting while lead reviews preserve scoring", async () => {
+  const protocol = administratorProtocol({ role: "founder" });
+  const authFetch = globalThis.fetch;
+  const writes = [];
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/meetings") return Response.json({ id: 7, title: "Weekly" });
+    if (url.pathname === "/rest/v1/meeting_attendance") { const body = await request.json(); writes.push(body); return Response.json({ id: 1, ...body }); }
+    if (url.pathname === "/rest/v1/profiles") return Response.json([{ id: "lead" }]);
+    if (["/rest/v1/notification_events", "/rest/v1/audit_log"].includes(url.pathname)) return new Response(null, { status: 201 });
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.attendance.write", targetId: "7" });
+  expect(grant.ok).toBe(true);
+  const values = { profileId: "synthetic-profile", status: "excused", absenceReason: "Customer appointment", reasonAccepted: false, writtenUpdate: "Evidence", points: 0 };
+  expect(await grant.planning.writeAttendance({ ...values, profileId: "foreign" })).toMatchObject({ error: { code: "42501" } });
+  expect(await grant.planning.writeAttendance({ ...values, points: 2 })).toMatchObject({ error: { code: "42501" } });
+  expect(await grant.planning.writeAttendance(values)).toMatchObject({ error: null, data: { meeting_id: 7, profile_id: "synthetic-profile", points: 0 } });
+  expect(await grant.planning.notifyAttendance([{ actor_profile_id: "synthetic-profile", entity_type: "meeting", entity_id: "7", type: "meeting.attendance_updated", recipient_profile_id: "foreign" }])).toMatchObject({ error: { code: "42501" } });
+  const { POST } = await importTestModule("src/app/api/meetings/[id]/attendance/route.ts", { "server-only": {} });
+  expect((await POST(protocol.request("/api/meetings/7/attendance", "POST", { status: "present" }), { params: Promise.resolve({ id: "7" }) })).status).toBe(403);
+  protocol.state.role = "deputy";
+  const response = await POST(protocol.request("/api/meetings/7/attendance", "POST", { profileId: "foreign", status: "present" }), { params: Promise.resolve({ id: "7" }) });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ attendance: { meetingId: 7, profileId: "foreign", points: 2 } });
+  expect(writes).toHaveLength(2);
+});
+
+
+test("task comments bind their author, item and committed delivery IDs", async () => {
+  const protocol = administratorProtocol({ role: "founder", responses: { create_task_comment_with_notifications: { comment: { id: 8, task_id: "comment-task", profile_id: "synthetic-profile", comment: "Evidence is ready" } } } });
+  const authFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/tasks") return Response.json({ id: "comment-task", task_type: "epic", title: "Comment task" });
+    if (url.pathname === "/rest/v1/profiles") return Response.json([{ id: "synthetic-profile", name: "Founder", platform_role: "founder" }]);
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.comment.create", targetId: "comment-task" });
+  expect(grant.ok).toBe(true);
+  expect(await grant.planning.writeComment({ comment: "Evidence is ready", mentions: [], recipients: [] })).toMatchObject({ data: { comment: { id: 8 } } });
+  expect(protocol.calls.find(call => call.name === "create_task_comment_with_notifications").body).toMatchObject({ p_task_id: "comment-task", p_profile_id: "synthetic-profile", p_deliver_to_github: false });
+  expect(await grant.planning.writeComment({ comment: "Evidence", mentions: [], recipients: ["foreign"] })).toMatchObject({ error: { code: "42501" } });
+  expect(await grant.planning.readCommentDelivery(999)).toMatchObject({ error: { code: "42501" } });
+  expect(await grant.planning.writeBlocker({ reason: "Foreign operation", impact: "", needsHelpFrom: "", notifications: [], mentions: [] }, {})).toMatchObject({ error: { code: "42501" } });
+  protocol.state.role = "viewer";
+  expect(await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.comment.create", targetId: "comment-task" })).toMatchObject({ ok: false, status: 403 });
+});
+
+
+test("blocker HTTP workflow retains owner and review-state restrictions", async () => {
+  const task = { id: "blocked-task", title: "Blocked", assignee: "synthetic-profile", owner: "synthetic-profile", status: "In Arbeit", task_type: "deliverable", review_status: "not_requested", score_final: false };
+  const protocol = administratorProtocol({ role: "founder", responses: { report_task_blocker_transaction_v2: { blocker: { id: 2, task_id: task.id, profile_id: "synthetic-profile", reason: "Missing dependency", status: "open" } } } });
+  const authFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/tasks") return Response.json(task);
+    if (url.pathname === "/rest/v1/profiles") return Response.json([{ id: "synthetic-profile", name: "Founder", platform_role: "founder" }]);
+    return authFetch(request);
+  });
+  const { POST } = await importTestModule("src/app/api/tasks/[id]/blockers/route.ts", { "server-only": {} });
+  const run = () => POST(protocol.request("/api/tasks/blocked-task/blockers", "POST", { reason: "Missing dependency" }), { params: Promise.resolve({ id: task.id }) });
+  expect((await run()).status).toBe(200);
+  expect(protocol.calls.find(call => call.name === "report_task_blocker_transaction_v2").body).toMatchObject({ p_task_id: task.id, p_actor_profile_id: "synthetic-profile" });
+  task.assignee = "foreign"; task.owner = "foreign";
+  expect((await run()).status).toBe(403);
+  task.assignee = "synthetic-profile"; task.review_status = "requested"; task.status = "Review";
+  expect((await run()).status).toBe(403);
+  expect(protocol.calls.filter(call => call.name === "report_task_blocker_transaction_v2")).toHaveLength(1);
+});
+
+
+test("attachment bookkeeping requires an authorized bound task before provider effects", async () => {
+  const protocol = administratorProtocol({ role: "founder" });
+  const authFetch = globalThis.fetch;
+  const audits = [];
+  let owner = "synthetic-profile";
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/tasks") return request.method === "GET" ? Response.json({ id: "attachment-task", task_type: "deliverable", status: "In Arbeit", assignee: owner, review_status: "not_requested" }) : new Response(null, { status: 204 });
+    if (url.pathname === "/rest/v1/audit_log") { const body = await request.json(); audits.push(body); return Response.json({ id: 9, ...body }); }
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const acquire = () => authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.attachment.write", targetId: "attachment-task" });
+  const grant = await acquire();
+  expect(grant.ok).toBe(true);
+  const values = { filename: "Evidence.pdf", contentType: "application/pdf", size: 42, url: "https://example.test/evidence" };
+  expect(await grant.planning.recordAttachment(values, {})).toMatchObject({ error: { code: "42501" } });
+  expect(await grant.planning.readCollaborationTask()).toMatchObject({ data: { id: "attachment-task" } });
+  expect(await grant.planning.recordAttachment(values, {})).toMatchObject({ data: { entity_id: "attachment-task", actor_profile_id: "synthetic-profile" } });
+  owner = "foreign";
+  const foreign = await acquire();
+  await foreign.planning.readCollaborationTask();
+  expect(await foreign.planning.recordAttachment(values, {})).toMatchObject({ error: { code: "42501" } });
+  expect(audits).toHaveLength(1);
+});
+
+
+test("GitHub comment import keeps viewer read access and binds the imported task", async () => {
+  const protocol = administratorProtocol({ role: "viewer", responses: { import_github_task_comments_with_mentions: { imported: 1 } } });
+  const authFetch = globalThis.fetch;
+  const writes = [];
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/tasks") { if (request.method !== "GET") writes.push(await request.json()); return Response.json({ id: "import-task", task_type: "deliverable", assignee: "other", status: "In Arbeit" }); }
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.github-comments.import", targetId: "import-task" });
+  expect(permission.ok).toBe(true);
+  expect(await permission.planning.importExternalComments([{ externalId: "7", body: "Evidence" }])).toMatchObject({ data: { imported: 1 } });
+  expect(protocol.calls.find(call => call.name === "import_github_task_comments_with_mentions").body.p_task_id).toBe("import-task");
+  expect(await permission.planning.updateImportedEvidence("https://example.test/evidence")).toMatchObject({ error: { code: "42501" } });
+  expect(writes).toHaveLength(0);
+  expect(await permission.planning.readProjectionKind()).toMatchObject({ error: { code: "42501" } });
+  protocol.state.profile = false;
+  expect(await permission.planning.importExternalComments([])).toMatchObject({ error: { code: "42501" } });
+});

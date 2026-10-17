@@ -31,9 +31,15 @@ import type { PlanningInvocation, PlanningResult } from "@/features/planning-ite
 
 type BoundInvocation = Omit<PlanningInvocation, "actor" | "mode">;
 const rejected = (): PlanningResult => ({ ok: false, error: { code: "forbidden", reason: "actionBinding" } });
+import { planningCollaborationOperations } from "./planning-collaboration";
+import { planningParticipationOperations } from "./planning-participation";
 import { planningSprintOperations } from "./planning-sprint";
 const forbidden = () => ({ code: "42501", message: "Keine Berechtigung für diese Aktion." });
 const planningPolicyActions: Record<PlanningCredentialInput["action"], CredentialAction> = {
+  "planning.github-comments.import": "team.read", "planning.github-sync.apply": "team.read",
+  "planning.attachment.write": "planning.contribute",
+  "planning.comment.create": "planning.contribute", "planning.blocker.report": "planning.contribute",
+  "planning.focus.write": "planning.contribute", "planning.focus.delete": "planning.contribute", "planning.attendance.write": "planning.contribute",
   "planning.revision.read": "team.read", "planning.board.read": "team.read", "planning.header.read": "team.read",
   "planning.backlog.read": "team.read", "planning.sprint.read": "team.read", "planning.task.read": "team.read",
   "planning.review.request": "planning.contribute", "planning.review.decide": "planning.contribute",
@@ -89,6 +95,8 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     return null;
   };
   return { ok: true as const, profile: profile ? Object.freeze({ ...profile }) : null, authority: authority ? Object.freeze({ ...authority, profile: Object.freeze({ ...authority.profile }), administratorAccess: Object.freeze({ ...authority.administratorAccess }), capabilities: Object.freeze({ ...authority.capabilities }) }) : undefined, planning: {
+    ...planningCollaborationOperations({ action, targetId, profile, service, current }),
+    ...planningParticipationOperations({ action, targetId, profile, service, current }),
     ...planningSprintOperations({ action, targetId, profile, service, current }),
     async readItemKind() {
       if ((action !== "planning.approval.decide" && !action.startsWith("planning.trash.")) || !targetId || await current()) return { data: null, error: forbidden() };
