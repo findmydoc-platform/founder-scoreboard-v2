@@ -1,15 +1,12 @@
 import { defaultGitHubRepository } from "@/lib/github-repositories";
 import { NextResponse, type NextRequest } from "next/server";
-import { requireTeamMember } from "@/lib/authz";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
 import { authorizeCredentialAction, type GitHubInstallationCapability } from "@/lib/credentials";
-import { loadGitHubMentionTeam } from "@/lib/github-mention-team-config";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { resolveGitHubCommentMentionSnapshot } from "@/lib/github-comment-mention-snapshot";
-import { importGitHubTaskCommentsWithMentions } from "@/lib/github-comment-mention-import";
-import { apiError, requireApiContext } from "@/lib/api-response";
+import { apiError } from "@/lib/api-response";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
-import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 function isAppMirroredComment(body: string) {
   return /<!--\s*fmd-(?:comment|review)-id:\d+\s*-->/.test(body);
@@ -24,20 +21,16 @@ function extractEvidenceFromIssueBody(body: string) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireTeamMember);
+  const { id } = await context.params;
+  const apiContext = await requirePlanningContext(request, "planning.github-comments.import", id);
   if (!apiContext.ok) return apiContext.response;
 
-  const { permission, supabase } = apiContext;
+  const { permission, planning } = apiContext;
 
-  const { id } = await context.params;
-  const activeItem = await requireActivePlanningItem(supabase, id);
+  const activeItem = await planning.ensureCollaborationActive();
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
 
-  const { data: task, error: taskError } = await supabase
-    .from("tasks")
-    .select("id,title,assignee,owner,status,review_owner_profile_id,review_status,score_final,evidence_link,issue_url,github_repo,github_issue_number,issue_number,task_type")
-    .eq("id", id)
-    .single();
+  const { data: task, error: taskError } = await planning.readCollaborationTask();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
   if (task.task_type === "epic" || task.task_type === "initiative") {
@@ -93,21 +86,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     unrestricted: !permission.profile,
   });
   if (importedEvidenceLink && evidencePermissions.canEditEvidence && (!currentEvidence || currentEvidence === String(task.issue_url || "").trim())) {
-    const { error: evidenceError } = await supabase
-      .from("tasks")
-      .update({
-        evidence_link: importedEvidenceLink,
-        github_issue_sync_status: "not_synced",
-        github_issue_sync_error: null,
-      })
-      .eq("id", id);
+    const { error: evidenceError } = await planning.updateImportedEvidence(importedEvidenceLink);
     if (evidenceError) return apiError(evidenceError.message, 500);
   } else {
     importedEvidenceLink = "";
   }
   const [{ data: profiles, error: profilesError }, mentionTeam] = await Promise.all([
-    supabase.from("profiles").select("id,name,github_login"),
-    loadGitHubMentionTeam(supabase),
+    planning.readGitHubImportProfiles(),
+    planning.readGitHubMentionTeam(),
   ]);
   if (profilesError) return apiError(profilesError.message, 500);
   const mentionProfiles = (profiles || []).map((profile) => ({
@@ -126,11 +112,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     mention_recipients_initialized: boolean;
   }> = [];
   if (externalIds.length) {
-    const { data: existingComments, error: existingCommentsError } = await supabase
-      .from("task_external_comments")
-      .select("external_id,author_login,body,source_updated_at,mention_recipient_profile_ids,mention_recipients_initialized")
-      .eq("source", "github")
-      .in("external_id", externalIds);
+    const { data: existingComments, error: existingCommentsError } = await planning.readExistingExternalComments(externalIds);
     if (existingCommentsError) return apiError(existingCommentsError.message, 500);
     existingCommentRows = existingComments || [];
   }
@@ -169,14 +151,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       };
     });
 
-  const { data: importResult, error: importError } = await importGitHubTaskCommentsWithMentions(supabase, id, externalRows);
+  const { data: importResult, error: importError } = await planning.importExternalComments(externalRows);
   if (importError) return apiError(importError.message, 500);
 
-  const { data: importedComments, error: importedError } = await supabase
-    .from("task_external_comments")
-    .select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at")
-    .eq("task_id", id)
-    .order("created_at", { ascending: true });
+  const { data: importedComments, error: importedError } = await planning.readImportedComments();
 
   if (importedError) return apiError(importedError.message, 500);
 

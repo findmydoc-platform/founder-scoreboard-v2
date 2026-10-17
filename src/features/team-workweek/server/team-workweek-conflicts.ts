@@ -1,3 +1,4 @@
+import type { WorkweekBookkeeping } from "./team-workweek-bookkeeping";
 import type { NextRequest } from "next/server";
 import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
@@ -279,6 +280,7 @@ export async function getOpenTeamWorkweekConflict(serviceSupabase: SupabaseClien
 
 export async function resolveTeamWorkweekConflict({
   request,
+  bookkeeping,
   conflictId,
   conflictRevision,
   decision,
@@ -294,6 +296,7 @@ export async function resolveTeamWorkweekConflict({
   conflictRevision: number;
   decision: "founderops" | "google";
   request?: NextRequest;
+  bookkeeping?: WorkweekBookkeeping;
   getAccessToken?: typeof calendarForWorkweekOwner;
   now?: () => Date;
   observe?: typeof observeGoogleWorkweek;
@@ -327,9 +330,9 @@ export async function resolveTeamWorkweekConflict({
     if(operation.error) throw new TeamWorkweekConflictError("unavailable","Auflösungsstatus ist nicht verfügbar.");
     if(operation.data?.attempt_generation){
       if(conflict.decision!==decision) throw new TeamWorkweekConflictError("stale","Konflikt wurde bereits anders entschieden.");
-      const publication=await publish({request,serviceSupabase,userSupabase,versionId:conflict.resolution_version_id,now});
+      const publication=await publish({request,bookkeeping,serviceSupabase,userSupabase,versionId:conflict.resolution_version_id,now});
       if(publication.status==="published"){
-        const completed=await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution",{p_conflict_id:conflictId,p_owner_profile_id:ownerProfileId,p_conflict_revision:conflictRevision,p_resolved_at:publication.lastSyncAt || now().toISOString()});
+        const completed=bookkeeping ? await bookkeeping.completeConflict({publicationId:publication.id,conflictId,ownerProfileId,revision:conflictRevision,resolvedAt:publication.lastSyncAt || now().toISOString()}) : await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution",{p_conflict_id:conflictId,p_owner_profile_id:ownerProfileId,p_conflict_revision:conflictRevision,p_resolved_at:publication.lastSyncAt || now().toISOString()});
         if(completed.error) throw new TeamWorkweekConflictError("unavailable","Bestätigte Konfliktauflösung konnte nicht abgeschlossen werden.");
       }
       return publication;
@@ -387,9 +390,9 @@ export async function resolveTeamWorkweekConflict({
   }
 
   if (!versionId) throw new TeamWorkweekConflictError("unavailable", "Konfliktauflösung ist unvollständig.");
-  const publication = await publish({ request, serviceSupabase, userSupabase, versionId, now, transitionsFirst: true });
+  const publication = await publish({ request, bookkeeping, serviceSupabase, userSupabase, versionId, now, transitionsFirst: true });
   if (publication.status === "published") {
-    const completed = await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution", {
+    const completed = bookkeeping ? await bookkeeping.completeConflict({ publicationId: publication.id, conflictId, ownerProfileId, revision: conflictRevision, resolvedAt: publication.lastSyncAt || now().toISOString() }) : await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution", {
       p_conflict_id: conflictId,
       p_owner_profile_id: ownerProfileId,
       p_conflict_revision: conflictRevision,

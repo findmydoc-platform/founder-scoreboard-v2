@@ -1,5 +1,13 @@
 import { authorizeAccount } from "./internal/account";
 import type { AccountCredentialInput, AccountCredentialResult } from "./account-types";
+import { authorizeReleaseIngest } from "./internal/release-ingest";
+import type { ReleaseIngestCredentialInput, ReleaseIngestCredentialResult } from "./release-ingest-types";
+import { authorizeGitHubWebhook } from "./internal/github-webhook";
+import type { GitHubWebhookInput, GitHubWebhookResult } from "./github-webhook-types";
+import { authorizeDecisionLog } from "./internal/notion";
+import type { DecisionLogCredentialInput, DecisionLogCredentialResult } from "./notion-types";
+import { authorizePlanning, isPlanningAction } from "./internal/planning";
+import type { PlanningCredentialInput, PlanningCredentialResult } from "./types";
 import { authorizeGoogleCalendar, authorizeGoogleCalendarConnection } from "./internal/google-calendar";
 import type { GoogleCalendarCapability, GoogleCalendarInput, GoogleCalendarConnectionInput } from "./types";
 import type { GoogleWorkspaceConnectionStatus } from "@/features/team-workweek/model/google-workspace-connection";
@@ -40,6 +48,10 @@ export type {
 
 export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
+export function authorizeCredentialAction(input: ReleaseIngestCredentialInput): Promise<ReleaseIngestCredentialResult>;
+export function authorizeCredentialAction(input: GitHubWebhookInput): Promise<GitHubWebhookResult>;
+export function authorizeCredentialAction(input: DecisionLogCredentialInput): Promise<DecisionLogCredentialResult>;
+export function authorizeCredentialAction(input: PlanningCredentialInput): Promise<PlanningCredentialResult>;
 export function authorizeCredentialAction(input: GoogleCalendarInput & {action:"google-calendar.workweek"}): Promise<{ok:true;calendar:GoogleCalendarCapability}>;
 export function authorizeCredentialAction(input: GoogleCalendarInput & {action:"google-calendar.connection.status"}): Promise<GoogleWorkspaceConnectionStatus>;
 export function authorizeCredentialAction(input: GoogleCalendarInput & {action:"google-calendar.connection.remove"}): Promise<{ok:true}>;
@@ -69,7 +81,11 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
 
-export function authorizeCredentialAction(input: AccountCredentialInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | GoogleCalendarInput | GoogleCalendarConnectionInput): Promise<AccountCredentialResult | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string}> {
+export function authorizeCredentialAction(input: AccountCredentialInput | ReleaseIngestCredentialInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | GoogleCalendarInput | GoogleCalendarConnectionInput | GitHubWebhookInput | DecisionLogCredentialInput | PlanningCredentialInput): Promise<AccountCredentialResult | ReleaseIngestCredentialResult | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string} | GitHubWebhookResult | DecisionLogCredentialResult | PlanningCredentialResult> {
+  if (input.action === "platform-release.ingest") return authorizeReleaseIngest(input);
+  if (input.action === "github.webhook.accept") return input.credential.kind === "github-webhook-request" ? authorizeGitHubWebhook(input) : Promise.resolve({kind:"rejected" as const,status:403 as const,code:"github_webhook_unauthorized",message:"GitHub webhook credential is required."});
+  if (input.action === "decision-log.read") return authorizeDecisionLog(input);
+  if (isPlanningAction(input.action)) return authorizePlanning(input as PlanningCredentialInput);
   if (input.action === "google-calendar.connection.start" || input.action === "google-calendar.connection.complete") return authorizeGoogleCalendarConnection(input as GoogleCalendarConnectionInput);
   if (input.action === "google-calendar.workweek" || input.action === "google-calendar.connection.status" || input.action === "google-calendar.connection.remove") return authorizeGoogleCalendar(input as GoogleCalendarInput);
   if (input.action === "google-chat.status" && input.credential.kind === "google-chat-configuration") return Promise.resolve(googleChatStatus());

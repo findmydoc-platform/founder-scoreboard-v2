@@ -1,23 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
-import { apiError, requireApiContext } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
-import { loadPlanningHeaderData } from "@/lib/planning-header-data";
-import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
+import { apiError, authzError } from "@/lib/api-response";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 
 export async function GET(request: NextRequest) {
-  const apiContext = await requireApiContext(request, requireTeamMember);
+  const apiContext = await requirePlanningContext(request, "planning.sprint.read");
   if (!apiContext.ok) return apiContext.response;
   const currentProfile = apiContext.permission.profile;
-  const [result, headerData] = await Promise.all([
-    createSupabaseSprintReadModel(apiContext.supabase).load({ authorized: true, actorProfileId: currentProfile?.id || null }),
-    loadPlanningHeaderData(apiContext.supabase, {
-      currentProfileId: currentProfile?.id || null,
-      platformRole: currentProfile?.platformRole || null,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
+  const [result, header] = await Promise.all([
+    apiContext.planning.loadSprint(), apiContext.planning.loadHeader(),
   ]);
+  if (!header.ok) return authzError(header);
   if (result.status === "forbidden") return apiError("Sprint darf nicht geladen werden.", 403);
   if (result.status === "unavailable") return apiError("Sprint konnte nicht geladen werden.", 503);
-  return NextResponse.json({ model: result.model, headerData, currentProfile });
+  return NextResponse.json({ model: result.model, headerData: header.headerData, currentProfile });
 }

@@ -1,34 +1,18 @@
 import assert from "node:assert/strict";
 
-import { createHmac } from "node:crypto";
-
 import { test } from "vitest";
 
 import { importTestModule } from "../../helpers/vitest-module.mjs";
-
-const webhookSecret = "test-webhook-secret";
 
 const expectedInstallationId = "42";
 
 const expectedOrganizationId = "606";
 
-const allowedRepositories = new Set([
-  "findmydoc-platform/management",
-  "findmydoc-platform/website",
-  "findmydoc-platform/clinic-dashboard",
-]);
+const webhook = await importTestModule("src/lib/github-webhook-intake.ts", {"server-only":{}});
 
-const webhook = await importTestModule("src/lib/github-webhook-intake.ts", {
-  "server-only": {},
-  "./github-repositories": {
-    normalizeGitHubRepository: (value) => allowedRepositories.has(value) ? value : null,
-  },
-});
-
-function signedEnvelope(body, {
+function rawEnvelope(body, {
   deliveryId = "delivery-123",
   eventName = "issues",
-  secret = webhookSecret,
 } = {}) {
   const rawBody = Buffer.from(typeof body === "string" ? body : JSON.stringify(body));
   return {
@@ -36,15 +20,14 @@ function signedEnvelope(body, {
     headers: {
       deliveryId,
       eventName,
-      signature: `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`,
+      signature: null,
     },
   };
 }
 
 function inspect(body, envelopeOptions = {}, intakeOptions = {}) {
-  return webhook.inspectGitHubIssueWebhook({
-    ...signedEnvelope(body, envelopeOptions),
-    webhookSecret,
+  return webhook.normalizeGitHubIssueWebhook({
+    ...rawEnvelope(body, envelopeOptions),
     expectedInstallationId,
     expectedOrganizationId,
     ...intakeOptions,

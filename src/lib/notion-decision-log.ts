@@ -1,18 +1,6 @@
 import "server-only";
 
-const notionApiVersion = "2026-03-11";
-const notionPageSize = 100;
-export const NOTION_DECISION_LOG_REQUEST_TIMEOUT_MS = 8_000;
-export const NOTION_DECISION_LOG_TOTAL_TIMEOUT_MS = 15_000;
-
-type RuntimeEnvironment = Record<string, string | undefined>;
-
-type NotionDecisionLogLoaderOptions = {
-  now?: () => number;
-  createTimeoutSignal?: (timeoutMs: number) => AbortSignal;
-  requestTimeoutMs?: number;
-  totalTimeoutMs?: number;
-};
+import type { NotionDecisionLogCapability } from "./credentials/notion-types";
 
 type NotionPage = {
   id?: unknown;
@@ -144,10 +132,6 @@ export function mapNotionDecisionLogEntry(page: unknown): NotionDecisionLogEntry
   };
 }
 
-function normalizeDataSourceId(value: string) {
-  return value.replace(/^collection:\/\//, "").trim();
-}
-
 function invalidResponse(fetchedAt: string): NotionDecisionLogResult {
   return {
     ok: false,
@@ -166,57 +150,18 @@ function notionUnavailable(fetchedAt: string): NotionDecisionLogResult {
   };
 }
 
-export async function loadNotionDecisionLog(
-  environment: RuntimeEnvironment = process.env,
-  fetcher: typeof fetch = fetch,
-  options: NotionDecisionLogLoaderOptions = {},
-): Promise<NotionDecisionLogResult> {
+export async function loadNotionDecisionLog(notion: NotionDecisionLogCapability | null): Promise<NotionDecisionLogResult> {
   const fetchedAt = new Date().toISOString();
-  const token = environment.NOTION_DECISION_LOG_TOKEN?.trim() || "";
-  const dataSourceId = normalizeDataSourceId(environment.NOTION_DECISION_LOG_DATA_SOURCE_ID || "");
-
-  if (environment.NOTION_DECISION_LOG_ENABLED === "false" || !token || !dataSourceId) {
-    return {
-      ok: false,
-      code: "missing_configuration",
-      fetchedAt,
-      message: "Die Notion-Konfiguration für das Decision Log fehlt.",
-    };
-  }
+  if (!notion) return { ok: false, code: "missing_configuration", fetchedAt, message: "Die Notion-Konfiguration für das Decision Log fehlt." };
 
   const entries: NotionDecisionLogEntry[] = [];
   const seenCursors = new Set<string>();
-  const now = options.now || Date.now;
-  const createTimeoutSignal = options.createTimeoutSignal || ((timeoutMs: number) => AbortSignal.timeout(timeoutMs));
-  const requestTimeoutMs = Math.max(1, options.requestTimeoutMs || NOTION_DECISION_LOG_REQUEST_TIMEOUT_MS);
-  const totalTimeoutMs = Math.max(1, options.totalTimeoutMs || NOTION_DECISION_LOG_TOTAL_TIMEOUT_MS);
-  const startedAt = now();
   let cursor = "";
 
   do {
-    const remainingMs = totalTimeoutMs - (now() - startedAt);
-    if (remainingMs <= 0) return notionUnavailable(fetchedAt);
-
-    let response: Response;
-    try {
-      response = await fetcher(`https://api.notion.com/v1/data_sources/${encodeURIComponent(dataSourceId)}/query`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "Notion-Version": notionApiVersion,
-        },
-        body: JSON.stringify({
-          page_size: notionPageSize,
-          sorts: [{ property: "Datum", direction: "descending" }],
-          ...(cursor ? { start_cursor: cursor } : {}),
-        }),
-        cache: "no-store",
-        signal: createTimeoutSignal(Math.min(requestTimeoutMs, remainingMs)),
-      });
-    } catch {
-      return notionUnavailable(fetchedAt);
-    }
+    let response: Awaited<ReturnType<NotionDecisionLogCapability["queryPage"]>>;
+    try { response = await notion.queryPage(cursor); }
+    catch { return notionUnavailable(fetchedAt); }
 
     if (!response.ok) {
       return {
@@ -227,7 +172,7 @@ export async function loadNotionDecisionLog(
       };
     }
 
-    const payload = await response.json().catch(() => null);
+    const payload = response.payload;
     if (!isRecord(payload) || !Array.isArray(payload.results)) return invalidResponse(fetchedAt);
 
     entries.push(...payload.results

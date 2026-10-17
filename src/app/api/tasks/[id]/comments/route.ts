@@ -1,22 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
-import { requirePlanningContributor } from "@/lib/authz";
-import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
+import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 import { mentionedProfileIds } from "@/lib/mentions";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
+import { apiError } from "@/lib/api-response";
 
 type CommentPayload = {
   comment?: string;
 };
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<CommentPayload>(request, requirePlanningContributor, {});
+  const { id } = await context.params;
+  const apiContext = await requirePlanningJsonContext<CommentPayload>(request, "planning.comment.create", {}, id);
   if (!apiContext.ok) return apiContext.response;
 
-  const { payload, permission, supabase } = apiContext;
-  const { id } = await context.params;
-  const activeItem = await requireActivePlanningItem(supabase, id);
+  const { payload, permission, planning } = apiContext;
+  const activeItem = await planning.ensureCollaborationActive();
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const comment = cleanText(payload.comment, 4000);
 
@@ -24,17 +22,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Kommentar ist erforderlich.", 400);
   }
 
-  const { data: task, error: taskError } = await supabase
-    .from("tasks")
-    .select("id,title,task_type,assignee,owner,github_issue_number,github_issue_url,issue_number,issue_url")
-    .eq("id", id)
-    .single();
+  const { data: task, error: taskError } = await planning.readCollaborationTask();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
-  const { data: profiles, error: profilesError } = await supabase
-    .from("profiles")
-    .select("id,name,github_login,platform_role");
+  const { data: profiles, error: profilesError } = await planning.readCollaborationProfiles();
   if (profilesError) return apiError(profilesError.message, 500);
 
   const actorProfileId = permission.profile?.id || "";
@@ -56,17 +48,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     });
 
   const isStrategic = task.task_type === "epic" || task.task_type === "initiative";
-  const { data: transaction, error: insertError } = await supabase.rpc(
-    "create_task_comment_with_notifications",
-    {
-      p_task_id: id,
-      p_profile_id: actorProfileId,
-      p_comment: comment,
-      p_deliver_to_github: !isStrategic,
-      p_mention_recipient_profile_ids: [...mentionedRecipients],
-      p_comment_recipient_profile_ids: [...commentRecipients],
-    },
-  );
+  const { data: transaction, error: insertError } = await planning.writeComment({ comment, mentions: [...mentionedRecipients], recipients: [...commentRecipients] });
   const created = transaction?.comment as {
     id: number;
     task_id: string;
@@ -78,15 +60,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (insertError || !created) return apiError(insertError?.message || "Kommentar konnte nicht gespeichert werden.", 500);
 
   if (!isStrategic) {
-    await deliverPendingGitHubComments({ supabase, taskId: id, limit: 20 }).catch(() => undefined);
+    await planning.deliverComments().catch(() => undefined);
   }
   const delivery = isStrategic
     ? null
-    : await supabase
-      .from("task_comment_github_deliveries")
-      .select("status,github_comment_url")
-      .eq("task_comment_id", created.id)
-      .maybeSingle<{ status: string; github_comment_url: string | null }>();
+    : await planning.readCommentDelivery(created.id);
   const deliveryStatus = isStrategic
     ? "not_applicable"
     : delivery?.data?.status || transaction?.deliveryStatus || "pending";

@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requirePlanningContributor } from "@/lib/authz";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 import type { MeetingAttendanceStatus } from "@/lib/types";
-import { apiError, requireApiContext } from "@/lib/api-response";
+import { apiError } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 
 type AttendancePayload = {
@@ -25,12 +25,12 @@ function defaultPoints(status: MeetingAttendanceStatus, reasonAccepted: boolean,
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requirePlanningContributor);
+  const { id } = await context.params;
+  const apiContext = await requirePlanningContext(request, "planning.attendance.write", id);
   if (!apiContext.ok) return apiContext.response;
 
-  const { permission, supabase } = apiContext;
+  const { permission, planning } = apiContext;
 
-  const { id } = await context.params;
   const meetingId = Number(id);
   if (!Number.isFinite(meetingId)) return apiError("Ungültiges Meeting.", 400);
 
@@ -58,32 +58,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     ? Math.max(0, Math.min(2, Math.round(Number(payload.points))))
     : isLead ? defaultPoints(status, reasonAccepted, writtenUpdate) : 0;
 
-  const { data: meeting, error: meetingError } = await supabase
-    .from("meetings")
-    .select("id,title")
-    .eq("id", meetingId)
-    .single();
+  const { data: meeting, error: meetingError } = await planning.readAttendanceMeeting();
   if (meetingError || !meeting) return apiError("Meeting wurde nicht gefunden.", 404);
 
-  const { data: attendance, error } = await supabase
-    .from("meeting_attendance")
-    .upsert({
-      meeting_id: meetingId,
-      profile_id: profileId,
-      status,
-      absence_reason: absenceReason,
-      reason_accepted: reasonAccepted,
-      written_update: writtenUpdate,
-      points,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "meeting_id,profile_id" })
-    .select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at")
-    .single();
+  const { data: attendance, error } = await planning.writeAttendance({ profileId, status, absenceReason, reasonAccepted, writtenUpdate, points });
 
   if (error || !attendance) return apiError(error?.message || "Weekly-Rückmeldung konnte nicht gespeichert werden.", 500);
 
   if (!isLead && status !== "pending") {
-    const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
+    const { data: leads } = await planning.readAttendanceLeads();
     const notifications = (leads || [])
       .filter((lead) => lead.id !== permission.profile?.id)
       .map((lead) => createNotificationPayload("meeting.attendance_updated", {
@@ -94,28 +77,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         title: `Weekly-Rückmeldung: ${meeting.title}`,
         body: `${profileId}: ${status}${absenceReason ? `\nGrund: ${absenceReason}` : ""}`,
       }));
-    if (notifications.length) await supabase.from("notification_events").insert(notifications);
+    if (notifications.length) await planning.notifyAttendance(notifications);
   }
 
   if (isLead && profileId !== permission.profile?.id) {
-    await supabase.from("notification_events").insert(createNotificationPayload("meeting.attendance_updated", {
+    await planning.notifyAttendance([createNotificationPayload("meeting.attendance_updated", {
       actorProfileId: permission.profile?.id,
       recipientProfileId: profileId,
       entityType: "meeting",
       entityId: String(meetingId),
       title: `Weekly bewertet: ${meeting.title}`,
       body: `${status} · ${points} Punkte${absenceReason ? `\nGrund: ${absenceReason}` : ""}`,
-    }));
+    })]);
   }
 
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "meeting.attendance.update",
-    entity_type: "meeting",
-    entity_id: String(meetingId),
-    after_data: { profileId, status, absenceReason, reasonAccepted, points, mode: isLead ? "lead_review" : "founder_self_report" },
-    ...auditRequestMetadata(request),
-  });
+  await planning.auditAttendance({ profileId, status, absenceReason, reasonAccepted, points, mode: isLead ? "lead_review" : "founder_self_report" }, auditRequestMetadata(request));
 
   return NextResponse.json({
     ok: true,
