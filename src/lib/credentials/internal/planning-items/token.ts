@@ -139,6 +139,8 @@ export async function requireTeamPlanningItemScope(
     || typeof authenticated.scopeGranted !== "boolean"
     || !authenticated.expiresAt
     || !authenticated.evaluatedAt
+    || !Number.isFinite(Date.parse(authenticated.expiresAt))
+    || !Number.isFinite(Date.parse(authenticated.evaluatedAt))
     || !Number.isFinite(authenticated.remainingSeconds)
   ) {
     return {
@@ -149,11 +151,17 @@ export async function requireTeamPlanningItemScope(
     };
   }
 
-  try { await authorizePersonalTokenWorkspace(supabase, authenticated.profile.id, tokenHash, scope, startedAt, Date.parse(authenticated.expiresAt)); }
+  const expired = () => Date.now() >= Date.parse(authenticated.expiresAt);
+  const inactive = () => ({ ok: false as const, status: 401 as const, code: "TOKEN_INACTIVE" as const, error: "Planning-API-Token ist ungültig oder abgelaufen." });
+  if (expired()) return inactive();
+
+  try { await authorizePersonalTokenWorkspace(supabase, authenticated.profile.id, tokenHash, scope, authenticated.scopes, startedAt, Date.parse(authenticated.expiresAt)); }
   catch (error) {
+    if (expired()) return inactive();
     return { ok: false, status: error instanceof WorkspaceAccessError ? error.status : 503, code: "AUTHORIZATION_UNAVAILABLE", error: "Workspace-Zugang des Token-Inhabers ist nicht freigegeben." };
   }
 
+  if (expired()) return inactive();
   return {
     ok: true,
     supabase,

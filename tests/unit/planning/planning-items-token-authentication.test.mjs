@@ -54,7 +54,7 @@ test.each([
 });
 
 test("personal token authorization rejects malformed and inconsistent receipts", async () => {
-  for (const receipt of [{ tokenId: null }, { scopes: ["unknown:scope"] }, { scopeGranted: false }, { remainingSeconds: null }]) {
+  for (const receipt of [{ tokenId: null }, { scopes: ["unknown:scope"] }, { scopeGranted: false }, { remainingSeconds: null }, { expiresAt: "invalid-date" }, { evaluatedAt: "invalid-date" }]) {
     const token = await fixture({ receipt });
     expect(await token.authorize()).toMatchObject({ ok: false, code: "AUTHORIZATION_UNAVAILABLE" });
   }
@@ -167,4 +167,10 @@ test("a GitHub capability accepts only its actor's enqueued projection ID", asyn
   const accepted = await result.planningItems.enqueueGitHubProjection({ tokenId: "foreign-token", actorProfileId: "foreign-owner", itemId: "foreign-item", idempotencyKey: "synthetic-key", command: { createIfMissing: false } });
   expect(accepted).toMatchObject({ ok: true, value: { operationId: "accepted-operation" } });
   await expect(result.planningItems.dispatchGitHubProjection("foreign-operation")).rejects.toMatchObject({ code: "P0007" });
+});
+
+
+test("a known token deadline is enforced even if its authentication receipt arrives late", async () => {
+  const token = await fixture({ receipt: { expiresAt: new Date(Date.now() - 1).toISOString() } });
+  expect(await token.authorize()).toMatchObject({ ok: false, status: 401, code: "TOKEN_INACTIVE" });
 });

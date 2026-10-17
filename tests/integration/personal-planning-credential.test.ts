@@ -25,6 +25,7 @@ it("personal planning HTTP contracts retain accounting, owner restrictions, revo
     await database.query("insert into auth.users(id,email,role,aud,email_confirmed_at) values ($1,'synthetic-pat@example.test','authenticated','authenticated',now())", [userId]);
     await database.query("insert into public.profiles(id,auth_user_id,name,platform_role) values ($1,$2,'Synthetic Token Owner','founder')", [profileId, userId]);
     await database.query("insert into public.profiles(id,name,platform_role) values ($1,'Other Token Owner','founder')", [otherProfileId]);
+    await database.query("insert into public.administrator_access_grants(profile_id,eligible,active_until) values ($1,true,now()+interval '1 hour')", [profileId]);
     await database.query("insert into auth.sessions(id,user_id,created_at) values ($1,$2,now())", [sessionId, userId]);
     await database.query("update workspace_private.configuration set mode='legacy',linking_enforced=false");
     for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: local.API_URL, SUPABASE_URL: local.API_URL,
@@ -45,6 +46,7 @@ it("personal planning HTTP contracts retain accounting, owner restrictions, revo
     });
     const routes = await importTestModule("src/app/api/team/planning-items/v2/tokens/route.ts", { "server-only": {} });
     const revokeRoute = await importTestModule("src/app/api/team/planning-items/v2/tokens/[id]/route.ts", { "server-only": {} });
+    const updatePreviewRoute = await importTestModule("src/app/api/team/planning-items/v2/items/[id]/preview/route.ts", { "server-only": {} });
     const previewRoute = await importTestModule("src/app/api/team/planning-items/v2/items/preview/route.ts", { "server-only": {} });
     const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
     const sessionRequest = (body?: unknown) => new NextRequest("https://app.example.test/api/team/planning-items/v2/tokens", {
@@ -75,15 +77,20 @@ it("personal planning HTTP contracts retain accounting, owner restrictions, revo
     const usedAgain = (await list()).find(row => row.id === first.tokenRecord.id)!;
     expect(Date.parse(usedAgain.lastUsedAt)).toBeGreaterThan(Date.parse(used.lastUsedAt));
 
-    await database.query("update public.team_task_intake_tokens set scopes=array['read:planning-context']::text[] where id=$1", [first.tokenRecord.id]);
-    const denied = await preview();
+    const denied = await updatePreviewRoute.POST(new NextRequest("https://app.example.test/api/team/planning-items/v2/items/synthetic/preview", {
+      method: "POST", headers: { authorization: `Bearer ${first.token}`, "content-type": "application/json" }, body: "{}",
+    }), { params: Promise.resolve({ id: "synthetic-item" }) });
     expect(denied.status).toBe(403);
     expect(denied.headers.get("www-authenticate")).toBe('Bearer error="insufficient_scope"');
-    expect(await denied.json()).toMatchObject({ code: "INSUFFICIENT_SCOPE", _meta: { access: { decision: "denied", missingScopes: ["write:planning-items:create"] } } });
+    expect(await denied.json()).toMatchObject({ code: "INSUFFICIENT_SCOPE", _meta: { access: { decision: "denied", missingScopes: ["write:planning-items:update"] } } });
 
     const access = await authorizeCredentialAction({ credential: { kind: "personal-planning-token", request: new NextRequest("https://app.example.test", { headers: { authorization: `Bearer ${first.token}` } }) }, action: "planning-items.access", operation: "planningContext.read", mode: "read" });
     expect(access).toMatchObject({ ok: true, profile: { id: profileId, platformRole: "founder" } });
     expect("authority" in access).toBe(false);
+    const browserAdministration = await authorizeCredentialAction({ credential: { kind: "session-request", request: sessionRequest() }, action: "administration.technical" });
+    expect(browserAdministration).toMatchObject({ ok: true });
+    const personalDelete = await authorizeCredentialAction({ credential: { kind: "personal-planning-token", request: new NextRequest("https://app.example.test", { headers: { authorization: `Bearer ${first.token}` } }) }, action: "planning-items.access", operation: "planningItems.deleteEmpty", mode: "commit", itemId: "synthetic-epic" });
+    expect(personalDelete).toMatchObject({ ok: false, status: 403, code: "TOKEN_PROFILE_FORBIDDEN" });
     await database.query("update public.profiles set platform_role='viewer' where id=$1", [profileId]);
     expect(await preview()).toMatchObject({ status: 403 });
     await database.query("update public.profiles set platform_role='founder' where id=$1", [profileId]);
@@ -100,7 +107,7 @@ it("personal planning HTTP contracts retain accounting, owner restrictions, revo
     expect(inactive.status).toBe(401);
     expect(await inactive.json()).toMatchObject({ code: "TOKEN_INACTIVE" });
     const replacement = await issue();
-    await database.query("update public.team_task_intake_tokens set expires_at=now()-interval '1 second' where id=$1", [replacement.tokenRecord.id]);
+    await database.query("update public.team_task_intake_tokens set created_at=now()-interval '1 day',expires_at=now()-interval '1 second' where id=$1", [replacement.tokenRecord.id]);
     const expired = await preview(replacement.token);
     expect(expired.status).toBe(401);
     expect(await expired.json()).toMatchObject({ code: "TOKEN_INACTIVE" });
