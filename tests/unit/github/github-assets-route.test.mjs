@@ -1,17 +1,24 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { beforeEach, afterEach, test, vi } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
 
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 let permission = { ok: true };
-let fetchToken = "installation-token";
+const privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" });
+beforeEach(() => {
+  vi.stubEnv("GITHUB_APP_ID", "123");
+  vi.stubEnv("GITHUB_APP_INSTALLATION_ID", "456");
+  vi.stubEnv("GITHUB_APP_PRIVATE_KEY", privateKey);
+  vi.stubEnv("GITHUB_APP_PRIVATE_KEY_PATH", "");
+});
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+const providerFetch = () => Response.json({ token: "installation-token", expires_at: new Date(Date.now() + 3600000).toISOString() });
 const route = await importTestModule("src/app/api/github-assets/route.ts", {
   "@/lib/authz": {
     requirePlanningContributor: async () => permission,
   },
-  "@/lib/github-app": {
-    getGitHubAppInstallationToken: async () => fetchToken,
-  },
+  "server-only": {},
   "@/lib/api-response": {
     apiError: (message, status) => Response.json({ message }, { status }),
     authzError: () => Response.json({ message: "forbidden" }, { status: 403 }),
@@ -26,6 +33,7 @@ test("GitHub asset route follows only allowed redirects and does not forward its
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, options) => {
+    if (String(url).startsWith("https://api.github.com/")) return providerFetch();
     calls.push({ url: String(url), authorization: new Headers(options.headers).get("authorization"), redirect: options.redirect });
     if (calls.length === 1) {
       return new Response(null, {
@@ -87,10 +95,11 @@ test("GitHub asset route stops when an approved host redirects outside the allow
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, options) => {
+    if (String(url).startsWith("https://api.github.com/")) return providerFetch();
     calls.push({ url: String(url), authorization: new Headers(options.headers).get("authorization") });
     return new Response(null, {
       status: 302,
-      headers: { location: "http://127.0.0.1:8080/admin" },
+      headers: { location: "https://blocked.example.test/admin" },
     });
   };
 

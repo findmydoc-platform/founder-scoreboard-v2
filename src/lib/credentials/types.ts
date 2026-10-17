@@ -34,3 +34,18 @@ export type CalendarReadCapability = Readonly<{
 export type CalendarCredentialInput = { credential: { kind: "session-request"; request: NextRequest }; action: "calendar.read" };
 export type CalendarCredentialResult = Extract<AuthzResult, { ok: false }>
   | { ok: true; profile: NonNullable<Extract<AuthzResult, { ok: true }>["profile"]>; calendar: CalendarReadCapability };
+
+export type GitHubInstallationCapability = Readonly<{
+  asset(url: string): Promise<Response | null>;
+  request(url: string, options: Omit<import("../github-http").GitHubRequestOptions, "token">): Promise<Response>;
+}>;
+export type GitHubInstallationAction = "github.projection.apply" | "github.lifecycle.apply" | "github.issue.read" | "github.project.read" | "github.team.read" | "github.asset.read";
+export type GitHubInstallationInput = {
+  [Action in GitHubInstallationAction]: {
+    credential: { kind: "github-installation" };
+    action: Action;
+    target: { repositories: readonly string[]; organization?: string; assetUrl?: string };
+  }
+}[GitHubInstallationAction];
+export type GitHubInstallationResult = { ok: true; github: GitHubInstallationCapability };
+export type GitHubInstallationStatusInput = { credential: { kind: "github-installation" }; action: "github.installation.status" };

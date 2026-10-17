@@ -1,7 +1,8 @@
+import { defaultGitHubRepository } from "@/lib/github-repositories";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireTeamMember } from "@/lib/authz";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
-import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { authorizeCredentialAction, type GitHubInstallationCapability } from "@/lib/credentials";
 import { loadGitHubMentionTeam } from "@/lib/github-mention-team-config";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { resolveGitHubCommentMentionSnapshot } from "@/lib/github-comment-mention-snapshot";
@@ -43,9 +44,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Strategische Planungselemente haben keine GitHub-Kommentare.", 400);
   }
 
-  let githubInstallationToken = "";
+  let githubInstallationToken: GitHubInstallationCapability;
   try {
-    githubInstallationToken = await getGitHubAppInstallationToken();
+    githubInstallationToken = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: [task.github_repo || defaultGitHubRepository] } })).github;
   } catch (tokenError) {
     const message = tokenError instanceof Error ? tokenError.message : "GitHub-Verbindung konnte nicht geprüft werden.";
     return apiError(message, 401);

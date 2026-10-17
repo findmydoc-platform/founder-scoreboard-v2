@@ -1,3 +1,4 @@
+import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -19,7 +20,7 @@ import {
 } from "@/features/planning-items/model/planning-items-relationships";
 import type { ActorContext, PlatformRole } from "@/features/planning-items/model/actor-context";
 import { getGitHubIssue } from "./github";
-import { getGitHubAppInstallationToken } from "./github-app";
+import { authorizeCredentialAction } from "./credentials";
 import {
   loadGitHubPlanningIssueFieldObservation,
   loadGitHubPlanningProjectObservation,
@@ -479,7 +480,7 @@ export function createSupabaseGitHubPlanningWebhookStore(
 async function loadCurrentGitHubIssue(
   delivery: ClaimedGitHubPlanningDelivery,
 ): Promise<GitHubPlanningIssueSnapshot> {
-  const token = await getGitHubAppInstallationToken();
+  const token = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
   const issue = await getGitHubIssue(delivery.issueNumber, token, delivery.repositoryFullName);
   const nodeId = text(issue.node_id);
   const title = text(issue.title);
@@ -519,7 +520,7 @@ async function loadCurrentGitHubIssue(
 async function loadCurrentGitHubRelationship(
   delivery: ClaimedGitHubPlanningDelivery,
 ): Promise<RelationshipObservation> {
-  const token = await getGitHubAppInstallationToken();
+  const token = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
   const loadVersion = async ({
     repositoryFullName,
     issueNumber,
@@ -1126,7 +1127,7 @@ export async function processGitHubPlanningWebhookDelivery({
           projectItemNodeId: projectDelivery.projectItemNodeId,
           contentNodeId: projectDelivery.projectContentNodeId,
           fieldNodeId: projectDelivery.projectFieldNodeId || null,
-          token: await getGitHubAppInstallationToken(),
+          token: (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github,
         })
       ));
       return processProjectDelivery({ delivery, lockToken, store, supabase, loadProject: projectLoader });
@@ -1182,7 +1183,7 @@ export async function processGitHubPlanningWebhookDelivery({
                 issueNumber: fieldDelivery.issueNumber,
                 issueNodeId: fieldDelivery.issueNodeId,
                 fieldName: managedFieldName,
-                token: await getGitHubAppInstallationToken(),
+                token: (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github,
               })
             )))(delivery, fieldName)),
             task,

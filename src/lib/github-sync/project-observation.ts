@@ -1,13 +1,11 @@
+import { projectObservationQuery, issueFieldObservationQuery } from "../github-graphql-documents";
+import type { GitHubResourceCredential } from "../github-http";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { githubGraphql } from "../github-graphql";
 import { normalizeGitHubRepository } from "../github-repositories";
 import {
-  githubIssueFieldsSelection,
-  githubIssueFieldValuesSelection,
-  githubProjectFieldsSelection,
-  githubProjectItemFieldValuesSelection,
   readGitHubIssueFieldValue,
   readGitHubProjectFieldValue,
   type GitHubIssueField,
@@ -63,56 +61,9 @@ export type GitHubPlanningProjectObservation = Readonly<{
   changedFieldValue: GitHubPlanningFieldValue;
 }>;
 
-const projectObservationQuery = `query FounderOpsInboundProjectItem(
-  $owner: String!,
-  $number: Int!,
-  $itemId: ID!,
-  $contentId: ID!
-) {
-  organization(login: $owner) {
-    projectV2(number: $number) {
-      id
-      closed
-      ${githubProjectFieldsSelection}
-    }
-    ${githubIssueFieldsSelection}
-  }
-  content: node(id: $contentId) {
-    ... on Issue {
-      id
-      number
-      repository { nameWithOwner }
-      ${githubIssueFieldValuesSelection}
-    }
-  }
-  item: node(id: $itemId) {
-    ... on ProjectV2Item {
-      id
-      updatedAt
-      isArchived
-      project { id }
-      content { ... on Issue { id } }
-      ${githubProjectItemFieldValuesSelection}
-    }
-  }
-}`;
 
-const issueFieldObservationQuery = `query FounderOpsInboundIssueField(
-  $owner: String!,
-  $contentId: ID!
-) {
-  organization(login: $owner) {
-    ${githubIssueFieldsSelection}
-  }
-  content: node(id: $contentId) {
-    ... on Issue {
-      id
-      number
-      repository { nameWithOwner }
-      ${githubIssueFieldValuesSelection}
-    }
-  }
-}`;
+
+
 
 export async function loadGitHubPlanningProjectObservation({
   supabase,
@@ -127,7 +78,7 @@ export async function loadGitHubPlanningProjectObservation({
   projectItemNodeId: string;
   contentNodeId: string;
   fieldNodeId: string | null;
-  token: string;
+  token: GitHubResourceCredential;
 }): Promise<GitHubPlanningProjectObservation> {
   const settings = await loadFounderOpsGitHubProjectSettings(supabase);
   const data = await githubGraphql<ObservationData>({
@@ -202,7 +153,7 @@ export async function loadGitHubPlanningIssueFieldObservation({
   issueNumber: number;
   issueNodeId: string;
   fieldName: string;
-  token: string;
+  token: GitHubResourceCredential;
 }): Promise<Readonly<{
   fieldName: string;
   fieldValue: GitHubPlanningProjectObservation["changedFieldValue"];

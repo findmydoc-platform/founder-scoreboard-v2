@@ -1,3 +1,5 @@
+import { fieldContextQuery, updateProjectFieldMutation, clearProjectFieldMutation, setIssueFieldMutation, projectMembershipQuery, addProjectItemMutation, unarchiveProjectItemMutation } from "../github-graphql-documents";
+import type { GitHubResourceCredential } from "../github-http";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { githubGraphql } from "../github-graphql";
 import {
@@ -7,11 +9,7 @@ import {
 import { splitGitHubRepository } from "../github-repositories";
 import type { Task } from "../types";
 import {
-  githubIssueFieldsSelection,
-  githubIssueFieldValuesSelection,
   githubIssuePriorityOption,
-  githubProjectFieldsSelection,
-  githubProjectItemFieldValuesSelection,
   githubProjectStatusOption,
   type GitHubIssueField,
   type GitHubIssueFieldValue,
@@ -52,56 +50,16 @@ type FounderOpsGitHubProjectFieldInput = {
   projectOwner: string;
   sprint?: FounderOpsGitHubSprint | null;
   task: Pick<Task, "fixedDate" | "evidenceLink" | "hours" | "priority" | "status" | "taskType" | "workstream">;
-  token: string;
+  token: GitHubResourceCredential;
 };
 
-const fieldContextQuery = `query FounderOpsProjectFields($owner: String!, $number: Int!, $itemId: ID!) {
-  organization(login: $owner) {
-    projectV2(number: $number) {
-      id
-      closed
-      ${githubProjectFieldsSelection}
-    }
-    ${githubIssueFieldsSelection}
-  }
-  node(id: $itemId) {
-    ... on ProjectV2Item {
-      id
-      project { id }
-      content {
-        ... on Issue {
-          id
-          ${githubIssueFieldValuesSelection}
-        }
-      }
-      ${githubProjectItemFieldValuesSelection}
-    }
-  }
-}`;
 
-const updateProjectFieldMutation = `mutation UpdateFounderOpsProjectField(
-  $projectId: ID!,
-  $itemId: ID!,
-  $fieldId: ID!,
-  $value: ProjectV2FieldValue!
-) {
-  updateProjectV2ItemFieldValue(input: {
-    projectId: $projectId,
-    itemId: $itemId,
-    fieldId: $fieldId,
-    value: $value
-  }) { projectV2Item { id } }
-}`;
 
-const clearProjectFieldMutation = `mutation ClearFounderOpsProjectField($projectId: ID!, $itemId: ID!, $fieldId: ID!) {
-  clearProjectV2ItemFieldValue(input: { projectId: $projectId, itemId: $itemId, fieldId: $fieldId }) {
-    projectV2Item { id }
-  }
-}`;
 
-const setIssueFieldMutation = `mutation SetFounderOpsIssueField($issueId: ID!, $issueFields: [IssueFieldCreateOrUpdateInput!]!) {
-  setIssueFieldValue(input: { issueId: $issueId, issueFields: $issueFields }) { issue { id } }
-}`;
+
+
+
+
 
 function sameCaseInsensitive(left: string, right: string) {
   return left.trim().localeCompare(right.trim(), undefined, { sensitivity: "accent" }) === 0;
@@ -308,37 +266,11 @@ type ProjectMembershipData = {
   } | null;
 };
 
-const projectMembershipQuery = `query FounderOpsProjectMembership(
-  $projectOwner: String!,
-  $projectNumber: Int!,
-  $repositoryOwner: String!,
-  $repositoryName: String!,
-  $issueNumber: Int!
-) {
-  organization(login: $projectOwner) {
-    projectV2(number: $projectNumber) { id closed }
-  }
-  repository(owner: $repositoryOwner, name: $repositoryName) {
-    issue(number: $issueNumber) {
-      id
-      projectItems(first: 100) {
-        nodes { id isArchived project { id } }
-      }
-    }
-  }
-}`;
 
-const addProjectItemMutation = `mutation FounderOpsAddProjectItem($projectId: ID!, $contentId: ID!) {
-  addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
-    item { id }
-  }
-}`;
 
-const unarchiveProjectItemMutation = `mutation FounderOpsUnarchiveProjectItem($projectId: ID!, $itemId: ID!) {
-  unarchiveProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
-    item { id }
-  }
-}`;
+
+
+
 
 export async function loadGitHubProjectSettings(supabase: SupabaseClient) {
   const { data, error } = await supabase
@@ -388,7 +320,7 @@ async function ensureProjectMembership({
   projectNumber: number;
   projectOwner: string;
   repository: string;
-  token: string;
+  token: GitHubResourceCredential;
 }) {
   const { owner: repositoryOwner, repo: repositoryName } = splitGitHubRepository(repository);
   const observed = await githubGraphql<ProjectMembershipData>({
@@ -458,7 +390,7 @@ export async function projectTaskToFounderOpsGitHubProject({
   task: Task;
   issueNumber: number;
   repository: string;
-  token: string;
+  token: GitHubResourceCredential;
 }) {
   const project = await loadGitHubProjectSettings(supabase);
   const item = await ensureProjectMembership({

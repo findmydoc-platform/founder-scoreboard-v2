@@ -29,10 +29,10 @@ const syncModel = await importTestModule(
   "src/features/planning-items/model/planning-items-github-sync.ts",
   {
     "server-only": {},
-    "@/lib/github-app": {
-      getGitHubAppInstallationToken: async () => {
+    "@/lib/credentials": {
+      authorizeCredentialAction: async () => {
         if (installationTokenError) throw installationTokenError;
-        return "installation-token";
+        return { github: "installation-token" };
       },
     },
     "@/lib/github-sync-failure-persistence": {

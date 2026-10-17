@@ -1,3 +1,4 @@
+import { authorizeCredentialAction } from "@/lib/credentials";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -9,7 +10,6 @@ import { mapNotificationDelivery, mapNotificationEvent } from "@/lib/planning-ro
 import type { DbNotificationDelivery, DbNotificationEvent } from "@/lib/planning-row-types";
 import type { PlatformRole } from "@/lib/types";
 import { googleChatDeliveryStatus } from "@/lib/google-chat";
-import { getGitHubAppOperationalStatus } from "@/lib/github-app";
 import { resolveGitHubMentionTeam } from "@/lib/github-mention-team-config";
 
 type GrantRow = {
@@ -67,7 +67,7 @@ export function createSupabaseAdministrationReadModel(
         technical
           ? supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,payload,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100)
           : Promise.resolve({ data: [], error: null }),
-        technical ? getGitHubAppOperationalStatus() : Promise.resolve(null),
+        technical ? authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.installation.status" }) : Promise.resolve(null),
         technical
           ? supabase.from("projects").select("id,github_project_owner,github_project_number,github_mention_team_slug").eq("id", "findmydoc-founder-execution").maybeSingle()
           : Promise.resolve({ data: null, error: null }),

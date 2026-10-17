@@ -1,3 +1,5 @@
+import { subIssueRelationshipQuery, connectSubIssueMutation, linkedPullRequestsQuery } from "./github-graphql-documents";
+import type { GitHubResourceCredential } from "./github-http";
 import type { LinkedPullRequest } from "./types";
 import { githubGraphql } from "./github-graphql";
 import { GITHUB_ISSUE_DEPENDENCY_API_VERSION, githubJson } from "./github-http";
@@ -36,12 +38,7 @@ function githubRawUrl(path: string, repository?: string | null) {
   return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-export async function githubUserForToken(token: string) {
-  return githubJson<{ login: string }>("https://api.github.com/user", {
-    token,
-    errorMessage: "GitHub-Verbindung konnte nicht geprüft werden",
-  });
-}
+
 
 type SubIssueRelationshipData = {
   parentRepository?: {
@@ -73,31 +70,11 @@ export async function connectGitHubSubIssue({
   parentIssueNumber: number;
   childRepository: string;
   childIssueNumber: number;
-  token: string;
+  token: GitHubResourceCredential;
 }) {
   const parent = splitGitHubRepository(parentRepository);
   const child = splitGitHubRepository(childRepository);
-  const query = `query(
-    $parentOwner: String!,
-    $parentRepo: String!,
-    $parentNumber: Int!,
-    $childOwner: String!,
-    $childRepo: String!,
-    $childNumber: Int!
-  ) {
-    parentRepository: repository(owner: $parentOwner, name: $parentRepo) {
-      issue(number: $parentNumber) { id number url }
-    }
-    childRepository: repository(owner: $childOwner, name: $childRepo) {
-      issue(number: $childNumber) {
-        id
-        number
-        url
-        repository { nameWithOwner }
-        parent { number url repository { nameWithOwner } }
-      }
-    }
-  }`;
+  const query = subIssueRelationshipQuery;
   const relationship = await githubGraphql<SubIssueRelationshipData>({
     query,
     variables: {
@@ -135,12 +112,7 @@ export async function connectGitHubSubIssue({
     };
   }
 
-  const mutation = `mutation($parent: ID!, $child: ID!) {
-    addSubIssue(input: { issueId: $parent, subIssueId: $child, replaceParent: true }) {
-      issue { number url }
-      subIssue { number url repository { nameWithOwner } parent { number url repository { nameWithOwner } } }
-    }
-  }`;
+  const mutation = connectSubIssueMutation;
   return githubGraphql<unknown>({
     query: mutation,
     variables: { parent: parentIssue.id, child: childIssue.id },
@@ -170,31 +142,11 @@ type LinkedPullRequestData = {
 
 export async function listGitHubIssueLinkedPullRequests(
   issueNumber: number,
-  token: string,
+  token: GitHubResourceCredential,
   repository?: string | null,
 ): Promise<LinkedPullRequest[]> {
   const { owner, repo } = splitGitHubRepository(repository);
-  const query = `query($owner: String!, $repo: String!, $issueNumber: Int!) {
-    repository(owner: $owner, name: $repo) {
-      issue(number: $issueNumber) {
-        closedByPullRequestsReferences(
-          first: 100
-          includeClosedPrs: true
-          userLinkedOnly: false
-        ) {
-          nodes {
-            title
-            number
-            url
-            state
-            merged
-            mergedAt
-            repository { nameWithOwner }
-          }
-        }
-      }
-    }
-  }`;
+  const query = linkedPullRequestsQuery;
   const data = await githubGraphql<LinkedPullRequestData>({
     query,
     variables: { owner, repo, issueNumber },
@@ -222,7 +174,7 @@ export async function listGitHubIssueLinkedPullRequests(
   });
 }
 
-export async function archiveGitHubIssue(issueNumber: number, token: string, repository?: string | null) {
+export async function archiveGitHubIssue(issueNumber: number, token: GitHubResourceCredential, repository?: string | null) {
   const { owner, repo } = splitGitHubRepository(repository);
   return githubJson<{ number: number; html_url: string }>(
     `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`,
@@ -256,7 +208,7 @@ export type GitHubIssueComment = {
 export async function createGitHubIssueComment(
   issueNumber: number,
   comment: string,
-  token: string,
+  token: GitHubResourceCredential,
   marker?: string,
   repository?: string | null,
 ) {
@@ -277,7 +229,7 @@ export async function createGitHubIssueComment(
 
 export async function listGitHubIssueComments(
   issueNumber: number,
-  token: string,
+  token: GitHubResourceCredential,
   repository?: string | null,
 ) {
   const { owner, repo } = splitGitHubRepository(repository);
@@ -301,7 +253,7 @@ export async function listGitHubIssueComments(
 
 export async function getGitHubIssueComment(
   commentId: number,
-  token: string,
+  token: GitHubResourceCredential,
   repository?: string | null,
 ) {
   const { owner, repo } = splitGitHubRepository(repository);
@@ -317,7 +269,7 @@ export async function getGitHubIssueComment(
 
 export async function getGitHubIssue(
   issueNumber: number,
-  token: string,
+  token: GitHubResourceCredential,
   repository?: string | null,
 ) {
   const { owner, repo } = splitGitHubRepository(repository);
@@ -342,7 +294,7 @@ export async function getGitHubIssue(
 
 export async function listGitHubIssueBlockedBy(
   issueNumber: number,
-  token: string,
+  token: GitHubResourceCredential,
   repository?: string | null,
 ) {
   const { owner, repo } = splitGitHubRepository(repository);

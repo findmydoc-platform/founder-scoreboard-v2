@@ -1,3 +1,5 @@
+import { projectValidationQuery } from "./github-graphql-documents";
+import type { GitHubResourceCredential } from "./github-http";
 import { githubGraphql } from "./github-graphql";
 import {
   FOUNDEROPS_GITHUB_PROJECT_FIELDS,
@@ -40,28 +42,9 @@ export type GitHubProjectValidation = {
   fields: ProjectField[];
 };
 
-const projectValidationQuery = `query FounderOpsProjectValidation($owner: String!, $number: Int!) {
-  organization(login: $owner) {
-    projectV2(number: $number) {
-      id
-      number
-      title
-      closed
-      url
-      repositories(first: 100) {
-        totalCount
-        nodes { nameWithOwner }
-      }
-      fields(first: 100) {
-        nodes {
-          ... on ProjectV2FieldCommon { name dataType }
-        }
-      }
-    }
-  }
-}`;
 
-export async function validateFounderOpsGitHubProject(owner: string, number: number, token: string): Promise<GitHubProjectValidation> {
+
+export async function validateFounderOpsGitHubProject(owner: string, number: number, token: GitHubResourceCredential): Promise<GitHubProjectValidation> {
   if (!validGitHubProjectOwner(owner) || !validGitHubProjectNumber(number)) {
     throw new Error("GitHub-Organisation oder Project-Nummer ist ungültig.");
   }
