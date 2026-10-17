@@ -1,5 +1,5 @@
 import "server-only";
-import { createClient, isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { createHash, randomBytes } from "node:crypto";
 import { WorkspaceAccessError, workspaceIdentity } from "../../workspace-identity";
 import { invalidSessionBeforeEffectErrorCode } from "../../auth-error-contract";
@@ -106,7 +106,13 @@ function boundDataFetch(binding: SessionBinding): typeof fetch {
   };
 }
 
-export async function authorizeCalendar(request: NextRequest): Promise<CalendarCredentialResult> {
+type SessionAction = "calendar.read" | "workweek.private.read" | "workweek.private.write" | "session.planning" | "session.home";
+type SessionDataResult = Extract<CalendarCredentialResult, { ok: false }> | {
+  ok: true; profile: Extract<CalendarCredentialResult, { ok: true }>["profile"]; user: User;
+  data: SupabaseClient; readOwnerConflict(versionId: string): Promise<{ data: { resolution_version_id: string } | null; error: { message: string } | null }>;
+};
+
+export async function authorizeSessionData(request: NextRequest, action: SessionAction): Promise<SessionDataResult> {
   const startedAt = Date.now();
   const header = request.headers.get("authorization");
   const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -160,7 +166,7 @@ export async function authorizeCalendar(request: NextRequest): Promise<CalendarC
       const key = digest(JSON.stringify(["session-request", token, environment.url, claims.sub, claims.session_id,
         context.profileId, identity.subject, identity.email, context.mode, context.linkingEnforced,
         process.env.GOOGLE_AUTHORIZED_GROUP, process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE, process.env.GOOGLE_WORKSPACE_SERVICE_ACCOUNT,
-        claims.aud, claims.role, claims.scope, "calendar.read", "calendar-policy-v1"]));
+        claims.aud, claims.role, claims.scope, action, "session-policy-v1"]));
       deadline = (await membership(key, identity.email, startedAt, deadline)).expiresAt;
     }
     const binding: SessionBinding = { token, userId: claims.sub, sessionId: claims.session_id,
@@ -177,17 +183,36 @@ export async function authorizeCalendar(request: NextRequest): Promise<CalendarC
     if (!profile.data || profile.data.id !== binding.profileId
       || !["ceo", "founder", "deputy", "viewer"].includes(profile.data.platform_role)) throw denied();
     if (Date.now() >= deadline) throw unavailable();
-    return { ok: true, profile: { id: profile.data.id, name: profile.data.name, platformRole: profile.data.platform_role, githubLogin: "" }, calendar: {
-      readPublications: async (earliestDate: string) => await data.from("team_workweek_publications")
-        .select("id,owner_profile_id,effective_from,effective_to,effective_at,effective_until,timezone,published_at,last_sync_at,publication_revision,windows")
-        .eq("status", "published").or(`effective_to.is.null,effective_to.gte.${earliestDate}`)
-        .order("effective_from", { ascending: false }).order("publication_revision", { ascending: false }).order("id", { ascending: false })
-        .returns<CalendarPublication[]>(),
-      readPublishedOwners: async () => await data.from("team_workweek_publications").select("owner_profile_id").eq("status", "published")
-        .returns<Array<{ owner_profile_id: string }>>(),
-    } };
+    return { ok: true, profile: { id: profile.data.id, name: profile.data.name, platformRole: profile.data.platform_role, githubLogin: "" }, user: user.data.user, data,
+      readOwnerConflict: async (versionId: string) => {
+        if (action !== "workweek.private.read") return { data: null, error: { message: "Keine Berechtigung für diesen Konfliktstatus." } };
+        // Service-backed conflict state has its own live authorization and owner restriction.
+        const current = await data.rpc("current_authenticated_profile");
+        if (current.error || current.data?.id !== binding.profileId || Date.now() >= binding.deadline) {
+          return { data: null, error: { message: "Privater Konfliktstatus konnte nicht geprüft werden." } };
+        }
+        return await environment.service.from("team_workweek_google_conflicts").select("resolution_version_id")
+          .eq("owner_profile_id", binding.profileId).eq("founderops_version_id", versionId).eq("state", "resolving")
+          .maybeSingle<{ resolution_version_id: string }>();
+      },
+    };
   } catch (error) {
     if (error instanceof WorkspaceAccessError) return { ok: false, status: error.status, code: error.code, error: error.message };
     return { ok: false, status: 503, error: "Anmeldung konnte vorübergehend nicht geprüft werden." };
   }
+}
+
+export async function authorizeCalendar(request: NextRequest): Promise<CalendarCredentialResult> {
+  const authorized = await authorizeSessionData(request, "calendar.read");
+  if (!authorized.ok) return authorized;
+  const { data, profile } = authorized;
+  return { ok: true, profile, calendar: {
+    readPublications: async (earliestDate: string) => await data.from("team_workweek_publications")
+      .select("id,owner_profile_id,effective_from,effective_to,effective_at,effective_until,timezone,published_at,last_sync_at,publication_revision,windows")
+      .eq("status", "published").or(`effective_to.is.null,effective_to.gte.${earliestDate}`)
+      .order("effective_from", { ascending: false }).order("publication_revision", { ascending: false }).order("id", { ascending: false })
+      .returns<CalendarPublication[]>(),
+    readPublishedOwners: async () => await data.from("team_workweek_publications").select("owner_profile_id").eq("status", "published")
+      .returns<Array<{ owner_profile_id: string }>>(),
+  } };
 }
