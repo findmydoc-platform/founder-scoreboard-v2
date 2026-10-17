@@ -1,3 +1,4 @@
+import { administratorAccessFailure, currentAdministratorAccess } from "./session-policy";
 import "server-only";
 import { authorizeDeliveryAdmission, deliveryStore, bookkeepingStore, DeliveryAdmissionDenied } from "./delivery-admission";
 import { runWithDeliveryAdmission } from "./delivery-admission-scope";
@@ -43,8 +44,8 @@ export async function authorizeNotificationDelivery(input: NotificationDeliveryI
       current();
       if (error.code === "42501") {
         if (admission.mode === "user") {
-          const result = await admission.reassert();
-          result();
+          const snapshot = await claimData.rpc("administrator_access_snapshot");
+          return administratorAccessFailure(currentAdministratorAccess(snapshot.error ? null : snapshot.data));
         }
         return { ok: false as const, status: 403, error: "Zustellauftrag ist nicht autorisiert." };
       }

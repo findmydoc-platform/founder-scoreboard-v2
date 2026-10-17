@@ -134,3 +134,7 @@ test("confirmed delivery metadata is snapshotted before the claim-binding await"
  const extras={deliveryMode:"direct_dm",deliveredAt:"2026-10-17T10:00:00.000Z"};const pending=claim.record([{row:loaded.events[0],target:"spaces/synthetic-dm",payload:{id:7,title:"Synthetic event"}}],"sent",1,extras);await started;extras.deliveredAt="2099-01-01T00:00:00.000Z";extras.deliveryMode="webhook_digest";release();await pending;
  expect(fixture.delivery.records).toMatchObject([{delivered_at:"2026-10-17T10:00:00.000Z",payload:{deliveryMode:"direct_dm"}}]);
 });
+
+test("an atomic claim denial with a still-active administrator preserves the required-access marker",async()=>{
+ fixture.delivery.claimError={code:"42501",message:"claim rejected"};const api=await route();const response=await api.POST(fixture.request());expect(response.status).toBe(403);expect(await response.json()).toEqual({error:"Ein aktiver Adminzugang ist erforderlich.",code:"administrator_access_required"});expect(fixture.delivery.messages).toHaveLength(0);
+});
