@@ -172,9 +172,10 @@ export async function authorizeGitHubInstallation(input: GitHubInstallationInput
       const credential = await installationToken(repositories);
       assertBinding(credential);
       // No credential response or network failure replays a resource mutation.
-      return githubRequest(url, { ...options, token: credential.token } as GitHubRequestOptions);
+      return githubRequest(url, { ...options, token: credential.token } as GitHubRequestOptions, async () => () => assertBinding(credential));
     },
   });
+  assertBinding(initial);
   return { ok: true as const, github: capability };
 }
 export async function installationOperationalStatus(): Promise<GitHubAppOperationalStatus> {

@@ -242,3 +242,33 @@ test.each(["installation","key"].flatMap(change=>["authorize","resource","asset"
   else {const {privateKey}=generateKeyPairSync("rsa",{modulusLength:2048});vi.stubEnv("GITHUB_APP_PRIVATE_KEY",privateKey.export({type:"pkcs8",format:"pem"}));}
   release();await expect(operation).rejects.toThrow("Konfiguration wurde geändert");expect(resources).toHaveLength(0);
 });
+
+
+test("a configuration change while an asset redirect is pending prevents the next hop",async()=>{
+  configure();const resources=[];
+  vi.stubGlobal("fetch",async url=>{
+    if(String(url).endsWith("/access_tokens")) return issued();
+    resources.push(String(url));vi.stubEnv("GITHUB_APP_INSTALLATION_ID","999");
+    return new Response(null,{status:302,headers:{location:"https://objects.githubusercontent.com/synthetic.png"}});
+  });
+  const assetUrl="https://github.com/user-attachments/assets/11111111-1111-4111-8111-111111111111";
+  const app=await workflow("github.asset.read",{repositories:["findmydoc-platform/management"],assetUrl});
+  const {github}=await app.authorize();
+  await expect(github.asset(assetUrl)).rejects.toThrow("Konfiguration wurde geändert");expect(resources).toEqual([assetUrl]);
+});
+test("installation tokens at their exact provider expiry cannot release a capability",async()=>{
+  configure();vi.useFakeTimers({toFake:["Date"]});
+  vi.stubGlobal("fetch",async()=>issued("synthetic-expired",0));
+  const app=await workflow();await expect(app.authorize()).rejects.toThrow("Installationstoken ist ungültig");
+});
+
+
+test("a changed installation cannot dispatch a bounded HTTP read retry",async()=>{
+  configure();let reads=0;
+  vi.stubGlobal("fetch",async url=>{
+    if(String(url).endsWith("/access_tokens"))return issued();
+    reads++;vi.stubEnv("GITHUB_APP_INSTALLATION_ID","999");return Response.json({message:"temporary"},{status:503});
+  });
+  const app=await workflow();const {github}=await app.authorize();
+  await expect(app.listGitHubIssueComments(1,github)).rejects.toThrow("Konfiguration wurde geändert");expect(reads).toBe(1);
+});
