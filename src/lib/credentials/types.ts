@@ -1,3 +1,4 @@
+import type { GitHubJobContext } from "./github-job-types";
 import type { NextRequest } from "next/server";
 import type { AuthzResult } from "../authz";
 
@@ -44,7 +45,7 @@ export type GitHubInstallationCapability = Readonly<{
 export type GitHubInstallationAction = "github.projection.apply" | "github.lifecycle.apply" | "github.issue.read" | "github.project.read" | "github.team.read" | "github.asset.read";
 export type GitHubInstallationInput = {
   [Action in GitHubInstallationAction]: {
-    credential: { kind: "github-installation" };
+    credential: { kind: "github-installation" } | { kind: "github-claimed-job"; claim: GitHubJobContext };
     action: Action;
     target: { repositories: readonly string[]; organization?: string; assetUrl?: string };
   }

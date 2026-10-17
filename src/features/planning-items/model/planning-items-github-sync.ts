@@ -1,8 +1,9 @@
+import type { GitHubInstallationInput } from "@/lib/credentials/types";
 import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { authorizeCredentialAction, type GitHubInstallationCapability } from "@/lib/credentials";
+import { authorizeCredentialAction, type GitHubInstallationCapability, type GitHubJobContext } from "@/lib/credentials";
 import { persistGitHubSyncFailure } from "@/lib/github-sync-failure-persistence";
 import {
   taskGitHubSyncFailure,
@@ -132,15 +133,23 @@ async function persistInfrastructureFailure(
   };
 }
 
-export async function executePlanningItemGitHubSyncs({
-  supabase,
-  actorProfileId,
-  targets,
-}: {
+type PlanningGitHubExecutionInput = {
   supabase: SupabaseClient;
   actorProfileId: string;
   targets: PlanningItemGitHubSyncTarget[];
-}) {
+};
+
+export function executePlanningItemGitHubSyncs(input: PlanningGitHubExecutionInput) {
+  return executeWithCredential(input, { kind: "github-installation" });
+}
+
+export function executeClaimedPlanningItemGitHubSyncs(input: PlanningGitHubExecutionInput & { claim: GitHubJobContext }) {
+  const claim = Object.freeze({ family: input.claim.family, id: input.claim.id, lockToken: input.claim.lockToken });
+  const targets = input.targets.map(target => ({ ...target, command: { ...target.command } }));
+  return executeWithCredential({ ...input, targets }, { kind: "github-claimed-job", claim });
+}
+
+async function executeWithCredential({ supabase, actorProfileId, targets }: PlanningGitHubExecutionInput, credential: GitHubInstallationInput["credential"]) {
   const results = new Map<string, PlanningItemGitHubSyncResult>();
   const executable: PlanningItemGitHubSyncTarget[] = [];
   for (const target of targets) {
@@ -163,7 +172,7 @@ export async function executePlanningItemGitHubSyncs({
 
   let installationToken: GitHubInstallationCapability;
   try {
-    installationToken = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.projection.apply", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
+    installationToken = (await authorizeCredentialAction({ credential, action: "github.projection.apply", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
   } catch (error) {
     const message = error instanceof Error
       ? error.message
