@@ -1,22 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { apiError, requireApiContext } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
-import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
-
-const founderProjectId = "findmydoc-founder-execution";
+import { apiError, authzError } from "@/lib/api-response";
+import { authorizeCredentialAction } from "@/lib/credentials";
 
 export async function GET(request: NextRequest) {
-  const apiContext = await requireApiContext(request, requireTeamMember, {
-    supabaseUnavailableMessage: "Planungsänderungen konnten nicht geprüft werden.",
-  });
-  if (!apiContext.ok) return apiContext.response;
-
-  const { data, error, count } = await apiContext.supabase
-    .from(ACTIVE_TASKS_TABLE)
-    .select("updated_at", { count: "exact" })
-    .eq("project_id", founderProjectId)
-    .order("updated_at", { ascending: false })
-    .limit(1);
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning.revision.read" });
+  if (!permission.ok) return permission.status === 501 ? apiError("Planungsänderungen konnten nicht geprüft werden.", 501) : authzError(permission);
+  const { data, error, count } = await permission.planning.readRevision();
   if (error) return apiError("Planungsänderungen konnten nicht geprüft werden.", 500);
 
   return NextResponse.json({

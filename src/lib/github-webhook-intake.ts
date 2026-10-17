@@ -1,13 +1,11 @@
 import "server-only";
 
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 import { normalizeGitHubRepository } from "./github-repositories";
 
 export const githubWebhookMaxPayloadBytes = 2 * 1024 * 1024;
 
 const deliveryIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-const signaturePattern = /^sha256=([0-9a-f]{64})$/i;
 const issueCommentActions = new Set(["created", "edited", "deleted"]);
 const planningEventNames = new Set(["issues", "sub_issues", "issue_dependencies", "projects_v2_item"]);
 const issuePlanningActions = new Set([
@@ -176,41 +174,26 @@ function planningChangedFields(payload: JsonObject, eventName: string, action: s
   return changes;
 }
 
-export function verifyGitHubWebhookSignature(rawBody: Uint8Array, secret: string, signature: string | null) {
-  if (!secret || !signature) return false;
-  const match = signature.match(signaturePattern);
-  if (!match) return false;
-
-  const received = Buffer.from(match[1], "hex");
-  const expected = createHmac("sha256", secret).update(rawBody).digest();
-  return received.length === expected.length && timingSafeEqual(received, expected);
-}
-
-export function inspectGitHubIssueWebhook({
+// Domain normalization is not credential verification or permission to persist a delivery.
+export function normalizeGitHubIssueWebhook({
   rawBody,
   headers,
-  webhookSecret,
   expectedInstallationId,
   expectedOrganizationId = "",
 }: {
   rawBody: Uint8Array;
   headers: GitHubWebhookHeaders;
-  webhookSecret: string;
   expectedInstallationId: string;
   expectedOrganizationId?: string;
 }): GitHubWebhookInspection {
   const expectedInstallation = Number(expectedInstallationId);
   const expectedOrganization = expectedOrganizationId ? Number(expectedOrganizationId) : null;
   if (
-    !webhookSecret
-    || !Number.isSafeInteger(expectedInstallation)
+    !Number.isSafeInteger(expectedInstallation)
     || expectedInstallation <= 0
     || (expectedOrganizationId && (!Number.isSafeInteger(expectedOrganization) || (expectedOrganization || 0) <= 0))
   ) {
     return rejected(503, "github_webhook_unavailable", "GitHub webhook intake is unavailable.");
-  }
-  if (!verifyGitHubWebhookSignature(rawBody, webhookSecret, headers.signature)) {
-    return rejected(401, "github_webhook_unauthorized", "GitHub webhook signature is invalid.");
   }
 
   const deliveryId = boundedText(headers.deliveryId, 128);
@@ -407,122 +390,4 @@ export function inspectGitHubIssueWebhook({
       payloadSha256: createHash("sha256").update(rawBody).digest("hex"),
     },
   };
-}
-
-export function createSupabaseGitHubWebhookDeliveryStore(supabase: SupabaseClient): GitHubWebhookDeliveryStore {
-  return {
-    async record(delivery) {
-      const commonRow = {
-        delivery_id: delivery.deliveryId,
-        event_name: delivery.eventName,
-        action: delivery.action,
-        installation_id: delivery.installationId,
-        organization_id: delivery.organizationId,
-        organization_login: delivery.organizationLogin,
-        repository_id: delivery.repositoryId,
-        repository_full_name: delivery.repositoryFullName,
-        issue_id: delivery.issueId,
-        issue_node_id: delivery.issueNodeId,
-        issue_number: delivery.issueNumber,
-        issue_updated_at: delivery.issueUpdatedAt,
-        sender_id: delivery.senderId,
-        sender_login: delivery.senderLogin,
-        sender_type: delivery.senderType,
-        payload_sha256: delivery.payloadSha256,
-      };
-      const planningRow = {
-        ...commonRow,
-        related_repository_id: delivery.relatedRepositoryId,
-        related_repository_full_name: delivery.relatedRepositoryFullName,
-        related_issue_id: delivery.relatedIssueId,
-        related_issue_node_id: delivery.relatedIssueNodeId,
-        related_issue_number: delivery.relatedIssueNumber,
-        related_issue_updated_at: delivery.relatedIssueUpdatedAt,
-        project_node_id: delivery.projectNodeId,
-        project_item_node_id: delivery.projectItemNodeId,
-        project_item_updated_at: delivery.projectItemUpdatedAt,
-        project_content_node_id: delivery.projectContentNodeId,
-        project_content_type: delivery.projectContentType,
-        project_field_node_id: delivery.projectFieldNodeId,
-        changed_fields: delivery.changedFields,
-        target_user_id: delivery.targetUserId,
-        target_user_login: delivery.targetUserLogin,
-      };
-      const commentRow = {
-        delivery_id: commonRow.delivery_id,
-        event_name: "issue_comment",
-        action: commonRow.action,
-        installation_id: commonRow.installation_id,
-        repository_id: commonRow.repository_id,
-        repository_full_name: commonRow.repository_full_name,
-        issue_id: commonRow.issue_id,
-        issue_node_id: commonRow.issue_node_id,
-        issue_number: commonRow.issue_number,
-        issue_updated_at: commonRow.issue_updated_at,
-        comment_id: delivery.commentId,
-        comment_node_id: delivery.commentNodeId,
-        comment_updated_at: delivery.commentUpdatedAt,
-        sender_id: commonRow.sender_id,
-        sender_login: commonRow.sender_login,
-        payload_sha256: commonRow.payload_sha256,
-      };
-      const table = delivery.eventName === "issue_comment"
-        ? "github_webhook_deliveries"
-        : "github_planning_webhook_deliveries";
-      const { error } = await supabase.from(table).insert(
-        (delivery.eventName === "issue_comment" ? commentRow : planningRow) as never,
-      );
-      if (!error) return "stored";
-      if (error.code !== "23505") throw new Error("GitHub webhook delivery could not be stored.");
-
-      const existing = await supabase
-        .from(table)
-        .select("event_name,payload_sha256")
-        .eq("delivery_id", delivery.deliveryId)
-        .maybeSingle<{ event_name: string; payload_sha256: string }>();
-      if (existing.error || !existing.data) throw new Error("GitHub webhook delivery could not be reconciled.");
-      return existing.data.event_name === delivery.eventName && existing.data.payload_sha256 === delivery.payloadSha256
-        ? "duplicate"
-        : "conflict";
-    },
-  };
-}
-
-export async function acceptGitHubIssueWebhook({
-  rawBody,
-  headers,
-  webhookSecret,
-  expectedInstallationId,
-  expectedOrganizationId = "",
-  store,
-}: {
-  rawBody: Uint8Array;
-  headers: GitHubWebhookHeaders;
-  webhookSecret: string;
-  expectedInstallationId: string;
-  expectedOrganizationId?: string;
-  store: GitHubWebhookDeliveryStore;
-}): Promise<GitHubWebhookIntakeResult> {
-  const inspection = inspectGitHubIssueWebhook({
-    rawBody,
-    headers,
-    webhookSecret,
-    expectedInstallationId,
-    expectedOrganizationId,
-  });
-  if (inspection.kind !== "accepted") return inspection;
-
-  try {
-    const recorded = await store.record(inspection.delivery);
-    if (recorded === "conflict") {
-      return rejected(409, "github_webhook_delivery_conflict", "GitHub webhook delivery identity conflicts with stored data.");
-    }
-    return {
-      kind: "accepted",
-      duplicate: recorded === "duplicate",
-      delivery: inspection.delivery,
-    };
-  } catch {
-    return rejected(503, "github_webhook_storage_unavailable", "GitHub webhook delivery could not be stored.");
-  }
 }

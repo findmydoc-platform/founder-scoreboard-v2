@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requirePlanningContributor } from "@/lib/authz";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { apiError, readJsonPayload } from "@/lib/api-response";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 
 type CommitmentPayload = {
   sprintId?: string;
@@ -14,10 +14,11 @@ type CommitmentPayload = {
 const levels = new Set(["Lite", "Standard", "Heavy", "Away"]);
 
 export async function PUT(request: NextRequest) {
-  const context = await requireJsonApiContext<CommitmentPayload>(request, requirePlanningContributor, {});
+  const payload = await readJsonPayload<CommitmentPayload>(request, {});
+  const context = await requirePlanningContext(request, "planning.sprint.commitment.write", payload.sprintId?.trim());
   if (!context.ok) return context.response;
 
-  const { payload, permission, supabase } = context;
+  const { permission, planning } = context;
   const sprintId = payload.sprintId?.trim();
   const profileId = payload.profileId?.trim() || permission.profile?.id || "";
   const commitmentLevel = payload.commitmentLevel || "Standard";
@@ -33,29 +34,11 @@ export async function PUT(request: NextRequest) {
     return apiError("Founder können nur ihr eigenes Commitment ändern.", 403);
   }
 
-  const { data, error } = await supabase
-    .from("sprint_commitments")
-    .upsert({
-      sprint_id: sprintId,
-      profile_id: profileId,
-      commitment_level: commitmentLevel,
-      weekly_hours: weeklyHours,
-      note,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "sprint_id,profile_id" })
-    .select("id,sprint_id,profile_id,commitment_level,weekly_hours,note")
-    .single();
+  const { data, error } = await planning.writeCommitment({ profileId, commitmentLevel, weeklyHours, note });
 
   if (error || !data) return apiError(error?.message || "Commitment konnte nicht gespeichert werden.", 500);
 
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "sprint.commitment.update",
-    entity_type: "sprint_commitment",
-    entity_id: String(data.id),
-    after_data: data,
-    ...auditRequestMetadata(request),
-  });
+  await planning.auditCommitment(auditRequestMetadata(request));
 
   return NextResponse.json({
     ok: true,

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import { planningRouteProtocol } from "../../helpers/planning-route-protocol.mjs";
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "session" } };
@@ -20,28 +22,6 @@ async function loadModel() {
   return importTestModule("src/features/planning-items/model/planning-items-sprint-assignment.ts", {
     "./planning-items-runner": runner,
     "./planning-items-store-supabase": supabaseStore,
-  });
-}
-
-async function loadRoute(run, apiContext) {
-  return importTestModule("src/app/api/tasks/bulk-sprint-assignment/route.ts", {
-    "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
-    "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }) },
-    "@/lib/api-response": {
-      apiError: (error, status) => ({ body: { error }, status }),
-      requireApiContext: async () => apiContext || { ok: true, permission: { profile: { id: "ceo", platformRole: "ceo" } }, supabase: {} },
-    },
-    "@/lib/authz": { requireOperationalLead: () => ({}) },
-    "@/features/planning-items/model/planning-actor-context-server": { actorContextFromSessionAuth: () => ({ ok: true, actor }) },
-    "@/features/planning-items/model/planning-items-sprint-assignment": {
-      parseSprintAssignmentRequest: (value) => value?.assignments ? value : "Sprint-Zuordnung ist ungültig.",
-      sprintAssignmentCommand: (value) => ({ kind: "canonicalSprintAssignment", value }),
-      createSprintAssignmentPlanningItems: () => ({ run }),
-      sprintAssignmentUpdatesFromChanges: (changes) => changes[0]?.after || [],
-      sprintAssignmentError: (error) => error.code === "conflict"
-        ? { message: "Der Ziel-Sprint ist gesperrt.", status: 409 }
-        : { message: "Sprint-Zuordnungen konnten nicht gespeichert werden.", status: 500 },
-    },
   });
 }
 
@@ -107,10 +87,18 @@ test("role, stale revision, and locked Sprint stop before writes", async () => {
 
 
 test("route preserves upstream auth failure and mapped errors", async () => {
-  const denied = { ok: false, response: { body: { error: "Nicht erlaubt" }, status: 403 } };
-  assert.deepEqual(await (await loadRoute(async () => ({}), denied)).PATCH({ json: async () => validPayload }), denied.response);
-  const route = await loadRoute(async () => ({ ok: false, error: { code: "conflict", reason: "state" } }));
-  const response = await route.PATCH({ json: async () => validPayload });
+  const protocol = planningRouteProtocol({ role: "founder", tables: {
+    tasks: (_request, url) => url.searchParams.get("id")?.includes("initiative") ? [item("initiative", "2026-08-03T11:00:00.000Z", { task_type: "initiative" })]
+      : validPayload.assignments.map(entry => item(entry.taskId, entry.expectedUpdatedAt)),
+    sprints: [{ id: "sprint-10", score_locked: true }],
+  } });
+  const { PATCH } = await importTestModule("src/app/api/tasks/bulk-sprint-assignment/route.ts", { "server-only": {} });
+  const send = () => PATCH(protocol.request("/api/tasks/bulk-sprint-assignment", "PATCH", validPayload));
+  assert.equal((await send()).status, 403);
+  assert.equal(protocol.requests.length, 0);
+  protocol.state.role = "ceo";
+  const response = await send();
   assert.equal(response.status, 409);
-  assert.equal(response.body.error, "Der Ziel-Sprint ist gesperrt.");
+  assert.equal((await response.json()).error, "Der Ziel-Sprint ist gesperrt.");
+  assert.equal(protocol.calls.length, 0);
 });
