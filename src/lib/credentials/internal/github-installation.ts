@@ -86,6 +86,7 @@ async function installationToken(repositories: readonly string[]) {
         body: { repositories: repositories.map(repository => repository.split("/")[1]) },
         errorMessage: "GitHub-App-Installationstoken konnte nicht erzeugt werden",
       });
+    if (configuration().key !== config.key) throw new GitHubAppConfigurationError("GitHub-App-Konfiguration wurde geändert.");
     const expiresAt = Date.parse(body.expires_at);
     if (!body.token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error("GitHub-App-Installationstoken ist ungültig.");
     const result = { token: body.token, expiresAt };
@@ -137,13 +138,19 @@ export async function authorizeGitHubInstallation(input: GitHubInstallationInput
   if ((action === "github.team.read" || action === "github.project.read") && (!organization || !/^[a-z\d](?:[a-z\d-]{0,38})$/i.test(organization))) throw new Error("GitHub-Organisation ist ungültig.");
   if (action === "github.asset.read" && (!assetUrl || !allowedGitHubAssetUrl(assetUrl))) throw new Error("GitHub-Anhang ist nicht freigegeben.");
   const binding = configuration().key;
-  await installationToken(repositories);
+  function assertBinding(credential: InstallationToken) {
+    if (configuration().key !== binding) throw new GitHubAppConfigurationError("GitHub-App-Konfiguration wurde geändert.");
+    if (Date.now() >= credential.expiresAt) throw new Error("GitHub-App-Installationstoken ist abgelaufen.");
+  }
+  const initial = await installationToken(repositories);
+  assertBinding(initial);
   const capability: GitHubInstallationCapability = Object.freeze({
     async asset(url: string) {
       if (configuration().key !== binding) throw new Error("GitHub-App-Konfiguration wurde geändert.");
       if (action !== "github.asset.read" || url !== assetUrl) throw new Error("GitHub-Aktion ist nicht freigegeben.");
       const credential = await installationToken(repositories);
-      return fetchGitHubAsset(url, credential.token);
+      assertBinding(credential);
+      return fetchGitHubAsset(url, credential.token, () => assertBinding(credential));
     },
     async request(url: string, requestOptions: Omit<GitHubRequestOptions, "token">) {
       const options = { ...requestOptions, ...(requestOptions.body === undefined ? {} : { body: structuredClone(requestOptions.body) }) };
@@ -163,10 +170,12 @@ export async function authorizeGitHubInstallation(input: GitHubInstallationInput
       }
       if (!permittedApiTarget(url, repositories, options, organization)) throw new Error("GitHub-Ziel ist nicht freigegeben.");
       const credential = await installationToken(repositories);
+      assertBinding(credential);
       // No credential response or network failure replays a resource mutation.
-      return githubRequest(url, { ...options, token: credential.token } as GitHubRequestOptions);
+      return githubRequest(url, { ...options, token: credential.token } as GitHubRequestOptions, async () => () => assertBinding(credential));
     },
   });
+  assertBinding(initial);
   return { ok: true as const, github: capability };
 }
 export async function installationOperationalStatus(): Promise<GitHubAppOperationalStatus> {
@@ -215,7 +224,7 @@ export async function installationOperationalStatus(): Promise<GitHubAppOperatio
 const maxGitHubAssetRedirects = 3;
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 
-async function fetchGitHubAsset(value: string, token: string) {
+async function fetchGitHubAsset(value: string, token: string, assertCurrent: () => void) {
   const initialUrl = allowedGitHubAssetUrl(value);
   if (!initialUrl) return null;
   let url: URL = initialUrl;
@@ -228,6 +237,7 @@ async function fetchGitHubAsset(value: string, token: string) {
     if (url.hostname === "github.com") headers.set("authorization", `Bearer ${token}`);
 
     // This URL passed the asset-host allowlist; every redirect is checked before the next request.
+    assertCurrent();
     const response: Response = await fetch(url, {
       method: "GET",
       headers,
