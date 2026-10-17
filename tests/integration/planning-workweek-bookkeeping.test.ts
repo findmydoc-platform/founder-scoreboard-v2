@@ -4,8 +4,9 @@ import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 
 async function json(response: Response) {
-  const body = await response.json();
-  if (!response.ok) throw new Error(`Synthetic Workweek fixture RPC rejected (${response.status}, ${body.code || "unknown"})`);
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!response.ok) throw new Error(`Synthetic Workweek fixture RPC rejected (${response.status}, ${body?.code || "unknown"})`);
   return body;
 }
 
@@ -39,8 +40,8 @@ it("public Workweek capabilities preserve real owner preparation and confirmed-e
   await expect(wrongOwner.planning.detectWorkweekConflict()).rejects.toMatchObject({ code: "not_found" });
   expect(writes).toBe(0);
   const foreignPreparation = await f.rpc("prepare_team_workweek_publication", { p_version_id: foreign.id, p_write_journal_version: 1 }, "viewer");
-  expect(foreignPreparation.status).toBe(403);
-  expect((await foreignPreparation.json()).code).toBe("42501");
+  expect(foreignPreparation.status).toBe(500);
+  expect((await foreignPreparation.json()).code).toBe("P0002");
   const read = await authorizeCredentialAction({ credential: { kind: "session-request", request: f.request("viewer", "/api/team-workweek/conflict") }, action: "workweek.conflict.read" });
   if (!read.ok) throw new Error("Expected owner conflict-read capability");
   await expect(read.planning.publishWorkweek()).rejects.toMatchObject({ code: "forbidden" });

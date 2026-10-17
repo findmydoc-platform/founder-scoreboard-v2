@@ -7,10 +7,10 @@ const context = (id: string) => ({ params: Promise.resolve({ id }) });
 
 it.each(["legacy", "linking"] as const)("Planning %s reads and corrections retain actual owner, revision, permit and administrator boundaries", mode => withPlanningCredentialDatabase(async f => {
   const own = `${f.prefix}-own`, foreign = `${f.prefix}-foreign`;
-  await f.db.query(`insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,assignee,owner,review_status,score_final)
-    values($1,'findmydoc-founder-execution','Own planning task','deliverable','In Arbeit','P2','approved',$3,$3,'not_requested',false),
-    ($2,'findmydoc-founder-execution','Foreign planning task','deliverable','In Arbeit','P2','approved',$4,$4,'not_requested',false)`, [own, foreign, f.actors.founder.profileId, f.actors.other.profileId]);
-  const revision = async (id: string) => (await f.db.query("select updated_at::text from public.tasks where id=$1", [id])).rows[0].updated_at as string;
+  await f.db.query(`insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,assignee,owner,review_status,score_final,parent_task_id)
+    values($1,'findmydoc-founder-execution','Own planning task','deliverable','In Arbeit','P2','approved',$3,$3,'not_requested',false,$5),
+    ($2,'findmydoc-founder-execution','Foreign planning task','deliverable','In Arbeit','P2','approved',$4,$4,'not_requested',false,$5)`, [own, foreign, f.actors.founder.profileId, f.actors.other.profileId, f.initiativeId]);
+  const revision = async (id: string) => (await f.db.query("select to_jsonb(updated_at)#>>'{}' as updated_at from public.tasks where id=$1", [id])).rows[0].updated_at as string;
   const before = await revision(own);
   const { GET } = await importTestModule("src/app/api/planning-revision/route.ts", { "server-only": {} });
   expect((await GET(f.request("viewer", "/api/planning-revision"))).status).toBe(200);
@@ -45,19 +45,24 @@ it.each(["legacy", "linking"] as const)("Planning %s reads and corrections retai
 
 it("ordinary creation, approval and trash retain contributor proposals, CEO approval and lead-only restoration", () => withPlanningCredentialDatabase(async f => {
   const create = await importTestModule("src/app/api/tasks/route.ts", { "server-only": {} });
-  const payload = { creationRequestId: randomUUID(), taskType: "deliverable", title: "Synthetic ordinary proposal", ownerId: f.actors.founder.profileId,
+  const payload = { creationRequestId: randomUUID(), taskType: "deliverable", title: "Synthetic ordinary proposal", parentTaskId: f.initiativeId, ownerId: f.actors.founder.profileId,
     problemStatement: "A testable planning boundary needs evidence.", intendedOutcome: "The approved owner can propose work.", scopeConstraints: "Synthetic acceptance fixture only.", acceptanceCriteria: "The stored actor and approval remain authoritative.", evidenceRequired: "An isolated transaction assertion.", definitionOfDone: "The owner and role controls pass." };
   expect((await create.POST(f.request("viewer", "/api/tasks", "POST", payload))).status).toBe(403);
   const response = await create.POST(f.request("founder", "/api/tasks", "POST", payload));
-  expect(response.status).toBe(200);
-  const body = await response.json(), id = body.task.id as string;
+  const body = await response.json();
+  expect(response.status, body.error).toBe(200);
+  let id = body.task.id as string;
   expect(id.startsWith(f.prefix)).toBe(true);
   expect((await f.db.query("select created_by,approval_status from public.tasks where id=$1", [id])).rows[0]).toMatchObject({ created_by: f.actors.founder.profileId, approval_status: "proposed" });
   const approval = await importTestModule("src/app/api/tasks/[id]/approval/route.ts", { "server-only": {} });
   expect((await approval.POST(f.request("founder", `/api/tasks/${id}/approval`, "POST", { action: "approve", expectedRevision: 1 }), context(id))).status).toBe(403);
   expect((await approval.POST(f.request("ceo", `/api/tasks/${id}/approval`, "POST", { action: "approve", expectedRevision: 1 }), context(id))).status).toBe(200);
   const approvedRevision = (await f.db.query("select approval_revision from public.tasks where id=$1", [id])).rows[0].approval_revision;
-  expect((await approval.POST(f.request("ceo", `/api/tasks/${id}/approval`, "POST", { action: "return_to_draft", expectedRevision: approvedRevision, note: "Return the isolated proposal for revision." }), context(id))).status).toBe(200);
+  expect((await approval.POST(f.request("ceo", `/api/tasks/${id}/approval`, "POST", { action: "return_to_draft", expectedRevision: approvedRevision, note: "An approved proposal cannot re-enter this decision transaction." }), context(id))).status).toBe(409);
+  expect((await f.db.query("select approval_status from public.tasks where id=$1", [id])).rows[0].approval_status).toBe("approved");
+  const withdrawable = await create.POST(f.request("founder", "/api/tasks", "POST", { ...payload, creationRequestId: randomUUID(), title: "Synthetic withdrawable proposal" }));
+  expect(withdrawable.status).toBe(200);
+  id = (await withdrawable.json()).task.id;
   const withdraw = await importTestModule("src/app/api/tasks/[id]/withdraw/route.ts", { "server-only": {} });
   const approved = (await f.db.query("select approval_revision from public.tasks where id=$1", [id])).rows[0].approval_revision;
   expect((await withdraw.POST(f.request("other", `/api/tasks/${id}/withdraw`, "POST", { expectedRevision: approved, reason: "Foreign owner must not withdraw this proposal." }), context(id))).status).toBe(403);
@@ -82,10 +87,10 @@ it("ordinary creation, approval and trash retain contributor proposals, CEO appr
 
 it("review, relationship and human comment operations preserve the observed actor and task ownership", () => withPlanningCredentialDatabase(async f => {
   const own = `${f.prefix}-review`, related = `${f.prefix}-related`;
-  await f.db.query(`insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,assignee,owner,review_owner_profile_id,evidence_link)
-    values($1,'findmydoc-founder-execution','Owner review','deliverable','In Arbeit','P2','approved',$3,$3,$4,'https://example.test/evidence'),
-    ($2,'findmydoc-founder-execution','Related task','deliverable','In Arbeit','P2','approved',$4,$4,$3,null)`, [own, related, f.actors.founder.profileId, f.actors.other.profileId]);
-  const revision = async () => (await f.db.query("select updated_at::text from public.tasks where id=$1", [own])).rows[0].updated_at;
+  await f.db.query(`insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,assignee,owner,review_owner_profile_id,evidence_link,parent_task_id)
+    values($1,'findmydoc-founder-execution','Owner review','deliverable','In Arbeit','P2','approved',$3,$3,$4,'https://example.test/evidence',$5),
+    ($2,'findmydoc-founder-execution','Related task','deliverable','In Arbeit','P2','approved',$4,$4,$3,null,$5)`, [own, related, f.actors.founder.profileId, f.actors.other.profileId, f.initiativeId]);
+  const revision = async () => (await f.db.query("select to_jsonb(updated_at)#>>'{}' as updated_at from public.tasks where id=$1", [own])).rows[0].updated_at;
   const relationships = await importTestModule("src/app/api/tasks/[id]/relationships/route.ts", { "server-only": {} });
   const relationPayload = { relationType: "blocked_by", relatedTaskId: related, note: "Owned dependency", expectedUpdatedAt: await revision() };
   expect((await relationships.POST(f.request("other", `/api/tasks/${own}/relationships`, "POST", relationPayload), context(own))).status).toBe(403);
@@ -108,12 +113,12 @@ it("review, relationship and human comment operations preserve the observed acto
 it("sprint, governance, Focus and Weekly operations preserve lead and owner distinctions", () => withPlanningCredentialDatabase(async f => {
   const sprint = `${f.prefix}-sprint`, task = `${f.prefix}-focus`;
   await f.db.query("insert into public.sprints(id,project_id,name,start_date,end_date,review_due_at,status) values($1,'findmydoc-founder-execution','Synthetic acceptance sprint',current_date-28,current_date-15,now()-interval '2 days','review')", [sprint]);
-  await f.db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,assignee,owner) values($1,'findmydoc-founder-execution','Owner focus','deliverable','In Arbeit','P2','approved',$2,$2)", [task, f.actors.founder.profileId]);
+  await f.db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,assignee,owner,parent_task_id) values($1,'findmydoc-founder-execution','Owner focus','deliverable','In Arbeit','P2','approved',$2,$2,$3)", [task, f.actors.founder.profileId, f.initiativeId]);
   const meeting = (await f.db.query("insert into public.meetings(sprint_id,title,meeting_at,status) values($1,'Synthetic weekly',now()+interval '1 day','planned') returning id", [sprint])).rows[0].id;
   const destination = `${f.prefix}-destination`;
   await f.db.query("insert into public.sprints(id,project_id,name,start_date,end_date,status) values($1,'findmydoc-founder-execution','Synthetic destination',current_date+7,current_date+20,'planning')", [destination]);
   const assignmentRoute = await importTestModule("src/app/api/tasks/bulk-sprint-assignment/route.ts", { "server-only": {} });
-  const assignment = { sprintId: destination, assignments: [{ taskId: task, expectedUpdatedAt: (await f.db.query("select updated_at::text from public.tasks where id=$1", [task])).rows[0].updated_at }] };
+  const assignment = { sprintId: destination, assignments: [{ taskId: task, expectedUpdatedAt: (await f.db.query("select to_jsonb(updated_at)#>>'{}' as updated_at from public.tasks where id=$1", [task])).rows[0].updated_at }] };
   expect((await assignmentRoute.PATCH(f.request("founder", "/api/tasks/bulk-sprint-assignment", "PATCH", assignment))).status).toBe(403);
   expect((await assignmentRoute.PATCH(f.request("deputy", "/api/tasks/bulk-sprint-assignment", "PATCH", assignment))).status).toBe(200);
   expect((await f.db.query("select sprint_id from public.tasks where id=$1", [task])).rows[0].sprint_id).toBe(destination);

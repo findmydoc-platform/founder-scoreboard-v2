@@ -24,6 +24,8 @@ async function createFixture(mode: "legacy" | "linking") {
   const db = new pg.Client(local.DB_URL);
   await db.connect();
   const prefix = `planning-auth-${randomUUID()}`;
+  const projectExisted = (await db.query("select exists(select 1 from public.projects where id='findmydoc-founder-execution') as present")).rows[0].present;
+  const initiativeId = `${prefix}-initiative`, epicId = `${prefix}-epic`;
   const nativeFetch = globalThis.fetch;
   const previous = (await db.query("select mode,linking_enforced from workspace_private.configuration")).rows[0];
   const actors = Object.fromEntries(["ceo", "deputy", "founder", "other", "viewer", "administrator", "unmapped"].map(name => [name, { profileId: `${prefix}-${name}`, userId: randomUUID(), sessionId: randomUUID(), subject: randomUUID(), token: "" }])) as Record<ActorName, PlanningDatabaseActor>;
@@ -44,6 +46,7 @@ async function createFixture(mode: "legacy" | "linking") {
       await db.query("select set_config('founderops.trash_lifecycle_write','on',false)");
       await db.query("delete from public.tasks where id like $1", [`${prefix}%`]);
       await db.query("delete from public.sprints where id like $1", [`${prefix}%`]);
+      if (!projectExisted) await db.query("delete from public.projects where id='findmydoc-founder-execution'");
       await db.query("delete from public.team_workweek_publications where owner_profile_id=any($1)", [profileIds]);
       await db.query("delete from public.team_workweek_versions where owner_profile_id=any($1)", [profileIds]);
       await db.query("delete from workspace_private.request_permits where user_id=any($1)", [userIds]);
@@ -68,13 +71,16 @@ async function createFixture(mode: "legacy" | "linking") {
       const unsigned = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ iss: `${local.API_URL}/auth/v1`, sub: actor.userId, aud: "authenticated", role: "authenticated", session_id: actor.sessionId, iat: now, exp: now + 3600, amr: [{ method: "oauth", timestamp: now }] })}`;
       actor.token = `${unsigned}.${createHmac("sha256", local.JWT_SECRET).update(unsigned).digest("base64url")}`;
     }
+    await db.query("insert into public.projects(id,name) values('findmydoc-founder-execution','Synthetic Planning acceptance') on conflict(id) do nothing");
+    await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,owner) values($1,'findmydoc-founder-execution','Synthetic acceptance Epic','epic','Offen','P2',$2)", [epicId, actors.ceo.profileId]);
+    await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner,assignee) values($1,'findmydoc-founder-execution','Synthetic acceptance Initiative','initiative','Offen','P2','approved',$2,$3,$3)", [initiativeId, epicId, actors.founder.profileId]);
     await db.query("update workspace_private.configuration set mode=$1,linking_enforced=$2", [mode, mode === "linking"]);
     if (mode === "linking") for (const actor of Object.values(actors)) await db.query("select public.workspace_record_google_login($1,$2,$3)", [actor.userId, actor.sessionId, actor.subject]);
     await db.query("insert into public.administrator_access_grants(profile_id,eligible,active_until) values($1,true,now()+interval '1 hour')", [actors.administrator.profileId]);
     for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: local.API_URL, SUPABASE_URL: local.API_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: local.ANON_KEY, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: local.ANON_KEY, SUPABASE_ANON_KEY: local.ANON_KEY, SUPABASE_PUBLISHABLE_KEY: local.ANON_KEY,
       SUPABASE_SERVICE_ROLE_KEY: local.SERVICE_ROLE_KEY, SUPABASE_SECRET_KEY: local.SERVICE_ROLE_KEY, REQUIRE_SUPABASE_AUTH: "true",
-      GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-planning-audience", GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "synthetic-planning@example.test", GOOGLE_AUTHORIZED_GROUP: "synthetic-planning-group", VERCEL_OIDC_TOKEN: actors.founder.token,
+      GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-planning-audience", GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "synthetic-planning@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu", VERCEL_OIDC_TOKEN: actors.founder.token,
       GOOGLE_WORKSPACE_CLIENT_ID: "synthetic-planning-client", GOOGLE_WORKSPACE_CLIENT_SECRET: "synthetic-planning-secret", GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY: encryptionKey.toString("base64"),
       GITHUB_APP_ID: "", GITHUB_APP_INSTALLATION_ID: "", GITHUB_APP_PRIVATE_KEY: "", GITHUB_APP_PRIVATE_KEY_PATH: "", GITHUB_APP_CLIENT_ID: "", GITHUB_APP_CLIENT_SECRET: "", GITHUB_TOKEN_ENCRYPTION_KEY: "",
       GOOGLE_CHAT_WEBHOOK_URL: "", GOOGLE_CHAT_PRIVATE_KEY: "", GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL: "" })) vi.stubEnv(name, value);
@@ -100,5 +106,5 @@ async function createFixture(mode: "legacy" | "linking") {
   } catch (error) { await cleanup(); throw error; }
   const request = (name: ActorName, path: string, method = "GET", body?: unknown) => new NextRequest(`http://localhost:3000${path}`, { method, headers: { authorization: `Bearer ${actors[name].token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const rpc = (name: string, body: unknown, actor: ActorName | "service" | "anonymous" = "service") => nativeFetch(`${local.API_URL}/rest/v1/rpc/${name}`, { method: "POST", headers: { apikey: local.ANON_KEY, authorization: `Bearer ${actor === "service" ? local.SERVICE_ROLE_KEY : actor === "anonymous" ? local.ANON_KEY : actors[actor].token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
-  return { db, prefix, actors, observed, request, rpc, cleanup, encrypt, local, nativeFetch, setProvider(value: typeof provider) { provider = value; } };
+  return { db, prefix, initiativeId, actors, observed, request, rpc, cleanup, encrypt, local, nativeFetch, setProvider(value: typeof provider) { provider = value; } };
 }
