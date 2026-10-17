@@ -61,7 +61,8 @@ beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-17T10:00:00Z"));
-  for (const [key, value] of Object.entries({ SUPABASE_URL: origin, SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service",
+  for (const [key, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: origin, NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon",
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_URL: origin, SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service",
     REQUIRE_SUPABASE_AUTH: "true", VERCEL_OIDC_TOKEN: token(), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience",
     GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "reader@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu" })) vi.stubEnv(key, value);
   counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId; precedingAuthDelay = 0;

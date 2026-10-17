@@ -14,6 +14,9 @@ test("the public credential seam retains the missing-session HTTP contract", asy
 
 test("the seam verifies a bearer and preserves founder versus CEO action authority", async () => {
   vi.stubEnv("REQUIRE_SUPABASE_AUTH", "true");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://auth.example.test");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "synthetic-anon");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "synthetic-anon");
   vi.stubEnv("SUPABASE_URL", "https://auth.example.test");
   vi.stubEnv("SUPABASE_ANON_KEY", "synthetic-anon");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "synthetic-service");
