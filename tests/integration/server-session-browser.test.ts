@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { createServer, type Server } from "node:http";
 import { createHmac } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -6,6 +6,7 @@ import { once } from "node:events";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { build } from "vite";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 
 // Run only in the integration project's isolated environment. All Auth responses are synthetic.
@@ -18,16 +19,22 @@ let releaseLogin: (() => void) | undefined;
 let loginEntered: (() => void) | undefined;
 const evidenceDirectory = mkdtempSync(path.join(tmpdir(), "session-browser-evidence-"));
 let logs = "";
+let browserClientCode = "", userCalls = 0, rejectUserAt = 0;
 const cookieBase = "sb-localhost-auth-token";
 const userA = "b1111111-1111-4111-8111-111111111111";
 const userB = "b2222222-2222-4222-8222-222222222222";
+let loginUser = userB;
+let sessionSequence = 0;
+let workspaceMode = "legacy", linkingEnforced = false, workspaceLinked = false, loginRecorded = false;
+let linkNonce: string | null = null;
+beforeEach(() => { workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; });
 function token(userId: string) {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
+  const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", amr: [{ method: "oauth" }], iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
   return `${value}.${createHmac("sha256", "synthetic-browser-signing-key").update(value).digest("base64url")}`;
 }
 function session(userId: string) {
-  return { access_token: token(userId), refresh_token: `synthetic-refresh-${userId}`, expires_at: Math.floor(Date.now()/1000)+3600, expires_in: 3600, token_type: "bearer", user: { id: userId, aud: "authenticated", user_metadata: {} } };
+  return { access_token: token(userId), refresh_token: `synthetic-refresh-${++sessionSequence}-${userId}`, expires_at: Math.floor(Date.now()/1000)+3600, expires_in: 3600, token_type: "bearer", user: { id: userId, aud: "authenticated", user_metadata: {} } };
 }
 async function listen(server: Server) {
   server.listen(0, "localhost"); await once(server, "listening");
@@ -44,20 +51,38 @@ beforeAll(async () => {
       response.writeHead(302, { location: redirect.href }); response.end(); return;
     }
     if (url.pathname === "/auth/v1/user") {
+      userCalls++;
+      if (userCalls === rejectUserAt) { send({ message: "Synthetic credential rejected before effect", code: "bad_jwt" }, 401); return; }
       const claims = JSON.parse(Buffer.from(request.headers.authorization!.slice(7).split(".")[1], "base64url").toString());
-      send({ id: claims.sub, aud: "authenticated", user_metadata: {} }); return;
+      send({ id: claims.sub, aud: "authenticated", user_metadata: {}, identities: [{ provider: "github" }] }); return;
     }
+    if (url.pathname === "/auth/v1/user/identities/authorize") { const target = new URL("/auth/v1/authorize", authOrigin); target.search = url.search; send({ url: target.href }); return; }
     if (url.pathname === "/auth/v1/token") {
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
-      if (url.searchParams.get("grant_type") === "pkce") { send({ ...session(userB), provider_token: "synthetic-provider-proof" }); return; }
+      if (url.searchParams.get("grant_type") === "pkce") { send({ ...session(loginUser), provider_token: "synthetic-provider-proof" }); return; }
       if (holdRefresh) { refreshEntered?.(); await new Promise<void>(resolve => { releaseRefresh = resolve; }); }
       send(session(body.refresh_token.endsWith(userB) ? userB : userA)); return;
     }
     if (url.pathname === "/auth/v1/logout") { response.writeHead(204); response.end(); return; }
     if (url.pathname === "/rest/v1/rpc/workspace_access_context") {
       if (holdLogin) { holdLogin = false; loginEntered?.(); await new Promise<void>(resolve => { releaseLogin = resolve; }); }
-      send({ mode: "legacy", linkingEnforced: false, linked: false, userId: userA, profileId: "synthetic-profile", identity: null }); return; }
+      const chunks = []; for await (const chunk of request) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      send({ mode: workspaceMode, linkingEnforced, linked: workspaceLinked, userId: body.p_user_id || loginUser, profileId: "synthetic-profile",
+        identity: workspaceMode === "legacy" ? null : { sub: "synthetic-google-subject", iss: "https://accounts.google.com", email: "synthetic@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } } }); return; }
+    if (url.pathname === "/rest/v1/rpc/workspace_begin_link" || url.pathname === "/rest/v1/rpc/workspace_complete_link" || url.pathname === "/rest/v1/rpc/workspace_record_google_login") {
+      const chunks = []; for await (const chunk of request) chunks.push(chunk); const body = JSON.parse(Buffer.concat(chunks).toString());
+      if (body.p_user_id !== userA) { send({ message: "Wrong bound actor" }, 403); return; }
+      if (url.pathname.endsWith("workspace_begin_link")) linkNonce = body.p_nonce_hash;
+      if (url.pathname.endsWith("workspace_complete_link")) {
+        if (!linkNonce || linkNonce !== body.p_nonce_hash || body.p_subject !== "synthetic-google-subject") { send({ message: "Nonce rejected" }, 403); return; }
+        linkNonce = null; workspaceLinked = true;
+      }
+      if (url.pathname.endsWith("workspace_record_google_login")) loginRecorded = true;
+      send(null); return;
+    }
+    if (url.pathname === "/rest/v1/rpc/workspace_linking_session_allowed") { send(loginRecorded); return; }
     if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send({ id: "synthetic-profile", name: "Synthetic Founder", platform_role: "founder" }); return; }
     if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: false, active: false }); return; }
     if (url.pathname.startsWith("/rest/v1/")) { send([]); return; }
@@ -66,7 +91,8 @@ beforeAll(async () => {
   authOrigin = await listen(auth);
   const port = await freePort(); appOrigin = `http://localhost:${port}`;
   const env: NodeJS.ProcessEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ["PATH", "HOME", "TMPDIR", "NODE_OPTIONS"].includes(key))), NODE_ENV: "development" };
-  Object.assign(env, { NEXT_TELEMETRY_DISABLED: "1", APP_URL: appOrigin, NEXT_PUBLIC_SUPABASE_URL: authOrigin, SUPABASE_URL: authOrigin,
+  Object.assign(env, { NEXT_TELEMETRY_DISABLED: "1", NODE_OPTIONS: `${env.NODE_OPTIONS || ""} --require=${path.resolve("tests/helpers/session-browser-protocol.cjs")}`,
+    VERCEL_OIDC_TOKEN: token(userA), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience", GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "synthetic@example.test", GOOGLE_AUTHORIZED_GROUP: "synthetic@example.test", APP_URL: appOrigin, NEXT_PUBLIC_SUPABASE_URL: authOrigin, SUPABASE_URL: authOrigin,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service" });
   app = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--webpack", "--port", port], { cwd: process.cwd(), env, stdio: ["ignore", "pipe", "pipe"] });
   app.stdout!.on("data", chunk => { logs = (logs + String(chunk)).slice(-4000); });
@@ -77,6 +103,12 @@ beforeAll(async () => {
     if (attempt === 119) throw new Error(`Synthetic session app did not start: ${logs}`);
     await new Promise(resolve => setTimeout(resolve, 250));
   }
+  const compiled = await build({ configFile: false, logLevel: "silent", resolve: { alias: { "@": path.resolve("src") } },
+    build: { write: false, lib: { entry: path.resolve("tests/fixtures/session-browser-entry.ts"), name: "FounderOpsBrowser", formats: ["iife"] } } });
+  const outputs = Array.isArray(compiled) ? compiled : [compiled];
+  const chunk = outputs.flatMap(output => "output" in output ? output.output : []).find(output => output.type === "chunk");
+  if (!chunk || chunk.type !== "chunk") throw new Error("Browser public transport fixture did not compile");
+  browserClientCode = chunk.code;
   browser = await chromium.launch({ headless: true });
 }, 120_000);
 
@@ -107,7 +139,8 @@ async function beginDelayedRefresh(page: Awaited<ReturnType<typeof start>>["page
 }
 async function current(context: BrowserContext) { const response = await context.request.get(`${appOrigin}/api/auth/session`); return { status: response.status(), body: await response.json() }; }
 
-test("Chromium keeps a newer login after an older refresh response writes its actual Set-Cookie headers", async () => {
+test.each([userA, userB])("Chromium keeps newer login %s after an older refresh writes its actual Set-Cookie headers", async replacementUser => {
+  loginUser = replacementUser;
   const { context, page, expected } = await start();
   try {
     const initial = "legacy".padEnd(32, "0");
@@ -118,17 +151,17 @@ test("Chromium keeps a newer login after an older refresh response writes its ac
     await other.waitForURL(`${appOrigin}/auth/error`);
     const replacement = (await context.cookies()).find(cookie => cookie.name === `${cookieBase}-active`)!.value;
     expect(replacement).not.toBe(initial);
-    expect((await current(context)).body.session.userId).toBe(userB);
+    expect((await current(context)).body.session.userId).toBe(replacementUser);
     releaseRefresh!(); holdRefresh = false;
     expect((await pending).status).toBe(200);
     const actualCookies = await context.cookies();
     expect(actualCookies.find(cookie => cookie.name === `${cookieBase}-g-${initial}`)).toBeDefined();
     expect(actualCookies.find(cookie => cookie.name === `${cookieBase}-active`)!.value).toBe(replacement);
     expect(actualCookies.find(cookie => cookie.name === `${cookieBase}-g-${replacement}`)!.httpOnly).toBe(true);
-    expect((await current(context)).body.session.userId).toBe(userB);
+    expect((await current(context)).body.session.userId).toBe(replacementUser);
     const encoded = actualCookies.find(cookie => cookie.name === `${cookieBase}-g-${replacement}`)!.value;
     expect(JSON.parse(Buffer.from(encoded.slice(7), "base64url").toString()).provider_token).toBeUndefined();
-  } finally { releaseRefresh?.(); holdRefresh = false; await context.close(); }
+  } finally { releaseRefresh?.(); holdRefresh = false; loginUser = userB; await context.close(); }
 }, 120_000);
 
 test("Chromium cannot resurrect a logged-out session when the delayed refresh response arrives last", async () => {
@@ -175,6 +208,7 @@ test("login error remains usable at supported phone, tablet and desktop viewport
     const page = await context.newPage(); await page.goto(`${appOrigin}/auth/login?next=//unapproved.example.test`);
     await expect.poll(async () => page.locator('[role="status"]').textContent()).toContain("nicht sicher vorbereitet");
     expect(new URL(page.url()).searchParams.get("next")).toBe("/");
+    await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
     for (const [width, height] of [[320,568],[390,844],[768,1024],[1024,768],[1440,900]]) {
       await page.setViewportSize({ width, height });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -208,5 +242,48 @@ test.each(["/planning", "/team/platform-releases"])("%s consumes server session 
     expect((await current(context)).status).toBe(401);
     expect(requests.filter(request => request.path.startsWith("/api/")).every(request => !request.authorization)).toBe(true);
     expect(requests.some(request => request.path === "/auth/v1/token" || request.path === "/auth/v1/user")).toBe(false);
+  } finally { await context.close(); }
+}, 120_000);
+
+
+test("real Google link form returns through PKCE and consumes the existing bound nonce", async () => {
+  workspaceMode = "linking"; loginUser = userA;
+  const { context, page } = await start();
+  try {
+    await page.goto(`${appOrigin}/auth/link-google`);
+    await page.getByRole("button", { name: "Mit Google verknüpfen", exact: true }).click();
+    await expect.poll(async () => page.locator("body").textContent()).toContain("Dein Google-Konto ist verknüpft.");
+    expect(workspaceLinked).toBe(true); expect(linkNonce).toBeNull();
+    expect((await current(context)).body.session.userId).toBe(userA);
+    expect((await context.cookies()).find(cookie => cookie.name === "workspace_link")).toBeUndefined();
+  } finally { await context.close(); }
+}, 120_000);
+
+test("real Google login return records only nonce-matched provider proof and navigates as the bound user", async () => {
+  workspaceMode = "linking"; linkingEnforced = true; workspaceLinked = true; loginUser = userA;
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage(); await page.goto(`${appOrigin}/auth/login?next=/auth/error`);
+    await page.waitForURL(`${appOrigin}/auth/error`);
+    expect(loginRecorded).toBe(true);
+    expect((await current(context)).body.session.userId).toBe(userA);
+    expect((await context.cookies()).find(cookie => cookie.name === "workspace_google_login")).toBeUndefined();
+  } finally { await context.close(); }
+}, 120_000);
+
+
+test("real browser API transport recovers one marked pre-effect rejection and replays the read once", async () => {
+  const { context, page } = await start();
+  const calls: string[] = [];
+  context.on("request", request => { calls.push(new URL(request.url()).pathname); });
+  try {
+    await page.addScriptTag({ content: browserClientCode });
+    await page.evaluate("FounderOpsBrowser.createBrowserSessionAdapter().current()");
+    rejectUserAt = userCalls+2;
+    const result = await page.evaluate("FounderOpsBrowser.createBrowserApiClient().requestJson('/api/team-workweek/team').then(result => ({status: result.response.status, body: result.body}))");
+    expect(result.status).toBe(200);
+    expect(calls.filter(call => call === "/api/team-workweek/team")).toHaveLength(2);
+    expect(calls.filter(call => call === "/api/auth/session/recover")).toHaveLength(1);
+    expect((await current(context)).body.session.userId).toBe(userA);
   } finally { await context.close(); }
 }, 120_000);

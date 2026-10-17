@@ -20,7 +20,14 @@ function createCookieContext(jar: Jar, replace = false, request?: NextRequest) {
   const env = environment();
   const pending = new Map<string, Cookie>();
   const headers = new Headers();
-  const all = () => jar.getAll?.() || [];
+  const all = () => {
+    const values = new Map((jar.getAll?.() || []).map(cookie => [cookie.name, cookie.value]));
+    for (const cookie of pending.values()) {
+      if (cookie.options?.maxAge === 0) values.delete(cookie.name);
+      else values.set(cookie.name, cookie.value);
+    }
+    return [...values].map(([name, value]) => ({ name, value }));
+  };
   const base = env ? `sb-${new URL(env.url).hostname.split(".")[0]}-auth-token` : "sb-session-auth-token";
   const pointer = `${base}-active`;
   const existing = all().find(cookie => cookie.name === pointer)?.value;

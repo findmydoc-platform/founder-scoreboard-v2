@@ -17,6 +17,7 @@ let reading: Promise<BrowserSessionSnapshot | null> | undefined;
 const recoveries = new Map<string, Promise<BrowserSessionRecovery>>();
 const listeners = new Set<(session: BrowserSessionSnapshot | null) => void>();
 let channel: BroadcastChannel | undefined;
+let focusInstalled = false;
 const same = (a: BrowserSessionSnapshot | null | undefined, b: BrowserSessionSnapshot) => a?.userId === b.userId && a.revision === b.revision;
 function publish(session: BrowserSessionSnapshot | null) { known = session; listeners.forEach(listener => listener(session)); }
 function changed(kind = "changed") { channel?.postMessage({ kind }); }
@@ -71,6 +72,10 @@ async function clearIfCurrent(expected: BrowserSessionSnapshot) {
   } catch { /* A transport failure cannot prove that the current server session was cleared. */ }
 }
 function ensureChannel() {
+  if (typeof window !== "undefined" && !focusInstalled) {
+    focusInstalled = true;
+    window.addEventListener("focus", () => { epoch++; reading = undefined; refresh().catch(() => undefined); });
+  }
   if (typeof window !== "undefined" && !channel && typeof BroadcastChannel !== "undefined") {
     channel = new BroadcastChannel("founderops-session");
     channel.onmessage = event => { invalidate(); if (event.data?.kind === "changed") refresh().catch(() => undefined); };
@@ -79,9 +84,7 @@ function ensureChannel() {
 function subscribe(listener: (session: BrowserSessionSnapshot | null) => void) {
   listeners.add(listener);
   ensureChannel();
-  const onFocus = () => { epoch++; reading = undefined; refresh().catch(() => undefined); };
-  if (typeof window !== "undefined") window.addEventListener("focus", onFocus);
-  return () => { listeners.delete(listener); if (typeof window !== "undefined") window.removeEventListener("focus", onFocus); };
+  return () => { listeners.delete(listener); };
 }
 async function logout() {
   let expected: BrowserSessionSnapshot | null;

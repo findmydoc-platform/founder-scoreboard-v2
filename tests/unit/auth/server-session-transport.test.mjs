@@ -322,3 +322,9 @@ test("legacy cookie adoption leaves only HttpOnly server storage and no canonica
   const refreshed = await invoke("session.recover", mutation((await response.json()).session));
   expect(refreshed.cookies.get(cookieBase)).toBeUndefined();
 });
+
+test("server components can read an adopted legacy session even when their cookie store is immutable", async () => {
+  jar.set(cookieBase, encode(session())); activeJar = { ...jar, set: () => { throw new Error("Read-only server component cookies"); } };
+  const { authorizeCredentialAction } = await publicModule();
+  expect(await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" })).toMatchObject({ ok: true, user: { id: "user-1" } });
+});

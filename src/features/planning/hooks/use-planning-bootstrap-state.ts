@@ -62,8 +62,6 @@ export function usePlanningBootstrapState({
   const auth = usePlanningAuth({
     authRequired,
     source,
-    safeInitialData,
-    safeInitialHeaderData,
     taskCount: data.tasks.length,
     workspace,
     initialAuthUser,

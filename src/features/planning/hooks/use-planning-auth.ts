@@ -1,3 +1,5 @@
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import type { User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
@@ -35,8 +37,6 @@ export function setProtectedPlanningShellStateCache(cache: ProtectedPlanningShel
 type UsePlanningAuthOptions = {
   authRequired: boolean;
   source: "supabase";
-  safeInitialData: PlanningShellState;
-  safeInitialHeaderData: PlanningHeaderData;
   taskCount: number;
   workspace: AppWorkspace;
   initialAuthUser?: User | null;
@@ -63,8 +63,6 @@ function currentRelativeUrl() {
 export function usePlanningAuth({
   authRequired,
   source,
-  safeInitialData,
-  safeInitialHeaderData,
   taskCount,
   workspace,
   initialAuthUser = null,
@@ -136,16 +134,21 @@ export function usePlanningAuth({
       protectedDataUserIdRef.current = "";
       protectedPlanningShellStateCache = null;
       setServerCurrentProfile(null);
-      setData(safeInitialData);
-      setHeaderData(safeInitialHeaderData);
+      setData(emptyPlanningShellState);
+      setHeaderData(emptyPlanningHeaderData);
       setProtectedDataLoaded(false);
       onSignedOut();
     };
     let displayedUser = initialAuthUser?.id || "";
+    let lastAccount = displayedUser;
     const applySessionState = (session: ServerSessionView | null) => {
       if (!active) return;
       generation++;
-      if (displayedUser !== (session?.userId || "") || !session) clearProtected();
+      if (authRequired && (displayedUser !== (session?.userId || "") || !session)) clearProtected();
+      if (lastAccount && session?.userId && lastAccount !== session.userId) {
+        setAuthUser(null); window.location.reload(); return;
+      }
+      if (session?.userId) lastAccount = session.userId;
       displayedUser = session?.userId || "";
       setAuthUser(session?.user || null);
       setAuthChecked(true);
@@ -160,7 +163,7 @@ export function usePlanningAuth({
     });
     return () => { active = false; unsubscribe(); };
 
-  }, [apiClient, initialAuthUser?.id, onSignedOut, safeInitialData, safeInitialHeaderData, setData, setHeaderData]);
+  }, [apiClient, authRequired, initialAuthUser?.id, onSignedOut, setData, setHeaderData]);
 
   useEffect(() => {
     if (!authRequired || source !== "supabase" || !authUser) return;
@@ -225,8 +228,8 @@ export function usePlanningAuth({
         if (!response.ok || !payloadData || !payload?.currentProfile) {
           protectedDataUserIdRef.current = "";
           setServerCurrentProfile(null);
-          setData(safeInitialData);
-          setHeaderData(safeInitialHeaderData);
+          setData(emptyPlanningShellState);
+          setHeaderData(emptyPlanningHeaderData);
           setProtectedDataLoaded(false);
           setAuthError(payload?.error || "Planungsdaten konnten nicht geladen werden.");
           return;
@@ -257,7 +260,7 @@ export function usePlanningAuth({
     return () => {
       active = false;
     };
-  }, [apiClient, authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, safeInitialData, safeInitialHeaderData, setData, setHeaderData, source, taskCount, workspace]);
+  }, [apiClient, authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, setData, setHeaderData, source, taskCount, workspace]);
 
   const signIn = useCallback(async (options: SignInOptions = {}) => {
     setAuthBusy(true);
@@ -310,8 +313,8 @@ export function usePlanningAuth({
     setGithubUserConnected(false);
     setWaitingGitHubCommentCount(0);
     setGithubConnectionState("unknown");
-    setData(safeInitialData);
-    setHeaderData(safeInitialHeaderData);
+    setData(emptyPlanningShellState);
+    setHeaderData(emptyPlanningHeaderData);
     setProtectedDataLoaded(false);
     onSignedOut();
     setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
