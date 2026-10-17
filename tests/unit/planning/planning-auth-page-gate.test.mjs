@@ -1,3 +1,5 @@
+import { vi as mockRuntime } from "vitest";
+mockRuntime.mock("server-only", () => ({}));
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";

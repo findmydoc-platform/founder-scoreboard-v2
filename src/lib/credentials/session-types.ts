@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import type { ServerPlanningAuth } from "../planning-auth-server";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 
-export type SessionHttpAction = "session.proxy" | "session.login" | "session.callback" | "session.link" | "session.logout-local" | "session.local-login"
+export type SessionHttpAction = "session.proxy" | "session.login-start" | "session.login" | "session.callback" | "session.link" | "session.logout-local" | "session.local-login"
   | "session.current" | "session.recover" | "session.logout" | "session.clear";
 export type SessionLifecycleInput = {
   credential: { kind: "http-request"; request: NextRequest };
@@ -20,7 +20,7 @@ export type SessionLinkPageState = {
 export type { ServerPlanningAuth, AppWorkspace };
 
 export type ServerSessionView = {
-  user: { id: string; email?: string };
+  user: { id: string; email?: string; githubLogin?: string; displayName?: string; avatarUrl?: string };
   userId: string;
   revision: string;
   /** Unix seconds, bounded by the provider session. */

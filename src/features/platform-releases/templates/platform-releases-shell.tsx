@@ -19,7 +19,7 @@ type Props = {
 
 export function PlatformReleasesShell({ authUser = null, children, currentPlatformRole = "", headerData }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { busy: authBusy, signOut } = usePlatformReleaseAuth();
+  const { busy: authBusy, signOut, signedOut } = usePlatformReleaseAuth();
   return (
     <div className="min-h-screen bg-white text-slate-950">
       <AppSidebar
@@ -39,7 +39,7 @@ export function PlatformReleasesShell({ authUser = null, children, currentPlatfo
             <>
               <PlanningHeaderDataActions headerData={headerData} />
               <PlanningHelpMenu />
-              {authUser ? (
+              {authUser && !signedOut ? (
                 <AuthControl
                   user={authUser}
                   busy={authBusy}
@@ -51,7 +51,7 @@ export function PlatformReleasesShell({ authUser = null, children, currentPlatfo
             </>
           )}
         />
-        {children}
+        {signedOut ? <p role="status" className="p-6">Du bist abgemeldet. Der Zugriff auf die Releases ist gesperrt.</p> : children}
       </main>
     </div>
   );

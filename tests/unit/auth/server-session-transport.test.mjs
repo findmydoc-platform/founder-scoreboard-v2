@@ -291,3 +291,34 @@ test("cookie-authenticated calendar requests use the real credential seam withou
   const result = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("/api/team-workweek/team") }, action: "calendar.read" });
   expect(result.ok).toBe(true);
 });
+
+test("cookie-authenticated mutations require the approved origin while explicit Bearer transport stays independent", async () => {
+  jar.set(cookieBase, encode(session()));
+  const { authorizeCredentialAction } = await publicModule();
+  const denied = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("/api/team-workweek/private-draft", { method: "POST" }) }, action: "workweek.private.write" });
+  expect(denied).toMatchObject({ ok: false, status: 403 });
+  const approved = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("/api/team-workweek/private-draft", { method: "POST", headers: { origin: appOrigin } }) }, action: "workweek.private.write" });
+  expect(approved.ok).toBe(true);
+  const bearer = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("/api/team-workweek/private-draft", { method: "POST", headers: { authorization: `Bearer ${jwt()}` } }) }, action: "workweek.private.write" });
+  expect(bearer.ok).toBe(true);
+});
+
+test("an invalid supplied Bearer never falls back to a valid cookie and retired generations cannot authenticate", async () => {
+  jar.set(cookieBase, encode(session()));
+  const { authorizeCredentialAction } = await publicModule();
+  const rejected = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("/api/team-workweek/team", { headers: { authorization: "Bearer invalid" } }) }, action: "calendar.read" });
+  expect(rejected).toMatchObject({ ok: false, status: 401 });
+  jar.set(`${cookieBase}-g-${"legacy".padEnd(32, "0")}-revoked`, "1");
+  expect(await authorizeCredentialAction({ credential: { kind: "session-request", request: request("/api/team-workweek/team") }, action: "calendar.read" })).toMatchObject({ ok: false, status: 401 });
+});
+
+test("legacy cookie adoption leaves only HttpOnly server storage and no canonical SDK session mirror", async () => {
+  jar.set(cookieBase, encode(session()));
+  const response = await invoke("session.current");
+  expect(response.cookies.get(cookieBase)?.maxAge).toBe(0);
+  expect(response.cookies.get(`${cookieBase}-g-${"legacy".padEnd(32, "0")}`)?.httpOnly).toBe(true);
+  applyCookies(response);
+  expect(jar.get(cookieBase)).toBeUndefined();
+  const refreshed = await invoke("session.recover", mutation((await response.json()).session));
+  expect(refreshed.cookies.get(cookieBase)).toBeUndefined();
+});

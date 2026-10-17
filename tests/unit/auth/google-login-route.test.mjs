@@ -8,14 +8,14 @@ test.beforeEach(() => vi.resetModules());
 for (const mode of ["legacy", "linking", "google"]) {
   test(`login uses the authorized provider in ${mode} mode`, async () => {
     let options;
-    const route = await importTestModule("src/app/auth/login/route.ts", {
+    const route = await importTestModule("src/app/api/auth/session/login/route.ts", {
       "@/lib/workspace-access": { workspaceAccessContext: async () => ({ mode }) },
       "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
       "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: { signInWithOAuth: async input => { options = input; return { data: { url: "https://accounts.google.com/authorize" }, error: null }; } } }) },
     });
     const url = "https://founder-ops.findmydoc.eu/auth/login?provider=github";
-    const response = await route.GET({ url, nextUrl: new URL(url) });
-    expect(response.status).toBe(307);
+    const response = await route.POST({ url, nextUrl: new URL(url), headers: new Headers({ origin: "https://founder-ops.findmydoc.eu", "content-type": "application/json" }) });
+    expect(response.status).toBe(200);
     expect(options.provider).toBe(mode === "google" ? "google" : "github");
     if (mode === "google") {
       expect(options.options.scopes).toBe("openid email profile");

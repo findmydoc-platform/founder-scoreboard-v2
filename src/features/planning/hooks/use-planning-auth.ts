@@ -1,7 +1,8 @@
 import type { User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
-import { getBrowserSupabase } from "@/lib/supabase";
+import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
+import type { ServerSessionView } from "@/lib/credentials/session-types";
 import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData } from "@/lib/types";
 import { githubUserConnectionStateFromStatus, type GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
@@ -20,6 +21,8 @@ type ProtectedPlanningShellStateCache = {
 };
 
 let protectedPlanningShellStateCache: ProtectedPlanningShellStateCache | null = null;
+// Logout must clear cached planning data even while a different workspace is mounted.
+createBrowserSessionAdapter().subscribe(session => { if (!session) protectedPlanningShellStateCache = null; });
 
 export function getProtectedPlanningShellStateCache() {
   return protectedPlanningShellStateCache;
@@ -76,7 +79,7 @@ export function usePlanningAuth({
 }: UsePlanningAuthOptions) {
   const apiClient = useMemo(() => createBrowserApiClient(), []);
   const protectedDataUserIdRef = useRef(initialProtectedDataLoaded ? initialAuthUser?.id || "" : "");
-  const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
+  const [authUser, setAuthUser] = useState<ServerSessionView["user"] | null>(initialAuthUser);
   const [authChecked, setAuthChecked] = useState(!authRequired || Boolean(initialAuthUser));
   const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired || initialProtectedDataLoaded);
   const [serverCurrentProfile, setServerCurrentProfile] = useState<AuthenticatedProfile | null>(initialCurrentProfile);
@@ -90,19 +93,13 @@ export function usePlanningAuth({
   const [authBusy, setAuthBusy] = useState(false);
 
   useEffect(() => {
-    const supabase = getBrowserSupabase();
-    if (!supabase) {
-      queueMicrotask(() => {
-        setGithubConnectionState("unknown");
-        setAuthChecked(true);
-      });
-      return;
-    }
-
+    const sessions = createBrowserSessionAdapter();
     let active = true;
+    let generation = 0;
 
-    const refreshGitHubUserConnectionState = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
+    const refreshGitHubUserConnectionState = async (session: ServerSessionView | null) => {
       if (!active) return;
+      const started = generation;
       if (isLocalLoginSimulationEnabled()) {
         setGithubInstallationAvailable(false);
         setGithubUserConnected(false);
@@ -111,7 +108,7 @@ export function usePlanningAuth({
         setGithubConnectionState("unknown");
         return;
       }
-      if (!session?.access_token) {
+      if (!session) {
         setGithubInstallationAvailable(false);
         setGithubUserConnected(false);
         setWaitingGitHubCommentCount(0);
@@ -126,7 +123,7 @@ export function usePlanningAuth({
         waitingCommentCount?: number;
       }>("/api/github-app/status").catch(() => ({ response: null, body: null }));
       const status = response?.ok ? body : null;
-      if (!active) return;
+      if (!active || started !== generation) return;
       const connectionState = githubUserConnectionStateFromStatus(status?.user || null);
       setGithubConnectionState(connectionState);
       setGithubInstallationAvailable(Boolean(status?.installation?.available));
@@ -135,59 +132,35 @@ export function usePlanningAuth({
       setGithubReauthFailed(connectionState === "reconnect_required");
     };
 
-    const applySessionState = (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
+    const clearProtected = () => {
+      protectedDataUserIdRef.current = "";
+      protectedPlanningShellStateCache = null;
+      setServerCurrentProfile(null);
+      setData(safeInitialData);
+      setHeaderData(safeInitialHeaderData);
+      setProtectedDataLoaded(false);
+      onSignedOut();
+    };
+    let displayedUser = initialAuthUser?.id || "";
+    const applySessionState = (session: ServerSessionView | null) => {
       if (!active) return;
-      if (!session?.user) {
-        setGithubInstallationAvailable(false);
-        setGithubUserConnected(false);
-        setWaitingGitHubCommentCount(0);
-        setGithubReauthFailed(false);
-        setGithubConnectionState("unknown");
-      }
+      generation++;
+      if (displayedUser !== (session?.userId || "") || !session) clearProtected();
+      displayedUser = session?.userId || "";
       setAuthUser(session?.user || null);
       setAuthChecked(true);
-    };
-
-    const refreshSessionState = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      applySessionState(sessionData.session);
-      await refreshGitHubUserConnectionState(sessionData.session);
-    };
-
-    refreshSessionState().catch(() => {
-      if (!active) return;
-      setGithubConnectionState("unknown");
-      setAuthChecked(true);
-    });
-
-    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-      setAuthUser(session?.user || null);
-      setAuthChecked(true);
-      refreshGitHubUserConnectionState(session).catch(() => undefined);
       setAuthError("");
-      if (event === "SIGNED_IN") setAuthNotice("");
-      if (event === "SIGNED_OUT") {
-        setGithubReauthFailed(false);
-        setGithubInstallationAvailable(false);
-        setGithubUserConnected(false);
-        setWaitingGitHubCommentCount(0);
-        setGithubConnectionState("unknown");
-        protectedDataUserIdRef.current = "";
-        protectedPlanningShellStateCache = null;
-        setServerCurrentProfile(null);
-        setData(safeInitialData);
-        setHeaderData(safeInitialHeaderData);
-        setProtectedDataLoaded(false);
-        onSignedOut();
-        setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
-      }
-    });
-
-    return () => {
-      active = false;
-      subscription.subscription.unsubscribe();
+      if (!session) setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
+      else setAuthNotice("");
+      refreshGitHubUserConnectionState(session).catch(() => undefined);
     };
-  }, [apiClient, onSignedOut, safeInitialData, safeInitialHeaderData, setData, setHeaderData]);
+    const unsubscribe = sessions.subscribe(applySessionState);
+    sessions.refresh().catch(() => {
+      if (active) { setGithubConnectionState("unknown"); setAuthChecked(true); }
+    });
+    return () => { active = false; unsubscribe(); };
+
+  }, [apiClient, initialAuthUser?.id, onSignedOut, safeInitialData, safeInitialHeaderData, setData, setHeaderData]);
 
   useEffect(() => {
     if (!authRequired || source !== "supabase" || !authUser) return;
@@ -287,22 +260,17 @@ export function usePlanningAuth({
   }, [apiClient, authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, safeInitialData, safeInitialHeaderData, setData, setHeaderData, source, taskCount, workspace]);
 
   const signIn = useCallback(async (options: SignInOptions = {}) => {
-    const supabase = getBrowserSupabase();
-    if (!supabase) return;
-
     setAuthBusy(true);
     setAuthError("");
     setAuthNotice("");
     const next = currentRelativeUrl();
     if (isLocalLoginSimulationEnabled()) {
-      const response = await fetch("/api/auth/local-login", { method: "POST" }).catch(() => null);
-      if (!response?.ok) {
-        const payload = await response?.json().catch(() => null) as { error?: string } | null;
-        setAuthError(payload?.error || "Lokaler Login konnte nicht erstellt werden.");
+      const success = await createBrowserSessionAdapter().startLocalLogin();
+      if (!success) {
+        setAuthError("Lokaler Login konnte nicht erstellt werden.");
         setAuthBusy(false);
         return;
       }
-      window.location.reload();
       return;
     }
     if (options.githubReconnect) {
@@ -318,9 +286,6 @@ export function usePlanningAuth({
   }, []);
 
   const signOut = async () => {
-    const supabase = getBrowserSupabase();
-    if (!supabase) return;
-
     setAuthBusy(true);
     setAuthError("");
     setAuthNotice("");
@@ -330,8 +295,8 @@ export function usePlanningAuth({
     setWaitingGitHubCommentCount(0);
     setGithubConnectionState("unknown");
 
-    const { error } = await supabase.auth.signOut({ scope: "global" });
-    if (error) {
+    const success = await createBrowserSessionAdapter().logout();
+    if (!success) {
       setAuthError("Abmeldung konnte nicht abgeschlossen werden.");
       setAuthBusy(false);
       return;

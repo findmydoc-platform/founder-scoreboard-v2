@@ -1,19 +1,25 @@
 "use client";
 
-import { useState } from "react";
-import { getBrowserSupabase } from "@/lib/supabase";
+import { useEffect, useState } from "react";
+import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
 
 export function usePlatformReleaseAuth() {
   const [busy, setBusy] = useState(false);
+  const [signedOut, setSignedOut] = useState(false);
+  useEffect(() => {
+    const sessions = createBrowserSessionAdapter();
+    const unsubscribe = sessions.subscribe(session => setSignedOut(!session));
+    sessions.refresh().catch(() => undefined);
+    return unsubscribe;
+  }, []);
 
   const signOut = async () => {
-    const supabase = getBrowserSupabase();
-    if (!supabase) return;
+    setSignedOut(true);
     setBusy(true);
-    const { error } = await supabase.auth.signOut({ scope: "global" });
+    const success = await createBrowserSessionAdapter().logout();
     setBusy(false);
-    if (!error) window.location.assign("/");
+    if (success) window.location.assign("/");
   };
 
-  return { busy, signOut };
+  return { busy, signOut, signedOut };
 }

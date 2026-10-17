@@ -3,6 +3,9 @@ import { createServer, type Server } from "node:http";
 import { createHmac } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 
 // Run only in the integration project's isolated environment. All Auth responses are synthetic.
@@ -10,6 +13,10 @@ let auth: Server, app: ChildProcess, browser: Browser, authOrigin: string, appOr
 let releaseRefresh: (() => void) | undefined;
 let refreshEntered: (() => void) | undefined;
 let holdRefresh = false;
+let holdLogin = false;
+let releaseLogin: (() => void) | undefined;
+let loginEntered: (() => void) | undefined;
+const evidenceDirectory = mkdtempSync(path.join(tmpdir(), "session-browser-evidence-"));
 let logs = "";
 const cookieBase = "sb-localhost-auth-token";
 const userA = "b1111111-1111-4111-8111-111111111111";
@@ -48,7 +55,12 @@ beforeAll(async () => {
       send(session(body.refresh_token.endsWith(userB) ? userB : userA)); return;
     }
     if (url.pathname === "/auth/v1/logout") { response.writeHead(204); response.end(); return; }
-    if (url.pathname === "/rest/v1/rpc/workspace_access_context") { send({ mode: "legacy", linkingEnforced: false, linked: false, userId: userA, profileId: "synthetic-profile", identity: null }); return; }
+    if (url.pathname === "/rest/v1/rpc/workspace_access_context") {
+      if (holdLogin) { holdLogin = false; loginEntered?.(); await new Promise<void>(resolve => { releaseLogin = resolve; }); }
+      send({ mode: "legacy", linkingEnforced: false, linked: false, userId: userA, profileId: "synthetic-profile", identity: null }); return; }
+    if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send({ id: "synthetic-profile", name: "Synthetic Founder", platform_role: "founder" }); return; }
+    if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: false, active: false }); return; }
+    if (url.pathname.startsWith("/rest/v1/")) { send([]); return; }
     send({ error: "Unscripted synthetic protocol" }, 501);
   });
   authOrigin = await listen(auth);
@@ -69,7 +81,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  releaseRefresh?.(); await browser?.close(); app?.kill("SIGTERM");
+  releaseRefresh?.(); releaseLogin?.(); await browser?.close(); app?.kill("SIGTERM");
   if (app && app.exitCode === null) await once(app, "exit");
   if (auth) await new Promise<void>(resolve => auth.close(() => resolve()));
 });
@@ -131,4 +143,70 @@ test("Chromium cannot resurrect a logged-out session when the delayed refresh re
     expect((await context.cookies()).some(cookie => cookie.name.endsWith("-revoked") && cookie.value === "1")).toBe(true);
     expect((await current(context)).status).toBe(401);
   } finally { releaseRefresh?.(); holdRefresh = false; await context.close(); }
+}, 120_000);
+
+
+test("concurrent tabs serialize actual login-start cookie writes and unavailable locks fail visibly", async () => {
+  const context = await browser.newContext();
+  const starts: string[] = [];
+  context.on("request", request => { if (new URL(request.url()).pathname === "/api/auth/session/login") starts.push(request.method()); });
+  try {
+    holdLogin = true;
+    const entered = new Promise<void>(resolve => { loginEntered = resolve; });
+    const first = await context.newPage(); await first.goto(`${appOrigin}/auth/login?next=/auth/error`);
+    await entered;
+    const second = await context.newPage(); await second.goto(`${appOrigin}/auth/login?next=/auth/error`);
+    await expect.poll(async () => second.locator('[role="status"]').textContent()).toContain("nicht sicher vorbereitet");
+    expect(starts).toEqual(["POST"]);
+    releaseLogin!(); await first.waitForURL(`${appOrigin}/auth/error`);
+    expect((await current(context)).body.session.userId).toBe(userB);
+    expect((await context.cookies()).some(cookie => cookie.name === cookieBase)).toBe(false);
+    expect(await first.evaluate(() => document.cookie)).not.toContain("auth-token");
+  } finally { releaseLogin?.(); holdLogin = false; await context.close(); }
+}, 120_000);
+
+test("login error remains usable at supported phone, tablet and desktop viewports without leaking credentials", async () => {
+  const context = await browser.newContext();
+  await context.addInitScript(() => Object.defineProperty(navigator, "locks", { value: undefined }));
+  const protocols: string[] = []; const scripts: Promise<string>[] = [];
+  context.on("request", request => { protocols.push(new URL(request.url()).pathname); });
+  context.on("response", response => { if (new URL(response.url()).pathname.startsWith("/_next/static/") && response.url().includes(".js")) scripts.push(response.text().catch(() => "")); });
+  try {
+    const page = await context.newPage(); await page.goto(`${appOrigin}/auth/login?next=//unapproved.example.test`);
+    await expect.poll(async () => page.locator('[role="status"]').textContent()).toContain("nicht sicher vorbereitet");
+    expect(new URL(page.url()).searchParams.get("next")).toBe("/");
+    for (const [width, height] of [[320,568],[390,844],[768,1024],[1024,768],[1440,900]]) {
+      await page.setViewportSize({ width, height });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const retry = page.getByRole("button", { name: "Erneut versuchen" }); expect(await retry.isVisible()).toBe(true);
+      const bounds = await retry.boundingBox(); expect(bounds!.height).toBeGreaterThanOrEqual(44);
+      await page.screenshot({ path: path.join(evidenceDirectory, `login-error-${width}.png`), fullPage: true });
+    }
+    expect(protocols).not.toContain("/api/auth/session/login");
+    expect(protocols.some(protocol => protocol === "/auth/v1/user" || protocol === "/auth/v1/token")).toBe(false);
+    const clientCode = (await Promise.all(scripts)).join("\n");
+    expect(clientCode).not.toContain("synthetic-service");
+    expect(clientCode).not.toContain("GoTrueClient");
+    console.info(`Session browser viewport evidence: ${evidenceDirectory}`);
+  } finally { await context.close(); }
+}, 120_000);
+
+test.each(["/planning", "/team/platform-releases"])("%s consumes server session views, navigates and clears protected UI on global logout", async workspace => {
+  const context = await browser.newContext();
+  const requests: Array<{ path: string; authorization: string | undefined }> = [];
+  context.on("request", request => requests.push({ path: new URL(request.url()).pathname, authorization: request.headers().authorization }));
+  try {
+    const page = await context.newPage();
+    const sessionRead = page.waitForResponse(response => new URL(response.url()).pathname === "/api/auth/session");
+    await page.goto(`${appOrigin}/auth/login?next=${encodeURIComponent(workspace)}`);
+    await page.waitForURL(`${appOrigin}${workspace}`);
+    expect((await sessionRead).status()).toBe(200);
+    await page.getByRole("button", { name: /Account-Menü öffnen/ }).click();
+    await page.getByRole("button", { name: "Abmelden", exact: true }).click();
+    if (workspace === "/planning") await expect.poll(async () => page.locator("body").textContent()).toContain("abgemeldet");
+    else await page.waitForURL(`${appOrigin}/`);
+    expect((await current(context)).status).toBe(401);
+    expect(requests.filter(request => request.path.startsWith("/api/")).every(request => !request.authorization)).toBe(true);
+    expect(requests.some(request => request.path === "/auth/v1/token" || request.path === "/auth/v1/user")).toBe(false);
+  } finally { await context.close(); }
 }, 120_000);
