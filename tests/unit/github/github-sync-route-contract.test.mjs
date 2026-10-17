@@ -1,207 +1,82 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
+import { afterEach, test, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
+import { planningRouteProtocol } from "../../helpers/planning-route-protocol.mjs";
 
-const contract = await importTestModule("src/lib/github-sync/contract.ts");
-
-let payload;
-let tokenCalls;
-let projectionCalls;
-let apiContext;
-let activeTaskType = "deliverable";
-let activeTaskError = null;
-let activeTaskMissing = false;
-
-function activeTaskSupabase() {
-  return {
-    from() {
-      return {
-        select() { return this; },
-        eq() { return this; },
-        async maybeSingle() {
-          return {
-            data: activeTaskMissing ? null : { task_type: activeTaskType },
-            error: activeTaskError,
-          };
-        },
-      };
-    },
-  };
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
+async function workflow({ kind = "deliverable", outage = false, missing = false } = {}) {
+  const task = { id: "task-1", task_type: kind, project_id: "findmydoc-founder-execution", title: "Synthetic task", status: "Offen", approval_status: "approved", github_repo: "findmydoc-platform/management", trashed_at: null };
+  const protocol = planningRouteProtocol({ role: "founder", tables: {
+    active_tasks: () => outage ? Response.json({ code: "08006", message: "Unavailable" }, { status: 503 }) : missing ? null : task,
+    tasks: task,
+  } });
+  let tokenCalls = 0;
+  const authFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.hostname === "api.github.com") {
+      assert.equal(url.pathname, "/app/installations/456/access_tokens"); tokenCalls += 1;
+      return Response.json({ token: "synthetic-installation", expires_at: new Date(Date.now() + 3600000).toISOString() });
+    }
+    return authFetch(request);
+  });
+  const { POST } = await importTestModule("src/app/api/tasks/[id]/sync-github/route.ts", { "server-only": {} });
+  return { ...protocol, tokenCalls: () => tokenCalls, send: payload => POST(protocol.request("/api/tasks/task-1/sync-github", "POST", payload), { params: Promise.resolve({ id: "task-1" }) }) };
 }
-const route = await importTestModule(
-  "src/app/api/tasks/[id]/sync-github/route.ts",
-  {
-    "next/server": {
-      NextResponse: {
-        json: (body, init) => ({
-          status: init.status,
-          async json() {
-            return body;
-          },
-        }),
-      },
-    },
-    "@/lib/authz": {
-      requireTeamMember: () => ({ ok: true }),
-    },
-    "@/lib/api-response": {
-      requireJsonApiContext: async () => apiContext,
-    },
-    "@/lib/credentials": {
-      authorizeCredentialAction: async () => {
-        tokenCalls += 1;
-        return { github: "installation-token" };
-      },
-    },
-    "@/lib/github-sync/contract": contract,
-    "@/lib/github-sync/task-projection": {
-      projectTaskToGitHub: async (command) => {
-        projectionCalls.push(command);
-        return contract.taskGitHubSyncFailure(
-          "github_sync_creation_required",
-          "creation required",
-        );
-      },
-    },
-    "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
-  },
-);
 
 test("sync route rejects a non-boolean creation decision before token acquisition", async () => {
-  payload = { createIfMissing: "false" };
-  tokenCalls = 0;
-  projectionCalls = [];
-  apiContext = {
-    ok: true,
-    supabase: activeTaskSupabase(),
-    permission: { profile: { id: "profile-1" } },
-    payload,
-  };
-
-  const response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
-  const body = await response.json();
-
+  const state = await workflow();
+  const response = await state.send({ createIfMissing: "false" });
   assert.equal(response.status, 409);
-  assert.equal(body.code, "github_sync_invalid_target");
-  assert.equal(body.retryable, false);
-  assert.equal(tokenCalls, 0);
-  assert.deepEqual(projectionCalls, []);
+  assert.deepEqual(await response.json(), { ok: false, code: "github_sync_invalid_target", error: "createIfMissing muss als Boolean übergeben werden.", retryable: false });
+  assert.equal(state.tokenCalls(), 0); assert.equal(state.requests.length, 0);
 });
 
 test("sync route forwards an explicit false creation decision unchanged", async () => {
-  payload = { createIfMissing: false };
-  tokenCalls = 0;
-  projectionCalls = [];
-  apiContext = {
-    ok: true,
-    supabase: activeTaskSupabase(),
-    permission: { profile: { id: "profile-1" } },
-    payload,
-  };
-
-  const response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
-
+  const state = await workflow();
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  vi.stubEnv("GITHUB_APP_ID", "123"); vi.stubEnv("GITHUB_APP_INSTALLATION_ID", "456");
+  vi.stubEnv("GITHUB_APP_PRIVATE_KEY", privateKey.export({ type: "pkcs8", format: "pem" }));
+  const response = await state.send({ createIfMissing: false });
   assert.equal(response.status, 409);
-  assert.equal(tokenCalls, 1);
-  assert.equal(projectionCalls.length, 1);
-  assert.equal(projectionCalls[0].createIfMissing, false);
+  assert.equal((await response.json()).code, "github_sync_creation_required");
+  assert.equal(state.tokenCalls(), 1);
+  assert.equal(state.calls.length, 0);
 });
 
 test("sync route preserves API context infrastructure status metadata", async () => {
-  tokenCalls = 0;
-  projectionCalls = [];
-  apiContext = {
-    ok: false,
-    status: 501,
-    error: "Supabase env is not configured.",
-  };
-
-  const response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
-  const body = await response.json();
-
+  const state = await workflow();
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", ""); vi.stubEnv("SUPABASE_URL", "");
+  const response = await state.send({ createIfMissing: false });
   assert.equal(response.status, 501);
-  assert.equal(body.code, "github_sync_unavailable");
-  assert.equal(body.retryable, true);
-  assert.equal(tokenCalls, 0);
-  assert.deepEqual(projectionCalls, []);
+  const body = await response.json();
+  assert.equal(body.code, "github_sync_unavailable"); assert.equal(body.retryable, true);
+  assert.equal(state.tokenCalls(), 0); assert.equal(state.requests.length, 0);
 });
 
 test("sync route preserves a marked pre-effect session failure", async () => {
-  tokenCalls = 0;
-  projectionCalls = [];
-  const markedResponse = {
-    status: 401,
-    async json() {
-      return {
-        code: "session_invalid_before_effect",
-        error: "Anmeldung ungültig oder abgelaufen.",
-      };
-    },
-  };
-  apiContext = {
-    ok: false,
-    status: 401,
-    code: "session_invalid_before_effect",
-    error: "Anmeldung ungültig oder abgelaufen.",
-    response: markedResponse,
-  };
-
-  const response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
-
-  assert.equal(response, markedResponse);
-  assert.equal(tokenCalls, 0);
-  assert.deepEqual(projectionCalls, []);
+  const state = await workflow(); state.state.authError = 401;
+  const response = await state.send({ createIfMissing: false });
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { code: "session_invalid_before_effect", error: "Anmeldung ungültig oder abgelaufen." });
+  assert.equal(state.tokenCalls(), 0); assert.equal(state.requests.length, 0);
 });
 
 test("sync route rejects strategic items before token acquisition", async () => {
-  payload = { createIfMissing: false };
-  activeTaskType = "initiative";
-  tokenCalls = 0;
-  projectionCalls = [];
-  apiContext = {
-    ok: true,
-    supabase: activeTaskSupabase(),
-    permission: { profile: { id: "profile-1" } },
-    payload,
-  };
-
-  const response = await route.POST({}, { params: Promise.resolve({ id: "initiative-1" }) });
-  const body = await response.json();
-
-  assert.equal(response.status, 409);
-  assert.equal(body.code, "github_sync_invalid_target");
-  assert.equal(tokenCalls, 0);
-  assert.deepEqual(projectionCalls, []);
-  activeTaskType = "deliverable";
+  const state = await workflow({ kind: "initiative" });
+  const response = await state.send({ createIfMissing: false });
+  assert.equal(response.status, 409); assert.equal((await response.json()).code, "github_sync_invalid_target");
+  assert.equal(state.tokenCalls(), 0); assert.equal(state.calls.length, 0);
 });
 
 test("sync route distinguishes a database outage from a missing item", async () => {
-  payload = { createIfMissing: false };
-  tokenCalls = 0;
-  projectionCalls = [];
-  apiContext = {
-    ok: true,
-    supabase: activeTaskSupabase(),
-    permission: { profile: { id: "profile-1" } },
-    payload,
-  };
-
-  activeTaskError = { code: "08006", message: "connection failed" };
-  let response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
-  let body = await response.json();
+  const failed = await workflow({ outage: true });
+  const response = await failed.send({ createIfMissing: false });
   assert.equal(response.status, 503);
-  assert.equal(body.code, "github_sync_unavailable");
-  assert.equal(body.retryable, true);
-  assert.equal(tokenCalls, 0);
-
-  activeTaskError = null;
-  activeTaskMissing = true;
-  response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
-  body = await response.json();
-  assert.equal(response.status, 404);
-  assert.equal(body.code, "github_sync_not_found");
-  assert.equal(body.retryable, false);
-  assert.equal(tokenCalls, 0);
-  assert.deepEqual(projectionCalls, []);
-  activeTaskMissing = false;
+  const body = await response.json(); assert.equal(body.code, "github_sync_unavailable"); assert.equal(body.retryable, true); assert.equal(failed.tokenCalls(), 0);
+  const missing = await workflow({ missing: true });
+  const absent = await missing.send({ createIfMissing: false });
+  assert.equal(absent.status, 404);
+  const absentBody = await absent.json(); assert.equal(absentBody.code, "github_sync_not_found"); assert.equal(absentBody.retryable, false); assert.equal(missing.tokenCalls(), 0);
 });

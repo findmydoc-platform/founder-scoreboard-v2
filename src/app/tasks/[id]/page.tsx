@@ -7,13 +7,12 @@ import { safeTaskDetailReturnTo } from "@/features/tasks/model/task-detail-retur
 import { PlanningTrashTaskDetailPage } from "@/features/planning-trash/templates/planning-trash-task-detail-page";
 import { taskDetailDegradationMessage } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { parseTaskCommentTarget } from "@/features/tasks/model/task-comment-target";
-import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
-import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
-import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
-import { loadPlanningTrashTaskDetail } from "@/lib/planning-trash-detail";
+import { requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
 
@@ -42,26 +41,17 @@ export default async function TaskPage({ params, searchParams }: Props) {
     administratorAccess = auth.authority?.administratorAccess;
   }
 
-  const supabase = getServerSupabase();
-  if (!supabase) {
-    return <WorkspaceDataUnavailablePage workspace="planning" />;
-  }
-  const [taskDetailResult, headerData] = await Promise.all([
-    createSupabaseTaskDetailReadModel(supabase).load(
-      { itemId: id },
-      { authorized: true, actorProfileId: authProfile?.id || null },
-    ),
-    loadPlanningHeaderData(supabase, {
-      currentProfileId: authProfile?.id || null,
-      platformRole: authProfile?.platformRole || null,
-    }),
-  ]);
+  const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.task.read", targetId: id });
+  if (!permission.ok) return <WorkspaceDataUnavailablePage workspace="planning" />;
+  const [taskDetailResult, header] = await Promise.all([permission.planning.loadDetail(), permission.planning.loadHeader()]);
+  if (!header.ok) return <WorkspaceDataUnavailablePage workspace="planning" />;
+  const headerData = header.headerData;
   if (taskDetailResult.status === "unavailable" || taskDetailResult.status === "forbidden") {
     return <WorkspaceDataUnavailablePage workspace="planning" />;
   }
 
   if (taskDetailResult.status === "notFound") {
-    const trashDetailResult = await loadPlanningTrashTaskDetail(supabase, id, [...taskDetailResult.people]);
+    const trashDetailResult = await permission.planning.loadTrashDetail();
     if (!trashDetailResult.ok) {
       if (trashDetailResult.status === 404) notFound();
       return <WorkspaceDataUnavailablePage workspace="planning" />;

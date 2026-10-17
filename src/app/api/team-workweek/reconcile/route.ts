@@ -1,36 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
-  reconcileTeamWorkweek,
   TeamWorkweekReconciliationError,
 } from "@/features/team-workweek/server/team-workweek-reconciliation";
-import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
-import { bearerToken, requireTeamMember } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase-user";
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { apiError, readJsonPayload } from "@/lib/api-response";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const context = await requireApiContext(request, requireTeamMember);
+  const context = await requirePlanningContext(request, "workweek.reconcile");
   if (!context.ok) return context.response;
-  const ownerProfileId = context.permission.profile?.id || null;
-  const token = bearerToken(request);
-  const userSupabase = token ? getSupabaseForToken(token) : null;
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!ownerProfileId || !userSupabase) return apiError("Anmeldung erforderlich.", 401);
-  if (!serviceSupabase) return apiError("Google-Abgleich ist derzeit nicht verfügbar.", 503);
-
   const payload = await readJsonPayload<unknown>(request, null);
   if (!payload || typeof payload !== "object" || Array.isArray(payload) || Object.keys(payload).length) {
     return apiError("Google-Abgleich akzeptiert keine frei gewählten Ziele.", 400);
   }
 
   try {
-    const reconciliation = await reconcileTeamWorkweek({request,
-      ownerProfileId,
-      serviceSupabase,
-      userSupabase,
-    });
+    const reconciliation = await context.planning.reconcileWorkweek();
     return NextResponse.json({ reconciliation }, {
       status: reconciliation.state === "delayed" ? 202 : reconciliation.state === "conflict" ? 409 : 200,
     });
