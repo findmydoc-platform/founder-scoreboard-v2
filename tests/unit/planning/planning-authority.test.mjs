@@ -898,3 +898,37 @@ test("held workweek read cannot dispatch a new resource request after its origin
     expect(protocol.calls.some(call => call.name.startsWith("prepare_team_workweek"))).toBe(false);
   } finally { vi.useRealTimers(); }
 });
+
+
+test("administrator task correction retains named expiry across the final user-data binding await", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const protocol = administratorProtocol({ role: "founder", snapshot: { eligible: true, active: true, expiresAt: new Date(Date.now()+10_000).toISOString() } });
+    const authFetch = globalThis.fetch;
+    let expireOnBinding = false, resourceCalls = 0;
+    vi.stubGlobal("fetch", async (input, init) => {
+      const request = new Request(input, init), url = new URL(request.url);
+      if (url.pathname === "/rest/v1/active_tasks") { resourceCalls++; return Response.json({ id: "admin-task", task_type: "deliverable", trashed_at: null }); }
+      if (url.pathname.endsWith("/administrator_access_snapshot")) {
+        const response = await authFetch(request);
+        expireOnBinding = true;
+        return response;
+      }
+      if (url.pathname.endsWith("/workspace_access_context") && expireOnBinding) {
+        expireOnBinding = false;
+        const response = await authFetch(request);
+        vi.setSystemTime(Date.now() + 10_001);
+        return response;
+      }
+      return authFetch(request);
+    });
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+    const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.task.update", targetId: "admin-task" });
+    expect(grant.ok).toBe(true);
+    expireOnBinding = false;
+    const result = await grant.planning.revise({ expectedUpdatedAt: "2026-10-17T08:00:00Z", title: "Correction" });
+    expect(result).toMatchObject({ ok: false, error: { kind: "forbidden", code: "administrator_access_expired" } });
+    expect(resourceCalls).toBe(0);
+    expect(protocol.calls.some(call => call.name.includes("transaction"))).toBe(false);
+  } finally { vi.useRealTimers(); }
+});

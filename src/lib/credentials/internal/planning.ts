@@ -97,7 +97,9 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   const actor = actorContextFromSessionAuth(permission);
   const authority = "authority" in permission ? permission.authority : undefined;
   const correction = authority?.capabilities.operationalCorrection === true;
+  const administratorExpired = () => correction && Date.parse(authority!.administratorAccess.expiresAt || "") <= Date.now();
   const failure = async () => {
+    if (administratorExpired()) return administratorAccessFailure({ eligible: true, active: false, expiresAt: null });
     const result = permission.data ? await permission.data.rpc("administrator_access_snapshot") : null;
     return administratorAccessFailure(currentAdministratorAccess(result?.error ? null : result?.data));
   };
@@ -136,7 +138,10 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     }
     return null;
   };
-  const resourceData = "constrainedData" in permission ? permission.constrainedData(assertKnown) : permission.data;
+  const resourceData = "constrainedData" in permission ? permission.constrainedData(() => {
+    if ("assertCurrent" in permission) permission.assertCurrent();
+    if (administratorExpired()) throw new WorkspaceAccessError(403, "workspace_access_denied");
+  }) : permission.data;
   return { ok: true as const, profile: profile ? Object.freeze({ ...profile }) : null, authority: authority ? Object.freeze({ ...authority, profile: Object.freeze({ ...authority.profile }), administratorAccess: Object.freeze({ ...authority.administratorAccess }), capabilities: Object.freeze({ ...authority.capabilities }) }) : undefined, planning: {
     ...planningWorkweekOperations({ action, targetId, profile, service, followup: followup!, data: permission.data, request, current }),
     ...planningCollaborationOperations({ action, targetId, profile, service, followup: followup!, request, current }),
@@ -250,7 +255,9 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (!expected || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== expected
         || !("itemId" in call.command.action) || !targetId || call.command.action.itemId !== targetId) return rejected();
       if (await current()) return correction ? { ok: false, error: { code: "forbidden", reason: "administratorAccessRequired" } } : rejected();
-      return createPlanningRelationshipPlanningItems(service, { mutationClient: correction ? resourceData! : service, administratorAccess: correction, mentionRecipientProfileIds: mentions }).run({ ...call, actor: actor.actor, mode: "commit" });
+      const result = await createPlanningRelationshipPlanningItems(service, { mutationClient: correction ? resourceData! : service, administratorAccess: correction, mentionRecipientProfileIds: mentions }).run({ ...call, actor: actor.actor, mode: "commit" });
+      if (!result.ok && administratorExpired()) return { ok: false, error: { code: "forbidden", reason: "administratorAccessRequired" } };
+      return result;
     },
     failure,
     async revise(suppliedPayload: TaskUpdatePayload) {
@@ -260,7 +267,12 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
         const denied = correction ? await failure() : { error: denial.message, code: undefined };
         return { ok: false as const, error: { kind: "forbidden" as const, message: denied.error, code: denied.code } };
       }
-      return createPlanningItemRevision(correction ? resourceData! : service, failure).commitBrowserRevision({ itemId: targetId, payload, permission });
+      const result = await createPlanningItemRevision(correction ? resourceData! : service, failure).commitBrowserRevision({ itemId: targetId, payload, permission });
+      if (!result.ok && administratorExpired()) {
+        const denied = await failure();
+        return { ok: false as const, error: { kind: "forbidden" as const, message: denied.error, code: denied.code } };
+      }
+      return result;
     },
     async readMentionProfiles() {
       const denial = reviewKinds[action] || action === "planning.task.create" || action === "planning.task.update" || action.startsWith("planning.relationship.") ? await current() : forbidden();

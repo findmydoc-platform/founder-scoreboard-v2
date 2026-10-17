@@ -96,3 +96,23 @@ test("Notification Center still loads its own notification data and ready header
   expect(page.props.initialHeaderData.notifications.state).toBe("ready");
   expect(notificationRead).toHaveBeenCalled();
 });
+
+
+test("Planning SSR refuses a role rebound between shell authentication and its data capability", async () => {
+  const { protocol } = planningProtocol();
+  const fetchProtocol = globalThis.fetch;
+  let rebound = false;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const response = await fetchProtocol(request);
+    if (!rebound && new URL(request.url).pathname.endsWith("/administrator_access_snapshot")) {
+      rebound = true;
+      protocol.state.role = "viewer";
+    }
+    return response;
+  });
+  const page = await renderWorkspacePage("planning");
+  expect(rebound).toBe(true);
+  expect(page.props.workspace).toBe("planning");
+  expect(page.props.initialProtectedDataLoaded).toBeUndefined();
+});

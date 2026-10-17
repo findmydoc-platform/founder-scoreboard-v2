@@ -23,9 +23,9 @@ import { redirect } from "next/navigation";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
 
-async function loadBacklogPageData() {
+async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.backlog.read" });
-  if (!permission.ok) return { status: "unavailable" as const };
+  if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
   const [backlog, header] = await Promise.all([permission.planning.loadBacklog(), permission.planning.loadHeader()]);
   return backlog.status === "ready" && header.ok
     ? { status: "ready" as const, model: backlog.model, headerData: header.headerData }
@@ -38,7 +38,7 @@ async function loadPlanningWorkspacePageData(
 ) {
   if (workspace === "planning") {
     const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
-    if (!permission.ok) return { status: "unavailable" as const };
+    if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
     const [planningWorkspace, header] = await Promise.all([
       permission.planning.loadBoard(), permission.planning.loadHeader(permission.profile ? ["quickLinks", "calendarEvents"] : undefined),
     ]);
@@ -86,9 +86,9 @@ async function loadSupportingWorkspacePageData(
     : { status: workspaceData.status };
 }
 
-async function loadSprintPageData() {
+async function loadSprintPageData(profile?: AuthenticatedProfile | null) {
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.sprint.read" });
-  if (!permission.ok) return { status: "unavailable" as const };
+  if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
   const [sprint, header] = await Promise.all([permission.planning.loadSprint(), permission.planning.loadHeader()]);
   return sprint.status === "ready" && header.ok
     ? { status: "ready" as const, model: sprint.model, headerData: header.headerData }
@@ -154,7 +154,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
     }
 
     if (initialWorkspace === "backlog") {
-      const backlog = await loadBacklogPageData();
+      const backlog = await loadBacklogPageData(auth.profile);
       if (backlog.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace="backlog" authUserEmail={auth.user?.email || ""} />;
       }
@@ -215,7 +215,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
     }
 
     if (initialWorkspace === "sprint") {
-      const sprint = await loadSprintPageData();
+      const sprint = await loadSprintPageData(auth.profile);
       if (sprint.status !== "ready") return <WorkspaceDataUnavailablePage workspace="sprint" authUserEmail={auth.user?.email || ""} />;
       return (
         <PlanningApp
