@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-import { probeGoogleWorkspacePrimaryCalendar } from "../../../src/features/team-workweek/server/google-workspace-oauth";
+import { probeGoogleWorkspacePrimaryCalendar } from "../../../src/lib/credentials/internal/google-calendar-vault";
 
 afterEach(() => vi.unstubAllGlobals());
 

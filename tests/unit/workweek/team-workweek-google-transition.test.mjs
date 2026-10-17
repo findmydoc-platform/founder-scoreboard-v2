@@ -68,7 +68,7 @@ test("a later Monday ends the predecessor series with COUNT and an ETag precondi
     Response.json(transitionEvent({ etag: '"etag-2"', completed: true }), { status: 200 }),
   ];
   const result = await publicationCore.ensureGoogleWorkweekSeriesTransition({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     transition,
     now: () => new Date("2026-08-25T10:00:00.000Z"),
     fetchImpl: async (url, init = {}) => {
@@ -90,7 +90,7 @@ test("a later Monday ends the predecessor series with COUNT and an ETag precondi
 test("a stale predecessor revision remains a stable conflict without an overwrite", async () => {
   let calls = 0;
   const staleEtag = await publicationCore.ensureGoogleWorkweekSeriesTransition({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     transition,
     fetchImpl: async () => {
       calls += 1;
@@ -101,7 +101,7 @@ test("a stale predecessor revision remains a stable conflict without an overwrit
   assert.equal(calls, 1);
 
   const staleRevision = await publicationCore.ensureGoogleWorkweekSeriesTransition({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     transition,
     fetchImpl: async () => Response.json(transitionEvent({ revision: "0" }), { status: 200 }),
   });
@@ -111,7 +111,7 @@ test("a stale predecessor revision remains a stable conflict without an overwrit
 test("a lost predecessor update is observed before any further write", async () => {
   let calls = 0;
   const result = await publicationCore.ensureGoogleWorkweekSeriesTransition({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     transition,
     now: () => new Date("2026-08-25T11:00:00.000Z"),
     fetchImpl: async (_url, init = {}) => {
@@ -145,7 +145,7 @@ test("conditional predecessor updates classify 412 and recover a committed 503 w
       Response.json(scenario.after, { status: 200 }),
     ];
     const result = await publicationCore.ensureGoogleWorkweekSeriesTransition({
-      accessToken: "token",
+      accessToken: { request: (url, init) => fetch(url, init) },
       transition,
       now: () => new Date("2026-08-25T12:00:00.000Z"),
       fetchImpl: async (_url, init = {}) => {
