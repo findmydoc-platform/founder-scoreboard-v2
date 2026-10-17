@@ -224,13 +224,13 @@ Initial acceptance fixture failures were a foreign-key cleanup dependency, an in
 
 Per-sample raw evidence retains timings, statuses, synthetic identifiers, category/phase counts and source/schema metadata. It omits URLs, authorization headers, cookie values, provider payloads and private endpoints. Every measurement fixture restores configuration and records zero owned users, profiles, versions and publications after cleanup. The final metadata records the original and instrumented hashes for four functions and verifies all other runtime source bytes against the stated source commit.
 
-The root-owned final migration/reset/security/Auth/database-lint/full-suite/lint/build/architecture cycle is pending. Its results belong in the acceptance record after execution. These measurements alone do not establish deployment readiness or a hosted-provider performance guarantee.
+The root-owned final verification cycle is complete and is recorded in the [acceptance evidence](credential-verification-acceptance.md#completed-final-verification-cycle). The corrected ordinary full suite passed 1,999 tests across 308 files; migration/security/Auth/database-lint/lint/build/architecture checks also passed. These local measurements do not establish a hosted-provider performance guarantee or authorize deployment.
 
 ## Source and cleanup metadata
 
 The Before runtime source digest is `a31c51ac4ca93fdd76d1d7e9a0dddd092ab03b14e5513a65c57772c82c2ac495`; After is `2678e40788ae8924cdbf5a13f795b3f490b924a704d7b135f45dc32c3a6db5e7`. The sorted digest covers each runtime source path and its original bytes. The recorder verified the snapshot against those originals, allowing only the four declared function wrappers. After uses a 29-migration ledger, latest `20261017144737`; Before uses a 26-migration ledger, latest `20261016170256`. Both use Postgres 17.6. Each final measurement records zero owned users, profiles, versions and publications after cleanup. The test-target portability change occurred after measurements and changes no runtime source or workflow.
 
-The measured After production build’s client scan passed across 183 chunks/maps and 2,390,345 bytes. This is distinct from ticket 502’s original 63-artifact scan and from the still-pending global final build. The original 12-file baseline hash manifest was rechecked after all series and every hash matched.
+The measured After production build’s client scan passed across 183 chunks/maps and 2,390,345 bytes. This is distinct from ticket 502’s original 63-artifact scan and from the final global build, whose separate scan passed across 63 chunks/maps and 2,231,432 bytes. The original 12-file baseline hash manifest was rechecked after all series and every hash matched.
 
 ## Untimed browser setup and private editor interaction
 
@@ -240,3 +240,7 @@ Build/readiness/login are one setup observation per version, outside the 30 warm
 | --- | --- | --- | --- | --- |
 | Before | 12158.83 | 342.97 | 1415.33 | 63.15 / 76.00 / 77.20 |
 | After | 23368.73 | 374.37 | 1856.66 | 64.05 / 76.00 / 77.00 |
+
+## Final verification source
+
+The final global checks passed on test-source candidate `ae655c595a9e15641beaaae4eb12c9c2e773709d`, after two fixture-only repairs retained with their observed failures. Runtime source remains `17955b50917034c49ebb1b758635d8c07c8dccbc`, so the matched measurements retain their stated source and schema metadata. The final documentation commit changes no executable files. The final global client scan is 63 chunks/maps and 2,231,432 bytes; it is separate from both the measurement build (183/2,390,345) and ticket 502’s earlier build (63/2,231,293).
