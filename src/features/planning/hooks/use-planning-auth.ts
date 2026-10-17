@@ -1,6 +1,7 @@
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import type { User } from "@supabase/supabase-js";
+import { flushSync } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
 import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
@@ -144,10 +145,11 @@ export function usePlanningAuth({
     const applySessionState = (session: ServerSessionView | null) => {
       if (!active) return;
       generation++;
-      if (authRequired && (displayedUser !== (session?.userId || "") || !session)) clearProtected();
       if (lastAccount && session?.userId && lastAccount !== session.userId) {
-        setAuthUser(null); window.location.reload(); return;
+        flushSync(() => { clearProtected(); setAuthUser(null); });
+        window.location.reload(); return;
       }
+      if (authRequired && (displayedUser !== (session?.userId || "") || !session)) clearProtected();
       if (session?.userId) lastAccount = session.userId;
       displayedUser = session?.userId || "";
       setAuthUser(session?.user || null);

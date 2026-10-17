@@ -94,3 +94,13 @@ test("only a nonce-matched Google callback can approve a session", async () => {
   expect(rejected.rpc).not.toHaveBeenCalled();
   expect(rejected.signOut).not.toHaveBeenCalled();
 });
+
+
+test("browser login redirects through the configured public origin behind a proxy", async () => {
+  const route = await importTestModule("src/app/auth/login/route.ts", {
+    "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
+  });
+  const url = "http://localhost:3000/auth/login?next=/planning";
+  const response = route.GET({ url, nextUrl: new URL(url) });
+  expect(response.headers.get("location")).toBe("https://founder-ops.findmydoc.eu/auth/start?next=%2Fplanning");
+});

@@ -60,7 +60,7 @@ test("global logout clears subscribers immediately and a delayed recovery cannot
 
 test("login fails closed when browser locking is unavailable", async () => {
   vi.stubGlobal("navigator", {}); const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
-  expect(await (await adapter()).startLogin("?next=/planning")).toBe(false);
+  expect(await (await adapter()).startLogin("?next=/planning")).toBe("unsupported");
   expect(fetch).not.toHaveBeenCalled();
 });
 

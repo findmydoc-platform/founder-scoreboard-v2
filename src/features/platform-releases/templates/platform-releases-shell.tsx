@@ -19,15 +19,15 @@ type Props = {
 
 export function PlatformReleasesShell({ authUser = null, children, currentPlatformRole = "", headerData }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { busy: authBusy, signOut, signedOut } = usePlatformReleaseAuth();
+  const { busy: authBusy, signOut, signedOut } = usePlatformReleaseAuth(authUser?.id);
   return (
     <div className="min-h-screen bg-white text-slate-950">
-      <AppSidebar
+      {!signedOut ? <AppSidebar
         activeWorkspace="platform-releases"
         currentPlatformRole={currentPlatformRole}
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
-      />
+      /> : null}
       <main className="app-sidebar-main min-w-0">
         <AppHeader
           mobileNavOpen={mobileOpen}
@@ -37,7 +37,7 @@ export function PlatformReleasesShell({ authUser = null, children, currentPlatfo
           description="Auslieferungen einzelner Anwendungen und der gemeinsamen Plattform."
           actions={(
             <>
-              <PlanningHeaderDataActions headerData={headerData} />
+              {!signedOut ? <PlanningHeaderDataActions headerData={headerData} /> : null}
               <PlanningHelpMenu />
               {authUser && !signedOut ? (
                 <AuthControl

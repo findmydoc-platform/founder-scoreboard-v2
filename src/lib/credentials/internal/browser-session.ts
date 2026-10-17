@@ -100,7 +100,7 @@ async function logout() {
   } catch { return false; }
 }
 async function performLogin(query: string, local: boolean) {
-  if (typeof navigator === "undefined" || !navigator.locks) return false;
+  if (typeof navigator === "undefined" || !navigator.locks) return "unsupported" as const;
   try {
     return await navigator.locks.request("founderops-session-login", { ifAvailable: true }, async lock => {
       if (!lock) return false;
@@ -118,7 +118,7 @@ async function performLogin(query: string, local: boolean) {
     });
   } catch { return false; }
 }
-let loginStarting: Promise<boolean> | undefined;
+let loginStarting: Promise<boolean | "unsupported"> | undefined;
 function beginLogin(query: string, local: boolean) {
   if (loginStarting) return loginStarting;
   const pending = performLogin(query, local); loginStarting = pending;
@@ -126,5 +126,5 @@ function beginLogin(query: string, local: boolean) {
   return pending;
 }
 const adapter = { current: () => known === undefined ? refresh() : Promise.resolve(known), recover, clearIfCurrent,
-  isCurrent: (expected: BrowserSessionSnapshot) => same(known, expected), refresh, subscribe, logout, startLogin: (query: string) => beginLogin(query, false), startLocalLogin: () => beginLogin("", true) };
+  isCurrent: (expected: BrowserSessionSnapshot) => same(known, expected), refresh, subscribe, logout, startLogin: (query: string) => beginLogin(query, false), startLocalLogin: async () => (await beginLogin("", true)) === true };
 export function createBrowserSessionAdapter() { ensureChannel(); return adapter; }

@@ -3,6 +3,7 @@
 import { ChevronRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
 import { platformReleaseRequest } from "../model/platform-release-api";
 import { formatReleaseDate, type PlatformReleaseRecord } from "../model/platform-release-model";
 import { platformReleaseSeed } from "../model/platform-release-seed";
@@ -18,13 +19,14 @@ export function PlatformReleaseSidebarCard({ compact = false, mobile = false, on
 
   useEffect(() => {
     let active = true;
+    const unsubscribe = createBrowserSessionAdapter().subscribe(session => { if (!session) setRelease(null); });
     void platformReleaseRequest<{ releases?: PlatformReleaseRecord[] }>("/api/team/platform-releases/v1/releases")
       .then(({ response, body }) => response.ok ? body : null)
       .then((payload) => {
         if (active && payload?.releases?.[0]) setRelease(payload.releases[0]);
       })
       .catch(() => undefined);
-    return () => { active = false; };
+    return () => { active = false; unsubscribe(); };
   }, []);
 
   if (!release) return null;
