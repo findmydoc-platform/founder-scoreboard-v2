@@ -4,21 +4,6 @@ import { notificationDeliveryProtocol } from "../../helpers/notification-deliver
 import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const markedFailure = {
-  ok: false,
-  status: 401,
-  code: "session_invalid_before_effect",
-  error: "Anmeldung ungültig oder abgelaufen.",
-};
-
-function authzError(permission, fields = {}) {
-  return Response.json({
-    ...fields,
-    ...(permission.code ? { code: permission.code } : {}),
-    error: permission.error,
-  }, { status: permission.status });
-}
-
 async function assertMarked(response) {
   assert.equal(response.status, 401);
   assert.deepEqual(await response.json(), {
