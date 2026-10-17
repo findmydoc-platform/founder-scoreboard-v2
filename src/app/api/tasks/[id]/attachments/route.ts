@@ -1,10 +1,6 @@
 import { createHash } from "node:crypto";
-import { defaultGitHubRepository } from "@/lib/github-repositories";
 import { NextResponse, type NextRequest } from "next/server";
 import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
-import { uploadGitHubAttachment } from "@/lib/github";
-import { GitHubAppUserTokenRequiredError, GitHubAppUserTokenBusyError } from "@/lib/github-app-errors";
-import { authorizeCredentialAction, type GitHubUserCapability } from "@/lib/credentials";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { compactAlphanumeric, slugify } from "@/lib/slug";
 import { apiError } from "@/lib/api-response";
@@ -91,34 +87,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   // Existing callers without an operation retain deterministic content reconciliation.
   const identity = createHash("sha256").update(`${permission.profile?.id || ""}\0${suppliedOperation}\0${file.name}\0${file.type}\0`).update(suppliedOperation ? "" : buffer).digest("hex");
   const path = `.fmd-attachments/tasks/${id}/${identity}-${safeFileName(file.name)}`;
-  let github: GitHubUserCapability;
-  try {
-    github = (await authorizeCredentialAction({
-      credential: { kind: "session-request", request },
-      action: "github.attachment.write",
-      target: { taskId: id, path, repository: task.github_repo || defaultGitHubRepository },
-    })).github;
-  } catch (error) {
-    return apiError(error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.", error instanceof GitHubAppUserTokenBusyError ? 503 : error instanceof GitHubAppUserTokenRequiredError ? 401 : 403);
-  }
-
-  let uploaded;
-  try {
-    uploaded = await uploadGitHubAttachment(
-      path,
-      buffer,
-      github,
-      `Add attachment for Founder Scoreboard task ${id}`,
-      task.github_repo,
-    );
-  } catch {
-    return apiError("GitHub-Anhang konnte nicht sicher gespeichert werden. Bitte denselben Anhang erneut senden.", 502);
-  }
+  const upload = await planning.uploadAttachment({ path, bytes: buffer, filename: file.name, contentType: file.type });
+  if (!upload.ok) return apiError(upload.error, upload.status);
+  const uploaded = upload.uploaded;
   const markdown = isImageType(file.type)
     ? `![${file.name}](${uploaded.rawUrl})`
     : `[${file.name}](${uploaded.rawUrl})`;
 
-  const { data: audit, error: auditError } = await planning.recordAttachment({ filename: file.name, contentType: file.type, size: file.size, url: uploaded.rawUrl }, auditRequestMetadata(request));
+  const { data: audit, error: auditError } = await planning.recordAttachment(auditRequestMetadata(request));
   if (auditError || !audit) return apiError(auditError?.message || "Anhang konnte nicht protokolliert werden.", 500);
 
   return NextResponse.json({

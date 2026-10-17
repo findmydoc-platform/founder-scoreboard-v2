@@ -6,13 +6,14 @@ import { ACTIVE_TASKS_TABLE } from "../../planning-read-model";
 import { rolePermitsAction } from "./session-policy";
 
 type PlanningSprintContext = {
-  action: PlanningCredentialInput["action"]; targetId: string; profile: AuthenticatedProfile | null; service: SupabaseClient;
+  action: PlanningCredentialInput["action"]; targetId: string; profile: AuthenticatedProfile | null; service: SupabaseClient; followup: SupabaseClient;
   current(): Promise<{ code?: string; message: string } | null>;
 };
 const forbidden = () => ({ code: "42501", message: "Keine Berechtigung für diese Aktion." });
 
-export function planningSprintOperations({ action, targetId, profile, service, current }: PlanningSprintContext) {
+export function planningSprintOperations({ action, targetId, profile, service, followup, current }: PlanningSprintContext) {
   let lockProjectId = "";
+  let lockStartDate = "";
   let nextSprintId = "";
   const sprintTaskIds = new Set<string>();
   let savedCommitment: Record<string, unknown> | null = null;
@@ -22,9 +23,10 @@ export function planningSprintOperations({ action, targetId, profile, service, c
       return await service.rpc("create_score_objection_transaction", { p_sprint_id: targetId, p_profile_id: profile.id, p_comment: comment,
         p_request_ip: metadata.request_ip || null, p_user_agent: metadata.user_agent || null });
     },
-    async processScoreObjection(values: { action: "assign_second_review" | "resolve" | "second_review"; objectionId: number; status?: string | null;
+    async processScoreObjection(suppliedValues: { action: "assign_second_review" | "resolve" | "second_review"; objectionId: number; status?: string | null;
       resolutionComment?: string; deliveryPoints?: number; formPoints?: number; weeklyPoints?: number; secondReviewerProfileId?: string; secondReviewDecision?: string },
       metadata: { request_ip?: string | null; user_agent?: string | null }) {
+      const values = structuredClone(suppliedValues);
       if (action !== "planning.sprint.objection.process" || !targetId || !profile
         || (values.action !== "second_review" && !rolePermitsAction("governance.ceo", profile.platformRole)) || await current()) return { data: null, error: forbidden() };
       return await service.rpc("process_score_objection_transaction", { p_sprint_id: targetId, p_objection_id: values.objectionId, p_actor_profile_id: profile.id,
@@ -33,7 +35,8 @@ export function planningSprintOperations({ action, targetId, profile, service, c
         p_second_reviewer_profile_id: values.secondReviewerProfileId || null, p_second_review_decision: values.secondReviewDecision || null,
         p_request_ip: metadata.request_ip || null, p_user_agent: metadata.user_agent || null });
     },
-    async setReviewWindow(values: { expectedHours: number; hours: number }, metadata: { request_ip?: string | null; user_agent?: string | null }) {
+    async setReviewWindow(suppliedValues: { expectedHours: number; hours: number }, metadata: { request_ip?: string | null; user_agent?: string | null }) {
+      const values = structuredClone(suppliedValues);
       if (action !== "planning.sprint.review-window" || !profile || await current()) return { data: null, error: forbidden() };
       return await service.rpc("update_founderops_review_window_transaction", { p_project_id: "findmydoc-founder-execution", p_expected_hours: values.expectedHours,
         p_review_objection_window_hours: values.hours, p_actor_profile_id: profile.id,
@@ -42,7 +45,7 @@ export function planningSprintOperations({ action, targetId, profile, service, c
     async readSprintLock() {
       if (action !== "planning.sprint.lock" || !targetId || await current()) return { data: null, error: forbidden() };
       const result = await service.from("sprints").select("id,project_id,name,start_date,end_date,review_due_at,score_locked,updated_at,lock_result").eq("id", targetId).single();
-      if (result.data) lockProjectId = result.data.project_id;
+      if (result.data) { lockProjectId = result.data.project_id; lockStartDate = result.data.start_date || "1900-01-01"; }
       return result;
     },
     async readSprintBlockingObjections() {
@@ -58,9 +61,9 @@ export function planningSprintOperations({ action, targetId, profile, service, c
       if (action !== "planning.sprint.lock" || !lockProjectId || await current()) return { data: null, error: forbidden() };
       return await service.from("projects").select("review_objection_window_hours").eq("id", lockProjectId).single();
     },
-    async readNextSprint(startDate: string) {
-      if (action !== "planning.sprint.lock" || !targetId || await current()) return { data: null, error: forbidden() };
-      const result = await service.from("sprints").select("id,name,start_date,end_date").neq("id", targetId).gt("start_date", startDate)
+    async readNextSprint() {
+      if (action !== "planning.sprint.lock" || !targetId || !lockStartDate || await current()) return { data: null, error: forbidden() };
+      const result = await service.from("sprints").select("id,name,start_date,end_date").neq("id", targetId).gt("start_date", lockStartDate)
         .order("start_date", { ascending: true }).limit(1).maybeSingle();
       nextSprintId = result.data?.id || "";
       return result;
@@ -74,7 +77,8 @@ export function planningSprintOperations({ action, targetId, profile, service, c
       for (const task of result.data || []) sprintTaskIds.add(task.id);
       return result;
     },
-    async readSprintBlockers(taskIds: string[]) {
+    async readSprintBlockers(suppliedTaskIds: string[]) {
+      const taskIds = [...suppliedTaskIds];
       if (action !== "planning.sprint.lock" || taskIds.some(id => !sprintTaskIds.has(id)) || await current()) return { data: null, error: forbidden() };
       return await service.from("task_blockers").select("id,task_id,status").in("task_id", taskIds).eq("status", "open");
     },
@@ -91,10 +95,11 @@ export function planningSprintOperations({ action, targetId, profile, service, c
     service.from("founder_strike_state").select("id,profile_id,strike_level,fulfilled_reset_streak,last_evaluated_sprint_id,updated_at"),
   ]);
     },
-    async commitSprintLock(values: { expectedUpdatedAt: string; taskUpdates: readonly Record<string, unknown>[]; acceptedBlockerTaskIds: readonly string[];
+    async commitSprintLock(suppliedValues: { expectedUpdatedAt: string; taskUpdates: readonly Record<string, unknown>[]; acceptedBlockerTaskIds: readonly string[];
       carryoverInserts: readonly Record<string, unknown>[]; notifications: readonly Record<string, unknown>[]; scoreRows: readonly Record<string, unknown>[];
       strikeStateRows: readonly Record<string, unknown>[]; strikeEvents: readonly Record<string, unknown>[]; resultData: Record<string, unknown> },
       metadata: { request_ip?: string | null; user_agent?: string | null }) {
+      const values = structuredClone(suppliedValues);
       if (action !== "planning.sprint.lock" || !targetId || !profile || values.taskUpdates.some(row => !sprintTaskIds.has(String(row.id)))
         || values.acceptedBlockerTaskIds.some(id => !sprintTaskIds.has(id))
         || values.carryoverInserts.some(row => !nextSprintId || !sprintTaskIds.has(String(row.carried_from_task_id)) || row.carried_from_sprint_id !== targetId
@@ -119,7 +124,8 @@ export function planningSprintOperations({ action, targetId, profile, service, c
       if (action !== "planning.sprint.plan" || await current()) return { data: null, error: forbidden() };
       return await service.from(ACTIVE_TASKS_TABLE).select("sprint_id").not("sprint_id", "is", null);
     },
-    async commitSprintPlan(values: { sprints: readonly Record<string, unknown>[]; meetings: readonly Record<string, unknown>[]; auditData: Record<string, unknown> }, metadata: { request_ip?: string | null; user_agent?: string | null }) {
+    async commitSprintPlan(suppliedValues: { sprints: readonly Record<string, unknown>[]; meetings: readonly Record<string, unknown>[]; auditData: Record<string, unknown> }, metadata: { request_ip?: string | null; user_agent?: string | null }) {
+      const values = structuredClone(suppliedValues);
       if (action !== "planning.sprint.plan" || !profile || await current()) return { data: null, error: forbidden() };
       return await service.rpc("create_sprint_plan_with_review_window_transaction", { p_project_id: "findmydoc-founder-execution", p_sprints: values.sprints,
         p_meetings: values.meetings, p_audit_data: values.auditData, p_actor_profile_id: profile.id,
@@ -133,12 +139,14 @@ export function planningSprintOperations({ action, targetId, profile, service, c
       if (action !== "planning.sprint.update" || !targetId || await current()) return { count: null, error: forbidden() };
       return await service.from(ACTIVE_TASKS_TABLE).select("id", { count: "exact", head: true }).eq("sprint_id", targetId);
     },
-    async commitSprintSchedule(values: { expectedUpdatedAt: string; patch: Record<string, string | null> }, metadata: { request_ip?: string | null; user_agent?: string | null }) {
+    async commitSprintSchedule(suppliedValues: { expectedUpdatedAt: string; patch: Record<string, string | null> }, metadata: { request_ip?: string | null; user_agent?: string | null }) {
+      const values = structuredClone(suppliedValues);
       if (action !== "planning.sprint.update" || !targetId || !profile || await current()) return { data: null, error: forbidden() };
       return await service.rpc("update_sprint_schedule_transaction", { p_sprint_id: targetId, p_expected_updated_at: values.expectedUpdatedAt,
         p_sprint_patch: values.patch, p_actor_profile_id: profile.id, p_request_ip: metadata.request_ip || null, p_user_agent: metadata.user_agent || null });
     },
-    async writeCommitment(values: { profileId: string; commitmentLevel: string; weeklyHours: number; note: string }) {
+    async writeCommitment(suppliedValues: { profileId: string; commitmentLevel: string; weeklyHours: number; note: string }) {
+      const values = structuredClone(suppliedValues);
       if (action !== "planning.sprint.commitment.write" || !targetId || !profile
         || (!rolePermitsAction("operations.lead", profile.platformRole) && values.profileId !== profile.id) || await current()) return { data: null, error: forbidden() };
       const result = await service.from("sprint_commitments").upsert({ sprint_id: targetId, profile_id: values.profileId,
@@ -149,7 +157,7 @@ export function planningSprintOperations({ action, targetId, profile, service, c
     },
     async auditCommitment(metadata: { request_ip?: string | null; user_agent?: string | null }) {
       if (action !== "planning.sprint.commitment.write" || !savedCommitment) return { error: forbidden() };
-      return await service.from("audit_log").insert({ actor_profile_id: profile?.id || null, action: "sprint.commitment.update",
+      return await followup.from("audit_log").insert({ actor_profile_id: profile?.id || null, action: "sprint.commitment.update",
         entity_type: "sprint_commitment", entity_id: String(savedCommitment.id), after_data: savedCommitment,
         request_ip: metadata.request_ip || null, user_agent: metadata.user_agent || null,
       });

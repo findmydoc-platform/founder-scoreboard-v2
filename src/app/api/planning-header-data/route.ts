@@ -8,5 +8,7 @@ export async function GET(request: NextRequest) {
   if (!permission.ok) return authzError(permission);
   const slots = parsePlanningHeaderSlots(request.nextUrl.searchParams.get("slots"));
   if (!slots) return apiError("Unknown planning header slot.", 400);
-  return NextResponse.json({ headerData: await permission.planning.loadHeader(slots) });
+  const result = await permission.planning.loadHeader(slots);
+  if (!result.ok) return authzError(result);
+  return NextResponse.json({ headerData: result.headerData });
 }

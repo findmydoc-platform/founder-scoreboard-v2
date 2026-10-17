@@ -133,7 +133,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Die Review- und Einwandfrist läuft noch. Der Sprint kann erst danach finalisiert werden.", 409);
   }
 
-  const { data: nextSprint, error: nextSprintError } = await planning.readNextSprint(sprint.start_date || "1900-01-01");
+  const { data: nextSprint, error: nextSprintError } = await planning.readNextSprint();
 
   if (nextSprintError) return apiError(nextSprintError.message, 500);
 

@@ -1,16 +1,25 @@
 import "server-only";
 import type { CredentialAction, PlanningCredentialInput } from "../types";
 import { authorizeSessionPolicy, currentAdministratorAccess, administratorAccessFailure, rolePermitsAction } from "./session-policy";
-import { getServerServiceRoleSupabase } from "../../supabase-service-role";
-import { getServerSupabase } from "../../supabase";
+import { planningWorkweekOperations } from "./planning-workweek";
+import { planningService, PlanningDispatchError } from "./planning-service";
+import { requiresSupabaseAuth } from "../../supabase";
+import { isLocalLoginRequestAllowed } from "../../local-development-auth";
+import { WorkspaceAccessError } from "../../workspace-identity";
+import { administratorAccessExpiredErrorCode, type AuthErrorCode } from "../../auth-error-contract";
+import { getServerAuthSupabase } from "./cookie-client";
+import { headers } from "next/headers";
+import type { NextRequest } from "next/server";
 import { ACTIVE_TASKS_TABLE } from "../../planning-read-model";
 
 import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
 import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
 import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
+import { loadPlanningTrashTaskDetail } from "../../planning-trash-detail";
+import type { Profile } from "../../types";
 import { loadPlanningHeaderData } from "../../planning-header-data";
-import { sharedPlanningHeaderSlotLoaders } from "../../planning-header-cache";
+import { planningHeaderSlotLoaders } from "./planning-header-cache";
 import type { PlanningHeaderSlotKey } from "../../planning-header-data";
 
 import { createPlanningTrashPlanningItems, planningTrashTransactionFromResult, runPlanningTrashLifecycle, type PlanningTrashTransactionResult } from "@/features/planning-items/model/planning-items-trash";
@@ -36,6 +45,7 @@ import { planningParticipationOperations } from "./planning-participation";
 import { planningSprintOperations } from "./planning-sprint";
 const forbidden = () => ({ code: "42501", message: "Keine Berechtigung für diese Aktion." });
 const planningPolicyActions: Record<PlanningCredentialInput["action"], CredentialAction> = {
+  "workweek.publish": "team.read", "workweek.restart": "team.read", "workweek.conflict.read": "team.read", "workweek.conflict.resolve": "team.read", "workweek.reconcile": "team.read",
   "planning.github-comments.import": "team.read", "planning.github-sync.apply": "team.read",
   "planning.attachment.write": "planning.contribute",
   "planning.comment.create": "planning.contribute", "planning.blocker.report": "planning.contribute",
@@ -56,15 +66,32 @@ export function isPlanningAction(value: string): value is PlanningCredentialInpu
 
 
 export async function authorizePlanning(input: PlanningCredentialInput) {
-  if (input.credential.kind !== "session-request") return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
+  const startedAt = Date.now();
   const action = input.action;
   const targetId = input.targetId?.trim() || "";
   const targetIds = new Set(input.targetIds || []);
-  const permission = await authorizeSessionPolicy(input.credential.request, planningPolicyActions[action]);
+
+  const readActions = ["planning.revision.read", "planning.board.read", "planning.header.read", "planning.backlog.read", "planning.sprint.read", "planning.task.read"];
+  if (input.credential.kind !== "session-request" && !(input.credential.kind === "server-cookies" && readActions.includes(action))) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
+  const strictService = action === "planning.approval.decide" || action.startsWith("planning.trash.") || action.startsWith("workweek.");
+  const service = planningService(strictService, () => current(), () => assertKnown());
+  const followup = planningService(strictService);
+  if (!service && !strictService) return { ok: false as const, status: 501, error: "Supabase env is not configured." };
+  let request: NextRequest;
+  if (input.credential.kind === "server-cookies") {
+    const requestHeaders = new Headers(await headers());
+    if (requiresSupabaseAuth()) {
+      const client = await getServerAuthSupabase();
+      const session = client ? await client.auth.getSession() : null;
+      if (session?.error || !session?.data.session?.access_token) return { ok: false as const, status: 401, error: "Anmeldung erforderlich." };
+      requestHeaders.set("authorization", `Bearer ${session.data.session.access_token}`);
+    }
+    request = { headers: requestHeaders, method: "GET" } as NextRequest;
+  } else request = { headers: new Headers(input.credential.request.headers), method: input.credential.request.method, url: input.credential.request.url } as NextRequest;
+  const permission = await authorizeSessionPolicy(request, planningPolicyActions[action], startedAt);
   if (!permission.ok) return permission;
-  const strictService = action === "planning.approval.decide" || action.startsWith("planning.trash.");
-  const service = strictService ? getServerServiceRoleSupabase() : getServerSupabase();
-  if (!service && strictService) return { ok: false as const, status: 503, error: action.startsWith("planning.trash.") ? "Server-Service für den Papierkorb ist nicht konfiguriert." : "Server-Service für Freigaben ist nicht konfiguriert." };
+  if (action.startsWith("workweek.") && !permission.data) return { ok: false as const, status: 401, error: "Anmeldung erforderlich." };
+  if (!service && strictService) return { ok: false as const, status: 503, error: action.startsWith("planning.trash.") ? "Server-Service für den Papierkorb ist nicht konfiguriert." : action === "workweek.publish" ? "Grundwoche kann derzeit nicht veröffentlicht werden." : action === "workweek.restart" ? "Neustart ist derzeit nicht verfügbar." : action === "workweek.reconcile" ? "Google-Abgleich ist derzeit nicht verfügbar." : action.startsWith("workweek.conflict.") ? "Synchronisationskonflikt ist nicht verfügbar." : "Server-Service für Freigaben ist nicht konfiguriert." };
   if (!service) return { ok: false as const, status: 501, error: "Supabase env is not configured." };
   const profile = permission.profile;
   const actor = actorContextFromSessionAuth(permission);
@@ -82,29 +109,47 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   let approvedKind = "";
   let trashTransaction: PlanningTrashTransactionResult | null = null;
   const createdIds = new Set<string>();
+  let detailPeople: Profile[] | null = null;
+  const assertKnown = () => {
+    if ("assertCurrent" in permission) permission.assertCurrent();
+    if (correction && Date.parse(authority!.administratorAccess.expiresAt || "") <= Date.now()) throw new PlanningDispatchError(403, administratorAccessExpiredErrorCode, "Der Adminzugang ist abgelaufen.");
+  };
   const current = async () => {
     if (!permission.data) return null;
     const result = await permission.data.rpc("current_authenticated_profile");
-    if (result.error) return { code: result.error.code, message: "Berechtigung konnte nicht geprüft werden." };
-    if (result.data?.id !== profile?.id || result.data?.platform_role !== profile?.platformRole) return forbidden();
+    if (result.error) return { code: result.status >= 500 ? "workspace_access_unavailable" : result.error.code, message: "Berechtigung konnte nicht geprüft werden.", status: result.status >= 500 ? 503 : 403 };
+    if (result.data?.id !== profile?.id || result.data?.platform_role !== profile?.platformRole) {
+      const override = request.headers.get("x-fmd-dev-profile-id")?.trim();
+      if (!override || override !== profile?.id || !isLocalLoginRequestAllowed(request.headers.get("host") || "")
+        || !result.data || !rolePermitsAction("operations.lead", result.data.platform_role)) return forbidden();
+      const selected = await permission.data.from("profiles").select("id,platform_role").eq("id", profile.id).single();
+      if (selected.error || selected.data?.id !== profile.id || selected.data?.platform_role !== profile.platformRole) return forbidden();
+    }
     if (correction) {
       if (Date.parse(authority!.administratorAccess.expiresAt || "") <= Date.now()) return forbidden();
       const snapshot = await permission.data.rpc("administrator_access_snapshot");
       if (snapshot.error || !currentAdministratorAccess(snapshot.data).active) return forbidden();
     }
+    try { assertKnown(); } catch (error) {
+      if (error instanceof WorkspaceAccessError || error instanceof PlanningDispatchError) return { code: error.code, message: error.message, status: error.status };
+      return { code: "workspace_access_unavailable", message: "Berechtigung konnte nicht geprüft werden.", status: 503 };
+    }
     return null;
   };
+  const resourceData = "constrainedData" in permission ? permission.constrainedData(assertKnown) : permission.data;
   return { ok: true as const, profile: profile ? Object.freeze({ ...profile }) : null, authority: authority ? Object.freeze({ ...authority, profile: Object.freeze({ ...authority.profile }), administratorAccess: Object.freeze({ ...authority.administratorAccess }), capabilities: Object.freeze({ ...authority.capabilities }) }) : undefined, planning: {
-    ...planningCollaborationOperations({ action, targetId, profile, service, current }),
-    ...planningParticipationOperations({ action, targetId, profile, service, current }),
-    ...planningSprintOperations({ action, targetId, profile, service, current }),
+    ...planningWorkweekOperations({ action, targetId, profile, service, followup: followup!, data: permission.data, request, current }),
+    ...planningCollaborationOperations({ action, targetId, profile, service, followup: followup!, request, current }),
+    ...planningParticipationOperations({ action, targetId, profile, service, followup: followup!, current }),
+    ...planningSprintOperations({ action, targetId, profile, service, followup: followup!, current }),
     async readItemKind() {
       if ((action !== "planning.approval.decide" && !action.startsWith("planning.trash.")) || !targetId || await current()) return { data: null, error: forbidden() };
       const result = await service.from("tasks").select("task_type").eq("id", targetId).maybeSingle<{ task_type: string }>();
       if (result.data) observedKind = result.data.task_type;
       return result;
     },
-    async runTrash(kind: "initiative" | "deliverable", call: BoundInvocation): Promise<PlanningResult> {
+    async runTrash(kind: "initiative" | "deliverable", invocation: BoundInvocation): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
       const expected = action === "planning.trash.withdraw" ? "withdraw" : action === "planning.trash.restore" ? "restore" : null;
       if (!expected || kind !== observedKind || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== expected
         || !("itemId" in call.command.action) || call.command.action.itemId !== targetId || !targetId || await current()) return rejected();
@@ -117,9 +162,10 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     },
     async trashLifecycle() {
       if (!action.startsWith("planning.trash.") || !trashTransaction) throw Object.assign(new Error("Keine gebundene Papierkorb-Transaktion vorhanden."), { code: "42501" });
-      return runPlanningTrashLifecycle(service, trashTransaction);
+      return runPlanningTrashLifecycle(followup!, trashTransaction);
     },
-    async runApproval(kind: "initiative" | "deliverable", call: BoundInvocation): Promise<PlanningResult> {
+    async runApproval(kind: "initiative" | "deliverable", invocation: BoundInvocation): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
       if (action !== "planning.approval.decide" || kind !== observedKind || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== "decideApproval"
         || call.command.action.itemId !== targetId || !targetId || await current()) return rejected();
       const result = await createPlanningApprovalPlanningItems(service, kind).run({ ...call, actor: actor.actor, mode: "commit" });
@@ -128,19 +174,23 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     },
     async approvalLifecycle() {
       if (action !== "planning.approval.decide" || approvedKind !== "deliverable") throw Object.assign(new Error("Keine gebundene Freigabe vorhanden."), { code: "42501" });
-      return runPlanningApprovalLifecycle(service, targetId);
+      return runPlanningApprovalLifecycle(followup!, targetId);
     },
-    async runBacklogMove(call: BoundInvocation): Promise<PlanningResult> {
+    async runBacklogMove(invocation: BoundInvocation): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
       if (action !== "planning.backlog.move" || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== "moveBacklog"
         || !targetId || call.command.action.itemId !== targetId || !targetIds.has(call.command.action.before?.itemId || call.command.action.after?.itemId || "") || await current()) return rejected();
       return createBacklogMovePlanningItems(service).run({ ...call, actor: actor.actor, mode: "commit" });
     },
-    async runSprintAssignment(call: BoundInvocation): Promise<PlanningResult> {
+    async runSprintAssignment(invocation: BoundInvocation): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
       if (action !== "planning.sprint.assign" || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== "assignSprint"
         || !targetId || call.command.action.sprintId !== targetId || call.command.action.items.some(item => !targetIds.has(item.itemId)) || await current()) return rejected();
       return createSprintAssignmentPlanningItems(service).run({ ...call, actor: actor.actor, mode: "commit" });
     },
-    async runCreate(writer: BrowserCreateWriter, call: BoundInvocation): Promise<PlanningResult> {
+    async runCreate(suppliedWriter: BrowserCreateWriter, invocation: BoundInvocation): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
+      const writer = structuredClone(suppliedWriter);
       if (action !== "planning.task.create" || !actor.ok || call.command.kind !== "createItems" || call.command.items.length !== 1 || await current()) return rejected();
       const item = call.command.items[0];
       const row = writer.kind === "strategic" ? writer.params.item : writer.params.taskInsert;
@@ -155,7 +205,8 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       }
       return result;
     },
-    async runCreateApproval(kind: "initiative" | "deliverable", call: BoundInvocation): Promise<PlanningResult> {
+    async runCreateApproval(kind: "initiative" | "deliverable", invocation: BoundInvocation): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
       if (action !== "planning.task.create" || !actor.ok || !profile || !rolePermitsAction("governance.ceo", profile.platformRole)
         || call.command.kind !== "actOnItem" || call.command.action.kind !== "decideApproval" || !createdIds.has(call.command.action.itemId) || await current()) return rejected();
       return createPlanningApprovalPlanningItems(service, kind).run({ ...call, actor: actor.actor, mode: "commit" });
@@ -180,30 +231,36 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.task.create" || await current()) return { data: null, error: forbidden() };
       return await service.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
     },
-    async runReparent(call: BoundInvocation): Promise<PlanningResult> {
+    async runReparent(invocation: BoundInvocation): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
       if (action !== "planning.task.update" || correction || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== "changeParent"
         || call.command.action.itemId !== targetId || !targetId || await current()) return rejected();
       return createPlanningReparentPlanningItems(service, "any").run({ ...call, actor: actor.actor, mode: "commit" });
     },
-    async runDelete(call: BoundInvocation): Promise<PlanningResult> {
+    async runDelete(invocation: BoundInvocation): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
       if (action !== "planning.task.delete" || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== "deleteEmptyEpic"
         || call.command.action.itemId !== targetId || !targetId || await current()) return rejected();
       return createEmptyEpicDeletePlanningItems(service).run({ ...call, actor: actor.actor, mode: "commit" });
     },
-    async runRelationship(call: BoundInvocation, mentionRecipientProfileIds: readonly string[] = []): Promise<PlanningResult> {
+    async runRelationship(invocation: BoundInvocation, mentionRecipientProfileIds: readonly string[] = []): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
+      const mentions = [...mentionRecipientProfileIds];
       const expected = action === "planning.relationship.add" ? "addRelationship" : action === "planning.relationship.remove" ? "removeRelationship" : null;
       if (!expected || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== expected
-        || !("itemId" in call.command.action) || !targetId || call.command.action.itemId !== targetId || await current()) return rejected();
-      return createPlanningRelationshipPlanningItems(service, { mutationClient: correction ? permission.data! : service, administratorAccess: correction, mentionRecipientProfileIds }).run({ ...call, actor: actor.actor, mode: "commit" });
+        || !("itemId" in call.command.action) || !targetId || call.command.action.itemId !== targetId) return rejected();
+      if (await current()) return correction ? { ok: false, error: { code: "forbidden", reason: "administratorAccessRequired" } } : rejected();
+      return createPlanningRelationshipPlanningItems(service, { mutationClient: correction ? resourceData! : service, administratorAccess: correction, mentionRecipientProfileIds: mentions }).run({ ...call, actor: actor.actor, mode: "commit" });
     },
     failure,
-    async revise(payload: TaskUpdatePayload) {
+    async revise(suppliedPayload: TaskUpdatePayload) {
+      const payload = structuredClone(suppliedPayload);
       const denial = action === "planning.task.update" && targetId ? await current() : forbidden();
       if (denial) {
         const denied = correction ? await failure() : { error: denial.message, code: undefined };
         return { ok: false as const, error: { kind: "forbidden" as const, message: denied.error, code: denied.code } };
       }
-      return createPlanningItemRevision(correction ? permission.data! : service, failure).commitBrowserRevision({ itemId: targetId, payload, permission });
+      return createPlanningItemRevision(correction ? resourceData! : service, failure).commitBrowserRevision({ itemId: targetId, payload, permission });
     },
     async readMentionProfiles() {
       const denial = reviewKinds[action] || action === "planning.task.create" || action === "planning.task.update" || action.startsWith("planning.relationship.") ? await current() : forbidden();
@@ -217,9 +274,10 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     },
     async deliverReviews() {
       if (action !== "planning.review.decide" || !reviewCommitted) throw Object.assign(new Error("Keine Berechtigung für diesen Review-Versand."), { code: "42501" });
-      return deliverPendingGitHubReviews({ supabase: service, taskId: targetId, limit: 20 });
+      return deliverPendingGitHubReviews({ supabase: followup!, taskId: targetId, limit: 20 });
     },
-    async runReview(call: BoundInvocation): Promise<PlanningResult> {
+    async runReview(invocation: BoundInvocation): Promise<PlanningResult> {
+      const call = structuredClone(invocation);
       if (!reviewKinds[action] || correction || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== reviewKinds[action]
         || !targetId || !("itemId" in call.command.action) || call.command.action.itemId !== targetId || await current()) return rejected();
       const result = await createPlanningReviewPlanningItems(service).run({ ...call, actor: actor.actor, mode: "commit" });
@@ -236,7 +294,13 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     },
     async loadDetail() {
       if (action !== "planning.task.read" || !targetId || await current()) return { status: "forbidden" as const };
-      return createSupabaseTaskDetailReadModel(service).load({ itemId: targetId }, { authorized: true, actorProfileId: profile?.id || null });
+      const result = await createSupabaseTaskDetailReadModel(service).load({ itemId: targetId }, { authorized: true, actorProfileId: profile?.id || null });
+      if (result.status === "notFound") detailPeople = structuredClone([...result.people]);
+      return result;
+    },
+    async loadTrashDetail() {
+      if (action !== "planning.task.read" || !targetId || !detailPeople || await current()) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
+      return loadPlanningTrashTaskDetail(service, targetId, detailPeople);
     },
     async loadBoard() {
       const denial = action === "planning.board.read" ? await current() : forbidden();
@@ -244,9 +308,17 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       return createSupabasePlanningBoardReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
     },
     async loadHeader(slots?: PlanningHeaderSlotKey[]) {
-      const denial = ["planning.board.read", "planning.header.read", "planning.backlog.read", "planning.sprint.read"].includes(action) ? await current() : forbidden();
-      if (denial) throw Object.assign(new Error(denial.message), { code: denial.code });
-      return loadPlanningHeaderData(service, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, slots, sharedSlotLoaders: sharedPlanningHeaderSlotLoaders });
+      const denial = ["planning.board.read", "planning.header.read", "planning.backlog.read", "planning.sprint.read", "planning.task.read"].includes(action) ? await current() : forbidden();
+      if (denial) {
+        const code: AuthErrorCode | undefined = denial.code === "workspace_access_unavailable" ? "workspace_access_unavailable"
+          : denial.code === "workspace_access_denied" ? "workspace_access_denied" : denial.code === "workspace_google_login_required" ? "workspace_google_login_required" : undefined;
+        return { ok: false as const, status: "status" in denial ? Number(denial.status) : 403, error: denial.message, code };
+      }
+      const headerData = await loadPlanningHeaderData(service, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, slots, sharedSlotLoaders: planningHeaderSlotLoaders(service) });
+      try { assertKnown(); } catch {
+        return { ok: false as const, status: 503, error: "Berechtigung konnte nicht geprüft werden.", code: "workspace_access_unavailable" as const };
+      }
+      return { ok: true as const, headerData };
     },
     async readRevision() {
       const denial = action === "planning.revision.read" ? await current() : forbidden();

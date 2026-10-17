@@ -1,8 +1,6 @@
-import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
 import { NextResponse, type NextRequest } from "next/server";
 import { invalidSessionBeforeEffectErrorCode } from "@/lib/auth-error-contract";
 import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
-import { authorizeCredentialAction, type GitHubInstallationCapability } from "@/lib/credentials";
 import {
   parseTaskGitHubSyncCommand,
   taskGitHubSyncFailure,
@@ -64,18 +62,6 @@ export async function POST(
     return syncResponse(taskGitHubSyncFailure("github_sync_invalid_target", "Strategische Planungselemente werden nicht mit GitHub synchronisiert."));
   }
 
-  let installationToken: GitHubInstallationCapability;
-  try {
-    installationToken = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.projection.apply", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
-  } catch (error) {
-    return syncResponse(taskGitHubSyncFailure(
-      "github_sync_unavailable",
-      error instanceof Error
-        ? error.message
-        : "GitHub-Verbindung konnte nicht geprüft werden.",
-    ));
-  }
-
-  const result = await apiContext.planning.projectToGitHub({ installationToken, createIfMissing: command.createIfMissing });
+  const result = await apiContext.planning.projectToGitHub(command.createIfMissing);
   return syncResponse(result);
 }

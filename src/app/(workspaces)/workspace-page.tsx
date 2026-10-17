@@ -3,9 +3,7 @@ import { PlanningApp } from "@/features/planning/PlanningApp";
 import { WorkspaceDataUnavailablePage } from "@/features/planning/templates/workspace-data-unavailable-page";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
-import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
-import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
 import { createSupabaseStrategicPlanningReadModel } from "@/features/projects/server/strategic-planning-read-model-supabase";
 import { supportingWorkspaceModelToPlanningShellState, type SupportingWorkspace } from "@/features/planning/model/supporting-planning-shell-projection";
 import { createSupabaseEventsReadModel } from "@/features/events/server/events-read-model-supabase";
@@ -14,7 +12,6 @@ import { createSupabaseTeamReadModel } from "@/features/team/server/team-read-mo
 import { createSupabaseProfileReadModel } from "@/features/profile/server/profile-read-model-supabase";
 import { createSupabaseNotificationsReadModel } from "@/features/notifications/server/notifications-read-model-supabase";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
-import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
 import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
@@ -26,40 +23,37 @@ import { redirect } from "next/navigation";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
 
-async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
-  const supabase = getServerSupabase();
-  if (!supabase) return { status: "unavailable" as const };
-  const [backlog, headerData] = await Promise.all([
-    createSupabaseBacklogReadModel(supabase).load({
-      authorized: true,
-      actorProfileId: profile?.id || null,
-    }),
-    loadPlanningHeaderData(supabase, {
-      currentProfileId: profile?.id || null,
-      platformRole: profile?.platformRole || null,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
-  ]);
-  return backlog.status === "ready"
-    ? { status: "ready" as const, model: backlog.model, headerData }
-    : { status: backlog.status };
+async function loadBacklogPageData() {
+  const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.backlog.read" });
+  if (!permission.ok) return { status: "unavailable" as const };
+  const [backlog, header] = await Promise.all([permission.planning.loadBacklog(), permission.planning.loadHeader()]);
+  return backlog.status === "ready" && header.ok
+    ? { status: "ready" as const, model: backlog.model, headerData: header.headerData }
+    : { status: "unavailable" as const };
 }
 
 async function loadPlanningWorkspacePageData(
   workspace: "planning" | "projects",
   profile?: AuthenticatedProfile | null,
 ) {
+  if (workspace === "planning") {
+    const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
+    if (!permission.ok) return { status: "unavailable" as const };
+    const [planningWorkspace, header] = await Promise.all([
+      permission.planning.loadBoard(), permission.planning.loadHeader(permission.profile ? ["quickLinks", "calendarEvents"] : undefined),
+    ]);
+    return planningWorkspace.status === "ready" && header.ok
+      ? { status: "ready" as const, model: planningWorkspace.model, headerData: header.headerData }
+      : { status: "unavailable" as const };
+  }
   const supabase = getServerSupabase();
   if (!supabase) return { status: "unavailable" as const };
-  const readModel = workspace === "planning"
-    ? createSupabasePlanningBoardReadModel(supabase)
-    : createSupabaseStrategicPlanningReadModel(supabase);
+  const readModel = createSupabaseStrategicPlanningReadModel(supabase);
   const [planningWorkspace, headerData] = await Promise.all([
     readModel.load({ authorized: true, actorProfileId: profile?.id || null }),
     loadPlanningHeaderData(supabase, {
       currentProfileId: profile?.id || null,
       platformRole: profile?.platformRole || null,
-      slots: workspace === "planning" && profile ? ["quickLinks", "calendarEvents"] : undefined,
       sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
     }),
   ]);
@@ -92,20 +86,13 @@ async function loadSupportingWorkspacePageData(
     : { status: workspaceData.status };
 }
 
-async function loadSprintPageData(profile?: AuthenticatedProfile | null) {
-  const supabase = getServerSupabase();
-  if (!supabase) return { status: "unavailable" as const };
-  const [sprint, headerData] = await Promise.all([
-    createSupabaseSprintReadModel(supabase).load({ authorized: true, actorProfileId: profile?.id || null }),
-    loadPlanningHeaderData(supabase, {
-      currentProfileId: profile?.id || null,
-      platformRole: profile?.platformRole || null,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
-  ]);
-  return sprint.status === "ready"
-    ? { status: "ready" as const, model: sprint.model, headerData }
-    : { status: sprint.status };
+async function loadSprintPageData() {
+  const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.sprint.read" });
+  if (!permission.ok) return { status: "unavailable" as const };
+  const [sprint, header] = await Promise.all([permission.planning.loadSprint(), permission.planning.loadHeader()]);
+  return sprint.status === "ready" && header.ok
+    ? { status: "ready" as const, model: sprint.model, headerData: header.headerData }
+    : { status: "unavailable" as const };
 }
 
 async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
@@ -167,7 +154,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
     }
 
     if (initialWorkspace === "backlog") {
-      const backlog = await loadBacklogPageData(auth.profile);
+      const backlog = await loadBacklogPageData();
       if (backlog.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace="backlog" authUserEmail={auth.user?.email || ""} />;
       }
@@ -228,7 +215,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
     }
 
     if (initialWorkspace === "sprint") {
-      const sprint = await loadSprintPageData(auth.profile);
+      const sprint = await loadSprintPageData();
       if (sprint.status !== "ready") return <WorkspaceDataUnavailablePage workspace="sprint" authUserEmail={auth.user?.email || ""} />;
       return (
         <PlanningApp

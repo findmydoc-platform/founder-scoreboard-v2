@@ -1,3 +1,4 @@
+import { createCipheriv } from "node:crypto";
 import { afterEach, expect, test, vi } from "vitest";
 import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
@@ -572,15 +573,14 @@ test("attachment bookkeeping requires an authorized bound task before provider e
   const acquire = () => authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.attachment.write", targetId: "attachment-task" });
   const grant = await acquire();
   expect(grant.ok).toBe(true);
-  const values = { filename: "Evidence.pdf", contentType: "application/pdf", size: 42, url: "https://example.test/evidence" };
-  expect(await grant.planning.recordAttachment(values, {})).toMatchObject({ error: { code: "42501" } });
+  expect(await grant.planning.recordAttachment({})).toMatchObject({ error: { code: "42501" } });
   expect(await grant.planning.readCollaborationTask()).toMatchObject({ data: { id: "attachment-task" } });
-  expect(await grant.planning.recordAttachment(values, {})).toMatchObject({ data: { entity_id: "attachment-task", actor_profile_id: "synthetic-profile" } });
+  expect(await grant.planning.recordAttachment({ actor_profile_id: "foreign", entity_id: "foreign" })).toMatchObject({ error: { code: "42501" } });
   owner = "foreign";
   const foreign = await acquire();
   await foreign.planning.readCollaborationTask();
-  expect(await foreign.planning.recordAttachment(values, {})).toMatchObject({ error: { code: "42501" } });
-  expect(audits).toHaveLength(1);
+  expect(await foreign.planning.recordAttachment({})).toMatchObject({ error: { code: "42501" } });
+  expect(audits).toHaveLength(0);
 });
 
 
@@ -603,4 +603,298 @@ test("GitHub comment import keeps viewer read access and binds the imported task
   expect(await permission.planning.readProjectionKind()).toMatchObject({ error: { code: "42501" } });
   protocol.state.profile = false;
   expect(await permission.planning.importExternalComments([])).toMatchObject({ error: { code: "42501" } });
+});
+
+
+test("server rendered planning uses the same real cookie-bound read policy", async () => {
+  const protocol = administratorProtocol({ role: "viewer" });
+  const authFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return url.pathname === "/rest/v1/projects"
+      ? Response.json({ id: "findmydoc-founder-execution", name: "Planning" }) : Response.json([]);
+    return authFetch(request);
+  });
+  const jar = protocol.cookieJar();
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "next/headers": { cookies: async () => jar, headers: async () => new Headers({ host: "localhost" }) } });
+  const rendered = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
+  expect(rendered.ok).toBe(true);
+  expect(await rendered.planning.loadBoard()).toMatchObject({ status: "ready", model: { items: [] } });
+  expect(await rendered.planning.runReview({ command: { kind: "actOnItem", action: { kind: "requestReview", itemId: "foreign" } } })).toMatchObject({ ok: false });
+  expect(await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.task.create" })).toMatchObject({ ok: false, status: 403 });
+  protocol.state.profile = false;
+  expect(await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" })).toMatchObject({ ok: false, status: 403 });
+});
+
+
+test("review invocation cannot switch action or task while current authority is awaited", async () => {
+  const task = { id: "immutable-task", task_type: "deliverable", title: "Review", updated_at: "2026-10-17T08:00:00Z", status: "In Arbeit", approval_status: "approved", assignee: "synthetic-profile", owner: "synthetic-profile", review_status: "not_requested", review_owner_profile_id: "reviewer", score_final: false };
+  const protocol = administratorProtocol({ responses: {
+    prepare_planning_review_command: { task, actorName: "Founder", defaultReviewer: { id: "reviewer", contributor: true } }, has_valid_planning_review_evidence: true,
+    mutate_planning_review_command_transaction_v3: { task, activities: [] },
+  } });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.review.request", targetId: task.id });
+  expect(grant.ok).toBe(true);
+  const authFetch = globalThis.fetch;
+  let release, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).pathname.endsWith("/current_authenticated_profile")) { entered(); await gate; }
+    return authFetch(request);
+  });
+  const call = { command: { kind: "actOnItem", action: { kind: "requestReview", itemId: task.id, expectedRevision: task.updated_at } } };
+  const pending = grant.planning.runReview(call);
+  await waiting;
+  call.command.action = { kind: "reopenReview", itemId: "foreign" };
+  release();
+  expect(await pending).toMatchObject({ ok: true, status: "committed" });
+  expect(protocol.calls.find(call => call.name === "mutate_planning_review_command_transaction_v3").body).toMatchObject({ p_task_id: task.id, p_action: "request" });
+});
+
+test("commitment owner is captured before an awaited current binding check", async () => {
+  const protocol = administratorProtocol({ role: "founder" });
+  const authFetch = globalThis.fetch;
+  const writes = [];
+  let gateCurrent = false, release, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (gateCurrent && url.pathname.endsWith("/current_authenticated_profile")) { entered(); await gate; }
+    if (url.pathname === "/rest/v1/sprint_commitments") { const body = await request.json(); writes.push(body); return Response.json({ id: 2, ...body }); }
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.sprint.commitment.write", targetId: "sprint-one" });
+  expect(grant.ok).toBe(true);
+  const values = { profileId: "synthetic-profile", commitmentLevel: "full", weeklyHours: 24, note: "Evidence" };
+  gateCurrent = true;
+  const pending = grant.planning.writeCommitment(values);
+  await waiting;
+  values.profileId = "foreign";
+  release();
+  expect(await pending).toMatchObject({ error: null });
+  expect(writes[0]).toMatchObject({ profile_id: "synthetic-profile", sprint_id: "sprint-one" });
+});
+
+
+test("a slow prepare cannot extend the original session deadline before service commit", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const task = { id: "deadline-task", task_type: "deliverable", title: "Review", updated_at: "2026-10-17T08:00:00Z", status: "In Arbeit", approval_status: "approved", assignee: "synthetic-profile", owner: "synthetic-profile", review_status: "not_requested", review_owner_profile_id: "reviewer", score_final: false };
+    let release, entered;
+    const waiting = new Promise(resolve => { entered = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const protocol = administratorProtocol({ responses: {
+      prepare_planning_review_command: async () => { entered(); await gate; return Response.json({ task, actorName: "Founder", defaultReviewer: { id: "reviewer", contributor: true } }); },
+      has_valid_planning_review_evidence: true, mutate_planning_review_command_transaction_v3: { task, activities: [] },
+    } });
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+    const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.review.request", targetId: task.id });
+    expect(grant.ok).toBe(true);
+    const pending = grant.planning.runReview({ command: { kind: "actOnItem", action: { kind: "requestReview", itemId: task.id, expectedRevision: task.updated_at } } });
+    await waiting;
+    vi.setSystemTime(Date.now() + 3_600_001);
+    release();
+    expect(await pending).toMatchObject({ ok: false });
+    expect(protocol.calls.some(call => call.name === "mutate_planning_review_command_transaction_v3")).toBe(false);
+  } finally { vi.useRealTimers(); }
+});
+
+
+test("workweek operations keep the actual owner and selected version behind fixed capabilities", async () => {
+  const protocol = administratorProtocol({ role: "viewer" });
+  const authFetch = globalThis.fetch;
+  let owner = "synthetic-profile";
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/team_workweek_google_conflicts") {
+      expect(url.searchParams.get("owner_profile_id")).toBe("eq.synthetic-profile");
+      return Response.json(null);
+    }
+    if (url.pathname === "/rest/v1/team_workweek_versions") {
+      expect(url.searchParams.get("id")).toBe("eq.bound-version");
+      expect(url.searchParams.get("owner_profile_id")).toBe("eq.synthetic-profile");
+      return Response.json(owner === "synthetic-profile" ? { id: "bound-version", owner_profile_id: owner, origin: "google_reconciliation" } : null);
+    }
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const read = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "workweek.conflict.read" });
+  expect(read.ok).toBe(true);
+  expect(await read.planning.readWorkweekConflict()).toBeNull();
+  await expect(read.planning.publishWorkweek()).rejects.toMatchObject({ code: "forbidden" });
+  const input = { credential: { kind: "session-request", request: protocol.request() }, action: "workweek.publish", targetId: "bound-version" };
+  const publish = await authorizeCredentialAction(input);
+  expect(publish.ok).toBe(true);
+  input.targetId = "foreign-version";
+  expect(await publish.planning.detectWorkweekConflict()).toEqual({ state: "clear" });
+  owner = "foreign";
+  await expect(publish.planning.detectWorkweekConflict()).rejects.toMatchObject({ code: "not_found" });
+  protocol.state.profile = false;
+  expect(await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "workweek.reconcile" })).toMatchObject({ ok: false, status: 403 });
+});
+
+
+test("a planning resource cannot reuse a changed service credential configuration", async () => {
+  const protocol = administratorProtocol({ role: "viewer" });
+  const authFetch = globalThis.fetch;
+  let reads = 0;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).pathname === "/rest/v1/active_tasks") { reads += 1; return Response.json([]); }
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.revision.read" });
+  expect(grant.ok).toBe(true);
+  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "synthetic-replacement-service");
+  expect(await grant.planning.readRevision()).toMatchObject({ data: null, error: { code: "workspace_access_unavailable" } });
+  expect(reads).toBe(0);
+});
+
+
+test("confirmed workweek writes retain bound journal accounting after profile loss", async () => {
+  const effect = { id: "effect-one", calendarId: "primary", googleEventId: "fopssynthetic", generation: 1, state: "pending", confirmedEtag: null,
+    payload: { id: "fopssynthetic", summary: "Workweek", start: { dateTime: "2099-01-12T09:00:00Z", timeZone: "Europe/Berlin" },
+      end: { dateTime: "2099-01-12T17:00:00Z", timeZone: "Europe/Berlin" }, extendedProperties: { private: { founderopsWorkweekEffectId: "effect-one" } } } };
+  const publication = { id: "publication-one", sourceVersionId: "bound-version", ownerProfileId: "synthetic-profile", effectiveFrom: "2099-01-12", timezone: "Europe/Berlin",
+    status: "preparing", syncState: "pending", publicationRevision: 1, publishedAt: null, lastSyncAt: null, series: [], transitions: [], effects: [effect],
+    activationMode: "immediate", effectiveAt: "2099-01-12T09:00:00Z", attemptGeneration: 1, writeJournalVersion: 1 };
+  const protocol = administratorProtocol({ role: "viewer", responses: {
+    prepare_team_workweek_publication: body => { expect(body.p_version_id).toBe("bound-version"); return Response.json(publication); },
+    claim_team_workweek_provider_operation: body => { expect(body).toMatchObject({ p_publication_id: publication.id, p_generation: 1 }); return Response.json({ state: "claimed", id: "claim-one" }); },
+    record_team_workweek_provider_write: body => { expect(body).toMatchObject({ p_operation_id: "claim-one", p_effect_id: effect.id }); return Response.json(null); },
+    confirm_team_workweek_effect: body => { expect(body).toMatchObject({ p_effect_id: effect.id, p_generation: 1 }); return Response.json(null); },
+    finish_team_workweek_provider_operation: body => { expect(body.p_operation_id).toBe("claim-one"); return Response.json({ state: "settled" }); },
+  } });
+  const encryptionKey = Buffer.alloc(32, 1), iv = Buffer.alloc(12, 2);
+  const encrypt = value => { const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv); const bytes = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]); return ["v1", iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), bytes.toString("base64url")].join("."); };
+  vi.stubEnv("GOOGLE_WORKSPACE_CLIENT_ID", "synthetic-calendar-client"); vi.stubEnv("GOOGLE_WORKSPACE_CLIENT_SECRET", "synthetic-secret"); vi.stubEnv("GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY", encryptionKey.toString("base64"));
+  const connection = { connection_id: "connection-one", credential_version: 0, encrypted_access_token: encrypt("synthetic-calendar"), encrypted_refresh_token: encrypt("synthetic-refresh"),
+    access_token_expires_at: new Date(Date.now() + 3600000).toISOString(), refresh_token_expires_at: new Date(Date.now() + 7200000).toISOString(),
+    oauth_scopes: ["https://www.googleapis.com/auth/calendar.events.owned"], token_type: "Bearer", primary_calendar_id: "primary", revoked_at: null };
+  const authFetch = globalThis.fetch;
+  let providerWrites = 0;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.hostname === "www.googleapis.com") {
+      if (request.method === "GET") return Response.json({ message: "Not found" }, { status: 404 });
+      expect(request.method).toBe("POST"); providerWrites += 1; protocol.state.profile = false;
+      return Response.json({ ...effect.payload, etag: "confirmed-etag" });
+    }
+    if (url.pathname === "/rest/v1/team_workweek_versions") return Response.json({ id: "bound-version", owner_profile_id: "synthetic-profile", origin: "google_reconciliation" });
+    if (url.pathname === "/rest/v1/google_workspace_disconnect_operations") return Response.json([]);
+    if (url.pathname === "/rest/v1/google_workspace_connections") return Response.json(connection);
+    if (url.pathname.endsWith("/rpc/use_google_calendar_connection")) return Response.json(true);
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "workweek.publish", targetId: "bound-version" });
+  expect(grant.ok).toBe(true);
+  expect(grant.planning).not.toHaveProperty("bookkeeping");
+  expect(await grant.planning.detectWorkweekConflict()).toMatchObject({ state: "clear" });
+  await expect(grant.planning.publishWorkweek()).rejects.toMatchObject({ completionPending: true });
+  expect(providerWrites).toBe(1);
+  expect(protocol.calls.filter(call => call.name === "record_team_workweek_provider_write").map(call => call.body.p_state)).toEqual(["dispatched", "settled"]);
+  expect(protocol.calls.some(call => call.name === "confirm_team_workweek_effect")).toBe(true);
+  expect(protocol.calls.some(call => call.name === "finish_team_workweek_provider_operation")).toBe(true);
+  await expect(grant.planning.publishWorkweek()).rejects.toMatchObject({ code: "forbidden" });
+  expect(providerWrites).toBe(1);
+});
+
+
+test.each(["unmapped", "expired"])("a shared header cache warmed by another actor cannot bypass %s authority", async reason => {
+  const values = new Map();
+  const cache = { unstable_cache: (load, key) => async () => { const id = key.join(":"); if (!values.has(id)) values.set(id, await load()); return values.get(id); } };
+  const first = administratorProtocol({ userId: "actor-first", profileId: "profile-first", role: "viewer" });
+  const configureData = () => {
+    const authFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input, init) => {
+      const request = new Request(input, init), url = new URL(request.url);
+      if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([]);
+      return authFetch(request);
+    });
+  };
+  configureData();
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "next/cache": cache });
+  const warmed = await authorizeCredentialAction({ credential: { kind: "session-request", request: first.request() }, action: "planning.header.read" });
+  expect(warmed.ok).toBe(true);
+  expect(await warmed.planning.loadHeader(["quickLinks"])).toMatchObject({ ok: true, headerData: { quickLinks: { state: "ready" } } });
+  expect(values.size).toBe(1);
+  const second = administratorProtocol({ userId: "actor-second", profileId: "profile-second", role: "viewer" });
+  configureData();
+  const held = await authorizeCredentialAction({ credential: { kind: "session-request", request: second.request() }, action: "planning.header.read" });
+  expect(held.ok).toBe(true);
+  try {
+    if (reason === "unmapped") second.state.profile = false;
+    else { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(Date.now() + 3_600_001); }
+    expect(await held.planning.loadHeader(["quickLinks"])).toMatchObject({ ok: false });
+    expect(values.size).toBe(1);
+  } finally { vi.useRealTimers(); }
+});
+
+test("ordinary planning data outages retain the safe HTTP unavailable response", async () => {
+  const protocol = administratorProtocol({ role: "viewer" });
+  const authFetch = globalThis.fetch;
+  let projectReads = 0;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/projects") { projectReads += 1; return Response.json({ code: "storage_unavailable", message: "Private upstream detail" }, { status: 503 }); }
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([]);
+    return authFetch(request);
+  });
+  const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const response = await GET(protocol.request("/api/planning-board-data"));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: "Planung konnte nicht geladen werden." });
+  expect(projectReads).toBe(1);
+});
+
+
+test("local simulation keeps the existing host gate and cannot run on a deployed host", async () => {
+  const protocol = administratorProtocol({ origin: "http://localhost:19000" });
+  vi.stubEnv("REQUIRE_SUPABASE_AUTH", "false");
+  vi.stubEnv("NODE_ENV", "development");
+  vi.stubEnv("VERCEL", "");
+  vi.stubEnv("ENABLE_LOCAL_LOGIN", "true");
+  const authFetch = globalThis.fetch;
+  let reads = 0;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).pathname === "/rest/v1/active_tasks") { reads++; return Response.json([]); }
+    return authFetch(request);
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const local = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request("/api/planning-revision", "GET", undefined, { host: "localhost" }) }, action: "planning.revision.read" });
+  expect(local.ok).toBe(true);
+  expect(await local.planning.readRevision()).toMatchObject({ error: null });
+  expect(local.profile).toBeNull();
+  const denied = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request("/api/planning-revision", "GET", undefined, { host: "app.example.test" }) }, action: "planning.revision.read" });
+  expect(denied).toMatchObject({ ok: false, status: 403 });
+  expect(reads).toBe(1);
+});
+
+test("held workweek read cannot dispatch a new resource request after its original deadline", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const protocol = administratorProtocol();
+    const authFetch = globalThis.fetch;
+    let reads = 0;
+    vi.stubGlobal("fetch", async (input, init) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).pathname === "/rest/v1/team_workweek_google_conflicts") { reads++; return Response.json(null); }
+      return authFetch(request);
+    });
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+    const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "workweek.conflict.read" });
+    expect(grant.ok).toBe(true);
+    vi.setSystemTime(Date.now() + 3_600_001);
+    await expect(grant.planning.readWorkweekConflict()).rejects.toBeDefined();
+    expect(reads).toBe(0);
+    expect(protocol.calls.some(call => call.name.startsWith("prepare_team_workweek"))).toBe(false);
+  } finally { vi.useRealTimers(); }
 });

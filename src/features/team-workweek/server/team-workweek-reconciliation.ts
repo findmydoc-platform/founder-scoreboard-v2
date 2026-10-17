@@ -1,3 +1,4 @@
+import type { WorkweekBookkeeping } from "./team-workweek-bookkeeping";
 import type { NextRequest } from "next/server";
 import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
@@ -84,8 +85,9 @@ async function recordSuccess(
   serviceSupabase: SupabaseClient,
   publication: Pick<PublicationRow, "id" | "publication_revision">,
   observedAt: string,
+  bookkeeping?: WorkweekBookkeeping,
 ) {
-  const { error } = await serviceSupabase.rpc("record_google_team_workweek_reconciliation_state", {
+  const { error } = bookkeeping ? await bookkeeping.recordReconciliation({ publicationId: publication.id, revision: publication.publication_revision, observedAt }) : await serviceSupabase.rpc("record_google_team_workweek_reconciliation_state", {
     p_publication_id: publication.id,
     p_publication_revision: publication.publication_revision,
     p_state: "confirmed",
@@ -116,6 +118,7 @@ function delayedStatus(
 
 async function finishPublication({
   request,
+  bookkeeping,
   now,
   previousLastSyncAt,
   publish,
@@ -125,6 +128,7 @@ async function finishPublication({
   versionId,
 }: {
   request?: NextRequest;
+  bookkeeping?: WorkweekBookkeeping;
   now: () => Date;
   previousLastSyncAt: string | null;
   publish: typeof publishTeamWorkweek;
@@ -135,7 +139,7 @@ async function finishPublication({
 }): Promise<ReconciliationStatus> {
   let publication: Awaited<ReturnType<typeof publishTeamWorkweek>>;
   try {
-    publication = await publish({ request, serviceSupabase, userSupabase, versionId, now });
+    publication = await publish({ request, bookkeeping, serviceSupabase, userSupabase, versionId, now });
   } catch (error) {
     if (error instanceof TeamWorkweekPublicationError && error.code === "forbidden") {
       throw new TeamWorkweekReconciliationError("forbidden", error.message);
@@ -158,7 +162,7 @@ async function finishPublication({
     await recordSuccess(serviceSupabase, {
       id: publication.id,
       publication_revision: publication.publicationRevision,
-    }, publication.lastSyncAt || now().toISOString());
+    }, publication.lastSyncAt || now().toISOString(), bookkeeping);
     return { state: "updated", lastSuccessfulSyncAt: publication.lastSyncAt, recovery: null, effectiveAt:publication.effectiveAt,effectiveUntil:publication.effectiveUntil };
   }
   const errorClass: ReconciliationErrorClass = publication.recovery === "reconnect"
@@ -179,6 +183,7 @@ function errorClassForObservation(
 
 export async function reconcileTeamWorkweek({
   request,
+  bookkeeping,
   getAccessToken = calendarForWorkweekOwner,
   observe = observeGoogleWorkweek,
   now = () => new Date(),
@@ -188,6 +193,7 @@ export async function reconcileTeamWorkweek({
   userSupabase,
 }: {
   request?: NextRequest;
+  bookkeeping?: WorkweekBookkeeping;
   getAccessToken?: typeof calendarForWorkweekOwner;
   observe?: typeof observeGoogleWorkweek;
   now?: () => Date;
@@ -232,6 +238,7 @@ export async function reconcileTeamWorkweek({
     }
     return await finishPublication({
       request,
+      bookkeeping,
       now,
       previousLastSyncAt: predecessorResponse?.data?.last_sync_at || null,
       publish,
@@ -319,6 +326,7 @@ export async function reconcileTeamWorkweek({
 
   return await finishPublication({
       request,
+      bookkeeping,
     now,
     previousLastSyncAt: publication.last_sync_at,
     publish,

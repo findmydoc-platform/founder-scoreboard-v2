@@ -5,11 +5,11 @@ import type { PlanningCredentialInput } from "../types";
 import { ACTIVE_TASKS_TABLE } from "../../planning-read-model";
 import { rolePermitsAction } from "./session-policy";
 
-type Context = { action: PlanningCredentialInput["action"]; targetId: string; profile: AuthenticatedProfile | null; service: SupabaseClient;
+type Context = { action: PlanningCredentialInput["action"]; targetId: string; profile: AuthenticatedProfile | null; service: SupabaseClient; followup: SupabaseClient;
   current(): Promise<{ code?: string; message: string } | null> };
 const denied = () => ({ data: null, error: { code: "42501", message: "Keine Berechtigung für diese Aktion." } });
-export function planningParticipationOperations({ action, targetId, profile, service, current }: Context) {
-  const lead = rolePermitsAction("operations.lead", profile?.platformRole);
+export function planningParticipationOperations({ action, targetId, profile, service, followup, current }: Context) {
+  const lead = profile ? rolePermitsAction("operations.lead", profile.platformRole) : false;
   let attendanceProfile = "";
   const attendanceRecipients = new Set<string>();
   return {
@@ -21,7 +21,8 @@ export function planningParticipationOperations({ action, targetId, profile, ser
       if (action !== "planning.focus.write" || !profile || (!lead && profileId !== profile.id) || await current()) return denied();
       return await service.from("task_focus_items").select("id,task_id").eq("profile_id", profileId).eq("focus_date", date);
     },
-    async writeFocus(values: { profileId: string; focusDate: string; position: number; nextStep: string; status: string }) {
+    async writeFocus(suppliedValues: { profileId: string; focusDate: string; position: number; nextStep: string; status: string }) {
+      const values = structuredClone(suppliedValues);
       if (action !== "planning.focus.write" || !targetId || !profile || (!lead && values.profileId !== profile.id) || await current()) return denied();
       const task = await service.from(ACTIVE_TASKS_TABLE).select("id,assignee,owner").eq("id", targetId).single();
       if (task.error || !task.data) return { data: null, error: task.error || { code: "P0002", message: "Aufgabe wurde nicht gefunden." } };
@@ -48,7 +49,8 @@ export function planningParticipationOperations({ action, targetId, profile, ser
       if (action !== "planning.attendance.write" || !targetId || await current()) return denied();
       return await service.from("meetings").select("id,title").eq("id", Number(targetId)).single();
     },
-    async writeAttendance(values: { profileId: string; status: MeetingAttendanceStatus; absenceReason: string; reasonAccepted: boolean; writtenUpdate: string; points: number }) {
+    async writeAttendance(suppliedValues: { profileId: string; status: MeetingAttendanceStatus; absenceReason: string; reasonAccepted: boolean; writtenUpdate: string; points: number }) {
+      const values = structuredClone(suppliedValues);
       if (action !== "planning.attendance.write" || !targetId || !profile || await current()
         || (!lead && (values.profileId !== profile.id || !["pending", "excused", "late_excused"].includes(values.status)
           || values.reasonAccepted || values.points !== 0 || (values.status !== "pending" && !values.absenceReason)))) return denied();
@@ -60,19 +62,20 @@ export function planningParticipationOperations({ action, targetId, profile, ser
     },
     async readAttendanceLeads() {
       if (action !== "planning.attendance.write" || !attendanceProfile) return denied();
-      const result = await service.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
+      const result = await followup.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
       for (const row of result.data || []) if (row.id !== profile?.id) attendanceRecipients.add(row.id);
       return result;
     },
     async notifyAttendance(notifications: readonly Record<string, unknown>[]) {
       if (action !== "planning.attendance.write" || !attendanceProfile || !profile || notifications.some(row => row.actor_profile_id !== profile.id
         || String(row.entity_id) !== targetId || row.entity_type !== "meeting" || row.type !== "meeting.attendance_updated" || !attendanceRecipients.has(String(row.recipient_profile_id)))) return denied();
-      return await service.from("notification_events").insert(notifications);
+      return await followup.from("notification_events").insert(notifications);
     },
-    async auditAttendance(values: Record<string, unknown>, metadata: { request_ip?: string | null; user_agent?: string | null }) {
+    async auditAttendance(suppliedValues: Record<string, unknown>, metadata: { request_ip?: string | null; user_agent?: string | null }) {
+      const values = structuredClone(suppliedValues);
       if (action !== "planning.attendance.write" || !attendanceProfile || !profile) return denied();
-      return await service.from("audit_log").insert({ actor_profile_id: profile.id, action: "meeting.attendance.update", entity_type: "meeting", entity_id: targetId,
-        after_data: { ...values, profileId: attendanceProfile }, ...metadata });
+      return await followup.from("audit_log").insert({ actor_profile_id: profile.id, action: "meeting.attendance.update", entity_type: "meeting", entity_id: targetId,
+        after_data: { ...values, profileId: attendanceProfile }, request_ip: metadata.request_ip || null, user_agent: metadata.user_agent || null });
     },
   };
 }

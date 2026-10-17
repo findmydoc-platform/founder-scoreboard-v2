@@ -38,7 +38,11 @@ test("the real attachment route binds an operation to owner and content and reco
     if(url.pathname==="/rest/v1/profiles") return Response.json({github_login:"synthetic-author"});
     if(url.pathname==="/rest/v1/github_app_user_tokens") return Response.json({profile_id:"author-1",github_login:"synthetic-author",connection_id:"connection-1",credential_version:0,encrypted_access_token:ciphertext,access_token_expires_at:new Date(Date.now()+3600000).toISOString(),revoked_at:null});
     if(url.pathname.endsWith("/rpc/use_github_user_connection")) return Response.json(true);
-    if(url.pathname==="/rest/v1/audit_log") return Response.json({id:++audits,entity_id:"task-1",action:"task.attachment_uploaded",created_at:new Date().toISOString()});
+    if(url.pathname==="/rest/v1/audit_log") {
+      const body=await request.json(); expect(body.actor_profile_id).toBe("author-1"); expect(body.entity_id).toBe("task-1");
+      expect(body.after_data).toMatchObject({filename:"hello.txt",contentType:"text/plain",size:5});
+      expect([...files.values()].some(row=>row.download_url===body.after_data.url)).toBe(true);
+      return Response.json({id:++audits,entity_id:"task-1",action:"task.attachment_uploaded",created_at:new Date().toISOString()}); }
     throw new Error(`Unexpected attachment protocol ${url.pathname}`);
   });
   const {POST}=await importTestModule("src/app/api/tasks/[id]/attachments/route.ts",{"server-only":{}});

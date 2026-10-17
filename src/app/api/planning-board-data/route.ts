@@ -6,11 +6,12 @@ export async function GET(request: NextRequest) {
   const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning.board.read" });
   if (!permission.ok) return authzError(permission);
   const currentProfile = permission.profile;
-  const [result, headerData] = await Promise.all([
+  const [result, header] = await Promise.all([
     permission.planning.loadBoard(),
     permission.planning.loadHeader(currentProfile ? ["quickLinks", "calendarEvents"] : undefined),
   ]);
+  if (!header.ok) return authzError(header);
   if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
   if (result.status === "unavailable") return apiError("Planung konnte nicht geladen werden.", 503);
-  return NextResponse.json({ model: result.model, headerData, currentProfile });
+  return NextResponse.json({ model: result.model, headerData: header.headerData, currentProfile });
 }
