@@ -1,9 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { canonicalPlatformReleaseManifest, validatePlatformReleaseManifest } from "@/features/platform-releases/model/platform-release-manifest";
-import { loadPlatformReleases } from "@/features/platform-releases/server/platform-release-read-model-supabase";
 import { authzError } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";
@@ -21,15 +20,15 @@ function secureTokenMatch(provided: string, expected: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireTeamMember(request);
+  const auth = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "releases.read" });
   if (!auth.ok) {
     const response = authzError(auth, { ok: false });
     response.headers.set("Cache-Control", "no-store");
     return response;
   }
-  const supabase = getServerServiceRoleSupabase();
-  if (!supabase) return json({ ok: false, error: "Platform-Releases sind nicht verfügbar." }, 503);
-  const releases = await loadPlatformReleases(supabase, auth.profile?.id || null);
+  const result = await auth.account.readReleases();
+  if (!result.available) return json({ ok: false, error: "Platform-Releases sind nicht verfügbar." }, 503);
+  const releases = result.releases;
   return json({ ok: true, releases });
 }
 

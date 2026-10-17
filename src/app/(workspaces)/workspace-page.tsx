@@ -11,7 +11,6 @@ import { supportingWorkspaceModelToPlanningShellState, type SupportingWorkspace 
 import { createSupabaseEventsReadModel } from "@/features/events/server/events-read-model-supabase";
 import { createSupabaseToolsReadModel } from "@/features/tools/server/tools-read-model-supabase";
 import { createSupabaseTeamReadModel } from "@/features/team/server/team-read-model-supabase";
-import { createSupabaseProfileReadModel } from "@/features/profile/server/profile-read-model-supabase";
 import { createSupabaseNotificationsReadModel } from "@/features/notifications/server/notifications-read-model-supabase";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
@@ -72,13 +71,18 @@ async function loadSupportingWorkspacePageData(
   workspace: SupportingWorkspace,
   profile?: AuthenticatedProfile | null,
 ) {
+  if (workspace === "profile") {
+    const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "account.profile.read" });
+    if (!permission.ok || (permission.profile?.id || null) !== (profile?.id || null)
+      || (permission.profile?.platformRole || null) !== (profile?.platformRole || null)) return { status: "unavailable" as const };
+    return permission.account.loadProfile();
+  }
   const supabase = getServerSupabase();
   if (!supabase) return { status: "unavailable" as const };
   const readModel = workspace === "events" ? createSupabaseEventsReadModel(supabase)
     : workspace === "tools" ? createSupabaseToolsReadModel(supabase)
       : workspace === "team" ? createSupabaseTeamReadModel(supabase)
-        : workspace === "profile" ? createSupabaseProfileReadModel(supabase)
-          : createSupabaseNotificationsReadModel(supabase);
+        : createSupabaseNotificationsReadModel(supabase);
   const [workspaceData, headerData] = await Promise.all([
     readModel.load({ authorized: true, actorProfileId: profile?.id || null }),
     loadPlanningHeaderData(supabase, {
