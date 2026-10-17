@@ -106,10 +106,11 @@ export async function authorizeGitHubAttachment(input:GitHubAttachmentInput):Pro
   const profileId=permission.profile.id;
   const repository=requireAllowedGitHubRepository(input.target.repository);
   const path=input.target.path;
-  if(!path.startsWith(`.fmd-attachments/tasks/${input.target.taskId}/`) || path.split("/").some(part=>part===".." || part===".")) throw new Error("GitHub-Anhangsziel ist ungültig.");
+  const taskId=input.target.taskId;
+  if(!path.startsWith(`.fmd-attachments/tasks/${taskId}/`) || path.split("/").some(part=>part===".." || part===".")) throw new Error("GitHub-Anhangsziel ist ungültig.");
   const expected=`/repos/${repository}/contents/${path.split("/").map(encodeURIComponent).join("/")}`;
   async function checkTask(profile:AuthenticatedProfile) {
-    const task=await userVault().from("active_tasks").select("id,task_type,status,assignee,owner,review_owner_profile_id,review_status,score_final,github_repo").eq("id",input.target.taskId).maybeSingle();
+    const task=await userVault().from("active_tasks").select("id,task_type,status,assignee,owner,review_owner_profile_id,review_status,score_final,github_repo").eq("id",taskId).maybeSingle();
     if(task.error || !task.data || !["deliverable","sub_issue"].includes(task.data.task_type) || requireAllowedGitHubRepository(task.data.github_repo)!==repository) throw new Error("GitHub-Aufgabe wurde nicht gefunden.");
     const row=task.data;
     const permissions=taskDetailPermissions({task:{assignee:row.assignee||"",assigneeId:row.assignee||"",owner:row.owner||"",ownerId:row.owner||"",reviewOwnerProfileId:row.review_owner_profile_id||"",reviewStatus:row.review_status||"not_requested",scoreFinal:Boolean(row.score_final),status:row.status,taskType:row.task_type},profile});
