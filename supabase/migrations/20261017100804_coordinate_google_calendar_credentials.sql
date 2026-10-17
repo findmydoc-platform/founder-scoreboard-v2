@@ -75,7 +75,7 @@ declare affected integer;
 begin
   perform 1 from public.profiles where id=p_profile_id for share;
   if p_access is null then
-    if p_error not in ('oauth_reconnect_required','oauth_provider_unavailable','oauth_scope_mismatch','oauth_storage_failed') then return false; end if;
+    if p_error is null or p_error not in ('oauth_reconnect_required','oauth_provider_unavailable','oauth_scope_mismatch','oauth_storage_failed') then return false; end if;
     update public.google_workspace_connections set last_error_class=p_error,updated_at=clock_timestamp()
     where profile_id=p_profile_id and connection_id=p_connection_id and credential_version=p_version
       and refresh_claim_id=p_claim_id and revoked_at is null;
@@ -112,7 +112,9 @@ begin
     where id=p_operation_id and owner_profile_id=p_profile_id and state='revoke_pending' and revoke_connection for update;
   if not found then return false; end if;
   if not exists(select 1 from public.google_workspace_connections where profile_id=p_profile_id) then return true; end if;
-  if operation.connection_id is null then return false; end if;
+  if operation.connection_id is null then
+    return exists(select 1 from public.google_workspace_connections where profile_id=p_profile_id and connected_at>operation.requested_at);
+  end if;
   delete from public.google_workspace_connections where profile_id=p_profile_id and connection_id=operation.connection_id;
   -- A replacement connection remains intact. The old connection is already absent.
   return true;

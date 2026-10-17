@@ -3,7 +3,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {createHmac} from "node:crypto";
 import {importTestModule} from "../../helpers/vitest-module.mjs";
 const authOrigin="https://calendar-auth.example.test",appOrigin="https://application.example.test";
-let jar,userId,configuredLogin,providerLogin,vault,exchanges,stores,queued,calendarStatus;
+let jar,userId,configuredLogin,providerLogin,vault,exchanges,stores,queued,calendarStatus,expireExchange;
 function setupSession() {
   const exp=Math.floor(Date.now()/1000)+3600;
   const encode=value=>Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -14,11 +14,11 @@ function setupSession() {
   jar={getAll:()=>[...values].map(([name,value])=>({name,value})),set:(name,value)=>values.set(name,value)};
 }
 beforeEach(()=>{
-  vi.resetModules();userId="user-1";configuredLogin="synthetic-author";providerLogin="https://www.googleapis.com/auth/calendar.events.owned";vault=null;exchanges=0;stores=[];queued=[];calendarStatus=200;setupSession();
+  vi.resetModules();userId="user-1";configuredLogin="synthetic-author";providerLogin="https://www.googleapis.com/auth/calendar.events.owned";vault=null;exchanges=0;stores=[];queued=[];calendarStatus=200;expireExchange=false;setupSession();
   for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:authOrigin,SUPABASE_URL:authOrigin,NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",SUPABASE_SECRET_KEY:"synthetic-service",SUPABASE_ANON_KEY:"synthetic-anon",SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",REQUIRE_SUPABASE_AUTH:"true",GOOGLE_WORKSPACE_CLIENT_ID:"synthetic-client",GOOGLE_WORKSPACE_CLIENT_SECRET:"synthetic-secret",GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,3).toString("base64"),APP_URL:appOrigin,VERCEL_ENV:"preview"})) vi.stubEnv(name,value);
   vi.stubGlobal("fetch",async(input,options)=>{
     const request=new Request(input,options),url=new URL(request.url);
-    if(url.href==="https://oauth2.googleapis.com/token") {exchanges++;return Response.json({access_token:"synthetic-calendar-user",refresh_token:"synthetic-calendar-refresh",expires_in:3600,refresh_token_expires_in:7200,token_type:"Bearer",scope:providerLogin});}
+    if(url.href==="https://oauth2.googleapis.com/token") {exchanges++;if(expireExchange){vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(Date.now()+600000);}return Response.json({access_token:"synthetic-calendar-user",refresh_token:"synthetic-calendar-refresh",expires_in:3600,refresh_token_expires_in:7200,token_type:"Bearer",scope:providerLogin});}
     if(url.hostname==="www.googleapis.com") return Response.json({kind:"calendar#events",summary:"Synthetic calendar"},{status:calendarStatus});
     if(url.origin!==authOrigin) throw new Error("Unexpected synthetic protocol");
     if(url.pathname==="/auth/v1/user") return Response.json({id:userId,aud:"authenticated",user_metadata:{}});
@@ -55,17 +55,18 @@ test("real Calendar connect/callback stores encrypted profile-bound credentials 
   expect(stores[0].p_access).not.toContain("synthetic-calendar-user");expect(stores[0].p_refresh).not.toContain("synthetic-calendar-refresh");
   expect(stores[0].p_access_expires).not.toBe(stores[0].p_refresh_expires);
 });
-test.each(["signature","expired","different-session","wrong-scope","primary-denied"])("real callback rejects %s before replacing a connection",async change=>{
+test.each(["signature","expired","different-session","wrong-scope","primary-denied","expires-during-exchange"])("real callback rejects %s before replacing a connection",async change=>{
   const started=await begin();let state=started.state;
   if(change==="signature") state=state.slice(0,-2)+"xx";
   if(change==="expired") {vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(Date.now()+600000);}
   if(change==="different-session") {userId="other-user";setupSession();}
+  if(change==="expires-during-exchange") expireExchange=true;
   if(change==="primary-denied") calendarStatus=403;
   if(change==="wrong-scope") providerLogin="https://www.googleapis.com/auth/calendar";
   const result=await started.api.callback.GET(callback(state));
   expect(new URL(result.headers.get("location")).searchParams.get("googleWorkspace")).toBe("connection_error");
   expect(stores).toHaveLength(0);expect(queued).toHaveLength(0);
-  expect(exchanges).toBe(["wrong-scope","primary-denied"].includes(change) ? 1:0);
+  expect(exchanges).toBe(["wrong-scope","primary-denied","expires-during-exchange"].includes(change) ? 1:0);
 });
 test("connect rejects external and backslash next destinations",async()=>{
   const {api,state}=await begin("/\\evil.example.test/path");

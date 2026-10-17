@@ -24,7 +24,9 @@ async function fixture(run:(f:Fixture)=>Promise<void>) {
   const encrypt=(value:string)=>{const iv=Buffer.alloc(12,7),cipher=createCipheriv("aes-256-gcm",key,iv);const bytes=Buffer.concat([cipher.update(value,"utf8"),cipher.final()]);return ["v1",iv,cipher.getAuthTag(),bytes].map(part=>Buffer.isBuffer(part)?part.toString("base64url"):part).join(".");};
   let provider:(request:Request)=>Promise<Response>=async()=>{throw Error("Unscripted provider");};
   const calls:Request[]=[];
+  const previousConfiguration=(await db.query("select mode,linking_enforced from workspace_private.configuration")).rows[0];
   try {
+    await db.query("update workspace_private.configuration set mode='legacy',linking_enforced=false");
     await db.query("insert into auth.users(id,email,role,aud,email_confirmed_at) values($1,$2,'authenticated','authenticated',now())",[userId,`${id}@example.test`]);
     await db.query("insert into public.profiles(id,auth_user_id,name,platform_role) values($1,$2,'Synthetic Calendar owner','viewer')",[id,userId]);
     await db.query("insert into public.google_workspace_connections(profile_id,encrypted_access_token,encrypted_refresh_token,access_token_expires_at,refresh_token_expires_at,oauth_scopes,token_type,primary_calendar_id) values($1,$2,$3,now()+interval '1 hour',now()+interval '2 hours',$4,'Bearer','primary')",[id,encrypt("synthetic-calendar-old"),encrypt("synthetic-calendar-refresh"),[scope]]);
@@ -43,7 +45,8 @@ async function fixture(run:(f:Fixture)=>Promise<void>) {
   } finally {
     vi.unstubAllGlobals();vi.unstubAllEnvs();vi.resetModules();
     await db.query("delete from public.google_workspace_disconnect_operations where owner_profile_id=$1",[id]);
-    await db.query("delete from public.profiles where id=$1",[id]);await db.query("delete from auth.users where id=$1",[userId]);await db.end();
+    await db.query("delete from public.profiles where id=$1",[id]);await db.query("delete from auth.users where id=$1",[userId]);
+    await db.query("update workspace_private.configuration set mode=$1,linking_enforced=$2",[previousConfiguration.mode,previousConfiguration.linking_enforced]);await db.end();
   }
 }
 it("real owner/status entry retains primary scope, encrypted usage and immediate rebind/disconnect boundaries",()=>fixture(async f=>{
