@@ -1,3 +1,4 @@
+import type { GitHubJobContext } from "./github-job-types";
 import type { NextRequest } from "next/server";
 import type { AuthzResult } from "../authz";
 
@@ -44,7 +45,7 @@ export type GitHubInstallationCapability = Readonly<{
 export type GitHubInstallationAction = "github.projection.apply" | "github.lifecycle.apply" | "github.issue.read" | "github.project.read" | "github.team.read" | "github.asset.read";
 export type GitHubInstallationInput = {
   [Action in GitHubInstallationAction]: {
-    credential: { kind: "github-installation" };
+    credential: Action extends "github.lifecycle.apply" ? { kind: "github-claimed-job"; claim: GitHubJobContext } : { kind: "github-installation" } | { kind: "github-claimed-job"; claim: GitHubJobContext };
     action: Action;
     target: { repositories: readonly string[]; organization?: string; assetUrl?: string };
   }
@@ -153,3 +154,12 @@ export type AdministratorCredentialInput =
   | { credential: { kind: "session-request"; request: NextRequest }; action: "administrator-access.read" | "administrator-access.activate" | "administrator-access.end" | "administration.directory.read" }
   | { credential: { kind: "session-request"; request: NextRequest }; action: "administration.eligibility.manage" | "administration.technical.update"; targetProfileId: string };
 export type AdministratorCredentialResult = Awaited<ReturnType<typeof import("./internal/administrator").authorizeAdministrator>>;
+
+type PlanningRequestAction = {
+  action: "planning.revision.read" | "planning.board.read" | "planning.header.read" | "planning.review.request" | "planning.review.decide" | "planning.review.withdraw" | "planning.review.reopen" | "planning.backlog.read" | "planning.sprint.read" | "planning.task.read" | "planning.task.update" | "planning.relationship.add" | "planning.relationship.remove" | "planning.task.delete" | "planning.task.create" | "planning.sprint.commitment.write" | "planning.sprint.update" | "planning.sprint.plan" | "planning.sprint.lock" | "planning.sprint.review-window" | "planning.sprint.objection.create" | "planning.sprint.objection.process" | "planning.sprint.assign" | "planning.backlog.move" | "planning.approval.decide" | "planning.trash.withdraw" | "planning.trash.restore" | "planning.focus.write" | "planning.focus.delete" | "planning.attendance.write" | "planning.comment.create" | "planning.blocker.report" | "planning.attachment.write" | "planning.github-comments.import" | "planning.github-sync.apply" | "workweek.publish" | "workweek.restart" | "workweek.conflict.read" | "workweek.conflict.resolve" | "workweek.reconcile";
+};
+export type PlanningCredentialInput = (
+  | { credential: { kind: "session-request"; request: NextRequest }; action: PlanningRequestAction["action"] }
+  | { credential: { kind: "server-cookies" }; action: "planning.revision.read" | "planning.board.read" | "planning.header.read" | "planning.backlog.read" | "planning.sprint.read" | "planning.task.read" }
+) & { targetId?: string; targetIds?: readonly string[] };
+export type PlanningCredentialResult = Awaited<ReturnType<typeof import("./internal/planning").authorizePlanning>>;

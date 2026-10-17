@@ -1,3 +1,4 @@
+import type { WorkweekBookkeeping, WorkweekPublicationBookkeeping } from "./team-workweek-bookkeeping";
 import type { NextRequest } from "next/server";
 import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
@@ -135,8 +136,9 @@ async function markDelayed(
   publicationId: string,
   errorClass: TeamWorkweekPublicationDelayClass,
   observedAt: string,
+  bookkeeping?: WorkweekPublicationBookkeeping,
 ) {
-  const { data, error } = await serviceSupabase.rpc("delay_team_workweek_publication", {
+  const { data, error } = bookkeeping ? await bookkeeping.delay(errorClass, observedAt) : await serviceSupabase.rpc("delay_team_workweek_publication", {
     p_publication_id: publicationId,
     p_error_class: errorClass,
     p_observed_at: observedAt,
@@ -147,6 +149,7 @@ async function markDelayed(
 
 export async function publishTeamWorkweek({
   request,
+  bookkeeping,
   serviceSupabase,
   userSupabase,
   versionId,
@@ -159,6 +162,7 @@ export async function publishTeamWorkweek({
   now = () => new Date(),
   transitionsFirst = false,
 }: {
+  bookkeeping?: WorkweekBookkeeping;
   serviceSupabase: SupabaseClient;
   userSupabase: SupabaseClient;
   versionId: string;
@@ -180,7 +184,9 @@ export async function publishTeamWorkweek({
     throw new TeamWorkweekPublicationError("unavailable", "Grundwoche konnte nicht vorbereitet werden.");
   }
   let publication = preparedResponse.data;
+  let publicationBookkeeping = bookkeeping?.forPublication(publication);
   if (publication.status === "published") {
+    bookkeeping?.published(publication);
     return {
       id: publication.id,
       status: "published",
@@ -203,25 +209,27 @@ export async function publishTeamWorkweek({
     const reconnectRequired = error instanceof GoogleWorkspaceOAuthContractError && error.code === "reconnect_required";
     return {
       ...await markDelayed(serviceSupabase, publication.id,
-        reconnectRequired ? "oauth_reconnect_required" : "provider_unavailable", observedAt),
+        reconnectRequired ? "oauth_reconnect_required" : "provider_unavailable", observedAt, publicationBookkeeping),
       ...(publication.effectiveAt ? { effectiveAt: publication.effectiveAt, activationMode: publication.activationMode } : {}),
     };
   }
 
   if (publication.effects !== undefined) {
     const delayed = async (errorClass: TeamWorkweekPublicationDelayClass) => ({
-      ...await markDelayed(serviceSupabase, publication.id, errorClass, now().toISOString()),
+      ...await markDelayed(serviceSupabase, publication.id, errorClass, now().toISOString(), publicationBookkeeping),
       activationMode: publication.activationMode, effectiveAt: publication.effectiveAt,
     });
     const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
     if (expired()) {
-      const compensation = await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attemptGeneration!,serviceSupabase,now,cleanupEffect,discoverInstance,recoverWrite,journaled:publication.writeJournalVersion!==undefined});
+      const compensation = await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attemptGeneration!,serviceSupabase,bookkeeping:publicationBookkeeping,now,cleanupEffect,discoverInstance,recoverWrite,journaled:publication.writeJournalVersion!==undefined});
       if(compensation)return await delayed(compensation);
       const replanned = await userSupabase.rpc("prepare_team_workweek_publication", { p_version_id: versionId, p_write_journal_version: 1 });
       if (replanned.error) throw publicationError(replanned.error);
       if (!isPreparedPublication(replanned.data) || replanned.data.status !== "preparing") {
         // A concurrent/lost finalization is never compensated or overwritten by a new attempt.
         if (isPreparedPublication(replanned.data) && replanned.data.status === "published") {
+          bookkeeping?.forPublication(replanned.data);
+          bookkeeping?.published(replanned.data);
           return {
             id: replanned.data.id, status: "published", syncState: "confirmed", recovery: null,
             publishedAt: replanned.data.publishedAt, lastSyncAt: replanned.data.lastSyncAt,
@@ -232,10 +240,11 @@ export async function publishTeamWorkweek({
         throw new TeamWorkweekPublicationError("unavailable", "Neuer Veröffentlichungsbeginn konnte nicht bestätigt werden.");
       }
       publication = replanned.data;
+      publicationBookkeeping = bookkeeping?.forPublication(publication);
       if (expired()) return await delayed("provider_unavailable");
     }
     return await executeTeamWorkweekPublication({
-      serviceSupabase, publication, accessToken, ensureEffect, discoverInstance, recoverWrite, now, delayed,
+      serviceSupabase, bookkeeping: publicationBookkeeping, publication, accessToken, ensureEffect, discoverInstance, recoverWrite, now, delayed,
       complete: async () => {
         const finalized = await userSupabase.rpc("finalize_team_workweek_publication", { p_publication_id: publication.id });
         if (finalized.error?.code === "P0005") return await delayed("provider_unavailable");
@@ -247,14 +256,15 @@ export async function publishTeamWorkweek({
         if (!isPublicationResult(finalized.data) || finalized.data.status !== "published") {
           throw new TeamWorkweekPublicationError("unavailable", "Veröffentlichungsstatus konnte nicht bestätigt werden.");
         }
-        return { ...finalized.data, recovery: null };
+        bookkeeping?.published(finalized.data);
+      return { ...finalized.data, recovery: null };
       },
     });
   }
 
   return await executeTeamWorkweekPublication({
-    serviceSupabase, publication, accessToken, ensureSeries, ensureTransition, transitionsFirst, now,
-    delayed: (errorClass) => markDelayed(serviceSupabase, publication.id, errorClass, now().toISOString()),
+    serviceSupabase, bookkeeping: publicationBookkeeping, publication, accessToken, ensureSeries, ensureTransition, transitionsFirst, now,
+    delayed: (errorClass) => markDelayed(serviceSupabase, publication.id, errorClass, now().toISOString(), publicationBookkeeping),
     complete: async () => {
       const finalized = await userSupabase.rpc("finalize_team_workweek_publication", {
         p_publication_id: publication.id,
@@ -263,6 +273,7 @@ export async function publishTeamWorkweek({
       if (!isPublicationResult(finalized.data) || finalized.data.status !== "published") {
         throw new TeamWorkweekPublicationError("unavailable", "Grundwoche konnte nicht veröffentlicht werden.");
       }
+      bookkeeping?.published(finalized.data);
       return { ...finalized.data, recovery: null };
     },
   });
@@ -272,11 +283,13 @@ export async function delayTeamWorkweekPublication({
   errorClass,
   now = () => new Date(),
   serviceSupabase,
+  bookkeeping,
   userSupabase,
   versionId,
 }: {
   errorClass: Exclude<TeamWorkweekPublicationDelayClass, "storage_failed" | "provider_identity_mismatch">;
   now?: () => Date;
+  bookkeeping?: WorkweekBookkeeping;
   serviceSupabase: SupabaseClient;
   userSupabase: SupabaseClient;
   versionId: string;
@@ -288,7 +301,9 @@ export async function delayTeamWorkweekPublication({
   if (!isPreparedPublication(preparedResponse.data)) {
     throw new TeamWorkweekPublicationError("unavailable", "Grundwoche konnte nicht vorbereitet werden.");
   }
+  const publicationBookkeeping = bookkeeping?.forPublication(preparedResponse.data);
   if (preparedResponse.data.status === "published") {
+    bookkeeping?.published(preparedResponse.data);
     return {
       id: preparedResponse.data.id,
       status: "published",
@@ -300,7 +315,7 @@ export async function delayTeamWorkweekPublication({
     };
   }
   return {
-    ...await markDelayed(serviceSupabase, preparedResponse.data.id, errorClass, now().toISOString()),
+    ...await markDelayed(serviceSupabase, preparedResponse.data.id, errorClass, now().toISOString(), publicationBookkeeping),
     ...(preparedResponse.data.effectiveAt ? { effectiveAt: preparedResponse.data.effectiveAt, activationMode: preparedResponse.data.activationMode } : {}),
   };
 }

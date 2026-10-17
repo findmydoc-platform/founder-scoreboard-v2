@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, isIsoDate } from "@/lib/api-input";
-import { requireOperationalLead } from "@/lib/authz";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
-import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, sprintReviewDueAt } from "@/lib/sprint-review-window";
 
 type SprintRow = {
@@ -40,10 +39,10 @@ function mapSprint(row: SprintRow) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<CreateSprintPlanPayload>(request, requireOperationalLead, {});
+  const context = await requirePlanningJsonContext<CreateSprintPlanPayload>(request, "planning.sprint.plan", {});
   if (!context.ok) return context.response;
 
-  const { payload, permission, supabase } = context;
+  const { payload, planning } = context;
   const firstSprintNumber = Math.max(Number(payload.firstSprintNumber) || 1, 1);
   const anchorStartDate = payload.anchorStartDate?.trim() || new Date().toISOString().slice(0, 10);
   const rhythmWeeks = Math.min(Math.max(Number(payload.rhythmWeeks) || 2, 1), 12);
@@ -54,26 +53,16 @@ export async function POST(request: NextRequest) {
     return apiError("Startdatum der Sprint-Planung ist ungültig.", 400);
   }
 
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .select("review_objection_window_hours")
-    .eq("id", projectId)
-    .single();
+  const { data: project, error: projectError } = await planning.readSprintPlanProject();
+
   if (projectError || !project) return apiError("FounderOps-Prozesseinstellungen wurden nicht gefunden.", 409);
   const reviewObjectionWindowHours = Number(project.review_objection_window_hours || DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS);
 
-  const { data: existing, error: existingError } = await supabase
-    .from("sprints")
-    .select("id,name,status,start_date,end_date,review_due_at,score_locked,updated_at")
-    .eq("project_id", projectId)
-    .order("start_date", { ascending: true });
+  const { data: existing, error: existingError } = await planning.readPlannedSprints();
 
   if (existingError) return apiError(existingError.message, 500);
 
-  const { data: assignedTasks, error: assignedTasksError } = await supabase
-    .from(ACTIVE_TASKS_TABLE)
-    .select("sprint_id")
-    .not("sprint_id", "is", null);
+  const { data: assignedTasks, error: assignedTasksError } = await planning.readAssignedSprintIds();
 
   if (assignedTasksError) return apiError(assignedTasksError.message, 500);
 
@@ -146,11 +135,10 @@ export async function POST(request: NextRequest) {
   });
 
   const metadata = auditRequestMetadata(request);
-  const { data: transactionData, error: transactionError } = await supabase.rpc("create_sprint_plan_with_review_window_transaction", {
-    p_project_id: projectId,
-    p_sprints: upserts,
-    p_meetings: weeklyRows,
-    p_audit_data: {
+  const { data: transactionData, error: transactionError } = await planning.commitSprintPlan({
+    sprints: upserts,
+    meetings: weeklyRows,
+    auditData: {
       firstSprintNumber,
       anchorStartDate,
       rhythmWeeks,
@@ -159,10 +147,7 @@ export async function POST(request: NextRequest) {
       reviewObjectionWindowHours,
       protectedSprintIds: Array.from(protectedSprintIds),
     },
-    p_actor_profile_id: permission.profile?.id || null,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent || null,
-  });
+  }, metadata);
   if (transactionError) {
     if (transactionError.code === "P0001") {
       return apiError("Sprint-Plan wurde parallel geändert oder enthält inzwischen geschützte Sprints. Bitte neu laden.", 409);

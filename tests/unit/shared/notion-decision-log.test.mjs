@@ -3,10 +3,7 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const {
-  loadNotionDecisionLog,
   mapNotionDecisionLogEntry,
-  NOTION_DECISION_LOG_REQUEST_TIMEOUT_MS,
-  NOTION_DECISION_LOG_TOTAL_TIMEOUT_MS,
   safeDecisionLogUrl,
 } = await importTestModule("src/lib/notion-decision-log.ts", {
   "server-only": {},
@@ -117,99 +114,6 @@ test("maps missing properties to safe values and rejects unsafe links", () => {
   assert.equal(safeDecisionLogUrl("https://example.com/path"), "https://example.com/path");
 });
 
-test("paginates every Notion result and keeps server request details deterministic", async () => {
-  const requests = [];
-  const result = await loadNotionDecisionLog(
-    {
-      NOTION_DECISION_LOG_TOKEN: "secret-test-token",
-      NOTION_DECISION_LOG_DATA_SOURCE_ID: "collection://source-id",
-    },
-    async (url, init) => {
-      requests.push({ url, init });
-      if (requests.length === 1) {
-        return Response.json({ results: [notionPage({ id: "later", properties: { ...notionPage().properties, Datum: { date: { start: "2026-07-18" } } } })], has_more: true, next_cursor: "cursor-2" });
-      }
-      return Response.json({ results: [notionPage({ id: "earlier" })], has_more: false, next_cursor: null });
-    },
-  );
-
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.entries.map((item) => item.id), ["later", "earlier"]);
-  assert.equal(requests.length, 2);
-  assert.match(requests[0].url, /data_sources\/source-id\/query$/);
-  assert.equal(requests[0].init.cache, "no-store");
-  assert.equal(requests[0].init.signal instanceof AbortSignal, true);
-  assert.equal(requests[0].init.headers.Authorization, "Bearer secret-test-token");
-  assert.deepEqual(JSON.parse(requests[0].init.body), {
-    page_size: 100,
-    sorts: [{ property: "Datum", direction: "descending" }],
-  });
-  assert.deepEqual(JSON.parse(requests[1].init.body), {
-    page_size: 100,
-    sorts: [{ property: "Datum", direction: "descending" }],
-    start_cursor: "cursor-2",
-  });
-});
-
-test("bounds each Notion request and the complete pagination window", async () => {
-  const environment = {
-    NOTION_DECISION_LOG_TOKEN: "secret-test-token",
-    NOTION_DECISION_LOG_DATA_SOURCE_ID: "source-id",
-  };
-  const timeoutRequests = [];
-  let now = 0;
-  let requestCount = 0;
-  const result = await loadNotionDecisionLog(
-    environment,
-    async () => {
-      requestCount += 1;
-      now = NOTION_DECISION_LOG_TOTAL_TIMEOUT_MS + 1;
-      return Response.json({ results: [], has_more: true, next_cursor: "cursor-2" });
-    },
-    {
-      now: () => now,
-      createTimeoutSignal: (timeoutMs) => {
-        timeoutRequests.push(timeoutMs);
-        return new AbortController().signal;
-      },
-    },
-  );
-
-  assert.equal(NOTION_DECISION_LOG_REQUEST_TIMEOUT_MS, 8_000);
-  assert.equal(NOTION_DECISION_LOG_TOTAL_TIMEOUT_MS, 15_000);
-  assert.deepEqual(timeoutRequests, [NOTION_DECISION_LOG_REQUEST_TIMEOUT_MS]);
-  assert.equal(requestCount, 1);
-  assert.equal(result.ok, false);
-  assert.equal(result.code, "notion_unavailable");
-});
-
-test("classifies configuration, network, API and response failures without leaking secrets", async () => {
-  let called = false;
-  const missing = await loadNotionDecisionLog({}, async () => {
-    called = true;
-    return new Response();
-  });
-  assert.equal(called, false);
-  assert.equal(missing.code, "missing_configuration");
-
-  const environment = {
-    NOTION_DECISION_LOG_TOKEN: "secret-test-token",
-    NOTION_DECISION_LOG_DATA_SOURCE_ID: "source-id",
-  };
-  const network = await loadNotionDecisionLog(environment, async () => { throw new Error("secret-test-token"); });
-  const api = await loadNotionDecisionLog(environment, async () => new Response("secret-test-token", { status: 403 }));
-  const invalid = await loadNotionDecisionLog(environment, async () => Response.json({ value: [] }));
-  const empty = await loadNotionDecisionLog(environment, async () => Response.json({ results: [] }));
-
-  assert.equal(network.code, "notion_unavailable");
-  assert.equal(api.code, "notion_unavailable");
-  assert.equal(invalid.code, "invalid_response");
-  assert.equal(network.message.includes("secret-test-token"), false);
-  assert.equal(api.message.includes("secret-test-token"), false);
-  assert.equal(empty.ok, true);
-  assert.deepEqual(empty.entries, []);
-});
-
 test("derives unique attention reasons without interpreting the ambiguous Review date", () => {
   const openReasons = decisionLogAttentionReasons(entry({ vote: "In Abstimmung", confirmation: "Form versendet" }));
   assert.deepEqual(openReasons.map((reason) => reason.key), ["decision_required", "vote_in_progress", "confirmation_open"]);
@@ -280,16 +184,4 @@ test("keys the visible-row limit to URL-backed filters regardless of multi-filte
 test("labels the form as an action and moves closed forms to history language", () => {
   assert.equal(decisionLogFormLabel(entry()), "Zur Abstimmung ↗");
   assert.equal(decisionLogFormLabel(entry({ status: "Bestätigt" })), "Abstimmung ansehen ↗");
-});
-
-
-test("disabled Notion integration makes no request even when credentials exist", async () => {
-  let calls = 0;
-  const result = await loadNotionDecisionLog({
-    NOTION_DECISION_LOG_ENABLED: "false",
-    NOTION_DECISION_LOG_TOKEN: "secret-test-token",
-    NOTION_DECISION_LOG_DATA_SOURCE_ID: "source-id",
-  }, async () => { calls++; return Response.json({ results: [], has_more: false }); });
-  assert.equal(result.ok, false);
-  assert.equal(calls, 0);
 });

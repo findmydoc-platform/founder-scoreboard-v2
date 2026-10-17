@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { requireCEO } from "@/lib/authz";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 import { MAX_REVIEW_OBJECTION_WINDOW_HOURS } from "@/lib/sprint-review-window";
 
 type SprintReviewWindowPayload = {
@@ -21,24 +21,17 @@ function validWindowHours(value: unknown): value is number {
 }
 
 export async function PATCH(request: NextRequest) {
-  const context = await requireJsonApiContext<SprintReviewWindowPayload>(request, requireCEO, {});
+  const context = await requirePlanningJsonContext<SprintReviewWindowPayload>(request, "planning.sprint.review-window", {});
   if (!context.ok) return context.response;
 
-  const { payload, permission, supabase } = context;
+  const { payload, permission, planning } = context;
   if (!permission.profile) return apiError("CEO-Profil erforderlich.", 401);
   if (!validWindowHours(payload.expectedReviewObjectionWindowHours) || !validWindowHours(payload.reviewObjectionWindowHours)) {
     return apiError(`Die Review- und Einspruchsfrist muss zwischen 1 und ${MAX_REVIEW_OBJECTION_WINDOW_HOURS} Stunden liegen.`, 400);
   }
 
   const metadata = auditRequestMetadata(request);
-  const { data, error } = await supabase.rpc("update_founderops_review_window_transaction", {
-    p_project_id: projectId,
-    p_expected_hours: payload.expectedReviewObjectionWindowHours,
-    p_review_objection_window_hours: payload.reviewObjectionWindowHours,
-    p_actor_profile_id: permission.profile.id,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent || null,
-  });
+  const { data, error } = await planning.setReviewWindow({ expectedHours: payload.expectedReviewObjectionWindowHours, hours: payload.reviewObjectionWindowHours }, metadata);
 
   if (error) {
     if (error.code === "P0001") return apiError("Die Prozesseinstellungen wurden parallel geändert. Bitte neu laden.", 409);

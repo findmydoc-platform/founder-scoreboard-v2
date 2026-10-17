@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { codepointLength } from "@/lib/github-issue-content";
 import { planningContentFromRow } from "./planning-item-content";
 import { validateStoredPlanningContent } from "./planning-item-content-server";
-import { resolveAdministratorAccessFailure, type AuthzResult } from "@/lib/authz";
+import type { AuthzResult } from "@/lib/authz";
 import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { taskAuditActionFromMessage } from "@/features/tasks/model/task-comment-timeline-policy";
 import {
@@ -148,9 +148,9 @@ async function commitRevision(supabase: SupabaseClient, actor: ActorContext, wri
   return { ok: true as const, transaction: result.data as unknown };
 }
 
-export function createPlanningItemRevision(supabase: SupabaseClient) {
+export function createPlanningItemRevision(supabase: SupabaseClient, administratorFailureForSession?: () => Promise<Extract<AuthzResult, { ok: false }>>) {
   return {
-    commitBrowserRevision: (input: BrowserRevisionInput) => commitBrowserRevision(supabase, input),
+    commitBrowserRevision: (input: BrowserRevisionInput) => commitBrowserRevision(supabase, input, administratorFailureForSession),
     commitGitHubRevision: (input: GitHubRevisionInput) => commitGitHubRevision(supabase, input),
   };
 }
@@ -188,8 +188,10 @@ function strategicDate(value: unknown) {
 async function commitBrowserRevision(
   supabase: SupabaseClient,
   { itemId: id, payload: inputPayload, permission }: BrowserRevisionInput,
+  administratorFailureForSession?: () => Promise<Extract<AuthzResult, { ok: false }>>,
 ): Promise<BrowserRevisionResult> {
   const operationalCorrection = permission.authority?.capabilities.operationalCorrection === true;
+  if (operationalCorrection && !administratorFailureForSession) return browserFailure("Adminzugang konnte nicht geprüft werden.", 403);
   const rawPayload = inputPayload;
   let payload = { ...inputPayload };
   const activeItem = await requireActivePlanningItem(supabase, id);
@@ -345,7 +347,7 @@ async function commitBrowserRevision(
     });
     if (!result.ok) {
       if (operationalCorrection && result.error.code === "forbidden" && result.error.reason === "administratorAccessRequired") {
-        return administratorFailure(await resolveAdministratorAccessFailure(supabase));
+        return administratorFailure(await administratorFailureForSession!());
       }
       if (result.error.code === "conflict" && result.error.reason === "revision") return browserFailure("Planungselement wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
       if (result.error.code === "notFound") return browserFailure("Planungselement wurde nicht gefunden.", 404);
@@ -677,7 +679,7 @@ async function commitBrowserRevision(
   });
   if (!reviseResult.ok) {
     if (operationalCorrection && reviseResult.error.code === "forbidden" && reviseResult.error.reason === "administratorAccessRequired") {
-      return administratorFailure(await resolveAdministratorAccessFailure(supabase));
+      return administratorFailure(await administratorFailureForSession!());
     }
     if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision") {
       return browserFailure("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
