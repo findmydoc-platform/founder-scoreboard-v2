@@ -6,7 +6,7 @@ const origin = "https://chat-delivery-db.example.test";
 const { privateKey, publicKey } = generateKeyPairSync("rsa", {modulusLength:2048});
 const key = privateKey.export({type:"pkcs8",format:"pem"}).toString();
 const event = {id:7,type:"task.mention",title:"Synthetic notification",body:"Synthetic body",entityType:"task",entityId:"synthetic-task",createdAt:"2026-10-17T10:00:00Z"};
-let tokenStatus, chatStatus, unknownDelivery, lifetime, tokenResponse, exchanges, messages, assertions, delayToken, routeRows, profiles, deliveryRecords, databaseCalls, claimAvailable, existingDeliveries;
+let messageResponse, tokenStatus, chatStatus, unknownDelivery, lifetime, tokenResponse, exchanges, messages, assertions, delayToken, routeRows, profiles, deliveryRecords, databaseCalls, claimAvailable, existingDeliveries;
 
 async function protocol(input, init) {
   const request = new Request(input,init);
@@ -24,6 +24,7 @@ async function protocol(input, init) {
   }
   if (url.origin === "https://chat.googleapis.com") {
     messages.push({url,headers:request.headers,body:await request.json()});
+    if (messageResponse) return messageResponse(messages.length);
     if (unknownDelivery) throw new Error("sensitive-webhook-token uncertain provider response");
     return chatStatus === 200 ? Response.json({name:"spaces/synthetic/messages/synthetic"}) : Response.json({error:"sensitive-token-detail"},{status:chatStatus});
   }
@@ -47,7 +48,7 @@ async function protocol(input, init) {
 beforeEach(() => {
   vi.resetModules(); vi.useFakeTimers({toFake:["Date"]}); vi.setSystemTime(new Date("2026-10-17T10:00:00Z"));
   for (const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:origin,SUPABASE_URL:origin,NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_ANON_KEY:"synthetic-anon",SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",SUPABASE_SECRET_KEY:"synthetic-service",GOOGLE_CHAT_DELIVERY_ENABLED:"true",GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL:"synthetic-chat@example.test",GOOGLE_CHAT_PRIVATE_KEY:key,GOOGLE_CHAT_WEBHOOK_URL:"https://chat.googleapis.com/v1/spaces/synthetic-webhook/messages?key=synthetic-key&token=synthetic-webhook-token",FOUNDEROPS_DELIVERY_SECRET:"synthetic-delivery-secret",APP_URL:"https://app.example.test"})) vi.stubEnv(name,value);
-  tokenStatus=200;chatStatus=200;unknownDelivery=false;lifetime=3600;tokenResponse=undefined;
+  messageResponse=null;tokenStatus=200;chatStatus=200;unknownDelivery=false;lifetime=3600;tokenResponse=undefined;
   exchanges=0; messages=[]; assertions=[]; delayToken=null;
   routeRows=[{id:7,type:"task.mention",actor_profile_id:null,recipient_profile_id:"synthetic-recipient",entity_type:"task",entity_id:"synthetic-task",title:event.title,body:event.body,created_at:event.createdAt}];
   profiles=[{id:"synthetic-recipient",name:"Synthetic Recipient",google_chat_dm_space:"spaces/synthetic-dm",google_chat_user_id:null,notifications_enabled:true}];
@@ -259,4 +260,31 @@ test("a failed shared token issuance can recover without replaying a message",as
 test("configured Chat credentials cannot replace the real delivery trigger secret",async()=>{
   const api=await route();const response=await api.POST(trigger("incorrect-synthetic-secret"));
   expect(response.status).toBe(401);expect(databaseCalls).toHaveLength(0);expect(exchanges).toBe(0);expect(messages).toHaveLength(0);
+});
+
+test("a provider-rejected bot token is replaced only for the next explicit delivery",async()=>{
+  chatStatus=401;const chat=await delivery();
+  await expect(chat.sendGoogleChatSpaceDigest("spaces/synthetic-a",[event],"https://app.example.test")).rejects.toMatchObject({name:"GoogleChatDeliveryFailed"});
+  expect(messages).toHaveLength(1);expect(exchanges).toBe(1);
+  chatStatus=200;
+  await chat.sendGoogleChatSpaceDigest("spaces/synthetic-a",[event],"https://app.example.test");
+  expect(messages).toHaveLength(2);expect(exchanges).toBe(2);
+});
+
+
+test("a late rejected dispatch cannot evict a concurrently replaced bot token",async()=>{
+  let release;
+  const firstResponse=new Promise(resolve=>{release=resolve;});
+  messageResponse=async number=>number===1 ? firstResponse : Response.json({name:"spaces/synthetic/messages/synthetic"});
+  const chat=await delivery();const start=Date.now();
+  const first=chat.sendGoogleChatSpaceDigest("spaces/synthetic-a",[event],"https://app.example.test").then(()=>null,error=>error);
+  for(let attempt=0;attempt<100&&messages.length===0;attempt++)await new Promise(resolve=>setImmediate(resolve));
+  expect(messages).toHaveLength(1);
+  vi.setSystemTime(start+3540000);
+  await chat.sendGoogleChatSpaceDigest("spaces/synthetic-b",[event],"https://app.example.test");
+  expect(exchanges).toBe(2);
+  release(Response.json({error:"sensitive-token-detail"},{status:401}));
+  expect(await first).toMatchObject({name:"GoogleChatDeliveryFailed"});
+  await chat.sendGoogleChatSpaceDigest("spaces/synthetic-b",[event],"https://app.example.test");
+  expect(exchanges).toBe(2);expect(messages).toHaveLength(3);
 });

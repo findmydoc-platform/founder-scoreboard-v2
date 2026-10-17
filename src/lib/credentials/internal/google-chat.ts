@@ -101,13 +101,15 @@ async function accessToken(configuration: BotConfiguration): Promise<AccessToken
   finally { if (issuing.get(configuration.fingerprint) === request) issuing.delete(configuration.fingerprint); }
 }
 
-async function dispatch(target: string, body: string, access?: string) {
+async function dispatch(target: string, body: string, access?: { credential: AccessToken; fingerprint: string }) {
   let response: Response;
   try {
     // A failed or lost response may follow a successful mutation. Never refresh and replay here.
     response = await fetch(target, { method: "POST", redirect: "error", headers: { "content-type": "application/json; charset=UTF-8",
-      ...(access ? { authorization: `Bearer ${access}` } : {}) }, body });
+      ...(access ? { authorization: `Bearer ${access.credential.value}` } : {}) }, body });
   } catch { return failure("GoogleChatDeliveryUnknown", access ? "Google Chat DM-Versand konnte nicht bestätigt werden." : "Google Chat Versand konnte nicht bestätigt werden."); }
+  // Rejection invalidates only this exact entry. A late response cannot discard a newer token.
+  if (response.status === 401 && access && tokens.get(access.fingerprint) === access.credential) tokens.delete(access.fingerprint);
   if (!response.ok) failure("GoogleChatDeliveryFailed", `${access ? "Google Chat DM-Versand" : "Google Chat Versand"} fehlgeschlagen: ${response.status}`);
 }
 
@@ -121,7 +123,7 @@ export async function authorizeGoogleChat(input: GoogleChatDeliveryInput): Promi
       const token = await accessToken(configuration);
       requireCurrentBot(configuration);
       if (Date.now() >= token.expiresAt) failure("GoogleChatCredentialExpired", "Google Chat Token ist abgelaufen.");
-      await dispatch(`https://chat.googleapis.com/v1/${target}/messages`, body, token.value);
+      await dispatch(`https://chat.googleapis.com/v1/${target}/messages`, body, { credential: token, fingerprint: configuration.fingerprint });
     } } };
   }
   if (input.action === "google-chat.webhook.deliver" && input.credential.kind === "google-chat-webhook") {
