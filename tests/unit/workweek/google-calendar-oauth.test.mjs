@@ -15,7 +15,7 @@ function setupSession() {
 }
 beforeEach(()=>{
   vi.resetModules();userId="user-1";configuredLogin="synthetic-author";providerLogin="https://www.googleapis.com/auth/calendar.events.owned";vault=null;exchanges=0;stores=[];queued=[];calendarStatus=200;setupSession();
-  for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:authOrigin,SUPABASE_URL:authOrigin,NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",GOOGLE_WORKSPACE_CLIENT_ID:"synthetic-client",GOOGLE_WORKSPACE_CLIENT_SECRET:"synthetic-secret",GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,3).toString("base64"),APP_URL:appOrigin,VERCEL_ENV:"preview"})) vi.stubEnv(name,value);
+  for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:authOrigin,SUPABASE_URL:authOrigin,NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",SUPABASE_SECRET_KEY:"synthetic-service",SUPABASE_ANON_KEY:"synthetic-anon",SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",REQUIRE_SUPABASE_AUTH:"true",GOOGLE_WORKSPACE_CLIENT_ID:"synthetic-client",GOOGLE_WORKSPACE_CLIENT_SECRET:"synthetic-secret",GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,3).toString("base64"),APP_URL:appOrigin,VERCEL_ENV:"preview"})) vi.stubEnv(name,value);
   vi.stubGlobal("fetch",async(input,options)=>{
     const request=new Request(input,options),url=new URL(request.url);
     if(url.href==="https://oauth2.googleapis.com/token") {exchanges++;return Response.json({access_token:"synthetic-calendar-user",refresh_token:"synthetic-calendar-refresh",expires_in:3600,refresh_token_expires_in:7200,token_type:"Bearer",scope:providerLogin});}

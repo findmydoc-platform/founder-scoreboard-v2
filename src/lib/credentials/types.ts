@@ -145,7 +145,7 @@ export type GoogleCalendarCapability = Readonly<{
   request(url: string | URL, init?: RequestInit): Promise<Response>;
 }>;
 export type GoogleCalendarInput =
-  | {credential:{kind:"session-request";request:NextRequest};action:"google-calendar.workweek" | "google-calendar.connection.status";target:{ownerProfileId:string;disconnectOperationId?:string}}
+  | {credential:{kind:"session-request";request:NextRequest};action:"google-calendar.workweek" | "google-calendar.connection.status";target:{ownerProfileId:string}}
   | {credential:{kind:"session-request";request:NextRequest};action:"google-calendar.connection.remove";target:{ownerProfileId:string;operationId:string}};
 export type GoogleCalendarConnectionInput = {credential:{kind:"google-calendar-oauth-request";request:NextRequest};action:"google-calendar.connection.start" | "google-calendar.connection.complete"};
 export type AdministratorCredentialInput =

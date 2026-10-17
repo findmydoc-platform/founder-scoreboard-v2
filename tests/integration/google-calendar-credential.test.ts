@@ -28,7 +28,7 @@ async function fixture(run:(f:Fixture)=>Promise<void>) {
     await db.query("insert into auth.users(id,email,role,aud,email_confirmed_at) values($1,$2,'authenticated','authenticated',now())",[userId,`${id}@example.test`]);
     await db.query("insert into public.profiles(id,auth_user_id,name,platform_role) values($1,$2,'Synthetic Calendar owner','viewer')",[id,userId]);
     await db.query("insert into public.google_workspace_connections(profile_id,encrypted_access_token,encrypted_refresh_token,access_token_expires_at,refresh_token_expires_at,oauth_scopes,token_type,primary_calendar_id) values($1,$2,$3,now()+interval '1 hour',now()+interval '2 hours',$4,'Bearer','primary')",[id,encrypt("synthetic-calendar-old"),encrypt("synthetic-calendar-refresh"),[scope]]);
-    for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:local.API_URL,SUPABASE_URL:local.API_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY:local.ANON_KEY,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:local.ANON_KEY,SUPABASE_SERVICE_ROLE_KEY:local.SERVICE_ROLE_KEY,GOOGLE_WORKSPACE_CLIENT_ID:"synthetic-calendar-client",GOOGLE_WORKSPACE_CLIENT_SECRET:"synthetic-secret",GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY:key.toString("base64"),VERCEL_ENV:"preview"}))vi.stubEnv(name,value as string);
+    for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:local.API_URL,SUPABASE_URL:local.API_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY:local.ANON_KEY,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:local.ANON_KEY,SUPABASE_SERVICE_ROLE_KEY:local.SERVICE_ROLE_KEY,SUPABASE_SECRET_KEY:local.SERVICE_ROLE_KEY,SUPABASE_ANON_KEY:local.ANON_KEY,SUPABASE_PUBLISHABLE_KEY:local.ANON_KEY,REQUIRE_SUPABASE_AUTH:"true",GOOGLE_WORKSPACE_CLIENT_ID:"synthetic-calendar-client",GOOGLE_WORKSPACE_CLIENT_SECRET:"synthetic-secret",GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY:key.toString("base64"),VERCEL_ENV:"preview"}))vi.stubEnv(name,value as string);
     vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{
       const req=new Request(input,init),url=new URL(req.url);
       if(url.origin===api.origin){if(url.pathname==="/auth/v1/user")return Response.json({id:userId,aud:"authenticated",role:"authenticated",user_metadata:{}});return originalFetch(req);}
@@ -55,9 +55,20 @@ it("real owner/status entry retains primary scope, encrypted usage and immediate
   await expect(access.request("https://www.googleapis.com/calendar/v3/calendars/foreign/events/event-1")).rejects.toThrow();
   const {GET}=await importTestModule("src/app/api/google-workspace/status/route.ts",{"server-only":{}});
   const status=await GET(f.request);expect(status.status).toBe(200);expect(await status.json()).toMatchObject({connection:{state:"connected",calendarLabel:"Synthetic primary"},disconnectPending:false});
-  const operation=(await f.db.query("insert into public.google_workspace_disconnect_operations(owner_profile_id,requested_by,revoke_connection,cutoff_date,state,deactivated_at) values($1,'owner',true,current_date,'revoke_pending',now()) returning id,connection_id",[f.id])).rows[0];
+  const operation=(await f.db.query("insert into public.google_workspace_disconnect_operations(owner_profile_id,requested_by,revoke_connection,cutoff_date,state,deactivated_at) values($1,'owner',true,current_date,'cleaning',null) returning id,connection_id",[f.id])).rows[0];
   expect(operation.connection_id).toBe((await f.row()).connection_id);
   await f.store();await expect(access.request("https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1")).rejects.toThrow();
+  const target={calendarId:"primary",googleEventId:"fopsboundcleanup",seriesId:"series-1",expectedEtag:"expected-etag",expectedFounderopsRevision:1} as const;
+  let deleted=0;
+  f.setProvider(async request=>{
+    expect(request.headers.get("authorization")).toBe("Bearer synthetic-reconnected");
+    if(request.method==="DELETE"){expect(request.headers.get("if-match")).toBe("expected-etag");deleted++;return new Response(null,{status:204});}
+    return Response.json({id:target.googleEventId,etag:target.expectedEtag,extendedProperties:{private:{founderopsWorkweekSeriesId:target.seriesId,founderopsWorkweekRevision:"1"}}});
+  });
+  const {ensureGoogleWorkweekSeriesAbsent}=await importTestModule("src/features/team-workweek/server/google-workspace-disconnect-core.ts");
+  expect(await ensureGoogleWorkweekSeriesAbsent({accessToken:await f.authorize(),target})).toMatchObject({state:"confirmed"});
+  expect(deleted).toBe(1);
+  await f.db.query("update public.google_workspace_disconnect_operations set state='revoke_pending',deactivated_at=now() where id=$1",[operation.id]);
   const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
   expect(await authorizeCredentialAction({credential:{kind:"session-request",request:f.request},action:"google-calendar.connection.remove",target:{ownerProfileId:f.id,operationId:operation.id}})).toEqual({ok:true});
   expect((await f.row()).connection_id).not.toBe(operation.connection_id);

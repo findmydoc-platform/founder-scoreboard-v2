@@ -12,9 +12,11 @@ import type { GoogleCalendarInput, GoogleCalendarCapability, GoogleCalendarConne
 
 function denied() { return new GoogleWorkspaceOAuthContractError("reconnect_required", "Gebundene Google-Verbindung ist erforderlich."); }
 export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
+  if (input.credential.kind !== "session-request") throw denied();
+  const ownerProfileId = input.target.ownerProfileId;
   async function owner() {
     const permission = await authorizeLegacySession({credential:input.credential,action:"team.read"});
-    if (!permission.ok || permission.profile?.id !== input.target.ownerProfileId) throw denied();
+    if (!permission.ok || permission.profile?.id !== ownerProfileId) throw denied();
     return permission.profile.id;
   }
   const profileId = await owner();
@@ -26,14 +28,6 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
   }
   const snapshot = await calendarSnapshot(profileId);
   if (!snapshot || snapshot.revoked_at) throw denied();
-  const disconnectOperationId = "disconnectOperationId" in input.target ? input.target.disconnectOperationId : undefined;
-  async function checkDisconnect() {
-    if (!disconnectOperationId) return;
-    const operation = await calendarVault().from("google_workspace_disconnect_operations").select("connection_id")
-      .eq("id",disconnectOperationId).eq("owner_profile_id",profileId).in("state",["cleaning","cleanup_pending"]).maybeSingle();
-    if (operation.error || operation.data?.connection_id !== snapshot!.connection_id) throw denied();
-  }
-  await checkDisconnect();
   await calendarAccess(profileId,snapshot.connection_id);
   const calendar: GoogleCalendarCapability = Object.freeze({ async request(value: string | URL, init: RequestInit = {}) {
     const url = new URL(value);
@@ -43,7 +37,6 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
       || !/^\/calendar\/v3\/calendars\/primary\/events(?:\/[^/]+(?:\/instances)?)?$/.test(url.pathname)
       || !["GET","POST","PUT","PATCH","DELETE"].includes(method) || headers.has("authorization")) throw denied();
     await owner();
-    await checkDisconnect();
     const token = await calendarAccess(profileId,snapshot.connection_id);
     headers.set("authorization",`Bearer ${token}`);
     // Credential renewal happens before dispatch. Never replay a Calendar mutation here.
@@ -52,6 +45,7 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
   return {ok:true as const,calendar};
 }
 export async function authorizeGoogleCalendarConnection(input: GoogleCalendarConnectionInput) {
+  if (input.credential.kind !== "google-calendar-oauth-request") throw denied();
   const request = input.credential.request;
   const auth = await serverPlanningAuth();
   if (!auth.ok || !auth.profile) throw denied();

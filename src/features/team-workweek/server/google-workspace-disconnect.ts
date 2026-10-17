@@ -319,7 +319,7 @@ export async function disconnectGoogleWorkspace({
   if (operation.state === "cleaning" || operation.state === "cleanup_pending") {
     let accessToken: GoogleCalendarCapability;
     try {
-      accessToken = await getAccessToken(serviceSupabase, ownerProfileId, request, operation.id);
+      accessToken = await getAccessToken(serviceSupabase, ownerProfileId, request);
     } catch (error) {
       if (error instanceof GoogleWorkspaceOAuthContractError && error.code === "provider_revoked") {
         await markTeamWorkweekExternalRevocation({ ownerProfileId, serviceSupabase, now });

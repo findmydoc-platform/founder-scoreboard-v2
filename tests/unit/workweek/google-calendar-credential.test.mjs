@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { createCipheriv } from "node:crypto";
+import { createCipheriv, createHmac } from "node:crypto";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.resetModules(); });
 function encrypted(value) {
@@ -9,7 +9,7 @@ function encrypted(value) {
   return ["v1",iv,cipher.getAuthTag(),bytes].map(part=>Buffer.isBuffer(part)?part.toString("base64url"):part).join(".");
 }
 function fixture() {
-  for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:"https://calendar-auth.example.test",SUPABASE_URL:"https://calendar-auth.example.test",NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",GOOGLE_WORKSPACE_CLIENT_ID:"synthetic-calendar-client",GOOGLE_WORKSPACE_CLIENT_SECRET:"synthetic-secret",GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,1).toString("base64")})) vi.stubEnv(name,value);
+  for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:"https://calendar-auth.example.test",SUPABASE_URL:"https://calendar-auth.example.test",NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",SUPABASE_SECRET_KEY:"synthetic-service",SUPABASE_ANON_KEY:"synthetic-anon",SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",REQUIRE_SUPABASE_AUTH:"true",GOOGLE_WORKSPACE_CLIENT_ID:"synthetic-calendar-client",GOOGLE_WORKSPACE_CLIENT_SECRET:"synthetic-secret",GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,1).toString("base64")})) vi.stubEnv(name,value);
   const row={connection_id:"connection-1",credential_version:0,refresh_claim_id:null,encrypted_access_token:encrypted("synthetic-calendar"),encrypted_refresh_token:encrypted("synthetic-refresh"),access_token_expires_at:new Date(Date.now()+3600000).toISOString(),refresh_token_expires_at:new Date(Date.now()+7200000).toISOString(),oauth_scopes:["https://www.googleapis.com/auth/calendar.events.owned"],token_type:"Bearer",primary_calendar_id:"primary",revoked_at:null};
   const provider=[],removed=[];
   vi.stubGlobal("fetch",async(input,options)=>{
@@ -24,7 +24,10 @@ function fixture() {
     if(url.pathname.endsWith("/rpc/use_google_calendar_connection")) return Response.json(true);
     throw new Error(`Unexpected synthetic protocol ${url.pathname}`);
   });
-  return {row,provider,removed,request:new NextRequest("https://application.example.test/api/team-workweek/publish",{headers:{authorization:"Bearer synthetic-session"}})};
+  const encode=value=>Buffer.from(JSON.stringify(value)).toString("base64url");
+  const unsigned=`${encode({alg:"HS256",typ:"JWT"})}.${encode({iss:"https://calendar-auth.example.test/auth/v1",session_id:"00000000-0000-4000-8000-000000000001",sub:"user-1",aud:"authenticated",role:"authenticated",exp:Math.floor(Date.now()/1000)+3600})}`;
+  const token=`${unsigned}.${createHmac("sha256","synthetic-signature").update(unsigned).digest("base64url")}`;
+  return {row,provider,removed,request:new NextRequest("https://application.example.test/api/team-workweek/publish",{headers:{authorization:`Bearer ${token}`}})};
 }
 test("mapped workweek owners receive only their primary Calendar transport independently of platform role",async()=>{
   const state=fixture();const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
