@@ -61,7 +61,7 @@ The final isolated verification cycle passed. Migration and database gates ran o
 |17 ADR | ADR 0002 v 0.3 requested template/Nygard, Draft preserved, implementation complete distinguished from deployment/measurements. ADR 0001 retained. | ADR implementation/deployment distinction and Draft review status remain unchanged. The completed verification cycle and its limits are recorded here. |
 |18 Comparable measures | Immutable baseline 4 x 30 HTTP and 2 x 30 devHTTPbrowser; interim 489 separate. Plan/recipes specify full paired series. | All matched warm/process-cold/module-expiry/renewal/browser series complete with source/schema/phase/category metadata, retained outliers and explicit exclusions. |
 |19 Required isolated checks | Ticket-local logs listed here;502 broad 1820, lint 5 existing warnings/build/37 architecture green. | Completed final migrations/preservation/security/synthetic Auth/database-lint, ordinary full suite, lint, production build/client scan and architecture. Known warnings and failed fixture evidence are retained. |
-|20 No implied external action | Ticket 503 acceptance source and documentation; predecessors report no deployments/reviewers. | No reviewers, publication, deployment, parent/story changes, source-chat messages or product news performed. Root/user retain those decisions. |
+|20 No implied external action | Ticket 503 acceptance source and documentation; predecessors report no deployments/reviewers. | No reviewers, deployment, parent/story changes, source-chat messages or product news performed. Root controls PR publication; reviewer and deployment decisions remain with the user. |
 
 ## Runtime boundaries
 
