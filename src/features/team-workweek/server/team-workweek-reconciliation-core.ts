@@ -345,7 +345,7 @@ function samePhysicalSchedule(event: GoogleCalendarEvent, payload: WorkweekGoogl
     && end.instant===new Date(payload.end.dateTime).getTime() && recurrenceKey(event.recurrence)===recurrenceKey(payload.recurrence);
 }
 
-async function observePhysicalProjection({accessToken,fetchImpl,maxAttempts,now,series,logicalWindows,wait,verifyKnownPayloads}: {
+async function observePhysicalProjection({fetchImpl,maxAttempts,now,series,logicalWindows,wait,verifyKnownPayloads}: {
   accessToken:GoogleCalendarCapability;fetchImpl:GoogleCalendarCapability["request"];maxAttempts:number;now:()=>Date;series:KnownGoogleWorkweekSeries[];
   logicalWindows?:KnownGoogleWorkweekWindow[];wait:(attempt:number)=>Promise<void>;
   verifyKnownPayloads:boolean;
