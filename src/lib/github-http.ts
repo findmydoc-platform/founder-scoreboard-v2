@@ -174,7 +174,11 @@ function networkError(message: string, method: string) {
   });
 }
 
-export async function githubRequest(url: string, options: GitHubRequestOptions) {
+export async function githubRequest(
+  url: string,
+  options: GitHubRequestOptions,
+  authorizeDispatch?: () => Promise<() => void>,
+) {
   if (!options.token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
   if (typeof options.token !== "string") {
     const { token, ...requestOptions } = options;
@@ -188,6 +192,8 @@ export async function githubRequest(url: string, options: GitHubRequestOptions) 
 
   for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
     let response: Response;
+    const assertCurrent = authorizeDispatch ? await authorizeDispatch() : undefined;
+    assertCurrent?.();
     try {
       response = await fetch(url, {
         method,
