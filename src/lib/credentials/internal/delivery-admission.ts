@@ -26,16 +26,17 @@ export function deliveryConfiguration() {
   return { url: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "",
     key: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || "" };
 }
+function assertDatabaseBinding(configuration: ReturnType<typeof deliveryConfiguration>) {
+  const current = deliveryConfiguration();
+  if (current.url !== configuration.url || current.key !== configuration.key)
+    throw new DeliveryAdmissionDenied({ ok: false, status: 503, error: "Zustellkonfiguration wurde geändert." });
+}
 export async function authorizeDeliveryAdmission(source: NextRequest, action: DeliveryAction) {
   const startedAt = Date.now();
   const request = new NextRequest(source.url, { method: source.method, headers: new Headers(source.headers) });
   const secret = action === "notifications.delivery.inspect" ? "" : request.headers.get("x-founderops-delivery-secret")?.trim() || "";
   const configuration = deliveryConfiguration();
-  const assertConfiguration = () => {
-    const current = deliveryConfiguration();
-    if (current.url !== configuration.url || current.key !== configuration.key)
-      throw new DeliveryAdmissionDenied({ ok: false, status: 503, error: "Zustellkonfiguration wurde geändert." });
-  };
+  const assertConfiguration = () => assertDatabaseBinding(configuration);
   if (!configuration.url || !configuration.key)
     return { ok: false as const, status: 501, error: "Supabase ist nicht konfiguriert." };
   const policy = action.startsWith("notifications.delivery.") ? "administration.technical" : "operations.lead";
@@ -113,5 +114,17 @@ export function deliveryStore(admission: DeliveryAdmission): SupabaseClient {
 }
 export function bookkeepingStore(admission: DeliveryAdmission): SupabaseClient {
   const { url, key } = admission.configuration;
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: {
+    fetch: (input, init) => {
+      try { assertDatabaseBinding(admission.configuration); }
+      catch (error) {
+        if (error instanceof DeliveryAdmissionDenied) {
+          // Retrying cannot renew a capability bound to replaced storage configuration.
+          return Promise.resolve(Response.json({ message: error.message, code: "delivery_admission_denied" }, { status: 409 }));
+        }
+        throw error;
+      }
+      return fetch(input, init);
+    },
+  } });
 }

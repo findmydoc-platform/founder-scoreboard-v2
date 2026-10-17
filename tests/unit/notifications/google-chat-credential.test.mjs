@@ -296,3 +296,15 @@ test("a delivery secret changed during outgoing token issuance cannot authorize 
   expect(messages).toHaveLength(0);
   expect(response.status).toBe(401);
 });
+
+
+test.each([["SUPABASE_SERVICE_ROLE_KEY","changed-synthetic-service"],["NEXT_PUBLIC_SUPABASE_URL","https://changed-delivery-storage.example.test"]])("confirmed provider delivery cannot dispatch captured bookkeeping credentials after %s changes",async(name,value)=>{
+ let confirmedAt;messageResponse=()=>{confirmedAt=databaseCalls.length;vi.stubEnv(name,value);return Response.json({name:"spaces/synthetic/messages/confirmed"});};
+ const api=await route();const response=await api.POST(trigger());
+ expect(messages).toHaveLength(1);expect(confirmedAt).toBeGreaterThan(0);expect(databaseCalls.slice(confirmedAt)).toEqual([]);expect(deliveryRecords).toEqual([]);expect(response.status).toBe(409);expect(JSON.stringify(await response.json())).not.toContain("synthetic-service");
+});
+
+test("confirmed provider delivery retains exact bookkeeping after delivery-secret replacement",async()=>{
+ messageResponse=()=>{vi.stubEnv("FOUNDEROPS_DELIVERY_SECRET","changed-after-confirmed-send");return Response.json({name:"spaces/synthetic/messages/confirmed"});};
+ const api=await route();const response=await api.POST(trigger());expect(messages).toHaveLength(1);expect(response.status).toBe(200);expect(deliveryRecords).toMatchObject([{event_id:7,status:"sent",attempts:1}]);expect(databaseCalls.filter(call=>call.path.endsWith("/rpc/finalize_notification_delivery_claim"))).toHaveLength(1);
+});
