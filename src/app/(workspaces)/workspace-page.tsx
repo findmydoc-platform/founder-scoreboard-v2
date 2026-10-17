@@ -96,17 +96,15 @@ async function loadSprintPageData(profile?: AuthenticatedProfile | null) {
 }
 
 async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
-  const supabase = getServerSupabase();
-  if (!supabase) return { status: "unavailable" as const };
-  const [headerData, decisionLog] = await Promise.all([
-    loadPlanningHeaderData(supabase, {
-      currentProfileId: profile?.id || null,
-      platformRole: profile?.platformRole || null,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
-    loadNotionDecisionLog(),
-  ]);
-  return { status: "ready" as const, headerData, decisionLog };
+  const permission = await authorizeCredentialAction({credential:{kind:"server-cookies"},action:"decision-log.read"});
+  if (!permission.ok || permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole) return { status: "unavailable" as const };
+  try {
+    const [headerData, decisionLog] = await Promise.all([
+      permission.loadHeader(),
+      loadNotionDecisionLog(permission.notion),
+    ]);
+    return { status: "ready" as const, headerData, decisionLog };
+  } catch { return { status: "unavailable" as const }; }
 }
 
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
