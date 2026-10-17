@@ -6,6 +6,10 @@ import { authOrigin } from "../../auth-redirect";
 import type { ServerSessionView, SessionHttpAction } from "../session-types";
 import { cookieSession } from "./cookie-client";
 
+const metadataString = (value: unknown) => typeof value === "string" ? value : "";
+const displayIdentity = (user: { id: string; email?: string; user_metadata?: Record<string, unknown> }) => ({ id: user.id, ...(user.email ? { email: user.email } : {}),
+  displayName: metadataString(user.user_metadata?.full_name || user.user_metadata?.name), avatarUrl: metadataString(user.user_metadata?.avatar_url),
+  ...(typeof (user.user_metadata?.user_name || user.user_metadata?.preferred_username) === "string" ? { githubLogin: String(user.user_metadata?.user_name || user.user_metadata?.preferred_username) } : {}) });
 const noStore = { "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0", Expires: "0", Pragma: "no-cache" };
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: noStore });
 const revision = (session: Session) => createHash("sha256").update(`${session.access_token}\0${session.refresh_token}`).digest("hex");
@@ -38,7 +42,7 @@ export async function browserSessionTransport(request: NextRequest, action: Sess
     const verified = await client.auth.getUser(session.access_token);
     if (verified.error) return complete(json({ outcome: retryable(verified.error) ? "temporarily_unavailable" : "unavailable", session: null }, retryable(verified.error) ? 503 : 401));
     if (!verified.data.user || verified.data.user.id !== session.user.id) return complete(json({ outcome: "superseded", session: null }, 409));
-    const view = (): ServerSessionView => ({ user: { id: verified.data.user!.id, ...(verified.data.user!.email ? { email: verified.data.user!.email } : {}) },
+    const view = (): ServerSessionView => ({ user: displayIdentity(verified.data.user!),
       userId: verified.data.user!.id, revision: revision(session), expiresAt: session.expires_at || 0 });
     if (!mutation) return complete(json({ session: view() }));
     if (expected.userId !== verified.data.user.id) return complete(json({ outcome: "superseded", session: null }));
@@ -49,7 +53,7 @@ export async function browserSessionTransport(request: NextRequest, action: Sess
       const checked = await client.auth.getUser(refreshed.data.session.access_token);
       if (checked.error) return complete(json({ outcome: retryable(checked.error) ? "temporarily_unavailable" : "unavailable", session: null }, retryable(checked.error) ? 503 : 401));
       if (checked.data.user?.id !== expected.userId) { context.revoke(); return complete(json({ outcome: "superseded", session: null }, 409)); }
-      return complete(json({ outcome: "refreshed", session: { user: { id: checked.data.user.id, ...(checked.data.user.email ? { email: checked.data.user.email } : {}) }, userId: checked.data.user.id,
+      return complete(json({ outcome: "refreshed", session: { user: displayIdentity(checked.data.user), userId: checked.data.user.id,
         revision: revision(refreshed.data.session), expiresAt: refreshed.data.session.expires_at || 0 } }));
     }
     const result = await client.auth.signOut({ scope: action === "session.logout" ? "global" : "local" });

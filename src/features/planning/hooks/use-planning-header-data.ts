@@ -20,7 +20,7 @@ import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData } fro
 type UsePlanningHeaderDataOptions = {
   apiClient: BrowserApiClient;
   authRequired: boolean;
-  authUser: User | null;
+  authUser: Pick<User, "id"> | null;
   baseHeaderData: PlanningHeaderData;
   currentProfileId: string;
   data: PlanningShellState;

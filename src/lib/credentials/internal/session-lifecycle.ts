@@ -1,4 +1,5 @@
 import "server-only";
+import { NextResponse } from "next/server";
 import { browserSessionTransport, allowedSessionMutation } from "./browser-session-transport";
 import { cookieSession, maintainSessionProxy } from "./cookie-client";
 import { GET as login } from "./lifecycle-login";
@@ -13,11 +14,20 @@ import type { SessionLifecycleInput, SessionCookieResponseInput, SessionHttpActi
 export async function executeSessionLifecycle(input: SessionLifecycleInput | SessionCookieResponseInput): Promise<Response> {
   if (input.credential.kind === "http-request" && input.action === "session.proxy") return maintainSessionProxy(input.credential.request);
   if (input.credential.kind === "http-request" && ["session.current", "session.recover", "session.logout", "session.clear"].includes(input.action)) return browserSessionTransport(input.credential.request, input.action as SessionHttpAction);
-  if (input.credential.kind === "http-request" && ["session.link", "session.logout-local"].includes(input.action) && !allowedSessionMutation(input.credential.request)) return new Response(null, { status: 403 });
+  if (input.credential.kind === "http-request" && ["session.link", "session.logout-local", "session.login-start"].includes(input.action) && !allowedSessionMutation(input.credential.request)) return new Response(null, { status: 403 });
   if (input.action === "session.login-mode") return loginMode();
   const request = input.credential.kind === "http-request" ? input.credential.request : undefined;
-  const context = await cookieSession(input.action === "session.login" || input.action === "session.local-login", request);
+  const context = await cookieSession(input.action === "session.login" || input.action === "session.login-start" || input.action === "session.local-login", request);
   switch (input.action) {
+    case "session.login-start": {
+      if (request!.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") return NextResponse.json({ error: "JSON-Anfrage erforderlich." }, { status: 400 });
+      const response = await login(request!);
+      const location = response.headers.get("location");
+      if (!location || new URL(location).pathname === "/auth/error") return context.complete(NextResponse.json({ error: "Anmeldung konnte nicht vorbereitet werden." }, { status: 503, headers: { "cache-control": "no-store" } }));
+      const result = NextResponse.json({ redirectTo: location }, { headers: { "cache-control": "no-store" } });
+      response.cookies.getAll().forEach(cookie => result.cookies.set(cookie));
+      return context.complete(result);
+    }
     case "session.login": return context.complete(await login(request!));
     case "session.callback": return context.complete(await callback(request!));
     case "session.link": return context.complete(await link(request!));

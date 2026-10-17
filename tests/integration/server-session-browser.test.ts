@@ -1,30 +1,67 @@
-import { afterAll, beforeAll, expect, test } from "vitest";
-import { createServer, type Server } from "node:http";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "vitest";
+import { createServer, request as httpRequest, type Server } from "node:http";
+import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
 import { createHmac } from "node:crypto";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { build } from "vite";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 
 // Run only in the integration project's isolated environment. All Auth responses are synthetic.
+let tls: HttpsServer;
 let auth: Server, app: ChildProcess, browser: Browser, authOrigin: string, appOrigin: string;
 let releaseRefresh: (() => void) | undefined;
 let refreshEntered: (() => void) | undefined;
 let holdRefresh = false;
+let holdLogin = false;
+let releaseLogin: (() => void) | undefined;
+let loginEntered: (() => void) | undefined;
+const certificateDirectory = mkdtempSync(path.join(tmpdir(), "session-browser-tls-"));
+const evidenceDirectory = mkdtempSync(path.join(tmpdir(), "session-browser-evidence-"));
 let logs = "";
+function captureDiagnostics() {
+  let partial = "";
+  return (chunk: Buffer) => {
+    const lines = (partial + String(chunk)).split(/\r?\n/);
+    partial = lines.pop() || "";
+    for (const line of lines) {
+      if (/Network:/.test(line) || !/^(?:▲ Next|✓ Ready|⨯|Error:|Type error:|TypeError:|SyntaxError:|Failed to compile|\.\/src\/|\.\/tests\/)/.test(line.trimStart())) continue;
+      logs = `${logs}${line.replace(/https?:\/\/\S+/g, "[synthetic endpoint]")}\n`.slice(-4000);
+    }
+  };
+}
+const pendingGates = new Set<() => void>();
+function heldResponse(assign: (release: () => void) => void) {
+  return new Promise<void>(resolve => { const release = () => { pendingGates.delete(release); resolve(); }; pendingGates.add(release); assign(release); });
+}
+async function checkpoint<T>(name: string, operation: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  try { return await Promise.race([operation, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`Browser checkpoint failed: ${name}`)), 10_000); })]); }
+  finally { clearTimeout(timer!); }
+}
+let browserClientCode = "", userCalls = 0, rejectUserAt = 0;
 const cookieBase = "sb-localhost-auth-token";
 const userA = "b1111111-1111-4111-8111-111111111111";
 const userB = "b2222222-2222-4222-8222-222222222222";
+let loginUser = userB;
+let sessionSequence = 0;
+let workspaceMode = "legacy", linkingEnforced = false, workspaceLinked = false, loginRecorded = false;
+let linkNonce: string | null = null;
+beforeEach(() => { workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; });
 function token(userId: string) {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
+  const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", amr: [{ method: "oauth" }], iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
   return `${value}.${createHmac("sha256", "synthetic-browser-signing-key").update(value).digest("base64url")}`;
 }
 function session(userId: string) {
-  return { access_token: token(userId), refresh_token: `synthetic-refresh-${userId}`, expires_at: Math.floor(Date.now()/1000)+3600, expires_in: 3600, token_type: "bearer", user: { id: userId, aud: "authenticated", user_metadata: {} } };
+  return { access_token: token(userId), refresh_token: `synthetic-refresh-${++sessionSequence}-${userId}`, expires_at: Math.floor(Date.now()/1000)+3600, expires_in: 3600, token_type: "bearer", user: { id: userId, aud: "authenticated", user_metadata: {} } };
 }
-async function listen(server: Server) {
+async function listen(server: Server | HttpsServer, protocol = "http:") {
   server.listen(0, "localhost"); await once(server, "listening");
-  return `http://localhost:${(server.address() as { port: number }).port}`;
+  return `${protocol}//localhost:${(server.address() as { port: number }).port}`;
 }
 async function freePort() { const server = createServer(); const url = await listen(server); await new Promise<void>(resolve => server.close(() => resolve())); return new URL(url).port; }
 
@@ -37,45 +74,98 @@ beforeAll(async () => {
       response.writeHead(302, { location: redirect.href }); response.end(); return;
     }
     if (url.pathname === "/auth/v1/user") {
+      userCalls++;
+      if (userCalls === rejectUserAt) { send({ message: "Synthetic credential rejected before effect", code: "bad_jwt" }, 401); return; }
       const claims = JSON.parse(Buffer.from(request.headers.authorization!.slice(7).split(".")[1], "base64url").toString());
-      send({ id: claims.sub, aud: "authenticated", user_metadata: {} }); return;
+      send({ id: claims.sub, aud: "authenticated", user_metadata: {}, identities: [{ provider: "github" }] }); return;
     }
+    if (url.pathname === "/auth/v1/user/identities/authorize") { const target = new URL("/auth/v1/authorize", authOrigin); target.search = url.search; send({ url: target.href }); return; }
     if (url.pathname === "/auth/v1/token") {
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
-      if (url.searchParams.get("grant_type") === "pkce") { send({ ...session(userB), provider_token: "synthetic-provider-proof" }); return; }
+      if (url.searchParams.get("grant_type") === "pkce") { send({ ...session(loginUser), provider_token: "synthetic-provider-proof" }); return; }
       if (holdRefresh) { refreshEntered?.(); await new Promise<void>(resolve => { releaseRefresh = resolve; }); }
       send(session(body.refresh_token.endsWith(userB) ? userB : userA)); return;
     }
     if (url.pathname === "/auth/v1/logout") { response.writeHead(204); response.end(); return; }
-    if (url.pathname === "/rest/v1/rpc/workspace_access_context") { send({ mode: "legacy", linkingEnforced: false, linked: false, userId: userA, profileId: "synthetic-profile", identity: null }); return; }
+    if (url.pathname === "/rest/v1/rpc/workspace_access_context") {
+      if (holdLogin) { holdLogin = false; loginEntered?.(); await new Promise<void>(resolve => { releaseLogin = resolve; }); }
+      const chunks = []; for await (const chunk of request) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      send({ mode: workspaceMode, linkingEnforced, linked: workspaceLinked, userId: body.p_user_id || loginUser, profileId: "synthetic-profile",
+        identity: workspaceMode === "legacy" ? null : { sub: "synthetic-google-subject", iss: "https://accounts.google.com", email: "synthetic@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } } }); return; }
+    if (url.pathname === "/rest/v1/rpc/workspace_begin_link" || url.pathname === "/rest/v1/rpc/workspace_complete_link" || url.pathname === "/rest/v1/rpc/workspace_record_google_login") {
+      const chunks = []; for await (const chunk of request) chunks.push(chunk); const body = JSON.parse(Buffer.concat(chunks).toString());
+      if (body.p_user_id !== userA) { send({ message: "Wrong bound actor" }, 403); return; }
+      if (url.pathname.endsWith("workspace_begin_link")) linkNonce = body.p_nonce_hash;
+      if (url.pathname.endsWith("workspace_complete_link")) {
+        if (!linkNonce || linkNonce !== body.p_nonce_hash || body.p_subject !== "synthetic-google-subject") { send({ message: "Nonce rejected" }, 403); return; }
+        linkNonce = null; workspaceLinked = true;
+      }
+      if (url.pathname.endsWith("workspace_record_google_login")) loginRecorded = true;
+      send(null); return;
+    }
+    if (url.pathname === "/rest/v1/rpc/workspace_linking_session_allowed") { send(loginRecorded); return; }
+    if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send({ id: "synthetic-profile", name: "Synthetic Founder", platform_role: "founder" }); return; }
+    if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: false, active: false }); return; }
+    if (url.pathname === "/rest/v1/platform_releases") {
+      const summary = loginUser === userA ? "Synthetic previous account release" : "Synthetic replacement release";
+      const manifest = { schemaVersion: 2, version: "v1.0.0", summary, highlights: [], changes: [], components: [], visuals: [], publishedAt: "2026-10-01T00:00:00Z" };
+      send([{ version: "v1.0.0", summary, published_at: manifest.publishedAt, manifest_digest: "synthetic", manifest }]); return;
+    }
+    if (url.pathname.startsWith("/rest/v1/")) { send([]); return; }
     send({ error: "Unscripted synthetic protocol" }, 501);
   });
   authOrigin = await listen(auth);
-  const port = await freePort(); appOrigin = `http://localhost:${port}`;
-  const env: NodeJS.ProcessEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ["PATH", "HOME", "TMPDIR", "NODE_OPTIONS"].includes(key))), NODE_ENV: "development" };
-  Object.assign(env, { NEXT_TELEMETRY_DISABLED: "1", APP_URL: appOrigin, NEXT_PUBLIC_SUPABASE_URL: authOrigin, SUPABASE_URL: authOrigin,
+  const port = await freePort();
+  execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", path.join(certificateDirectory, "key.pem"), "-out", path.join(certificateDirectory, "cert.pem"), "-subj", "/CN=localhost", "-days", "1", "-addext", "subjectAltName=DNS:localhost"], { stdio: "ignore" });
+  tls = createHttpsServer({ key: readFileSync(path.join(certificateDirectory, "key.pem")), cert: readFileSync(path.join(certificateDirectory, "cert.pem")) }, (request, response) => {
+    const upstream = httpRequest({ hostname: "localhost", port, path: request.url, method: request.method,
+      headers: { ...request.headers, "x-forwarded-proto": "https", "x-forwarded-host": request.headers.host } }, result => {
+      response.writeHead(result.statusCode || 502, result.headers); result.pipe(response);
+    });
+    upstream.on("error", () => { response.writeHead(502); response.end(); }); request.pipe(upstream);
+  });
+  appOrigin = await listen(tls, "https:");
+  const env: NodeJS.ProcessEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ["PATH", "HOME", "TMPDIR", "NODE_OPTIONS"].includes(key))), NODE_ENV: "production" };
+  Object.assign(env, { NEXT_TELEMETRY_DISABLED: "1", NODE_OPTIONS: `${env.NODE_OPTIONS || ""} --require=${path.resolve("tests/helpers/session-browser-protocol.cjs")}`,
+    VERCEL_OIDC_TOKEN: token(userA), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience", GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "synthetic@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu", APP_URL: appOrigin, NEXT_PUBLIC_SUPABASE_URL: authOrigin, SUPABASE_URL: authOrigin,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service" });
-  app = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--webpack", "--port", port], { cwd: process.cwd(), env, stdio: ["ignore", "pipe", "pipe"] });
-  app.stdout!.on("data", chunk => { logs = (logs + String(chunk)).slice(-4000); });
-  app.stderr!.on("data", chunk => { logs = (logs + String(chunk)).slice(-4000); });
+  // Production output keeps development hot reloads out of cookie/navigation ordering evidence.
+  app = spawn(process.execPath, ["node_modules/next/dist/bin/next", "build", "--webpack"], { cwd: process.cwd(), env, stdio: ["ignore", "pipe", "pipe"] });
+  app.stdout!.on("data", captureDiagnostics()); app.stderr!.on("data", captureDiagnostics());
+  const [built] = await once(app, "exit");
+  if (built !== 0) throw new Error(`Synthetic session app build failed: ${logs}`);
+  app = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--port", port], { cwd: process.cwd(), env, stdio: ["ignore", "pipe", "pipe"] });
+  app.stdout!.on("data", captureDiagnostics());
+  app.stderr!.on("data", captureDiagnostics());
   for (let attempt = 0; attempt < 120; attempt++) {
     if (app.exitCode !== null) throw new Error(`Synthetic session app exited: ${logs}`);
-    try { if ((await fetch(`${appOrigin}/api/auth/login-mode`)).ok) break; } catch { /* Wait for the local app socket. */ }
+    try { if ((await fetch(`http://localhost:${port}/api/auth/login-mode`)).ok) break; } catch { /* Wait for the local app socket. */ }
     if (attempt === 119) throw new Error(`Synthetic session app did not start: ${logs}`);
     await new Promise(resolve => setTimeout(resolve, 250));
   }
+  const compiled = await build({ configFile: false, logLevel: "silent", resolve: { alias: { "@": path.resolve("src") } },
+    build: { write: false, lib: { entry: path.resolve("tests/fixtures/session-browser-entry.ts"), name: "FounderOpsBrowser", formats: ["iife"] } } });
+  const outputs = Array.isArray(compiled) ? compiled : [compiled];
+  const chunk = outputs.flatMap(output => "output" in output ? output.output : []).find(output => output.type === "chunk");
+  if (!chunk || chunk.type !== "chunk") throw new Error("Browser public transport fixture did not compile");
+  browserClientCode = chunk.code;
   browser = await chromium.launch({ headless: true });
 }, 120_000);
 
+afterEach(context => { if (context.task.result?.state === "fail") console.info(`Synthetic app diagnostics: ${logs}`); });
+
 afterAll(async () => {
-  releaseRefresh?.(); await browser?.close(); app?.kill("SIGTERM");
+  releaseRefresh?.(); releaseLogin?.(); pendingGates.forEach(release => release()); await browser?.close(); app?.kill("SIGTERM");
   if (app && app.exitCode === null) await once(app, "exit");
+  if (tls) await new Promise<void>(resolve => tls.close(() => resolve()));
   if (auth) await new Promise<void>(resolve => auth.close(() => resolve()));
+  rmSync(certificateDirectory, { recursive: true, force: true });
 });
 
 async function start() {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
   await context.addCookies([{ name: cookieBase, value: `base64-${Buffer.from(JSON.stringify(session(userA))).toString("base64url")}`, url: appOrigin, sameSite: "Lax" }]);
   const page = await context.newPage(); await page.goto(`${appOrigin}/api/auth/login-mode`);
   const current = await page.evaluate(async () => (await fetch("/api/auth/session")).json());
@@ -95,7 +185,8 @@ async function beginDelayedRefresh(page: Awaited<ReturnType<typeof start>>["page
 }
 async function current(context: BrowserContext) { const response = await context.request.get(`${appOrigin}/api/auth/session`); return { status: response.status(), body: await response.json() }; }
 
-test("Chromium keeps a newer login after an older refresh response writes its actual Set-Cookie headers", async () => {
+test.each([userA, userB])("Chromium keeps newer login %s after an older refresh writes its actual Set-Cookie headers", async replacementUser => {
+  loginUser = replacementUser;
   const { context, page, expected } = await start();
   try {
     const initial = "legacy".padEnd(32, "0");
@@ -106,17 +197,17 @@ test("Chromium keeps a newer login after an older refresh response writes its ac
     await other.waitForURL(`${appOrigin}/auth/error`);
     const replacement = (await context.cookies()).find(cookie => cookie.name === `${cookieBase}-active`)!.value;
     expect(replacement).not.toBe(initial);
-    expect((await current(context)).body.session.userId).toBe(userB);
+    expect((await current(context)).body.session.userId).toBe(replacementUser);
     releaseRefresh!(); holdRefresh = false;
     expect((await pending).status).toBe(200);
     const actualCookies = await context.cookies();
     expect(actualCookies.find(cookie => cookie.name === `${cookieBase}-g-${initial}`)).toBeDefined();
     expect(actualCookies.find(cookie => cookie.name === `${cookieBase}-active`)!.value).toBe(replacement);
     expect(actualCookies.find(cookie => cookie.name === `${cookieBase}-g-${replacement}`)!.httpOnly).toBe(true);
-    expect((await current(context)).body.session.userId).toBe(userB);
+    expect((await current(context)).body.session.userId).toBe(replacementUser);
     const encoded = actualCookies.find(cookie => cookie.name === `${cookieBase}-g-${replacement}`)!.value;
     expect(JSON.parse(Buffer.from(encoded.slice(7), "base64url").toString()).provider_token).toBeUndefined();
-  } finally { releaseRefresh?.(); holdRefresh = false; await context.close(); }
+  } finally { releaseRefresh?.(); holdRefresh = false; loginUser = userB; await context.close(); }
 }, 120_000);
 
 test("Chromium cannot resurrect a logged-out session when the delayed refresh response arrives last", async () => {
@@ -131,4 +222,173 @@ test("Chromium cannot resurrect a logged-out session when the delayed refresh re
     expect((await context.cookies()).some(cookie => cookie.name.endsWith("-revoked") && cookie.value === "1")).toBe(true);
     expect((await current(context)).status).toBe(401);
   } finally { releaseRefresh?.(); holdRefresh = false; await context.close(); }
+}, 120_000);
+
+
+test("concurrent tabs serialize actual login-start cookie writes and unavailable locks fail visibly", async () => {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const starts: string[] = [];
+  context.on("request", request => { if (new URL(request.url()).pathname === "/api/auth/session/login") starts.push(request.method()); });
+  try {
+    holdLogin = true;
+    const entered = new Promise<void>(resolve => { loginEntered = resolve; });
+    const first = await context.newPage(); await first.goto(`${appOrigin}/auth/login?next=/auth/error`);
+    await entered;
+    const second = await context.newPage(); await second.goto(`${appOrigin}/auth/login?next=/auth/error`);
+    await expect.poll(async () => second.locator('[role="status"]').textContent()).toContain("nicht sicher vorbereitet");
+    expect(starts).toEqual(["POST"]);
+    releaseLogin!(); await first.waitForURL(`${appOrigin}/auth/error`);
+    expect((await current(context)).body.session.userId).toBe(userB);
+    expect((await context.cookies()).some(cookie => cookie.name === cookieBase)).toBe(false);
+    expect(await first.evaluate(() => document.cookie)).not.toContain("auth-token");
+  } finally { releaseLogin?.(); holdLogin = false; await context.close(); }
+}, 120_000);
+
+test("login error remains usable at supported phone, tablet and desktop viewports without leaking credentials", async () => {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  await context.addInitScript(() => Object.defineProperty(navigator, "locks", { value: undefined }));
+  const protocols: string[] = []; const scripts: Promise<string>[] = [];
+  context.on("request", request => { protocols.push(new URL(request.url()).pathname); });
+  context.on("response", response => { if (new URL(response.url()).pathname.startsWith("/_next/static/") && response.url().includes(".js")) scripts.push(response.text().catch(() => "")); });
+  try {
+    const page = await context.newPage(); await page.goto(`${appOrigin}/auth/login?next=//unapproved.example.test`);
+    await expect.poll(async () => page.locator('[role="status"]').textContent()).toContain("Bitte aktualisiere deinen Browser");
+    expect(new URL(page.url()).searchParams.get("next")).toBe("/");
+    await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+    for (const [width, height] of [[320,568],[390,844],[768,1024],[1024,768],[1440,900]]) {
+      await page.setViewportSize({ width, height });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      expect(await page.getByRole("button", { name: "Erneut versuchen" }).count()).toBe(0);
+      await page.screenshot({ path: path.join(evidenceDirectory, `login-error-${width}.png`), fullPage: true });
+    }
+    expect(protocols).not.toContain("/api/auth/session/login");
+    expect(protocols.some(protocol => protocol === "/auth/v1/user" || protocol === "/auth/v1/token")).toBe(false);
+    const clientCode = (await Promise.all(scripts)).join("\n");
+    expect(clientCode).not.toContain("synthetic-service");
+    expect(clientCode).not.toContain("GoTrueClient");
+    console.info(`Session browser viewport evidence: ${evidenceDirectory}`);
+  } finally { await context.close(); }
+}, 120_000);
+
+test.each(["/planning", "/team/platform-releases"])("%s consumes server session views, navigates and clears protected UI on global logout", async workspace => {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const requests: Array<{ path: string; authorization: string | undefined }> = [];
+  context.on("request", request => requests.push({ path: new URL(request.url()).pathname, authorization: request.headers().authorization }));
+  try {
+    const page = await context.newPage();
+    const sessionRead = page.waitForResponse(response => new URL(response.url()).pathname === "/api/auth/session");
+    await page.goto(`${appOrigin}/auth/login?next=${encodeURIComponent(workspace)}`);
+    await page.waitForURL(`${appOrigin}${workspace}`);
+    expect((await sessionRead).status()).toBe(200);
+    const updates = page.getByRole("button", { name: "Was ist neu schließen" });
+    await page.addLocatorHandler(updates, async () => { await updates.click(); });
+    await page.getByRole("button", { name: /Account-Menü öffnen/ }).click();
+    await page.getByRole("button", { name: "Abmelden", exact: true }).click();
+    if (workspace === "/planning") {
+      await page.getByRole("heading", { name: "Willkommen zurück" }).waitFor();
+      expect(await page.getByRole("button", { name: /Account-Menü öffnen/ }).count()).toBe(0);
+    }
+    else await page.waitForURL(`${appOrigin}/planning`);
+    expect((await current(context)).status).toBe(401);
+    expect(requests.filter(request => request.path.startsWith("/api/")).every(request => !request.authorization)).toBe(true);
+    expect(requests.some(request => request.path === "/auth/v1/token" || request.path === "/auth/v1/user")).toBe(false);
+  } finally { await context.close(); }
+}, 120_000);
+
+
+test("real Google link form returns through PKCE and consumes the existing bound nonce", async () => {
+  workspaceMode = "linking"; loginUser = userA;
+  const { context, page } = await start();
+  try {
+    await page.goto(`${appOrigin}/auth/link-google`);
+    await page.getByRole("button", { name: "Mit Google verknüpfen", exact: true }).click();
+    await expect.poll(async () => page.locator("body").innerText(), { timeout: 30_000 }).toContain("Dein Google-Konto ist verknüpft.");
+    expect(workspaceLinked).toBe(true); expect(linkNonce).toBeNull();
+    expect((await current(context)).body.session.userId).toBe(userA);
+    expect((await context.cookies()).find(cookie => cookie.name === "workspace_link")).toBeUndefined();
+  } finally { await context.close(); }
+}, 120_000);
+
+test("real Google login return records only nonce-matched provider proof and navigates as the bound user", async () => {
+  workspaceMode = "linking"; linkingEnforced = true; workspaceLinked = true; loginUser = userA;
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    const page = await context.newPage(); await page.goto(`${appOrigin}/auth/login?next=/auth/error`);
+    await page.waitForURL(url => url.pathname === "/auth/error");
+    expect(loginRecorded).toBe(true);
+    expect((await current(context)).body.session.userId).toBe(userA);
+    expect((await context.cookies()).find(cookie => cookie.name === "workspace_google_login")).toBeUndefined();
+  } finally { await context.close(); }
+}, 120_000);
+
+
+test("real browser API transport recovers one marked pre-effect rejection and replays the read once", async () => {
+  const { context, page } = await start();
+  const calls: string[] = [];
+  context.on("request", request => { calls.push(new URL(request.url()).pathname); });
+  try {
+    await page.addScriptTag({ content: browserClientCode });
+    await page.evaluate("FounderOpsBrowser.createBrowserSessionAdapter().current()");
+    rejectUserAt = userCalls+2;
+    const result = await page.evaluate<{ status: number; body: unknown }>("FounderOpsBrowser.createBrowserApiClient().requestJson('/api/team-workweek/team').then(result => ({status: result.response.status, body: result.body}))");
+    expect(result.status).toBe(200);
+    expect(calls.filter(call => call === "/api/team-workweek/team")).toHaveLength(2);
+    expect(calls.filter(call => call === "/api/auth/session/recover")).toHaveLength(1);
+    expect((await current(context)).body.session.userId).toBe(userA);
+  } finally { await context.close(); }
+}, 120_000);
+
+
+test("release workspace clears the previous account before its replacement document or delayed data arrives", async () => {
+  loginUser = userA;
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  let releaseDocument: (() => void) | undefined, releaseData: (() => void) | undefined;
+  try {
+    const page = await context.newPage();
+    await page.goto(`${appOrigin}/auth/login?next=/team/platform-releases`);
+    await page.waitForURL(`${appOrigin}/team/platform-releases`);
+    await page.getByText("Synthetic previous account release", { exact: true }).first().waitFor();
+    await context.request.get(`${appOrigin}/auth/error`);
+    await page.waitForLoadState("networkidle");
+    await page.addScriptTag({ content: browserClientCode });
+    await page.evaluate("FounderOpsBrowser.createBrowserSessionAdapter().current()");
+    let observeLeaving: (value: {text: string; account: boolean}) => void;
+    const leavingState = new Promise<{text: string; account: boolean}>(resolve => { observeLeaving = resolve; });
+    await page.exposeBinding("observeLeavingSession", (_source, value) => observeLeaving(value));
+    await page.evaluate("window.addEventListener('beforeunload', () => { void window.observeLeavingSession({text: document.body.innerText, account: !!document.querySelector('[aria-label=\"Account-Menü öffnen\"]')}); })");
+    let observeData: (value: unknown) => void;
+    const oldResult = new Promise<unknown>(resolve => { observeData = resolve; });
+    await page.exposeBinding("observeOldSessionResult", (_source, value) => observeData(value));
+    page.on("requestfailed", request => { if (new URL(request.url()).pathname === "/api/team-workweek/team") observeData({ kind: "aborted" }); });
+    let dataEntered: () => void;
+    const dataStarted = new Promise<void>(resolve => { dataEntered = resolve; });
+    await page.route("**/api/team-workweek/team", async route => {
+      dataEntered(); await heldResponse(release => { releaseData = release; });
+      try { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ secret: "previous-account-delayed-data" }) }); }
+      catch (error) { if (!route.request().failure()) throw error; }
+    });
+    await page.evaluate("FounderOpsBrowser.createBrowserApiClient().requestJson('/api/team-workweek/team').then(result => window.observeOldSessionResult({status: result.response.status, body: result.body})); undefined");
+    await checkpoint("previous account data request started", dataStarted);
+    let documentEntered: () => void;
+    const documentStarted = new Promise<void>(resolve => { documentEntered = resolve; });
+    await page.route("**/team/platform-releases", async route => {
+      documentEntered(); await heldResponse(release => { releaseDocument = release; }); await route.continue();
+    });
+    loginUser = userB;
+    const other = await context.newPage(); await other.bringToFront();
+    await other.goto(`${appOrigin}/auth/login?next=/auth/error`);
+    await other.waitForURL(`${appOrigin}/auth/error`);
+    await checkpoint("release page regained focus", page.bringToFront());
+    await checkpoint("focused page session check scheduled", page.evaluate(() => { window.setTimeout(() => window.dispatchEvent(new Event("focus")), 0); }));
+    const leaving = await checkpoint("replacement document starts after protected content clears", leavingState);
+    expect(leaving.text).not.toContain("Synthetic previous account release");
+    expect(leaving.account).toBe(false);
+    await checkpoint("replacement SSR document requested", documentStarted);
+    releaseData!();
+    const obsolete = await checkpoint("obsolete data discarded", oldResult);
+    expect([JSON.stringify({ kind: "aborted" }), JSON.stringify({ status: 409, body: { error: "Die Sitzung wurde ersetzt.", code: "session_superseded" } })]).toContain(JSON.stringify(obsolete));
+    releaseDocument!();
+    await page.getByText("Synthetic replacement release", { exact: true }).first().waitFor();
+    expect((await current(context)).body.session.userId).toBe(userB);
+  } finally { pendingGates.forEach(release => release()); await context.close(); }
 }, 120_000);
