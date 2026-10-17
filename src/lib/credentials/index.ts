@@ -1,5 +1,8 @@
 import { authorizeGitHubWebhook } from "./internal/github-webhook";
 import type { GitHubWebhookInput, GitHubWebhookResult } from "./github-webhook-types";
+import { authorizeGoogleCalendar, authorizeGoogleCalendarConnection } from "./internal/google-calendar";
+import type { GoogleCalendarCapability, GoogleCalendarInput, GoogleCalendarConnectionInput } from "./types";
+import type { GoogleWorkspaceConnectionStatus } from "@/features/team-workweek/model/google-workspace-connection";
 import { authorizeGoogleChat, googleChatStatus } from "./internal/google-chat";
 import type { GoogleChatDeliveryInput, GoogleChatDeliveryResult, GoogleChatStatusInput, GoogleChatDeliveryStatus } from "./google-chat-types";
 import { authorizeAdministrator } from "./internal/administrator";
@@ -31,13 +34,17 @@ import type { GitHubAppOperationalStatus } from "./types";
 export type {
   CredentialAction, CredentialActionInput, CredentialActionResult,
   CalendarCredentialInput, CalendarCredentialResult, CalendarReadCapability,
-  GitHubInstallationCapability, GitHubUserCapability,
+  GitHubInstallationCapability, GitHubUserCapability, GoogleCalendarCapability,
 } from "./types";
 
 
 export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
 export function authorizeCredentialAction(input: GitHubWebhookInput): Promise<GitHubWebhookResult>;
+export function authorizeCredentialAction(input: GoogleCalendarInput & {action:"google-calendar.workweek"}): Promise<{ok:true;calendar:GoogleCalendarCapability}>;
+export function authorizeCredentialAction(input: GoogleCalendarInput & {action:"google-calendar.connection.status"}): Promise<GoogleWorkspaceConnectionStatus>;
+export function authorizeCredentialAction(input: GoogleCalendarInput & {action:"google-calendar.connection.remove"}): Promise<{ok:true}>;
+export function authorizeCredentialAction(input: GoogleCalendarConnectionInput): Promise<{next:string;redirect?:string}>;
 export function authorizeCredentialAction(input: GoogleChatDeliveryInput): Promise<GoogleChatDeliveryResult>;
 export function authorizeCredentialAction(input: GoogleChatStatusInput): Promise<GoogleChatDeliveryStatus>;
 export function authorizeCredentialAction(input: AdministratorCredentialInput): Promise<AdministratorCredentialResult>;
@@ -62,8 +69,10 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
 
-export function authorizeCredentialAction(input: GitHubWebhookInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput): Promise<GitHubWebhookResult | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus> {
+export function authorizeCredentialAction(input: GitHubWebhookInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | GoogleCalendarInput | GoogleCalendarConnectionInput): Promise<GitHubWebhookResult | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string}> {
   if (input.action === "github.webhook.accept") return input.credential.kind === "github-webhook-request" ? authorizeGitHubWebhook(input) : Promise.resolve({kind:"rejected" as const,status:403 as const,code:"github_webhook_unauthorized",message:"GitHub webhook credential is required."});
+  if (input.action === "google-calendar.connection.start" || input.action === "google-calendar.connection.complete") return authorizeGoogleCalendarConnection(input as GoogleCalendarConnectionInput);
+  if (input.action === "google-calendar.workweek" || input.action === "google-calendar.connection.status" || input.action === "google-calendar.connection.remove") return authorizeGoogleCalendar(input as GoogleCalendarInput);
   if (input.action === "google-chat.status" && input.credential.kind === "google-chat-configuration") return Promise.resolve(googleChatStatus());
   if (input.action.startsWith("google-chat.")) return authorizeGoogleChat(input as GoogleChatDeliveryInput);
   if (["administrator-access.read", "administrator-access.activate", "administrator-access.end", "administration.directory.read", "administration.eligibility.manage", "administration.technical.update"].includes(input.action)) return authorizeAdministrator(input as AdministratorCredentialInput);

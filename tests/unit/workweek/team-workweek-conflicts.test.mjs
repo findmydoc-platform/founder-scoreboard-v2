@@ -4,7 +4,7 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const reconciliationCore = await import("../../../src/features/team-workweek/server/team-workweek-reconciliation-core.ts");
-const oauthCore = await import("../../../src/features/team-workweek/server/google-workspace-oauth-core.ts");
+const oauthCore = await import("../../../src/lib/credentials/internal/google-calendar-protocol.ts");
 const workweekModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
 
 const conflicts = await importTestModule(
@@ -12,8 +12,8 @@ const conflicts = await importTestModule(
   {
     "server-only": {},
     "../model/team-workweek-draft": workweekModel,
-    "./google-workspace-oauth": { getGoogleWorkspaceAccessToken: async () => "token" },
-    "./google-workspace-oauth-core": oauthCore,
+    "./team-workweek-calendar": { calendarForWorkweekOwner: async () => ({request:(url,init)=>fetch(url,init)}) },
+    "@/lib/google-calendar-errors": oauthCore,
     "./team-workweek-reconciliation-core": reconciliationCore,
     "./team-workweek-publication": { publishTeamWorkweek: async () => { throw new Error("unused"); } },
   },

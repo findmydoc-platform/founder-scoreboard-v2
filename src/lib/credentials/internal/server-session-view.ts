@@ -24,8 +24,10 @@ async function planningContext(action: "session.planning" | "session.home") {
   return result;
 }
 
+export function serverPlanningContext() { return planningContext("session.planning"); }
+
 export async function serverPlanningAuth(): Promise<ServerPlanningAuth> {
-  const auth = await planningContext("session.planning");
+  const auth = await serverPlanningContext();
   if (!auth.ok) return auth;
   const authority = await loadSessionAuthority(auth.data, auth.profile);
   return { ok: true, user: auth.user, profile: auth.profile, authority };

@@ -1,12 +1,11 @@
+import type { NextRequest } from "next/server";
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nextMondayIso } from "../model/team-workweek-draft";
-import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
-import {
-  getGoogleWorkspaceAccessToken,
-  removeGoogleWorkspaceConnection,
-} from "./google-workspace-oauth";
+import { GoogleWorkspaceOAuthContractError } from "@/lib/google-calendar-errors";
+import { calendarForWorkweekOwner, removeWorkweekCalendarConnection } from "./team-workweek-calendar";
 import {
   ensureGoogleWorkweekSeriesAbsent,
   observeGoogleWorkweekSeriesForDisconnect,
@@ -180,7 +179,7 @@ async function cleanupOperation({
   operation,
   serviceSupabase,
 }: {
-  accessToken: string;
+  accessToken: GoogleCalendarCapability;
   ensureAbsent: typeof ensureGoogleWorkweekSeriesAbsent;
   ensureTransition: typeof ensureGoogleWorkweekSeriesTransition;
   now: () => Date;
@@ -270,22 +269,24 @@ async function cleanupOperation({
 }
 
 export async function disconnectGoogleWorkspace({
+  request,
   ensureAbsent = ensureGoogleWorkweekSeriesAbsent,
   ensureTransition = ensureGoogleWorkweekSeriesTransition,
-  getAccessToken = getGoogleWorkspaceAccessToken,
+  getAccessToken = calendarForWorkweekOwner,
   now = () => new Date(),
   observe = observeGoogleWorkweekSeriesForDisconnect,
   ownerProfileId,
-  removeConnection = removeGoogleWorkspaceConnection,
+  removeConnection = removeWorkweekCalendarConnection,
   serviceSupabase,
 }: {
   ensureAbsent?: typeof ensureGoogleWorkweekSeriesAbsent;
   ensureTransition?: typeof ensureGoogleWorkweekSeriesTransition;
-  getAccessToken?: typeof getGoogleWorkspaceAccessToken;
+  request?: NextRequest;
+  getAccessToken?: typeof calendarForWorkweekOwner;
   now?: () => Date;
   observe?: typeof observeGoogleWorkweekSeriesForDisconnect;
   ownerProfileId: string;
-  removeConnection?: typeof removeGoogleWorkspaceConnection;
+  removeConnection?: typeof removeWorkweekCalendarConnection;
   serviceSupabase: SupabaseClient;
 }) {
   let operation = await openOperation(serviceSupabase, ownerProfileId);
@@ -294,8 +295,8 @@ export async function disconnectGoogleWorkspace({
     if(pending.error)throw new GoogleWorkspaceDisconnectError("unavailable","Laufende Veröffentlichung konnte nicht geprüft werden.");
     for(const publication of pending.data||[]){
       if(!publication.attempt_generation || !publication.effective_at || Date.parse(publication.effective_at)>now().getTime())throw new GoogleWorkspaceDisconnectError("conflict","Schließe zuerst die laufende Veröffentlichung ab.");
-      let accessToken:string;
-      try{accessToken=await getAccessToken(serviceSupabase,ownerProfileId);}catch{return {state:"cleanup_pending" as const,recovery:"reconnect" as const};}
+      let accessToken:GoogleCalendarCapability;
+      try{accessToken=await getAccessToken(serviceSupabase,ownerProfileId,request);}catch{return {state:"cleanup_pending" as const,recovery:"reconnect" as const};}
       const failure=await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attempt_generation,serviceSupabase,now});
       if(failure)return {state:"cleanup_pending" as const,recovery:failure==="oauth_reconnect_required"?"reconnect" as const:"retry" as const};
       const retired=await serviceSupabase.rpc("retire_compensated_workweek_for_disconnect",{p_owner_profile_id:ownerProfileId,p_publication_id:publication.id,p_generation:publication.attempt_generation});
@@ -316,9 +317,9 @@ export async function disconnectGoogleWorkspace({
   if (!operation) throw new GoogleWorkspaceDisconnectError("unavailable", "Trennung konnte nicht geladen werden.");
 
   if (operation.state === "cleaning" || operation.state === "cleanup_pending") {
-    let accessToken: string;
+    let accessToken: GoogleCalendarCapability;
     try {
-      accessToken = await getAccessToken(serviceSupabase, ownerProfileId);
+      accessToken = await getAccessToken(serviceSupabase, ownerProfileId, request);
     } catch (error) {
       if (error instanceof GoogleWorkspaceOAuthContractError && error.code === "provider_revoked") {
         await markTeamWorkweekExternalRevocation({ ownerProfileId, serviceSupabase, now });
@@ -345,7 +346,7 @@ export async function disconnectGoogleWorkspace({
 
   if (operation.state === "revoke_pending") {
     try {
-      await removeConnection(serviceSupabase, ownerProfileId);
+      await removeConnection(serviceSupabase, ownerProfileId, request, operation.id);
     } catch {
       return { state: "remove_pending" as const, recovery: "retry" as const };
     }

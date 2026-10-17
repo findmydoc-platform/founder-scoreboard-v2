@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getGoogleWorkspaceConnectionStatus } from "@/features/team-workweek/server/google-workspace-oauth";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { requireTeamMember } from "@/lib/authz";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const [connection, cleanup] = await Promise.all([
-      getGoogleWorkspaceConnectionStatus(supabase, profileId),
+      authorizeCredentialAction({credential:{kind:"session-request",request},action:"google-calendar.connection.status",target:{ownerProfileId:profileId}}),
       supabase.from("google_workspace_disconnect_operations").select("id")
         .eq("owner_profile_id", profileId).neq("state", "completed").limit(1),
     ]);
