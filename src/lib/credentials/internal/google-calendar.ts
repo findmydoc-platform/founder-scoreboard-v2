@@ -26,10 +26,11 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
   }
   const snapshot = await calendarSnapshot(profileId);
   if (!snapshot || snapshot.revoked_at) throw denied();
+  const disconnectOperationId = "disconnectOperationId" in input.target ? input.target.disconnectOperationId : undefined;
   async function checkDisconnect() {
-    if (!input.target.disconnectOperationId) return;
+    if (!disconnectOperationId) return;
     const operation = await calendarVault().from("google_workspace_disconnect_operations").select("connection_id")
-      .eq("id",input.target.disconnectOperationId).eq("owner_profile_id",profileId).in("state",["cleaning","cleanup_pending"]).maybeSingle();
+      .eq("id",disconnectOperationId).eq("owner_profile_id",profileId).in("state",["cleaning","cleanup_pending"]).maybeSingle();
     if (operation.error || operation.data?.connection_id !== snapshot!.connection_id) throw denied();
   }
   await checkDisconnect();
