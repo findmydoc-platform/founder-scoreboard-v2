@@ -8,7 +8,7 @@ test("the real attachment route binds an operation to owner and content and reco
   const cipher=createCipheriv("aes-256-gcm",key,Buffer.alloc(12,2));
   const encrypted=Buffer.concat([cipher.update("synthetic-user-access","utf8"),cipher.final()]);
   const ciphertext=[Buffer.alloc(12,2),cipher.getAuthTag(),encrypted].map(part=>part.toString("base64url")).join(".");
-  for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:origin,SUPABASE_URL:origin,NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_ANON_KEY:"synthetic-anon",SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",SUPABASE_SECRET_KEY:"synthetic-service",GITHUB_TOKEN_ENCRYPTION_KEY:key.toString("base64"),REQUIRE_SUPABASE_AUTH:"true"})) vi.stubEnv(name,value);
+  for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:origin,SUPABASE_URL:origin,NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_ANON_KEY:"synthetic-anon",SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",SUPABASE_SECRET_KEY:"synthetic-service",GITHUB_APP_CLIENT_ID:"synthetic-client",GITHUB_APP_CLIENT_SECRET:"synthetic-client-secret",GITHUB_TOKEN_ENCRYPTION_KEY:key.toString("base64"),REQUIRE_SUPABASE_AUTH:"true"})) vi.stubEnv(name,value);
   const encode=value=>Buffer.from(JSON.stringify(value)).toString("base64url");
   const sessionToken=userId=>{
     const unsigned=`${encode({alg:"HS256",typ:"JWT"})}.${encode({iss:`${origin}/auth/v1`,aud:"authenticated",role:"authenticated",sub:userId,session_id:"00000000-0000-4000-8000-000000000001",exp:Math.floor(Date.now()/1000)+3600})}`;
