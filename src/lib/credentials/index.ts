@@ -29,12 +29,13 @@ export type {
 } from "./types";
 
 
+export type { ServerSessionView, SessionLinkPageState } from "./session-types";
+
 export function authorizeCredentialAction(input:GitHubConnectionInput):Promise<GitHubConnectionResult>;
 export function authorizeCredentialAction(input:GitHubAuthoredCredentialInput|GitHubAttachmentInput):Promise<GitHubAuthoredCredentialResult>;
 export function authorizeCredentialAction(input:GitHubSessionInput & {action:"github.connection.status"}):Promise<GitHubConnectionStatus>;
 export function authorizeCredentialAction(input:GitHubSessionInput & {action:"github.connection.disconnect"}):Promise<{ok:true}>;
 
-export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
 export function authorizeCredentialAction(input: SessionPlanningInput): Promise<ServerPlanningAuth>;
 export function authorizeCredentialAction(input: SessionHomeInput): Promise<AppWorkspace>;

@@ -79,7 +79,7 @@ declare configured text; affected integer;
 begin
   select lower(trim(github_login)) into configured from public.profiles where id=p_profile_id for share;
   if p_disconnect then
-    delete from public.github_app_user_tokens where profile_id=p_profile_id and connection_id=p_connection_id and credential_version=p_version;
+    delete from public.github_app_user_tokens where profile_id=p_profile_id and connection_id=p_connection_id;
   else
     update public.github_app_user_tokens set last_used_at=clock_timestamp(),last_error=null,updated_at=clock_timestamp()
     where profile_id=p_profile_id and connection_id=p_connection_id and credential_version=p_version
@@ -102,8 +102,12 @@ begin
   end if;
   return new;
 end $$;
-create trigger invalidate_github_user_association after update of github_login on public.profiles
-for each row execute function public.invalidate_github_user_association();
+do $$ begin
+  if not exists(select 1 from pg_catalog.pg_trigger where tgrelid='public.profiles'::regclass and tgname='invalidate_github_user_association') then
+    create trigger invalidate_github_user_association after update of github_login on public.profiles
+    for each row execute function public.invalidate_github_user_association();
+  end if;
+end $$;
 
 revoke all on function public.store_github_user_connection(text,text,bigint,text,text,timestamptz,timestamptz,uuid,bigint) from public,anon,authenticated;
 revoke all on function public.claim_github_user_refresh(text,uuid,bigint) from public,anon,authenticated;

@@ -71,6 +71,34 @@ Asset downloads stay outside GitHub JSON API semantics. Their private adapter ch
 
 Observable coverage uses the public entry and real comments, native relationship and archive resource workflows with synthetic GitHub responses. It covers warm and expiring access, concurrent acquisition, changed installation, denied target, provider denial/unavailability, read-only access, exact GraphQL restrictions, private diagnostics and ambiguous mutation success followed by resource reconciliation. Existing projection, serial execution and HTTP metadata suites retain their contracts. No production provider or database is needed for this slice. These tests measure controlled protocol behavior and make no claim about production request duration.
 
+## GitHub authored connection migration
+
+Issue #496 moves the GitHub OAuth state, code exchange, configured-account lookup, encryption, vault access, refresh, status and disconnect into private credential adapters. Connect and callback routes use the public entry with the existing server-owned cookie session. A signed state retains its ten-minute deadline, exact Auth user and profile binding and safe relative next destination. The callback verifies the provider account against the current configured login and persists the stable GitHub user ID. The existing unique active-account constraint, AES-256-GCM ciphertext and separate access/refresh expiry remain authoritative. A delayed callback cannot replace a newer connection.
+
+Authored comment and review capabilities identify their durable delivery and claim, rather than accepting a profile chosen by a caller. The module loads the actual source author, active task, repository and issue and verifies the live claim before every resource call. It permits only that issue's comment reads and a marker-bound comment write. Preview access separately verifies the existing operational-lead or dedicated delivery-secret authority. Attachment access verifies the requesting session and the existing task-detail permissions and permits only its exact Contents target. Credentials, SDK clients and decrypted strings never leave these adapters. Installation capabilities still cannot perform user attachment uploads.
+
+The additive migration extends only the existing service-only GitHub vault:
+
+| Added state or operation | Necessity and boundary |
+| --- | --- |
+| `connection_id` | A fresh UUID for each connection prevents disconnect/reconnect ABA and rejects stale callback or resource capabilities |
+| `credential_version` | CAS distinguishes rotation snapshots without treating usage timestamps as credential changes |
+| `refresh_claim_id` | One durable owner can attempt the rotating refresh exchange; another instance cannot reuse the same snapshot |
+| `refresh_claim_expires_at` | A late provider result cannot commit after its ownership deadline; an expired claim is never reassigned |
+| Store RPC | Locks the configured profile and applies the expected connection/version before replacing ciphertext |
+| Claim RPC | Atomically binds profile, connection and version and admits a single provider attempt |
+| Finalize RPC | Atomically checks configured login, connection, version, claim and deadline before replacing ciphertext or recording a safe failure |
+| Use/disconnect RPC | Records use against the current snapshot; disconnect removes only the expected connection, including its legitimately refreshed versions |
+| Profile association trigger | An actual configured-login change invalidates only that profile's GitHub connection and any in-flight refresh |
+
+All new RPC execution is denied to PUBLIC, anon and authenticated. Only the server role can call the four vault RPCs. The narrow trigger function grants no direct Data API action. Existing vault RLS and table grants remain unchanged. Profile-first locks serialize absent-row OAuth CAS as well as rotation and identity changes. The migration preserves existing ciphertext, expiries, IDs and timestamps and can be applied again without replacing connection IDs.
+
+A lost refresh response cannot reveal an unknown rotated secret. The durable claim remains blocked and reconnect is required; no instance blindly exchanges the old refresh again. Successful rotation preserves a non-replaced refresh token and its individual expiry when the provider omits them. Last-used recording and live configured-account checks continue on ordinary access. No resource mutation is retried because of a credential response or renewal.
+
+The browser retains a random attachment operation ID in memory and session storage after an unknown HTTP result. A manual retry of the same task, filename, MIME type and bytes reuses that ID; a confirmed success clears it, so a deliberate later upload receives a new ID. The server binds the target to task, current author, operation ID, filename and MIME type. Legacy callers without an ID use a content-derived target. The ID grants no authority: every request repeats the session, task and owner checks. The resource workflow observes the target and compares Git blob identity before writing. After an uncertain PUT it observes again and accepts only matching content. A later retry also observes first; conflicting content is never overwritten. Comment and review orchestration, markers, serial claims/finalization and reconciliation remain in their existing feature workflows.
+
+Tests exercise real connect/callback routes and the public entry with scripted Auth/GitHub responses. Durable tests use an isolated local vault and real PostgREST for cross-instance contention, stale finalization, reconnect, unknown rotation outcomes, mutable association changes, usage, disconnect and every new RPC's denied user/anonymous access. The real comment outbox proves reconciliation after a lost success response. A migration test checks preservation, repeat application and service-only privileges. These are controlled protocol and database checks, not production timing measurements.
+
 ## Executable dependency rule
 
 `pnpm verify:credentials` runs compiler-resolved fixture projects and the repository check. `pnpm build` also runs the repository check before Next.js compilation. Resolution honors `@/` and relative imports. The check visits imports, re-exports, namespace imports, literal dynamic imports, import-equals and CommonJS. New helpers cannot indirectly expose an internal adapter or a protected legacy entry because the helper's own edge fails. Non-literal runtime loads fail closed. Type-only imports remain usable.

@@ -1,6 +1,6 @@
 import "server-only";
 import { safeRelativeNext } from "../../auth-redirect";
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerServiceRoleSupabase } from "../../supabase-service-role";
 import { githubJson } from "../../github-http";
@@ -236,7 +236,8 @@ async function loadConfiguredGitHubLogin(supabase: SupabaseClient, profileId: st
 const refreshing = new Map<string, Promise<string>>();
 
 async function refreshGitHubAppUserToken(supabase: SupabaseClient, profile: AuthenticatedProfile, row: GitHubAppUserTokenRow) {
-  const key = `${row.connection_id}:${row.credential_version}`;
+  const configuration = createHash("sha256").update(JSON.stringify([requireEnv("GITHUB_APP_CLIENT_ID"),requireEnv("GITHUB_APP_CLIENT_SECRET"),requireEnv("GITHUB_TOKEN_ENCRYPTION_KEY")])).digest("hex");
+  const key = `${configuration}:${row.connection_id}:${row.credential_version}`;
   const existing = refreshing.get(key);
   if (existing) return existing;
   const operation = (async () => {
@@ -265,6 +266,8 @@ async function refreshGitHubAppUserToken(supabase: SupabaseClient, profile: Auth
       }).then(() => undefined, () => undefined);
       throw userTokenRequired("GitHub-Verbindung konnte nicht erneuert werden. Bitte verbinde GitHub einmal neu.");
     }
+    const currentConfiguration = createHash("sha256").update(JSON.stringify([requireEnv("GITHUB_APP_CLIENT_ID"),requireEnv("GITHUB_APP_CLIENT_SECRET"),requireEnv("GITHUB_TOKEN_ENCRYPTION_KEY")])).digest("hex");
+    if(currentConfiguration!==configuration) throw userTokenRequired("GitHub-Konfiguration wurde geändert. Bitte erneut verbinden.");
     const saved = await supabase.rpc("finalize_github_user_refresh", {
       p_profile_id: profile.id, p_connection_id: row.connection_id, p_version: row.credential_version,
       p_claim_id: claim.data, p_access: encryptToken(token.access_token || ""),

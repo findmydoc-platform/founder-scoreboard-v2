@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -142,7 +143,7 @@ async function loadDeliveryContext(supabase: SupabaseClient, delivery: ClaimedDe
   };
 }
 
-export async function previewPendingGitHubComments(supabase: SupabaseClient, limit = 100) {
+export async function previewPendingGitHubComments(supabase: SupabaseClient, request:NextRequest, limit = 100) {
   const preview: GitHubCommentDeliveryPreview = {
     existing: 0,
     missing: 0,
@@ -183,7 +184,7 @@ export async function previewPendingGitHubComments(supabase: SupabaseClient, lim
       const cacheKey = `${profile.id}:${task.github_repo || "findmydoc-platform/management"}:${targetIssueNumber}`;
       let githubComments = commentsByAuthorAndIssue.get(cacheKey);
       if (!githubComments) {
-        const authorToken = (await authorizeCredentialAction({credential:{kind:"github-comment-preview",commentId:comment.id},action:"github.comment.preview"})).github;
+        const authorToken = (await authorizeCredentialAction({credential:{kind:"github-comment-preview",commentId:comment.id,request},action:"github.comment.preview"})).github;
         githubComments = await listGitHubIssueComments(targetIssueNumber, authorToken, task.github_repo);
         commentsByAuthorAndIssue.set(cacheKey, githubComments);
       }

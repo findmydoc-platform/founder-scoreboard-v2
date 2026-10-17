@@ -6,7 +6,15 @@ import pg from "pg";
 import {expect,it,vi} from "vitest";
 import {importTestModule} from "../helpers/vitest-module.mjs";
 
-async function fixture(run:(f:any)=>Promise<void>) {
+type VaultRow={connection_id:string;credential_version:number;github_user_id:number;encrypted_access_token:string;last_used_at:string|null;refresh_claim_id:string|null;revoked_at:string|null};
+type RpcResult={status:number;body:unknown};
+type Fixture={database:pg.Client;local:Record<string,string>;id:string;userId:string;commentId:number;claim:string;
+  encrypt(value:string):string;setProvider(fn:(request:Request)=>Promise<Response>):void;
+  requests:Array<{url:string;method:string;authorization:string|null}>;
+  authorize():Promise<import("../../src/lib/credentials/types").GitHubAuthoredCredentialResult>;
+  row():Promise<VaultRow>;rpc(name:string,body:unknown,credential?:string):Promise<RpcResult>;store(access?:string):Promise<RpcResult>;
+};
+async function fixture(run:(f:Fixture)=>Promise<void>) {
   const {stdout}=await promisify(execFile)(resolve("node_modules/.bin/supabase"),["status","-o","json"]);
   const local=JSON.parse(stdout);
   const api=new URL(local.API_URL);
@@ -20,17 +28,20 @@ async function fixture(run:(f:any)=>Promise<void>) {
     const bytes=Buffer.concat([cipher.update(value,"utf8"),cipher.final()]);
     return [iv,cipher.getAuthTag(),bytes].map(part=>part.toString("base64url")).join(".");
   }
-  let provider=async(_request:Request)=>Response.json({message:"unexpected synthetic provider"},{status:500});
-  const f:any={database,local,id,userId,encrypt,setProvider:(fn:any)=>{provider=fn;},requests:[]};
+  let provider:(request:Request)=>Promise<Response>=async()=>Response.json({message:"unexpected synthetic provider"},{status:500});
+  const f:Fixture={database,local,id,userId,encrypt,setProvider:fn=>{provider=fn;},requests:[],commentId:0,claim:"",
+    authorize:async()=>{throw new Error("Fixture not initialized");},row:async()=>{throw new Error("Fixture not initialized");},
+    rpc:async()=>{throw new Error("Fixture not initialized");},store:async()=>{throw new Error("Fixture not initialized");}};
   try {
     await database.query("insert into auth.users(id,email,role,aud,email_confirmed_at) values ($1,$2,'authenticated','authenticated',now())",[userId,`${id}@example.test`]);
     await database.query("insert into public.profiles(id,auth_user_id,name,platform_role,github_login) values ($1,$2,'Synthetic GitHub author','founder','synthetic-author')",[id,userId]);
     await database.query("insert into public.projects(id,name) values ($1,'Synthetic GitHub project')",[id]);
-    await database.query("insert into public.tasks(id,project_id,title,status,approval_status,owner,assignee,github_repo,github_issue_number) values ($1,$1,'Synthetic authored task','Geplant','approved',$1,$1,'findmydoc-platform/management',1)",[id]);
+    await database.query("insert into public.tasks(id,project_id,title,status,priority,task_type,approval_status,score_relevant,github_issue_sync_status) values ($2,$1,'Synthetic initiative','Offen','P2','initiative','approved',false,'not_applicable')",[id,`${id}-initiative`]);
+    await database.query("insert into public.tasks(id,project_id,title,status,priority,approval_status,score_relevant,parent_task_id,owner,assignee,github_repo,github_issue_number) values ($1,$1,'Synthetic authored task','Offen','P2','approved',false,$2,$1,$1,'findmydoc-platform/management',1)",[id,`${id}-initiative`]);
     const comment=await database.query("insert into public.task_comments(task_id,profile_id,comment) values ($1,$1,'Synthetic authored comment') returning id",[id]);
     f.commentId=Number(comment.rows[0].id);f.claim=randomUUID();
-    await database.query("update public.task_comment_github_deliveries set status='processing',lock_token=$2,locked_at=clock_timestamp() where task_comment_id=$1",[f.commentId,f.claim]);
-    await database.query("insert into public.github_app_user_tokens(profile_id,github_login,github_user_id,encrypted_access_token,encrypted_refresh_token,access_token_expires_at,refresh_token_expires_at) values ($1,'synthetic-author',$2,$3,$4,now()+interval '1 hour',now()+interval '2 hours')",[id,Math.floor(Math.random()*100000000)+100000,encrypt("synthetic-old-access"),encrypt("synthetic-refresh")]);
+    await database.query("insert into public.task_comment_github_deliveries(task_comment_id,task_id,author_profile_id,github_issue_number,status,lock_token,locked_at) values($1,$2,$2,1,'processing',$3,clock_timestamp())",[f.commentId,id,f.claim]);
+    await database.query("insert into public.github_app_user_tokens(profile_id,github_login,github_user_id,encrypted_access_token,encrypted_refresh_token,access_token_expires_at,refresh_token_expires_at) values ($1,'synthetic-author',$2,$3,$4,now()+interval '1 hour',now()+interval '2 hours')",[id,42424242,encrypt("synthetic-old-access"),encrypt("synthetic-refresh")]);
     for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:local.API_URL,SUPABASE_URL:local.API_URL,SUPABASE_SERVICE_ROLE_KEY:local.SERVICE_ROLE_KEY,GITHUB_TOKEN_ENCRYPTION_KEY:key.toString("base64"),GITHUB_APP_CLIENT_ID:"synthetic-client",GITHUB_APP_CLIENT_SECRET:"synthetic-client-secret"})) vi.stubEnv(name,value as string);
     vi.stubGlobal("fetch",async(input:RequestInfo|URL,options?:RequestInit)=>{
       const request=new Request(input,options),url=new URL(request.url);
@@ -55,7 +66,9 @@ async function fixture(run:(f:any)=>Promise<void>) {
     vi.resetModules();await run(f);
   } finally {
     vi.unstubAllGlobals();vi.unstubAllEnvs();vi.resetModules();
+    await database.query("select set_config('founderops.trash_lifecycle_write','on',false)");
     await database.query("delete from public.tasks where id=$1",[id]);
+    await database.query("delete from public.tasks where id=$1",[`${id}-initiative`]);
     await database.query("delete from public.projects where id=$1",[id]);
     await database.query("delete from public.profiles where id=$1",[id]);
     await database.query("delete from auth.users where id=$1",[userId]);
@@ -85,7 +98,7 @@ it("separate instances cannot rotate the same snapshot or overwrite a newer conn
   const pending=new Promise<void>(resolve=>{release=resolve;}),entered=new Promise<void>(resolve=>{started=resolve;});
   let exchanges=0;
   f.setProvider(async()=>{exchanges++;started();await pending;return Response.json({access_token:"synthetic-rotated",refresh_token:"synthetic-rotated-refresh",expires_in:3600,refresh_token_expires_in:7200});});
-  const first=f.authorize();await entered;
+  const first=f.authorize();await Promise.race([entered,first.then(()=>{throw new Error("Expected controlled refresh exchange");})]);
   const claimed=await f.row();
   vi.resetModules();
   await expect(f.authorize()).rejects.toThrow("gerade erneuert");

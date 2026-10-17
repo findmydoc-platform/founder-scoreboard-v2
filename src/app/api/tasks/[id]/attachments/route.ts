@@ -91,12 +91,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!allowedMimeTypes.has(file.type)) return apiError("Dateityp wird noch nicht unterstützt.", 415);
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const identity=createHash("sha256").update(`${permission.profile?.id || ""}\0${file.name}\0${file.type}\0`).update(buffer).digest("hex");
+  const suppliedOperation = request.headers.get("idempotency-key")?.trim() || "";
+  if (suppliedOperation && !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(suppliedOperation)) return apiError("Upload-Operations-ID ist ungültig.", 400);
+  // Existing callers without an operation retain deterministic content reconciliation.
+  const identity = createHash("sha256").update(`${permission.profile?.id || ""}\0${suppliedOperation}\0${file.name}\0${file.type}\0`).update(suppliedOperation ? "" : buffer).digest("hex");
   const path = `.fmd-attachments/tasks/${id}/${identity}-${safeFileName(file.name)}`;
-  let githubUserToken:GitHubUserCapability;
+  let github: GitHubUserCapability;
   try {
-    githubUserToken=(await authorizeCredentialAction({credential:{kind:"session-request",request},action:"github.attachment.write",
-      target:{taskId:id,path,repository:task.github_repo || defaultGitHubRepository}})).github;
+    github = (await authorizeCredentialAction({
+      credential: { kind: "session-request", request },
+      action: "github.attachment.write",
+      target: { taskId: id, path, repository: task.github_repo || defaultGitHubRepository },
+    })).github;
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.", error instanceof GitHubAppUserTokenBusyError ? 503 : error instanceof GitHubAppUserTokenRequiredError ? 401 : 403);
   }
@@ -104,13 +110,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   let uploaded;
   try {
     uploaded = await uploadGitHubAttachment(
-    path,
-    buffer,
-    githubUserToken,
-    `Add attachment for Founder Scoreboard task ${id}`,
-    task.github_repo,
-  );
-  } catch { return apiError("GitHub-Anhang konnte nicht sicher gespeichert werden. Bitte denselben Anhang erneut senden.",502); }
+      path,
+      buffer,
+      github,
+      `Add attachment for Founder Scoreboard task ${id}`,
+      task.github_repo,
+    );
+  } catch {
+    return apiError("GitHub-Anhang konnte nicht sicher gespeichert werden. Bitte denselben Anhang erneut senden.", 502);
+  }
   const markdown = isImageType(file.type)
     ? `![${file.name}](${uploaded.rawUrl})`
     : `[${file.name}](${uploaded.rawUrl})`;

@@ -1,3 +1,4 @@
+import { GitHubConnectionError } from "@/lib/github-app-errors";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import { getServerSupabase } from "@/lib/supabase";
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.redirect(new URL(next, request.url));
-  } catch {
-    return redirectError(request, next);
+  } catch(error) {
+    return redirectError(request, error instanceof GitHubConnectionError ? error.next : next);
   }
 }

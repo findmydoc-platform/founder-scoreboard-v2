@@ -1,6 +1,7 @@
+import { FOUNDEROPS_DELIVERY_SECRET_HEADER, validateDeliverySecret } from "../../delivery-auth";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import "server-only";
-import { githubRequest, type GitHubRequestOptions } from "../../github-http";
+import { GitHubApiError, githubRequest, type GitHubRequestOptions } from "../../github-http";
 import { requireAllowedGitHubRepository } from "../../github-repositories";
 import { GitHubAppUserTokenRequiredError } from "../../github-app-errors";
 import type { AuthenticatedProfile } from "../../types";
@@ -10,6 +11,13 @@ import { boundUserConnection, getGitHubUserTokenForProfile, getGitHubUserConnect
 
 function required() { return new GitHubAppUserTokenRequiredError("GitHub-App-Verbindung fehlt. Bitte verbinde GitHub einmal neu."); }
 async function authoredContext(input: GitHubAuthoredCredentialInput) {
+  if(input.credential.kind==="github-comment-preview") {
+    const request=input.credential.request;
+    const secret=request.headers.get(FOUNDEROPS_DELIVERY_SECRET_HEADER)?.trim() || "";
+    if(secret ? !validateDeliverySecret(secret) : !(await authorizeLegacySession({credential:{kind:"session-request",request},action:"operations.lead"})).ok) {
+      throw new Error("Keine Berechtigung für die GitHub-Vorschau.");
+    }
+  }
   const supabase=userVault();
   const review=input.credential.kind==="github-review-delivery";
   const id=input.credential.kind==="github-review-delivery" ? input.credential.reviewId : input.credential.commentId;
@@ -41,13 +49,19 @@ async function capability(profileId:string,check:()=>Promise<void>,permitted:(ur
     const current=await boundUserConnection(profileId);
     if(current.connection_id!==connection.connection_id) throw required();
     const token=await getGitHubUserTokenForProfile(userVault(),profile);
-    return githubRequest(value,{...options,token} as GitHubRequestOptions);
+    try { return await githubRequest(value,{...options,token} as GitHubRequestOptions); }
+    catch(error) {
+      if(error instanceof GitHubApiError) throw new GitHubApiError(error.message.split(token).join("[redacted]"),error);
+      throw error;
+    }
   }});
 }
 export async function authorizeAuthoredGitHub(input:GitHubAuthoredCredentialInput):Promise<GitHubAuthoredCredentialResult> {
   const expected = input.action === "github.comment.deliver" ? "github-comment-delivery" : input.action === "github.comment.preview" ? "github-comment-preview" : "github-review-delivery";
   if(input.credential.kind!==expected) throw required();
-  input=structuredClone(input);
+  input = input.action === "github.comment.preview"
+    ? { action: input.action, credential: { ...input.credential } }
+    : structuredClone(input);
   const context=await authoredContext(input);
   const prefix=`/repos/${context.repository}/issues/${context.issue}/comments`;
   const github=await capability(context.profileId,async()=> {

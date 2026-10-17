@@ -6,7 +6,7 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const githubJsonCalls = [];
 let githubJsonImplementation = async () => { throw new Error("Unexpected synthetic GitHub request."); };
-const githubApp = await importTestModule("src/lib/github-app-errors.ts");
+const githubApp = await import("../../../src/lib/github-app-errors.ts");
 const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
 const installation = () => authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: ["findmydoc-platform/management"] } });
 const operationalStatus = (options = {}) => authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.installation.status", ...options });

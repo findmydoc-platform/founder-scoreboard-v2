@@ -107,7 +107,7 @@ export type GitHubUserCapability = Readonly<{
 }>;
 export type GitHubAuthoredCredentialInput =
   | { credential: {kind:"github-comment-delivery";commentId:number;claimToken:string};action:"github.comment.deliver" }
-  | { credential: {kind:"github-comment-preview";commentId:number};action:"github.comment.preview" }
+  | { credential: {kind:"github-comment-preview";commentId:number;request:NextRequest};action:"github.comment.preview" }
   | { credential: {kind:"github-review-delivery";reviewId:number;claimToken:string};action:"github.review.deliver" };
 export type GitHubAuthoredCredentialResult = {ok:true;github:GitHubUserCapability};
 export type GitHubConnectionInput = {[Action in "github.connection.start"|"github.connection.complete"]:{credential:{kind:"github-oauth-request";request:NextRequest};action:Action}}["github.connection.start"|"github.connection.complete"];
