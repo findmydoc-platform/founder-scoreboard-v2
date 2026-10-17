@@ -54,7 +54,7 @@ it("inserts a current correction before the prepared Monday without changing tha
       return Response.json(providerEvents.get(payload.id));
     }) as typeof fetch;
     for (const effect of publication.effects as PreparedWorkweekEffect[]) {
-      const result = await ensureGoogleWorkweekEffect({ accessToken: "controlled-token", effect, fetchImpl: provider });
+      const result = await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider });
       expect(result.state).toBe("confirmed");
       if (result.state !== "confirmed") throw new Error("Provider confirmation required");
       await client.query("set local role service_role");
@@ -82,7 +82,7 @@ it("inserts a current correction before the prepared Monday without changing tha
     expect(expired.attemptGeneration).toBe(1);
     await client.query("set local role service_role");
     for (const effect of expired.effects as PreparedWorkweekEffect[]) {
-      const restored = await cleanupGoogleWorkweekEffect({ accessToken: "controlled-token", effect, fetchImpl: provider });
+      const restored = await cleanupGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider });
       expect(restored.state).toBe("confirmed");
       if (restored.state !== "confirmed") throw new Error("Restoration confirmation required");
       await client.query("select public.confirm_team_workweek_effect_restoration($1,$2,$3)", [effect.id, effect.generation, restored.etag]);
@@ -93,7 +93,7 @@ it("inserts a current correction before the prepared Monday without changing tha
     expect(new Date(resumed.effectiveAt).getTime()).toBeGreaterThan(Date.now());
     expect(resumed.successorPublicationId).toBe(successor.rows[0].id);
     for (const effect of resumed.effects as PreparedWorkweekEffect[]) {
-      const result = await ensureGoogleWorkweekEffect({ accessToken: "controlled-token", effect, fetchImpl: provider });
+      const result = await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider });
       expect(result.state).toBe("confirmed");
       if (result.state !== "confirmed") throw new Error("Provider confirmation required");
       await client.query("set local role service_role");

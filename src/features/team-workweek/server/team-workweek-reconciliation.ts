@@ -1,10 +1,12 @@
+import type { NextRequest } from "next/server";
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
 
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nextVersionMondayIso } from "../model/team-workweek-draft";
-import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
-import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
+import { GoogleWorkspaceOAuthContractError } from "@/lib/google-calendar-errors";
+import { calendarForWorkweekOwner } from "./team-workweek-calendar";
 import {
   observeGoogleWorkweek,
   type GoogleWorkweekObservation,
@@ -113,6 +115,7 @@ function delayedStatus(
 }
 
 async function finishPublication({
+  request,
   now,
   previousLastSyncAt,
   publish,
@@ -121,6 +124,7 @@ async function finishPublication({
   userSupabase,
   versionId,
 }: {
+  request?: NextRequest;
   now: () => Date;
   previousLastSyncAt: string | null;
   publish: typeof publishTeamWorkweek;
@@ -131,7 +135,7 @@ async function finishPublication({
 }): Promise<ReconciliationStatus> {
   let publication: Awaited<ReturnType<typeof publishTeamWorkweek>>;
   try {
-    publication = await publish({ serviceSupabase, userSupabase, versionId, now });
+    publication = await publish({ request, serviceSupabase, userSupabase, versionId, now });
   } catch (error) {
     if (error instanceof TeamWorkweekPublicationError && error.code === "forbidden") {
       throw new TeamWorkweekReconciliationError("forbidden", error.message);
@@ -174,7 +178,8 @@ function errorClassForObservation(
 }
 
 export async function reconcileTeamWorkweek({
-  getAccessToken = getGoogleWorkspaceAccessToken,
+  request,
+  getAccessToken = calendarForWorkweekOwner,
   observe = observeGoogleWorkweek,
   now = () => new Date(),
   ownerProfileId,
@@ -182,7 +187,8 @@ export async function reconcileTeamWorkweek({
   serviceSupabase,
   userSupabase,
 }: {
-  getAccessToken?: typeof getGoogleWorkspaceAccessToken;
+  request?: NextRequest;
+  getAccessToken?: typeof calendarForWorkweekOwner;
   observe?: typeof observeGoogleWorkweek;
   now?: () => Date;
   ownerProfileId: string;
@@ -225,6 +231,7 @@ export async function reconcileTeamWorkweek({
       throw new TeamWorkweekReconciliationError("unavailable", "Ausgangsversion des Abgleichs ist nicht verfügbar.");
     }
     return await finishPublication({
+      request,
       now,
       previousLastSyncAt: predecessorResponse?.data?.last_sync_at || null,
       publish,
@@ -241,9 +248,9 @@ export async function reconcileTeamWorkweek({
   if(!context) throw new TeamWorkweekReconciliationError("not_found","Noch keine aktuell gültige App-Arbeitswoche vorhanden.");
   const {publication,series,logicalWindows}=context;
 
-  let accessToken: string;
+  let accessToken: GoogleCalendarCapability;
   try {
-    accessToken = await getAccessToken(serviceSupabase, ownerProfileId);
+    accessToken = await getAccessToken(serviceSupabase, ownerProfileId, request);
   } catch (error) {
     const errorClass: ReconciliationErrorClass = error instanceof GoogleWorkspaceOAuthContractError
       && error.code === "reconnect_required"
@@ -311,6 +318,7 @@ export async function reconcileTeamWorkweek({
   }
 
   return await finishPublication({
+      request,
     now,
     previousLastSyncAt: publication.last_sync_at,
     publish,

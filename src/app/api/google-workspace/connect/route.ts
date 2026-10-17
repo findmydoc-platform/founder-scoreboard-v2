@@ -1,26 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import {
-  buildGoogleWorkspaceAuthorizationUrl,
-  createBoundGoogleWorkspaceState,
-} from "@/features/team-workweek/server/google-workspace-oauth";
-import { getServerPlanningAuth } from "@/lib/planning-auth-server";
-
+import { GoogleWorkspaceOAuthContractError } from "@/lib/google-calendar-errors";
+import { authorizeCredentialAction } from "@/lib/credentials";
 export const dynamic = "force-dynamic";
-
 export async function GET(request: NextRequest) {
-  const auth = await getServerPlanningAuth();
-  if (!auth.ok || !auth.profile) {
-    return NextResponse.redirect(new URL("/auth/error?next=%2Fteam", request.url));
-  }
   try {
-    const redirectUri = new URL("/api/google-workspace/callback", request.url).toString();
-    const state = createBoundGoogleWorkspaceState({
-      userId: auth.user.id,
-      profileId: auth.profile.id,
-      next: request.nextUrl.searchParams.get("next") || "/team",
-    });
-    return NextResponse.redirect(buildGoogleWorkspaceAuthorizationUrl({ redirectUri, state }));
-  } catch {
-    return NextResponse.redirect(new URL("/team?googleWorkspace=configuration_error", request.url));
+    const result = await authorizeCredentialAction({credential:{kind:"google-calendar-oauth-request",request},action:"google-calendar.connection.start"});
+    return NextResponse.redirect(result.redirect!);
+  } catch (error) {
+    if (error instanceof GoogleWorkspaceOAuthContractError && error.code === "reconnect_required") return NextResponse.redirect(new URL("/auth/error?next=%2Fteam",request.url));
+    return NextResponse.redirect(new URL("/team?googleWorkspace=configuration_error",request.url));
   }
 }

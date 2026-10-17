@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const publication = await resolveTeamWorkweekConflict({
+    const publication = await resolveTeamWorkweekConflict({request,
       conflictId: input.conflictId,
       conflictRevision: Number(input.conflictRevision),
       decision: input.decision,

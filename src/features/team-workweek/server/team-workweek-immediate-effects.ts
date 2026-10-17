@@ -1,3 +1,4 @@
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import type { GoogleWorkweekSeriesResult } from "./team-workweek-publication-core";
 
 export type WorkweekGooglePayload = Readonly<{
@@ -43,7 +44,7 @@ export type WorkweekProviderWriteJournal = Readonly<{
   outcome: (state: "settled" | "uncertain") => Promise<void>;
 }>;
 
-async function mutate(fetchImpl: typeof fetch, url: string, init: RequestInit, journal?: WorkweekProviderWriteJournal) {
+async function mutate(fetchImpl: GoogleCalendarCapability["request"], url: string, init: RequestInit, journal?: WorkweekProviderWriteJournal) {
   await journal?.beforeWrite();
   try {
     const response = await fetchImpl(url, init);
@@ -83,10 +84,10 @@ function errorFor(response: Response): GoogleWorkweekSeriesResult {
     ? "oauth_reconnect_required" : "provider_unavailable" };
 }
 
-async function observe(fetchImpl: typeof fetch, accessToken: string, effect: PreparedWorkweekEffect, restoring = false, cancellationFence = false) {
+async function observe(fetchImpl: GoogleCalendarCapability["request"], accessToken: GoogleCalendarCapability, effect: PreparedWorkweekEffect, restoring = false, cancellationFence = false) {
   try {
     const response = await fetchImpl(endpoint(effect), {
-      headers: { authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: AbortSignal.timeout(8_000),
+      headers: { }, cache: "no-store", signal: AbortSignal.timeout(8_000),
     });
     if (response.status === 404 || response.status === 410) return { state: "absent" as const };
     if (!response.ok) return errorFor(response);
@@ -105,8 +106,8 @@ async function observe(fetchImpl: typeof fetch, accessToken: string, effect: Pre
   }
 }
 
-export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImpl = fetch, now = () => new Date(), writeJournal, readOnly = false, cancellationFence = false }: {
-  accessToken: string; effect: PreparedWorkweekEffect; fetchImpl?: typeof fetch; now?: () => Date; writeJournal?: WorkweekProviderWriteJournal; readOnly?: boolean; cancellationFence?: boolean;
+export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImpl = accessToken.request, now = () => new Date(), writeJournal, readOnly = false, cancellationFence = false }: {
+  accessToken: GoogleCalendarCapability; effect: PreparedWorkweekEffect; fetchImpl?: GoogleCalendarCapability["request"]; now?: () => Date; writeJournal?: WorkweekProviderWriteJournal; readOnly?: boolean; cancellationFence?: boolean;
 }): Promise<GoogleWorkweekSeriesResult> {
   const observed = await observe(fetchImpl, accessToken, effect, false, cancellationFence);
   if (observed.state === "cleaned") return {state:"delayed",errorClass:"provider_identity_mismatch"};
@@ -120,7 +121,7 @@ export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImp
   if (updating && observed.state === "absent") return { state: "delayed", errorClass: "provider_identity_mismatch" };
   try {
     const response = await mutate(fetchImpl, updating ? `${endpoint(effect)}?sendUpdates=none` : endpoint(effect, true), {
-      method: updating ? "PUT" : "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json", ...(updating ? { "if-match": effect.expectedEtag! } : {}) },
+      method: updating ? "PUT" : "POST", headers: { "content-type": "application/json", ...(updating ? { "if-match": effect.expectedEtag! } : {}) },
       body: JSON.stringify(effect.payload), cache: "no-store", signal: AbortSignal.timeout(8_000),
     }, writeJournal);
     if (response.ok) {
@@ -140,8 +141,8 @@ export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImp
     : recovered.state === "delayed" ? recovered : { state: "delayed", errorClass: "provider_unavailable" };
 }
 
-export async function cleanupGoogleWorkweekEffect({ accessToken, effect, fetchImpl = fetch, now = () => new Date(), writeJournal, readOnly = false }: {
-  accessToken: string; effect: PreparedWorkweekEffect; fetchImpl?: typeof fetch; now?: () => Date; writeJournal?: WorkweekProviderWriteJournal; readOnly?: boolean;
+export async function cleanupGoogleWorkweekEffect({ accessToken, effect, fetchImpl = accessToken.request, now = () => new Date(), writeJournal, readOnly = false }: {
+  accessToken: GoogleCalendarCapability; effect: PreparedWorkweekEffect; fetchImpl?: GoogleCalendarCapability["request"]; now?: () => Date; writeJournal?: WorkweekProviderWriteJournal; readOnly?: boolean;
 }): Promise<GoogleWorkweekSeriesResult & { preserved?: boolean }> {
   if (effect.cleanupDisposition) return cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJournal,readOnly});
   if (effect.instanceOf && !effect.expectedEtag) return {state:"confirmed",etag:"unbound",observedAt:now().toISOString()};
@@ -156,7 +157,7 @@ export async function cleanupGoogleWorkweekEffect({ accessToken, effect, fetchIm
   try {
     if (readOnly) return { state: "delayed", errorClass: "provider_unavailable" };
     const response = await mutate(fetchImpl, `${endpoint(effect)}?sendUpdates=none`, {
-      method: updating ? "PUT" : "DELETE", headers: { authorization: `Bearer ${accessToken}`, "if-match": observed.etag,
+      method: updating ? "PUT" : "DELETE", headers: { "if-match": observed.etag,
         ...(updating ? {"content-type":"application/json"} : {}) },
       ...(updating ? {body:JSON.stringify({...effect.expectedPayload,status:"confirmed"})} : {}),
       cache: "no-store", signal: AbortSignal.timeout(8_000),
@@ -180,7 +181,7 @@ export async function cleanupGoogleWorkweekEffect({ accessToken, effect, fetchIm
     : recovered.state === "delayed" ? recovered : { state: "delayed", errorClass: "provider_unavailable" };
 }
 
-async function cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJournal,readOnly}:{accessToken:string;effect:PreparedWorkweekEffect;fetchImpl:typeof fetch;now:()=>Date;writeJournal?:WorkweekProviderWriteJournal;readOnly?:boolean}):Promise<GoogleWorkweekSeriesResult & {preserved?:boolean}> {
+async function cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJournal,readOnly}:{accessToken:GoogleCalendarCapability;effect:PreparedWorkweekEffect;fetchImpl:GoogleCalendarCapability["request"];now:()=>Date;writeJournal?:WorkweekProviderWriteJournal;readOnly?:boolean}):Promise<GoogleWorkweekSeriesResult & {preserved?:boolean}> {
   if(effect.instanceOf && !effect.expectedEtag && effect.kind!=="cleanup_crossing")return {state:"confirmed",etag:"unbound",observedAt:now().toISOString(),preserved:false};
   const observed=await observe(fetchImpl,accessToken,effect,true);
   const preservation=effect.cleanupDisposition==="preserve" || effect.cleanupDisposition==="retain";
@@ -201,7 +202,7 @@ async function cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJourn
   if(effect.cleanupDisposition==="delete" && now().getTime()>=new Date(effect.payload.start.dateTime).getTime()) return {state:"delayed",errorClass:"provider_identity_mismatch"};
   const deleting=effect.cleanupDisposition==="delete";
   try {
-    const response=await mutate(fetchImpl,`${endpoint(effect)}?sendUpdates=none`,{method:deleting?"DELETE":"PUT",headers:{authorization:`Bearer ${accessToken}`,"if-match":observed.etag,...(!deleting?{"content-type":"application/json"}:{})},...(!deleting?{body:JSON.stringify(effect.cleanupPayload)}:{}),cache:"no-store",signal:AbortSignal.timeout(8_000)},writeJournal);
+    const response=await mutate(fetchImpl,`${endpoint(effect)}?sendUpdates=none`,{method:deleting?"DELETE":"PUT",headers:{"if-match":observed.etag,...(!deleting?{"content-type":"application/json"}:{})},...(!deleting?{body:JSON.stringify(effect.cleanupPayload)}:{}),cache:"no-store",signal:AbortSignal.timeout(8_000)},writeJournal);
     if(response.ok){
       if(deleting)return confirmed(observed.etag,false);
       const event=await response.json().catch(()=>null) as ObservedEvent|null;
@@ -218,14 +219,14 @@ async function cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJourn
   return recovered.state==="delayed"?recovered:{state:"delayed",errorClass:"provider_unavailable"};
 }
 
-export async function discoverGoogleWorkweekInstance({accessToken,effect,fetchImpl=fetch}: {
-  accessToken:string; effect:PreparedWorkweekEffect; fetchImpl?:typeof fetch;
+export async function discoverGoogleWorkweekInstance({accessToken,effect,fetchImpl=accessToken.request}: {
+  accessToken:GoogleCalendarCapability; effect:PreparedWorkweekEffect; fetchImpl?:GoogleCalendarCapability["request"];
 }): Promise<Readonly<{state:"observed";eventId:string;etag:string;originalPayload:WorkweekGooglePayload}> | Extract<GoogleWorkweekSeriesResult,{state:"delayed"}>> {
   if (!effect.instanceOf || !effect.originalStart || !effect.expectedPayload) return {state:"delayed",errorClass:"provider_identity_mismatch"};
   const url=new URL(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(effect.instanceOf)}/instances`);
   url.searchParams.set("originalStart",effect.originalStart);url.searchParams.set("showDeleted","true");url.searchParams.set("maxResults","10");
   try {
-    const response=await fetchImpl(url,{headers:{authorization:`Bearer ${accessToken}`},cache:"no-store",signal:AbortSignal.timeout(8_000)});
+    const response=await fetchImpl(url,{headers:{},cache:"no-store",signal:AbortSignal.timeout(8_000)});
     if (!response.ok) return {state:"delayed",errorClass:response.status===401||response.status===403?"oauth_reconnect_required":"provider_unavailable"};
     const body=await response.json() as {items?:Array<ObservedEvent & {recurringEventId?:string;originalStartTime?:{dateTime?:string}}>};
     const instance=(body.items||[]).find(item=>item.recurringEventId===effect.instanceOf && new Date(item.originalStartTime?.dateTime||"").getTime()===new Date(effect.originalStart!).getTime());
@@ -240,9 +241,9 @@ export async function discoverGoogleWorkweekInstance({accessToken,effect,fetchIm
 
 
 /** Resolve a journaled dispatch using provider identity/CAS, never elapsed time alone. */
-export async function recoverGoogleWorkweekWrite({accessToken,effect,purpose,abandon=false,fetchImpl=fetch,now=()=>new Date(),writeJournal}:{
-  accessToken:string;effect:PreparedWorkweekEffect;purpose:"publish"|"cleanup";abandon?:boolean;
-  fetchImpl?:typeof fetch;now?:()=>Date;writeJournal:WorkweekProviderWriteJournal;
+export async function recoverGoogleWorkweekWrite({accessToken,effect,purpose,abandon=false,fetchImpl=accessToken.request,now=()=>new Date(),writeJournal}:{
+  accessToken:GoogleCalendarCapability;effect:PreparedWorkweekEffect;purpose:"publish"|"cleanup";abandon?:boolean;
+  fetchImpl?:GoogleCalendarCapability["request"];now?:()=>Date;writeJournal:WorkweekProviderWriteJournal;
 }):Promise<GoogleWorkweekSeriesResult> {
   if(purpose==="cleanup")return cleanupGoogleWorkweekEffect({accessToken,effect,fetchImpl,now,writeJournal});
   if(!abandon)return ensureGoogleWorkweekEffect({accessToken,effect,fetchImpl,now,writeJournal});
@@ -259,7 +260,7 @@ export async function recoverGoogleWorkweekWrite({accessToken,effect,purpose,aba
   if(observed.state!=="baseline" || !effect.expectedPayload || !effect.expectedEtag)return observed.state==="delayed"?observed:{state:"delayed",errorClass:"provider_identity_mismatch"};
   try{
     const response=await mutate(fetchImpl,`${endpoint(effect)}?sendUpdates=none`,{
-      method:"PUT",headers:{authorization:`Bearer ${accessToken}`,"content-type":"application/json","if-match":effect.expectedEtag},
+      method:"PUT",headers:{"content-type":"application/json","if-match":effect.expectedEtag},
       body:JSON.stringify({...effect.expectedPayload,extendedProperties:{private:{...effect.expectedPayload.extendedProperties.private,founderopsWorkweekRecoveryFence:effect.id}}}),cache:"no-store",signal:AbortSignal.timeout(8_000),
     },writeJournal);
     if(!response.ok && response.status!==412 && response.status<500)return errorFor(response);

@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   try {
     const ownerProfileId = context.permission.profile?.id;
     if (!ownerProfileId) return apiError("Gebundenes Teamprofil erforderlich.", 403);
-    const preflight = await detectTeamWorkweekParallelConflict({
+    const preflight = await detectTeamWorkweekParallelConflict({request,
       ownerProfileId,
       serviceSupabase,
       versionId: input.versionId,
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         conflict: preflight.conflict,
       }, { status: 409 });
     }
-    const publication = await publishTeamWorkweek({
+    const publication = await publishTeamWorkweek({request,
       serviceSupabase,
       userSupabase,
       versionId: input.versionId,
