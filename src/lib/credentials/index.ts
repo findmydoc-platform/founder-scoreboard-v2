@@ -1,3 +1,5 @@
+import { authorizeGoogleChat, googleChatStatus } from "./internal/google-chat";
+import type { GoogleChatDeliveryInput, GoogleChatDeliveryResult, GoogleChatStatusInput, GoogleChatDeliveryStatus } from "./google-chat-types";
 import { authorizeAdministrator } from "./internal/administrator";
 import type { AdministratorCredentialInput, AdministratorCredentialResult } from "./types";
 
@@ -33,6 +35,8 @@ export type {
 
 export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
+export function authorizeCredentialAction(input: GoogleChatDeliveryInput): Promise<GoogleChatDeliveryResult>;
+export function authorizeCredentialAction(input: GoogleChatStatusInput): Promise<GoogleChatDeliveryStatus>;
 export function authorizeCredentialAction(input: AdministratorCredentialInput): Promise<AdministratorCredentialResult>;
 export function authorizeCredentialAction(input:GitHubConnectionInput):Promise<GitHubConnectionResult>;
 export function authorizeCredentialAction(input:GitHubAuthoredCredentialInput|GitHubAttachmentInput):Promise<GitHubAuthoredCredentialResult>;
@@ -55,7 +59,9 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
 
-export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult> {
+export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus> {
+  if (input.action === "google-chat.status" && input.credential.kind === "google-chat-configuration") return Promise.resolve(googleChatStatus());
+  if (input.action.startsWith("google-chat.")) return authorizeGoogleChat(input as GoogleChatDeliveryInput);
   if (["administrator-access.read", "administrator-access.activate", "administrator-access.end", "administration.directory.read", "administration.eligibility.manage", "administration.technical.update"].includes(input.action)) return authorizeAdministrator(input as AdministratorCredentialInput);
   if (input.credential.kind === "server-cookies") {
     if (input.action === "session.planning") return serverPlanningAuth();

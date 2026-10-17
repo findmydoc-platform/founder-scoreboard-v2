@@ -115,7 +115,7 @@ export function createSupabaseAdministrationReadModel(
       } : directory.project ? { ...directory.project, mentionTeamSlug: "" } : null;
       const notificationEvents = ((eventResult.data || []) as DbNotificationEvent[]).map(mapNotificationEvent);
       const notificationDeliveries = ((deliveryResult.data || []) as DbNotificationDelivery[]).map(mapNotificationDelivery);
-      const googleChatStatus = googleChatDeliveryStatus();
+      const googleChatStatus = await googleChatDeliveryStatus();
       const revision = [
         ...(directory.people || []).map((profile) => profile.activeUntil || String(profile.eligible)),
         ...notificationEvents.map((event) => event.createdAt),
