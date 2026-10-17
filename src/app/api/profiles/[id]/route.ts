@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanOptionalDate, cleanOptionalText } from "@/lib/api-input";
 import { apiError, authzError } from "@/lib/api-response";
-import { bearerToken, requireCEO } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase-user";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import type { PlatformRole } from "@/lib/types";
 
 type GovernancePayload = {
@@ -35,11 +34,9 @@ function governanceRoleLabel(role: PlatformRole) {
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const permission = await requireCEO(request);
+  const { id } = await context.params;
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "account.governance.update", targetProfileId: id });
   if (!permission.ok) return authzError(permission);
-  const token = bearerToken(request);
-  const supabase = token ? getSupabaseForToken(token) : null;
-  if (!supabase) return apiError("Anmeldung erforderlich.", 401);
   const payload = await request.json().catch(() => null) as GovernancePayload | null;
   if (!payload) return apiError("Profiländerung fehlt.", 400);
   const patch: Record<string, string | number | null> = {};
@@ -75,14 +72,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     patch.deputy_active_until = null;
   }
 
-  const { id } = await context.params;
   const metadata = auditRequestMetadata(request);
-  const { data, error } = await supabase.rpc("update_profile_governance_transaction", {
-    p_profile_id: id,
-    p_profile_patch: patch,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent,
-  });
+  const { data, error } = await permission.account.updateGovernance(patch, metadata);
   if (error?.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
   if (error?.code === "23514") return apiError("Genau ein CEO muss gesetzt bleiben.", 409);
   if (error?.code === "22023") return apiError("Profiländerung ist ungültig.", 400);

@@ -12,7 +12,7 @@ export function administratorProtocol(initial = {}) {
   for (const name of ["GITHUB_APP_ID", "GITHUB_APP_INSTALLATION_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_APP_PRIVATE_KEY_PATH", "GOOGLE_CHAT_WEBHOOK_URL", "GOOGLE_CHAT_PRIVATE_KEY", "GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL"]) vi.stubEnv(name, "");
   const state = { role: "founder", profile: true, snapshot: { eligible: true, active: true, expiresAt: new Date(Date.now() + 3600000).toISOString() }, responses: {}, ...initial };
   const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const unsigned = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ iss: `${origin}/auth/v1`, aud: "authenticated", role: "authenticated", sub: userId, session_id: "00000000-0000-4000-8000-000000000001", exp: Math.floor(Date.now() / 1000) + 3600 })}`;
+  const unsigned = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ iss: `${origin}/auth/v1`, aud: "authenticated", role: "authenticated", sub: userId, session_id: "00000000-0000-4000-8000-000000000001", exp: Math.floor(Date.now() / 1000) + 3600, ...initial.claims })}`;
   const token = `${unsigned}.${createHmac("sha256", "synthetic-test-key").update(unsigned).digest("base64url")}`;
   const calls = [];
   vi.stubGlobal("fetch", async (input, init) => {

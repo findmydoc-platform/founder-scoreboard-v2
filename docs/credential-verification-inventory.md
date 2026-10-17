@@ -39,7 +39,8 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | `src/app/api/maintenance/*` | Dedicated maintenance secret | Technical action separation and existing maintenance claims | #509 |
 | `src/app/api/notifications/deliver`, GitHub review/comment delivery | Dedicated delivery secret, outgoing provider credentials | Delivery authentication, attempts, claim consumption and safe recovery | #510 |
 | Planning boards, tasks, sprint and trash workflows | Session action and resource context | Fixed action, actor and resource operations; existing planning/deputy matrix, approval and revision checks. See the concrete caller inventory below. | #504 |
-| Account, settings, profile, administration data and preview endpoints | Session identity/capability plus bounded resource target | Existing owner filters, administrator expiry and preview access | #493, #505 |
+| Account settings, profile data/SSR, notification preferences, tour acknowledgement, governance, GitHub project settings, preview storage and human release browsing/seen | Exact session identity, fixed action and captured target | Fixed actor and allowed fields; original role/administrator deadlines; existing profile visibility, storage path and recipient filters | #505 implemented; disposable account parity passed |
+
 | Interactive intake, AI-assisted task creation and bulk creation | No current app entry or model credential consumer found | Preserve distinct browser creation, existing-task Sprint assignment and personal-token batch contracts; do not invent an intake action | #507 inventory complete; absent app actions N/A by user approval |
 | `src/app/api/auth/login-mode`, auth error pages, explicitly inert responses | Public configuration or no usable credential | Preserve public/inert contract; never treat these as authenticated actors | #491, #505 |
 | `src/lib/local-development-auth.ts`, local-login route and dev profile override | Development-only simulated profile | Existing host/environment gate; deny deployed entry points | #489, #491 |
@@ -71,10 +72,22 @@ One exact temporary edge from `authz.ts` to `credentials/internal/legacy-session
 
 | Existing compatibility API | Remaining production consumers |
 | --- | --- |
-| `requireTeamMemberForSession(client)` | `src/app/api/tools/preview-image/route.ts` |
-| `resolveAdministratorAccessFailure(client)` | `src/app/api/founderops-settings/github-project/route.ts`, `src/app/api/notifications/deliver/route.ts` |
+| `requireTeamMemberForSession(client)` | No remaining preview consumer after #505; compatibility export removal remains #502 |
+| `resolveAdministratorAccessFailure(client)` | `src/app/api/notifications/deliver/route.ts` |
 
 The existing server-only `bearerToken(request)` compatibility getter now selects the real request transport through the internal resolver. An explicit Authorization header takes precedence over cookies, and protected cookie mutations retain origin checks. The getter remains only for existing sibling resource migrations. No new credential kind or client-argument public action is introduced. #504/#505/#510 migrate their consumers; #502 removes the compatibility exports and exact allowance.
+
+## Account and human release migration
+
+Issue #505 adds fixed `account.profile.read`, `account.settings.update`, `account.notifications.update`, `account.tour.acknowledge`, `account.governance.update`, `account.github-project.update`, `account.preview.read`, `account.preview.write`, `releases.read` and `releases.seen` actions. The adapter captures the action, actor, target, effective configuration and original authority deadline before awaited work. Every resource dispatch rechecks the live session/profile/role binding, then checks the original known deadlines and configuration immediately before the request. A constrained user operation retains its separate permit and releases it even when the final synchronous check denies dispatch.
+
+Settings, preference, tour and profile read-model operations retain the existing service-key/anonymous fallback. Governance and administrator GitHub project transactions retain the exact user credential and database enforcement. Settings fields are restricted to focus, profile color/duplicate mode and notification enablement; UI preferences and catalog notification events keep their existing field sets. Governance exposes only its existing governance fields and remains CEO-only. Preference writes use the existing own-profile or CEO/deputy rule, Google Chat channel and conflict key. These personal preferences confer no delivery/claim authority.
+
+The profile projection preserves its existing team people and preference visibility. HTTP and profile SSR use the same fixed projection. SSR compares the earlier shell actor and role with the data capability before loading it. Human release reads retain the 200-release limit, published ordering, active-task/PR-link projections and current-recipient notification filter. Seen updates bind the captured version and authenticated recipient, with `seen_at IS NULL`. Release ingest remains a separate technical action owned by #501.
+
+Preview GET retains cookie-only authentication, validated existing paths, strict service storage and private/no-store/nosniff responses. Upload retains contributor admission, the existing MIME/size limits, generated paths and no overwrite. Profile/release header authority runs before both shared cache hits and misses; the original cache keys, tags and 300-second lifetime remain. A cache miss uses this invocation's private guarded service. No capability returns a client, credential, provider transport or query builder. The public login-mode and inert incoming Chat contracts remain unchanged; readiness and unrelated supporting workspace resources remain separate migration families.
+
+Focused evidence uses actual application handlers, SSR entries and the public credential seam with synthetic Auth, Directory, PostgREST and Storage responses. A separate guarded disposable test crosses the actual settings, preference, tour and governance routes with real PostgREST mutations, two profile owners, an unmapped credential and session revocation. Its Auth-user responses are scripted against live disposable session state and its JWTs are signed locally; this does not prove production provider behavior. The fixture removes its own actors and restores the captured Workspace configuration.
 
 ## GitHub installation migration
 
