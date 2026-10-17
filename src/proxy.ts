@@ -1,14 +1,12 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { createProxyAuthSupabase } from "@/lib/supabase-server";
+import { authorizeCredentialAction } from "@/lib/credentials";
 
 export async function proxy(request: NextRequest) {
   if (request.nextUrl.pathname === "/api/github/webhooks") {
     return NextResponse.next();
   }
-  const { supabase, response } = createProxyAuthSupabase(request);
-  if (supabase) await supabase.auth.getUser();
-  return response;
+  return authorizeCredentialAction({ credential: { kind: "http-request", request }, action: "session.proxy" });
 }
 
 export const config = {

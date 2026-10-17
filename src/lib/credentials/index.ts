@@ -1,3 +1,6 @@
+import type { SessionLifecycleInput, SessionCookieResponseInput, SessionPlanningInput, SessionHomeInput, SessionLinkPageInput, ServerPlanningAuth, AppWorkspace, SessionLinkPageState } from "./session-types";
+import { serverPlanningAuth, serverHomeWorkspace, serverLinkPage } from "./internal/server-session-view";
+import { executeSessionLifecycle } from "./internal/session-lifecycle";
 import "server-only";
 import { authorizePersonalPlanning, authorizePersonalPlanningTokenManagement } from "./internal/personal-planning";
 import { authorizeCalendar } from "./internal/session";
@@ -18,6 +21,13 @@ export type {
   GitHubInstallationCapability,
 } from "./types";
 
+export type { ServerSessionView, SessionLinkPageState } from "./session-types";
+
+export function authorizeCredentialAction(input: SessionPlanningInput): Promise<ServerPlanningAuth>;
+export function authorizeCredentialAction(input: SessionHomeInput): Promise<AppWorkspace>;
+export function authorizeCredentialAction(input: SessionLinkPageInput): Promise<SessionLinkPageState>;
+export function authorizeCredentialAction(input: SessionCookieResponseInput): Promise<Response>;
+export function authorizeCredentialAction(input: SessionLifecycleInput): Promise<Response>;
 export function authorizeCredentialAction(input: PersonalPlanningTokenManagementInput): Promise<PersonalPlanningTokenManagementResult>;
 export function authorizeCredentialAction(input: PersonalPlanningCredentialInput): Promise<PersonalPlanningCredentialResult>;
 export function authorizeCredentialAction(input: GitHubInstallationInput): Promise<GitHubInstallationResult>;
@@ -26,7 +36,14 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {action: "workweek.private.write"}): Promise<PrivateDraftWriteResult>;
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
-export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult> {
+export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState> {
+  if (input.credential.kind === "server-cookies") {
+    if (input.action === "session.planning") return serverPlanningAuth();
+    if (input.action === "session.home") return serverHomeWorkspace();
+    if (input.action === "session.link-page") return serverLinkPage();
+    return executeSessionLifecycle(input as SessionCookieResponseInput);
+  }
+  if (input.credential.kind === "http-request") return executeSessionLifecycle(input as SessionLifecycleInput);
   if (input.action.startsWith("github.") && input.credential.kind !== "github-installation") {
     return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
   }

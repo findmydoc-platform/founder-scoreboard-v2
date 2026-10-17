@@ -1,15 +1,6 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { authOrigin } from "@/lib/auth-redirect";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
+import type { NextRequest } from "next/server";
+import { authorizeCredentialAction } from "@/lib/credentials";
 
-export async function POST(request: NextRequest) {
-  try {
-    const origin = authOrigin();
-    if (request.headers.get("origin") !== origin) return new NextResponse(null, { status: 403 });
-    const supabase = await getServerAuthSupabase();
-    await supabase?.auth.signOut({ scope: "local" });
-    return NextResponse.redirect(new URL("/auth/link-google", origin), 303);
-  } catch {
-    return new NextResponse(null, { status: 503 });
-  }
+export function POST(request: NextRequest) {
+  return authorizeCredentialAction({ credential: { kind: "http-request", request }, action: "session.logout-local" });
 }

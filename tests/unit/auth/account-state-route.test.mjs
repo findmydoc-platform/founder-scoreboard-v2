@@ -1,5 +1,7 @@
+vi.mock("server-only", () => ({}));
+vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], get: () => undefined, set: () => {} }) }));
 import assert from "node:assert/strict";
-import { beforeEach, test } from "vitest";
+import { beforeEach, test, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const googleIdentity = {
