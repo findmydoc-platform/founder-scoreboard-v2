@@ -19,13 +19,15 @@ const route = await importTestModule("src/app/api/github-app/status/route.ts", {
   "@/lib/authz": {
     requireTeamMember: async () => ({ profile: { id: "profile-1" } }),
   },
-  "@/lib/github-app": {
-    getGitHubAppOperationalStatus: async () => ({
+  "@/lib/credentials": {
+    authorizeCredentialAction: async () => ({
       available: false,
       state: "unavailable",
       description: "safe",
       nextStep: "safe",
     }),
+  },
+  "@/lib/github-app": {
     getGitHubUserConnectionStatus: async () => ({ connected: true, needsReconnect: false, expiresAt: null }),
   },
   "@/lib/github-comment-delivery": {

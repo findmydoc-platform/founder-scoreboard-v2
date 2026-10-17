@@ -1,8 +1,9 @@
+import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
 import { NextResponse, type NextRequest } from "next/server";
 import { invalidSessionBeforeEffectErrorCode } from "@/lib/auth-error-contract";
 import { requireTeamMember } from "@/lib/authz";
 import { requireJsonApiContext } from "@/lib/api-response";
-import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { authorizeCredentialAction, type GitHubInstallationCapability } from "@/lib/credentials";
 import {
   parseTaskGitHubSyncCommand,
   taskGitHubSyncFailure,
@@ -74,9 +75,9 @@ export async function POST(
     return syncResponse(taskGitHubSyncFailure("github_sync_invalid_target", "Strategische Planungselemente werden nicht mit GitHub synchronisiert."));
   }
 
-  let installationToken = "";
+  let installationToken: GitHubInstallationCapability;
   try {
-    installationToken = await getGitHubAppInstallationToken();
+    installationToken = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.projection.apply", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
   } catch (error) {
     return syncResponse(taskGitHubSyncFailure(
       "github_sync_unavailable",

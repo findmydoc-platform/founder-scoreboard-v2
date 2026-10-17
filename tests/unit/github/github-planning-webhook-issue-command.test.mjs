@@ -56,7 +56,7 @@ const processor = await importTestModule("src/lib/github-planning-webhook.ts", {
     }),
   },
   "./github": { getGitHubIssue: async () => ({}) },
-  "./github-app": { getGitHubAppInstallationToken: async () => "token" },
+  "./credentials": { authorizeCredentialAction: async () => ({ github: "token" }) },
   "./github-sync/project-observation": {
     loadGitHubPlanningIssueFieldObservation: async () => ({}),
     loadGitHubPlanningProjectObservation: async () => ({}),

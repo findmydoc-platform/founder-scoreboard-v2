@@ -1,8 +1,10 @@
+import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
+import type { GitHubResourceCredential } from "./github-http";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getGitHubAppInstallationToken } from "./github-app";
+import { authorizeCredentialAction } from "./credentials";
 import { closeGitHubIssueNotPlanned, reopenGitHubIssueForPlanning } from "./planning-github-lifecycle-github";
 
 export type PlanningGitHubLifecycleJob = {
@@ -70,7 +72,7 @@ async function finalizeJob(
   return data as PlanningGitHubLifecycleJob;
 }
 
-async function processJob(job: PlanningGitHubLifecycleJob, token: string) {
+async function processJob(job: PlanningGitHubLifecycleJob, token: GitHubResourceCredential) {
   if (!job.github_issue_number || !job.github_repo) {
     throw new Error("GitHub Issue-Verknüpfung fehlt.");
   }
@@ -97,12 +99,10 @@ async function processJob(job: PlanningGitHubLifecycleJob, token: string) {
 export async function drainPlanningGitHubLifecycleJobs({
   supabase,
   limit = 25,
-  githubToken,
   scope,
 }: {
   supabase: SupabaseClient;
   limit?: number;
-  githubToken?: string;
   scope?: PlanningGitHubLifecycleScope;
 }): Promise<PlanningGitHubLifecycleSummary> {
   const summary: PlanningGitHubLifecycleSummary = {
@@ -152,24 +152,22 @@ export async function drainPlanningGitHubLifecycleJobs({
   }
   if (!deliverableJobs.length) return summary;
 
-  let token = githubToken?.trim() || "";
-  if (!token) {
-    try {
-      token = await getGitHubAppInstallationToken();
-    } catch (tokenError) {
-      const message = errorMessage(tokenError);
-      for (const job of deliverableJobs) {
-        try {
-          const finalized = await finalizeJob(supabase, job.id, lockToken, false, { error: message });
-          if (finalized.status === "failed") summary.failed += 1;
-          else summary.retryScheduled += 1;
-        } catch (finalizeError) {
-          summary.failed += 1;
-          summary.errors.push({ jobId: job.id, message: errorMessage(finalizeError) });
-        }
+  let token: GitHubResourceCredential;
+  try {
+    token = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.lifecycle.apply", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
+  } catch (tokenError) {
+    const message = errorMessage(tokenError);
+    for (const job of deliverableJobs) {
+      try {
+        const finalized = await finalizeJob(supabase, job.id, lockToken, false, { error: message });
+        if (finalized.status === "failed") summary.failed += 1;
+        else summary.retryScheduled += 1;
+      } catch (finalizeError) {
+        summary.failed += 1;
+        summary.errors.push({ jobId: job.id, message: errorMessage(finalizeError) });
       }
-      return summary;
     }
+    return summary;
   }
 
   for (const job of deliverableJobs) {

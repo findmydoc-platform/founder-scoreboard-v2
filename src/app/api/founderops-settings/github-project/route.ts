@@ -1,8 +1,9 @@
+import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { apiError, authzError } from "@/lib/api-response";
 import { bearerToken, requireActiveAdministrator, resolveAdministratorAccessFailure } from "@/lib/authz";
-import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { validGitHubTeamSlug, validateGitHubMentionTeam } from "@/lib/github-mention-team";
 import { validateFounderOpsGitHubProject } from "@/lib/github-project";
 import { validGitHubProjectNumber, validGitHubProjectOwner } from "@/lib/github-project-config";
@@ -50,10 +51,14 @@ export async function PATCH(request: NextRequest) {
   let validation;
   let mentionTeam = null;
   try {
-    const token = await getGitHubAppInstallationToken();
+    const token = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.project.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES, organization: payload.githubProjectOwner } })).github;
     validation = await validateFounderOpsGitHubProject(payload.githubProjectOwner, payload.githubProjectNumber, token);
     if (mentionTeamSlug) {
-      mentionTeam = await validateGitHubMentionTeam(payload.githubProjectOwner, mentionTeamSlug, token);
+      const teamAccess = await authorizeCredentialAction({
+        credential: { kind: "github-installation" }, action: "github.team.read",
+        target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES, organization: payload.githubProjectOwner },
+      });
+      mentionTeam = await validateGitHubMentionTeam(payload.githubProjectOwner, mentionTeamSlug, teamAccess.github);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "GitHub Project konnte nicht geprüft werden.";

@@ -1,30 +1,29 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { join } from "node:path";
-import { beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const githubJsonCalls = [];
-let githubJsonImplementation = async () => {
-  throw new Error("GitHub network access was not expected.");
-};
-
-const githubApp = await importTestModule("src/lib/github-app.ts", {
-  "./github-http": {
-    githubJson: async (...args) => {
-      githubJsonCalls.push(args);
-      return githubJsonImplementation(...args);
-    },
-  },
-});
+let githubJsonImplementation = async () => { throw new Error("Unexpected synthetic GitHub request."); };
+const githubApp = await importTestModule("src/lib/github-app.ts");
+const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+const installation = () => authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: ["findmydoc-platform/management"] } });
+const operationalStatus = (options = {}) => authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.installation.status", ...options });
 
 const validPrivateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
   format: "pem",
   type: "pkcs8",
 }).toString();
 
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+
 beforeEach(() => {
   githubJsonCalls.length = 0;
+  vi.stubGlobal("fetch", async (url, options) => {
+    githubJsonCalls.push([String(url), options]);
+    return Response.json(await githubJsonImplementation(url, options));
+  });
   githubJsonImplementation = async () => {
     throw new Error("GitHub network access was not expected.");
   };
@@ -99,7 +98,7 @@ async function withGitHubAppEnvironment(overrides, run) {
 async function expectSafeConfigurationFailure(overrides, forbiddenText) {
   await withGitHubAppEnvironment(overrides, async () => {
     await assert.rejects(
-      githubApp.getGitHubAppInstallationToken(),
+      installation(),
       (error) => {
         assert.ok(error instanceof githubApp.GitHubAppConfigurationError);
         assert.equal(error.message.includes(forbiddenText), false);
@@ -165,7 +164,7 @@ test("GitHub App operational status classifies invalid runtime configuration wit
   const invalidKey = "not-a-private-key";
 
   await withGitHubAppEnvironment({ GITHUB_APP_PRIVATE_KEY: invalidKey }, async () => {
-    const status = await githubApp.getGitHubAppOperationalStatus();
+    const status = await operationalStatus();
     assert.deepEqual(status, {
       available: false,
       state: "configuration_required",
@@ -182,7 +181,7 @@ test("GitHub App operational status verifies the installation with a read-only r
   githubJsonImplementation = async () => ({ id: 456 });
 
   await withGitHubAppEnvironment({ GITHUB_APP_PRIVATE_KEY: validPrivateKey }, async () => {
-    assert.deepEqual(await githubApp.getGitHubAppOperationalStatus(), {
+    assert.deepEqual(await operationalStatus(), {
       available: true,
       state: "ready",
       description: "Die GitHub App ist erreichbar und die Installation ist verfügbar.",
@@ -193,8 +192,7 @@ test("GitHub App operational status verifies the installation with a read-only r
   assert.equal(githubJsonCalls.length, 1);
   assert.equal(githubJsonCalls[0][0], "https://api.github.com/app/installations/456");
   assert.equal(githubJsonCalls[0][1].method, "GET");
-  assert.equal(githubJsonCalls[0][1].operation, "read");
-  assert.ok(githubJsonCalls[0][1].signal instanceof AbortSignal);
+    assert.ok(githubJsonCalls[0][1].signal instanceof AbortSignal);
 });
 
 test("GitHub App operational status aborts a stalled read and returns a safe failure", async () => {
@@ -207,7 +205,10 @@ test("GitHub App operational status aborts a stalled read and returns a safe fai
   });
 
   await withGitHubAppEnvironment({ GITHUB_APP_PRIVATE_KEY: validPrivateKey }, async () => {
-    assert.deepEqual(await githubApp.getGitHubAppOperationalStatus({ timeoutMs: 1 }), {
+    vi.useFakeTimers();
+    const pending = operationalStatus();
+    await vi.advanceTimersByTimeAsync(4_000);
+    assert.deepEqual(await pending, {
       available: false,
       state: "unavailable",
       description: "Die GitHub-App-Installation ist momentan nicht erreichbar.",

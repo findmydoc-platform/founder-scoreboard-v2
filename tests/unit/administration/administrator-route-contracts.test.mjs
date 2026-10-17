@@ -54,7 +54,7 @@ const githubRoute = await importTestModule("src/app/api/founderops-settings/gith
       error: "Der Adminzugang ist abgelaufen.",
     }),
   },
-  "@/lib/github-app": { getGitHubAppInstallationToken: async () => "installation-token" },
+  "@/lib/credentials": { authorizeCredentialAction: async () => ({ github: "installation-token" }) },
   "@/lib/github-project": {
     validateFounderOpsGitHubProject: async () => ({
       title: "FounderOps",
@@ -66,10 +66,6 @@ const githubRoute = await importTestModule("src/app/api/founderops-settings/gith
   "@/lib/github-mention-team": {
     validGitHubTeamSlug: (value) => typeof value === "string" && value.length > 0,
     validateGitHubMentionTeam: async () => ({ slug: "founderops", name: "FounderOps", url: "https://github.com/orgs/findmydoc-platform/teams/founderops", notificationsEnabled: true }),
-  },
-  "@/lib/github-project-config": {
-    validGitHubProjectNumber: (value) => Number.isInteger(value) && value > 0,
-    validGitHubProjectOwner: (value) => typeof value === "string" && value.length > 0,
   },
   "@/lib/supabase": { getSupabaseForToken: () => supabase },
 });

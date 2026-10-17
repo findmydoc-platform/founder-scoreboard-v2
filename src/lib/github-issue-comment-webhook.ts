@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { githubCommentMarkerId, githubReviewMarkerId } from "@/features/tasks/model/github-comment-delivery-policy";
 import { resolveGitHubCommentMentionSnapshot } from "@/lib/github-comment-mention-snapshot";
 import { loadGitHubMentionTeam } from "@/lib/github-mention-team-config";
-import { getGitHubAppInstallationToken } from "./github-app";
+import { authorizeCredentialAction } from "./credentials";
 import { getGitHubIssueComment, isGitHubIssueApiUrl } from "./github";
 
 type GitHubIssueCommentAction = "created" | "edited" | "deleted";
@@ -266,7 +266,7 @@ export function createSupabaseGitHubIssueCommentWebhookStore(
 async function loadCurrentGitHubIssueComment(
   delivery: ClaimedGitHubIssueCommentDelivery,
 ): Promise<GitHubIssueCommentSnapshot> {
-  const token = await getGitHubAppInstallationToken();
+  const token = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: [delivery.repositoryFullName] } })).github;
   const comment = await getGitHubIssueComment(
     delivery.commentId,
     token,

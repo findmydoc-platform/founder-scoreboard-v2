@@ -47,10 +47,10 @@ const route = await importTestModule(
     "@/lib/api-response": {
       requireJsonApiContext: async () => apiContext,
     },
-    "@/lib/github-app": {
-      getGitHubAppInstallationToken: async () => {
+    "@/lib/credentials": {
+      authorizeCredentialAction: async () => {
         tokenCalls += 1;
-        return "installation-token";
+        return { github: "installation-token" };
       },
     },
     "@/lib/github-sync/contract": contract,

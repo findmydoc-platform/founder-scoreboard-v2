@@ -133,8 +133,8 @@ const { createSupabaseAdministrationReadModel } = await importTestModule(
   "src/features/administration/server/administration-read-model-supabase.ts",
   {
     "server-only": {},
-    "@/lib/github-app": {
-      getGitHubAppOperationalStatus: async () => {
+    "@/lib/credentials": {
+      authorizeCredentialAction: async () => {
         githubAppStatusCalls += 1;
         return githubAppStatusResult;
       },

@@ -1,14 +1,15 @@
+import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getGitHubAppInstallationToken } from "./github-app";
+import { authorizeCredentialAction } from "./credentials";
 import { validateGitHubMentionTeam } from "./github-mention-team";
 import type { MentionTeam } from "./mentions";
 
 export async function resolveGitHubMentionTeam(organization: string, teamSlug: string): Promise<MentionTeam | undefined> {
   if (!organization || !teamSlug) return undefined;
   try {
-    const token = await getGitHubAppInstallationToken();
+    const token = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.team.read", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES, organization } })).github;
     const team = await validateGitHubMentionTeam(organization, teamSlug, token);
     return { organization, teamSlug: team.slug };
   } catch {
