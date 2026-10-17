@@ -1,7 +1,9 @@
 "use client";
 
 import { SiGithub, SiGoogle } from "@icons-pack/react-simple-icons";
+import type { ServerSessionView } from "@/lib/credentials/session-types";
 import type { User } from "@supabase/supabase-js";
+type DisplayUser = ServerSessionView["user"] | User;
 import { Check, Settings, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
@@ -14,8 +16,8 @@ export type TestProfileMenuOption = {
   label: string;
 };
 
-function getUserMetadataString(user: User | null, key: string) {
-  const value = user?.user_metadata?.[key];
+function getUserMetadataString(user: DisplayUser | null, key: string) {
+  const value = user && "user_metadata" in user ? user.user_metadata?.[key] : undefined;
   return typeof value === "string" ? value : "";
 }
 
@@ -37,7 +39,7 @@ export function AuthControl({
   onTestProfileChange,
   variant = "header",
 }: {
-  user: User | null;
+  user: DisplayUser | null;
   busy: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -81,12 +83,12 @@ export function AuthControl({
   const googleLogin = loginMode !== "legacy";
   const workspaceAccount = workspaceAccountResult?.userId === user?.id ? workspaceAccountResult : null;
 
-  const githubLogin = getUserMetadataString(user, "user_name") || getUserMetadataString(user, "preferred_username");
-  const avatarUrl = loginMode === "legacy" ? getUserMetadataString(user, "avatar_url") : workspaceAccount?.linked ? workspaceAccount.workspaceAvatarUrl || "" : "";
+  const githubLogin = (user && "githubLogin" in user ? user.githubLogin : "") || getUserMetadataString(user, "user_name") || getUserMetadataString(user, "preferred_username");
+  const avatarUrl = loginMode === "legacy" ? (user && "avatarUrl" in user ? user.avatarUrl : "") || getUserMetadataString(user, "avatar_url") : workspaceAccount?.linked ? workspaceAccount.workspaceAvatarUrl || "" : "";
   const avatarAlt = loginMode === "legacy" ? "" : "Google-Profilbild";
   const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
   const visibleAvatarUrl = avatarUrl === failedAvatarUrl ? "" : avatarUrl;
-  const displayName = getUserMetadataString(user, "full_name") || getUserMetadataString(user, "name") || githubLogin || user?.email || "";
+  const displayName = (user && "displayName" in user ? user.displayName : "") || getUserMetadataString(user, "full_name") || getUserMetadataString(user, "name") || githubLogin || user?.email || "";
   const activeTestProfile = testProfileOptions.find((profile) => profile.id === activeTestProfileId) || null;
 
   useEffect(() => {

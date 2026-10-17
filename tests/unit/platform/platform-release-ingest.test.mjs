@@ -1,3 +1,5 @@
+import { vi as mockRuntime } from "vitest";
+mockRuntime.mock("server-only", () => ({}));
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
