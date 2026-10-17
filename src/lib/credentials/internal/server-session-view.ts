@@ -2,7 +2,7 @@ import "server-only";
 import type { NextRequest } from "next/server";
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { rootWorkspaceFromPreference, type AppWorkspace } from "@/features/planning/model/workspace-routes";
-import { loadSessionAuthority } from "../../authz";
+import { loadSessionAuthority } from "./session-policy";
 import { assertGoogleSession, requireWorkspaceAccess, workspaceAccessContext } from "../../workspace-access";
 import { authorizeSessionData } from "./session";
 import { getServerAuthSupabase } from "./cookie-client";

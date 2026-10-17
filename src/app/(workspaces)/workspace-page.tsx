@@ -1,3 +1,4 @@
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { WorkspaceDataUnavailablePage } from "@/features/planning/templates/workspace-data-unavailable-page";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
@@ -22,7 +23,6 @@ import { loadNotionDecisionLog } from "@/lib/notion-decision-log";
 import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 import { redirect } from "next/navigation";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
 
@@ -142,10 +142,10 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
 
     if (initialWorkspace === "administration") {
       if (!auth.authority?.capabilities.manageAdministratorEligibility) redirect("/planning");
-      const sessionSupabase = await getServerAuthSupabase();
-      if (!sessionSupabase) return <WorkspaceDataUnavailablePage workspace="administration" authUserEmail={auth.user?.email || ""} />;
-      const administration = await createSupabaseAdministrationReadModel(sessionSupabase).load({
-        capabilities: auth.authority.capabilities,
+      const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "administration.directory.read" });
+      if (!permission.ok || !permission.authority) return <WorkspaceDataUnavailablePage workspace="administration" authUserEmail={auth.user?.email || ""} />;
+      const administration = await createSupabaseAdministrationReadModel(permission.administrator.directory).load({
+        capabilities: permission.authority.capabilities,
       });
       if (administration.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace="administration" authUserEmail={auth.user?.email || ""} />;
@@ -156,7 +156,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
           initialHeaderData={emptyPlanningHeaderData}
           initialWorkspace="administration"
           initialAdministrationModel={administration.model}
-          initialAdministratorAccess={auth.authority.administratorAccess}
+          initialAdministratorAccess={permission.authority.administratorAccess}
           source="supabase"
           authRequired
           initialAuthUser={auth.user}

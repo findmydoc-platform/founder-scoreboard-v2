@@ -116,3 +116,9 @@ export type PersonalPlanningTokenManagementInput = {
   action: "planning-items.tokens.manage";
 };
 export type PersonalPlanningTokenManagementResult = Awaited<ReturnType<typeof import("./internal/personal-planning").authorizePersonalPlanningTokenManagement>>;
+
+export type AdministratorCredentialInput =
+  | { credential: { kind: "server-cookies" }; action: "administration.directory.read" }
+  | { credential: { kind: "session-request"; request: NextRequest }; action: "administrator-access.read" | "administrator-access.activate" | "administrator-access.end" | "administration.directory.read" }
+  | { credential: { kind: "session-request"; request: NextRequest }; action: "administration.eligibility.manage" | "administration.technical.update"; targetProfileId: string };
+export type AdministratorCredentialResult = Awaited<ReturnType<typeof import("./internal/administrator").authorizeAdministrator>>;

@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanOptionalText } from "@/lib/api-input";
 import { apiError, authzError } from "@/lib/api-response";
-import { bearerToken, requireActiveAdministrator, resolveAdministratorAccessFailure } from "@/lib/authz";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { isGitHubLogin } from "@/lib/mentions";
-import { getSupabaseForToken } from "@/lib/supabase-user";
 
 type TechnicalIdentityPayload = {
   githubLogin?: unknown;
@@ -12,11 +11,9 @@ type TechnicalIdentityPayload = {
 };
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const permission = await requireActiveAdministrator(request);
+  const { id } = await context.params;
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "administration.technical.update", targetProfileId: id });
   if (!permission.ok) return authzError(permission);
-  const token = bearerToken(request);
-  const supabase = token ? getSupabaseForToken(token) : null;
-  if (!supabase) return apiError("Anmeldung erforderlich.", 401);
   const payload = await request.json().catch(() => null) as TechnicalIdentityPayload | null;
   if (!payload) return apiError("Technische Identität fehlt.", 400);
   if (Object.keys(payload).some((key) => !["githubLogin", "googleChatUserId", "googleChatDmSpace"].includes(key))) {
@@ -30,16 +27,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     ...(payload.googleChatUserId !== undefined ? { google_chat_user_id: cleanOptionalText(payload.googleChatUserId, 160) } : {}),
     ...(payload.googleChatDmSpace !== undefined ? { google_chat_dm_space: cleanOptionalText(payload.googleChatDmSpace, 240) } : {}),
   };
-  const { id } = await context.params;
   const metadata = auditRequestMetadata(request);
-  const { error } = await supabase.rpc("update_profile_technical_identity_transaction", {
-    p_profile_id: id,
-    p_profile_patch: patch,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent,
-  });
+  const { error } = await permission.administrator.updateTechnicalIdentity(patch, { requestIp: metadata.request_ip, userAgent: metadata.user_agent });
   if (error?.code === "42501") {
-    return authzError(await resolveAdministratorAccessFailure(supabase));
+    return authzError(await permission.administrator.failure());
   }
   if (error?.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
   if (error?.code === "22023") return apiError("Technische Identität ist ungültig.", 400);

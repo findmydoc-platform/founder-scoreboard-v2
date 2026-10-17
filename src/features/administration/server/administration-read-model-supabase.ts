@@ -1,7 +1,6 @@
 import { authorizeCredentialAction } from "@/lib/credentials";
 import "server-only";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   AdministrationProfile,
   AdministrationReadModel,
@@ -18,7 +17,7 @@ type GrantRow = {
   active_until: string | null;
 };
 
-type DirectorySnapshot = {
+export type AdministrationDirectorySnapshot = {
   people?: Array<{
     id: string;
     name: string;
@@ -39,6 +38,15 @@ type DirectorySnapshot = {
   project?: { id: string; owner: string; number: number } | null;
 };
 
+export type AdministrationProjectRow = { id: string; github_project_owner: string | null; github_project_number: number | null; github_mention_team_slug: string | null };
+type DataResult<T> = PromiseLike<{ data: T | null; error: { code?: string } | null }>;
+export type AdministrationDataAccess = {
+  readDirectory(): DataResult<AdministrationDirectorySnapshot>;
+  readNotificationEvents(): DataResult<DbNotificationEvent[]>;
+  readNotificationDeliveries(): DataResult<DbNotificationDelivery[]>;
+  readProject(): DataResult<AdministrationProjectRow>;
+};
+
 function accessForGrant(grant: GrantRow | undefined, now: number) {
   const active = Boolean(
     grant?.eligible
@@ -53,27 +61,27 @@ function accessForGrant(grant: GrantRow | undefined, now: number) {
 }
 
 export function createSupabaseAdministrationReadModel(
-  supabase: SupabaseClient,
+  data: AdministrationDataAccess,
 ): AdministrationReadModel {
   return {
     async load({ capabilities }) {
       if (!capabilities.manageAdministratorEligibility) return { status: "forbidden" };
       const technical = capabilities.technicalAdministration;
       const [directoryResult, eventResult, deliveryResult, githubAppStatus, githubProjectResult] = await Promise.all([
-        supabase.rpc("administrator_directory_snapshot"),
+        data.readDirectory(),
         technical
-          ? supabase.from("notification_events").select("id,type,actor_profile_id,actor_label,recipient_profile_id,entity_type,entity_id,title,body,target_path,status,seen_at,dismissed_at,resolved_at,resolution_reason,created_at").order("created_at", { ascending: false }).limit(100)
+          ? data.readNotificationEvents()
           : Promise.resolve({ data: [], error: null }),
         technical
-          ? supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,payload,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100)
+          ? data.readNotificationDeliveries()
           : Promise.resolve({ data: [], error: null }),
         technical ? authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.installation.status" }) : Promise.resolve(null),
         technical
-          ? supabase.from("projects").select("id,github_project_owner,github_project_number,github_mention_team_slug").eq("id", "findmydoc-founder-execution").maybeSingle()
+          ? data.readProject()
           : Promise.resolve({ data: null, error: null }),
       ]);
 
-      if (directoryResult.error?.code === "42501") {
+      if ([directoryResult, eventResult, deliveryResult, githubProjectResult].some(result => result.error?.code === "42501")) {
         return { status: "forbidden" };
       }
       if (directoryResult.error || eventResult.error || deliveryResult.error || githubProjectResult.error) {
@@ -81,7 +89,7 @@ export function createSupabaseAdministrationReadModel(
       }
 
       const now = Date.now();
-      const directory = (directoryResult.data || {}) as DirectorySnapshot;
+      const directory = (directoryResult.data || {}) as AdministrationDirectorySnapshot;
       const people: AdministrationProfile[] = (directory.people || []).map((profile) => ({
         id: profile.id,
         name: profile.name,
@@ -95,7 +103,7 @@ export function createSupabaseAdministrationReadModel(
         googleChatReady: technical && Boolean(profile.googleChatUserId && profile.googleChatDmSpace && profile.notificationsEnabled !== false),
         administratorAccess: accessForGrant({ profile_id: profile.id, eligible: profile.eligible, active_until: profile.activeUntil }, now),
       }));
-      const projectRow = githubProjectResult.data as { id: string; github_project_owner: string | null; github_project_number: number | null; github_mention_team_slug: string | null } | null;
+      const projectRow = githubProjectResult.data as AdministrationProjectRow | null;
       const validatedMentionTeam = technical && projectRow?.github_project_owner && projectRow.github_mention_team_slug
         ? await resolveGitHubMentionTeam(projectRow.github_project_owner, projectRow.github_mention_team_slug)
         : undefined;

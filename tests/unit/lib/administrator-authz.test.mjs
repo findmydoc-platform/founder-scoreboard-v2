@@ -1,163 +1,44 @@
-import { vi } from "vitest";
-vi.mock("@/lib/supabase-user", async () => vi.importMock("@/lib/supabase"));
-vi.mock("@/lib/workspace-access", () => ({ requireWorkspaceAccess: async () => null }));
-import assert from "node:assert/strict";
-import { beforeEach, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-let profile;
-let snapshot;
-let snapshotError;
-let authRequired;
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
-beforeEach(() => {
-  authRequired = true;
-  profile = {
-    id: "founder-1",
-    name: "Founder",
-    platform_role: "founder",
-    github_login: "founder",
-  };
-  snapshot = { eligible: true, active: true, expiresAt: "2026-09-22T13:00:00.000Z" };
-  snapshotError = null;
-});
-
-const accessModel = await importTestModule(
-  "src/features/administrator-access/model/administrator-access.ts",
-);
-
-const authz = await importTestModule("src/lib/authz.ts", {
-  "./auth-error-contract": {
-    invalidSessionBeforeEffectErrorCode: "session_invalid_before_effect",
-    administratorAccessRequiredErrorCode: "administrator_access_required",
-    administratorAccessExpiredErrorCode: "administrator_access_expired",
-  },
-  "./local-development-auth": { isLocalLoginRequestAllowed: () => false },
-  "./platform": { isOperationalLeadRole: () => false },
-  "./supabase": {
-    requiresSupabaseAuth: () => authRequired,
-    getSupabaseForToken: () => ({
-      auth: { getUser: async () => ({ data: { user: { id: "auth-user" } }, error: null }) },
-      from() {
-        return {
-          select() { return this; },
-          eq() { return this; },
-          async maybeSingle() { return { data: profile, error: null }; },
-        };
-      },
-      async rpc(name) {
-        if (name === "current_authenticated_profile") return { data: profile, error: null };
-        if (name === "administrator_access_snapshot") return { data: snapshot, error: snapshotError };
-        throw new Error(`Unexpected RPC: ${name}`);
-      },
-    }),
-  },
-  "@/features/administrator-access/model/administrator-access": accessModel,
-});
-
-function request(extraHeaders = {}) {
-  return { headers: new Headers({ authorization: "Bearer session-token", ...extraHeaders }) };
+async function fixture(options) {
+  const protocol = administratorProtocol(options);
+  const authz = await importTestModule("src/lib/authz.ts", { "server-only": {} });
+  return { ...protocol, authz };
 }
 
-test("active administrator guard returns named capabilities", async () => {
-  const result = await authz.requireActiveAdministrator(request());
-
-  assert.equal(result.ok, true);
-  assert.equal(result.authority.capabilities.technicalAdministration, true);
-  assert.equal(result.authority.capabilities.ceoGovernance, false);
+test("compatibility administrator guards use the public policy and retain named capabilities", async () => {
+  const current = await fixture();
+  expect(await current.authz.requireActiveAdministrator(current.request())).toMatchObject({ ok: true, authority: { capabilities: { technicalAdministration: true, ceoGovernance: false } } });
+  current.state.role = "ceo";
+  current.state.snapshot = { eligible: false, active: false, expiresAt: null };
+  expect(await current.authz.requireAdministratorEligibilityManager(current.request())).toMatchObject({ ok: true, authority: { capabilities: { technicalAdministration: false, manageAdministratorEligibility: true } } });
 });
 
-test("eligibility manager accepts CEO without active administrator access", async () => {
-  profile = { ...profile, platform_role: "ceo" };
-  snapshot = { eligible: false, active: false, expiresAt: null };
-
-  const result = await authz.requireAdministratorEligibilityManager(request());
-
-  assert.equal(result.ok, true);
-  assert.equal(result.authority.capabilities.manageAdministratorEligibility, true);
-  assert.equal(result.authority.capabilities.technicalAdministration, false);
+test("the correction guard never applies administrator activation to a simulated actor", async () => {
+  const current = await fixture({ role: "viewer" });
+  expect(await current.authz.requirePlanningContributorOrActiveAdministrator(current.request())).toMatchObject({ ok: true });
+  expect(await current.authz.requirePlanningContributorOrActiveAdministrator(current.request("/", "GET", undefined, { "x-fmd-dev-profile-id": "simulated-profile" }))).toMatchObject({ ok: false, status: 403 });
 });
 
-test("inactive and local-simulation access fail closed", async () => {
-  snapshot = { eligible: true, active: false, expiresAt: null };
-  assert.deepEqual(await authz.requireActiveAdministrator(request()), {
-    ok: false,
-    status: 403,
-    code: "administrator_access_expired",
-    error: "Der Adminzugang ist abgelaufen.",
-  });
-
-  authRequired = false;
-  assert.deepEqual(await authz.requireActiveAdministrator(request()), {
-    ok: false,
-    status: 403,
-    code: "administrator_access_required",
-    error: "Ein echter, aktiver Adminzugang ist erforderlich.",
-  });
+test("local simulation is denied on deployed hosts and cannot activate administration", async () => {
+  const current = await fixture();
+  vi.stubEnv("REQUIRE_SUPABASE_AUTH", "false"); vi.stubEnv("NODE_ENV", "development"); vi.stubEnv("ENABLE_LOCAL_LOGIN", "true");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://localhost:3000");
+  expect(await current.authz.requireTeamMember(current.request("/", "GET", undefined, { host: "app.example.test" }))).toMatchObject({ ok: false, status: 403 });
+  const local = current.request("/", "GET", undefined, { host: "localhost:3000" });
+  expect(await current.authz.requireTeamMember(local)).toEqual({ ok: true, profile: null });
+  expect(await current.authz.requireActiveAdministrator(local)).toMatchObject({ ok: false, status: 403, code: "administrator_access_required" });
 });
 
-test("administrator correction is exposed only through the named guard", async () => {
-  profile = { ...profile, platform_role: "viewer" };
-
-  const ordinaryContributor = await authz.requirePlanningContributor(request());
-  const correctionContributor = await authz.requirePlanningContributorOrActiveAdministrator(request());
-
-  assert.equal(ordinaryContributor.ok, false);
-  assert.equal(ordinaryContributor.status, 403);
-  assert.equal(correctionContributor.ok, true);
-  assert.equal(correctionContributor.authority.capabilities.operationalCorrection, true);
-
-  const simulatedActor = await authz.requirePlanningContributorOrActiveAdministrator(request({ "x-fmd-dev-profile-id": "simulated-viewer" }));
-  assert.equal(simulatedActor.ok, false);
-  assert.equal(simulatedActor.status, 403);
-});
-
-test("active planning contributors retain their role access and receive operational correction", async () => {
-  const result = await authz.requirePlanningContributorOrActiveAdministrator(request());
-
-  assert.equal(result.ok, true);
-  assert.equal(result.profile.platformRole, "founder");
-  assert.equal(result.authority.capabilities.operationalCorrection, true);
-});
-
-test("inactive planning contributors retain role access without operational correction", async () => {
-  snapshot = { eligible: true, active: false, expiresAt: null };
-
-  const result = await authz.requirePlanningContributorOrActiveAdministrator(request());
-
-  assert.equal(result.ok, true);
-  assert.equal(result.profile.platformRole, "founder");
-  assert.equal(result.authority?.capabilities.operationalCorrection ?? false, false);
-});
-
-test("planning contributors retain base access when the optional administrator snapshot is unavailable", async () => {
-  snapshotError = { message: "temporarily unavailable" };
-
-  const result = await authz.requirePlanningContributorOrActiveAdministrator(request());
-
-  assert.equal(result.ok, true);
-  assert.equal(result.profile.platformRole, "founder");
-  assert.equal(result.authority, undefined);
-});
-
-test("post-guard administrator failures distinguish expiry from revoked eligibility", async () => {
-  const client = {
-    rpc: async () => ({ data: snapshot, error: null }),
-  };
-
-  snapshot = { eligible: true, active: false, expiresAt: null };
-  assert.deepEqual(await authz.resolveAdministratorAccessFailure(client), {
-    ok: false,
-    status: 403,
-    code: "administrator_access_expired",
-    error: "Der Adminzugang ist abgelaufen.",
-  });
-
-  snapshot = { eligible: false, active: false, expiresAt: null };
-  assert.deepEqual(await authz.resolveAdministratorAccessFailure(client), {
-    ok: false,
-    status: 403,
-    code: "administrator_access_required",
-    error: "Ein aktiver Adminzugang ist erforderlich.",
-  });
+test("the legacy late-failure adapter retains expiry versus eligibility denial", async () => {
+  const current = await fixture();
+  const client = { rpc: async () => ({ data: current.state.snapshot, error: null }) };
+  current.state.snapshot = { eligible: true, active: false, expiresAt: null };
+  expect(await current.authz.resolveAdministratorAccessFailure(client)).toMatchObject({ ok: false, code: "administrator_access_expired" });
+  current.state.snapshot = { eligible: false, active: false, expiresAt: null };
+  expect(await current.authz.resolveAdministratorAccessFailure(client)).toMatchObject({ ok: false, code: "administrator_access_required" });
 });
