@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ client: null as SupabaseClient | null, profileId: "owner", authenticated: true }));
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/credentials", () => ({ authorizeCredentialAction: async () => ({state:"not_connected"}) }));
 vi.mock("@/lib/api-response", () => ({
   apiError: (error: string, status: number) => Response.json({ error }, { status }),
   requireApiContext: async () => state.authenticated

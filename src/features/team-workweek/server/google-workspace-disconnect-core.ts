@@ -1,3 +1,4 @@
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import {
   FOUNDEROPS_WORKWEEK_PROPERTY_KEY,
   type GoogleWorkweekSeriesResult,
@@ -30,11 +31,11 @@ function matchingIdentity(event: GoogleCalendarEvent, target: DisconnectDeleteTa
 
 export async function observeGoogleWorkweekSeriesForDisconnect({
   accessToken,
-  fetchImpl = fetch,
+  fetchImpl = accessToken.request,
   target,
 }: {
-  accessToken: string;
-  fetchImpl?: typeof fetch;
+  accessToken: GoogleCalendarCapability;
+  fetchImpl?: GoogleCalendarCapability["request"];
   target: DisconnectDeleteTarget;
 }): Promise<{ state: "present"; etag: string } | { state: "absent" } | Extract<GoogleWorkweekSeriesResult, { state: "delayed" }>> {
   let response: Response;
@@ -42,7 +43,7 @@ export async function observeGoogleWorkweekSeriesForDisconnect({
     const url = new URL(endpoint(target));
     url.searchParams.set("fields", "id,etag,extendedProperties/private");
     response = await fetchImpl(url, {
-      headers: { authorization: `Bearer ${accessToken}` },
+      headers: { },
       cache: "no-store",
     });
   } catch {
@@ -62,12 +63,12 @@ export async function observeGoogleWorkweekSeriesForDisconnect({
 
 export async function ensureGoogleWorkweekSeriesAbsent({
   accessToken,
-  fetchImpl = fetch,
+  fetchImpl = accessToken.request,
   now = () => new Date(),
   target,
 }: {
-  accessToken: string;
-  fetchImpl?: typeof fetch;
+  accessToken: GoogleCalendarCapability;
+  fetchImpl?: GoogleCalendarCapability["request"];
   now?: () => Date;
   target: DisconnectDeleteTarget;
 }): Promise<GoogleWorkweekSeriesResult> {
@@ -85,7 +86,6 @@ export async function ensureGoogleWorkweekSeriesAbsent({
     response = await fetchImpl(endpoint(target), {
       method: "DELETE",
       headers: {
-        authorization: `Bearer ${accessToken}`,
         "if-match": target.expectedEtag,
       },
       cache: "no-store",

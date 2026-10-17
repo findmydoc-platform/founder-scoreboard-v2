@@ -1,3 +1,4 @@
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recoverGoogleWorkweekWrite, type PreparedWorkweekEffect, type WorkweekProviderWriteJournal } from "./team-workweek-immediate-effects";
@@ -30,7 +31,7 @@ type EffectRow = {
   cleanup_payload: PreparedWorkweekEffect["cleanupPayload"];
 };
 
-async function observeUncertainOperation(serviceSupabase: SupabaseClient, operationId: string, purpose: "publish" | "cleanup", accessToken: string, now: () => Date, abandon: boolean, recoverWrite: typeof recoverGoogleWorkweekWrite) {
+async function observeUncertainOperation(serviceSupabase: SupabaseClient, operationId: string, purpose: "publish" | "cleanup", accessToken: GoogleCalendarCapability, now: () => Date, abandon: boolean, recoverWrite: typeof recoverGoogleWorkweekWrite) {
   const writes = await serviceSupabase.from("team_workweek_provider_writes")
     .select("effect_id,team_workweek_publication_effects(*)").eq("operation_id", operationId)
     .in("state", ["dispatched", "uncertain"]);
@@ -52,7 +53,7 @@ async function observeUncertainOperation(serviceSupabase: SupabaseClient, operat
 
 export async function claimProviderOperation({ serviceSupabase, publicationId, generation, purpose, accessToken, now = () => new Date(), recoverWrite = recoverGoogleWorkweekWrite }: {
   serviceSupabase: SupabaseClient; publicationId: string; generation: number; purpose: "publish" | "cleanup";
-  accessToken: string; now?: () => Date; recoverWrite?: typeof recoverGoogleWorkweekWrite;
+  accessToken: GoogleCalendarCapability; now?: () => Date; recoverWrite?: typeof recoverGoogleWorkweekWrite;
 }): Promise<{ id: string; reason?: never } | { id?: never; reason: WorkweekRecoveryReason; errorClass?: ProviderFailure }> {
   const claim = () => serviceSupabase.rpc("claim_team_workweek_provider_operation", {
     p_publication_id: publicationId, p_generation: generation, p_purpose: purpose,

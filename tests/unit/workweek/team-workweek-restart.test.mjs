@@ -1,6 +1,6 @@
 import {expect,it,vi} from "vitest";
 import {importTestModule} from "../../helpers/vitest-module.mjs";
-const {TeamWorkweekPublicationError}=await importTestModule("src/features/team-workweek/server/team-workweek-publication.ts",{"server-only":{},"./google-workspace-oauth":{getGoogleWorkspaceAccessToken:async()=>"token"}});
+const {TeamWorkweekPublicationError}=await importTestModule("src/features/team-workweek/server/team-workweek-publication.ts",{"server-only":{},"./team-workweek-calendar":{calendarForWorkweekOwner:async()=>"token"}});
 const restart=await importTestModule("src/features/team-workweek/server/team-workweek-restart.ts",{"server-only":{},"./team-workweek-publication":{TeamWorkweekPublicationError}});
 function clients({foreign=false,failure=null,replayed=false,journalVersion,future=false,cancellation={state:"ready"}}={}){
   const calls=[];
