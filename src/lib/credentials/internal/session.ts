@@ -111,6 +111,7 @@ function boundDataFetch(binding: SessionBinding): typeof fetch {
 type SessionAction = CredentialAction | "calendar.read" | "workweek.private.read" | "workweek.private.write" | "session.planning" | "session.home";
 type SessionDataResult = Extract<CalendarCredentialResult, { ok: false }> | {
   ok: true; profile: Extract<CalendarCredentialResult, { ok: true }>["profile"]; user: User;
+  assertCurrent(): void;
   data: SupabaseClient; readOwnerConflict(versionId: string): Promise<{ data: { resolution_version_id: string } | null; error: { message: string } | null }>;
 };
 
@@ -185,7 +186,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     if (!profile.data || profile.data.id !== binding.profileId
       || !["ceo", "founder", "deputy", "viewer"].includes(profile.data.platform_role)) throw denied();
     if (Date.now() >= deadline) throw unavailable();
-    return { ok: true, profile: { id: profile.data.id, name: profile.data.name, platformRole: profile.data.platform_role, githubLogin: "" }, user: user.data.user, data,
+    return { assertCurrent: () => { if (Date.now() >= binding.deadline) throw unavailable(); }, ok: true, profile: { id: profile.data.id, name: profile.data.name, platformRole: profile.data.platform_role, githubLogin: "" }, user: user.data.user, data,
       readOwnerConflict: async (versionId: string) => {
         if (action !== "workweek.private.read") return { data: null, error: { message: "Keine Berechtigung für diesen Konfliktstatus." } };
         // Service-backed conflict state has its own live authorization and owner restriction.
