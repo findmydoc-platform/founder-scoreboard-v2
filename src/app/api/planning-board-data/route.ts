@@ -1,28 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
-import { apiError, requireApiContext } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
-import { loadPlanningHeaderData } from "@/lib/planning-header-data";
-import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
+import { authorizeCredentialAction } from "@/lib/credentials";
+import { apiError, authzError } from "@/lib/api-response";
 
 export async function GET(request: NextRequest) {
-  const apiContext = await requireApiContext(
-    request,
-    requireTeamMember,
-  );
-  if (!apiContext.ok) return apiContext.response;
-  const currentProfile = apiContext.permission.profile;
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning.board.read" });
+  if (!permission.ok) return authzError(permission);
+  const currentProfile = permission.profile;
   const [result, headerData] = await Promise.all([
-    createSupabasePlanningBoardReadModel(apiContext.supabase).load({
-      authorized: true,
-      actorProfileId: currentProfile?.id || null,
-    }),
-    loadPlanningHeaderData(apiContext.supabase, {
-      currentProfileId: currentProfile?.id || null,
-      platformRole: currentProfile?.platformRole || null,
-      slots: currentProfile ? ["quickLinks", "calendarEvents"] : undefined,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
+    permission.planning.loadBoard(),
+    permission.planning.loadHeader(currentProfile ? ["quickLinks", "calendarEvents"] : undefined),
   ]);
   if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
   if (result.status === "unavailable") return apiError("Planung konnte nicht geladen werden.", 503);

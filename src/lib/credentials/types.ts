@@ -146,3 +146,10 @@ export type AdministratorCredentialInput =
   | { credential: { kind: "session-request"; request: NextRequest }; action: "administrator-access.read" | "administrator-access.activate" | "administrator-access.end" | "administration.directory.read" }
   | { credential: { kind: "session-request"; request: NextRequest }; action: "administration.eligibility.manage" | "administration.technical.update"; targetProfileId: string };
 export type AdministratorCredentialResult = Awaited<ReturnType<typeof import("./internal/administrator").authorizeAdministrator>>;
+
+export type PlanningCredentialInput = {
+  credential: { kind: "session-request"; request: NextRequest };
+  action: "planning.revision.read" | "planning.board.read" | "planning.header.read" | "planning.review.request" | "planning.review.decide" | "planning.review.withdraw" | "planning.review.reopen" | "planning.backlog.read" | "planning.sprint.read" | "planning.task.read" | "planning.task.update" | "planning.relationship.add" | "planning.relationship.remove" | "planning.task.delete";
+  targetId?: string;
+};
+export type PlanningCredentialResult = Awaited<ReturnType<typeof import("./internal/planning").authorizePlanning>>;
