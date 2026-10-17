@@ -76,7 +76,7 @@ export function authorizeCredentialAction(input: CredentialActionInput | Calenda
   if (input.action==="github.attachment.write") return authorizeGitHubAttachment(input);
   if (input.action==="github.connection.status" || input.action==="github.connection.disconnect") return githubConnectionSession(input);
 
-  if (input.action.startsWith("github.") && input.credential.kind !== "github-installation") {
+  if (input.action.startsWith("github.") && input.credential.kind !== "github-installation" && input.credential.kind !== "github-claimed-job") {
     return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
   }
   if (input.action === "github.projection.apply" || input.action === "github.lifecycle.apply" || input.action === "github.issue.read" || input.action === "github.project.read" || input.action === "github.team.read" || input.action === "github.asset.read") return authorizeGitHubInstallation(input);
@@ -90,3 +90,5 @@ export function authorizeCredentialAction(input: CredentialActionInput | Calenda
   if (input.action === "calendar.read") return authorizeCalendar(input.credential.request);
   return authorizeLegacySession(input as CredentialActionInput);
 }
+
+export type { GitHubJobContext } from "./github-job-types";
