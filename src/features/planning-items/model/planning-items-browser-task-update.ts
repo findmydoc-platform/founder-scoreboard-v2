@@ -1,25 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { apiError, requireApiContext, requireJsonApiContext } from "@/lib/api-response";
-import { bearerToken, requirePlanningContributorOrActiveAdministrator, requireOperationalLead } from "@/lib/authz";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningContext, requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 import type { TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { taskAuditActionFromMessage } from "@/features/tasks/model/task-comment-timeline-policy";
 import { rejectClientGitHubSyncStatusUpdate } from "@/features/tasks/model/task-route-update-helpers";
-import { actorContextFromSessionAuth } from "./planning-actor-context-server";
-import { createPlanningItemRevision } from "./planning-item-revision";
 import {
-  createPlanningReviewPlanningItems, isPlanningReviewRequestPayload, parsePlanningReviewRequestPayload,
+  isPlanningReviewRequestPayload, parsePlanningReviewRequestPayload,
   planningReviewActivitiesFromResult, planningReviewError, planningReviewTaskFromResult,
   requestPlanningReviewCommand,
 } from "./planning-items-review";
 import {
-  changePlanningParentCommand, createPlanningReparentPlanningItems, isPlanningTaskReparentPayload,
+  changePlanningParentCommand, isPlanningTaskReparentPayload,
   parsePlanningTaskReparentPayload, planningReparentError, planningReparentTaskFromResult,
 } from "./planning-items-reparent";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { mentionedProfileIds } from "@/lib/mentions";
-import { getSupabaseForToken } from "@/lib/supabase-user";
 import {
-  createEmptyEpicDeletePlanningItems, emptyEpicDeleteCommand, emptyEpicDeleteError, parseEmptyEpicDeletePayload,
+  emptyEpicDeleteCommand, emptyEpicDeleteError, parseEmptyEpicDeletePayload,
 } from "./planning-items-empty-epic-delete";
 
 const taskUpdatePayloadFields = new Set<keyof TaskUpdatePayload>([
@@ -32,19 +29,11 @@ const taskUpdatePayloadFields = new Set<keyof TaskUpdatePayload>([
 ]);
 
 export async function handleBrowserTaskUpdate(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requirePlanningContributorOrActiveAdministrator, {
-    supabaseUnavailableMessage: "Änderungen konnten nicht dauerhaft gespeichert werden.",
-  });
-  if (!apiContext.ok) return apiContext.response;
-
-  const { permission } = apiContext;
-  const operationalCorrection = permission.authority?.capabilities.operationalCorrection === true;
-  const supabase = operationalCorrection
-    ? getSupabaseForToken(bearerToken(request))
-    : apiContext.supabase;
-  if (!supabase) return apiError("Anmeldung erforderlich.", 401);
-
   const { id } = await context.params;
+  const apiContext = await requirePlanningContext(request, "planning.task.update", id, "Änderungen konnten nicht dauerhaft gespeichert werden.");
+  if (!apiContext.ok) return apiContext.response;
+  const { permission, planning } = apiContext;
+  const operationalCorrection = permission.authority?.capabilities.operationalCorrection === true;
   const rawPayload = await request.json() as unknown;
   if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
     return apiError("Aufgabenänderung ist ungültig.", 400);
@@ -58,18 +47,14 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     if (operationalCorrection) return apiError("Adminzugang darf keine Reviews starten oder finalisieren.", 403);
     const parsed = parsePlanningReviewRequestPayload(rawPayload);
     if (!parsed.ok) return apiError(parsed.error, parsed.status);
-    const actor = actorContextFromSessionAuth(permission);
-    if (!actor.ok) return apiError("Founder können nur den Status ihrer eigenen Aufgaben ändern.", 403);
-    const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id,name,github_login");
+    const { data: profiles, error: profilesError } = await planning.readMentionProfiles();
     if (profilesError) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
     const mentionRecipientProfileIds = mentionedProfileIds(
       parsed.value.evidenceExceptionNote,
       (profiles || []).map((profile) => ({ id: profile.id, name: profile.name, githubLogin: profile.github_login })),
     );
     const metadata = auditRequestMetadata(request);
-    const result = await createPlanningReviewPlanningItems(supabase).run({
-      actor: actor.actor,
-      mode: "commit",
+    const result = await planning.runReview({
       command: requestPlanningReviewCommand(id, { ...parsed.value, mentionRecipientProfileIds }),
       requestMetadata: {
         requestIp: metadata.request_ip || undefined,
@@ -98,11 +83,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     if (operationalCorrection) return apiError("Adminzugang darf keine Parent-Zuordnung umgehen.", 403);
     const parsed = parsePlanningTaskReparentPayload(rawPayload);
     if (!parsed.ok) return apiError(parsed.error, parsed.status);
-    const actor = actorContextFromSessionAuth(permission);
-    if (!actor.ok) return apiError("Zuordnung konnte nicht gespeichert werden.", 403);
-    const result = await createPlanningReparentPlanningItems(supabase, "any").run({
-      actor: actor.actor,
-      mode: "commit",
+    const result = await planning.runReparent({
       command: changePlanningParentCommand(id, parsed.value.parentId || null, parsed.value.expectedUpdatedAt),
     });
     if (!result.ok) {
@@ -126,7 +107,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       },
     });
   }
-  const result = await createPlanningItemRevision(supabase).commitBrowserRevision({ itemId: id, payload, permission });
+  const result = await planning.revise(payload);
   if (!result.ok) {
     const status = {
       invalidCommand: 400, forbidden: 403, notFound: 404,
@@ -145,17 +126,13 @@ export async function handleBrowserTaskDelete(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const apiContext = await requireJsonApiContext<unknown>(request, requireOperationalLead, null);
+  const { id } = await context.params;
+  const apiContext = await requirePlanningJsonContext<unknown>(request, "planning.task.delete", null, id);
   if (!apiContext.ok) return apiContext.response;
   const parsed = parseEmptyEpicDeletePayload(apiContext.payload);
   if (!parsed.ok) return apiError(parsed.error, 400);
-  const actor = actorContextFromSessionAuth({ ok: true, profile: apiContext.permission.profile });
-  if (!actor.ok) return apiError("Nur CEO oder Deputy können Epics löschen.", 403);
-  const { id } = await context.params;
   const metadata = auditRequestMetadata(request);
-  const result = await createEmptyEpicDeletePlanningItems(apiContext.supabase).run({
-    actor: actor.actor,
-    mode: "commit",
+  const result = await apiContext.planning.runDelete({
     command: emptyEpicDeleteCommand(id.trim(), parsed.expectedUpdatedAt),
     requestMetadata: {
       requestIp: metadata.request_ip || undefined,

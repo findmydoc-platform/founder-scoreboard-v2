@@ -1,17 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
-  delayTeamWorkweekPublication,
-  publishTeamWorkweek,
   TeamWorkweekPublicationError,
 } from "@/features/team-workweek/server/team-workweek-publication";
 import {
-  detectTeamWorkweekParallelConflict,
   TeamWorkweekConflictError,
 } from "@/features/team-workweek/server/team-workweek-conflicts";
-import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
-import { bearerToken, requireTeamMember } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase-user";
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { apiError, readJsonPayload } from "@/lib/api-response";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 
 export const dynamic = "force-dynamic";
 
@@ -34,28 +29,16 @@ function publicationFailureResponse(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireApiContext(request, requireTeamMember);
-  if (!context.ok) return context.response;
-  const token = bearerToken(request);
-  const userSupabase = token ? getSupabaseForToken(token) : null;
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!userSupabase) return apiError("Anmeldung erforderlich.", 401);
-  if (!serviceSupabase) return apiError("Grundwoche kann derzeit nicht veröffentlicht werden.", 503);
-
   const payload = await readJsonPayload<unknown>(request, null);
   const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const context = await requirePlanningContext(request, "workweek.publish", typeof input.versionId === "string" ? input.versionId : "");
+  if (!context.ok) return context.response;
   if (Object.keys(input).some((key) => key !== "versionId") || typeof input.versionId !== "string" || !UUID_PATTERN.test(input.versionId)) {
     return apiError("Gültige private Wochenversion ist erforderlich.", 400);
   }
 
   try {
-    const ownerProfileId = context.permission.profile?.id;
-    if (!ownerProfileId) return apiError("Gebundenes Teamprofil erforderlich.", 403);
-    const preflight = await detectTeamWorkweekParallelConflict({request,
-      ownerProfileId,
-      serviceSupabase,
-      versionId: input.versionId,
-    });
+    const preflight = await context.planning.detectWorkweekConflict();
     if (preflight.state === "google_only") {
       return apiError("Google wurde geändert. Gleiche Google zuerst ab und prüfe danach deine private Version.", 409);
     }
@@ -65,22 +48,13 @@ export async function POST(request: NextRequest) {
         conflict: preflight.conflict,
       }, { status: 409 });
     }
-    const publication = await publishTeamWorkweek({request,
-      serviceSupabase,
-      userSupabase,
-      versionId: input.versionId,
-    });
+    const publication = await context.planning.publishWorkweek();
     return NextResponse.json({ publication }, { status: publication.syncState === "delayed" ? 202 : 200 });
   } catch (error) {
     if (error instanceof TeamWorkweekConflictError) {
       if (error.delayClass) {
         try {
-          const publication = await delayTeamWorkweekPublication({
-            errorClass: error.delayClass,
-            serviceSupabase,
-            userSupabase,
-            versionId: input.versionId,
-          });
+          const publication = await context.planning.delayWorkweek();
           return NextResponse.json({ publication }, { status: publication.syncState === "delayed" ? 202 : 200 });
         } catch (delayError) {
           return publicationFailureResponse(delayError);
