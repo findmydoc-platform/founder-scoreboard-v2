@@ -46,6 +46,8 @@ async function createFixture(mode: "legacy" | "linking") {
       await db.query("delete from public.audit_log where actor_profile_id=any($1)", [profileIds]);
       await db.query("select set_config('founderops.trash_lifecycle_write','on',false)");
       await db.query("delete from public.tasks where id like $1", [`${prefix}%`]);
+      // API-created IDs and detached lifecycle rows share this fixture's unique UUID namespace.
+      await db.query("delete from public.planning_github_lifecycle_outbox where task_id like $1 or root_id like $1", [`${prefix}%`]);
       await db.query("delete from public.sprints where id like $1", [`${prefix}%`]);
       if (!projectExisted) await db.query("delete from public.projects where id='findmydoc-founder-execution'");
       await db.query("delete from public.google_workspace_disconnect_series where operation_id in (select id from public.google_workspace_disconnect_operations where owner_profile_id=any($1))", [profileIds]);
