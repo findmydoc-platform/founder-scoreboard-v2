@@ -281,4 +281,3 @@ async function fetchGitHubAsset(value: string, token: string, authorizeDispatch:
 
   return null;
 }
-

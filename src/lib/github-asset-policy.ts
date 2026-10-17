@@ -16,4 +16,3 @@ export function allowedGitHubAssetUrl(value: string, base?: URL) {
     return null;
   }
 }
-
