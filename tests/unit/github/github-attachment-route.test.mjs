@@ -1,6 +1,6 @@
 import {afterEach,expect,test,vi} from "vitest";
 import {NextRequest} from "next/server";
-import {createCipheriv} from "node:crypto";
+import {createCipheriv,createHmac} from "node:crypto";
 import {importTestModule} from "../../helpers/vitest-module.mjs";
 afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();vi.resetModules();});
 test("the real attachment route binds an operation to owner and content and reconciles a lost response",async()=>{
@@ -8,7 +8,13 @@ test("the real attachment route binds an operation to owner and content and reco
   const cipher=createCipheriv("aes-256-gcm",key,Buffer.alloc(12,2));
   const encrypted=Buffer.concat([cipher.update("synthetic-user-access","utf8"),cipher.final()]);
   const ciphertext=[Buffer.alloc(12,2),cipher.getAuthTag(),encrypted].map(part=>part.toString("base64url")).join(".");
-  for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:origin,SUPABASE_URL:origin,NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",GITHUB_TOKEN_ENCRYPTION_KEY:key.toString("base64"),REQUIRE_SUPABASE_AUTH:"true"})) vi.stubEnv(name,value);
+  for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:origin,SUPABASE_URL:origin,NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_ANON_KEY:"synthetic-anon",SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",SUPABASE_SECRET_KEY:"synthetic-service",GITHUB_TOKEN_ENCRYPTION_KEY:key.toString("base64"),REQUIRE_SUPABASE_AUTH:"true"})) vi.stubEnv(name,value);
+  const encode=value=>Buffer.from(JSON.stringify(value)).toString("base64url");
+  const sessionToken=userId=>{
+    const unsigned=`${encode({alg:"HS256",typ:"JWT"})}.${encode({iss:`${origin}/auth/v1`,aud:"authenticated",role:"authenticated",sub:userId,session_id:"00000000-0000-4000-8000-000000000001",exp:Math.floor(Date.now()/1000)+3600})}`;
+    return `${unsigned}.${createHmac("sha256","synthetic-test-key").update(unsigned).digest("base64url")}`;
+  };
+  const ownerToken=sessionToken("user-1"),otherToken=sessionToken("user-2");
   const files=new Map();let writes=0,audits=0,lost=true;
   const task={id:"task-1",title:"Synthetic task",task_type:"deliverable",assignee:"author-1",owner:"author-1",status:"Offen",review_status:"not_requested",score_final:false,github_repo:"findmydoc-platform/management",github_issue_number:1,trashed_at:null};
   vi.stubGlobal("fetch",async(input,options)=>{
@@ -23,7 +29,7 @@ test("the real attachment route binds an operation to owner and content and reco
       return Response.json({content});
     }
     if(url.origin!==origin) throw new Error("Unscripted attachment provider");
-    const other=request.headers.get("authorization")==="Bearer synthetic-other";
+    const other=request.headers.get("authorization")===`Bearer ${otherToken}`;
     if(url.pathname==="/auth/v1/user") return Response.json({id:other ? "user-2":"user-1",aud:"authenticated",identities:[]});
     if(url.pathname.endsWith("/rpc/workspace_access_context")) return Response.json({mode:"legacy",linkingEnforced:false,userId:other?"user-2":"user-1",profileId:other?"author-2":"author-1"});
     if(url.pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json({id:other?"author-2":"author-1",name:other?"Other":"Author",platform_role:"founder"});
@@ -37,7 +43,7 @@ test("the real attachment route binds an operation to owner and content and reco
   });
   const {POST}=await importTestModule("src/app/api/tasks/[id]/attachments/route.ts",{"server-only":{}});
   const firstId="11111111-1111-4111-8111-111111111111",laterId="22222222-2222-4222-8222-222222222222";
-  const send=async(operation,bytes="hello",token="synthetic-owner")=>{
+  const send=async(operation,bytes="hello",token=ownerToken)=>{
     const form=new FormData();form.append("file",new File([bytes],"hello.txt",{type:"text/plain"}));
     return POST(new NextRequest("https://application.example.test/api/tasks/task-1/attachments",{method:"POST",headers:{authorization:`Bearer ${token}`,"idempotency-key":operation},body:form}),{params:Promise.resolve({id:"task-1"})});
   };
@@ -45,6 +51,6 @@ test("the real attachment route binds an operation to owner and content and reco
   // The browser can lose the entire successful HTTP response and repeat this same operation.
   const repeated=await send(firstId);expect(repeated.status).toBe(200);expect((await repeated.json()).path).toBe(firstBody.path);expect(writes).toBe(1);
   const changed=await send(firstId,"changed");expect(changed.status).toBe(502);expect(writes).toBe(1);
-  const otherOwner=await send(firstId,"hello","synthetic-other");expect(otherOwner.status).toBe(403);expect(writes).toBe(1);
+  const otherOwner=await send(firstId,"hello",otherToken);expect(otherOwner.status).toBe(403);expect(writes).toBe(1);
   const later=await send(laterId);expect(later.status).toBe(200);expect((await later.json()).path).not.toBe(firstBody.path);expect(writes).toBe(2);
 });
