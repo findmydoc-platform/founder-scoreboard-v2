@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const reconciliation = await reconcileTeamWorkweek({
+    const reconciliation = await reconcileTeamWorkweek({request,
       ownerProfileId,
       serviceSupabase,
       userSupabase,

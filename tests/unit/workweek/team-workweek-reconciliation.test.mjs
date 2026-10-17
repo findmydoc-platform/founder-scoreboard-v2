@@ -17,8 +17,8 @@ const reconciliationServer = await importTestModule(
   {
     "server-only": {},
     "../model/team-workweek-draft": workweekModel,
-    "./google-workspace-oauth-core": { GoogleWorkspaceOAuthContractError: class extends Error {} },
-    "./google-workspace-oauth": { getGoogleWorkspaceAccessToken: async () => "token" },
+    "@/lib/google-calendar-errors": { GoogleWorkspaceOAuthContractError: class extends Error {} },
+    "./team-workweek-calendar": { calendarForWorkweekOwner: async () => ({request:(url,init)=>fetch(url,init)}) },
     "./team-workweek-reconciliation-core": reconciliation,
     "./team-workweek-publication": {
       publishTeamWorkweek: async () => { throw new Error("unused"); },
@@ -66,7 +66,7 @@ test("known recurring masters are read by exact id with a minimal field projecti
   const calls = [];
   const series = known();
   const result = await reconciliation.observeGoogleWorkweek({
-    accessToken: "secret-token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     series: [series],
     now,
     wait: noWait,
@@ -83,14 +83,13 @@ test("known recurring masters are read by exact id with a minimal field projecti
   assert.equal(url.pathname, `/calendar/v3/calendars/primary/events/${series.googleEventId}`);
   assert.match(url.searchParams.get("fields"), /extendedProperties\/private/);
   assert.doesNotMatch(url.searchParams.get("fields"), /summary|description|location|attendees|attachments/);
-  assert.equal(calls[0].init.headers.authorization, "Bearer secret-token");
 });
 
 test("ordinary events and instance exceptions never enter the known-series read set", async () => {
   const series = known();
   const calls = [];
   const result = await reconciliation.observeGoogleWorkweek({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     series: [series],
     now,
     wait: noWait,
@@ -111,7 +110,7 @@ test("ordinary events and instance exceptions never enter the known-series read 
 
 test("a legacy managed UTC endpoint is interpreted in its declared Berlin timezone",async()=>{
   const series=known();
-  const result=await reconciliation.observeGoogleWorkweek({accessToken:"token",series:[series],now,wait:noWait,fetchImpl:async()=>Response.json(event(series,{etag:'"metadata-etag"',start:{dateTime:"2026-08-31T07:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2026-08-31T15:00:00Z",timeZone:"Europe/Berlin"}}))});
+  const result=await reconciliation.observeGoogleWorkweek({accessToken: { request: (url, init) => fetch(url, init) },series:[series],now,wait:noWait,fetchImpl:async()=>Response.json(event(series,{etag:'"metadata-etag"',start:{dateTime:"2026-08-31T07:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2026-08-31T15:00:00Z",timeZone:"Europe/Berlin"}}))});
   assert.equal(result.state,"unchanged");
 });
 
@@ -125,7 +124,7 @@ test("a deleted recurring master removes only its known workweek window", async 
     endMinute: 900,
   });
   const result = await reconciliation.observeGoogleWorkweek({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     series: [monday, wednesday],
     now,
     wait: noWait,
@@ -146,7 +145,7 @@ test("a deleted recurring master removes only its known workweek window", async 
 test("non-schedule event edits advance the known ETag without creating a new week", async () => {
   const series = known();
   const result = await reconciliation.observeGoogleWorkweek({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     series: [series],
     now,
     wait: noWait,
@@ -172,7 +171,7 @@ test("ambiguous series shape and overlapping windows preserve the confirmed stat
     endMinute: 1200,
   });
   const ambiguous = await reconciliation.observeGoogleWorkweek({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     series: [first],
     now,
     wait: noWait,
@@ -185,7 +184,7 @@ test("ambiguous series shape and overlapping windows preserve the confirmed stat
   });
 
   const overlap = await reconciliation.observeGoogleWorkweek({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     series: [first, second],
     now,
     wait: noWait,
@@ -202,7 +201,7 @@ test("weekly recurrence accepts only a single BYDAY matching the master start", 
   const series = known();
   for (const recurrence of ["RRULE:FREQ=WEEKLY;BYDAY=MO", "RRULE:FREQ=WEEKLY;INTERVAL=1;WKST=MO;BYDAY=MO"]) {
     const result = await reconciliation.observeGoogleWorkweek({
-      accessToken: "token",
+      accessToken: { request: (url, init) => fetch(url, init) },
       series: [series],
       now,
       wait: noWait,
@@ -213,7 +212,7 @@ test("weekly recurrence accepts only a single BYDAY matching the master start", 
 
   for (const recurrence of ["RRULE:FREQ=WEEKLY;BYDAY=TU", "RRULE:FREQ=WEEKLY;BYDAY=MO,TU", "RRULE:FREQ=WEEKLY;BYDAY=1MO"]) {
     const result = await reconciliation.observeGoogleWorkweek({
-      accessToken: "token",
+      accessToken: { request: (url, init) => fetch(url, init) },
       series: [series],
       now,
       wait: noWait,
@@ -228,7 +227,7 @@ test("auth, quota, and transport failures use bounded idempotent reads and later
   const series = known();
   let quotaCalls = 0;
   const quota = await reconciliation.observeGoogleWorkweek({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     series: [series],
     now,
     wait: noWait,
@@ -243,7 +242,7 @@ test("auth, quota, and transport failures use bounded idempotent reads and later
 
   let authCalls = 0;
   const auth = await reconciliation.observeGoogleWorkweek({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     series: [series],
     now,
     wait: noWait,
@@ -257,7 +256,7 @@ test("auth, quota, and transport failures use bounded idempotent reads and later
 
   let transportCalls = 0;
   const recovered = await reconciliation.observeGoogleWorkweek({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     series: [series],
     now,
     wait: noWait,

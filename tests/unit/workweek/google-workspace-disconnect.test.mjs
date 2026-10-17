@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const publicationCore = await import("../../../src/features/team-workweek/server/team-workweek-publication-core.ts");
-const oauthCore = await import("../../../src/features/team-workweek/server/google-workspace-oauth-core.ts");
+const oauthCore = await import("../../../src/lib/credentials/internal/google-calendar-protocol.ts");
 const draftModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
 const disconnectCore = await importTestModule(
   "src/features/team-workweek/server/google-workspace-disconnect-core.ts",
@@ -41,7 +41,7 @@ function event(etag = target.expectedEtag, seriesId = target.seriesId) {
 test("future-only series deletion observes exact identity and uses ETag CAS", async () => {
   const calls = [];
   const result = await disconnectCore.ensureGoogleWorkweekSeriesAbsent({
-    accessToken: "secret-token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     target,
     fetchImpl: async (input, init = {}) => {
       calls.push({ input: String(input), init });
@@ -53,14 +53,13 @@ test("future-only series deletion observes exact identity and uses ETag CAS", as
   assert.equal(calls.length, 2);
   assert.match(calls[0].input, /fields=id%2Cetag%2CextendedProperties%2Fprivate/);
   assert.equal(calls[1].init.headers["if-match"], target.expectedEtag);
-  assert.equal(typeof calls[0].init.headers.authorization === "string", true);
 });
 
 test("lost delete success is observed before any retry and an unrelated event is never deleted", async () => {
   let attempts = 0;
   let deletes = 0;
   const lost = await disconnectCore.ensureGoogleWorkweekSeriesAbsent({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     target,
     fetchImpl: async (_input, init = {}) => {
       attempts += 1;
@@ -77,7 +76,7 @@ test("lost delete success is observed before any retry and an unrelated event is
 
   deletes = 0;
   const unrelated = await disconnectCore.ensureGoogleWorkweekSeriesAbsent({
-    accessToken: "token",
+    accessToken: { request: (url, init) => fetch(url, init) },
     target,
     fetchImpl: async (_input, init = {}) => {
       if (init.method === "DELETE") deletes += 1;
@@ -230,10 +229,10 @@ const disconnectServer = await importTestModule(
   "src/features/team-workweek/server/google-workspace-disconnect.ts",
   {
     "server-only": {},
-    "./google-workspace-oauth-core": oauthCore,
-    "./google-workspace-oauth": {
-      getGoogleWorkspaceAccessToken: async () => "token",
-      removeGoogleWorkspaceConnection: async () => undefined,
+    "@/lib/google-calendar-errors": oauthCore,
+    "./team-workweek-calendar": {
+      calendarForWorkweekOwner: async () => ({request:(url,init)=>fetch(url,init)}),
+      removeWorkweekCalendarConnection: async () => undefined,
     },
     "./google-workspace-disconnect-core": disconnectCore,
     "./team-workweek-publication-core": publicationCore,

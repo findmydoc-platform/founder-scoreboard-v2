@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
   const serviceSupabase = getServerServiceRoleSupabase();
   if (!serviceSupabase) return apiError("Trennung ist nicht verfügbar.", 503);
   try {
-    const result = await disconnectGoogleWorkspace({ ownerProfileId, serviceSupabase });
+    const result = await disconnectGoogleWorkspace({ request, ownerProfileId, serviceSupabase });
     return NextResponse.json({ result }, { status: result.state === "completed" ? 200 : 202 });
   } catch (error) {
     if (error instanceof GoogleWorkspaceDisconnectError) {
