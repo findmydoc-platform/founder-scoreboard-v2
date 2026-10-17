@@ -60,7 +60,7 @@ type SessionBinding = {
   mode: AccessContext["mode"]; linkingEnforced: boolean; subject?: string; email?: string;
 };
 
-function boundDataFetch(binding: SessionBinding): typeof fetch {
+function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): typeof fetch {
   return async (input, init) => {
     try {
       const request = new Request(input, init);
@@ -83,7 +83,10 @@ function boundDataFetch(binding: SessionBinding): typeof fetch {
       }
       if (Date.now() >= binding.deadline) throw loginRequired();
       request.headers.set("authorization", `Bearer ${binding.token}`);
-      if (!binding.workspace) return fetch(request);
+      if (!binding.workspace) {
+        assertDispatch?.();
+        return fetch(request);
+      }
       const permit = randomBytes(32).toString("base64url");
       const hash = digest(permit);
       const issued = await binding.service.rpc("workspace_issue_permit", {
@@ -94,6 +97,7 @@ function boundDataFetch(binding: SessionBinding): typeof fetch {
       // A slow permit cannot extend either the credential or the evidence deadline.
       try {
         if (Date.now() >= binding.deadline) throw loginRequired();
+        assertDispatch?.();
         request.headers.set("x-founderops-workspace-permit", permit);
         return await fetch(request);
       } finally {
@@ -112,6 +116,7 @@ type SessionAction = CredentialAction | "calendar.read" | "workweek.private.read
 type SessionDataResult = Extract<CalendarCredentialResult, { ok: false }> | {
   ok: true; profile: Extract<CalendarCredentialResult, { ok: true }>["profile"]; user: User;
   assertCurrent(): void;
+  constrainedData(assertDispatch: () => void): SupabaseClient;
   data: SupabaseClient; readOwnerConflict(versionId: string): Promise<{ data: { resolution_version_id: string } | null; error: { message: string } | null }>;
 };
 
@@ -175,9 +180,10 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     const binding: SessionBinding = { token, userId: claims.sub, sessionId: claims.session_id,
       profileId: context.profileId, deadline, workspace, url: environment.url, service: environment.service, auth: environment.auth,
       mode: context.mode, linkingEnforced: context.linkingEnforced, subject, email };
-    const data = createClient(environment.url, environment.key, { ...environment.options,
-      global: { headers: { Authorization: `Bearer ${token}` }, fetch: boundDataFetch(binding) },
+    const constrainedData = (assertDispatch: () => void) => createClient(environment.url, environment.key, { ...environment.options,
+      global: { headers: { Authorization: `Bearer ${token}` }, fetch: boundDataFetch(binding, assertDispatch) },
     });
+    const data = constrainedData(() => {});
     // This live user-bound RPC also enforces profile rebinding and current role before every action.
     const profile = await data.rpc("current_authenticated_profile");
     if (Date.now() >= claims.exp * 1000) return invalidSession();
@@ -186,7 +192,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     if (!profile.data || profile.data.id !== binding.profileId
       || !["ceo", "founder", "deputy", "viewer"].includes(profile.data.platform_role)) throw denied();
     if (Date.now() >= deadline) throw unavailable();
-    return { assertCurrent: () => { if (Date.now() >= binding.deadline) throw unavailable(); }, ok: true, profile: { id: profile.data.id, name: profile.data.name, platformRole: profile.data.platform_role, githubLogin: "" }, user: user.data.user, data,
+    return { constrainedData, assertCurrent: () => { if (Date.now() >= binding.deadline) throw unavailable(); }, ok: true, profile: { id: profile.data.id, name: profile.data.name, platformRole: profile.data.platform_role, githubLogin: "" }, user: user.data.user, data,
       readOwnerConflict: async (versionId: string) => {
         if (action !== "workweek.private.read") return { data: null, error: { message: "Keine Berechtigung für diesen Konfliktstatus." } };
         // Service-backed conflict state has its own live authorization and owner restriction.

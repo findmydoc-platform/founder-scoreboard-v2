@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import { planningRouteProtocol } from "../../helpers/planning-route-protocol.mjs";
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const actor = {
@@ -23,83 +25,6 @@ async function loadModel() {
       "./planning-items-store-supabase": supabaseStore,
     },
   );
-}
-
-async function loadRoute(run, payload) {
-  return importTestModule("src/app/api/tasks/[id]/relationships/route.ts", {
-    "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
-    "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }) },
-    "@/lib/api-response": {
-      apiError: (error, status) => ({ body: { error }, status }),
-      requireJsonApiContext: async () => ({
-        ok: true,
-        payload,
-        permission: { profile: { id: "ceo", platformRole: "ceo" } },
-        supabase: {},
-      }),
-    },
-    "@/lib/authz": { requirePlanningContributorOrActiveAdministrator: () => ({}) },
-    "@/lib/supabase-user": { getSupabaseForToken: () => null },
-    "@/features/planning-items/model/planning-actor-context-server": {
-      actorContextFromSessionAuth: () => ({ ok: true, actor }),
-    },
-    "@/features/planning-items/model/planning-items-relationships": {
-      parseAddPlanningRelationshipPayload: (value) => ({ ok: true, value }),
-      parseRemovePlanningRelationshipPayload: (value) => ({ ok: true, value }),
-      addPlanningRelationshipCommand: (itemId, value) => ({ kind: "addRelationship", itemId, ...value }),
-      removePlanningRelationshipCommand: (itemId, value) => ({ kind: "removeRelationship", itemId, ...value }),
-      createPlanningRelationshipPlanningItems: () => ({ run }),
-      planningRelationshipError: () => ({ message: "Abhängigkeit konnte nicht gespeichert werden.", status: 500 }),
-      planningRelationshipFromResult: (result) => result.items[0],
-    },
-  });
-}
-
-async function loadAdministratorRoute(run, payload) {
-  const mutationClient = {};
-  return importTestModule("src/app/api/tasks/[id]/relationships/route.ts", {
-    "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
-    "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }) },
-    "@/lib/api-response": {
-      apiError: (error, status) => ({ body: { error }, status }),
-      authzError: (failure) => ({ body: { code: failure.code, error: failure.error }, status: failure.status }),
-      requireJsonApiContext: async () => ({
-        ok: true,
-        payload,
-        permission: {
-          profile: { id: "founder-one", platformRole: "founder" },
-          authority: { capabilities: { operationalCorrection: true } },
-        },
-        supabase: {},
-      }),
-    },
-    "@/lib/authz": {
-      bearerToken: () => "session-token",
-      requirePlanningContributorOrActiveAdministrator: () => ({}),
-      resolveAdministratorAccessFailure: async (client) => {
-        assert.equal(client, mutationClient);
-        return {
-          ok: false,
-          status: 403,
-          code: "administrator_access_expired",
-          error: "Der Adminzugang ist abgelaufen.",
-        };
-      },
-    },
-    "@/lib/supabase-user": { getSupabaseForToken: () => mutationClient },
-    "@/features/planning-items/model/planning-actor-context-server": {
-      actorContextFromSessionAuth: () => ({ ok: true, actor: administratorActor }),
-    },
-    "@/features/planning-items/model/planning-items-relationships": {
-      parseAddPlanningRelationshipPayload: (value) => ({ ok: true, value }),
-      parseRemovePlanningRelationshipPayload: (value) => ({ ok: true, value }),
-      addPlanningRelationshipCommand: (itemId, value) => ({ kind: "addRelationship", itemId, ...value }),
-      removePlanningRelationshipCommand: (itemId, value) => ({ kind: "removeRelationship", itemId, ...value }),
-      createPlanningRelationshipPlanningItems: () => ({ run }),
-      planningRelationshipError: () => ({ message: "Abhängigkeit konnte nicht gespeichert werden.", status: 500 }),
-      planningRelationshipFromResult: (result) => result.items[0],
-    },
-  });
 }
 
 const administratorActor = {
@@ -193,42 +118,25 @@ function fixture({
 
 
 test("relationship transport preserves Browser POST and DELETE shapes", async () => {
-  const relationResult = {
-    id: 41,
-    taskId: "source",
-    relatedTaskId: "target",
-    relationType: "blocked_by",
-    note: "Wait",
-    createdBy: "ceo",
-    createdAt: "2026-08-12T10:05:00.000Z",
-  };
-  const calls = [];
-  const run = async (invocation) => {
-    calls.push(invocation);
-    return { ok: true, status: "committed", items: [relationResult], changes: [], effects: [] };
-  };
-
-  const postRoute = await loadRoute(run, { relationType: "blocked_by", relatedTaskId: "target", note: "Wait" });
-  const post = await postRoute.POST({}, { params: Promise.resolve({ id: "source" }) });
-  assert.deepEqual(post, { status: 200, body: { ok: true, relation: relationResult } });
-
-  const deleteRoute = await loadRoute(run, { relationId: 41 });
-  const removed = await deleteRoute.DELETE({}, { params: Promise.resolve({ id: "source" }) });
-  assert.deepEqual(removed, { status: 200, body: { ok: true, relationId: 41 } });
-  assert.deepEqual(calls, [
-    {
-      actor,
-      mode: "commit",
-      command: { kind: "addRelationship", itemId: "source", relationType: "blocked_by", relatedTaskId: "target", note: "Wait" },
-      requestMetadata: { requestIp: "test-ip", userAgent: "test-agent" },
-    },
-    {
-      actor,
-      mode: "commit",
-      command: { kind: "removeRelationship", itemId: "source", relationId: 41 },
-      requestMetadata: { requestIp: "test-ip", userAgent: "test-agent" },
-    },
-  ]);
+  const relationRow = relation({ created_by: "synthetic-profile" });
+  const protocol = planningRouteProtocol({ role: "ceo", snapshot: { eligible: false, active: false }, responses: {
+    prepare_planning_relationship_command: body => Response.json({ source: task("source"), related: task("target"), relation: body.p_relation_id ? relationRow : null, existingRelation: null, actorName: "CEO" }),
+    mutate_planning_relationship_transaction_v2: body => Response.json({ operation: body.p_operation, relation: relationRow, affectedItemIds: ["source", "target"], changed: true, replayed: false }),
+  } });
+  const route = await importTestModule("src/app/api/tasks/[id]/relationships/route.ts", { "server-only": {} });
+  const send = (method, payload) => route[method](protocol.request("/api/tasks/source/relationships", method, payload, { "x-forwarded-for": "192.0.2.1", "user-agent": "synthetic-agent" }), { params: Promise.resolve({ id: "source" }) });
+  const post = await send("POST", { relationType: "blocked_by", relatedTaskId: "target", note: "Wait" });
+  assert.equal(post.status, 200);
+  assert.deepEqual(await post.json(), { ok: true, relation: { id: 41, taskId: "source", relatedTaskId: "target", relationType: "blocked_by", note: "Wait", createdBy: "synthetic-profile", createdAt: "2026-08-12T10:05:00.000Z" } });
+  const removed = await send("DELETE", { relationId: 41 });
+  assert.equal(removed.status, 200);
+  assert.deepEqual(await removed.json(), { ok: true, relationId: 41 });
+  const writes = protocol.calls.filter(call => call.name === "mutate_planning_relationship_transaction_v2");
+  assert.deepEqual(writes.map(call => call.body.p_operation), ["add", "remove"]);
+  for (const { body } of writes) {
+    assert.equal(body.p_task_id, "source"); assert.equal(body.p_actor_profile_id, "synthetic-profile");
+    assert.equal(body.p_request_ip, "192.0.2.1"); assert.equal(body.p_user_agent, "synthetic-agent");
+  }
 });
 
 test("payload parsing preserves relation types, trimming, optional revision, and validation messages", async () => {
@@ -281,23 +189,14 @@ test("administrator relationship commits preserve a late access rejection", asyn
 });
 
 test("relationship routes return the named expiry contract after a late access rejection", async () => {
-  const route = await loadAdministratorRoute(
-    async () => ({
-      ok: false,
-      error: { code: "forbidden", reason: "administratorAccessRequired" },
-    }),
-    { relationType: "blocked_by", relatedTaskId: "target", note: "Wait" },
-  );
-
-  const response = await route.POST({}, { params: Promise.resolve({ id: "source" }) });
-
-  assert.deepEqual(response, {
-    status: 403,
-    body: {
-      code: "administrator_access_expired",
-      error: "Der Adminzugang ist abgelaufen.",
-    },
-  });
+  const protocol = planningRouteProtocol({ role: "founder", responses: {
+    prepare_planning_relationship_command: { source: task("source"), related: task("target"), relation: null, existingRelation: null, actorName: "Administrator" },
+    mutate_administrator_planning_relationship_transaction_v2: () => { protocol.state.snapshot = { eligible: true, active: false }; return Response.json({ code: "42501", message: "active administrator access required" }, { status: 403 }); },
+  } });
+  const route = await importTestModule("src/app/api/tasks/[id]/relationships/route.ts", { "server-only": {} });
+  const response = await route.POST(protocol.request("/api/tasks/source/relationships", "POST", { relationType: "blocked_by", relatedTaskId: "target", note: "Wait" }), { params: Promise.resolve({ id: "source" }) });
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { code: "administrator_access_expired", error: "Der Adminzugang ist abgelaufen." });
 });
 
 test("Preview and Commit use identical add policy and one atomic writer with deterministic effects", async () => {
