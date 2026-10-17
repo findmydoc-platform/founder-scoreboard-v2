@@ -1,12 +1,16 @@
+import "server-only";
+import { safeRelativeNext } from "../../auth-redirect";
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { githubJson } from "./github-http";
-import type { AuthenticatedProfile } from "./types";
+import { getServerServiceRoleSupabase } from "../../supabase-service-role";
+import { githubJson } from "../../github-http";
+import type { AuthenticatedProfile } from "../../types";
 
 const tokenRefreshWindowMs = 5 * 60 * 1000;
 const oauthStateTtlMs = 10 * 60 * 1000;
 
 type GitHubAppUserTokenRow = {
+  connection_id: string; credential_version: number; refresh_claim_id: string | null; refresh_claim_expires_at: string | null;
   profile_id: string;
   github_login: string;
   github_user_id: number | null;
@@ -44,16 +48,9 @@ type OAuthStatePayload = {
   nonce: string;
 };
 
-import { GitHubAppConfigurationError } from "./github-app-errors";
-export { GitHubAppConfigurationError } from "./github-app-errors";
-export class GitHubAppUserTokenRequiredError extends Error {}
+import { GitHubAppConfigurationError } from "../../github-app-errors";
+import { GitHubAppUserTokenRequiredError, GitHubAppUserTokenBusyError } from "../../github-app-errors";
 
-export type GitHubAppOperationalStatus = Readonly<{
-  available: boolean;
-  state: "ready" | "configuration_required" | "unavailable";
-  description: string;
-  nextStep: string;
-}>;
 
 function env(name: string) {
   return process.env[name]?.trim() || "";
@@ -75,16 +72,6 @@ function tokenEncryptionKey() {
 
 function base64UrlJson(value: unknown) {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
-}
-
-function safeRelativeNext(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
-  try {
-    const parsed = new URL(value, "http://localhost");
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  } catch {
-    return "/";
-  }
 }
 
 function encryptToken(token: string) {
@@ -167,7 +154,7 @@ export function verifyGitHubAppOAuthState(state: string) {
     throw new Error("GitHub OAuth State konnte nicht geprüft werden.");
   }
   const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as OAuthStatePayload;
-  if (!payload.exp || payload.exp < Date.now()) throw new Error("GitHub OAuth State ist abgelaufen.");
+  if (!payload.exp || payload.exp <= Date.now()) throw new Error("GitHub OAuth State ist abgelaufen.");
   return payload;
 }
 
@@ -201,11 +188,13 @@ export async function storeGitHubAppUserToken({
   profile,
   githubUser,
   token,
+  expected,
 }: {
   supabase: SupabaseClient;
   profile: AuthenticatedProfile;
   githubUser: GitHubUser;
   token: GitHubAppTokenResponse;
+  expected: {connection_id:string;credential_version:number}|null;
 }) {
   const configuredLogin = await loadConfiguredGitHubLogin(supabase, profile.id);
   if (!configuredLogin || normalizeLogin(githubUser.login) !== normalizeLogin(configuredLogin)) {
@@ -213,30 +202,19 @@ export async function storeGitHubAppUserToken({
   }
   if (!token.access_token) throw new Error("GitHub-App-Token fehlt.");
 
-  const now = new Date().toISOString();
-  const { error } = await supabase.from("github_app_user_tokens").upsert({
-    profile_id: profile.id,
-    github_login: githubUser.login,
-    github_user_id: githubUser.id,
-    encrypted_access_token: encryptToken(token.access_token),
-    encrypted_refresh_token: token.refresh_token ? encryptToken(token.refresh_token) : null,
-    access_token_expires_at: expiresAtFromNow(token.expires_in),
-    refresh_token_expires_at: expiresAtFromNow(token.refresh_token_expires_in),
-    connected_at: now,
-    refreshed_at: null,
-    last_used_at: now,
-    revoked_at: null,
-    last_error: null,
-    updated_at: now,
-  }, { onConflict: "profile_id" });
-
-  if (error) throw new Error(`GitHub-App-Verbindung konnte nicht gespeichert werden: ${error.message}`);
+  const stored = await supabase.rpc("store_github_user_connection", {
+    p_expected_connection: expected?.connection_id || null, p_expected_version: expected?.credential_version ?? null,
+    p_profile_id: profile.id, p_github_login: githubUser.login, p_github_user_id: githubUser.id,
+    p_access: encryptToken(token.access_token), p_refresh: token.refresh_token ? encryptToken(token.refresh_token) : null,
+    p_access_expires: expiresAtFromNow(token.expires_in), p_refresh_expires: expiresAtFromNow(token.refresh_token_expires_in),
+  });
+  if (stored.error || stored.data !== true) throw new Error("GitHub-App-Verbindung konnte nicht gespeichert werden.");
 }
 
 async function loadTokenRow(supabase: SupabaseClient, profile: AuthenticatedProfile) {
   const { data, error } = await supabase
     .from("github_app_user_tokens")
-    .select("profile_id,github_login,github_user_id,encrypted_access_token,encrypted_refresh_token,access_token_expires_at,refresh_token_expires_at,connected_at,refreshed_at,last_used_at,revoked_at,last_error")
+    .select("connection_id,credential_version,refresh_claim_id,refresh_claim_expires_at,profile_id,github_login,github_user_id,encrypted_access_token,encrypted_refresh_token,access_token_expires_at,refresh_token_expires_at,connected_at,refreshed_at,last_used_at,revoked_at,last_error")
     .eq("profile_id", profile.id)
     .maybeSingle<GitHubAppUserTokenRow>();
 
@@ -255,37 +233,50 @@ async function loadConfiguredGitHubLogin(supabase: SupabaseClient, profileId: st
   return data?.github_login?.trim() || "";
 }
 
+const refreshing = new Map<string, Promise<string>>();
+
 async function refreshGitHubAppUserToken(supabase: SupabaseClient, profile: AuthenticatedProfile, row: GitHubAppUserTokenRow) {
-  if (!row.encrypted_refresh_token || isExpired(row.refresh_token_expires_at)) {
-    await supabase.from("github_app_user_tokens").update({
-      last_error: "GitHub Refresh Token fehlt oder ist abgelaufen.",
-      updated_at: new Date().toISOString(),
-    }).eq("profile_id", profile.id);
-    throw userTokenRequired("GitHub-Verbindung ist abgelaufen. Bitte verbinde GitHub einmal neu.");
-  }
-
-  const token = await exchangeOrRefreshGitHubUserToken(new URLSearchParams({
-    client_id: requireEnv("GITHUB_APP_CLIENT_ID"),
-    client_secret: requireEnv("GITHUB_APP_CLIENT_SECRET"),
-    grant_type: "refresh_token",
-    refresh_token: decryptToken(row.encrypted_refresh_token),
-  }));
-
-  const now = new Date().toISOString();
-  const { error } = await supabase.from("github_app_user_tokens").update({
-    encrypted_access_token: encryptToken(token.access_token || ""),
-    encrypted_refresh_token: token.refresh_token ? encryptToken(token.refresh_token) : row.encrypted_refresh_token,
-    access_token_expires_at: expiresAtFromNow(token.expires_in),
-    refresh_token_expires_at: token.refresh_token_expires_in ? expiresAtFromNow(token.refresh_token_expires_in) : row.refresh_token_expires_at,
-    refreshed_at: now,
-    last_used_at: now,
-    revoked_at: null,
-    last_error: null,
-    updated_at: now,
-  }).eq("profile_id", profile.id);
-
-  if (error) throw new Error(`GitHub-App-Token konnte nicht aktualisiert werden: ${error.message}`);
-  return token.access_token || "";
+  const key = `${row.connection_id}:${row.credential_version}`;
+  const existing = refreshing.get(key);
+  if (existing) return existing;
+  const operation = (async () => {
+    if (row.refresh_claim_id) {
+      if (Date.parse(row.refresh_claim_expires_at || "") <= Date.now()) throw userTokenRequired();
+      throw new GitHubAppUserTokenBusyError("GitHub-Verbindung wird gerade erneuert. Bitte später erneut versuchen.");
+    }
+    if (!row.encrypted_refresh_token || isExpired(row.refresh_token_expires_at)) throw userTokenRequired("GitHub-Verbindung ist abgelaufen. Bitte verbinde GitHub einmal neu.");
+    const claim = await supabase.rpc("claim_github_user_refresh", {
+      p_profile_id: profile.id, p_connection_id: row.connection_id, p_version: row.credential_version,
+    });
+    if (claim.error) throw new Error("GitHub-Verbindung konnte nicht reserviert werden.");
+    if (!claim.data) throw new GitHubAppUserTokenBusyError("GitHub-Verbindung wird gerade erneuert. Bitte später erneut versuchen.");
+    let token: GitHubAppTokenResponse;
+    try {
+      token = await exchangeOrRefreshGitHubUserToken(new URLSearchParams({
+        client_id: requireEnv("GITHUB_APP_CLIENT_ID"), client_secret: requireEnv("GITHUB_APP_CLIENT_SECRET"),
+        grant_type: "refresh_token", refresh_token: decryptToken(row.encrypted_refresh_token),
+      }));
+    } catch {
+      // A consumed rotating refresh token cannot be recovered after an unknown provider outcome.
+      // Retain the durable claim. No instance may exchange this snapshot again.
+      await supabase.rpc("finalize_github_user_refresh", {
+        p_profile_id: profile.id, p_connection_id: row.connection_id, p_version: row.credential_version,
+        p_claim_id: claim.data, p_access: null, p_refresh: null, p_access_expires: null, p_refresh_expires: null,
+      }).then(() => undefined, () => undefined);
+      throw userTokenRequired("GitHub-Verbindung konnte nicht erneuert werden. Bitte verbinde GitHub einmal neu.");
+    }
+    const saved = await supabase.rpc("finalize_github_user_refresh", {
+      p_profile_id: profile.id, p_connection_id: row.connection_id, p_version: row.credential_version,
+      p_claim_id: claim.data, p_access: encryptToken(token.access_token || ""),
+      p_refresh: token.refresh_token ? encryptToken(token.refresh_token) : row.encrypted_refresh_token,
+      p_access_expires: expiresAtFromNow(token.expires_in),
+      p_refresh_expires: token.refresh_token_expires_in ? expiresAtFromNow(token.refresh_token_expires_in) : row.refresh_token_expires_at,
+    });
+    if (saved.error || saved.data !== true) throw userTokenRequired("GitHub-Verbindung wurde geändert. Bitte erneut verbinden.");
+    return token.access_token || "";
+  })();
+  refreshing.set(key, operation);
+  try { return await operation; } finally { refreshing.delete(key); }
 }
 
 export async function getGitHubUserTokenForProfile(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
@@ -297,25 +288,13 @@ export async function getGitHubUserTokenForProfile(supabase: SupabaseClient, pro
   if (normalizeLogin(row.github_login) !== normalizeLogin(configuredLogin)) {
     throw userTokenRequired("GitHub-Verbindung passt nicht zum angemeldeten Teamprofil. Bitte verbinde GitHub erneut.");
   }
-  if (expiresSoon(row.access_token_expires_at)) {
-    try {
-      return await refreshGitHubAppUserToken(supabase, profile, row);
-    } catch (error) {
-      if (error instanceof GitHubAppConfigurationError || error instanceof GitHubAppUserTokenRequiredError) throw error;
-      await supabase.from("github_app_user_tokens").update({
-        last_error: error instanceof Error ? error.message : "GitHub Token konnte nicht erneuert werden.",
-        updated_at: new Date().toISOString(),
-      }).eq("profile_id", profile.id);
-      throw userTokenRequired("GitHub-Verbindung konnte nicht erneuert werden. Bitte verbinde GitHub einmal neu.");
-    }
-  }
+  if (expiresSoon(row.access_token_expires_at)) return refreshGitHubAppUserToken(supabase, profile, row);
 
   const token = decryptToken(row.encrypted_access_token);
-  await supabase.from("github_app_user_tokens").update({
-    last_used_at: new Date().toISOString(),
-    last_error: null,
-    updated_at: new Date().toISOString(),
-  }).eq("profile_id", profile.id);
+  const used = await supabase.rpc("use_github_user_connection", {
+    p_profile_id: profile.id, p_connection_id: row.connection_id, p_version: row.credential_version, p_disconnect: false,
+  });
+  if (used.error || used.data !== true) throw userTokenRequired();
   return token;
 }
 
@@ -351,5 +330,28 @@ export async function getGitHubUserConnectionStatus(supabase: SupabaseClient, pr
 
 export async function revokeGitHubAppUserConnection(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
   if (!profile?.id) return;
-  await supabase.from("github_app_user_tokens").delete().eq("profile_id", profile.id);
+  const row = await loadTokenRow(supabase, profile);
+  if (!row) return;
+  const result = await supabase.rpc("use_github_user_connection", { p_profile_id: profile.id,
+    p_connection_id: row.connection_id, p_version: row.credential_version, p_disconnect: true });
+  if (result.error) throw new Error("GitHub-Verbindung konnte nicht getrennt werden.");
+}
+
+export function userVault() {
+  const supabase = getServerServiceRoleSupabase();
+  if (!supabase) throw new GitHubAppConfigurationError("Supabase Service Role ist nicht konfiguriert.");
+  return supabase;
+}
+export async function boundUserConnection(profileId: string) {
+  const profile = { id: profileId } as AuthenticatedProfile;
+  const supabase = userVault();
+  const configured = await loadConfiguredGitHubLogin(supabase, profileId);
+  const row = await loadTokenRow(supabase, profile);
+  if (!configured || !row || row.revoked_at || normalizeLogin(configured) !== normalizeLogin(row.github_login)) throw userTokenRequired();
+  return row;
+}
+
+export async function oauthConnectionSnapshot(profile:AuthenticatedProfile) {
+  const row=await loadTokenRow(userVault(),profile);
+  return row ? {connection_id:row.connection_id,credential_version:row.credential_version} : null;
 }

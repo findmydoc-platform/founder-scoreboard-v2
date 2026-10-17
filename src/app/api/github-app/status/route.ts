@@ -1,7 +1,6 @@
 import { authorizeCredentialAction } from "@/lib/credentials";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiContext } from "@/lib/api-response";
-import { getGitHubUserConnectionStatus } from "@/lib/github-app";
 import { countWaitingGitHubCommentsForAuthor } from "@/lib/github-comment-delivery";
 import { requireTeamMember } from "@/lib/authz";
 
@@ -11,7 +10,7 @@ export async function GET(request: NextRequest) {
   const apiContext = await requireApiContext(request, requireTeamMember);
   if (!apiContext.ok) return apiContext.response;
 
-  const user = await getGitHubUserConnectionStatus(apiContext.supabase, apiContext.permission.profile);
+  const user = await authorizeCredentialAction({credential:{kind:"session-request",request},action:"github.connection.status"});
   const waitingCommentCount = await countWaitingGitHubCommentsForAuthor(
     apiContext.supabase,
     apiContext.permission.profile?.id || "",

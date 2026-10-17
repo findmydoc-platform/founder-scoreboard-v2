@@ -1,5 +1,5 @@
-import type { GitHubInstallationCapability } from "./credentials";
-export type GitHubResourceCredential = string | GitHubInstallationCapability;
+import type { GitHubUserCapability } from "./credentials";
+export type GitHubResourceCredential = string | GitHubUserCapability;
 
 export const GITHUB_API_VERSION = "2022-11-28";
 export const GITHUB_ISSUE_DEPENDENCY_API_VERSION = "2026-03-10";

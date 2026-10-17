@@ -101,3 +101,28 @@ export type PrivateDraftCredentialInput = { credential: { kind: "session-request
 export type PrivateDraftReadResult = Extract<AuthzResult, { ok: false }> | { ok: true; profile: NonNullable<Extract<AuthzResult, {ok:true}>["profile"]>; privateDraft: PrivateDraftReadCapability };
 export type PrivateDraftWriteResult = Extract<AuthzResult, { ok: false }> | { ok: true; profile: NonNullable<Extract<AuthzResult, {ok:true}>["profile"]>; privateDraft: PrivateDraftWriteCapability };
 export type PrivateDraftCredentialResult = PrivateDraftReadResult | PrivateDraftWriteResult;
+
+export type GitHubUserCapability = Readonly<{
+  request(url: string, options: Omit<import("../github-http").GitHubRequestOptions, "token">): Promise<Response>;
+}>;
+export type GitHubAuthoredCredentialInput =
+  | { credential: {kind:"github-comment-delivery";commentId:number;claimToken:string};action:"github.comment.deliver" }
+  | { credential: {kind:"github-comment-preview";commentId:number};action:"github.comment.preview" }
+  | { credential: {kind:"github-review-delivery";reviewId:number;claimToken:string};action:"github.review.deliver" };
+export type GitHubAuthoredCredentialResult = {ok:true;github:GitHubUserCapability};
+export type GitHubConnectionInput = {[Action in "github.connection.start"|"github.connection.complete"]:{credential:{kind:"github-oauth-request";request:NextRequest};action:Action}}["github.connection.start"|"github.connection.complete"];
+export type GitHubConnectionResult = {ok:true;next:string;profileId:string;redirect?:string};
+export type GitHubSessionInput = {[Action in "github.connection.status"|"github.connection.disconnect"]:{credential:{kind:"session-request";request:NextRequest};action:Action}}["github.connection.status"|"github.connection.disconnect"];
+export type GitHubConnectionStatus = {connected:boolean;needsReconnect:boolean;expiresAt:string|null};
+export type GitHubAttachmentInput = {
+  credential:{kind:"session-request";request:NextRequest};action:"github.attachment.write";
+  target:{taskId:string;path:string;repository:string};
+};
+
+export type GitHubAppOperationalStatus = Readonly<{
+  available: boolean;
+  state: "ready" | "configuration_required" | "unavailable";
+  description: string;
+  nextStep: string;
+}>;
+

@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
+import { defaultGitHubRepository } from "@/lib/github-repositories";
 import { NextResponse, type NextRequest } from "next/server";
 import { requirePlanningContributor } from "@/lib/authz";
 import { uploadGitHubAttachment } from "@/lib/github";
-import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "@/lib/github-app";
+import { GitHubAppUserTokenRequiredError, GitHubAppUserTokenBusyError } from "@/lib/github-app-errors";
+import { authorizeCredentialAction, type GitHubUserCapability } from "@/lib/credentials";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { compactAlphanumeric, slugify } from "@/lib/slug";
 import { apiError, requireApiContext } from "@/lib/api-response";
@@ -87,24 +90,27 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (file.size > maxUploadBytes) return apiError("Datei ist zu groß. Maximal erlaubt sind 10 MB.", 413);
   if (!allowedMimeTypes.has(file.type)) return apiError("Dateityp wird noch nicht unterstützt.", 415);
 
-  let githubUserToken = "";
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const identity=createHash("sha256").update(`${permission.profile?.id || ""}\0${file.name}\0${file.type}\0`).update(buffer).digest("hex");
+  const path = `.fmd-attachments/tasks/${id}/${identity}-${safeFileName(file.name)}`;
+  let githubUserToken:GitHubUserCapability;
   try {
-    githubUserToken = await getGitHubUserTokenForProfile(supabase, permission.profile);
+    githubUserToken=(await authorizeCredentialAction({credential:{kind:"session-request",request},action:"github.attachment.write",
+      target:{taskId:id,path,repository:task.github_repo || defaultGitHubRepository}})).github;
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.", error instanceof GitHubAppUserTokenRequiredError ? 401 : 403);
+    return apiError(error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.", error instanceof GitHubAppUserTokenBusyError ? 503 : error instanceof GitHubAppUserTokenRequiredError ? 401 : 403);
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const filename = `${timestamp}-${safeFileName(file.name)}`;
-  const path = `.fmd-attachments/tasks/${id}/${filename}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const uploaded = await uploadGitHubAttachment(
+  let uploaded;
+  try {
+    uploaded = await uploadGitHubAttachment(
     path,
     buffer,
     githubUserToken,
     `Add attachment for Founder Scoreboard task ${id}`,
     task.github_repo,
   );
+  } catch { return apiError("GitHub-Anhang konnte nicht sicher gespeichert werden. Bitte denselben Anhang erneut senden.",502); }
   const markdown = isImageType(file.type)
     ? `![${file.name}](${uploaded.rawUrl})`
     : `[${file.name}](${uploaded.rawUrl})`;
