@@ -1,3 +1,5 @@
+import { authorizeReleaseIngest } from "./internal/release-ingest";
+import type { ReleaseIngestCredentialInput, ReleaseIngestCredentialResult } from "./release-ingest-types";
 import { authorizeGitHubWebhook } from "./internal/github-webhook";
 import type { GitHubWebhookInput, GitHubWebhookResult } from "./github-webhook-types";
 import { authorizeDecisionLog } from "./internal/notion";
@@ -44,6 +46,7 @@ export type {
 
 export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
+export function authorizeCredentialAction(input: ReleaseIngestCredentialInput): Promise<ReleaseIngestCredentialResult>;
 export function authorizeCredentialAction(input: GitHubWebhookInput): Promise<GitHubWebhookResult>;
 export function authorizeCredentialAction(input: DecisionLogCredentialInput): Promise<DecisionLogCredentialResult>;
 export function authorizeCredentialAction(input: PlanningCredentialInput): Promise<PlanningCredentialResult>;
@@ -75,7 +78,8 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
 
-export function authorizeCredentialAction(input: GitHubWebhookInput | DecisionLogCredentialInput | GoogleCalendarInput | GoogleCalendarConnectionInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | PlanningCredentialInput): Promise<GitHubWebhookResult | DecisionLogCredentialResult | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string} | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | PlanningCredentialResult> {
+export function authorizeCredentialAction(input: ReleaseIngestCredentialInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | GoogleCalendarInput | GoogleCalendarConnectionInput | GitHubWebhookInput | DecisionLogCredentialInput | PlanningCredentialInput): Promise<ReleaseIngestCredentialResult | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string} | GitHubWebhookResult | DecisionLogCredentialResult | PlanningCredentialResult> {
+  if (input.action === "platform-release.ingest") return authorizeReleaseIngest(input);
   if (input.action === "github.webhook.accept") return input.credential.kind === "github-webhook-request" ? authorizeGitHubWebhook(input) : Promise.resolve({kind:"rejected" as const,status:403 as const,code:"github_webhook_unauthorized",message:"GitHub webhook credential is required."});
   if (input.action === "decision-log.read") return authorizeDecisionLog(input);
   if (isPlanningAction(input.action)) return authorizePlanning(input as PlanningCredentialInput);
