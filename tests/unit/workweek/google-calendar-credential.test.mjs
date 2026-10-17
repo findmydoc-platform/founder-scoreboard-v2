@@ -119,3 +119,32 @@ test("a damaged encrypted connection retains the existing reconnect status after
   expect((await (await GET(request())).json()).connection).toMatchObject({state:"reconnect_required"});
   expect(state.provider).toHaveLength(0);
 });
+
+
+test("disconnect confirms an observed provider effect after the initiating owner loses admission", async () => {
+  const state = fixture(), transport = globalThis.fetch;
+  let deleted = 0, confirmed = 0, finalized = 0, ownerMapped = true, phase = "cleaning";
+  const operation = () => ({ id: "operation-1", owner_profile_id: "owner-1", requested_by: "owner", revoke_connection: true, state: phase, retained_version_id: null, deactivated_at: null, completed_at: null, last_error_class: null });
+  const target = { id: "target-1", series_id: "series-1", calendar_id: "primary", google_event_id: "event-1", expected_etag: '"etag-1"', expected_founderops_revision: 1, cleanup_action: "delete", recurrence_count: null, state: "pending" };
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname.endsWith("/rpc/current_authenticated_profile") && !ownerMapped) return Response.json(null);
+    if (url.pathname === "/rest/v1/google_workspace_disconnect_operations") return Response.json(operation());
+    if (url.pathname === "/rest/v1/team_workweek_publications") return Response.json([]);
+    if (url.pathname === "/rest/v1/google_workspace_disconnect_series") return Response.json([target]);
+    if (url.pathname.endsWith("/rpc/confirm_google_workspace_disconnect_series")) { confirmed++; return new Response(null, { status: 204 }); }
+    if (url.pathname.endsWith("/rpc/finalize_google_workspace_disconnect")) { finalized++; phase = "revoke_pending"; return Response.json({ state: phase }); }
+    if (url.hostname === "www.googleapis.com") {
+      if (request.method === "DELETE") { deleted++; ownerMapped = false; return new Response(null, { status: 204 }); }
+      return Response.json({ id: "event-1", etag: '"etag-1"', extendedProperties: { private: { founderopsWorkweekSeriesId: "series-1", founderopsWorkweekRevision: "1" } } });
+    }
+    return transport(request);
+  });
+  const { POST } = await importTestModule("src/app/api/google-workspace/disconnect/route.ts", { "server-only": {} });
+  const response = await POST(new NextRequest("https://application.example.test/api/google-workspace/disconnect", { method: "POST", headers: state.request.headers, body: JSON.stringify({ confirm: true }) }));
+  expect(deleted).toBe(1);
+  expect(confirmed).toBe(1);
+  expect(finalized).toBe(1);
+  expect(response.status).toBe(202);
+  expect(await response.json()).toEqual({ result: { state: "remove_pending", recovery: "retry" } });
+});

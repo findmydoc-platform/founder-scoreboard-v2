@@ -9,9 +9,9 @@ for (const mode of ["legacy", "linking", "google"]) {
   test(`login uses the authorized provider in ${mode} mode`, async () => {
     let options;
     const route = await importTestModule("src/app/api/auth/session/login/route.ts", {
-      "@/lib/workspace-access": { workspaceAccessContext: async () => ({ mode }) },
+      "@/lib/credentials/internal/workspace-access": { workspaceAccessContext: async () => ({ mode }) },
       "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
-      "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: { signInWithOAuth: async input => { options = input; return { data: { url: "https://accounts.google.com/authorize" }, error: null }; } } }) },
+      "@/lib/credentials/internal/cookie-client": { cookieSession: async () => ({ complete: response => response, revoke() {} }), getServerAuthSupabase: async () => ({ auth: { signInWithOAuth: async input => { options = input; return { data: { url: "https://accounts.google.com/authorize" }, error: null }; } } }) },
     });
     const url = "https://founder-ops.findmydoc.eu/auth/login?provider=github";
     const response = await route.POST({ url, nextUrl: new URL(url), headers: new Headers({ origin: "https://founder-ops.findmydoc.eu", "content-type": "application/json" }) });
@@ -28,12 +28,12 @@ test("callback denies an unapproved Workspace identity and clears the new applic
   const signOut = vi.fn(async () => ({}));
   const route = await importTestModule("src/app/auth/callback/route.ts", {
     "next/headers": { cookies: async () => ({}) },
-    "@/lib/workspace-access": { requireWorkspaceAccess: async () => { throw new Error("Not a member"); } },
-    "@/lib/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
-    "@/lib/google-provider-proof": { verifyGoogleProviderToken: async () => {} },
-    "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => null },
+    "@/lib/credentials/internal/workspace-access": { requireWorkspaceAccess: async () => { throw new Error("Not a member"); } },
+    "@/lib/credentials/internal/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
+    "@/lib/credentials/internal/google-provider-proof": { verifyGoogleProviderToken: async () => {} },
+    "@/lib/credentials/internal/service-client": { getServerServiceRoleSupabase: () => null },
     "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
-    "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: { exchangeCodeForSession: async () => ({ data: { user: { id: "auth-user" }, session: { access_token: "session", refresh_token: "refresh" } }, error: null }), setSession: async () => ({ error: null }), signOut } }) },
+    "@/lib/credentials/internal/cookie-client": { cookieSession: async () => ({ complete: response => response, revoke() {} }), getServerAuthSupabase: async () => ({ auth: { exchangeCodeForSession: async () => ({ data: { user: { id: "auth-user" }, session: { access_token: "session", refresh_token: "refresh" } }, error: null }), setSession: async () => ({ error: null }), signOut } }) },
   });
   const url = "https://founder-ops.findmydoc.eu/auth/callback?code=example";
   const response = await route.GET({ url, nextUrl: new URL(url) });
@@ -50,16 +50,16 @@ async function enforcedCallback({ linked, loginNonce = null, cookieNonce = null 
   const token = `e.${Buffer.from(JSON.stringify({ session_id: sessionId })).toString("base64url")}.s`;
   const route = await importTestModule("src/app/auth/callback/route.ts", {
     "next/headers": { cookies: async () => ({ get: () => ({ value: cookieNonce }), set: vi.fn() }) },
-    "@/lib/workspace-access": {
+    "@/lib/credentials/internal/workspace-access": {
       workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true, profileId: "founder", linked }),
       requireWorkspaceAccess: async () => ({ subject: "google-subject" }),
       assertGoogleSession: async () => {},
     },
-    "@/lib/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
-    "@/lib/google-provider-proof": { verifyGoogleProviderToken },
-    "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => ({ rpc }) },
+    "@/lib/credentials/internal/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
+    "@/lib/credentials/internal/google-provider-proof": { verifyGoogleProviderToken },
+    "@/lib/credentials/internal/service-client": { getServerServiceRoleSupabase: () => ({ rpc }) },
     "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
-    "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: {
+    "@/lib/credentials/internal/cookie-client": { cookieSession: async () => ({ complete: response => response, revoke() {} }), getServerAuthSupabase: async () => ({ auth: {
       exchangeCodeForSession: async () => ({ data: { user: { id: "auth-user" }, session: { access_token: token, refresh_token: "refresh", provider_token: "google-provider-token" } }, error: null }),
       setSession: async () => ({ error: null }), signOut,
     } }) },

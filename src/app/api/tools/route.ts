@@ -1,15 +1,12 @@
 import { isProtectedToolPreviewUrl } from "@/lib/tool-preview-image";
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { requirePlanningContributor } from "@/lib/authz";
+import { apiError, authzError, readJsonPayload } from "@/lib/api-response";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { mapFmdTool } from "@/lib/planning-row-mappers";
 import type { DbFmdTool } from "@/lib/planning-row-types";
-import { slugify } from "@/lib/slug";
 import type { FmdTool } from "@/lib/types";
 import { invalidateSharedPlanningHeaderCache } from "@/lib/planning-header-cache";
-
-const maxCuratedFmdToolLinks = 5;
 
 type FmdToolPayload = {
   name?: string;
@@ -26,7 +23,6 @@ type FmdToolPayload = {
 
 const toolCategories = new Set<FmdTool["category"]>(["tool", "repo", "knowledge", "asset"]);
 const previewImageSources = new Set<FmdTool["previewImageSource"]>(["none", "og", "manual"]);
-const fmdToolSelect = "id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order";
 
 function normalizeToolUrl(value: string) {
   if (!value) return "";
@@ -52,10 +48,9 @@ function normalizePreviewImageUrl(value: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<FmdToolPayload>(request, requirePlanningContributor, {});
-  if (!context.ok) return context.response;
-
-  const { payload, permission, supabase } = context;
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "tools.create" });
+  if (!permission.ok) return authzError(permission);
+  const payload = await readJsonPayload<FmdToolPayload>(request, {});
   const name = cleanText(payload.name, 160);
   const description = cleanText(payload.description, 1200);
   const kind = cleanText(payload.kind, 80) || "Tool";
@@ -74,57 +69,13 @@ export async function POST(request: NextRequest) {
   const previewImageSource = normalizedPreviewImageUrl && previewImageSources.has(payload.previewImageSource as FmdTool["previewImageSource"])
     ? payload.previewImageSource as FmdTool["previewImageSource"]
     : "none";
-  if (isCurated) {
-    const { count, error: countError } = await supabase
-      .from("fmd_tools")
-      .select("id", { count: "exact", head: true })
-      .eq("is_curated", true)
-      .not("url", "is", null);
-    if (countError) return apiError(countError.message, 500);
-    if ((count || 0) >= maxCuratedFmdToolLinks) return apiError(`Es können maximal ${maxCuratedFmdToolLinks} kuratierte Links sein.`, 400);
-  }
-  const { data: maxRow } = await supabase
-    .from("fmd_tools")
-    .select("sort_order")
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const idBase = `tool-${slugify(name, { maxLength: 64 }) || "neu"}`;
-  const id = `${idBase}-${Date.now().toString(36)}`;
-  const insert = {
-    id,
-    name,
-    category,
-    kind,
-    description,
-    url: normalizedUrl || null,
-    owner,
-    status,
-    is_curated: isCurated,
-    preview_image_url: normalizedPreviewImageUrl || null,
-    preview_image_source: previewImageSource,
-    sort_order: Number(maxRow?.sort_order || 0) + 10,
-  };
-
-  const { data: created, error } = await supabase
-    .from("fmd_tools")
-    .insert(insert)
-    .select(fmdToolSelect)
-    .single();
-
-  if (error || !created) return apiError(error?.message || "Link konnte nicht gespeichert werden.", 500);
-
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "fmd_tool.create",
-    entity_type: "fmd_tool",
-    entity_id: id,
-    after_data: insert,
-    ...auditRequestMetadata(request),
-  });
+  const result = await permission.resource.saveTool({
+    name, category, kind, description, url: normalizedUrl || null, owner, status,
+    is_curated: isCurated, preview_image_url: normalizedPreviewImageUrl || null, preview_image_source: previewImageSource,
+  }, auditRequestMetadata(request));
+  if (!result.ok) return apiError(result.error, result.status);
 
   invalidateSharedPlanningHeaderCache("quickLinks");
 
-  return NextResponse.json({ ok: true, tool: mapFmdTool(created as DbFmdTool) });
+  return NextResponse.json({ ok: true, tool: mapFmdTool(result.tool as DbFmdTool) });
 }

@@ -1,5 +1,5 @@
 import "server-only";
-import type { WorkspaceIdentity } from "./workspace-identity";
+import type { WorkspaceIdentity } from "../../workspace-identity";
 
 export async function verifyGoogleProviderToken(providerToken: string | null | undefined, identity: WorkspaceIdentity) {
   if (!providerToken) throw new Error("Google provider token unavailable");

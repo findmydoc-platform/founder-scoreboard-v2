@@ -12,7 +12,13 @@ export type PlanningDatabaseActor = { profileId: string; userId: string; session
 // This fixture must run only in the guarded external snapshot, never in an operator checkout.
 export async function withPlanningCredentialDatabase(run: (fixture: Awaited<ReturnType<typeof createFixture>>) => Promise<void>, mode: "legacy" | "linking" = "legacy") {
   const fixture = await createFixture(mode);
-  try { await run(fixture); } finally { await fixture.cleanup(); }
+  let failure: unknown;
+  try { await run(fixture); } catch (error) { failure = error; }
+  try { await fixture.cleanup(); } catch (error) {
+    if (failure) throw new AggregateError([failure, error], "Planning acceptance and fixture cleanup both failed");
+    throw error;
+  }
+  if (failure) throw failure;
 }
 
 async function createFixture(mode: "legacy" | "linking") {
@@ -47,6 +53,8 @@ async function createFixture(mode: "legacy" | "linking") {
       await db.query("delete from public.tasks where id like $1", [`${prefix}%`]);
       await db.query("delete from public.sprints where id like $1", [`${prefix}%`]);
       if (!projectExisted) await db.query("delete from public.projects where id='findmydoc-founder-execution'");
+      await db.query("delete from public.google_workspace_disconnect_series where operation_id in (select id from public.google_workspace_disconnect_operations where owner_profile_id=any($1))", [profileIds]);
+      await db.query("delete from public.google_workspace_disconnect_operations where owner_profile_id=any($1)", [profileIds]);
       await db.query("delete from public.team_workweek_publications where owner_profile_id=any($1)", [profileIds]);
       await db.query("delete from public.team_workweek_versions where owner_profile_id=any($1)", [profileIds]);
       await db.query("delete from workspace_private.request_permits where user_id=any($1)", [userIds]);

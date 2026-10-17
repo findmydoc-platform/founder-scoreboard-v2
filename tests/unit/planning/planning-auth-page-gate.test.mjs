@@ -5,7 +5,7 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("REQUIRE_SUPABASE_AUTH disables auth only for explicit local development", async () => {
-  const supabase = await importTestModule("src/lib/supabase.ts", {
+  const supabase = await importTestModule("src/lib/supabase-configuration.ts", {
     "@supabase/ssr": { createBrowserClient: () => ({}) },
     "@supabase/supabase-js": { createClient: () => ({}) },
   });

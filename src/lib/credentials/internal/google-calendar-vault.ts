@@ -1,5 +1,5 @@
 import { GoogleWorkspaceOAuthContractError } from "../../google-calendar-errors";
-import { getServerServiceRoleSupabase } from "../../supabase-service-role";
+import { getServerServiceRoleSupabase } from "./service-client";
 import { createHash } from "node:crypto";
 import "server-only";
 

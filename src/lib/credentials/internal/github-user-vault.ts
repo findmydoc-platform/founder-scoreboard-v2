@@ -2,8 +2,8 @@ import "server-only";
 import { safeRelativeNext } from "../../auth-redirect";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getServerServiceRoleSupabase } from "../../supabase-service-role";
-import { githubJson } from "../../github-http";
+import { getServerServiceRoleSupabase } from "./service-client";
+import { githubJson } from "./github-http-transport";
 import type { AuthenticatedProfile } from "../../types";
 
 const tokenRefreshWindowMs = 5 * 60 * 1000;

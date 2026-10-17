@@ -5,7 +5,7 @@ import type { ContentLengthError } from "@/lib/github-issue-content";
 import { createHash } from "node:crypto";
 import type { AuthenticatedProfile } from "@/lib/types";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
-import type { getServerSupabase } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { defaultGitHubRepository, resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
@@ -38,7 +38,7 @@ import type { CreateItems, NewPlanningItem, PlanningError, PlanningItems, Planni
 import type { PlanningCommitOutcome, PlanningCommitRequest, PlanningPreparation, PlanningPreparationRequest } from "./planning-items-store";
 import type { PlanningDecisionCore } from "./planning-items-runner";
 
-type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
+type SupabaseServer = SupabaseClient;
 
 type ParentRow = {
   id: string;

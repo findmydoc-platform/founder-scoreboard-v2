@@ -1,12 +1,12 @@
 import "server-only";
 import { resolveSessionRequest } from "./session-request";
-import type { CredentialAction } from "../types";
+import type { SessionPolicyAction } from "./session-policy-types";
 import { createClient, isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { createHash, randomBytes } from "node:crypto";
 import { WorkspaceAccessError, workspaceIdentity } from "../../workspace-identity";
 import { invalidSessionBeforeEffectErrorCode } from "../../auth-error-contract";
 import { isWorkspaceGroupMember } from "./workspace-directory";
-import type { AccessContext } from "../../workspace-access";
+import type { AccessContext } from "./workspace-access";
 import type { CalendarCredentialResult, CalendarPublication } from "../types";
 import type { NextRequest } from "next/server";
 
@@ -112,7 +112,7 @@ function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): t
   };
 }
 
-type SessionAction = CredentialAction | "calendar.read" | "workweek.private.read" | "workweek.private.write" | "session.planning" | "session.home";
+type SessionAction = SessionPolicyAction | "calendar.read" | "workweek.private.read" | "workweek.private.write" | "session.planning" | "session.home";
 type SessionDataResult = Extract<CalendarCredentialResult, { ok: false }> | {
   ok: true; profile: Extract<CalendarCredentialResult, { ok: true }>["profile"]; user: User;
   assertCurrent(): void;

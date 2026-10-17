@@ -1,12 +1,12 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
-import { assertGoogleSession, requireWorkspaceAccess, workspaceAccessContext } from "@/lib/workspace-access";
-import { sha256 } from "@/lib/workspace-data-fetch";
+import { getServerAuthSupabase } from "./cookie-client";
+import { getServerServiceRoleSupabase } from "@/lib/credentials/internal/service-client";
+import { assertGoogleSession, requireWorkspaceAccess, workspaceAccessContext } from "@/lib/credentials/internal/workspace-access";
+import { sha256 } from "@/lib/credentials/internal/workspace-data-fetch";
 import { authOrigin, safeRelativeNext } from "@/lib/auth-redirect";
-import { verifyGoogleProviderToken } from "@/lib/google-provider-proof";
+import { verifyGoogleProviderToken } from "@/lib/credentials/internal/google-provider-proof";
 
 export const dynamic = "force-dynamic";
 

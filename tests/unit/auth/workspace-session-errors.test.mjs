@@ -23,9 +23,9 @@ async function fixture({ mode = "linking", getUser, context, session } = {}) {
       return session || { data: true, error: null };
     }),
   };
-  const access = await importTestModule("src/lib/workspace-access.ts", {
+  const access = await importTestModule("src/lib/credentials/internal/workspace-access.ts", {
     "server-only": {},
-    "./supabase-service-role": { getServerServiceRoleSupabase: () => service },
+    "./service-client": { getServerServiceRoleSupabase: () => service },
     "./workspace-directory": { isWorkspaceGroupMember: vi.fn() },
   });
   return { access, service };

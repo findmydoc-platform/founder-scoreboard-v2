@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { codepointLength } from "@/lib/github-issue-content";
 import { planningContentFromRow } from "./planning-item-content";
 import { validateStoredPlanningContent } from "./planning-item-content-server";
-import type { AuthzResult } from "@/lib/authz";
+import type { AuthzResult } from "@/lib/credentials/auth-types";
 import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { taskAuditActionFromMessage } from "@/features/tasks/model/task-comment-timeline-policy";
 import {

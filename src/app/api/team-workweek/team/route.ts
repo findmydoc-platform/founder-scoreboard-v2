@@ -6,7 +6,7 @@ import {
 } from "@/features/team-workweek/model/team-workweek-calendar";
 import { berlinTodayIso, inflatePublishedTeamWorkweekWindows } from "@/features/team-workweek/model/team-workweek-draft";
 import { selectVisibleTeamWorkweeks } from "@/features/team-workweek/model/published-team-workweek";
-import { apiError, requireApiContext } from "@/lib/api-response";
+import { apiError, authzError } from "@/lib/api-response";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import type { CalendarPublication } from "@/lib/credentials/types";
 
@@ -30,8 +30,8 @@ function calendarWorkweek(row: PublishedVersionRow): CalendarTeamWorkweek {
 }
 
 export async function GET(request: NextRequest) {
-  const context = await requireApiContext(request, request => authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "calendar.read" }));
-  if (!context.ok) return context.response;
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "calendar.read" });
+  if (!permission.ok) return authzError(permission);
   const requestedRange = validateCalendarWorkweekRange(
     request.nextUrl.searchParams.get("from"),
     request.nextUrl.searchParams.get("to"),
@@ -43,9 +43,9 @@ export async function GET(request: NextRequest) {
   // Retain current and all future plans, plus history needed by the requested range.
   const earliestDate = requestedRange.range && requestedRange.range.from < referenceDate ? requestedRange.range.from : referenceDate;
   const [publications, owners] = await Promise.all([
-    context.permission.calendar.readPublications(earliestDate),
+    permission.calendar.readPublications(earliestDate),
     // An owner with historical hours is still published, even without a current plan.
-    context.permission.calendar.readPublishedOwners(),
+    permission.calendar.readPublishedOwners(),
   ]);
   const { data, error } = publications;
   if (error || owners.error) return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);

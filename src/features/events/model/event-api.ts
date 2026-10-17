@@ -1,6 +1,6 @@
 import type { FounderEvent } from "@/lib/types";
 import { cleanText } from "@/lib/api-input";
-import { getServerSupabase } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type EventPayload = {
   title?: string;
@@ -20,8 +20,7 @@ export const founderEventSelect = "id,title,category,starts_at,ends_at,location,
 export const eventCategories = new Set<FounderEvent["category"]>(["conference", "legal", "company", "travel", "deadline", "other"]);
 export const eventStatuses = new Set<FounderEvent["status"]>(["planned", "done", "cancelled"]);
 
-type SupabaseClient = NonNullable<ReturnType<typeof getServerSupabase>>;
-type FounderEventRow = {
+export type FounderEventRow = {
   title: string;
   category: FounderEvent["category"];
   starts_at: string;

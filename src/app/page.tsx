@@ -1,10 +1,10 @@
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { redirect } from "next/navigation";
 import { workspacePath } from "@/features/planning/model/workspace-routes";
-import { getServerPlanningHomeWorkspace } from "@/lib/planning-auth-server";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const workspace = await getServerPlanningHomeWorkspace();
+  const workspace = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.home" });
   redirect(workspacePath(workspace));
 }

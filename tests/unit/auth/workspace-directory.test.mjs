@@ -19,7 +19,7 @@ test.each(["production", "preview"])("%s uses WIF, caches only the service crede
   });
   vi.stubGlobal("fetch",network);
   try {
-    const directory = await importTestModule("src/lib/workspace-directory.ts", { "server-only":{}, "@vercel/oidc":{getVercelOidcToken:async()=>"test-oidc"} });
+    const directory = await importTestModule("src/lib/credentials/internal/workspace-directory.ts", { "server-only":{}, "@vercel/oidc":{getVercelOidcToken:async()=>"test-oidc"} });
     expect(await directory.isWorkspaceGroupMember("member@findmydoc.eu")).toBe(true);
     expect(await directory.isWorkspaceGroupMember("member@findmydoc.eu")).toBe(false);
     expect(network).toHaveBeenCalledTimes(4);

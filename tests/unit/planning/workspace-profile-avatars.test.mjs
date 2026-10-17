@@ -17,27 +17,17 @@ let serviceAvailable = true;
 let batchError = null;
 let batchThrows = false;
 let batchData = undefined;
-const { withWorkspaceProfileAvatars } = await importTestModule(
-  "src/features/planning-items/server/workspace-profile-avatars.ts",
-  {
-    "server-only": {},
-    "@/lib/supabase-service-role": {
-      getServerServiceRoleSupabase: () => serviceAvailable ? {
-        rpc: async (name, params) => {
-          requested.push([name, params]);
-          if (name === "workspace_access_contexts") {
-            if (batchThrows) throw new Error("connection failed");
-            return batchError
-              ? { data: null, error: batchError }
-              : { data: batchData ?? params.p_profile_ids.map((id) => contexts.get(id) ?? null), error: null };
-          }
-          const value = contexts.get(params.p_profile_id);
-          return value instanceof Error ? { data: null, error: value } : { data: value, error: null };
-        },
-      } : null,
-    },
-  },
-);
+const { withWorkspaceProfileAvatars: enrich } = await importTestModule("src/features/planning-items/server/workspace-profile-avatars.ts", { "server-only": {} });
+const service = { rpc: async (name, params) => {
+  requested.push([name, params]);
+  if (name === "workspace_access_contexts") {
+    if (batchThrows) throw new Error("connection failed");
+    return batchError ? { data: null, error: batchError } : { data: batchData ?? params.p_profile_ids.map(id => contexts.get(id) ?? null), error: null };
+  }
+  const value = contexts.get(params.p_profile_id);
+  return value instanceof Error ? { data: null, error: value } : { data: value, error: null };
+} };
+const withWorkspaceProfileAvatars = profiles => enrich(profiles, serviceAvailable ? service : null);
 
 beforeEach(() => {
   contexts.clear();

@@ -1,7 +1,5 @@
 import "server-only";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-let serverClient: SupabaseClient | null = null;
 
 const browserSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const browserSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -25,16 +23,6 @@ function runtimeSupabaseAnonKey() {
 
 export function hasSupabaseEnv() {
   return Boolean((browserSupabaseUrl && browserSupabaseAnonKey) || (runtimeSupabaseUrl() && runtimeSupabaseAnonKey()));
-}
-
-export function getServerSupabase() {
-  const url = runtimeSupabaseUrl();
-  const key = runtimeEnv("SUPABASE_SERVICE_ROLE_KEY") || runtimeEnv("SUPABASE_SECRET_KEY") || runtimeSupabaseAnonKey();
-  if (!url || !key) return null;
-  serverClient ??= createClient(url, key, {
-    auth: { persistSession: false },
-  });
-  return serverClient;
 }
 
 export function requiresSupabaseAuth() {

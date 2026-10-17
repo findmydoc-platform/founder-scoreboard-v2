@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-response";
 import { isLocalLoginRequestAllowed } from "@/lib/local-development-auth";
 import { allowedSessionMutation } from "./browser-session-transport";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
+import { getServerAuthSupabase } from "./cookie-client";
 
 export async function POST(request: NextRequest) {
   if (!isLocalLoginRequestAllowed(request.headers.get("host") || "")) {

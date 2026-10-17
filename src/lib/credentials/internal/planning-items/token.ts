@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type { AuthenticatedProfile } from "@/lib/types";
-import { getServerSupabase } from "@/lib/supabase";
+import { getServerSupabase } from "@/lib/credentials/internal/server-data-client";
 import { authorizePersonalTokenWorkspace } from "./workspace";
 import { WorkspaceAccessError } from "@/lib/workspace-identity";
 import { TEAM_PLANNING_ITEM_SCOPES, type TeamPlanningItemScope } from "@/features/planning-items/model/planning-items-contract";

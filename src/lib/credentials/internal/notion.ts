@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { getServerAuthSupabase } from "./cookie-client";
 import { authorizeSessionData } from "./session";
-import { requiresSupabaseAuth } from "../../supabase";
+import { requiresSupabaseAuth } from "../../supabase-configuration";
 import { isLocalLoginRequestAllowed } from "../../local-development-auth";
 import { loadPlanningHeaderData } from "../../planning-header-data";
 import { planningHeaderSlotLoaders } from "./planning-header-cache";

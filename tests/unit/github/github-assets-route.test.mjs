@@ -2,37 +2,32 @@ import assert from "node:assert/strict";
 import { beforeEach, afterEach, test, vi } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 
+import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-let permission = { ok: true };
+let protocol, route, provider;
 const privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" });
-beforeEach(() => {
-  vi.stubEnv("GITHUB_APP_ID", "123");
-  vi.stubEnv("GITHUB_APP_INSTALLATION_ID", "456");
-  vi.stubEnv("GITHUB_APP_PRIVATE_KEY", privateKey);
-  vi.stubEnv("GITHUB_APP_PRIVATE_KEY_PATH", "");
+beforeEach(async () => {
+  vi.resetModules();
+  protocol = administratorProtocol();
+  const authFetch = globalThis.fetch;
+  vi.stubEnv("GITHUB_APP_ID", "123"); vi.stubEnv("GITHUB_APP_INSTALLATION_ID", "456");
+  vi.stubEnv("GITHUB_APP_PRIVATE_KEY", privateKey); vi.stubEnv("GITHUB_APP_PRIVATE_KEY_PATH", "");
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.hostname === "administrator-auth.example.test") return authFetch(request);
+    if (url.hostname === "api.github.com") return providerFetch();
+    return provider(request.url, { method: request.method, headers: request.headers, redirect: request.redirect });
+  });
+  route = await importTestModule("src/app/api/github-assets/route.ts", { "server-only": {} });
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 const providerFetch = () => Response.json({ token: "installation-token", expires_at: new Date(Date.now() + 3600000).toISOString() });
-const route = await importTestModule("src/app/api/github-assets/route.ts", {
-  "@/lib/authz": {
-    requirePlanningContributor: async () => permission,
-  },
-  "server-only": {},
-  "@/lib/api-response": {
-    apiError: (message, status) => Response.json({ message }, { status }),
-    authzError: () => Response.json({ message: "forbidden" }, { status: 403 }),
-  },
-});
-
-function request(url) {
-  return { nextUrl: new URL(`https://app.example/api/github-assets?url=${encodeURIComponent(url)}`) };
-}
+function request(url) { return protocol.request(`/api/github-assets?url=${encodeURIComponent(url)}`); }
 
 test("GitHub asset route follows only allowed redirects and does not forward its token", async () => {
-  const originalFetch = globalThis.fetch;
   const calls = [];
-  globalThis.fetch = async (url, options) => {
+  provider = async (url, options) => {
     if (String(url).startsWith("https://api.github.com/")) return providerFetch();
     calls.push({ url: String(url), authorization: new Headers(options.headers).get("authorization"), redirect: options.redirect });
     if (calls.length === 1) {
@@ -53,14 +48,13 @@ test("GitHub asset route follows only allowed redirects and does not forward its
     assert.equal(calls[0].redirect, "manual");
     assert.equal(calls[1].authorization, null);
   } finally {
-    globalThis.fetch = originalFetch;
+    provider = undefined;
   }
 });
 
 test("GitHub asset route rejects unapproved URLs before making an outbound request", async () => {
-  const originalFetch = globalThis.fetch;
   let fetchCalls = 0;
-  globalThis.fetch = async () => {
+  provider = async () => {
     fetchCalls += 1;
     return new Response("unexpected");
   };
@@ -70,14 +64,13 @@ test("GitHub asset route rejects unapproved URLs before making an outbound reque
     assert.equal(response.status, 400);
     assert.equal(fetchCalls, 0);
   } finally {
-    globalThis.fetch = originalFetch;
+    provider = undefined;
   }
 });
 
 test("GitHub asset route rejects paths that escape the attachment endpoint", async () => {
-  const originalFetch = globalThis.fetch;
   let fetchCalls = 0;
-  globalThis.fetch = async () => {
+  provider = async () => {
     fetchCalls += 1;
     return new Response("unexpected");
   };
@@ -87,14 +80,13 @@ test("GitHub asset route rejects paths that escape the attachment endpoint", asy
     assert.equal(response.status, 400);
     assert.equal(fetchCalls, 0);
   } finally {
-    globalThis.fetch = originalFetch;
+    provider = undefined;
   }
 });
 
 test("GitHub asset route stops when an approved host redirects outside the allowlist", async () => {
-  const originalFetch = globalThis.fetch;
   const calls = [];
-  globalThis.fetch = async (url, options) => {
+  provider = async (url, options) => {
     if (String(url).startsWith("https://api.github.com/")) return providerFetch();
     calls.push({ url: String(url), authorization: new Headers(options.headers).get("authorization") });
     return new Response(null, {
@@ -109,15 +101,14 @@ test("GitHub asset route stops when an approved host redirects outside the allow
     assert.equal(calls.length, 1);
     assert.equal(calls[0].authorization, "Bearer installation-token");
   } finally {
-    globalThis.fetch = originalFetch;
+    provider = undefined;
   }
 });
 
 test("GitHub asset route stops after the redirect limit", async () => {
-  const originalFetch = globalThis.fetch;
   let fetchCalls = 0;
   let finalRedirectCanceled = false;
-  globalThis.fetch = async () => {
+  provider = async () => {
     fetchCalls += 1;
     return new Response(new ReadableStream({
       cancel() {
@@ -135,15 +126,14 @@ test("GitHub asset route stops after the redirect limit", async () => {
     assert.equal(fetchCalls, 4);
     assert.equal(finalRedirectCanceled, true);
   } finally {
-    globalThis.fetch = originalFetch;
+    provider = undefined;
   }
 });
 
 test("GitHub asset route requires authorization and enforces image responses", async () => {
-  const originalFetch = globalThis.fetch;
-  permission = { ok: false };
+  protocol.state.profile = false;
   let fetchCalls = 0;
-  globalThis.fetch = async () => {
+  provider = async () => {
     fetchCalls += 1;
     return new Response("unexpected");
   };
@@ -153,13 +143,13 @@ test("GitHub asset route requires authorization and enforces image responses", a
     assert.equal(denied.status, 403);
     assert.equal(fetchCalls, 0);
 
-    permission = { ok: true };
-    globalThis.fetch = async () => new Response("not an image", { headers: { "content-type": "text/plain" } });
+    protocol.state.profile = true;
+    provider = async () => new Response("not an image", { headers: { "content-type": "text/plain" } });
     const unsupported = await route.GET(request("https://github.com/user-attachments/assets/42"));
     assert.equal(unsupported.status, 415);
   } finally {
-    permission = { ok: true };
-    globalThis.fetch = originalFetch;
+    protocol.state.profile = true;
+    provider = undefined;
   }
 });
 

@@ -2,16 +2,16 @@ import "server-only";
 import type { NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthenticatedProfile, PlatformRole } from "../../types";
-import type { AuthzResult } from "../../authz";
-import { requiresSupabaseAuth } from "../../supabase";
+import type { AuthzResult } from "../auth-types";
+import { requiresSupabaseAuth } from "../../supabase-configuration";
 import { isLocalLoginRequestAllowed } from "../../local-development-auth";
 import { administratorAccessExpiredErrorCode, administratorAccessRequiredErrorCode } from "../../auth-error-contract";
 import { inactiveAdministratorAccess, sessionAuthority, type AdministratorAccessSnapshot, type SessionAuthorityContext } from "@/features/administrator-access/model/administrator-access";
-import type { CredentialAction } from "../types";
+import type { SessionPolicyAction } from "./session-policy-types";
 import { authorizeSessionData } from "./session";
 import { resolveSessionRequest } from "./session-request";
 
-const roleActions: Partial<Record<CredentialAction, readonly PlatformRole[]>> = {
+const roleActions: Partial<Record<SessionPolicyAction, readonly PlatformRole[]>> = {
   "team.read": ["ceo", "founder", "deputy", "viewer"],
   "planning.contribute": ["ceo", "founder", "deputy"],
   "governance.ceo": ["ceo"],
@@ -20,7 +20,7 @@ const roleActions: Partial<Record<CredentialAction, readonly PlatformRole[]>> = 
   "operations.correct": ["ceo", "deputy"],
 };
 
-export function rolePermitsAction(action: CredentialAction, role: PlatformRole) {
+export function rolePermitsAction(action: SessionPolicyAction, role: PlatformRole) {
   return roleActions[action]?.includes(role) === true;
 }
 
@@ -42,7 +42,7 @@ export async function loadSessionAuthority(data: SupabaseClient, profile: Authen
     administratorAccess: currentAdministratorAccess(result.error ? null : result.data) }) };
 }
 
-export async function authorizeSessionPolicy(request: NextRequest, action: CredentialAction, startedAt = Date.now()) {
+export async function authorizeSessionPolicy(request: NextRequest, action: SessionPolicyAction, startedAt = Date.now()) {
   const transport = resolveSessionRequest(request);
   if (transport.denial) return transport.denial;
   const administratorCapability = action === "administration.technical" ? "technicalAdministration"

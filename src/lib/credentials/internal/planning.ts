@@ -1,9 +1,10 @@
 import "server-only";
-import type { CredentialAction, PlanningCredentialInput } from "../types";
+import type { PlanningCredentialInput } from "../types";
+import type { SessionPolicyAction } from "./session-policy-types";
 import { authorizeSessionPolicy, currentAdministratorAccess, administratorAccessFailure, rolePermitsAction } from "./session-policy";
 import { planningWorkweekOperations } from "./planning-workweek";
 import { planningService, PlanningDispatchError } from "./planning-service";
-import { requiresSupabaseAuth } from "../../supabase";
+import { requiresSupabaseAuth } from "../../supabase-configuration";
 import { isLocalLoginRequestAllowed } from "../../local-development-auth";
 import { WorkspaceAccessError } from "../../workspace-identity";
 import { administratorAccessExpiredErrorCode, type AuthErrorCode } from "../../auth-error-contract";
@@ -44,7 +45,7 @@ import { planningCollaborationOperations } from "./planning-collaboration";
 import { planningParticipationOperations } from "./planning-participation";
 import { planningSprintOperations } from "./planning-sprint";
 const forbidden = () => ({ code: "42501", message: "Keine Berechtigung für diese Aktion." });
-const planningPolicyActions: Record<PlanningCredentialInput["action"], CredentialAction> = {
+const planningPolicyActions: Record<PlanningCredentialInput["action"], SessionPolicyAction> = {
   "workweek.publish": "team.read", "workweek.restart": "team.read", "workweek.conflict.read": "team.read", "workweek.conflict.resolve": "team.read", "workweek.reconcile": "team.read",
   "planning.github-comments.import": "team.read", "planning.github-sync.apply": "team.read",
   "planning.attachment.write": "planning.contribute",

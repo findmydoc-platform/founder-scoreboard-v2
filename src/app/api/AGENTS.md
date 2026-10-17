@@ -1,7 +1,7 @@
 # API Boundary Rules
 
 - Declare every accepted caller class and its trust boundary: an explicit session and role guard, a verified external secret or signature, a local-only development gate, or a deliberately public health, OAuth callback, or inert event-receiver contract.
-- Use `requireApiContext` or `requireJsonApiContext` with the narrowest existing guard for session-authorized routes. Fail closed when auth or Supabase is unavailable.
+- Use `authorizeCredentialAction` from `@/lib/credentials` with the concrete application action. Invoke only its fixed resource operations; preserve existing authentication, payload-validation and error ordering. Fail closed when authentication or required data authority is unavailable.
 - Derive authorization from mapped profiles and `profiles.platform_role`, never from names, email addresses, request payload roles, or UI state.
 - Validate and normalize input before database writes or external side effects. Preserve established response shapes and status codes through the shared response helpers.
 - New planning-item automation must use canonical `/api/team/planning-items/v2/*` endpoints. Keep `/v1/*` only as a compatibility adapter for existing callers; do not add parallel role-specific import or agent endpoints.
