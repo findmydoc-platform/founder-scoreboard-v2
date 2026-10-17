@@ -44,7 +44,7 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | Interactive intake, AI-assisted task creation and bulk creation | No current app entry or model credential consumer found | Preserve distinct browser creation, existing-task Sprint assignment and personal-token batch contracts; do not invent an intake action | #507 inventory complete; absent app actions N/A by user approval |
 | `src/app/api/auth/login-mode`, auth error pages, explicitly inert responses | Public configuration or no usable credential | Preserve public/inert contract; never treat these as authenticated actors | #491, #505 |
 | `src/lib/local-development-auth.ts`, local-login route and dev profile override | Development-only simulated profile | Existing host/environment gate; deny deployed entry points | #489, #491 |
-| `src/app/api/health/route.ts` | Existing public readiness probe using server database access | Return readiness/configuration booleans only, without granting a human actor or returning credentials | #499, #505 |
+| `src/app/api/health/route.ts` | Existing public readiness probe using server database access | Return readiness/configuration booleans only, without granting a human actor or returning credentials | #502 implemented; fixed public Health capability |
 
 ## Decision Log scope
 
@@ -262,7 +262,7 @@ The public planning actions reuse the shared session policy. The feature owns re
 | Legacy browser compatibility POST/DELETE `/api/focus` | `planning.focus.write`, `planning.focus.delete` | Existing contributor guard; owner-only for founders, existing operational leads may select another owner. Existing three-item limit remains. | Own task succeeds; foreign profile/task and another method fail. This does not restore retired execution UI. |
 | Browser POST `/api/meetings/[id]/attendance` | `planning.attendance.write` | Existing contributors self-report pending/excused/late-excused with zero points; CEO/deputy retain final evaluation and cross-owner reporting. | Founder final evaluation, foreign owner and foreign notification recipient fail; deputy final evaluation retains two points. Meeting, actor and saved owner are bound. |
 
-The two client-argument compatibility exports retain only their explicitly listed sibling consumers above. Planning revision and relationship callers no longer use `resolveAdministratorAccessFailure(client)`. Notification delivery orchestration remains owned by #510; provider acquisition and protocols remain owned by their provider adapters.
+The former client-argument compatibility exports are removed. Planning revision and relationship callers use fixed capabilities through the public credential entry. Notification delivery orchestration remains owned by #510; provider acquisition and protocols remain owned by their provider adapters.
 
 The server-rendered Planning, Backlog, Sprint and task-detail entries use the same public actions with server-cookie acquisition. Shared header slots retain their existing 300-second data caches, keys and tags. Each invocation checks its actor and original deadline outside the cache, including cache hits; a cache miss uses that invocation's privately bound transport. Cached values contain resource data only.
 
@@ -299,3 +299,11 @@ The credential module now owns the live Workspace verification, provider proof, 
 `github-http.ts` accepts only authorized GitHub resource capabilities. The former raw-string transport is private. Installation/user scope, repository binding, immutable request bytes, original deadlines, configuration checks, read retry and mutation no-replay rules remain with the private resource adapters. Private-key file loading uses one fixed Node built-in edge in the installation adapter.
 
 The executable dependency policy has no legacy edge or transport section. Its remaining resource transports are the browser session/HTTP adapters, their story fixture and the domain metadata fetch. The resolved client graph rejects server entry and SDK dependencies. The production build additionally scans every emitted static JavaScript chunk and source map for server adapters and credential markers; source checks and emitted-bundle results are separate evidence.
+
+## Final acceptance evidence
+
+[Ticket 503 acceptance](credential-verification-acceptance.md) reconciles all 23 ticket boundaries and 20 parent criteria, including the approved absent/read-only actions, inert incoming Chat, development-only simulation and separate externally dispatched release publisher. The actual production browser, public protocol, real database and [matched measurement](credential-verification-measurements.md) evidence is complete. Acceptance used scripted external-provider protocols and contacted no production provider.
+
+The final isolated cycle passed: 30 migration/preservation tests across 28 files; full 29-entry ledger and security verification for 67 tables/32 authenticated RPCs; synthetic Auth and cleanup; database lint with zero errors; corrected ordinary full suite 1,999/308; lint with zero errors/five known warnings; TypeScript/production build; 37 architecture fixtures and actual source-boundary validation. The final emitted-client scan passed across 63 chunks/maps and 2,231,432 bytes. The measured 183-artifact scan and ticket 502’s earlier 63-artifact scan remain separate evidence.
+
+The two failed initial full-suite fixtures are retained and explained in the acceptance record. Synthetic configuration and exact-ID test cleanup were repaired without changing runtime code, app response contracts, schema, workflow settings or Maintenance assertions. Final read-only cleanup verified all 11 fixture tables empty, configuration restored and no copied environment files. ADR0002 remains Draft for review; these results authorize neither deployment nor reviewer execution.

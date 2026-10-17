@@ -1,6 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { resolve } from "node:path";
+import { localSupabaseStatus } from "../helpers/local-supabase-target.mjs";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import pg from "pg";
@@ -8,11 +6,8 @@ import { expect, it, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 
 it("the actual Decision Log page retains mapped-reader header restrictions with isolated Auth and database storage", async () => {
-  const { stdout } = await promisify(execFile)(resolve("node_modules/.bin/supabase"), ["status", "-o", "json"]);
-  const local = JSON.parse(stdout);
-  const api = new URL(local.API_URL), database = new URL(local.DB_URL);
-  if (!["localhost", "127.0.0.1"].includes(api.hostname) || api.port !== "56321"
-    || !["localhost", "127.0.0.1"].includes(database.hostname) || database.port !== "56322") throw Error("Disposable target required");
+  const local = await localSupabaseStatus();
+  const api = new URL(local.API_URL);
   const db = new pg.Client(local.DB_URL);
   await db.connect();
   const id = `decision-reader-${randomUUID()}`, foreign = `decision-foreign-${randomUUID()}`;

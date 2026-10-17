@@ -62,7 +62,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-17T10:00:00Z"));
   for (const [key, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: origin, NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon",
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_URL: origin, SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service",
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_URL: origin, SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", SUPABASE_SECRET_KEY: "synthetic-service",
     REQUIRE_SUPABASE_AUTH: "true", VERCEL_OIDC_TOKEN: token(), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience",
     GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "reader@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu" })) vi.stubEnv(key, value);
   counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId; precedingAuthDelay = 0;
@@ -174,6 +174,39 @@ test("instance replacement cannot reuse another instance's membership cache", as
   vi.resetModules(); route = await application(); member = false;
   expect((await route.GET(request(jwt))).status).toBe(403);
   expect(counts.directory).toBe(2);
+});
+
+test("two live module instances have independent evidence and each keeps its original deadline", async () => {
+  const first = await application(); const jwt = token(); const started = Date.now();
+  expect((await first.GET(request(jwt))).status).toBe(200);
+  vi.setSystemTime(started + 300000);
+  vi.resetModules();
+  const second = await application();
+  expect((await second.GET(request(jwt))).status).toBe(200);
+  expect(counts.directory).toBe(2);
+  directoryFailure = true;
+  vi.setSystemTime(started + 900000);
+  expect((await first.GET(request(jwt))).status).toBe(503);
+  expect((await second.GET(request(jwt))).status).toBe(200);
+  expect(counts.directory).toBe(3);
+  vi.setSystemTime(started + 1200000);
+  expect((await second.GET(request(jwt))).status).toBe(503);
+  expect(counts.directory).toBe(4);
+});
+
+test("copying an issued public capability cannot restart its original evidence lifetime", async () => {
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const started = Date.now();
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: request() }, action: "calendar.read" });
+  expect(permission.ok).toBe(true);
+  vi.setSystemTime(started + 899999);
+  const copied = { ...permission, calendar: { ...permission.calendar } };
+  expect((await copied.calendar.readPublishedOwners()).error).toBeNull();
+  const dispatched = counts.data;
+  vi.setSystemTime(started + 900000);
+  expect((await copied.calendar.readPublishedOwners()).error).not.toBeNull();
+  expect(counts.data).toBe(dispatched);
+  expect(counts.directory).toBe(1);
 });
 
 test("calendar maps publications and owners without provider or private fields", async () => {
