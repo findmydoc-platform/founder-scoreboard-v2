@@ -103,3 +103,17 @@ test("server-rendered administration uses the same capability policy as the HTTP
   current.state.role = "founder";
   expect(await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "administration.directory.read" })).toMatchObject({ ok: false, status: 403, code: "administrator_access_required" });
 });
+
+test("issued directory operations distinguish expired authority from a temporary snapshot failure", async () => {
+  const current = administratorProtocol({ role: "viewer" });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: current.request() }, action: "administration.directory.read" });
+  expect(permission.ok).toBe(true);
+  expect(() => { permission.authority.capabilities.ceoGovernance = true; }).toThrow();
+  current.state.snapshotError = "PGRST202";
+  expect(await permission.administrator.directory.readNotificationEvents()).toMatchObject({ error: { code: "AUTHORIZATION_UNAVAILABLE" } });
+  current.state.snapshotError = null;
+  current.state.snapshot = { eligible: true, active: false, expiresAt: null };
+  expect(await permission.administrator.directory.readNotificationEvents()).toMatchObject({ error: { code: "42501" } });
+  expect(current.calls).toEqual([]);
+});

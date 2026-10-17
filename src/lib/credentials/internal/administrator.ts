@@ -70,7 +70,7 @@ export async function authorizeAdministrator(input: AdministratorCredentialInput
   return { ok: true as const, profile: projectedProfile, authority: projectedAuthority, administrator: {
     async read() {
       if (action !== "administrator-access.read") return { data: null, error: forbidden() };
-      if (!data) return { data: inactiveAdministratorAccess, error: null };
+      if (!data) return { data: { ...inactiveAdministratorAccess }, error: null };
       const result = await data.rpc("administrator_access_snapshot");
       return { ...result, data: result.error ? null : currentAdministratorAccess(result.data) };
     },

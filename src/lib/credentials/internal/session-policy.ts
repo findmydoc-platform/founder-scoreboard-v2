@@ -25,7 +25,7 @@ export function rolePermitsAction(action: CredentialAction, role: PlatformRole) 
 }
 
 export function currentAdministratorAccess(value: AdministratorAccessSnapshot | null): AdministratorAccessSnapshot {
-  if (!value) return inactiveAdministratorAccess;
+  if (!value) return { ...inactiveAdministratorAccess };
   const active = value.eligible === true && value.active === true && typeof value.expiresAt === "string" && Date.parse(value.expiresAt) > Date.now();
   return { eligible: value.eligible === true, active, expiresAt: active ? value.expiresAt : null };
 }
