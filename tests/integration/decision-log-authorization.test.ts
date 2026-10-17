@@ -102,7 +102,7 @@ it("denies retired local Decision Log REST actions in every supported mode while
     } catch (error) { await db.query("rollback"); throw error; }
     expect((await db.query("select platform_role from public.profiles where id=$1", [administrator.profileId])).rows[0].platform_role).toBe("viewer");
     await db.query("insert into public.projects(id,name) values($1,'Synthetic retired-decision project')", [projectId]);
-    await db.query("insert into public.tasks(id,project_id,title,status,task_type) values($1,$2,'Synthetic linked task','backlog','deliverable')", [taskId, projectId]);
+    await db.query("insert into public.tasks(id,project_id,title,status,task_type,priority,github_repo,approval_status,score_relevant) values($1,$2,'Synthetic linked task','Offen','deliverable','P1','findmydoc-platform/management','draft',false)", [taskId, projectId]);
     const preservedDecision = await seedDecision();
     preserved = { decision_log: preservedDecision, decision_comments: await seedRow("decision_comments", preservedDecision), decision_confirmations: await seedRow("decision_confirmations", preservedDecision), decision_task_links: await seedRow("decision_task_links", preservedDecision) };
     const before = await snapshot(preserved);
