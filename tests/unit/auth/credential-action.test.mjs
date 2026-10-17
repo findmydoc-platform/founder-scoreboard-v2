@@ -5,7 +5,7 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 test("the public credential seam retains the missing-session HTTP contract", async () => {
-  vi.stubEnv("REQUIRE_SUPABASE_AUTH", "true");
+  administratorProtocol();
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   expect(await authorizeCredentialAction({
     credential: { kind: "session-request", request: { headers: new Headers() } },

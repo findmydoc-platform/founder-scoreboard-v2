@@ -1076,11 +1076,14 @@ it("serializes concurrent add and remove calls across receipt replays and semant
     await setup.query("delete from public.task_relationship_edges where task_id = any($1::text[]) or related_task_id = any($1::text[])", [[concurrentBlockedId, concurrentBlockingId]]).catch(() => undefined);
     await setup.query("delete from public.audit_log where entity_id = any($1::text[])", [[concurrentBlockedId, concurrentBlockingId]]).catch(() => undefined);
     await setup.query("delete from public.team_task_intake_tokens where id = $1", [concurrentTokenId]).catch(() => undefined);
-    await setup.query("delete from public.tasks where id = any($1::text[])", [[concurrentBlockedId, concurrentBlockingId]]).catch(() => undefined);
+    await setup.query("select set_config('founderops.trash_lifecycle_write', 'on', false)");
+    await setup.query("delete from public.tasks where id = any($1::text[])", [[concurrentBlockedId, concurrentBlockingId]]);
     await setup.query("delete from public.profiles where id = $1", [concurrentActorId]).catch(() => undefined);
     if (createdProject) {
       await setup.query("delete from public.projects where id = 'findmydoc-founder-execution'").catch(() => undefined);
     }
+    const remaining = await setup.query<{ count: string }>("select count(*)::text as count from public.tasks where id = any($1::text[])", [[concurrentBlockedId, concurrentBlockingId]]);
     await setup.end();
+    expect(remaining.rows[0].count).toBe("0");
   }
 }, 30_000);
