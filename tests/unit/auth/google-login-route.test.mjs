@@ -1,5 +1,9 @@
+vi.mock("server-only", () => ({}));
+vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], get: () => undefined, set: () => {} }) }));
 import { test, expect, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
+
+test.beforeEach(() => vi.resetModules());
 
 for (const mode of ["legacy", "linking", "google"]) {
   test(`login uses the authorized provider in ${mode} mode`, async () => {
@@ -25,7 +29,7 @@ test("callback denies an unapproved Workspace identity and clears the new applic
   const route = await importTestModule("src/app/auth/callback/route.ts", {
     "next/headers": { cookies: async () => ({}) },
     "@/lib/workspace-access": { requireWorkspaceAccess: async () => { throw new Error("Not a member"); } },
-    "@/lib/workspace-data-fetch": { sha256: value => value },
+    "@/lib/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
     "@/lib/google-provider-proof": { verifyGoogleProviderToken: async () => {} },
     "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => null },
     "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
@@ -38,6 +42,7 @@ test("callback denies an unapproved Workspace identity and clears the new applic
 });
 
 async function enforcedCallback({ linked, loginNonce = null, cookieNonce = null }) {
+  vi.resetModules();
   const signOut = vi.fn(async () => ({}));
   const rpc = vi.fn(async () => ({ error: null }));
   const verifyGoogleProviderToken = vi.fn(async () => {});
@@ -50,7 +55,7 @@ async function enforcedCallback({ linked, loginNonce = null, cookieNonce = null 
       requireWorkspaceAccess: async () => ({ subject: "google-subject" }),
       assertGoogleSession: async () => {},
     },
-    "@/lib/workspace-data-fetch": { sha256: value => value },
+    "@/lib/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
     "@/lib/google-provider-proof": { verifyGoogleProviderToken },
     "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => ({ rpc }) },
     "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
@@ -87,5 +92,5 @@ test("only a nonce-matched Google callback can approve a session", async () => {
   const rejected = await enforcedCallback({ linked: true, loginNonce: "wrong", cookieNonce: "valid" });
   expect(new URL(rejected.response.headers.get("location")).pathname).toBe("/auth/error");
   expect(rejected.rpc).not.toHaveBeenCalled();
-  expect(rejected.signOut).toHaveBeenCalledWith({ scope: "local" });
+  expect(rejected.signOut).not.toHaveBeenCalled();
 });

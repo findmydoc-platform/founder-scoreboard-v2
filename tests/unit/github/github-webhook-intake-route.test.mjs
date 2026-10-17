@@ -182,20 +182,8 @@ test("the proxy bypasses Supabase auth only for the exact webhook path", async (
         next: () => webhookResponse,
       },
     },
-    "@/lib/supabase-server": {
-      createProxyAuthSupabase: () => {
-        authFactoryCalls += 1;
-        return {
-          supabase: {
-            auth: {
-              getUser: async () => {
-                getUserCalls += 1;
-              },
-            },
-          },
-          response: authenticatedResponse,
-        };
-      },
+    "@/lib/credentials": {
+      authorizeCredentialAction: async () => { authFactoryCalls++; getUserCalls++; return authenticatedResponse; },
     },
   });
 

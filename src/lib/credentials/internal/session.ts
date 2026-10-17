@@ -112,8 +112,7 @@ type SessionDataResult = Extract<CalendarCredentialResult, { ok: false }> | {
   data: SupabaseClient; readOwnerConflict(versionId: string): Promise<{ data: { resolution_version_id: string } | null; error: { message: string } | null }>;
 };
 
-export async function authorizeSessionData(request: NextRequest, action: SessionAction): Promise<SessionDataResult> {
-  const startedAt = Date.now();
+export async function authorizeSessionData(request: NextRequest, action: SessionAction, startedAt = Date.now()): Promise<SessionDataResult> {
   const header = request.headers.get("authorization");
   const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return { ok: false, status: 401, error: "Anmeldung erforderlich." };
