@@ -1,5 +1,5 @@
 import { normalizeStatus, normalizeSubIssueStatus } from "@/lib/status";
-import type { getServerSupabase } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthenticatedProfile } from "@/lib/types";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
@@ -14,7 +14,7 @@ import {
   storedReviewEvidenceIsValid,
 } from "@/features/reviews/model/review-evidence";
 
-type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
+type SupabaseServer = SupabaseClient;
 
 type TaskContextRow = {
   id: string;

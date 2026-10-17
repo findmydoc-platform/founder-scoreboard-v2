@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { safeTaskDetailReturnTo } from "@/features/tasks/model/task-detail-return-navigation";
-import { getServerSupabase } from "@/lib/supabase";
+import { authorizeCredentialAction } from "@/lib/credentials";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -10,16 +10,9 @@ type Props = {
 export default async function InitiativePage({ params, searchParams }: Props) {
   const { id } = await params;
   const { returnTo } = await searchParams;
-  const supabase = getServerSupabase();
-  const { data } = supabase
-    ? await supabase
-      .from("planning_item_historical_links")
-      .select("task_id")
-      .eq("item_type", "initiative")
-      .eq("historical_id", id)
-      .maybeSingle()
-    : { data: null };
+  const permission = await authorizeCredentialAction({ credential: { kind: "public-resource" }, action: "historical-initiative.resolve", targetId: id });
+  const taskId = await permission.publicResource.resolveHistoricalInitiative();
   const safeReturnTo = safeTaskDetailReturnTo(returnTo);
   const returnQuery = safeReturnTo ? `?returnTo=${encodeURIComponent(safeReturnTo)}` : "";
-  redirect(`/tasks/${encodeURIComponent(data?.task_id || id)}${returnQuery}`);
+  redirect(`/tasks/${encodeURIComponent(taskId)}${returnQuery}`);
 }

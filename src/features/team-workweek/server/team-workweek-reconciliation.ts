@@ -1,10 +1,13 @@
+import type { WorkweekBookkeeping } from "./team-workweek-bookkeeping";
+import type { NextRequest } from "next/server";
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
 
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nextVersionMondayIso } from "../model/team-workweek-draft";
-import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
-import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
+import { GoogleWorkspaceOAuthContractError } from "@/lib/google-calendar-errors";
+import { calendarForWorkweekOwner } from "./team-workweek-calendar";
 import {
   observeGoogleWorkweek,
   type GoogleWorkweekObservation,
@@ -82,8 +85,9 @@ async function recordSuccess(
   serviceSupabase: SupabaseClient,
   publication: Pick<PublicationRow, "id" | "publication_revision">,
   observedAt: string,
+  bookkeeping?: WorkweekBookkeeping,
 ) {
-  const { error } = await serviceSupabase.rpc("record_google_team_workweek_reconciliation_state", {
+  const { error } = bookkeeping ? await bookkeeping.recordReconciliation({ publicationId: publication.id, revision: publication.publication_revision, observedAt }) : await serviceSupabase.rpc("record_google_team_workweek_reconciliation_state", {
     p_publication_id: publication.id,
     p_publication_revision: publication.publication_revision,
     p_state: "confirmed",
@@ -113,6 +117,8 @@ function delayedStatus(
 }
 
 async function finishPublication({
+  request,
+  bookkeeping,
   now,
   previousLastSyncAt,
   publish,
@@ -121,6 +127,8 @@ async function finishPublication({
   userSupabase,
   versionId,
 }: {
+  request?: NextRequest;
+  bookkeeping?: WorkweekBookkeeping;
   now: () => Date;
   previousLastSyncAt: string | null;
   publish: typeof publishTeamWorkweek;
@@ -131,7 +139,7 @@ async function finishPublication({
 }): Promise<ReconciliationStatus> {
   let publication: Awaited<ReturnType<typeof publishTeamWorkweek>>;
   try {
-    publication = await publish({ serviceSupabase, userSupabase, versionId, now });
+    publication = await publish({ request, bookkeeping, serviceSupabase, userSupabase, versionId, now });
   } catch (error) {
     if (error instanceof TeamWorkweekPublicationError && error.code === "forbidden") {
       throw new TeamWorkweekReconciliationError("forbidden", error.message);
@@ -154,7 +162,7 @@ async function finishPublication({
     await recordSuccess(serviceSupabase, {
       id: publication.id,
       publication_revision: publication.publicationRevision,
-    }, publication.lastSyncAt || now().toISOString());
+    }, publication.lastSyncAt || now().toISOString(), bookkeeping);
     return { state: "updated", lastSuccessfulSyncAt: publication.lastSyncAt, recovery: null, effectiveAt:publication.effectiveAt,effectiveUntil:publication.effectiveUntil };
   }
   const errorClass: ReconciliationErrorClass = publication.recovery === "reconnect"
@@ -174,7 +182,9 @@ function errorClassForObservation(
 }
 
 export async function reconcileTeamWorkweek({
-  getAccessToken = getGoogleWorkspaceAccessToken,
+  request,
+  bookkeeping,
+  getAccessToken = calendarForWorkweekOwner,
   observe = observeGoogleWorkweek,
   now = () => new Date(),
   ownerProfileId,
@@ -182,7 +192,9 @@ export async function reconcileTeamWorkweek({
   serviceSupabase,
   userSupabase,
 }: {
-  getAccessToken?: typeof getGoogleWorkspaceAccessToken;
+  request?: NextRequest;
+  bookkeeping?: WorkweekBookkeeping;
+  getAccessToken?: typeof calendarForWorkweekOwner;
   observe?: typeof observeGoogleWorkweek;
   now?: () => Date;
   ownerProfileId: string;
@@ -225,6 +237,8 @@ export async function reconcileTeamWorkweek({
       throw new TeamWorkweekReconciliationError("unavailable", "Ausgangsversion des Abgleichs ist nicht verfügbar.");
     }
     return await finishPublication({
+      request,
+      bookkeeping,
       now,
       previousLastSyncAt: predecessorResponse?.data?.last_sync_at || null,
       publish,
@@ -241,9 +255,9 @@ export async function reconcileTeamWorkweek({
   if(!context) throw new TeamWorkweekReconciliationError("not_found","Noch keine aktuell gültige App-Arbeitswoche vorhanden.");
   const {publication,series,logicalWindows}=context;
 
-  let accessToken: string;
+  let accessToken: GoogleCalendarCapability;
   try {
-    accessToken = await getAccessToken(serviceSupabase, ownerProfileId);
+    accessToken = await getAccessToken(serviceSupabase, ownerProfileId, request);
   } catch (error) {
     const errorClass: ReconciliationErrorClass = error instanceof GoogleWorkspaceOAuthContractError
       && error.code === "reconnect_required"
@@ -311,6 +325,8 @@ export async function reconcileTeamWorkweek({
   }
 
   return await finishPublication({
+      request,
+      bookkeeping,
     now,
     previousLastSyncAt: publication.last_sync_at,
     publish,

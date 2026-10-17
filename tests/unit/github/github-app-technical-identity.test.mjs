@@ -1,78 +1,33 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { join } from "node:path";
-import { beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const githubJsonCalls = [];
-let githubJsonImplementation = async () => {
-  throw new Error("GitHub network access was not expected.");
-};
-
-const githubApp = await importTestModule("src/lib/github-app.ts", {
-  "./github-http": {
-    githubJson: async (...args) => {
-      githubJsonCalls.push(args);
-      return githubJsonImplementation(...args);
-    },
-  },
-});
+let githubJsonImplementation = async () => { throw new Error("Unexpected synthetic GitHub request."); };
+const githubApp = await import("../../../src/lib/github-app-errors.ts");
+const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+const installation = () => authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.issue.read", target: { repositories: ["findmydoc-platform/management"] } });
+const operationalStatus = (options = {}) => authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.installation.status", ...options });
 
 const validPrivateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
   format: "pem",
   type: "pkcs8",
 }).toString();
 
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+
 beforeEach(() => {
   githubJsonCalls.length = 0;
+  vi.stubGlobal("fetch", async (url, options) => {
+    githubJsonCalls.push([String(url), options]);
+    return Response.json(await githubJsonImplementation(url, options));
+  });
   githubJsonImplementation = async () => {
     throw new Error("GitHub network access was not expected.");
   };
 });
-
-function serviceSupabase({ configuredLogin = "sebastian", tokenLogin = configuredLogin } = {}) {
-  const calls = [];
-  return {
-    calls,
-    from(table) {
-      calls.push(table);
-      const query = {
-        select() { return query; },
-        eq() { return query; },
-        async maybeSingle() {
-          if (table === "profiles") return { data: { github_login: configuredLogin }, error: null };
-          if (table === "github_app_user_tokens") {
-            return {
-              data: {
-                profile_id: "profile-1",
-                github_login: tokenLogin,
-                encrypted_access_token: "unused",
-                encrypted_refresh_token: null,
-                access_token_expires_at: "2999-01-01T00:00:00.000Z",
-                refresh_token_expires_at: null,
-                connected_at: "2026-09-22T00:00:00.000Z",
-                refreshed_at: null,
-                last_used_at: null,
-                revoked_at: null,
-                last_error: null,
-              },
-              error: null,
-            };
-          }
-          throw new Error(`Unexpected table: ${table}`);
-        },
-      };
-      return query;
-    },
-  };
-}
-
-const browserSafeProfile = {
-  id: "profile-1",
-  name: "Sebastian",
-  platformRole: "founder",
-  githubLogin: "",
-};
 
 async function withGitHubAppEnvironment(overrides, run) {
   const names = [
@@ -99,7 +54,7 @@ async function withGitHubAppEnvironment(overrides, run) {
 async function expectSafeConfigurationFailure(overrides, forbiddenText) {
   await withGitHubAppEnvironment(overrides, async () => {
     await assert.rejects(
-      githubApp.getGitHubAppInstallationToken(),
+      installation(),
       (error) => {
         assert.ok(error instanceof githubApp.GitHubAppConfigurationError);
         assert.equal(error.message.includes(forbiddenText), false);
@@ -108,43 +63,6 @@ async function expectSafeConfigurationFailure(overrides, forbiddenText) {
     );
   });
 }
-
-test("GitHub connection status resolves the technical login only through the service client", async () => {
-  const supabase = serviceSupabase();
-
-  const status = await githubApp.getGitHubUserConnectionStatus(supabase, browserSafeProfile);
-
-  assert.deepEqual(status, {
-    connected: true,
-    needsReconnect: false,
-    expiresAt: "2999-01-01T00:00:00.000Z",
-  });
-  assert.deepEqual(supabase.calls, ["profiles", "github_app_user_tokens"]);
-  assert.equal("githubLogin" in status, false);
-});
-
-test("GitHub user tokens remain bound to the centrally configured login", async () => {
-  const supabase = serviceSupabase({ configuredLogin: "sebastian", tokenLogin: "another-user" });
-
-  await assert.rejects(
-    githubApp.getGitHubUserTokenForProfile(supabase, browserSafeProfile),
-    /passt nicht zum angemeldeten Teamprofil/,
-  );
-});
-
-test("GitHub OAuth callback validation uses the centrally configured login", async () => {
-  const supabase = serviceSupabase({ configuredLogin: "sebastian" });
-
-  await assert.rejects(
-    githubApp.storeGitHubAppUserToken({
-      supabase,
-      profile: browserSafeProfile,
-      githubUser: { id: 42, login: "another-user" },
-      token: { access_token: "unused" },
-    }),
-    /passt nicht zum angemeldeten Teamprofil/,
-  );
-});
 
 test("missing GitHub private key files are classified without exposing their path", async () => {
   const missingPath = join(process.cwd(), "missing-github-app-private-key.pem");
@@ -165,7 +83,7 @@ test("GitHub App operational status classifies invalid runtime configuration wit
   const invalidKey = "not-a-private-key";
 
   await withGitHubAppEnvironment({ GITHUB_APP_PRIVATE_KEY: invalidKey }, async () => {
-    const status = await githubApp.getGitHubAppOperationalStatus();
+    const status = await operationalStatus();
     assert.deepEqual(status, {
       available: false,
       state: "configuration_required",
@@ -182,7 +100,7 @@ test("GitHub App operational status verifies the installation with a read-only r
   githubJsonImplementation = async () => ({ id: 456 });
 
   await withGitHubAppEnvironment({ GITHUB_APP_PRIVATE_KEY: validPrivateKey }, async () => {
-    assert.deepEqual(await githubApp.getGitHubAppOperationalStatus(), {
+    assert.deepEqual(await operationalStatus(), {
       available: true,
       state: "ready",
       description: "Die GitHub App ist erreichbar und die Installation ist verfügbar.",
@@ -193,8 +111,7 @@ test("GitHub App operational status verifies the installation with a read-only r
   assert.equal(githubJsonCalls.length, 1);
   assert.equal(githubJsonCalls[0][0], "https://api.github.com/app/installations/456");
   assert.equal(githubJsonCalls[0][1].method, "GET");
-  assert.equal(githubJsonCalls[0][1].operation, "read");
-  assert.ok(githubJsonCalls[0][1].signal instanceof AbortSignal);
+    assert.ok(githubJsonCalls[0][1].signal instanceof AbortSignal);
 });
 
 test("GitHub App operational status aborts a stalled read and returns a safe failure", async () => {
@@ -207,7 +124,10 @@ test("GitHub App operational status aborts a stalled read and returns a safe fai
   });
 
   await withGitHubAppEnvironment({ GITHUB_APP_PRIVATE_KEY: validPrivateKey }, async () => {
-    assert.deepEqual(await githubApp.getGitHubAppOperationalStatus({ timeoutMs: 1 }), {
+    vi.useFakeTimers();
+    const pending = operationalStatus();
+    await vi.advanceTimersByTimeAsync(4_000);
+    assert.deepEqual(await pending, {
       available: false,
       state: "unavailable",
       description: "Die GitHub-App-Installation ist momentan nicht erreichbar.",

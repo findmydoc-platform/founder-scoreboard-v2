@@ -1,10 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
-import { requirePlanningContributor } from "@/lib/authz";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 import { isOperationalLeadRole } from "@/lib/platform";
 import type { TaskFocusItem } from "@/lib/types";
-import { apiError, requireApiContext, requireJsonApiContext } from "@/lib/api-response";
-import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { apiError, readJsonPayload } from "@/lib/api-response";
 
 type FocusPayload = {
   taskId?: string;
@@ -36,10 +35,11 @@ function mapFocusItem(row: Record<string, string | number>): TaskFocusItem {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<FocusPayload>(request, requirePlanningContributor, {});
+  const payload = await readJsonPayload<FocusPayload>(request, {});
+  const context = await requirePlanningContext(request, "planning.focus.write", typeof payload.taskId === "string" ? payload.taskId.trim() : "");
   if (!context.ok) return context.response;
 
-  const { payload, permission, supabase } = context;
+  const { permission, planning } = context;
   const taskId = typeof payload.taskId === "string" ? payload.taskId.trim() : "";
   if (!taskId) return apiError("Aufgabe ist erforderlich.", 400);
 
@@ -47,40 +47,20 @@ export async function POST(request: NextRequest) {
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const profileId = isOperationalLead ? payload.profileId || permission.profile?.id || "" : permission.profile?.id || "";
   const focusDate = payload.focusDate || todayIso();
-  const { data: task, error: taskError } = await supabase
-    .from(ACTIVE_TASKS_TABLE)
-    .select("id,assignee,owner")
-    .eq("id", taskId)
-    .single();
+  const { data: task, error: taskError } = await planning.readFocusTask();
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
   if (!isOperationalLead && (task.assignee || task.owner) !== permission.profile?.id) {
     return apiError("Founder können nur eigene Aufgaben in den Fokus nehmen.", 403);
   }
-  const { data: existingFocus } = await supabase
-    .from("task_focus_items")
-    .select("id,task_id")
-    .eq("profile_id", profileId)
-    .eq("focus_date", focusDate);
+  const { data: existingFocus } = await planning.readFocusEntries(profileId, focusDate);
   const alreadyFocused = (existingFocus || []).some((item) => item.task_id === taskId);
   if (!alreadyFocused && (existingFocus || []).length >= 3) {
     return apiError("Heute-Fokus ist auf drei Aufgaben begrenzt.", 409);
   }
 
-  const row = {
-    profile_id: profileId,
-    task_id: taskId,
-    focus_date: focusDate,
+  const { data, error } = await planning.writeFocus({ profileId, focusDate,
     position: Math.max(1, Math.min(3, Math.round(Number(payload.position || 1)))),
-    next_step: cleanText(payload.nextStep, 500),
-    status,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { data, error } = await supabase
-    .from("task_focus_items")
-    .upsert(row, { onConflict: "profile_id,task_id,focus_date" })
-    .select("id,profile_id,task_id,focus_date,position,next_step,status,created_at,updated_at")
-    .single();
+    nextStep: cleanText(payload.nextStep, 500), status });
 
   if (error || !data) return apiError(error?.message || "Fokus konnte nicht gespeichert werden.", 500);
 
@@ -88,26 +68,22 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const context = await requireApiContext(request, requirePlanningContributor);
+  const context = await requirePlanningContext(request, "planning.focus.delete", request.nextUrl.searchParams.get("id") || "");
   if (!context.ok) return context.response;
 
-  const { permission, supabase } = context;
+  const { permission, planning } = context;
 
   const id = Number(request.nextUrl.searchParams.get("id"));
   if (!Number.isFinite(id)) return apiError("Fokus-Eintrag ist ungültig.", 400);
 
-  const { data: focusItem, error: readError } = await supabase
-    .from("task_focus_items")
-    .select("id,task_id,profile_id")
-    .eq("id", id)
-    .single();
+  const { data: focusItem, error: readError } = await planning.readFocusEntry();
   if (readError || !focusItem) return apiError("Fokus-Eintrag nicht gefunden.", 404);
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   if (!isOperationalLead && focusItem.profile_id !== permission.profile?.id) {
     return apiError("Founder können nur eigene Fokus-Einträge entfernen.", 403);
   }
 
-  const { error } = await supabase.from("task_focus_items").delete().eq("id", id);
+  const { error } = await planning.deleteFocus();
   if (error) return apiError(error.message, 500);
 
   return NextResponse.json({ ok: true });

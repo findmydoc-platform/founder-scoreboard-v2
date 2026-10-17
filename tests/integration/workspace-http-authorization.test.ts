@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
@@ -20,6 +20,7 @@ it("blocks direct REST, RPC and Storage while the server relay retains user-cont
   const profile = `http-${suffix}`;
   const image = `quicklinks/2026-09-26/${suffix}.png`;
   let userId: string | undefined;
+  let otherUserId: string | undefined;
   try {
     const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
     expect(created.error).toBeNull();
@@ -32,6 +33,14 @@ it("blocks direct REST, RPC and Storage while the server relay retains user-cont
     const token = signedIn.data.session!.access_token;
     const sessionId = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8")).session_id as string;
     const headers = { apikey: local.ANON_KEY, authorization: `Bearer ${token}` };
+    const [encodedHeader, encodedClaims] = token.split(".");
+    const tampered = `${encodedHeader}.${encodedClaims}.${Buffer.alloc(32).toString("base64url")}`;
+    const expiredClaims = { ...JSON.parse(Buffer.from(encodedClaims, "base64url").toString("utf8")), exp: Math.floor(Date.now()/1000)-60 };
+    const expiredUnsigned = `${encodedHeader}.${Buffer.from(JSON.stringify(expiredClaims)).toString("base64url")}`;
+    const expired = `${expiredUnsigned}.${createHmac("sha256", local.JWT_SECRET).update(expiredUnsigned).digest("base64url")}`;
+    for (const invalid of [tampered, expired]) {
+      expect((await fetch(`${local.API_URL}/rest/v1/profiles?select=id`, { headers: { ...headers, authorization: `Bearer ${invalid}` } })).status).toBe(401);
+    }
     expect((await fetch(`${local.API_URL}/rest/v1/profiles?select=id`, { headers })).status).toBe(403);
     expect((await fetch(`${local.API_URL}/rest/v1/rpc/current_authenticated_profile`, { method: "POST", headers })).status).toBe(403);
     const permit = randomUUID();
@@ -41,6 +50,22 @@ it("blocks direct REST, RPC and Storage while the server relay retains user-cont
     const accepted = await fetch(`${local.API_URL}/rest/v1/profiles?select=id&id=eq.${profile}`, { headers: { ...headers, "x-founderops-workspace-permit":permit } });
     expect(accepted.status).toBe(200);
     expect(await accepted.json()).toEqual([{ id: profile }]);
+    const otherEmail = `${randomUUID()}@example.test`;
+    const otherPassword = randomUUID();
+    const otherCreated = await service.auth.admin.createUser({ email: otherEmail, password: otherPassword, email_confirm: true });
+    expect(otherCreated.error).toBeNull();
+    otherUserId = otherCreated.data.user!.id;
+    await database.query("insert into public.profiles(id,auth_user_id,name,platform_role) values ($1,$2,'Other HTTP test','founder')", [`other-${profile}`, otherUserId]);
+    await database.query("insert into workspace_private.identity_bindings(user_id,google_subject) values ($1,$2)", [otherUserId, randomUUID()]);
+    const otherClient = createClient(local.API_URL, local.ANON_KEY, { auth: { persistSession: false } });
+    const otherSession = await otherClient.auth.signInWithPassword({ email: otherEmail, password: otherPassword });
+    expect(otherSession.error).toBeNull();
+    const transferred = await fetch(`${local.API_URL}/rest/v1/profiles?select=id&id=eq.${profile}`, { headers: {
+      ...headers, authorization: `Bearer ${otherSession.data.session!.access_token}`, "x-founderops-workspace-permit": permit,
+    } });
+    expect(transferred.status).toBe(403);
+    // Rejection of a foreign actor does not consume the legitimate read permit.
+    expect((await fetch(`${local.API_URL}/rest/v1/profiles?select=id&id=eq.${profile}`, { headers: { ...headers, "x-founderops-workspace-permit": permit } })).status).toBe(200);
     await service.rpc("workspace_release_permit", { p_hash:await digest(permit) });
     expect((await fetch(`${local.API_URL}/rest/v1/profiles?select=id`, { headers: { ...headers, "x-founderops-workspace-permit":permit } })).status).toBe(403);
     const uploaded = await service.storage.from("fmd-tool-previews").upload(image, new Uint8Array([137,80,78,71]), { contentType:"image/png" });
@@ -55,6 +80,11 @@ it("blocks direct REST, RPC and Storage while the server relay retains user-cont
   } finally {
     await database.query("update workspace_private.configuration set mode='legacy'");
     await service.storage.from("fmd-tool-previews").remove([image]);
+    if (otherUserId) {
+      await database.query("delete from workspace_private.identity_bindings where user_id=$1", [otherUserId]);
+      await database.query("delete from public.profiles where auth_user_id=$1", [otherUserId]);
+      await service.auth.admin.deleteUser(otherUserId);
+    }
     if (userId) {
       await database.query("delete from workspace_private.identity_bindings where user_id=$1", [userId]);
       await database.query("delete from public.profiles where id=$1", [profile]);

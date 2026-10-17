@@ -1,3 +1,4 @@
+import type { GitHubResourceCredential } from "../github-http";
 import { GitHubContentLengthError } from "../github-issue-content";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deliverPendingGitHubComments } from "../github-comment-delivery";
@@ -217,7 +218,7 @@ async function releaseGitHubSyncLock(
 
 type TaskGitHubProjectionInput = {
   supabase: SupabaseClient;
-  installationToken: string;
+  installationToken: GitHubResourceCredential;
   taskId: string;
   actorProfileId: string;
   createIfMissing: boolean;
@@ -241,7 +242,7 @@ export function projectTaskToGitHub(
 ): Promise<TaskGitHubProjectionResult>;
 export async function projectTaskToGitHub({
   supabase,
-  installationToken = "",
+  installationToken,
   taskId,
   actorProfileId,
   createIfMissing,
@@ -272,6 +273,10 @@ export async function projectTaskToGitHub({
         issueNumber: eligibility.issueNumber,
       },
     };
+  }
+
+  if (!installationToken) {
+    throw new Error("GitHub projection requires an authorized resource capability.");
   }
 
   const resourceKey = githubSyncResourceKey(

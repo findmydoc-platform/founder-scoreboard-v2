@@ -7,16 +7,11 @@ import {
   type PlanningItemGitHubSyncResult,
 } from "@/features/planning-items/model/planning-items-contract";
 import {
-  dispatchAndLoadPlanningGitHubProjections,
-  enqueueTeamPlanningGitHubProjection,
-} from "@/features/planning-items/model/planning-items-github-projection";
-import {
   handlePlanningItemsRequest,
   planningItemsError,
   planningItemsJson,
   planningItemsTokenInactiveError,
 } from "@/features/planning-items/model/planning-items-route";
-import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
 import {
   taskGitHubSyncFailure,
   taskGitHubSyncHttpStatus,
@@ -40,8 +35,8 @@ export async function handleTeamPlanningItemGitHubSync(
     request,
     {
       operation: "planningItems.githubSync",
+      itemId: (await context.params).id.trim(),
       mode: "commit",
-      requiredScopes: ["write:planning-items:github-sync"],
     },
     "GitHub-Sync konnte nicht ausgeführt werden.",
     async (permission) => {
@@ -69,16 +64,12 @@ export async function handleTeamPlanningItemGitHubSync(
       const { id } = await context.params;
       const itemId = id.trim();
       if (!itemId) return planningItemsError("Planungselement-ID ist erforderlich.", 400);
-      if (!await hasCanonicalTeamPlanningItem(permission.supabase, itemId)) {
+      if (!await permission.planningItems.hasCanonicalItem()) {
         return planningItemsError("Planungselement wurde nicht gefunden.", 404);
       }
       const requestedIdempotencyKey = request.headers?.get?.("idempotency-key")?.trim() || "";
       const idempotencyKey = isUuid(requestedIdempotencyKey) ? requestedIdempotencyKey : randomUUID();
-      const enqueued = await enqueueTeamPlanningGitHubProjection({
-        supabase: permission.supabase,
-        tokenId: permission.tokenId,
-        actorProfileId: permission.profile.id,
-        itemId,
+      const enqueued = await permission.planningItems.enqueueGitHubProjection({
         idempotencyKey,
         command: command.command,
       });
@@ -109,7 +100,7 @@ export async function handleTeamPlanningItemGitHubSync(
       }
 
       if (mode === "wait") {
-        const results = await dispatchAndLoadPlanningGitHubProjections(permission.supabase, enqueued.value.operationId);
+        const results = await permission.planningItems.dispatchGitHubProjection(enqueued.value.operationId);
         const result = results.get(itemId);
         if (!result) {
           return planningItemsError("GitHub-Sync lieferte kein Ergebnis.", 500);
@@ -123,7 +114,7 @@ export async function handleTeamPlanningItemGitHubSync(
       }
 
       after(async () => {
-        await dispatchAndLoadPlanningGitHubProjections(permission.supabase, enqueued.value.operationId);
+        await permission.planningItems.dispatchGitHubProjection(enqueued.value.operationId);
       });
       return planningItemsJson({
         ok: true,

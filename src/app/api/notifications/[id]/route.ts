@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireTeamMember } from "@/lib/authz";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { authorizeCredentialAction } from "@/lib/credentials";
+import { apiError, authzError, readJsonPayload } from "@/lib/api-response";
 import { canManageNotificationEvent, type NotificationUserAction } from "@/lib/notification-lifecycle";
 
 type NotificationStatusPayload = {
@@ -8,26 +8,21 @@ type NotificationStatusPayload = {
 };
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<NotificationStatusPayload>(request, requireTeamMember, {});
-  if (!apiContext.ok) return apiContext.response;
-
-  const { payload, permission, supabase } = apiContext;
+  const { id } = await context.params;
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "notification.status.write", targetId: id });
+  if (!permission.ok) return authzError(permission);
+  const payload = await readJsonPayload<NotificationStatusPayload>(request, {});
   const action = payload.action;
   if (!action || !["seen", "dismiss"].includes(action)) {
     return apiError("Ungültige Notification-Aktion.", 400);
   }
 
-  const { id } = await context.params;
   const notificationId = Number(id);
   if (!Number.isInteger(notificationId) || notificationId <= 0) {
     return apiError("Ungültige Notification.", 400);
   }
 
-  const { data: event, error: readError } = await supabase
-    .from("notification_events")
-    .select("id,recipient_profile_id,status,seen_at,dismissed_at")
-    .eq("id", notificationId)
-    .single();
+  const { data: event, error: readError } = await permission.resource.readNotification();
 
   if (readError || !event) return apiError("Notification wurde nicht gefunden.", 404);
 
@@ -39,16 +34,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ ok: true, action, status: event.status });
   }
 
-  const now = new Date().toISOString();
-  const update = action === "seen"
-    ? { seen_at: event.seen_at || now }
-    : { status: "dismissed", seen_at: event.seen_at || now, dismissed_at: event.dismissed_at || now };
-  const { error: updateError } = await supabase
-    .from("notification_events")
-    .update(update)
-    .eq("id", notificationId)
-    .eq("status", "pending");
-
+  const { error: updateError } = await permission.resource.saveNotificationStatus(action);
   if (updateError) return apiError(updateError.message, 500);
 
   return NextResponse.json({ ok: true, action, status: action === "dismiss" ? "dismissed" : "pending" });

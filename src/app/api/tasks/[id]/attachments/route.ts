@@ -1,12 +1,10 @@
+import { createHash } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { requirePlanningContributor } from "@/lib/authz";
-import { uploadGitHubAttachment } from "@/lib/github";
-import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "@/lib/github-app";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { compactAlphanumeric, slugify } from "@/lib/slug";
-import { apiError, requireApiContext } from "@/lib/api-response";
+import { apiError } from "@/lib/api-response";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 
@@ -36,19 +34,15 @@ function isImageType(type: string) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requirePlanningContributor);
+  const { id } = await context.params;
+  const apiContext = await requirePlanningContext(request, "planning.attachment.write", id);
   if (!apiContext.ok) return apiContext.response;
 
-  const { permission, supabase } = apiContext;
+  const { permission, planning } = apiContext;
 
-  const { id } = await context.params;
-  const activeItem = await requireActivePlanningItem(supabase, id);
+  const activeItem = await planning.ensureCollaborationActive();
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
-  const { data: task, error: taskError } = await supabase
-    .from("tasks")
-    .select("id,title,task_type,assignee,owner,status,review_owner_profile_id,review_status,score_final,github_repo,github_issue_number,issue_number")
-    .eq("id", id)
-    .single();
+  const { data: task, error: taskError } = await planning.readCollaborationTask();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
   if (task.task_type === "epic" || task.task_type === "initiative") {
@@ -87,46 +81,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (file.size > maxUploadBytes) return apiError("Datei ist zu groß. Maximal erlaubt sind 10 MB.", 413);
   if (!allowedMimeTypes.has(file.type)) return apiError("Dateityp wird noch nicht unterstützt.", 415);
 
-  let githubUserToken = "";
-  try {
-    githubUserToken = await getGitHubUserTokenForProfile(supabase, permission.profile);
-  } catch (error) {
-    return apiError(error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.", error instanceof GitHubAppUserTokenRequiredError ? 401 : 403);
-  }
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const filename = `${timestamp}-${safeFileName(file.name)}`;
-  const path = `.fmd-attachments/tasks/${id}/${filename}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  const uploaded = await uploadGitHubAttachment(
-    path,
-    buffer,
-    githubUserToken,
-    `Add attachment for Founder Scoreboard task ${id}`,
-    task.github_repo,
-  );
+  const suppliedOperation = request.headers.get("idempotency-key")?.trim() || "";
+  if (suppliedOperation && !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(suppliedOperation)) return apiError("Upload-Operations-ID ist ungültig.", 400);
+  // Existing callers without an operation retain deterministic content reconciliation.
+  const identity = createHash("sha256").update(`${permission.profile?.id || ""}\0${suppliedOperation}\0${file.name}\0${file.type}\0`).update(suppliedOperation ? "" : buffer).digest("hex");
+  const path = `.fmd-attachments/tasks/${id}/${identity}-${safeFileName(file.name)}`;
+  const upload = await planning.uploadAttachment({ path, bytes: buffer, filename: file.name, contentType: file.type });
+  if (!upload.ok) return apiError(upload.error, upload.status);
+  const uploaded = upload.uploaded;
   const markdown = isImageType(file.type)
     ? `![${file.name}](${uploaded.rawUrl})`
     : `[${file.name}](${uploaded.rawUrl})`;
 
-  const { data: audit, error: auditError } = await supabase.from("audit_log").insert({
-    entity_type: "task",
-    entity_id: id,
-    action: "task.attachment_uploaded",
-    actor_profile_id: permission.profile?.id || null,
-    after_data: {
-      filename: file.name,
-      contentType: file.type,
-      size: file.size,
-      url: uploaded.rawUrl,
-    },
-    ...auditRequestMetadata(request),
-  }).select("id,entity_id,action,actor_profile_id,before_data,after_data,created_at").single();
+  const { data: audit, error: auditError } = await planning.recordAttachment(auditRequestMetadata(request));
   if (auditError || !audit) return apiError(auditError?.message || "Anhang konnte nicht protokolliert werden.", 500);
-  await supabase.from("tasks").update({
-    github_issue_sync_status: "not_synced",
-    github_issue_sync_error: null,
-  }).eq("id", id);
 
   return NextResponse.json({
     ok: true,

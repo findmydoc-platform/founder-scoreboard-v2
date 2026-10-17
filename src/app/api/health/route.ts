@@ -1,22 +1,11 @@
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { NextResponse } from "next/server";
-import { getServerSupabase, hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
-
-const coreTables = ["profiles", "tasks"] as const;
-
-async function coreTablesReachable() {
-  const supabase = getServerSupabase();
-  if (!supabase) return false;
-
-  const checks = await Promise.all(coreTables.map(async (table) => {
-    const { error } = await supabase.from(table).select("id").limit(1);
-    return !error;
-  }));
-  return checks.every(Boolean);
-}
+import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase-configuration";
 
 export async function GET() {
   const startedAt = Date.now();
-  const coreTablesReady = await coreTablesReachable();
+  const permission = await authorizeCredentialAction({ credential: { kind: "public-resource" }, action: "health.inspect" });
+  const coreTablesReady = await permission.publicResource.coreTablesReachable();
   const source = "supabase" as const;
 
   const checks = {

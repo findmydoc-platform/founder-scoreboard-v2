@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { getServerSupabase } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActorContext } from "./actor-context";
 import {
   loadPlanningItemUpdateTarget,
@@ -21,7 +21,7 @@ import {
   type TeamPlanningDependencyCommand,
 } from "./planning-items-team-dependency-contract";
 
-type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
+type SupabaseServer = SupabaseClient;
 
 export type TeamPlanningDependencyChange = Readonly<{
   operation: "add" | "remove";

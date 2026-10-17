@@ -17,10 +17,10 @@ test("GitHub lifecycle worker completes issue-less coverage without requesting a
   const finalized = [];
   const worker = await importTestModule("src/lib/planning-github-lifecycle.ts", {
     "server-only": {},
-    "./github-app": {
-      getGitHubAppInstallationToken: async () => {
+    "./credentials": {
+      authorizeCredentialAction: async () => {
         tokenRequests += 1;
-        return "token";
+        return { github: "token" };
       },
     },
     "./planning-github-lifecycle-github": {

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requirePlanningContributor } from "@/lib/authz";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 
 type ObjectionPayload = {
   comment?: string;
@@ -20,24 +20,18 @@ type ReviewPayload = {
 };
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<ObjectionPayload>(request, requirePlanningContributor, {});
+  const { id } = await context.params;
+  const apiContext = await requirePlanningJsonContext<ObjectionPayload>(request, "planning.sprint.objection.create", {}, id);
   if (!apiContext.ok) return apiContext.response;
 
-  const { payload, permission, supabase } = apiContext;
+  const { payload, permission, planning } = apiContext;
   if (!permission.profile) return apiError("Profil erforderlich.", 401);
 
-  const { id } = await context.params;
   const comment = cleanText(payload.comment, 2000);
   if (!comment) return apiError("Einwand ist erforderlich.", 400);
 
   const metadata = auditRequestMetadata(request);
-  const { data: objection, error } = await supabase.rpc("create_score_objection_transaction", {
-    p_sprint_id: id,
-    p_profile_id: permission.profile.id,
-    p_comment: comment,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent || null,
-  });
+  const { data: objection, error } = await planning.createScoreObjection(comment, metadata);
   if (error?.code === "P0002") return apiError("Sprint oder FounderOps-Prozesseinstellung wurde nicht gefunden.", 404);
   if (error?.code === "P0003") return apiError("Gelockte Sprints können nicht mehr beanstandet werden.", 409);
   if (error?.code === "P0004") return apiError("Score-Einwände können erst nach dem Sprint-Ende eingereicht werden.", 409);
@@ -50,13 +44,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<ReviewPayload>(request, requirePlanningContributor, {});
+  const { id } = await context.params;
+  const apiContext = await requirePlanningJsonContext<ReviewPayload>(request, "planning.sprint.objection.process", {}, id);
   if (!apiContext.ok) return apiContext.response;
 
-  const { payload, permission, supabase } = apiContext;
+  const { payload, permission, planning } = apiContext;
   if (!permission.profile) return apiError("Profil erforderlich.", 401);
 
-  const { id } = await context.params;
   const objectionId = Number(payload.objectionId);
   const action = payload.action || "resolve";
   const status = payload.status;
@@ -77,21 +71,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (action === "second_review" && !secondReviewDecision) return apiError("Eine Zweitreview-Entscheidung ist erforderlich.", 400);
 
   const metadata = auditRequestMetadata(request);
-  const { data: transactionData, error } = await supabase.rpc("process_score_objection_transaction", {
-    p_sprint_id: id,
-    p_objection_id: objectionId,
-    p_actor_profile_id: permission.profile.id,
-    p_action: action,
-    p_status: status || null,
-    p_resolution_comment: resolutionComment || null,
-    p_delivery_points: payload.deliveryPoints ?? null,
-    p_form_points: payload.formPoints ?? null,
-    p_weekly_points: payload.weeklyPoints ?? null,
-    p_second_reviewer_profile_id: secondReviewerProfileId || null,
-    p_second_review_decision: secondReviewDecision || null,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent || null,
-  });
+  const { data: transactionData, error } = await planning.processScoreObjection({ objectionId, action, status: status || null,
+    resolutionComment, deliveryPoints: payload.deliveryPoints, formPoints: payload.formPoints, weeklyPoints: payload.weeklyPoints,
+    secondReviewerProfileId, secondReviewDecision,
+  }, metadata);
 
   if (error) {
     if (error.code === "P0002") return apiError("Sprint oder Score-Einwand wurde nicht gefunden.", 404);

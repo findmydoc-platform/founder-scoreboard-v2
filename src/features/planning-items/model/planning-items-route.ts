@@ -3,10 +3,8 @@ import {
   TEAM_PLANNING_ITEM_SCOPES,
   type TeamPlanningItemScope,
 } from "@/features/planning-items/model/planning-items-contract";
-import {
-  requireTeamPlanningItemScope,
-  type TeamPlanningItemsAuthResult,
-} from "@/features/planning-items/model/planning-items-token";
+import { authorizeCredentialAction } from "@/lib/credentials";
+import type { PersonalPlanningCredentialResult } from "@/lib/credentials/types";
 
 export type PlanningItemsOperation =
   | "planningContext.read"
@@ -20,13 +18,11 @@ export type PlanningItemsRequestMode = "read" | "preview" | "commit";
 export type PlanningItemsAccessRequest = Readonly<{
   operation: PlanningItemsOperation;
   mode: PlanningItemsRequestMode;
-  requiredScopes: readonly TeamPlanningItemScope[];
-  resolveAdditionalScopes?: (
-    permission: SuccessfulPlanningItemsAuth,
-  ) => Promise<readonly TeamPlanningItemScope[]>;
+  itemId?: string;
+  requiresGitHubSync?: (permission: SuccessfulPlanningItemsAuth) => Promise<boolean>;
 }>;
 
-type SuccessfulPlanningItemsAuth = Extract<TeamPlanningItemsAuthResult, { ok: true }>;
+type SuccessfulPlanningItemsAuth = Extract<PersonalPlanningCredentialResult, { ok: true }>;
 type PlanningItemsHandler = (permission: SuccessfulPlanningItemsAuth) => Promise<Response>;
 type PlanningItemsErrorOptions = Readonly<{
   code?: string;
@@ -89,6 +85,7 @@ export function planningItemsTokenInactiveError() {
 
 function publicCommitError(error: unknown, fallbackError: string) {
   const code = error instanceof Error && "code" in error ? String(error.code || "") : "";
+  if (code === "AUTHORIZATION_UNAVAILABLE" && error instanceof Error && "status" in error) return planningItemsError(error.message, Number(error.status), { code });
   if (code === "P0001") return planningItemsError("Planungselement wurde zwischenzeitlich geändert. Bitte erneut laden.", 409);
   if (code === "P0002") return planningItemsError("Planungselement wurde nicht gefunden.", 404);
   if (code === "P0003") return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
@@ -201,15 +198,7 @@ export async function handlePlanningItemsRequest(
   fallbackError: string,
   handler: PlanningItemsHandler,
 ) {
-  const requiredScopes = canonicalScopes(accessRequest.requiredScopes);
-  const primaryScope = requiredScopes[0];
-  if (!primaryScope || requiredScopes.length !== new Set(accessRequest.requiredScopes).size) {
-    return planningItemsError("Planning-API-Berechtigung konnte nicht geprüft werden.", 500, {
-      code: "AUTHORIZATION_UNAVAILABLE",
-    });
-  }
-
-  const permission = await requireTeamPlanningItemScope(request, primaryScope);
+  const permission = await authorizeCredentialAction({ credential: { kind: "personal-planning-token", request }, action: "planning-items.access", operation: accessRequest.operation, mode: accessRequest.mode, itemId: accessRequest.itemId });
   if (!permission.ok) {
     const challenge = bearerChallenge(permission.code);
     return planningItemsError(permission.error, permission.status, {
@@ -218,13 +207,8 @@ export async function handlePlanningItemsRequest(
     });
   }
 
-  if (permission.scopeGranted !== permission.scopes.includes(primaryScope)) {
-    return planningItemsError("Planning-API-Berechtigung konnte nicht geprüft werden.", 500, {
-      code: "AUTHORIZATION_UNAVAILABLE",
-    });
-  }
-
-  const missingBaseScopes = requiredScopes.filter((scope) => !permission.scopes.includes(scope));
+  const requiredScopes = permission.requiredScopes;
+  const missingBaseScopes = permission.missingScopes;
   if (missingBaseScopes.length) {
     return insufficientScopeResponse(
       permission,
@@ -235,25 +219,18 @@ export async function handlePlanningItemsRequest(
   }
 
   let allRequiredScopes = requiredScopes;
-  if (accessRequest.resolveAdditionalScopes) {
+  if (accessRequest.requiresGitHubSync) {
     try {
-      const additionalScopes = await accessRequest.resolveAdditionalScopes(permission);
-      allRequiredScopes = canonicalScopes([...requiredScopes, ...additionalScopes]);
-      if (allRequiredScopes.length !== new Set([...requiredScopes, ...additionalScopes]).size) {
-        const metadata = accessMetadata(permission, accessRequest, requiredScopes, []);
-        return addAccessMetadata(planningItemsError(
-          "Planning-API-Berechtigung konnte nicht geprüft werden.",
-          500,
-          { code: "AUTHORIZATION_UNAVAILABLE" },
-        ), metadata);
-      }
+      if (await accessRequest.requiresGitHubSync(permission)) allRequiredScopes = permission.planningItems.requireGitHubSync().requiredScopes;
     } catch (error) {
       const metadata = accessMetadata(permission, accessRequest, requiredScopes, []);
       return addAccessMetadata(publicCommitError(error, fallbackError), metadata);
     }
   }
 
-  const missingScopes = allRequiredScopes.filter((scope) => !permission.scopes.includes(scope));
+  const missingScopes = allRequiredScopes.includes("write:planning-items:github-sync")
+    ? permission.planningItems.requireGitHubSync().missingScopes
+    : permission.missingScopes;
   if (missingScopes.length) {
     return insufficientScopeResponse(
       permission,

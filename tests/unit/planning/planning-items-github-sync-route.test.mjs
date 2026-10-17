@@ -78,7 +78,11 @@ const standaloneRoute = await importTestModule(
       handlePlanningItemsRequest: async (_request, accessRequest, _fallback, handler) => {
         standaloneAccessRequest = accessRequest;
         return handler({
-          supabase: {},
+          planningItems: {
+            hasCanonicalItem: async () => true,
+            enqueueGitHubProjection: async () => standaloneEnqueueError ? { ok: false, error: standaloneEnqueueError } : { ok: true, value: { operationId: "team-sync:token-1:key-1", itemType: "sub_issue", githubSync: { status: "accepted" } } },
+            dispatchGitHubProjection: async () => new Map([["task-1", standaloneMode === "oversized" ? contentFailure : standaloneMode === "failed" ? { status: "failed", code: "github_sync_unavailable", error: "GitHub unavailable", retryable: true } : { status: "synced", code: "github_sync_succeeded" }]]),
+          },
           profile: { id: "profile-1" },
           tokenId: "token-1",
           scopes: ["write:planning-items:github-sync"],
@@ -159,8 +163,8 @@ test("standalone async sync requires the new scope and returns 202 without an id
 
   assert.deepEqual(standaloneAccessRequest, {
     operation: "planningItems.githubSync",
+    itemId: "task-1",
     mode: "commit",
-    requiredScopes: ["write:planning-items:github-sync"],
   });
   assert.equal(response.status, 202);
   assert.equal(body.githubSync.status, "accepted");

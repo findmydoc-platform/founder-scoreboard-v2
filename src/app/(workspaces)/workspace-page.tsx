@@ -1,130 +1,88 @@
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { WorkspaceDataUnavailablePage } from "@/features/planning/templates/workspace-data-unavailable-page";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
-import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
-import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
-import { createSupabaseStrategicPlanningReadModel } from "@/features/projects/server/strategic-planning-read-model-supabase";
 import { supportingWorkspaceModelToPlanningShellState, type SupportingWorkspace } from "@/features/planning/model/supporting-planning-shell-projection";
-import { createSupabaseEventsReadModel } from "@/features/events/server/events-read-model-supabase";
-import { createSupabaseToolsReadModel } from "@/features/tools/server/tools-read-model-supabase";
-import { createSupabaseTeamReadModel } from "@/features/team/server/team-read-model-supabase";
-import { createSupabaseProfileReadModel } from "@/features/profile/server/profile-read-model-supabase";
-import { createSupabaseNotificationsReadModel } from "@/features/notifications/server/notifications-read-model-supabase";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
-import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
-import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
-import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
-import { getServerPlanningAuth } from "@/lib/planning-auth-server";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { loadNotionDecisionLog } from "@/lib/notion-decision-log";
-import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
+import { requiresSupabaseAuth } from "@/lib/supabase-configuration";
 import type { AuthenticatedProfile } from "@/lib/types";
 import { redirect } from "next/navigation";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
 
 async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
-  const supabase = getServerSupabase();
-  if (!supabase) return { status: "unavailable" as const };
-  const [backlog, headerData] = await Promise.all([
-    createSupabaseBacklogReadModel(supabase).load({
-      authorized: true,
-      actorProfileId: profile?.id || null,
-    }),
-    loadPlanningHeaderData(supabase, {
-      currentProfileId: profile?.id || null,
-      platformRole: profile?.platformRole || null,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
-  ]);
-  return backlog.status === "ready"
-    ? { status: "ready" as const, model: backlog.model, headerData }
-    : { status: backlog.status };
+  const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.backlog.read" });
+  if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
+  const [backlog, header] = await Promise.all([permission.planning.loadBacklog(), permission.planning.loadHeader()]);
+  return backlog.status === "ready" && header.ok
+    ? { status: "ready" as const, model: backlog.model, headerData: header.headerData }
+    : { status: "unavailable" as const };
 }
 
 async function loadPlanningWorkspacePageData(
   workspace: "planning" | "projects",
   profile?: AuthenticatedProfile | null,
 ) {
-  const supabase = getServerSupabase();
-  if (!supabase) return { status: "unavailable" as const };
-  const readModel = workspace === "planning"
-    ? createSupabasePlanningBoardReadModel(supabase)
-    : createSupabaseStrategicPlanningReadModel(supabase);
-  const [planningWorkspace, headerData] = await Promise.all([
-    readModel.load({ authorized: true, actorProfileId: profile?.id || null }),
-    loadPlanningHeaderData(supabase, {
-      currentProfileId: profile?.id || null,
-      platformRole: profile?.platformRole || null,
-      slots: workspace === "planning" && profile ? ["quickLinks", "calendarEvents"] : undefined,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
-  ]);
-  return planningWorkspace.status === "ready"
-    ? { status: "ready" as const, model: planningWorkspace.model, headerData }
-    : { status: planningWorkspace.status };
+  if (workspace === "planning") {
+    const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
+    if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
+    const [planningWorkspace, header] = await Promise.all([
+      permission.planning.loadBoard(), permission.planning.loadHeader(permission.profile ? ["quickLinks", "calendarEvents"] : undefined),
+    ]);
+    return planningWorkspace.status === "ready" && header.ok
+      ? { status: "ready" as const, model: planningWorkspace.model, headerData: header.headerData }
+      : { status: "unavailable" as const };
+  }
+  const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "strategic.read" });
+  if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
+  return permission.resource.loadStrategic();
 }
 
 async function loadSupportingWorkspacePageData(
   workspace: SupportingWorkspace,
   profile?: AuthenticatedProfile | null,
 ) {
-  const supabase = getServerSupabase();
-  if (!supabase) return { status: "unavailable" as const };
-  const readModel = workspace === "events" ? createSupabaseEventsReadModel(supabase)
-    : workspace === "tools" ? createSupabaseToolsReadModel(supabase)
-      : workspace === "team" ? createSupabaseTeamReadModel(supabase)
-        : workspace === "profile" ? createSupabaseProfileReadModel(supabase)
-          : createSupabaseNotificationsReadModel(supabase);
-  const [workspaceData, headerData] = await Promise.all([
-    readModel.load({ authorized: true, actorProfileId: profile?.id || null }),
-    loadPlanningHeaderData(supabase, {
-      currentProfileId: profile?.id || null,
-      platformRole: profile?.platformRole || null,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
-  ]);
-  return workspaceData.status === "ready"
-    ? { status: "ready" as const, model: workspaceData.model, headerData }
-    : { status: workspaceData.status };
+  if (workspace === "profile") {
+    const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "account.profile.read" });
+    if (!permission.ok || (permission.profile?.id || null) !== (profile?.id || null)
+      || (permission.profile?.platformRole || null) !== (profile?.platformRole || null)) return { status: "unavailable" as const };
+    return permission.account.loadProfile();
+  }
+  const action = workspace === "events" ? "events.read" : workspace === "tools" ? "tools.read" : workspace === "team" ? "team.read" : "notifications.read";
+  const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action });
+  if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
+  return permission.resource.loadWorkspace();
 }
 
 async function loadSprintPageData(profile?: AuthenticatedProfile | null) {
-  const supabase = getServerSupabase();
-  if (!supabase) return { status: "unavailable" as const };
-  const [sprint, headerData] = await Promise.all([
-    createSupabaseSprintReadModel(supabase).load({ authorized: true, actorProfileId: profile?.id || null }),
-    loadPlanningHeaderData(supabase, {
-      currentProfileId: profile?.id || null,
-      platformRole: profile?.platformRole || null,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
-  ]);
-  return sprint.status === "ready"
-    ? { status: "ready" as const, model: sprint.model, headerData }
-    : { status: sprint.status };
+  const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.sprint.read" });
+  if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
+  const [sprint, header] = await Promise.all([permission.planning.loadSprint(), permission.planning.loadHeader()]);
+  return sprint.status === "ready" && header.ok
+    ? { status: "ready" as const, model: sprint.model, headerData: header.headerData }
+    : { status: "unavailable" as const };
 }
 
 async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
-  const supabase = getServerSupabase();
-  if (!supabase) return { status: "unavailable" as const };
-  const [headerData, decisionLog] = await Promise.all([
-    loadPlanningHeaderData(supabase, {
-      currentProfileId: profile?.id || null,
-      platformRole: profile?.platformRole || null,
-      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
-    }),
-    loadNotionDecisionLog(),
-  ]);
-  return { status: "ready" as const, headerData, decisionLog };
+  const permission = await authorizeCredentialAction({credential:{kind:"server-cookies"},action:"decision-log.read"});
+  if (!permission.ok || permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole) return { status: "unavailable" as const };
+  try {
+    const [headerData, decisionLog] = await Promise.all([
+      permission.loadHeader(),
+      loadNotionDecisionLog(permission.notion),
+    ]);
+    return { status: "ready" as const, headerData, decisionLog };
+  } catch { return { status: "unavailable" as const }; }
 }
 
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
   if (requiresSupabaseAuth()) {
-    const auth = await getServerPlanningAuth();
+    const auth = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" });
     if (!auth.ok) {
       redirectForWorkspaceGate(auth.code);
       return (
@@ -142,10 +100,10 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
 
     if (initialWorkspace === "administration") {
       if (!auth.authority?.capabilities.manageAdministratorEligibility) redirect("/planning");
-      const sessionSupabase = await getServerAuthSupabase();
-      if (!sessionSupabase) return <WorkspaceDataUnavailablePage workspace="administration" authUserEmail={auth.user?.email || ""} />;
-      const administration = await createSupabaseAdministrationReadModel(sessionSupabase).load({
-        capabilities: auth.authority.capabilities,
+      const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "administration.directory.read" });
+      if (!permission.ok || !permission.authority) return <WorkspaceDataUnavailablePage workspace="administration" authUserEmail={auth.user?.email || ""} />;
+      const administration = await createSupabaseAdministrationReadModel(permission.administrator.directory).load({
+        capabilities: permission.authority.capabilities,
       });
       if (administration.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace="administration" authUserEmail={auth.user?.email || ""} />;
@@ -156,7 +114,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
           initialHeaderData={emptyPlanningHeaderData}
           initialWorkspace="administration"
           initialAdministrationModel={administration.model}
-          initialAdministratorAccess={auth.authority.administratorAccess}
+          initialAdministratorAccess={permission.authority.administratorAccess}
           source="supabase"
           authRequired
           initialAuthUser={auth.user}

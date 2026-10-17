@@ -31,7 +31,7 @@ test.each([false,true])("a journaled uncertain create reaches a usable claim aft
     return event?Response.json(event):new Response(null,{status:404});
   });
   try{
-    assert.deepEqual(await provider.claimProviderOperation({serviceSupabase:service,publicationId:"publication",generation:1,purpose:abandon?"cleanup":"publish",accessToken:"test"}),{id:"next-operation"});
+    assert.deepEqual(await provider.claimProviderOperation({serviceSupabase:service,publicationId:"publication",generation:1,purpose:abandon?"cleanup":"publish",accessToken: { request: (url, init) => fetch(url, init) }}),{id:"next-operation"});
     assert.equal(event.status,abandon?"cancelled":undefined);
   }finally{spy.mockRestore();}
 });

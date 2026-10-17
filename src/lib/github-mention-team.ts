@@ -1,3 +1,4 @@
+import type { GitHubResourceCredential } from "./github-http";
 import { githubJson } from "./github-http";
 import { validGitHubProjectOwner } from "./github-project-config";
 
@@ -14,7 +15,7 @@ export function validGitHubTeamSlug(value: unknown): value is string {
   return typeof value === "string" && githubTeamSlugPattern.test(value);
 }
 
-export async function validateGitHubMentionTeam(organization: string, teamSlug: string, token: string) {
+export async function validateGitHubMentionTeam(organization: string, teamSlug: string, token: GitHubResourceCredential) {
   if (!validGitHubProjectOwner(organization) || !validGitHubTeamSlug(teamSlug)) {
     throw new Error("GitHub-Organisation oder Team-Slug ist ungültig.");
   }

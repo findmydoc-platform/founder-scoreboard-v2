@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const githubHttp = await importTestModule("src/lib/github-http.ts");
+const githubHttp = await importTestModule("src/lib/credentials/internal/github-http-transport.ts", { "server-only": {} });
 
 async function withFetch(fetchImplementation, callback) {
   const originalFetch = globalThis.fetch;

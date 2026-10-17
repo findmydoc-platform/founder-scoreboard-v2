@@ -1,7 +1,5 @@
 import type { NextRequest } from "next/server";
-import { actorContextFromPlanningTokenAuth } from "@/features/planning-items/model/planning-actor-context-server";
 import {
-  createEmptyEpicDeletePlanningItems,
   emptyEpicDeleteCommand,
   emptyEpicDeleteError,
   emptyEpicDeletePreview,
@@ -12,7 +10,6 @@ import {
   planningItemsError,
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
-import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
 
 export async function handleTeamPlanningItemDeletePreview(
   request: NextRequest,
@@ -22,8 +19,8 @@ export async function handleTeamPlanningItemDeletePreview(
     request,
     {
       operation: "planningItems.deleteEmpty",
+      itemId: (await context.params).id.trim(),
       mode: "preview",
-      requiredScopes: ["write:planning-items:delete-empty"],
     },
     "Planning-Items-Löschung konnte nicht geprüft werden.",
     async (permission) => {
@@ -33,23 +30,10 @@ export async function handleTeamPlanningItemDeletePreview(
 
       const parsed = parseEmptyEpicDeletePayload(await request.json().catch(() => null));
       if (!parsed.ok) return planningItemsError(parsed.error, 400);
-      if (!await hasCanonicalTeamPlanningItem(permission.supabase, itemId)) {
+      if (!await permission.planningItems.hasCanonicalItem()) {
         return planningItemsError("Planungselement wurde nicht gefunden.", 404);
       }
-
-      const actor = actorContextFromPlanningTokenAuth({
-        ok: true,
-        profile: {
-          id: permission.profile.id,
-          platformRole: permission.profile.platformRole,
-        },
-        tokenId: permission.tokenId,
-        scopes: permission.scopes,
-      });
-      if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
-      const result = await createEmptyEpicDeletePlanningItems(permission.supabase).run({
-        actor: actor.actor,
-        mode: "preview",
+      const result = await permission.planningItems.delete({
         command: emptyEpicDeleteCommand(itemId, parsed.expectedUpdatedAt),
       });
       if (!result.ok) {

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { workspaceAvatarUrl, workspaceIdentity } from "@/lib/workspace-identity";
 import type { Profile } from "@/lib/types";
 
@@ -20,10 +20,8 @@ function withWorkspaceAvatar(profile: Profile, data: unknown): Profile {
   }
 }
 
-export async function withWorkspaceProfileAvatars(profiles: Profile[]): Promise<Profile[]> {
-  if (profiles.length === 0) return profiles;
-  const service = getServerServiceRoleSupabase();
-  if (!service) return profiles;
+export async function withWorkspaceProfileAvatars(profiles: Profile[], service: SupabaseClient | null): Promise<Profile[]> {
+  if (profiles.length === 0 || !service) return profiles;
 
   try {
     const { data, error } = await service.rpc("workspace_access_contexts", { p_profile_ids: profiles.map((profile) => profile.id) });

@@ -1,5 +1,5 @@
 import type { AuthenticatedProfile } from "@/lib/types";
-import type { getServerSupabase } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContentLengthError } from "@/lib/github-issue-content";
 import type { ActorContext } from "./actor-context";
 import type { PlanningInvocation, PlanningError } from "./planning-items";
@@ -26,7 +26,7 @@ import {
   type TeamPlanningDependencyChange,
 } from "@/features/planning-items/model/planning-items-team-dependency";
 
-type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
+type SupabaseServer = SupabaseClient;
 type ParsedUpdate = Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
 
 type UpdateTransaction = {

@@ -1,3 +1,4 @@
+import type { GitHubResourceCredential } from "../github-http";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { listGitHubIssueBlockedBy } from "../github";
 import {
@@ -162,7 +163,7 @@ async function loadDependencyContext(
   };
 }
 
-async function listGitHubIssuesBlocking(issueNumber: number, token: string, repository: string) {
+async function listGitHubIssuesBlocking(issueNumber: number, token: GitHubResourceCredential, repository: string) {
   const { owner, repo } = splitGitHubRepository(repository);
   return githubJson<GitHubIssueDependency[]>(
     `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocking?per_page=100`,
@@ -175,7 +176,7 @@ async function listGitHubIssuesBlocking(issueNumber: number, token: string, repo
   );
 }
 
-async function getGitHubIssue(issueNumber: number, token: string, repository: string) {
+async function getGitHubIssue(issueNumber: number, token: GitHubResourceCredential, repository: string) {
   const { owner, repo } = splitGitHubRepository(repository);
   return githubJson<GitHubIssueReference>(
     `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`,
@@ -190,7 +191,7 @@ async function getGitHubIssue(issueNumber: number, token: string, repository: st
 async function addGitHubIssueBlockedBy(
   issueNumber: number,
   blockingIssueId: number,
-  token: string,
+  token: GitHubResourceCredential,
   repository: string,
 ) {
   const { owner, repo } = splitGitHubRepository(repository);
@@ -210,7 +211,7 @@ async function addGitHubIssueBlockedBy(
 async function removeGitHubIssueBlockedBy(
   issueNumber: number,
   blockingIssueId: number,
-  token: string,
+  token: GitHubResourceCredential,
   repository: string,
 ) {
   const { owner, repo } = splitGitHubRepository(repository);
@@ -238,7 +239,7 @@ export async function projectTaskGitHubDependencies({
   taskId: string;
   currentIssueNumber: number;
   repository: string;
-  token: string;
+  token: GitHubResourceCredential;
 }) {
   const current: GitHubIssueCoordinate = {
     repository: splitGitHubRepository(repository).repository,

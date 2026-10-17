@@ -61,11 +61,11 @@ it.each([{deleted:false,expired:true},{deleted:true,expired:true}])(
       };
       const claim = (await service(db,()=>db.query("select public.claim_team_workweek_provider_operation($1,1,'publish') as value",[publication.id]))).rows[0].value;
       for (const effect of publication.effects.filter((effect: PreparedWorkweekEffect)=>effect.operation==="create")) {
-        const result = await ensureGoogleWorkweekEffect({accessToken:"test",effect,fetchImpl:provider,writeJournal:record(db,claim.id,effect.id)});
+        const result = await ensureGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect,fetchImpl:provider,writeJournal:record(db,claim.id,effect.id)});
         expect(result.state).toBe("confirmed");
         if (result.state==="confirmed") await service(db,()=>db.query("select public.confirm_team_workweek_effect($1,1,$2,$3)",[effect.id,result.etag,effect.payload]));
       }
-      expect(await ensureGoogleWorkweekEffect({accessToken:"test",effect:predecessor,fetchImpl:provider,writeJournal:record(db,claim.id,predecessor.id)})).toMatchObject({state:"delayed",errorClass:"provider_identity_mismatch"});
+      expect(await ensureGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect:predecessor,fetchImpl:provider,writeJournal:record(db,claim.id,predecessor.id)})).toMatchObject({state:"delayed",errorClass:"provider_identity_mismatch"});
       await service(db,()=>db.query("select public.finish_team_workweek_provider_operation($1)",[claim.id]));
       await service(db,()=>db.query("select public.delay_team_workweek_publication($1,'provider_identity_mismatch')",[publication.id]));
       expect((await db.query("select last_error_class from public.team_workweek_publications where id=$1",[publication.id])).rows[0].last_error_class).toBe("provider_identity_mismatch");
@@ -77,7 +77,7 @@ it.each([{deleted:false,expired:true},{deleted:true,expired:true}])(
         const plan = (await service(db,()=>db.query("select public.prepare_team_workweek_effect_cleanup($1,1) as value",[publication.id]))).rows[0].value;
         for (const effect of plan.effects as PreparedWorkweekEffect[]) {
           if (effect.state==="cleaned") { if (effect.id===predecessor.id) skipped=true; continue; }
-          const result = await cleanupGoogleWorkweekEffect({accessToken:"test",effect,fetchImpl:provider,writeJournal:record(db,cleanup.id,effect.id)});
+          const result = await cleanupGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect,fetchImpl:provider,writeJournal:record(db,cleanup.id,effect.id)});
           expect(result.state).toBe("confirmed");
           if (result.state==="confirmed") await service(db,()=>db.query("select public.confirm_team_workweek_planned_cleanup($1,1,$2,false)",[effect.id,result.etag]));
         }

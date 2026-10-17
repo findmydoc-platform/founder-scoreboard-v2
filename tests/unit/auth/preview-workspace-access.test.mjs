@@ -10,9 +10,9 @@ async function fixture(change = {}, member = true) {
   const identity = { sub: "google-subject", iss: "https://accounts.google.com", email: "member@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } };
   const context = { mode: "linking", linkingEnforced: true, linked: true, userId: "user-1", profileId: "founder", identity, ...change };
   const isWorkspaceGroupMember = vi.fn().mockResolvedValue(member);
-  const access = await importTestModule("src/lib/workspace-access.ts", {
+  const access = await importTestModule("src/lib/credentials/internal/workspace-access.ts", {
     "server-only": {},
-    "./supabase-service-role": { getServerServiceRoleSupabase: () => ({ rpc: async () => ({ data: context, error: null }) }) },
+    "./service-client": { getServerServiceRoleSupabase: () => ({ rpc: async () => ({ data: context, error: null }) }) },
     "./workspace-directory": { isWorkspaceGroupMember },
   });
   return { access, isWorkspaceGroupMember };
@@ -39,8 +39,10 @@ test("Preview rejects a nonmember and fails closed when Directory is unavailable
 
 test("Preview reports the configured login mode instead of hiding login", async () => {
   vi.stubEnv("VERCEL_ENV", "preview");
+  vi.resetModules();
   const route = await importTestModule("src/app/api/auth/login-mode/route.ts", {
-    "@/lib/workspace-access": { workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true }) },
+    "server-only": {},
+    "@/lib/credentials/internal/workspace-access": { workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true }) },
   });
   const response = await route.GET();
   expect(response.status).toBe(200);
@@ -54,12 +56,7 @@ async function linkingPage(context = {}, user = { id: "user-1" }) {
   const page = await importTestModule("src/app/auth/link-google/page.tsx", {
     "next/link": { default: ({ children, ...props }) => createElement("a", props, children) },
     "@/shared/atoms/app-brand": { AppBrand: () => null },
-    "@/lib/supabase-server": {
-      getServerAuthSupabase: async () => ({ auth: { getUser: async () => ({ data: { user } }) } }),
-    },
-    "@/lib/workspace-access": {
-      workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true, linked: false, profileId: "founder", ...context }),
-    },
+    "@/lib/credentials": { authorizeCredentialAction: async () => ({ user, approved: false, context: { mode: "linking", linkingEnforced: true, linked: false, profileId: "founder", ...context } }) },
   });
   return renderToStaticMarkup(await page.default());
 }

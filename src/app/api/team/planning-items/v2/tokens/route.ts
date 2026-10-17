@@ -1,12 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
-import { apiError, requireApiContext, requireJsonApiContext } from "@/lib/api-response";
-import { requirePlanningContributor } from "@/lib/authz";
-import {
-  createTeamPlanningItemsToken,
-  mapTeamPlanningItemsTokenRecord,
-} from "@/features/planning-items/model/planning-items-token";
-import { TEAM_PLANNING_ITEMS_TOKEN_HISTORY_LIMIT } from "@/features/planning-items/model/planning-items-contract";
+import { apiError, authzError } from "@/lib/api-response";
+import { authorizeCredentialAction } from "@/lib/credentials";
 
 type CreateTokenPayload = {
   label?: unknown;
@@ -15,38 +10,13 @@ type CreateTokenPayload = {
   allowGitHubSync?: unknown;
 };
 
-type TokenRecordRow = Parameters<typeof mapTeamPlanningItemsTokenRecord>[0];
-
 export async function GET(request: NextRequest) {
-  const context = await requireApiContext(request, requirePlanningContributor, {
-    supabaseUnavailableMessage: "Supabase ist für Planning-API-Tokens erforderlich.",
-  });
-  if (!context.ok) return context.response;
-
-  const { permission, supabase } = context;
-  const profileId = permission.profile?.id || "";
-  if (!profileId) return apiError("Profil konnte nicht bestimmt werden.", 403);
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning-items.tokens.manage" });
+  if (!permission.ok) return authzError(permission);
   const canIssueEmptyEpicDeletes = permission.profile?.platformRole === "ceo"
     || permission.profile?.platformRole === "deputy";
 
-  const now = new Date().toISOString();
-  const [activeResult, historyResult] = await Promise.all([
-    supabase
-      .from("team_task_intake_tokens")
-      .select("id,label,token_hint,scopes,expires_at,created_at,last_used_at,revoked_at")
-      .eq("profile_id", profileId)
-      .is("revoked_at", null)
-      .gt("expires_at", now)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("team_task_intake_tokens")
-      .select("id,label,token_hint,scopes,expires_at,created_at,last_used_at,revoked_at")
-      .eq("profile_id", profileId)
-      .or(`revoked_at.not.is.null,expires_at.lte.${now}`)
-      .order("created_at", { ascending: false })
-      .limit(TEAM_PLANNING_ITEMS_TOKEN_HISTORY_LIMIT),
-  ]);
-  const error = activeResult.error || historyResult.error;
+  const { data, error } = await permission.tokens.list();
   if (error) return apiError(error.code === "42P01" ? "Planning-API-Schema ist noch nicht verfügbar." : "Planning-API-Tokens konnten nicht geladen werden.", error.code === "42P01" ? 503 : 500);
 
   return NextResponse.json({
@@ -54,8 +24,7 @@ export async function GET(request: NextRequest) {
     capabilities: {
       canIssueEmptyEpicDeletes,
     },
-    tokens: ([...(activeResult.data || []), ...(historyResult.data || [])] as TokenRecordRow[])
-      .map(mapTeamPlanningItemsTokenRecord)
+    tokens: data
       .map((token) => canIssueEmptyEpicDeletes
         ? token
         : { ...token, scopes: token.scopes.filter((scope) => scope !== "write:planning-items:delete-empty") }),
@@ -63,14 +32,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<CreateTokenPayload | null>(request, requirePlanningContributor, {}, {
-    supabaseUnavailableMessage: "Supabase ist für Planning-API-Tokens erforderlich.",
-  });
-  if (!context.ok) return context.response;
-
-  const { payload, permission, supabase } = context;
-  const profileId = permission.profile?.id || "";
-  if (!profileId) return apiError("Profil konnte nicht bestimmt werden.", 403);
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning-items.tokens.manage" });
+  if (!permission.ok) return authzError(permission);
+  const payload = await request.json().catch(() => ({})) as CreateTokenPayload | null;
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return apiError("Token-Payload muss ein JSON-Objekt sein.", 400);
   }
@@ -100,16 +64,8 @@ export async function POST(request: NextRequest) {
     return apiError("Nur CEO oder Deputy können Tokens zum Löschen leerer Epics erstellen.", 403);
   }
 
-  const generated = createTeamPlanningItemsToken();
-  const { data, error } = await supabase.rpc("create_team_planning_items_token_v2", {
-    p_profile_id: profileId,
-    p_label: label,
-    p_token_hash: generated.tokenHash,
-    p_token_hint: generated.tokenHint,
-    p_allow_updates: payload.allowUpdates === true,
-    p_allow_empty_epic_deletes: allowEmptyEpicDeletes === true,
-    p_allow_github_sync: payload.allowGitHubSync === true,
-  });
+  const { data, error } = await permission.tokens.issue({ label, allowUpdates: payload.allowUpdates === true,
+    allowEmptyEpicDeletes: allowEmptyEpicDeletes === true, allowGitHubSync: payload.allowGitHubSync === true });
 
   if (error) {
     if (error.code === "P0003") return apiError("Maximal drei aktive Planning-API-Tokens sind erlaubt.", 409);
@@ -119,10 +75,9 @@ export async function POST(request: NextRequest) {
     return apiError(error.code === "PGRST202" || error.code === "42883" ? "Planning-API-Schema ist noch nicht verfügbar." : "Planning-API-Token konnte nicht erstellt werden.", error.code === "PGRST202" || error.code === "42883" ? 503 : 500);
   }
 
-  const tokenRecord = mapTeamPlanningItemsTokenRecord(data as TokenRecordRow);
   return NextResponse.json({
     ok: true,
-    token: generated.token,
-    tokenRecord,
+    token: data?.token,
+    tokenRecord: data?.tokenRecord,
   });
 }

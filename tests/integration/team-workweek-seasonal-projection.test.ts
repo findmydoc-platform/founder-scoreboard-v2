@@ -78,12 +78,12 @@ it("keeps source windows while merging spring duplicates and omitting nonpositiv
       }
       return observed ? Response.json(observed) : new Response(null, { status: 404 });
     }) as typeof fetch;
-    expect((await ensureGoogleWorkweekEffect({ accessToken: "controlled-token", effect, fetchImpl: provider })).state).toBe("confirmed");
-    expect((await ensureGoogleWorkweekEffect({ accessToken: "controlled-token", effect, fetchImpl: provider })).state).toBe("confirmed");
+    expect((await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider })).state).toBe("confirmed");
+    expect((await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider })).state).toBe("confirmed");
     expect(writes).toEqual([JSON.stringify(effect.payload)]);
     const foreign = { ...effect.payload, etag: "foreign-etag", end: { ...effect.payload.end, dateTime: "2027-03-28T02:00:00Z" } };
     const methods: string[] = [];
-    const cleanup = await cleanupGoogleWorkweekEffect({ accessToken: "controlled-token", effect, fetchImpl: (async (_input, init) => {
+    const cleanup = await cleanupGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: (async (_input, init) => {
       methods.push(init?.method || "GET");
       return Response.json(foreign);
     }) as typeof fetch });
