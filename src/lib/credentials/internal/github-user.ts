@@ -1,4 +1,6 @@
-import { FOUNDEROPS_DELIVERY_SECRET_HEADER, validateDeliverySecret } from "../../delivery-auth";
+import { NextRequest } from "next/server";
+import { authorizeDeliveryAdmission, DeliveryAdmissionDenied } from "./delivery-admission";
+import { reassertDeliveryAdmission } from "./delivery-admission-scope";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import "server-only";
 import { GitHubApiError, githubRequest, type GitHubRequestOptions } from "../../github-http";
@@ -14,15 +16,9 @@ async function authoredContext(input: GitHubAuthoredCredentialInput) {
   let assertAuthority = () => {};
   if(input.credential.kind==="github-comment-preview") {
     const request=input.credential.request;
-    const secret=request.headers.get(FOUNDEROPS_DELIVERY_SECRET_HEADER)?.trim() || "";
-    if (secret) {
-      if (!validateDeliverySecret(secret)) throw new Error("Keine Berechtigung für die GitHub-Vorschau.");
-      assertAuthority = () => { if (!validateDeliverySecret(secret)) throw new Error("Keine Berechtigung für die GitHub-Vorschau."); };
-    } else {
-      const permission = await authorizeSessionPolicy(request,"operations.lead");
-      if (!permission.ok || !("assertCurrent" in permission)) throw new Error("Keine Berechtigung für die GitHub-Vorschau.");
-      assertAuthority = permission.assertCurrent;
-    }
+    const permission = await authorizeDeliveryAdmission(request,"github.preview.admit");
+    if (!permission.ok) throw new DeliveryAdmissionDenied(permission);
+    assertAuthority = await permission.reassert();
   }
   const supabase=userVault();
   const review=input.credential.kind==="github-review-delivery";
@@ -50,6 +46,7 @@ async function capability(profileId:string,check:()=>Promise<()=>void>,permitted
   const configuration=githubUserConfiguration();
   const connection=await boundUserConnection(profileId);
   const profile={id:profileId} as AuthenticatedProfile;
+  const initialAdmission = await reassertDeliveryAdmission(); initialAdmission();
   // Validate usability before returning; no decrypted value escapes this module.
   const initialToken=await getGitHubUserTokenForProfile(userVault(),profile,connection.connection_id,configuration);
   const initialAuthority=await check();
@@ -71,7 +68,9 @@ async function capability(profileId:string,check:()=>Promise<()=>void>,permitted
       const assertAuthority=await check();
       const finalBinding=await boundUserConnection(profileId);
       if(finalBinding.connection_id!==connection.connection_id) throw required();
+      const assertAdmission = await reassertDeliveryAdmission();
       return () => {
+        assertAdmission();
         if(githubUserConfiguration()!==configuration) throw required();
         assertAuthority();
         if(Date.now()>=acquired.expiresAt) throw required();
@@ -87,14 +86,15 @@ export async function authorizeAuthoredGitHub(input:GitHubAuthoredCredentialInpu
   const expected = input.action === "github.comment.deliver" ? "github-comment-delivery" : input.action === "github.comment.preview" ? "github-comment-preview" : "github-review-delivery";
   if(input.credential.kind!==expected) throw required();
   input = input.action === "github.comment.preview"
-    ? { action: input.action, credential: { ...input.credential } }
+    ? { action: input.action, credential: { ...input.credential, request: new NextRequest(input.credential.request.url,{method:input.credential.request.method,headers:new Headers(input.credential.request.headers)}) } }
     : structuredClone(input);
   const context=await authoredContext(input);
   const prefix=`/repos/${context.repository}/issues/${context.issue}/comments`;
   const github=await capability(context.profileId,async()=> {
+    context.assertCurrent();
     const current=await authoredContext(input);
     if(current.profileId!==context.profileId || current.repository!==context.repository || current.issue!==context.issue) throw required();
-    return current.assertCurrent;
+    return () => { context.assertCurrent(); current.assertCurrent(); };
   },(url,options)=> {
     if(url.pathname!==prefix) return false;
     if((options.method||"GET")==="GET" && options.operation!=="mutation") return true;

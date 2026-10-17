@@ -1,3 +1,4 @@
+import { reassertDeliveryAdmission } from "./delivery-admission-scope";
 import "server-only";
 import { createHash, createSign } from "node:crypto";
 import type { GoogleChatDeliveryInput, GoogleChatDeliveryResult, GoogleChatDeliveryStatus } from "../google-chat-types";
@@ -121,8 +122,10 @@ export async function authorizeGoogleChat(input: GoogleChatDeliveryInput): Promi
     return { ok: true, chat: { send: async message => {
       const body = JSON.stringify(message);
       const token = await accessToken(configuration);
+      const assertAdmission = await reassertDeliveryAdmission();
       requireCurrentBot(configuration);
       if (Date.now() >= token.expiresAt) failure("GoogleChatCredentialExpired", "Google Chat Token ist abgelaufen.");
+      assertAdmission();
       await dispatch(`https://chat.googleapis.com/v1/${target}/messages`, body, { credential: token, fingerprint: configuration.fingerprint });
     } } };
   }
@@ -130,7 +133,9 @@ export async function authorizeGoogleChat(input: GoogleChatDeliveryInput): Promi
     const target = webhookConfiguration();
     return { ok: true, chat: { send: async message => {
       const body = JSON.stringify(message);
+      const assertAdmission = await reassertDeliveryAdmission();
       requireCurrentWebhook(target);
+      assertAdmission();
       await dispatch(target, body);
     } } };
   }

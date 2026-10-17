@@ -13,7 +13,7 @@ function fixture() {
   for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: "https://vault.example.test", SUPABASE_URL: "https://vault.example.test", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", SUPABASE_SECRET_KEY: "synthetic-service", NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon", SUPABASE_ANON_KEY:"synthetic-anon", SUPABASE_PUBLISHABLE_KEY:"synthetic-anon", REQUIRE_SUPABASE_AUTH:"true", GITHUB_APP_CLIENT_ID:"synthetic-client", GITHUB_APP_CLIENT_SECRET:"synthetic-client-secret", GITHUB_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32,1).toString("base64") })) vi.stubEnv(name,value);
   const row = { profile_id: "author-1", github_login: "author", github_user_id: 42, encrypted_access_token: encrypted("synthetic-user"), encrypted_refresh_token: encrypted("synthetic-refresh"), access_token_expires_at: new Date(Date.now()+3600000).toISOString(), refresh_token_expires_at: new Date(Date.now()+7200000).toISOString(), connection_id: "connection-1", credential_version: 0, refresh_claim_id: null, revoked_at: null };
   const requests = [];
-  const control={vaultReads:0,onVault:async()=>{},onUse:async()=>{},onClaim:async()=>{},tokenPosts:[],ownedTasks:new Set(["task-1","task-2"]),expectedToken:"synthetic-user",lockedAt:new Date().toISOString()};
+  const control={vaultReads:0,onVault:async()=>{},onUse:async()=>{},onClaim:async()=>{},tokenPosts:[],ownedTasks:new Set(["task-1","task-2"]),expectedToken:"synthetic-user",lockToken:"claim-1",lockedAt:new Date().toISOString()};
   vi.stubGlobal("fetch", async (input, options) => {
     const request = new Request(input,options); const url = new URL(request.url);
     if (url.href === "https://github.com/login/oauth/access_token") {control.tokenPosts.push(await request.text());return Response.json({access_token:"synthetic-rotated",refresh_token:"synthetic-rotated-refresh",expires_in:3600});}
@@ -30,7 +30,7 @@ function fixture() {
     if (url.pathname.endsWith("/rpc/administrator_access_snapshot")) return Response.json({eligible:false,active:false});
     if (url.pathname === "/rest/v1/profiles") return Response.json({ id: "author-1", github_login: "author" });
     if (url.pathname === "/rest/v1/github_app_user_tokens") {control.vaultReads++;await control.onVault();return Response.json(row);}
-    if (url.pathname === "/rest/v1/task_comment_github_deliveries") return Response.json({ task_comment_id: 5, task_id: "task-1", author_profile_id: "author-1", status: "processing", lock_token: "claim-1", locked_at: control.lockedAt });
+    if (url.pathname === "/rest/v1/task_comment_github_deliveries") return Response.json({ task_comment_id: 5, task_id: "task-1", author_profile_id: "author-1", status: "processing", lock_token: control.lockToken, locked_at: control.lockedAt });
     if (url.pathname === "/rest/v1/task_comments") return Response.json({ id: 5, task_id: "task-1", profile_id: "author-1" });
     if (url.pathname === "/rest/v1/active_tasks") {const id=url.searchParams.get("id")?.replace(/^eq\./,"") || "task-1";return Response.json({ id, github_repo: "findmydoc-platform/management", github_issue_number: 1, task_type:"deliverable",status:"Offen",assignee:control.ownedTasks.has(id)?"author-1":"other-owner",owner:control.ownedTasks.has(id)?"author-1":"other-owner",review_status:"not_requested",score_final:false });}
     if (url.pathname === "/rest/v1/rpc/use_github_user_connection") {await control.onUse();return Response.json(true);}
@@ -151,4 +151,34 @@ test.each(["before-call","during-lookup"])("an issued user capability cannot ref
   if(stage==="before-call")vi.stubEnv("GITHUB_APP_CLIENT_ID","replacement-client");
   else state.control.onVault=async()=>{if(++reads===2)vi.stubEnv("GITHUB_APP_CLIENT_ID","replacement-client");};
   await expect(state.send()).rejects.toThrow();expect(state.control.tokenPosts).toHaveLength(0);expect(state.requests).toHaveLength(0);
+});
+
+test("reconciliation trigger changes during user-token acquisition block provider attempts and cannot leak into a later independent job",async()=>{
+ const state=fixture();vi.stubEnv("FOUNDEROPS_DELIVERY_SECRET","synthetic-delivery-secret");
+ const protocol=globalThis.fetch,finalized=[];
+ vi.stubGlobal("fetch",async(input,init)=>{
+  const request=new Request(input,init),url=new URL(request.url);
+  if(url.pathname.endsWith("/rpc/claim_task_comment_github_deliveries")) {const body=await request.json();state.control.lockToken=body.p_lock_token;return Response.json([{task_comment_id:5,task_id:"task-1",author_profile_id:"author-1",github_issue_number:1,status:"processing",attempts:0}]);}
+  if(url.pathname.endsWith("/rpc/claim_task_review_github_deliveries"))return Response.json([]);
+  if(url.pathname.endsWith("/rpc/finalize_task_comment_github_delivery")){finalized.push(await request.json());return Response.json(true);}
+  if(url.pathname==="/rest/v1/task_comments")return Response.json({id:5,task_id:"task-1",profile_id:"author-1",comment:"Synthetic authored comment"});
+  return protocol(request);
+ });
+ let release,entered;const gate=new Promise(resolve=>{release=resolve;}),started=new Promise(resolve=>{entered=resolve;});state.control.onUse=async()=>{entered();await gate;};
+ const route=await importTestModule("src/app/api/github-comments/reconcile/route.ts",{"server-only":{}});
+ const pending=route.POST(new NextRequest("https://app.example.test/api/github-comments/reconcile",{method:"POST",headers:{"x-founderops-delivery-secret":"synthetic-delivery-secret"}}));
+ await started;vi.stubEnv("FOUNDEROPS_DELIVERY_SECRET","rotated-secret");release();
+ const response=await pending;expect(response.status).toBe(401);expect(state.requests).toHaveLength(0);expect(finalized).toMatchObject([{p_lock_token:state.control.lockToken,p_task_comment_id:5,p_status:"retry_scheduled"}]);
+ state.control.onUse=async()=>{};
+ const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
+ const access=await authorizeCredentialAction({credential:{kind:"github-comment-delivery",commentId:5,claimToken:state.control.lockToken},action:"github.comment.deliver"});
+ const {createGitHubIssueComment}=await importTestModule("src/lib/github.ts");await createGitHubIssueComment(1,"Independent authored job",access.github,"fmd-comment-id:5");expect(state.requests).toHaveLength(1);
+});
+test("technical preview admission snapshots its supplied secret and rechecks live configuration",async()=>{
+ const state=fixture();vi.stubEnv("FOUNDEROPS_DELIVERY_SECRET","synthetic-delivery-secret");
+ const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
+ const request=new NextRequest("https://app.example.test/api/github-comments/reconcile",{headers:{"x-founderops-delivery-secret":"synthetic-delivery-secret"}});
+ const access=await authorizeCredentialAction({credential:{kind:"github-comment-preview",commentId:5,request},action:"github.comment.preview"});
+ vi.stubEnv("FOUNDEROPS_DELIVERY_SECRET","rotated-secret");request.headers.set("x-founderops-delivery-secret","rotated-secret");
+ await expect(access.github.request("https://api.github.com/repos/findmydoc-platform/management/issues/1/comments",{method:"GET"})).rejects.toThrow();expect(state.requests).toHaveLength(0);
 });

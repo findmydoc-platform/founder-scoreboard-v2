@@ -34,6 +34,7 @@ async function protocol(input, init) {
     if (url.pathname.endsWith("/rpc/claim_notification_delivery")) return Response.json({claimToken:"synthetic-claim",eventIds:claimAvailable?routeRows.map(row=>row.id):[]});
     if (url.pathname.endsWith("/rpc/finalize_notification_delivery_claim")) {claimAvailable=false;return Response.json(body.p_event_ids.length);}
     if (url.pathname.endsWith("/rpc/release_notification_delivery_claim")) return new Response(null,{status:204});
+    if (url.pathname.endsWith("/notification_delivery_claims")) return Response.json(routeRows.map(row=>({event_id:row.id,claim_token:"synthetic-claim",claimed_by_profile_id:null,claim_authority:"pipeline",expires_at:new Date(Date.now()+600000).toISOString()})));
     if (url.pathname.endsWith("/notification_events")) return Response.json(url.searchParams.get("select").includes("actor_label")?[]:routeRows);
     if (url.pathname.endsWith("/profiles")) return Response.json(profiles);
     if (url.pathname.endsWith("/notification_preferences")) return Response.json([]);
@@ -287,4 +288,23 @@ test("a late rejected dispatch cannot evict a concurrently replaced bot token",a
   expect(await first).toMatchObject({name:"GoogleChatDeliveryFailed"});
   await chat.sendGoogleChatSpaceDigest("spaces/synthetic-b",[event],"https://app.example.test");
   expect(exchanges).toBe(2);expect(messages).toHaveLength(3);
+});
+
+test("a delivery secret changed during outgoing token issuance cannot authorize a new Chat send",async()=>{
+  delayToken=async()=>vi.stubEnv("FOUNDEROPS_DELIVERY_SECRET","rotated-synthetic-delivery-secret");
+  const api=await route();const response=await api.POST(trigger());
+  expect(messages).toHaveLength(0);
+  expect(response.status).toBe(401);
+});
+
+
+test.each([["SUPABASE_SERVICE_ROLE_KEY","changed-synthetic-service"],["NEXT_PUBLIC_SUPABASE_URL","https://changed-delivery-storage.example.test"]])("confirmed provider delivery cannot dispatch captured bookkeeping credentials after %s changes",async(name,value)=>{
+ let confirmedAt;messageResponse=()=>{confirmedAt=databaseCalls.length;vi.stubEnv(name,value);return Response.json({name:"spaces/synthetic/messages/confirmed"});};
+ const api=await route();const response=await api.POST(trigger());
+ expect(messages).toHaveLength(1);expect(confirmedAt).toBeGreaterThan(0);expect(databaseCalls.slice(confirmedAt)).toEqual([]);expect(deliveryRecords).toEqual([]);expect(response.status).toBe(409);expect(JSON.stringify(await response.json())).not.toContain("synthetic-service");
+});
+
+test("confirmed provider delivery retains exact bookkeeping after delivery-secret replacement",async()=>{
+ messageResponse=()=>{vi.stubEnv("FOUNDEROPS_DELIVERY_SECRET","changed-after-confirmed-send");return Response.json({name:"spaces/synthetic/messages/confirmed"});};
+ const api=await route();const response=await api.POST(trigger());expect(messages).toHaveLength(1);expect(response.status).toBe(200);expect(deliveryRecords).toMatchObject([{event_id:7,status:"sent",attempts:1}]);expect(databaseCalls.filter(call=>call.path.endsWith("/rpc/finalize_notification_delivery_claim"))).toHaveLength(1);
 });

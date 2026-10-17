@@ -1,10 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { timingSafeEqual } from "node:crypto";
-import { requireOperationalLead } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
-import { createNotificationPayload, type NotificationType } from "@/lib/notification-catalog";
-import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { type NotificationType } from "@/lib/notification-catalog";
 
 type TaskRow = {
   id: string;
@@ -70,34 +67,12 @@ type ReminderCandidate = {
   dedupeKey: string;
 };
 
-const pipelineSecretHeader = "x-founderops-delivery-secret";
 const groupRecipient = "space";
 
 function safeLimit(value: unknown) {
   const limit = Number(value || 20);
   if (!Number.isFinite(limit)) return 20;
   return Math.max(1, Math.min(50, Math.round(limit)));
-}
-
-function secretsMatch(provided: string, expected: string) {
-  const providedBuffer = Buffer.from(provided);
-  const expectedBuffer = Buffer.from(expected);
-  return providedBuffer.length === expectedBuffer.length && timingSafeEqual(providedBuffer, expectedBuffer);
-}
-
-async function authorizeDigestGeneration(request: NextRequest) {
-  const providedSecret = request.headers.get(pipelineSecretHeader)?.trim() || "";
-  if (providedSecret) {
-    const expectedSecret = process.env.FOUNDEROPS_DELIVERY_SECRET?.trim() || "";
-    if (!expectedSecret || !secretsMatch(providedSecret, expectedSecret)) {
-      return { ok: false as const, status: 401, error: "Ungültiger Delivery-Secret." };
-    }
-    return { ok: true as const };
-  }
-
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return permission;
-  return { ok: true as const };
 }
 
 function berlinDateKey(date = new Date()) {
@@ -152,16 +127,12 @@ function eventBody(event: FounderEventRow) {
   return `Start: ${startsAt}.${location}${description}`.slice(0, 700);
 }
 
-export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
-
-  const permission = await authorizeDigestGeneration(request);
-  if (!permission.ok) return authzError(permission);
-
-  const payload = (await request.json().catch(() => ({}))) as { limit?: number; dryRun?: boolean };
-  const limit = safeLimit(payload.limit);
-  const dryRun = Boolean(payload.dryRun);
+async function generateDigest(request: NextRequest) {
+  const payload = (await request.json().catch(() => ({}))) as {limit?:number;dryRun?:boolean};
+  const limit = safeLimit(payload.limit), dryRun = Boolean(payload.dryRun);
+  const permission = await authorizeCredentialAction({credential:{kind:"notification-delivery-request",request},action:"notifications.digest.generate",limit,dryRun});
+  if (!permission.ok) return permission.status === 501 ? supabaseUnavailable() : authzError(permission);
+  const digest = permission.digest;
   const today = berlinDateKey();
   const now = new Date();
 
@@ -171,37 +142,7 @@ export async function POST(request: NextRequest) {
     sprintResult,
     eventResult,
     profileResult,
-  ] = await Promise.all([
-    supabase
-      .from(ACTIVE_TASKS_TABLE)
-      .select("id,title,description,status,priority,assignee,owner,fixed_date,review_status,review_owner_profile_id,task_type,approval_status,score_relevant,score_final")
-      .order("updated_at", { ascending: false })
-      .limit(200),
-    supabase
-      .from("task_blockers")
-      .select("id,task_id,profile_id,reason,impact,status")
-      .eq("status", "open")
-      .order("created_at", { ascending: false })
-      .limit(100),
-    supabase
-      .from("sprints")
-      .select("id,name,status,review_due_at")
-      .in("status", ["active", "review"])
-      .order("review_due_at", { ascending: true })
-      .limit(20),
-    supabase
-      .from("founder_events")
-      .select("id,title,category,starts_at,ends_at,location,description,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status")
-      .eq("status", "planned")
-      .is("reminder_generated_at", null)
-      .order("starts_at", { ascending: true })
-      .limit(100),
-    supabase
-      .from("profiles")
-      .select("id,platform_role")
-      .neq("platform_role", "viewer")
-      .limit(100),
-  ]);
+  ] = await digest.sources();
 
   const firstError = [taskResult, blockerResult, sprintResult, eventResult, profileResult].find((result) => result.error)?.error;
   if (firstError) return apiError(firstError.message, 500);
@@ -321,7 +262,7 @@ export async function POST(request: NextRequest) {
   const limitedCandidates = candidates.slice(0, limit);
   const candidateKeys = limitedCandidates.map((candidate) => candidate.dedupeKey);
   const existingResult = candidateKeys.length
-    ? await supabase.from("notification_events").select("dedupe_key").in("dedupe_key", candidateKeys)
+    ? await digest.existing(candidateKeys)
     : { data: [] };
 
   if ("error" in existingResult && existingResult.error) {
@@ -338,23 +279,12 @@ export async function POST(request: NextRequest) {
   );
 
   if (!dryRun && toCreate.length) {
-    const insertResult = await supabase.from("notification_events").insert(toCreate.map((candidate) => createNotificationPayload(candidate.type, {
-      actorProfileId: candidate.actorProfileId,
-      recipientProfileId: candidate.recipientProfileId,
-      entityType: candidate.entityType,
-      entityId: candidate.entityId,
-      title: candidate.title,
-      body: candidate.body,
-      dedupeKey: candidate.dedupeKey,
-    })));
+    const insertResult = await digest.create(toCreate);
     if (insertResult.error) return apiError(insertResult.error.message, 500);
   }
 
   if (!dryRun && generatedReminderEventIds.size) {
-    const updateResult = await supabase
-      .from("founder_events")
-      .update({ reminder_generated_at: now.toISOString(), updated_at: now.toISOString() })
-      .in("id", [...generatedReminderEventIds]);
+    const updateResult = await digest.markReminders(now.toISOString());
     if (updateResult.error) return apiError(updateResult.error.message, 500);
   }
 
@@ -374,4 +304,12 @@ export async function POST(request: NextRequest) {
       dedupeKey: candidate.dedupeKey,
     })) : [],
   });
+}
+
+export async function POST(request:NextRequest) {
+  try { return await generateDigest(request); }
+  catch (error) {
+    if (error instanceof Error && "status" in error && typeof error.status === "number") return NextResponse.json({error:error.message,...("code" in error && error.code ? {code:error.code}:{})},{status:error.status});
+    return apiError("Erinnerungen konnten nicht erstellt werden.",500);
+  }
 }
