@@ -26,4 +26,3 @@ export class GoogleWorkspaceOAuthContractError extends Error {
     this.code = code;
   }
 }
-
