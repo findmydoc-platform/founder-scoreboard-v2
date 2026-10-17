@@ -7,7 +7,7 @@ import { GitHubAppUserTokenRequiredError } from "../../github-app-errors";
 import type { AuthenticatedProfile } from "../../types";
 import type { GitHubAuthoredCredentialInput, GitHubAuthoredCredentialResult, GitHubAttachmentInput, GitHubUserCapability, GitHubSessionInput } from "../types";
 import { authorizeSessionPolicy } from "./session-policy";
-import { boundUserConnection, getGitHubUserTokenForProfile, getGitHubUserConnectionStatus, revokeGitHubAppUserConnection, userVault } from "./github-user-vault";
+import { githubUserConfiguration, boundUserConnection, getGitHubUserTokenForProfile, getGitHubUserConnectionStatus, revokeGitHubAppUserConnection, userVault } from "./github-user-vault";
 
 function required() { return new GitHubAppUserTokenRequiredError("GitHub-App-Verbindung fehlt. Bitte verbinde GitHub einmal neu."); }
 async function authoredContext(input: GitHubAuthoredCredentialInput) {
@@ -47,13 +47,15 @@ async function authoredContext(input: GitHubAuthoredCredentialInput) {
   return {assertCurrent:assertAuthority,profileId:row.author_profile_id as string,repository,issue,marker:`fmd-${review ? "review" : "comment"}-id:${id}`};
 }
 async function capability(profileId:string,check:()=>Promise<()=>void>,permitted:(url:URL,options:Omit<GitHubRequestOptions,"token">)=>boolean):Promise<GitHubUserCapability> {
+  const configuration=githubUserConfiguration();
   const connection=await boundUserConnection(profileId);
   const profile={id:profileId} as AuthenticatedProfile;
   // Validate usability before returning; no decrypted value escapes this module.
-  const initialToken=await getGitHubUserTokenForProfile(userVault(),profile,connection.connection_id);
+  const initialToken=await getGitHubUserTokenForProfile(userVault(),profile,connection.connection_id,configuration);
   const initialAuthority=await check();
   const initialBinding=await boundUserConnection(profileId);
   if(initialBinding.connection_id!==connection.connection_id) throw required();
+  if(githubUserConfiguration()!==configuration) throw required();
   initialAuthority();
   if(Date.now()>=initialToken.expiresAt) throw required();
   return Object.freeze({async request(value:string,input:Omit<GitHubRequestOptions,"token">) {
@@ -63,13 +65,14 @@ async function capability(profileId:string,check:()=>Promise<()=>void>,permitted
     await check();
     const current=await boundUserConnection(profileId);
     if(current.connection_id!==connection.connection_id) throw required();
-    const acquired=await getGitHubUserTokenForProfile(userVault(),profile,connection.connection_id);
+    const acquired=await getGitHubUserTokenForProfile(userVault(),profile,connection.connection_id,configuration);
     const token=acquired.token;
     try { return await githubRequest(value,{...options,token} as GitHubRequestOptions,async()=> {
       const assertAuthority=await check();
       const finalBinding=await boundUserConnection(profileId);
       if(finalBinding.connection_id!==connection.connection_id) throw required();
       return () => {
+        if(githubUserConfiguration()!==configuration) throw required();
         assertAuthority();
         if(Date.now()>=acquired.expiresAt) throw required();
       };
