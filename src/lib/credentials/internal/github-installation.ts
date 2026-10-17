@@ -140,6 +140,7 @@ export async function authorizeGitHubInstallation(input: GitHubInstallationInput
     throw new Error("GitHub-Ziel-Repository ist nicht freigegeben.");
   }
   const action = input.action;
+  if (action === "github.lifecycle.apply" && input.credential.kind !== "github-claimed-job") throw new Error("A claimed GitHub job is required for lifecycle access.");
   const organization = input.target.organization;
   const assetUrl = input.target.assetUrl;
   if ((action === "github.team.read" || action === "github.project.read") && (!organization || !/^[a-z\d](?:[a-z\d-]{0,38})$/i.test(organization))) throw new Error("GitHub-Organisation ist ungültig.");
