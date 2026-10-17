@@ -30,7 +30,7 @@ beforeEach(() => {
     set: (name, value) => values.set(name, value), delete: name => values.delete(name) };
   for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: authOrigin, SUPABASE_URL: authOrigin,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_ANON_KEY: "synthetic-anon",
-    SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", APP_URL: appOrigin, VERCEL_ENV: "preview" })) vi.stubEnv(name, value);
+    SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", SUPABASE_SECRET_KEY: "synthetic-service", APP_URL: appOrigin, VERCEL_ENV: "preview" })) vi.stubEnv(name, value);
   network = async (input, init) => {
     const req = new Request(input, init); const url = new URL(req.url);
     if (url.origin !== authOrigin) throw new Error("Unexpected provider");
@@ -127,6 +127,76 @@ async function admitted() {
   return (await response.json()).session;
 }
 const mutation = expected => ({ method: "POST", headers: { origin: appOrigin, "content-type": "application/json" }, body: JSON.stringify({ expected }) });
+
+test("a permanently rejected access token can still clear only its expected local cookie generation", async () => {
+  const expected = await admitted(); const previous = network;
+  network = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/auth/v1/user" || url.pathname === "/auth/v1/logout") return Response.json({ code: "bad_jwt", message: "Synthetic permanent rejection" }, { status: 401 });
+    return previous(input, init);
+  };
+  const response = await invoke("session.clear", mutation(expected));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ outcome: "cleared", session: null });
+  applyCookies(response);
+  expect((await invoke("session.current")).status).toBe(401);
+  expect(refreshes).toBe(0);
+});
+
+test("recovery can replace a permanently rejected access token only after refreshing and verifying its bound actor", async () => {
+  const expected = await admitted(); const previous = network; let first = true;
+  network = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/auth/v1/user" && first) { first = false; return Response.json({ code: "bad_jwt", message: "Synthetic old token rejected" }, { status: 401 }); }
+    return previous(input, init);
+  };
+  const response = await invoke("session.recover", mutation(expected));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ outcome: "refreshed", session: { userId: expected.userId } });
+  expect(refreshes).toBe(1);
+});
+
+test.each(["session.clear", "session.recover"])("%s cannot use permanent Auth denial to mutate another actor or revision", async action => {
+  const expected = await admitted(); const previous = network; let logouts = 0;
+  network = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/auth/v1/user") return Response.json({ code: "bad_jwt", message: "Synthetic permanent rejection" }, { status: 401 });
+    if (url.pathname === "/auth/v1/logout") logouts++;
+    return previous(input, init);
+  };
+  for (const stale of [{ ...expected, userId: "replacement-user" }, { ...expected, revision: "obsolete" }]) {
+    const response = await invoke(action, mutation(stale)); applyCookies(response);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ outcome: "superseded", session: null });
+  }
+  expect(refreshes).toBe(0); expect(logouts).toBe(0);
+  network = previous;
+  expect((await invoke("session.current")).status).toBe(200);
+});
+
+test("temporary Auth failure cannot locally revoke an otherwise current cookie", async () => {
+  const expected = await admitted(); const previous = network;
+  network = async () => Response.json({ message: "Synthetic outage" }, { status: 503 });
+  const response = await invoke("session.clear", mutation(expected)); applyCookies(response);
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ outcome: "temporarily_unavailable", session: null });
+  network = previous;
+  expect((await invoke("session.current")).status).toBe(200);
+});
+
+test("recovery after permanent denial cannot admit a different refreshed actor", async () => {
+  const expected = await admitted(); const previous = network; let first = true;
+  network = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/auth/v1/user" && first) { first = false; return Response.json({ code: "bad_jwt", message: "Synthetic old token rejected" }, { status: 401 }); }
+    if (url.pathname === "/auth/v1/token") return Response.json(session(false, "replacement-user"));
+    return previous(input, init);
+  };
+  const response = await invoke("session.recover", mutation(expected)); applyCookies(response);
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ outcome: "superseded", session: null });
+  expect((await invoke("session.current")).status).toBe(401);
+});
 
 test("recovery binds the verified user and revision, and keeps temporary failures distinct", async () => {
   const expected = await admitted();

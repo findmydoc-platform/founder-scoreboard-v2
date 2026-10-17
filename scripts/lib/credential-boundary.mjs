@@ -10,7 +10,9 @@ export function verifyCredentialBoundary({ root, resourceEdges = [], protectedMo
   const configured = config && !config.error ? ts.parseJsonConfigFileContent(config.config, ts.sys, root).options : {};
   const options = { allowJs: true, moduleResolution: ts.ModuleResolutionKind.Bundler,
     module: ts.ModuleKind.ESNext, baseUrl: root, paths: { "@/*": ["src/*"] }, ...configured };
-  const files = ts.sys.readDirectory(path.join(root, "src"), [".ts", ".tsx", ".js", ".mjs"]);
+  const sourceExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+  const files = ts.sys.readDirectory(path.join(root, "src"), sourceExtensions);
+  const queuedFiles = new Set(files);
   const failures = [];
   const observed = [];
   const transports = new Map();
@@ -26,6 +28,11 @@ export function verifyCredentialBoundary({ root, resourceEdges = [], protectedMo
     function dependency(specifier, typeOnly = false) {
       if (typeOnly) return;
       const resolved = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule;
+      if (resolved && !resolved.isExternalLibraryImport && !queuedFiles.has(resolved.resolvedFileName)
+        && sourceExtensions.some(extension => resolved.resolvedFileName.endsWith(extension))) {
+        queuedFiles.add(resolved.resolvedFileName);
+        files.push(resolved.resolvedFileName);
+      }
       const to = resolved && !resolved.isExternalLibraryImport ? relative(resolved.resolvedFileName) : specifier;
       const edge = `${from} -> ${to}`;
       dependencies.get(from).push(to);

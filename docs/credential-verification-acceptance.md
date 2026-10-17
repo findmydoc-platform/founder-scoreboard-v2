@@ -2,13 +2,13 @@
 
 ## Evidence status
 
-The application migration is integrated at `17955b50917034c49ebb1b758635d8c07c8dccbc`. This record distinguishes predecessor execution, acceptance on that runtime source, and the final repository verification cycle. Production deployment and the review status of ADR0002 remain separate decisions.
+The original application migration and matched measurements use historical runtime `17955b50917034c49ebb1b758635d8c07c8dccbc`. This record distinguishes that acceptance cycle from the later session-lifecycle and module-coverage correction, verified on `2abdb66054ce83fd038ae0b7165becaa80b2c388`. Current runtime source is not byte-identical to the historical measured source. Production deployment and the review status of ADR0002 remain separate decisions.
 
 The table records observed contracts. Controlled Auth, Directory and provider protocols prove application behavior without contacting hosted providers. Database cases use an independently verified disposable project. Browser cases use the actual production Next.js application and Chromium over owned HTTPS. The compiled browser API fixture alone is not the complete client-bundle proof.
 
 Ticket 503 adds real private-Workweek HTTP read states, controlled mixed-snapshot interleaving, foreign-user permit transfer, simultaneously live cache instances and a copied public capability at its original expiry. Existing positive and negative contracts remain in their focused suites. No production code changed for these acceptance cases.
 
-The final isolated verification cycle passed. Migration and database gates ran on `307d8745fc0a537310ae3df7cc4425d0ea044ee7`; after two test-fixture repairs, the ordinary full suite and final lint/build/architecture gates passed on `ae655c595a9e15641beaaae4eb12c9c2e773709d`. Runtime source, schema and workflows remained unchanged from `17955b50917034c49ebb1b758635d8c07c8dccbc`. Post-test closeout changes only documentation and removes an extra terminal blank line from two source files; their bytes match the tested source after terminal-newline normalization, and runtime behavior is unchanged. The exact results and retained failed run are recorded below.
+The initial complete isolated verification cycle passed. Migration and database gates ran on `307d8745fc0a537310ae3df7cc4425d0ea044ee7`; after two test-fixture repairs, the ordinary full suite and final lint/build/architecture gates passed on `ae655c595a9e15641beaaae4eb12c9c2e773709d`. Runtime source, schema and workflows remained unchanged from `17955b50917034c49ebb1b758635d8c07c8dccbc`. That cycle’s immediate closeout changed documentation and two terminal blank lines only. The later bounded runtime correction and its new verification source are recorded in the post-acceptance section below. The exact results and retained failed run are recorded below.
 
 ## Caller and credential matrix
 
@@ -43,25 +43,25 @@ The final isolated verification cycle passed. Migration and database gates ran o
 | Criterion | Source and predecessor proof | Final acceptance evidence |
 | --- | --- | --- |
 |1 Mandatory seam |488 index/types plus all family rows;502 residual actual-entry tests and zero legacy policy. | Final inventory reconciled; the complete corrected suite and actual source-boundary check passed. |
-|2 No caller-selected modes/bypass |488 seam tests;502 architecture fixtures reject aliases/reexports/dynamic/CommonJS/runtime loads/raw clients; constrained capability operations. | All 37 executable architecture/bundle fixtures and the actual source boundary passed; closed public capabilities remain enforced. |
+|2 No caller-selected modes/bypass |488 seam tests;502 architecture fixtures reject aliases/reexports/dynamic/CommonJS/runtime loads/raw clients; constrained capability operations. | All 56 current architecture/bundle fixtures and the actual source boundary passed, including additional source formats and resolved local helpers; closed public capabilities remain enforced. |
 |3 Original maximum 900 s | Calendar 88/104/212 and private 229; original start precedes cookie/Auth work. | Copied public capability succeeds just before and denies exactly at its original deadline; 23 cache-chain cases passed. No cross-store copy claim. |
 |4 Earlier deadlines | Calendar 116, admin real activation-end/expiry; GitHub/Calendar token/state/claim cases; Notion 8 s/15 s; job original 120 s and provider limits. | Earlier JWT/admin/provider/job deadlines remain in the indexed family suites. Exact-900-second renewal/outage protocols and the corrected full suite passed. |
 |5 No authority transfer | Key 149, user 260, credential-action and provider-family suites; fixed actor/target/source scopes; PAT isolation; callback binding. | Foreign-user permit reuse denied against real storage; original user remains allowed until release. Indexed family-specific actor/action/target negatives remain retained. |
 |6 Hits/single-flight/instances | Calendar 73/157 counts live work separately and one Directory miss;171 replacement. Process-local RAM only. | Two simultaneously live instances expire at independent original starts; cache-chain 23 passed. Matched counts and separate Proxy/authority/route observations recorded. |
 |7 Denial/outage | Calendar 88 returns 503 at expiry outage then 403 removal;223 failure recovery; provider established statuses. | Actual revoked-session HTTP denial, controlled expiry 503/renewal 200 and the corrected full suite passed. |
-|8 Server-owned lifecycle |491/492 transport +11 HTTPS Chromium cookie/recovery/logout/replacement cases; removed SDK mirror/readers. | All 17 actual production HTTPS Chromium cases passed. Both the measured and final global production client scans passed, with separate artifact counts. |
+|8 Server-owned lifecycle |491/492 transport +11 HTTPS Chromium cookie/recovery/logout/replacement cases; removed SDK mirror/readers. | All 20 current production HTTPS Chromium cases passed. Both the historical measured and current production client scans passed, with separate artifact counts. |
 |9 PAT |494 actual HTTP/realDB case: owner/scopes/expiry/revocation/usage/limits, no interactive admin inheritance. | Real final-schema PAT ownership/scope/usage/revocation/limit cases passed in the critical DB run and corrected full suite. |
 |10 Separate purposes |495/496 installation/user;491 proof;489 Directory;497 Calendar;498 Chat;499 Notion; concrete fixed DB ports. | Final family matrix retains separate purposes, the external release publisher and approved absent-AI scope. No generic authority introduced. |
 |11 Payload/claims/one-time |500 copied raw HMAC/receipt;501 digest/version replay;508/509/510 claims/leases;491 real PKCE/linknonce. | Family-specific immutable proof/claim/non-replay cases passed in the corrected full suite; actual PKCE and mixed-snapshot barriers were also rerun. |
 |12 DB parity | Real WorkspaceJWT/signature/expiry/REST/RPC/Storage plus owner/permit/generation; all real vertical cases;506 retired denial/preservation. | Foreign-user permit denial and 16 critical DB cases passed. Final migrations, preservation, schema/security, synthetic Auth, database lint and the corrected full suite passed. |
 |13 Calendar parity | Calendar mapping 179 omits provider/private fields; seasonal/history/range suites and real separate permit proof. | All populated/history/future/range/no-range/private-exclusion variants matched. Actual owner-filtered HTTP assertions and 30+30 browser pairs passed. |
 |14 Private semantics |490 source cases include five base, conditional source/conflict/expiredauto, selected once,409, recovery/future/pinned. | All conditional read/recovery/pinned/automatic variants covered, plus 30 actual 409 races per version and one-context-read assertions. |
-|15 Executable architecture/client exclusion |502 37 architecture/bundle fixtures; actual production scan 63 chunks/maps 2,231,293 bytes, no forbidden markers/adapters. | Final global production scan passed: 63 chunks/maps, 2,231,432 bytes; all 37 architecture fixtures and actual source-boundary validation passed. The separate measured scan remains 183/2,390,345. |
+|15 Executable architecture/client exclusion |502 37 architecture/bundle fixtures; actual production scan 63 chunks/maps 2,231,293 bytes, no forbidden markers/adapters. | Final global production scan passed: 63 chunks/maps, 2,231,432 bytes; all 56 current architecture fixtures and actual source-boundary validation passed. The separate historical measured scan remains 183/2,390,345. |
 |16 Complete inventory | All 22 predecessors integrated; final inventory covers residual/public/inert/local/absent boundaries and legacy exports removed. | Health owner corrected to 502; obsolete compatibility-export statement removed. All 23 ticket boundaries and exceptions indexed. |
 |17 ADR | ADR 0002 v 0.3 requested template/Nygard, Draft preserved, implementation complete distinguished from deployment/measurements. ADR 0001 retained. | ADR implementation/deployment distinction and Draft review status remain unchanged. The completed verification cycle and its limits are recorded here. |
 |18 Comparable measures | Immutable baseline 4 x 30 HTTP and 2 x 30 devHTTPbrowser; interim 489 separate. Plan/recipes specify full paired series. | All matched warm/process-cold/module-expiry/renewal/browser series complete with source/schema/phase/category metadata, retained outliers and explicit exclusions. |
 |19 Required isolated checks | Ticket-local logs listed here;502 broad 1820, lint 5 existing warnings/build/37 architecture green. | Completed final migrations/preservation/security/synthetic Auth/database-lint, ordinary full suite, lint, production build/client scan and architecture. Known warnings and failed fixture evidence are retained. |
-|20 No implied external action | Ticket 503 acceptance source and documentation; predecessors report no deployments/reviewers. | No reviewers, deployment, parent/story changes, source-chat messages or product news performed. Root controls PR publication; reviewer and deployment decisions remain with the user. |
+|20 No implied external action | Ticket 503 acceptance source and documentation; predecessors report no deployments/reviewers. | No deployment, parent/story changes, source-chat messages or product news performed during acceptance or corrective verification. No reviewer rerun was performed for the correction. Root controls PR publication; reviewer and deployment decisions remain with the user. |
 
 ## Runtime boundaries
 
@@ -87,7 +87,7 @@ Initial Workweek fixture failures concerned deletion dependencies and an invalid
 
 The existing JPEG/.jpg preview path mismatch remains unchanged. PNG storage proof does not cover every image format. Earlier deferred Structure Storybook failures under two workers have no established repaired cause; serial checks use one worker and retain prior failures.
 
-Approved stories, parent issue state, deployment settings, product news and reviewer execution were not changed.
+Acceptance and corrective verification changed no approved stories, parent issue state, deployment settings or product news. Reviewer execution remains a separate user-controlled decision.
 
 ## Ticket 503 execution and CI portability
 
@@ -101,7 +101,7 @@ The portable-target regression was observed before the helper existed, then all 
 
 An earlier ticket-local cleanup found two detached lifecycle jobs after the Planning fixture deleted its tasks. The fixture now deletes only task/root IDs in its generated UUID namespace after task cleanup, including API-created derived IDs. The actual creation/approval/trash regression passed again; the original cleanup failure remains retained. This changes test cleanup only and preserves production queue behavior.
 
-## Completed final verification cycle
+## Completed initial verification cycle
 
 The root-owned gates used the guarded disposable project. The database gates ran on `307d8745fc0a537310ae3df7cc4425d0ea044ee7`. The corrected full suite and final source gates ran on clean `ae655c595a9e15641beaaae4eb12c9c2e773709d`. Only two test files changed between those candidates; runtime source, migrations and workflows remained identical. Administrative environment values were supplied only to the explicit schema/Auth verifiers, not to ordinary `pnpm test`.
 
@@ -126,3 +126,27 @@ The Maintenance test correctly rejected its nonempty database. The residue was t
 The three complete production-client scans are distinct: ticket 502 inspected 63 chunks/maps and 2,231,293 bytes; the instrumented measurement build inspected 183 and 2,390,345; the final global build inspected 63 and 2,231,432. Each scan passed independently. Artifact counts are not pooled or used as a claim of byte-identical builds.
 
 Ticket 503 acceptance is complete for the approved 23-ticket scope, including the documented absent/read-only cases. ADR0002 remains Draft for review. No reviewer run, deployment, main merge, hosted-provider performance guarantee, parent-story revision or product news is implied by these results.
+
+## Post-acceptance session lifecycle and module coverage
+
+The current executable checkpoint is `2abdb66054ce83fd038ae0b7165becaa80b2c388`, based on accepted integration `c853443d992035ae218a26e494029fda5b0d2e7b`. A byte comparison verified all 776 files under `src` against the uninstrumented tested snapshot; its runtime digest is `c5ca060826b8b401581a5e1d59ca14d7267c5ed522e17a5eacac482e18cd6d2f`. This is a new runtime checkpoint. The historical 32-state measurements, source hashes and sample values above remain unchanged and were not remeasured for this bounded correction.
+
+A permanent Auth rejection no longer prevents the exact cookie session from locally clearing or attempting refresh. Local cleanup requires the captured actor and revision and revokes only that cookie generation. Refresh still requires an authoritative check of the new token and the same expected actor before returning a verified session view. Wrong actors/revisions cannot refresh or sign out another session; a different refreshed actor is denied. Temporary Auth failures retain their 503 outcome without local revocation. CSRF/Origin checks and data-action authorization are unchanged.
+
+Actual production HTTPS Chromium verifies that the existing Planning header poll clears loaded protected state after terminal Auth failure, without focus or document reload. Delayed local clears cannot revoke a newer login for either the same or a different user; their provider scope remains local. All previous cookie-generation, delayed-response, login, recovery and logout browser assertions remain present.
+
+The credential boundary now covers `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs`. It follows compiler-resolved local imports beyond the initial source roots, including the `.mjs`→`.mts` and `.cjs`→`.cts` mappings. Executable graph fixtures reject hidden SDK/private-entry/transport access, preserve legitimate public-seam imports and terminate on valid cyclic local graphs. No plugin framework or dependency was added.
+
+| Check on the new checkpoint | Executed result | Retained evidence |
+| --- | --- | --- |
+| Focused public session and browser API protocols | 56 passed across three files | `review-auth-final-focused.log` |
+| Actual production HTTPS Chromium | 20 passed, including passive poll cleanup and two delayed-clear replacement cases | `review-browser-final-focused.log` |
+| Focused import-graph fixtures | 46 passed | `review-boundary-final-focused.log` |
+| Ordinary full suite, one worker, no admin/database variables | 2,008 passed across 308 files in 249.63 s | `review-fixes-full-test.log` |
+| Full lint | Zero errors; five unchanged Next navigation warnings | `review-fixes-lint.log` |
+| Production build and actual client scan | TypeScript/boundary passed; 63 chunks/maps, 2,231,432 bytes verified | `review-fixes-build.log` |
+| Credential verification | 56/56 architecture fixtures and actual source dependency boundary passed | `review-fixes-credentials.log` |
+| Auth verifier | `pnpm run verify:auth` passed with one synthetic disposable identity; identity removed | `review-fixes-auth.log` |
+| Final cleanup | All 11 fixture tables zero; 29 migrations/latest `20261017144737`; configuration `legacy`/`false`; no copied environment files | `review-fixes-cleanup.log` |
+
+Public-session, production-browser and executable-graph REDs were observed before the corresponding changes. A first browser GREEN attempt retained all 17 earlier successes but exposed an unnecessary news-modal handler racing the passive cleanup; that fixture handler was removed without increasing timeouts. The corrected complete browser run passed 20/20. These logs are retained outside the repository. The schema and migrations did not change, so the completed migration/security evidence above was retained rather than repeated. No reviewer rerun, deployment or hosted-provider request was performed during this correction.

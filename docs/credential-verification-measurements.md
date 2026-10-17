@@ -2,7 +2,7 @@
 
 ## Scope and method
 
-These are local acceptance measurements, not a production latency guarantee. Before is `facc2e42ba0a95a8411e9d939cb909973b598122`; After is runtime source `17955b50917034c49ebb1b758635d8c07c8dccbc`. Ticket 503 changes tests and documentation only. Both versions ran serially on the same Darwin arm64 host with Node v26.11.1 and Next.js 16.3.8, Postgres 17.6, synthetic users and fixed fixture dates. The Workweek DDL shared by both versions is byte-identical. Before used its actual 26-migration ledger; After used its actual 29-migration ledger. No new-schema assumption was imposed on the baseline.
+These are local acceptance measurements, not a production latency guarantee. Before is `facc2e42ba0a95a8411e9d939cb909973b598122`; After is runtime source `17955b50917034c49ebb1b758635d8c07c8dccbc`. These measurements preceded the later bounded session-lifecycle and module-coverage correction; their source metadata and values are historical and unchanged. Both versions ran serially on the same Darwin arm64 host with Node v26.11.1 and Next.js 16.3.8, Postgres 17.6, synthetic users and fixed fixture dates. The Workweek DDL shared by both versions is byte-identical. Before used its actual 26-migration ledger; After used its actual 29-migration ledger. No new-schema assumption was imposed on the baseline.
 
 Auth, Directory and Google login proof were scripted, zero-delay protocols. PostgREST and storage authorization used the real disposable database. External network access remained denied. No actual Google/GitHub/Notion/Chat request was sent. HTTPS used an owned certificate and browser-context trust; global TLS validation remained enabled.
 
@@ -224,7 +224,7 @@ Initial acceptance fixture failures were a foreign-key cleanup dependency, an in
 
 Per-sample raw evidence retains timings, statuses, synthetic identifiers, category/phase counts and source/schema metadata. It omits URLs, authorization headers, cookie values, provider payloads and private endpoints. Every measurement fixture restores configuration and records zero owned users, profiles, versions and publications after cleanup. The final metadata records the original and instrumented hashes for four functions and verifies all other runtime source bytes against the stated source commit.
 
-The root-owned final verification cycle is complete and is recorded in the [acceptance evidence](credential-verification-acceptance.md#completed-final-verification-cycle). The corrected ordinary full suite passed 1,999 tests across 308 files; migration/security/Auth/database-lint/lint/build/architecture checks also passed. These local measurements do not establish a hosted-provider performance guarantee or authorize deployment.
+The root-owned final verification cycle is complete and is recorded in the [acceptance evidence](credential-verification-acceptance.md#completed-initial-verification-cycle). The corrected ordinary full suite passed 1,999 tests across 308 files; migration/security/Auth/database-lint/lint/build/architecture checks also passed. These local measurements do not establish a hosted-provider performance guarantee or authorize deployment.
 
 ## Source and cleanup metadata
 
@@ -243,4 +243,4 @@ Build/readiness/login are one setup observation per version, outside the 30 warm
 
 ## Final verification source
 
-The final global checks passed on test-source candidate `ae655c595a9e15641beaaae4eb12c9c2e773709d`, after two fixture-only repairs retained with their observed failures. Runtime source remains `17955b50917034c49ebb1b758635d8c07c8dccbc`, so the matched measurements retain their stated source and schema metadata. The final documentation commit changes no executable files. The final global client scan is 63 chunks/maps and 2,231,432 bytes; it is separate from both the measurement build (183/2,390,345) and ticket 502’s earlier build (63/2,231,293).
+The earlier complete global checks passed on test-source candidate `ae655c595a9e15641beaaae4eb12c9c2e773709d`, after two fixture-only repairs retained with their observed failures. At that measured checkpoint, runtime source was `17955b50917034c49ebb1b758635d8c07c8dccbc`. The matched measurements retain that source and schema metadata. The subsequent session-lifecycle correction has a different executable source and new regression evidence in the [post-acceptance record](credential-verification-acceptance.md#post-acceptance-session-lifecycle-and-module-coverage); these historical measurements are not a measurement of that correction. The final global client scan is 63 chunks/maps and 2,231,432 bytes; it is separate from both the measurement build (183/2,390,345) and ticket 502’s earlier build (63/2,231,293).
