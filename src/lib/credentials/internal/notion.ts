@@ -29,7 +29,7 @@ function unavailable() { return new Error("Decision Log ist gerade nicht verfüg
 
 export async function authorizeDecisionLog(input: DecisionLogCredentialInput): Promise<DecisionLogCredentialResult> {
   const startedAt = Date.now();
-  const resourceDeadline = startedAt + 15000;
+  let resourceDeadline: number | null = null;
   const action = input.action;
   const kind = input.credential.kind;
   const configured = configuration();
@@ -61,7 +61,8 @@ export async function authorizeDecisionLog(input: DecisionLogCredentialInput): P
   }
   const assertNotion = () => {
     const live = configuration();
-    if (live.token !== configured.token || live.source !== configured.source || live.enabled !== configured.enabled || Date.now() >= resourceDeadline) throw unavailable();
+    if (live.token !== configured.token || live.source !== configured.source || live.enabled !== configured.enabled
+      || (resourceDeadline !== null && Date.now() >= resourceDeadline)) throw unavailable();
   };
   const assertData = () => {
     const live = serviceConfiguration();
@@ -85,10 +86,11 @@ export async function authorizeDecisionLog(input: DecisionLogCredentialInput): P
   const notion: NotionDecisionLogCapability | null = configured.enabled && configured.token && configured.source ? Object.freeze({
     async queryPage(cursor = "") {
       if (typeof cursor !== "string") throw unavailable();
+      const deadline = resourceDeadline ??= Date.now() + 15000;
       const body = JSON.stringify({ page_size: 100, sorts: [{ property: "Datum", direction: "descending" }], ...(cursor ? { start_cursor: cursor } : {}) });
       const assertCurrent = await current();
       assertNotion();
-      const requestDeadline = Math.min(Date.now() + 8000, resourceDeadline);
+      const requestDeadline = Math.min(Date.now() + 8000, deadline);
       const signal = AbortSignal.timeout(requestDeadline - Date.now());
       assertCurrent(); assertNotion();
       const response = await fetch(`https://api.notion.com/v1/data_sources/${encodeURIComponent(configured.source)}/query`, {

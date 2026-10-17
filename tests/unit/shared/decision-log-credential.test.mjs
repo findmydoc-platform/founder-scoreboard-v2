@@ -158,6 +158,32 @@ test.each(["token", "source", "enabled"])("late Notion %s configuration changes 
   expect(notionRequests).toHaveLength(0);
 });
 
+test("the actual page starts the Notion resource budget after held human authorization completes", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  let entered, release;
+  const held = new Promise(resolve => { entered = resolve; });
+  const released = new Promise(resolve => { release = resolve; });
+  const previous = network;
+  let profileReads = 0;
+  network = async request => {
+    const response = await previous(request);
+    if (new URL(request.url).pathname.endsWith("/rpc/current_authenticated_profile") && ++profileReads === 2) {
+      entered();
+      await released;
+    }
+    return response;
+  };
+  const rendering = render();
+  await held;
+  expect(notionRequests).toHaveLength(0);
+  now += 16000;
+  release();
+  const rendered = await rendering;
+  expect(rendered.props.initialDecisionLogResult).toMatchObject({ ok: true, entries: [{ id: "decision-1" }] });
+  expect(notionRequests).toHaveLength(1);
+});
+
 test("pagination retains its original fifteen-second budget independently of the session deadline", async () => {
   let now = Date.now();
   vi.spyOn(Date, "now").mockImplementation(() => now);
