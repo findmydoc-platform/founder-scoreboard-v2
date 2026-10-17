@@ -1,3 +1,7 @@
+import { authorizeNotificationDelivery } from "./internal/notification-delivery";
+import { authorizeNotificationDigest } from "./internal/notification-digest";
+import { authorizeDeliveryReconciliation } from "./internal/delivery-reconciliation";
+import type { NotificationDeliveryInput, NotificationDeliveryResult, NotificationDigestInput, NotificationDigestResult, GitHubReconciliationInput, GitHubReconciliationResult } from "./notification-delivery-types";
 import { authorizeGoogleChat, googleChatStatus } from "./internal/google-chat";
 import type { GoogleChatDeliveryInput, GoogleChatDeliveryResult, GoogleChatStatusInput, GoogleChatDeliveryStatus } from "./google-chat-types";
 import { authorizeAdministrator } from "./internal/administrator";
@@ -35,6 +39,9 @@ export type {
 
 export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
+export function authorizeCredentialAction(input: NotificationDeliveryInput): Promise<NotificationDeliveryResult>;
+export function authorizeCredentialAction(input: NotificationDigestInput): Promise<NotificationDigestResult>;
+export function authorizeCredentialAction(input: GitHubReconciliationInput): Promise<GitHubReconciliationResult>;
 export function authorizeCredentialAction(input: GoogleChatDeliveryInput): Promise<GoogleChatDeliveryResult>;
 export function authorizeCredentialAction(input: GoogleChatStatusInput): Promise<GoogleChatDeliveryStatus>;
 export function authorizeCredentialAction(input: AdministratorCredentialInput): Promise<AdministratorCredentialResult>;
@@ -59,7 +66,11 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
 
-export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus> {
+export function authorizeCredentialAction(input: NotificationDeliveryInput | NotificationDigestInput | GitHubReconciliationInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput): Promise<NotificationDeliveryResult | NotificationDigestResult | GitHubReconciliationResult | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus> {
+  if ((input.action.startsWith("notifications.") || input.action.startsWith("github.reconciliation.")) && input.credential.kind !== "notification-delivery-request") return Promise.resolve({ok:false,status:403,error:"Keine Berechtigung für diese Aktion."});
+  if (input.action === "notifications.delivery.inspect" || input.action === "notifications.delivery.run") return authorizeNotificationDelivery(input as NotificationDeliveryInput);
+  if (input.action === "notifications.digest.generate") return authorizeNotificationDigest(input as NotificationDigestInput);
+  if (input.action === "github.reconciliation.preview" || input.action === "github.reconciliation.deliver") return authorizeDeliveryReconciliation(input as GitHubReconciliationInput);
   if (input.action === "google-chat.status" && input.credential.kind === "google-chat-configuration") return Promise.resolve(googleChatStatus());
   if (input.action.startsWith("google-chat.")) return authorizeGoogleChat(input as GoogleChatDeliveryInput);
   if (["administrator-access.read", "administrator-access.activate", "administrator-access.end", "administration.directory.read", "administration.eligibility.manage", "administration.technical.update"].includes(input.action)) return authorizeAdministrator(input as AdministratorCredentialInput);
