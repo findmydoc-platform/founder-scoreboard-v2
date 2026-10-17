@@ -17,6 +17,10 @@ let releaseRefresh: (() => void) | undefined;
 let refreshEntered: (() => void) | undefined;
 let holdRefresh = false;
 let holdLogin = false;
+let holdLogout = false;
+let logoutEntered: (() => void) | undefined;
+let releaseLogout: (() => void) | undefined;
+let heldLogoutScope: string | null = null;
 let releaseLogin: (() => void) | undefined;
 let loginEntered: (() => void) | undefined;
 const certificateDirectory = mkdtempSync(path.join(tmpdir(), "session-browser-tls-"));
@@ -50,7 +54,7 @@ let loginUser = userB;
 let sessionSequence = 0;
 let workspaceMode = "legacy", linkingEnforced = false, workspaceLinked = false, loginRecorded = false;
 let linkNonce: string | null = null;
-beforeEach(() => { workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; });
+beforeEach(() => { workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
 function token(userId: string) {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", amr: [{ method: "oauth" }], iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
@@ -87,7 +91,10 @@ beforeAll(async () => {
       if (holdRefresh) { refreshEntered?.(); await new Promise<void>(resolve => { releaseRefresh = resolve; }); }
       send(session(body.refresh_token.endsWith(userB) ? userB : userA)); return;
     }
-    if (url.pathname === "/auth/v1/logout") { response.writeHead(204); response.end(); return; }
+    if (url.pathname === "/auth/v1/logout") {
+      if (holdLogout) { heldLogoutScope = url.searchParams.get("scope"); logoutEntered?.(); await heldResponse(release => { releaseLogout = release; }); }
+      response.writeHead(204); response.end(); return;
+    }
     if (url.pathname === "/rest/v1/rpc/workspace_access_context") {
       if (holdLogin) { holdLogin = false; loginEntered?.(); await new Promise<void>(resolve => { releaseLogin = resolve; }); }
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
@@ -127,7 +134,7 @@ beforeAll(async () => {
     upstream.on("error", () => { response.writeHead(502); response.end(); }); request.pipe(upstream);
   });
   appOrigin = await listen(tls, "https:");
-  const env: NodeJS.ProcessEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ["PATH", "HOME", "TMPDIR", "NODE_OPTIONS"].includes(key))), NODE_ENV: "production" };
+  const env: NodeJS.ProcessEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ["PATH", "HOME", "TMPDIR", "NODE_OPTIONS", "FOUNDEROPS_PROTOCOL_ONLY"].includes(key))), NODE_ENV: "production" };
   Object.assign(env, { NEXT_TELEMETRY_DISABLED: "1", NODE_OPTIONS: `${env.NODE_OPTIONS || ""} --require=${path.resolve("tests/helpers/session-browser-protocol.cjs")}`,
     VERCEL_OIDC_TOKEN: token(userA), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience", GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "synthetic@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu", APP_URL: appOrigin, NEXT_PUBLIC_SUPABASE_URL: authOrigin, SUPABASE_URL: authOrigin,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service" });
@@ -283,16 +290,32 @@ test.each(["/planning", "/team/platform-releases"])("%s consumes server session 
     const updates = page.getByRole("button", { name: "Was ist neu schließen" });
     await page.addLocatorHandler(updates, async () => { await updates.click(); });
     await page.getByRole("button", { name: /Account-Menü öffnen/ }).click();
+    holdLogout = true;
+    const startedLogout = new Promise<void>(resolve => { logoutEntered = resolve; });
+    const completedLogout = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/auth/session/logout");
+    completedLogout.catch(() => undefined);
     await page.getByRole("button", { name: "Abmelden", exact: true }).click();
+    await checkpoint("global provider logout started", startedLogout);
+    expect(heldLogoutScope).toBe("global");
     if (workspace === "/planning") {
       await page.getByRole("heading", { name: "Willkommen zurück" }).waitFor();
       expect(await page.getByRole("button", { name: /Account-Menü öffnen/ }).count()).toBe(0);
     }
-    else await page.waitForURL(`${appOrigin}/planning`);
-    expect((await current(context)).status).toBe(401);
+    else {
+      await page.getByRole("status").filter({ hasText: "Zugriff auf die Releases ist gesperrt" }).waitFor();
+      expect(await page.getByRole("textbox", { name: "Releases durchsuchen" }).count()).toBe(0);
+      expect(await page.getByRole("button", { name: /Account-Menü öffnen/ }).count()).toBe(0);
+    }
+    // Protected UI clears immediately; server logout is not complete while its response is held.
+    expect((await current(context)).status).toBe(200);
+    releaseLogout!();
+    const logout = await checkpoint("global logout HTTP response", completedLogout);
+    expect(logout.status()).toBe(200);
+    await expect.poll(async () => (await current(context)).status, { timeout: 10_000 }).toBe(401);
+    if (workspace !== "/planning") await page.waitForURL(`${appOrigin}/planning`);
     expect(requests.filter(request => request.path.startsWith("/api/")).every(request => !request.authorization)).toBe(true);
     expect(requests.some(request => request.path === "/auth/v1/token" || request.path === "/auth/v1/user")).toBe(false);
-  } finally { await context.close(); }
+  } finally { releaseLogout?.(); holdLogout = false; await context.close(); }
 }, 120_000);
 
 
