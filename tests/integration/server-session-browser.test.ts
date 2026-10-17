@@ -31,8 +31,9 @@ function captureDiagnostics() {
   return (chunk: Buffer) => {
     const lines = (partial + String(chunk)).split(/\r?\n/);
     partial = lines.pop() || "";
-    for (const line of lines) {
-      if (/Network:/.test(line) || !/^(?:▲ Next|✓ Ready|⨯|Error:|Type error:|TypeError:|SyntaxError:|Failed to compile|\.\/src\/|\.\/tests\/)/.test(line.trimStart())) continue;
+    for (const rawLine of lines) {
+      const line = rawLine.replace(/\u001b\[[0-9;]*m/g, "");
+      if (/Network:/.test(line) || !/^(?:▲ Next|✓ Ready|⨯|Error:|Type error:|TypeError:|SyntaxError:|Failed to compile|(?:\.\/)?src\/|(?:\.\/)?tests\/)/.test(line.trimStart())) continue;
       logs = `${logs}${line.replace(/https?:\/\/\S+/g, "[synthetic endpoint]")}\n`.slice(-4000);
     }
   };
@@ -46,6 +47,7 @@ async function checkpoint<T>(name: string, operation: Promise<T>): Promise<T> {
   try { return await Promise.race([operation, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`Browser checkpoint failed: ${name}`)), 10_000); })]); }
   finally { clearTimeout(timer!); }
 }
+let role = "founder", mapped = true, activeAdministrator = false;
 let browserClientCode = "", userCalls = 0, rejectUserAt = 0;
 const cookieBase = "sb-localhost-auth-token";
 const userA = "b1111111-1111-4111-8111-111111111111";
@@ -54,7 +56,7 @@ let loginUser = userB;
 let sessionSequence = 0;
 let workspaceMode = "legacy", linkingEnforced = false, workspaceLinked = false, loginRecorded = false;
 let linkNonce: string | null = null;
-beforeEach(() => { workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
+beforeEach(() => { role = "founder"; mapped = true; activeAdministrator = false; workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
 function token(userId: string) {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", amr: [{ method: "oauth" }], iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
@@ -81,7 +83,7 @@ beforeAll(async () => {
       userCalls++;
       if (userCalls === rejectUserAt) { send({ message: "Synthetic credential rejected before effect", code: "bad_jwt" }, 401); return; }
       const claims = JSON.parse(Buffer.from(request.headers.authorization!.slice(7).split(".")[1], "base64url").toString());
-      send({ id: claims.sub, aud: "authenticated", user_metadata: {}, identities: [{ provider: "github" }] }); return;
+      send({ id: claims.sub, aud: "authenticated", user_metadata: { platform_role: "ceo" }, identities: [{ provider: "github" }] }); return;
     }
     if (url.pathname === "/auth/v1/user/identities/authorize") { const target = new URL("/auth/v1/authorize", authOrigin); target.search = url.search; send({ url: target.href }); return; }
     if (url.pathname === "/auth/v1/token") {
@@ -99,7 +101,7 @@ beforeAll(async () => {
       if (holdLogin) { holdLogin = false; loginEntered?.(); await new Promise<void>(resolve => { releaseLogin = resolve; }); }
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
-      send({ mode: workspaceMode, linkingEnforced, linked: workspaceLinked, userId: body.p_user_id || loginUser, profileId: "synthetic-profile",
+      send({ mode: workspaceMode, linkingEnforced, linked: workspaceLinked, userId: body.p_user_id || loginUser, profileId: mapped ? "synthetic-profile" : null,
         identity: workspaceMode === "legacy" ? null : { sub: "synthetic-google-subject", iss: "https://accounts.google.com", email: "synthetic@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } } }); return; }
     if (url.pathname === "/rest/v1/rpc/workspace_begin_link" || url.pathname === "/rest/v1/rpc/workspace_complete_link" || url.pathname === "/rest/v1/rpc/workspace_record_google_login") {
       const chunks = []; for await (const chunk of request) chunks.push(chunk); const body = JSON.parse(Buffer.concat(chunks).toString());
@@ -113,8 +115,8 @@ beforeAll(async () => {
       send(null); return;
     }
     if (url.pathname === "/rest/v1/rpc/workspace_linking_session_allowed") { send(loginRecorded); return; }
-    if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send({ id: "synthetic-profile", name: "Synthetic Founder", platform_role: "founder" }); return; }
-    if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: false, active: false }); return; }
+    if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send(mapped ? { id: "synthetic-profile", name: "Synthetic Founder", platform_role: role } : null); return; }
+    if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: activeAdministrator, active: activeAdministrator, expiresAt: activeAdministrator ? new Date(Date.now() + 60000).toISOString() : null }); return; }
     if (url.pathname === "/rest/v1/platform_releases") {
       const summary = loginUser === userA ? "Synthetic previous account release" : "Synthetic replacement release";
       const manifest = { schemaVersion: 2, version: "v1.0.0", summary, highlights: [], changes: [], components: [], visuals: [], publishedAt: "2026-10-01T00:00:00Z" };
@@ -137,7 +139,7 @@ beforeAll(async () => {
   const env: NodeJS.ProcessEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ["PATH", "HOME", "TMPDIR", "NODE_OPTIONS", "FOUNDEROPS_PROTOCOL_ONLY"].includes(key))), NODE_ENV: "production" };
   Object.assign(env, { NEXT_TELEMETRY_DISABLED: "1", NODE_OPTIONS: `${env.NODE_OPTIONS || ""} --require=${path.resolve("tests/helpers/session-browser-protocol.cjs")}`,
     VERCEL_OIDC_TOKEN: token(userA), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience", GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "synthetic@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu", APP_URL: appOrigin, NEXT_PUBLIC_SUPABASE_URL: authOrigin, SUPABASE_URL: authOrigin,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service" });
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", SUPABASE_SECRET_KEY: "synthetic-service", ENABLE_LOCAL_LOGIN: "true", NEXT_PUBLIC_ENABLE_LOCAL_LOGIN: "true" });
   // Production output keeps development hot reloads out of cookie/navigation ordering evidence.
   app = spawn(process.execPath, ["node_modules/next/dist/bin/next", "build", "--webpack"], { cwd: process.cwd(), env, stdio: ["ignore", "pipe", "pipe"] });
   app.stdout!.on("data", captureDiagnostics()); app.stderr!.on("data", captureDiagnostics());
@@ -169,10 +171,11 @@ afterAll(async () => {
   if (tls) await new Promise<void>(resolve => tls.close(() => resolve()));
   if (auth) await new Promise<void>(resolve => auth.close(() => resolve()));
   rmSync(certificateDirectory, { recursive: true, force: true });
+  rmSync(evidenceDirectory, { recursive: true, force: true });
 });
 
 async function start() {
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const context = await newBrowserContext();
   await context.addCookies([{ name: cookieBase, value: `base64-${Buffer.from(JSON.stringify(session(userA))).toString("base64url")}`, url: appOrigin, sameSite: "Lax" }]);
   const page = await context.newPage(); await page.goto(`${appOrigin}/api/auth/login-mode`);
   const current = await page.evaluate(async () => (await fetch("/api/auth/session")).json());
@@ -233,7 +236,7 @@ test("Chromium cannot resurrect a logged-out session when the delayed refresh re
 
 
 test("concurrent tabs serialize actual login-start cookie writes and unavailable locks fail visibly", async () => {
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const context = await newBrowserContext();
   const starts: string[] = [];
   context.on("request", request => { if (new URL(request.url()).pathname === "/api/auth/session/login") starts.push(request.method()); });
   try {
@@ -252,7 +255,7 @@ test("concurrent tabs serialize actual login-start cookie writes and unavailable
 }, 120_000);
 
 test("login error remains usable at supported phone, tablet and desktop viewports without leaking credentials", async () => {
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const context = await newBrowserContext();
   await context.addInitScript(() => Object.defineProperty(navigator, "locks", { value: undefined }));
   const protocols: string[] = []; const scripts: Promise<string>[] = [];
   context.on("request", request => { protocols.push(new URL(request.url()).pathname); });
@@ -278,7 +281,7 @@ test("login error remains usable at supported phone, tablet and desktop viewport
 }, 120_000);
 
 test.each(["/planning", "/team/platform-releases"])("%s consumes server session views, navigates and clears protected UI on global logout", async workspace => {
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const context = await newBrowserContext();
   const requests: Array<{ path: string; authorization: string | undefined }> = [];
   context.on("request", request => requests.push({ path: new URL(request.url()).pathname, authorization: request.headers().authorization }));
   try {
@@ -334,7 +337,7 @@ test("real Google link form returns through PKCE and consumes the existing bound
 
 test("real Google login return records only nonce-matched provider proof and navigates as the bound user", async () => {
   workspaceMode = "linking"; linkingEnforced = true; workspaceLinked = true; loginUser = userA;
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const context = await newBrowserContext();
   try {
     const page = await context.newPage(); await page.goto(`${appOrigin}/auth/login?next=/auth/error`);
     await page.waitForURL(url => url.pathname === "/auth/error");
@@ -364,7 +367,7 @@ test("real browser API transport recovers one marked pre-effect rejection and re
 
 test("release workspace clears the previous account before its replacement document or delayed data arrives", async () => {
   loginUser = userA;
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const context = await newBrowserContext();
   let releaseDocument: (() => void) | undefined, releaseData: (() => void) | undefined;
   try {
     const page = await context.newPage();
@@ -415,3 +418,42 @@ test("release workspace clears the previous account before its replacement docum
     expect((await current(context)).body.session.userId).toBe(userB);
   } finally { pendingGates.forEach(release => release()); await context.close(); }
 }, 120_000);
+
+async function newBrowserContext() {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  await context.route("**/*", route => {
+    const origin = new URL(route.request().url()).origin;
+    return origin === appOrigin || origin === authOrigin ? route.continue() : route.abort("blockedbyclient");
+  });
+  return context;
+}
+
+test.each([
+  ["ceo", false, 400, 400], ["founder", false, 400, 403], ["deputy", false, 400, 400],
+  ["viewer", false, 403, 403], ["viewer", true, 403, 400],
+] as const)("production Chromium preserves %s contributor and operational boundaries with administrator=%s", async (platformRole, administrator, toolStatus, eventStatus) => {
+  role = platformRole; activeAdministrator = administrator;
+  const { context, page } = await start();
+  try {
+    const statuses = await page.evaluate(async () => {
+      const request = (path: string) => fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      return { tool: (await request("/api/tools")).status, event: (await request("/api/events")).status };
+    });
+    // 400 proves admission reached unchanged domain input validation, not a persisted mutation.
+    expect(statuses).toEqual({ tool: toolStatus, event: eventStatus });
+    expect((await context.request.post(`${appOrigin}/api/auth/local-login`, { data: { profileId: "synthetic-profile" } })).status()).toBe(404);
+  } finally { await context.close(); }
+}, 30_000);
+
+test("production browser entry rejects anonymous and unmapped sessions even with local simulation flags", async () => {
+  const anonymous = await newBrowserContext();
+  try {
+    expect((await anonymous.request.post(`${appOrigin}/api/tools`, { data: {} })).status()).toBe(401);
+    expect((await anonymous.request.post(`${appOrigin}/api/auth/local-login`, { data: { profileId: "synthetic-profile" } })).status()).toBe(404);
+  } finally { await anonymous.close(); }
+  const { context, page } = await start();
+  try {
+    mapped = false;
+    expect(await page.evaluate(async () => (await fetch("/api/tools", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status)).toBe(403);
+  } finally { await context.close(); }
+}, 30_000);

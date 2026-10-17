@@ -1,6 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { resolve } from "node:path";
+import { localSupabaseStatus } from "../helpers/local-supabase-target.mjs";
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import pg from "pg";
@@ -14,12 +12,8 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
 
 it("denies retired local Decision Log REST actions in every supported mode while retaining service data and foreign keys", async () => {
-  const { stdout } = await promisify(execFile)(resolve("node_modules/.bin/supabase"), ["status", "-o", "json"]);
-  const local = JSON.parse(stdout) as { API_URL: string; DB_URL: string; ANON_KEY: string; SERVICE_ROLE_KEY: string; JWT_SECRET: string };
-  const api = new URL(local.API_URL), database = new URL(local.DB_URL);
-  if (!["localhost", "127.0.0.1"].includes(api.hostname) || api.port !== "56321"
-    || !["localhost", "127.0.0.1"].includes(database.hostname) || database.port !== "56322") throw Error("Disposable target required");
-  if (process.env.DISPOSABLE_DB_URL && process.env.DISPOSABLE_DB_URL !== local.DB_URL) throw Error("Disposable database target mismatch");
+  const local = await localSupabaseStatus();
+  const api = new URL(local.API_URL);
   const db = new pg.Client(local.DB_URL);
   await db.connect();
   const service = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { db: { retry: false }, auth: { persistSession: false, autoRefreshToken: false } });

@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
+import { localSupabaseStatus } from "../../helpers/local-supabase-target.mjs";
 import { createCipheriv, createHmac, randomUUID } from "node:crypto";
-import { resolve } from "node:path";
-import { promisify } from "node:util";
 import { NextRequest } from "next/server";
 import pg from "pg";
 import { vi } from "vitest";
@@ -9,7 +7,7 @@ import { vi } from "vitest";
 type ActorName = "ceo" | "deputy" | "founder" | "other" | "viewer" | "administrator" | "unmapped";
 export type PlanningDatabaseActor = { profileId: string; userId: string; sessionId: string; token: string; subject: string };
 
-// This fixture must run only in the guarded external snapshot, never in an operator checkout.
+// Fixtures verify the configured local test target; the runner owns environment isolation.
 export async function withPlanningCredentialDatabase(run: (fixture: Awaited<ReturnType<typeof createFixture>>) => Promise<void>, mode: "legacy" | "linking" = "legacy") {
   const fixture = await createFixture(mode);
   let failure: unknown;
@@ -22,11 +20,8 @@ export async function withPlanningCredentialDatabase(run: (fixture: Awaited<Retu
 }
 
 async function createFixture(mode: "legacy" | "linking") {
-  const { stdout } = await promisify(execFile)(resolve("node_modules/.bin/supabase"), ["status", "-o", "json"]);
-  const local = JSON.parse(stdout) as Record<string, string>;
-  const api = new URL(local.API_URL), databaseUrl = new URL(local.DB_URL);
-  if (![api.hostname, databaseUrl.hostname].every(host => ["localhost", "127.0.0.1"].includes(host)) || api.port !== "56321" || databaseUrl.port !== "56322") throw new Error("Dedicated disposable Planning target required");
-  if (process.env.DISPOSABLE_DB_URL && process.env.DISPOSABLE_DB_URL !== local.DB_URL) throw new Error("Disposable database target does not match");
+  const local = await localSupabaseStatus();
+  const api = new URL(local.API_URL);
   const db = new pg.Client(local.DB_URL);
   await db.connect();
   const prefix = `planning-auth-${randomUUID()}`;

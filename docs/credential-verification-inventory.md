@@ -44,7 +44,7 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | Interactive intake, AI-assisted task creation and bulk creation | No current app entry or model credential consumer found | Preserve distinct browser creation, existing-task Sprint assignment and personal-token batch contracts; do not invent an intake action | #507 inventory complete; absent app actions N/A by user approval |
 | `src/app/api/auth/login-mode`, auth error pages, explicitly inert responses | Public configuration or no usable credential | Preserve public/inert contract; never treat these as authenticated actors | #491, #505 |
 | `src/lib/local-development-auth.ts`, local-login route and dev profile override | Development-only simulated profile | Existing host/environment gate; deny deployed entry points | #489, #491 |
-| `src/app/api/health/route.ts` | Existing public readiness probe using server database access | Return readiness/configuration booleans only, without granting a human actor or returning credentials | #499, #505 |
+| `src/app/api/health/route.ts` | Existing public readiness probe using server database access | Return readiness/configuration booleans only, without granting a human actor or returning credentials | #502 implemented; fixed public Health capability |
 
 ## Decision Log scope
 
@@ -262,7 +262,7 @@ The public planning actions reuse the shared session policy. The feature owns re
 | Legacy browser compatibility POST/DELETE `/api/focus` | `planning.focus.write`, `planning.focus.delete` | Existing contributor guard; owner-only for founders, existing operational leads may select another owner. Existing three-item limit remains. | Own task succeeds; foreign profile/task and another method fail. This does not restore retired execution UI. |
 | Browser POST `/api/meetings/[id]/attendance` | `planning.attendance.write` | Existing contributors self-report pending/excused/late-excused with zero points; CEO/deputy retain final evaluation and cross-owner reporting. | Founder final evaluation, foreign owner and foreign notification recipient fail; deputy final evaluation retains two points. Meeting, actor and saved owner are bound. |
 
-The two client-argument compatibility exports retain only their explicitly listed sibling consumers above. Planning revision and relationship callers no longer use `resolveAdministratorAccessFailure(client)`. Notification delivery orchestration remains owned by #510; provider acquisition and protocols remain owned by their provider adapters.
+The former client-argument compatibility exports are removed. Planning revision and relationship callers use fixed capabilities through the public credential entry. Notification delivery orchestration remains owned by #510; provider acquisition and protocols remain owned by their provider adapters.
 
 The server-rendered Planning, Backlog, Sprint and task-detail entries use the same public actions with server-cookie acquisition. Shared header slots retain their existing 300-second data caches, keys and tags. Each invocation checks its actor and original deadline outside the cache, including cache hits; a cache miss uses that invocation's privately bound transport. Cached values contain resource data only.
 

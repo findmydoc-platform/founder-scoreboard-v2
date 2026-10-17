@@ -1,6 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { resolve } from "node:path";
+import { localSupabaseStatus } from "../helpers/local-supabase-target.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import pg from "pg";
@@ -10,10 +8,7 @@ import { platformReleaseFixture } from "../helpers/platform-release-fixture.mjs"
 import { canonicalPlatformReleaseManifest } from "../../src/features/platform-releases/model/platform-release-manifest";
 
 it("actual release ingest retains one immutable stored release and notification through identical retry and changed-manifest conflict", async () => {
-  const { stdout } = await promisify(execFile)(resolve("node_modules/.bin/supabase"), ["status", "-o", "json"]);
-  const local = JSON.parse(stdout), api = new URL(local.API_URL), database = new URL(local.DB_URL);
-  if (!["localhost", "127.0.0.1"].includes(api.hostname) || api.port !== "56321"
-    || !["localhost", "127.0.0.1"].includes(database.hostname) || database.port !== "56322") throw Error("Disposable target required");
+  const local = await localSupabaseStatus();
   const db = new pg.Client(local.DB_URL);
   await db.connect();
   const profileId = `release-ingest-${randomUUID()}`, version = `v999.0.${Date.now()}`;

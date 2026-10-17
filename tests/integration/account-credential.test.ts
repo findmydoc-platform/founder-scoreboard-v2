@@ -1,6 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { resolve } from "node:path";
+import { localSupabaseStatus } from "../helpers/local-supabase-target.mjs";
 import { createHmac, randomUUID } from "node:crypto";
 import pg from "pg";
 import { expect, it, vi } from "vitest";
@@ -8,12 +6,8 @@ import { NextRequest } from "next/server";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 
 it("retains account ownership across real handlers, PostgREST, database mutation and session revocation", async () => {
-  const expectedDatabase = process.env.DISPOSABLE_DB_URL;
-  if (!expectedDatabase || !["localhost", "127.0.0.1"].includes(new URL(expectedDatabase).hostname)) throw new Error("An explicitly guarded disposable database is required.");
-  const { stdout } = await promisify(execFile)(resolve("node_modules/.bin/supabase"), ["status", "-o", "json"]);
-  const local = JSON.parse(stdout);
-  if (local.DB_URL !== expectedDatabase || !["localhost", "127.0.0.1"].includes(new URL(local.API_URL).hostname)) throw new Error("Disposable database target mismatch.");
-  const database = new pg.Client(expectedDatabase);
+  const local = await localSupabaseStatus();
+  const database = new pg.Client(local.DB_URL);
   await database.connect();
   const actors = ["founder", "viewer", "unmapped"].map(role => ({ role, userId: randomUUID(), sessionId: randomUUID(), profileId: `account-${role}-${randomUUID()}`, token: "" }));
   const originalFetch = globalThis.fetch;
