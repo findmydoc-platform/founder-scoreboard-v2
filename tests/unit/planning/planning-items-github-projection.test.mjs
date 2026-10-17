@@ -21,7 +21,7 @@ const projection = await importTestModule(
   {
     "server-only": {},
     "@/features/planning-items/model/planning-items-github-sync": {
-      executePlanningItemGitHubSyncs: async ({ targets }) => new Map(
+      executeClaimedPlanningItemGitHubSyncs: async ({ targets }) => new Map(
         targets.map((target) => [target.itemId, executionResult]),
       ),
     },
