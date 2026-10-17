@@ -1,12 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { requireCEO } from "@/lib/authz";
 import { computeFounderSprintScore, computeStrikeTransition } from "@/lib/founderops-scoring";
 import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { Meeting, MeetingAttendance, Profile, SprintCommitment, Task } from "@/lib/types";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 import { createNotificationPayload } from "@/lib/notification-catalog";
-import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, sprintReviewDueAt } from "@/lib/sprint-review-window";
 
 type TaskRow = {
@@ -75,18 +74,13 @@ function carryoverReason(outcome: string) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<Record<string, never>>(request, requireCEO, {});
+  const { id } = await context.params;
+  const apiContext = await requirePlanningJsonContext<Record<string, never>>(request, "planning.sprint.lock", {}, id);
   if (!apiContext.ok) return apiContext.response;
 
-  const { permission, supabase } = apiContext;
+  const { permission, planning } = apiContext;
 
-  const { id } = await context.params;
-
-  const { data: sprint, error: sprintError } = await supabase
-    .from("sprints")
-    .select("id,project_id,name,start_date,end_date,review_due_at,score_locked,updated_at,lock_result")
-    .eq("id", id)
-    .single();
+  const { data: sprint, error: sprintError } = await planning.readSprintLock();
 
   if (sprintError || !sprint) return apiError("Sprint wurde nicht gefunden.", 404);
   if (sprint.score_locked) {
@@ -95,10 +89,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Sprint ist bereits gelockt.", 409);
   }
 
-  const { data: blockingObjections, error: objectionError } = await supabase
-    .from("score_objections")
-    .select("id,status,second_reviewer_profile_id,second_reviewed_at")
-    .eq("sprint_id", id);
+  const { data: blockingObjections, error: objectionError } = await planning.readSprintBlockingObjections();
+
   if (objectionError) return apiError(objectionError.message, 500);
   const unresolvedObjection = (blockingObjections || []).find((objection) =>
     objection.status === "open" || Boolean(objection.second_reviewer_profile_id && !objection.second_reviewed_at)
@@ -107,13 +99,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Offene oder ausstehende Score-Einwände müssen vor dem Sprint-Lock abgeschlossen werden.", 409);
   }
 
-  const { data: acceptedAdjustments, error: acceptedAdjustmentError } = await supabase
-    .from("score_objections")
-    .select("profile_id,resolved_delivery_points,resolved_form_points,resolved_weekly_points,reviewed_at")
-    .eq("sprint_id", id)
-    .eq("status", "accepted")
-    .not("resolved_delivery_points", "is", null)
-    .order("reviewed_at", { ascending: false });
+  const { data: acceptedAdjustments, error: acceptedAdjustmentError } = await planning.readSprintAcceptedAdjustments();
+
   if (acceptedAdjustmentError) return apiError(acceptedAdjustmentError.message, 500);
 
   const acceptedAdjustmentByProfile = new Map<string, {
@@ -133,11 +120,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   let reviewDueAt = sprint.review_due_at || "";
   if (!reviewDueAt) {
-    const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .select("review_objection_window_hours")
-      .eq("id", sprint.project_id)
-      .single();
+    const { data: project, error: projectError } = await planning.readSprintLockProject();
+
     if (projectError || !project) return apiError("FounderOps-Prozesseinstellungen wurden nicht gefunden.", 409);
     reviewDueAt = sprintReviewDueAt(
       sprint.end_date || "",
@@ -149,20 +133,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Die Review- und Einwandfrist läuft noch. Der Sprint kann erst danach finalisiert werden.", 409);
   }
 
-  const { data: nextSprint, error: nextSprintError } = await supabase
-    .from("sprints")
-    .select("id,name,start_date,end_date")
-    .neq("id", id)
-    .gt("start_date", sprint.start_date || "1900-01-01")
-    .order("start_date", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const { data: nextSprint, error: nextSprintError } = await planning.readNextSprint(sprint.start_date || "1900-01-01");
+
   if (nextSprintError) return apiError(nextSprintError.message, 500);
 
-  const { data: tasks, error: tasksError } = await supabase
-    .from(ACTIVE_TASKS_TABLE)
-    .select("id,project_id,parent_task_id,title,description,status,priority,owner,assignee,workstream,sort_order,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,approval_status,score_relevant,carryover_count,original_sprint_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
-    .eq("sprint_id", id);
+  const { data: tasks, error: tasksError } = await planning.readSprintTaskRows();
 
   if (tasksError) return apiError(tasksError.message, 500);
 
@@ -176,7 +151,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const taskIds = carryoverTasks.map((task) => task.id);
 
   const blockerResult = taskIds.length
-    ? await supabase.from("task_blockers").select("id,task_id,status").in("task_id", taskIds).eq("status", "open")
+    ? await planning.readSprintBlockers(taskIds)
     : { data: [] };
   if ("error" in blockerResult && blockerResult.error) return apiError(blockerResult.error.message, 500);
   const openBlockerTaskIds = new Set((blockerResult.data || []).map((blocker: { task_id: string }) => blocker.task_id));
@@ -260,13 +235,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     meetingResult,
     attendanceResult,
     strikeStateResult,
-  ] = await Promise.all([
-    supabase.from("profiles").select("id,name,platform_role,weekly_capacity"),
-    supabase.from("sprint_commitments").select("id,sprint_id,profile_id,commitment_level,weekly_hours,note").eq("sprint_id", id),
-    supabase.from("meetings").select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda").eq("sprint_id", id).order("meeting_at"),
-    supabase.from("meeting_attendance").select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at"),
-    supabase.from("founder_strike_state").select("id,profile_id,strike_level,fulfilled_reset_streak,last_evaluated_sprint_id,updated_at"),
-  ]);
+  ] = await planning.readSprintScoringInputs();
 
   if (profileResult.error) return apiError(profileResult.error.message, 500);
   if (commitmentResult.error) return apiError(commitmentResult.error.message, 500);
@@ -411,21 +380,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     },
   };
   const metadata = auditRequestMetadata(request);
-  const { data: transactionData, error: transactionError } = await supabase.rpc("lock_sprint_with_review_window_transaction", {
-    p_sprint_id: id,
-    p_expected_updated_at: sprint.updated_at,
-    p_task_updates: taskUpdates,
-    p_accepted_blocker_task_ids: acceptedBlockerTaskIds,
-    p_carryover_inserts: carryoverInserts,
-    p_notifications: notifications,
-    p_score_rows: scoreRows,
-    p_strike_state_rows: strikeStateRows,
-    p_strike_events: strikeEvents,
-    p_result_data: resultData,
-    p_actor_profile_id: permission.profile?.id || null,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent || null,
-  });
+  const { data: transactionData, error: transactionError } = await planning.commitSprintLock({
+    expectedUpdatedAt: sprint.updated_at, taskUpdates, acceptedBlockerTaskIds, carryoverInserts, notifications,
+    scoreRows, strikeStateRows, strikeEvents, resultData,
+  }, metadata);
 
   if (transactionError) {
     if (transactionError.code === "P0001") return apiError("Sprint wurde parallel geändert. Bitte neu laden.", 409);

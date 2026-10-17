@@ -1,4 +1,4 @@
-import { authorizePlanning } from "./internal/planning";
+import { authorizePlanning, isPlanningAction } from "./internal/planning";
 import type { PlanningCredentialInput, PlanningCredentialResult } from "./types";
 import { authorizeAdministrator } from "./internal/administrator";
 import type { AdministratorCredentialInput, AdministratorCredentialResult } from "./types";
@@ -59,7 +59,7 @@ export function authorizeCredentialAction(input: CalendarCredentialInput): Promi
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
 
 export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | PlanningCredentialInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | PlanningCredentialResult> {
-  if (["planning.revision.read", "planning.board.read", "planning.header.read", "planning.review.request", "planning.review.decide", "planning.review.withdraw", "planning.review.reopen", "planning.backlog.read", "planning.sprint.read", "planning.task.read", "planning.task.update", "planning.relationship.add", "planning.relationship.remove", "planning.task.delete"].includes(input.action)) return authorizePlanning(input as PlanningCredentialInput);
+  if (isPlanningAction(input.action)) return authorizePlanning(input as PlanningCredentialInput);
   if (["administrator-access.read", "administrator-access.activate", "administrator-access.end", "administration.directory.read", "administration.eligibility.manage", "administration.technical.update"].includes(input.action)) return authorizeAdministrator(input as AdministratorCredentialInput);
   if (input.credential.kind === "server-cookies") {
     if (input.action === "session.planning") return serverPlanningAuth();

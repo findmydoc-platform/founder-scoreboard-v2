@@ -149,7 +149,8 @@ export type AdministratorCredentialResult = Awaited<ReturnType<typeof import("./
 
 export type PlanningCredentialInput = {
   credential: { kind: "session-request"; request: NextRequest };
-  action: "planning.revision.read" | "planning.board.read" | "planning.header.read" | "planning.review.request" | "planning.review.decide" | "planning.review.withdraw" | "planning.review.reopen" | "planning.backlog.read" | "planning.sprint.read" | "planning.task.read" | "planning.task.update" | "planning.relationship.add" | "planning.relationship.remove" | "planning.task.delete";
+  action: "planning.revision.read" | "planning.board.read" | "planning.header.read" | "planning.review.request" | "planning.review.decide" | "planning.review.withdraw" | "planning.review.reopen" | "planning.backlog.read" | "planning.sprint.read" | "planning.task.read" | "planning.task.update" | "planning.relationship.add" | "planning.relationship.remove" | "planning.task.delete" | "planning.task.create" | "planning.sprint.commitment.write" | "planning.sprint.update" | "planning.sprint.plan" | "planning.sprint.lock" | "planning.sprint.review-window" | "planning.sprint.objection.create" | "planning.sprint.objection.process" | "planning.sprint.assign" | "planning.backlog.move" | "planning.approval.decide" | "planning.trash.withdraw" | "planning.trash.restore";
   targetId?: string;
+  targetIds?: readonly string[];
 };
 export type PlanningCredentialResult = Awaited<ReturnType<typeof import("./internal/planning").authorizePlanning>>;

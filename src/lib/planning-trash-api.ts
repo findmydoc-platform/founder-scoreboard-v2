@@ -1,13 +1,10 @@
 import "server-only";
 
 import { NextResponse, type NextRequest } from "next/server";
-import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
 import {
-  createPlanningTrashPlanningItems,
   planningTrashError,
   planningTrashTransactionFromResult,
   restorePlanningItemCommand,
-  runPlanningTrashLifecycle,
   withdrawPlanningItemCommand,
 } from "@/features/planning-items/model/planning-items-trash";
 import {
@@ -17,9 +14,8 @@ import {
   type PlanningTrashWithdrawPayload,
 } from "@/features/planning/model/planning-trash-contract";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { requireOperationalLead, requirePlanningContributor } from "@/lib/authz";
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 import type { TrashRootType } from "@/lib/types";
 
 function label(rootType: TrashRootType) {
@@ -39,7 +35,7 @@ export async function handlePlanningTrashWithdraw(
   rootId: string,
   expectedRootType?: TrashRootType,
 ) {
-  const context = await requireJsonApiContext<PlanningTrashWithdrawPayload>(request, requirePlanningContributor, {});
+  const context = await requirePlanningJsonContext<PlanningTrashWithdrawPayload>(request, "planning.trash.withdraw", {}, rootId);
   if (!context.ok) return context.response;
   const reason = validatePlanningTrashReason(context.payload.reason);
   if (!reason.ok) {
@@ -48,15 +44,7 @@ export async function handlePlanningTrashWithdraw(
       : "Für das Zurückziehen ist eine Begründung erforderlich.", 400);
   }
   if (!validatePlanningTrashRevision(context.payload.expectedRevision)) return apiError("Aktueller Freigabestand ist erforderlich.", 400);
-  const actor = actorContextFromSessionAuth({ ok: true, profile: context.permission.profile });
-  if (!actor.ok) return apiError("Nur Antragsteller, CEO oder Deputy können dieses Item zurückziehen.", 403);
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
-  const { data: item, error: itemError } = await serviceSupabase
-    .from("tasks")
-    .select("task_type")
-    .eq("id", rootId)
-    .maybeSingle<{ task_type: string }>();
+  const { data: item, error: itemError } = await context.planning.readItemKind();
   if (itemError) return apiError("Planungselement konnte nicht geladen werden.", 500);
   if (!item || (item.task_type !== "initiative" && item.task_type !== "deliverable")) {
     return apiError("Planungselement wurde nicht gefunden.", 404);
@@ -64,9 +52,7 @@ export async function handlePlanningTrashWithdraw(
   const rootType = item.task_type;
   if (expectedRootType && expectedRootType !== rootType) return apiError(`${label(expectedRootType)} wurde nicht gefunden.`, 404);
 
-  const result = await createPlanningTrashPlanningItems(serviceSupabase, rootType).run({
-    actor: actor.actor,
-    mode: "commit",
+  const result = await context.planning.runTrash(rootType, {
     command: withdrawPlanningItemCommand(rootId, {
       expectedApprovalRevision: Number(context.payload.expectedRevision),
       reason: reason.reason,
@@ -79,7 +65,7 @@ export async function handlePlanningTrashWithdraw(
   }
   const transaction = planningTrashTransactionFromResult(result);
   if (result.status !== "committed" || !transaction) return apiError(`${label(rootType)} konnte nicht zurückgezogen werden.`, 500);
-  const lifecycle = await runPlanningTrashLifecycle(serviceSupabase, transaction);
+  const lifecycle = await context.planning.trashLifecycle();
   return NextResponse.json({ ok: true, ...transaction, lifecycle });
 }
 
@@ -88,18 +74,10 @@ export async function handlePlanningTrashRestore(
   rootId: string,
   expectedRootType?: TrashRootType,
 ) {
-  const context = await requireJsonApiContext<PlanningTrashRestorePayload>(request, requireOperationalLead, {});
+  const context = await requirePlanningJsonContext<PlanningTrashRestorePayload>(request, "planning.trash.restore", {}, rootId);
   if (!context.ok) return context.response;
   if (!validatePlanningTrashRevision(context.payload.expectedTrashRevision)) return apiError("Aktueller Papierkorbstand ist erforderlich.", 400);
-  const actor = actorContextFromSessionAuth({ ok: true, profile: context.permission.profile });
-  if (!actor.ok) return apiError("Keine Berechtigung für diese Aktion.", 403);
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
-  const { data: item, error: itemError } = await serviceSupabase
-    .from("tasks")
-    .select("task_type")
-    .eq("id", rootId)
-    .maybeSingle<{ task_type: string }>();
+  const { data: item, error: itemError } = await context.planning.readItemKind();
   if (itemError) return apiError("Planungselement konnte nicht geladen werden.", 500);
   if (!item || (item.task_type !== "initiative" && item.task_type !== "deliverable")) {
     return apiError("Planungselement wurde nicht gefunden.", 404);
@@ -107,9 +85,7 @@ export async function handlePlanningTrashRestore(
   const rootType = item.task_type;
   if (expectedRootType && expectedRootType !== rootType) return apiError(`${label(expectedRootType)} wurde nicht gefunden.`, 404);
 
-  const result = await createPlanningTrashPlanningItems(serviceSupabase, rootType).run({
-    actor: actor.actor,
-    mode: "commit",
+  const result = await context.planning.runTrash(rootType, {
     command: restorePlanningItemCommand(rootId, Number(context.payload.expectedTrashRevision)),
     requestMetadata: requestMetadata(request),
   });
@@ -119,6 +95,6 @@ export async function handlePlanningTrashRestore(
   }
   const transaction = planningTrashTransactionFromResult(result);
   if (result.status !== "committed" || !transaction) return apiError(`${label(rootType)} konnte nicht wiederhergestellt werden.`, 500);
-  const lifecycle = await runPlanningTrashLifecycle(serviceSupabase, transaction);
+  const lifecycle = await context.planning.trashLifecycle();
   return NextResponse.json({ ok: true, ...transaction, lifecycle });
 }
