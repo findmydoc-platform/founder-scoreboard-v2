@@ -1,6 +1,7 @@
 import {
   authenticatedFunctionAllowlist,
   highRiskAuthenticatedTablePrivileges,
+  retiredDecisionLogTables,
   sequencePrivileges,
   serviceRoleOnlyTablePrivileges,
   tablePrivileges,
@@ -10,6 +11,9 @@ import { addRows } from "./failures.mjs";
 const allowedAuthenticatedFunctions = new Set(authenticatedFunctionAllowlist);
 const highRiskAuthenticatedPrivileges = new Set(
   highRiskAuthenticatedTablePrivileges,
+);
+const retiredDecisionLogSequences = new Set(
+  retiredDecisionLogTables.map((table) => `${table}_id_seq`),
 );
 const serviceRoleOnlyTablePrivilegeMap = new Map(
   serviceRoleOnlyTablePrivileges.map(([tableName, privileges]) => [
@@ -160,8 +164,15 @@ export async function verifyCatalogSecurity(client, failures) {
      from pg_policies
      where schemaname = 'public'
        and tablename = any($1::text[])
+       and not (
+         tablename = any($2::text[])
+         and policyname = 'workspace_request_boundary'
+         and permissive = 'RESTRICTIVE'
+         and cmd = 'ALL'
+         and roles = array['authenticated']::name[]
+       )
      order by tablename, policyname`,
-    [serviceRoleOnlyTableNames],
+    [serviceRoleOnlyTableNames, retiredDecisionLogTables],
   );
   addRows(
     failures,
@@ -200,7 +211,8 @@ export async function verifyCatalogSecurity(client, failures) {
   const unsafeSequencePrivileges = effectiveSequencePrivileges.rows.filter(
     (row) =>
       row.role_name === "anon"
-      || row.privilege_name !== "USAGE",
+      || row.privilege_name !== "USAGE"
+      || retiredDecisionLogSequences.has(row.sequence_name),
   );
   addRows(
     failures,

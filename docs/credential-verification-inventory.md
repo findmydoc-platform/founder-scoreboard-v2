@@ -32,7 +32,7 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | `team-workweek/server/google-workspace-oauth.ts`, provider operations and disconnect | Google Calendar connection access/refresh token and bound signed state | Owner/account/scope, encryption, guarded rotation, reconnect, uncertain mutation reconciliation | #497 |
 | `src/lib/google-chat.ts` and notification delivery route | Internal bot/service-account access and fixed configured webhook capability | Bot credentials confer no human action authority; fixed target, provider deadlines and notification claims remain effective | #498 implemented |
 | `src/app/api/google-chat/events` | Deliberately inert public receiver, no current signature verifier | Preserve the existing inert response; do not invent a signed Chat-event protocol | #498 |
-| `src/lib/notion-decision-log.ts`, Decision Log readers/actions | Notion integration credential plus human action authority | Existing integration purpose/timeouts; CEO-only Decision Log editing | #499, #506 |
+| `src/lib/notion-decision-log.ts`, actual Decision Log page readers | Notion integration credential plus mapped-reader authority | Preserve read-only app access and provider purpose/timeouts; absent app editing is N/A by user approval; retired local tables deny human access | #499 read migration; #506 database closure implemented |
 | `src/app/api/team/platform-releases/v1/releases` and release manifest model | Release ingest technical credential, manifest digest | Digest, exact ingest contract, idempotency and attribution | #501 |
 | GitHub webhook route | Concrete raw payload signature and delivery identity | Exact payload validation, deduplication and claims remain per operation | #500 |
 | Cron paths using `src/lib/maintenance-auth.ts` | Dedicated Cron Bearer secret | Timing-safe secret comparison, job ownership/claim/lease and consumption | #508 |
@@ -44,6 +44,14 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | `src/app/api/auth/login-mode`, auth error pages, explicitly inert responses | Public configuration or no usable credential | Preserve public/inert contract; never treat these as authenticated actors | #491, #505 |
 | `src/lib/local-development-auth.ts`, local-login route and dev profile override | Development-only simulated profile | Existing host/environment gate; deny deployed entry points | #489, #491 |
 | `src/app/api/health/route.ts` | Existing public readiness probe using server database access | Return readiness/configuration booleans only, without granting a human actor or returning credentials | #499, #505 |
+
+## Decision Log scope
+
+The actual Decision Log page reads the configured Notion data source and offers local detail views and external links. Source inventory found no app edit route, write RPC caller, mutation control or Notion write transport. The user approved recording CEO edit success and other-role edit rejection through those absent app actions as N/A. Approved story text is unchanged. Existing mapped-reader behavior remains covered by #499; provider credentials do not grant human authority.
+
+This app-action classification does not apply to reachable database operations. Migration `20261017144737_close_retired_decision_log_access.sql` revokes PUBLIC/anon/authenticated privileges on the retired local `decision_log`, `decision_comments`, `decision_confirmations` and `decision_task_links` tables and their owned sequences. It removes eight obsolete permissive human policies. Rows, foreign keys, RLS, the restrictive Workspace boundary and existing service privileges remain intact. No application edit endpoint or new role grant was added.
+
+The isolated real REST matrix first demonstrated legacy access, including successful CEO reads and writes with valid enforced-mode permits. It then proved denial for CEO, founder, deputy, viewer, a non-CEO active administrator, unmapped users and anonymous requests across legacy, unenforced linking, enforced linking and Google modes. The real migration test preserves seeded rows, keys, foreign keys, sequence state, RLS and service privileges before and after repeated application. Explicit verifier contracts reject restored human table/sequence privileges or permissive policies and detect removed service privileges; prior human-read/write assumptions were replaced with these denials.
 
 ## Interactive intake scope
 
