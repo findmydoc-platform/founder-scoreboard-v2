@@ -218,3 +218,27 @@ test("user-authored attachments cannot inherit technical installation access", a
   await expect(app.uploadGitHubAttachment("attachments/file.txt", Buffer.from("payload"), github, "Synthetic upload", "findmydoc-platform/management")).rejects.toThrow("Aktion ist nicht freigegeben");
   expect(calls).toBe(1);
 });
+
+
+test.each(["installation","key"].flatMap(change=>["authorize","resource","asset"].map(phase=>({change,phase}))))("configuration $change changing during $phase issuance cannot release provider access",async({change,phase})=>{
+  configure();vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(new Date("2026-10-17T10:00:00Z"));
+  let release,started,acquisitions=0;const pending=new Promise(r=>{release=r;}),entered=new Promise(r=>{started=r;});
+  const resources=[];
+  vi.stubGlobal("fetch",async(url)=>{
+    if(String(url).endsWith("/access_tokens")) {
+      acquisitions++;
+      if(phase==="authorize" || acquisitions===2){started();await pending;}
+      return issued();
+    }
+    resources.push(String(url));return Response.json({});
+  });
+  const assetUrl="https://github.com/user-attachments/assets/11111111-1111-4111-8111-111111111111";
+  const app=await workflow(phase==="asset" ? "github.asset.read":"github.projection.apply",{repositories:["findmydoc-platform/management"],...(phase==="asset"?{assetUrl}:{})});
+  let operation;
+  if(phase==="authorize") operation=app.authorize();
+  else {const {github}=await app.authorize();vi.setSystemTime(new Date("2026-10-17T10:56:00Z"));operation=phase==="asset" ? github.asset(assetUrl) : app.archiveGitHubIssue(1,github);}
+  await entered;
+  if(change==="installation")vi.stubEnv("GITHUB_APP_INSTALLATION_ID","999");
+  else {const {privateKey}=generateKeyPairSync("rsa",{modulusLength:2048});vi.stubEnv("GITHUB_APP_PRIVATE_KEY",privateKey.export({type:"pkcs8",format:"pem"}));}
+  release();await expect(operation).rejects.toThrow("Konfiguration wurde geändert");expect(resources).toHaveLength(0);
+});
