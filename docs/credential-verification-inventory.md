@@ -40,10 +40,16 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | `src/app/api/notifications/deliver`, GitHub review/comment delivery | Dedicated delivery secret, outgoing provider credentials | Delivery authentication, attempts, claim consumption and safe recovery | #510 |
 | Planning boards, tasks, sprint and trash workflows | Session action and resource context | Existing planning/deputy matrix, approval and revision checks | #504 |
 | Account, settings, profile, administration data and preview endpoints | Session identity/capability plus bounded resource target | Existing owner filters, administrator expiry and preview access | #493, #505 |
-| Interactive intake, AI task creation, bulk planning | CEO session and operation context | CEO-only scope, independent operation permits and model credentials | #507 |
+| Interactive intake, AI-assisted task creation and bulk creation | No current app entry or model credential consumer found | Preserve distinct browser creation, existing-task Sprint assignment and personal-token batch contracts; do not invent an intake action | #507 factual inventory; acceptance scope unresolved |
 | `src/app/api/auth/login-mode`, auth error pages, explicitly inert responses | Public configuration or no usable credential | Preserve public/inert contract; never treat these as authenticated actors | #491, #505 |
 | `src/lib/local-development-auth.ts`, local-login route and dev profile override | Development-only simulated profile | Existing host/environment gate; deny deployed entry points | #489, #491 |
 | `src/app/api/health/route.ts` | Existing public readiness probe using server database access | Return readiness/configuration booleans only, without granting a human actor or returning credentials | #499, #505 |
+
+## Interactive intake scope
+
+Source inventory found no app entry for CEO-only interactive intake, AI-assisted creation or bulk creation. The existing `POST /api/tasks` path uses planning-contributor authorization. `PATCH /api/tasks/bulk-sprint-assignment` assigns existing items and permits CEO/deputy operational leads. These are #504 contracts and must not become CEO-only. Personal Planning Items batch creation uses the separate scoped, owner-bound PAT contract in #494. No new intake action, model credential or role grant follows from #507.
+
+The unused local `task_intake_tokens` table has no human table grant or permissive human policy. Its owned `task_intake_tokens_id_seq` retains authenticated USAGE, which is latent SQL-role access. No allowed table insert, RPC or view exposing that sequence operation was found, and a sequence has no ordinary PostgREST table endpoint. This is not a demonstrated user API bypass. The existing verifier permits authenticated sequence USAGE; the grant remains unchanged. The user clarification about acceptance criteria for absent app actions is pending, so this inventory does not mark #507 complete or declare the database family not applicable.
 
 ## Shared role and administrator migration
 
