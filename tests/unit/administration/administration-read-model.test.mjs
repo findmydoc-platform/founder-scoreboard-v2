@@ -5,6 +5,7 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 let githubAppStatusCalls = 0;
 let githubAppStatusResult = null;
 let validatedMentionTeam = null;
+const safeChatStatus = {webhookConfigured:false,apiConfigured:false,deliveryEnabled:false,ready:false,mode:"not-configured"};
 
 beforeEach(() => {
   githubAppStatusCalls = 0;
@@ -116,7 +117,9 @@ const { createSupabaseAdministrationReadModel } = await importTestModule(
   {
     "server-only": {},
     "@/lib/credentials": {
-      authorizeCredentialAction: async () => {
+      authorizeCredentialAction: async (input) => {
+        if (input.action === "google-chat.status") return safeChatStatus;
+        assert.equal(input.action, "github.installation.status");
         githubAppStatusCalls += 1;
         return githubAppStatusResult;
       },
@@ -159,6 +162,7 @@ test("CEO eligibility view omits technical identity and delivery data", async ()
   assert.equal(result.model.githubProject, null);
   assert.equal(result.model.integrationStatus.githubApp, null);
   assert.equal(githubAppStatusCalls, 0);
+  assert.deepEqual(result.model.integrationStatus.googleChat, safeChatStatus);
   assert.deepEqual(result.model.notificationEvents, []);
   assert.deepEqual(result.model.notificationDeliveries, []);
   assert.deepEqual(supabase.calls.map((call) => call.rpc || call.table), ["administrator_directory_snapshot"]);
@@ -188,6 +192,7 @@ test("active administrator view projects technical identity and delivery operati
     nextStep: "",
   });
   assert.equal(githubAppStatusCalls, 1);
+  assert.deepEqual(result.model.integrationStatus.googleChat, safeChatStatus);
   assert.equal(result.model.integrationStatus.mentionTeam.state, "ready");
   assert.equal(result.model.integrationStatus.mentionTeam.githubHandle, "@findmydoc-platform/founderops");
   assert.deepEqual(result.model.notificationEvents.map(({ id }) => id), ["event"]);
@@ -252,4 +257,5 @@ test("active administrator view projects the provider-owned GitHub App status", 
     nextStep: "GitHub-App-ID, Installation und privaten Schlüssel in der Laufzeitkonfiguration prüfen.",
   });
   assert.equal(githubAppStatusCalls, 1);
+  assert.deepEqual(result.model.integrationStatus.googleChat, safeChatStatus);
 });
