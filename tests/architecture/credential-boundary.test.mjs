@@ -50,6 +50,56 @@ test("rejects indirect re-export through a new library helper", () => {
   }, failures => assert.match(failures.join("\n"), /src\/helper.ts.*internal credential adapter/));
 });
 
+test("rejects SDK acquisition hidden behind a compiled mts helper", () => fixture({
+  "src/route.ts": "import { client } from './helper.mjs'; client();",
+  "src/helper.mts": "import { createClient } from '@supabase/supabase-js'; export const client = () => createClient('synthetic', 'synthetic');",
+}, failures => assert.match(failures.join("\n"), /helper\.mts.*public credential seam/)));
+
+for (const [extension, specifier, commonjs] of [["cjs", "cjs", true], ["cts", "cjs", true], ["jsx", "js", false]]) {
+  test(`rejects private SDK acquisition behind an imported ${extension} helper`, () => fixture({
+    "src/route.ts": `import helper from './helper.${specifier}'; helper();`,
+    [`src/helper.${extension}`]: commonjs
+      ? "const { createClient } = require('@supabase/supabase-js'); module.exports = () => createClient('synthetic', 'synthetic');"
+      : "import { createClient } from '@supabase/supabase-js'; export default () => <span>{createClient('synthetic', 'synthetic')}</span>;",
+  }, failures => assert.match(failures.join("\n"), new RegExp(`helper\\.${extension}.*public credential seam`))));
+}
+
+for (const [extension, specifier, commonjs] of [["mts", "mjs", false], ["cts", "cjs", true], ["cjs", "cjs", true], ["jsx", "js", false]]) {
+  const helper = commonjs
+    ? "module.exports = require('./lib/credentials');"
+    : "export { authorizeCredentialAction as default } from './lib/credentials';";
+  test(`accepts a server caller using the public seam through ${extension}`, () => fixture({
+    "src/route.ts": `import helper from './helper.${specifier}'; helper();`,
+    [`src/helper.${extension}`]: helper,
+  }, failures => assert.deepEqual(failures, [])));
+  test(`rejects a client graph reaching the server seam through ${extension}`, () => fixture({
+    "src/route.ts": `'use client'; import helper from './helper.${specifier}'; helper();`,
+    [`src/helper.${extension}`]: helper,
+  }, failures => assert.match(failures.join("\n"), /client dependency graph/)));
+  test(`rejects forbidden transport in an imported ${extension} helper`, () => fixture({
+    "src/route.ts": `import helper from './helper.${specifier}'; helper();`,
+    [`src/helper.${extension}`]: commonjs ? "module.exports = () => fetch('https://synthetic.example.test');"
+      : extension === "jsx" ? "export default () => <span>{fetch('https://synthetic.example.test')}</span>;"
+        : "export default () => fetch('https://synthetic.example.test');",
+  }, failures => assert.match(failures.join("\n"), /network transport/)));
+}
+
+test("follows a compiled local helper reached outside the source directory", () => fixture({
+  "src/route.ts": "import helper from '../helper.mjs'; helper();",
+  "helper.mts": "import { createClient } from '@supabase/supabase-js'; export default () => createClient('synthetic', 'synthetic');",
+}, failures => assert.match(failures.join("\n"), /helper\.mts.*public credential seam/)));
+
+test("accepts a resolved local helper outside source when it uses the public seam", () => fixture({
+  "src/route.ts": "import helper from '../helper.mjs'; helper();",
+  "helper.mts": "export { authorizeCredentialAction as default } from './src/lib/credentials';",
+}, failures => assert.deepEqual(failures, [])));
+
+test("accepts a finite cyclic local module graph across supported formats", () => fixture({
+  "src/route.ts": "import helper from '../helper.mjs'; helper();",
+  "helper.mts": "import helper from './other.cjs'; export default helper;",
+  "other.cts": "module.exports = require('./helper.mjs');",
+}, failures => assert.deepEqual(failures, [])));
+
 test("resource allowance is an exact resolved edge, never a directory exemption", () => {
   fixture({
     "src/legacy.ts": "import 'node:net';",

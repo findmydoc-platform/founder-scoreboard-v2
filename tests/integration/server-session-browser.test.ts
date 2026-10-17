@@ -49,6 +49,7 @@ async function checkpoint<T>(name: string, operation: Promise<T>): Promise<T> {
 }
 let role = "founder", mapped = true, activeAdministrator = false;
 let browserClientCode = "", userCalls = 0, rejectUserAt = 0;
+let permanentAuthDenial = false;
 const cookieBase = "sb-localhost-auth-token";
 const userA = "b1111111-1111-4111-8111-111111111111";
 const userB = "b2222222-2222-4222-8222-222222222222";
@@ -56,7 +57,7 @@ let loginUser = userB;
 let sessionSequence = 0;
 let workspaceMode = "legacy", linkingEnforced = false, workspaceLinked = false, loginRecorded = false;
 let linkNonce: string | null = null;
-beforeEach(() => { role = "founder"; mapped = true; activeAdministrator = false; workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
+beforeEach(() => { permanentAuthDenial = false; role = "founder"; mapped = true; activeAdministrator = false; workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
 function token(userId: string) {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", amr: [{ method: "oauth" }], iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
@@ -81,12 +82,13 @@ beforeAll(async () => {
     }
     if (url.pathname === "/auth/v1/user") {
       userCalls++;
-      if (userCalls === rejectUserAt) { send({ message: "Synthetic credential rejected before effect", code: "bad_jwt" }, 401); return; }
+      if (permanentAuthDenial || userCalls === rejectUserAt) { send({ message: "Synthetic credential rejected before effect", code: "bad_jwt" }, 401); return; }
       const claims = JSON.parse(Buffer.from(request.headers.authorization!.slice(7).split(".")[1], "base64url").toString());
       send({ id: claims.sub, aud: "authenticated", user_metadata: { platform_role: "ceo" }, identities: [{ provider: "github" }] }); return;
     }
     if (url.pathname === "/auth/v1/user/identities/authorize") { const target = new URL("/auth/v1/authorize", authOrigin); target.search = url.search; send({ url: target.href }); return; }
     if (url.pathname === "/auth/v1/token") {
+      if (permanentAuthDenial) { send({ message: "Synthetic refresh rejected", code: "refresh_token_not_found" }, 400); return; }
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
       if (url.searchParams.get("grant_type") === "pkce") { send({ ...session(loginUser), provider_token: "synthetic-provider-proof" }); return; }
@@ -319,6 +321,55 @@ test.each(["/planning", "/team/platform-releases"])("%s consumes server session 
     expect(requests.filter(request => request.path.startsWith("/api/")).every(request => !request.authorization)).toBe(true);
     expect(requests.some(request => request.path === "/auth/v1/token" || request.path === "/auth/v1/user")).toBe(false);
   } finally { releaseLogout?.(); holdLogout = false; await context.close(); }
+}, 120_000);
+
+test("Planning polling clears loaded protected state after permanent Auth denial without focus or reload", async () => {
+  const context = await newBrowserContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(`${appOrigin}/auth/login?next=%2Fplanning`);
+    await page.waitForURL(`${appOrigin}/planning`);
+    await page.getByRole("button", { name: /Account-Menü öffnen/ }).waitFor();
+    await page.clock.install();
+    await page.evaluate("window.__samePlanningDocument = true");
+    const cleared = page.waitForResponse(response => new URL(response.url()).pathname === "/api/auth/session/clear");
+    permanentAuthDenial = true;
+    await page.clock.fastForward(60_001);
+    expect((await checkpoint("terminal polling session clear", cleared)).status()).toBe(200);
+    await page.getByRole("heading", { name: "Willkommen zurück" }).waitFor();
+    expect(await page.getByRole("button", { name: /Account-Menü öffnen/ }).count()).toBe(0);
+    expect(await page.evaluate("window.__samePlanningDocument")).toBe(true);
+    expect((await current(context)).status).toBe(401);
+  } finally { permanentAuthDenial = false; await context.close(); }
+}, 120_000);
+
+test.each([userA, userB])("a delayed terminal local clear cannot revoke replacement login %s", async replacementUser => {
+  const { context, page, expected } = await start();
+  let pending: Promise<unknown> | undefined;
+  try {
+    permanentAuthDenial = true; holdLogout = true;
+    const entered = new Promise<void>(resolve => { logoutEntered = resolve; });
+    pending = page.evaluate(async expected => {
+      const response = await fetch("/api/auth/session/clear", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ expected }) });
+      return { status: response.status, body: await response.json() };
+    }, expected);
+    pending.catch(() => undefined);
+    await checkpoint("bound local logout started", entered);
+    expect(heldLogoutScope).toBe("local");
+    permanentAuthDenial = false; loginUser = replacementUser;
+    const other = await context.newPage();
+    await other.goto(`${appOrigin}/auth/login?provider=github&next=/auth/error`);
+    await other.waitForURL(`${appOrigin}/auth/error`);
+    const replacement = (await context.cookies()).find(cookie => cookie.name === `${cookieBase}-active`)!.value;
+    expect((await current(context)).body.session.userId).toBe(replacementUser);
+    releaseLogout!();
+    expect(await pending).toMatchObject({ status: 200, body: { outcome: "cleared", session: null } });
+    expect((await context.cookies()).find(cookie => cookie.name === `${cookieBase}-active`)!.value).toBe(replacement);
+    expect((await current(context)).body.session.userId).toBe(replacementUser);
+  } finally {
+    releaseLogout?.(); permanentAuthDenial = false; holdLogout = false;
+    await pending?.catch(() => undefined); await context.close();
+  }
 }, 120_000);
 
 

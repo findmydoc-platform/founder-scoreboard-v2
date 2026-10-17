@@ -40,12 +40,22 @@ export async function browserSessionTransport(request: NextRequest, action: Sess
       return complete(json({ outcome: "unavailable", session: null }, 401));
     }
     const verified = await client.auth.getUser(session.access_token);
-    if (verified.error) return complete(json({ outcome: retryable(verified.error) ? "temporarily_unavailable" : "unavailable", session: null }, retryable(verified.error) ? 503 : 401));
-    if (!verified.data.user || verified.data.user.id !== session.user.id) return complete(json({ outcome: "superseded", session: null }, 409));
+    if (verified.error) {
+      if (retryable(verified.error)) return complete(json({ outcome: "temporarily_unavailable", session: null }, 503));
+      if (action !== "session.clear" && action !== "session.recover") return complete(json({ outcome: "unavailable", session: null }, 401));
+      if (expected.userId !== session.user.id || expected.revision !== revision(session)) return complete(json({ outcome: "superseded", session: null }, 409));
+      if (action === "session.clear") {
+        // Local invalidation needs the exact cookie binding, not a still-valid access token.
+        await client.auth.signOut({ scope: "local" });
+        context.revoke();
+        return complete(json({ outcome: "cleared", session: null }));
+      }
+    }
+    if (!verified.error && (!verified.data.user || verified.data.user.id !== session.user.id)) return complete(json({ outcome: "superseded", session: null }, 409));
     const view = (): ServerSessionView => ({ user: displayIdentity(verified.data.user!),
       userId: verified.data.user!.id, revision: revision(session), expiresAt: session.expires_at || 0 });
     if (!mutation) return complete(json({ session: view() }));
-    if (expected.userId !== verified.data.user.id) return complete(json({ outcome: "superseded", session: null }));
+    if (expected.userId !== session.user.id) return complete(json({ outcome: "superseded", session: null }));
     if (expected.revision !== revision(session)) return complete(json({ outcome: "superseded", session: view() }));
     if (action === "session.recover") {
       const refreshed = await client.auth.refreshSession();
