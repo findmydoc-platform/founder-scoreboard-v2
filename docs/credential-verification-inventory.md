@@ -34,7 +34,7 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | `src/app/api/google-chat/events` | Deliberately inert public receiver, no current signature verifier | Preserve the existing inert response; do not invent a signed Chat-event protocol | #498 |
 | `/decision-log` -> `renderWorkspacePage` -> `loadDecisionLogPageData`; feature Notion mapping/pagination | `decision-log.read` cookie reader plus fixed configured Notion transport | Same mapped readers; fixed data source/page/date order, 8-second request and original 15-second resource budget; absent app editing is N/A by user approval; retired local tables deny human access | #499 read migration; #506 database closure implemented |
 | `src/app/api/team/platform-releases/v1/releases` and release manifest model | Release ingest technical credential, manifest digest | Digest, exact ingest contract, idempotency and attribution | #501 |
-| GitHub webhook route | Concrete raw payload signature and delivery identity | Exact payload validation, deduplication and claims remain per operation | #500 source checkpoint; disposable queue parity pending |
+| GitHub webhook route | Concrete raw payload signature and delivery identity | Exact payload validation, deduplication and claims remain per operation | #500 implemented; disposable queue parity passed |
 | Cron paths using `src/lib/maintenance-auth.ts` | Dedicated Cron Bearer secret | Timing-safe secret comparison, job ownership/claim/lease and consumption | #508 |
 | `src/app/api/maintenance/*` | Dedicated maintenance secret | Technical action separation and existing maintenance claims | #509 |
 | `src/app/api/notifications/deliver`, GitHub review/comment delivery | Dedicated delivery secret, outgoing provider credentials | Delivery authentication, attempts, claim consumption and safe recovery | #510 |
@@ -193,7 +193,7 @@ Event normalization, installation/organization/repository policy and domain proc
 
 Accepted results provide only a dispatch operation for the exact persisted delivery. That operation delegates to the existing comment or planning processor and retains its independent claims, lease, finalization and uncertain-result protocols. Changes after a confirmed receipt do not retrospectively revoke that job. The public caller receives no raw Supabase client, provider credential, persistence callback or selectable adapter. The Proxy's exact public receiver bypass and Next.js after callback remain effective.
 
-Real HMAC and scripted PostgREST protocols exercise the actual route and public credential seam. Pure normalization cases retain their distinct metadata and event-policy assertions. Disposable queue/idempotency parity remains pending while the coordinated Docker filesystem is read-only; protocol tests do not establish that real parity ran.
+Real HMAC and scripted PostgREST protocols exercise the actual route and public credential seam. Pure normalization cases retain their distinct metadata and event-policy assertions. A separately guarded disposable Supabase test crosses the actual signed route and proves receipt idempotency/conflict, one terminal worker claim, active-lease exclusion, expired-lease recovery, exact lock-token finalization and anonymous write denial. Its fixture deletes only its own delivery IDs; no external GitHub request is made.
 
 ## Decision Log integration
 
