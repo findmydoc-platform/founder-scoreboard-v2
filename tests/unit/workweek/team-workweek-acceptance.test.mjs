@@ -4,8 +4,6 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 import {
   assertGoogleWorkspaceOAuthStateBinding,
   createGoogleWorkspaceOAuthState,
-  GOOGLE_WORKSPACE_CALENDAR_SCOPE,
-  validateGoogleWorkspaceTokenResponse,
   verifyGoogleWorkspaceOAuthState,
 } from "../../../src/lib/credentials/internal/google-calendar-protocol.ts";
 import {
@@ -146,16 +144,6 @@ function series(profileId, revision) {
     startMinute: 9 * 60,
     endMinute: 17 * 60,
   };
-}
-
-function controlledToken(profileId, suffix = "initial") {
-  return validateGoogleWorkspaceTokenResponse({
-    access_token: `${profileId}-${suffix}-access`,
-    refresh_token: `${profileId}-${suffix}-refresh`,
-    expires_in: 3600,
-    scope: GOOGLE_WORKSPACE_CALENDAR_SCOPE,
-    token_type: "Bearer",
-  });
 }
 
 function createProfileVaultHarness() {
@@ -302,8 +290,6 @@ test("an arbitrary mapped team completes the deterministic Google lifecycle with
       userId: `${profileId}-auth-user`,
       profileId,
     });
-    const token = controlledToken(profileId);
-
     const initialSeries = series(profileId, 1);
     adapter.loseNextCreateResponse = true;
     const firstProjection = await ensureGoogleWorkweekSeries({
