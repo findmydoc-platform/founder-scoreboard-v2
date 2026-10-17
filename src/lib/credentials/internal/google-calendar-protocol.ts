@@ -1,3 +1,4 @@
+import { GoogleWorkspaceOAuthContractError } from "../../google-calendar-errors";
 import {
   createCipheriv,
   createDecipheriv,
@@ -6,7 +7,7 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
-import type { GoogleWorkspaceConnectionStatus } from "../model/google-workspace-connection";
+import type { GoogleWorkspaceConnectionStatus } from "@/features/team-workweek/model/google-workspace-connection";
 
 export const GOOGLE_WORKSPACE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned";
 export const GOOGLE_WORKSPACE_PRIMARY_CALENDAR = "primary";
@@ -39,34 +40,6 @@ export type GoogleWorkspaceConnectionRow = Readonly<{
   last_error_class: string | null;
 }>;
 
-export class GoogleWorkspaceOAuthContractError extends Error {
-  readonly code:
-    | "invalid_configuration"
-    | "invalid_state"
-    | "expired_state"
-    | "state_binding_mismatch"
-    | "invalid_token_response"
-    | "scope_mismatch"
-    | "provider_revoked"
-    | "reconnect_required";
-
-  constructor(
-    code:
-      | "invalid_configuration"
-      | "invalid_state"
-      | "expired_state"
-      | "state_binding_mismatch"
-      | "invalid_token_response"
-      | "scope_mismatch"
-      | "provider_revoked"
-      | "reconnect_required",
-    message: string,
-  ) {
-    super(message);
-    this.name = "GoogleWorkspaceOAuthContractError";
-    this.code = code;
-  }
-}
 
 export function googleWorkspaceEncryptionKey(value: string) {
   const decoded = Buffer.from(value, "base64");
@@ -108,7 +81,7 @@ export function decryptGoogleWorkspaceToken(value: string, key: Buffer) {
 }
 
 function safeRelativeNext(value: string) {
-  if (!value.startsWith("/") || value.startsWith("//")) return "/team";
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/team";
   try {
     const parsed = new URL(value, "http://localhost");
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
@@ -175,7 +148,7 @@ export function verifyGoogleWorkspaceOAuthState(value: string, { key, now = Date
   } catch {
     throw new GoogleWorkspaceOAuthContractError("invalid_state", "Google OAuth State ist ungültig.");
   }
-  if (!payload.userId || !payload.profileId || !payload.nonce || !payload.exp || payload.exp < now) {
+  if (!payload.userId || !payload.profileId || !payload.nonce || !payload.exp || payload.exp <= now) {
     throw new GoogleWorkspaceOAuthContractError("expired_state", "Google OAuth State ist abgelaufen.");
   }
   return { ...payload, next: safeRelativeNext(payload.next) };
@@ -269,3 +242,5 @@ export function googleWorkspaceConnectionStatus(row: GoogleWorkspaceConnectionRo
     accessTokenExpiresAt: row.access_token_expires_at,
   };
 }
+
+export { GoogleWorkspaceOAuthContractError } from "../../google-calendar-errors";

@@ -2,10 +2,10 @@
 
 import { isInvalidSessionBeforeEffectBody, workspaceTransitionTarget } from "@/lib/auth-error-contract";
 import {
-  createSupabaseBrowserSessionAdapter,
+  createBrowserSessionAdapter,
   type BrowserSessionPort,
   type BrowserSessionSnapshot,
-} from "@/lib/browser-session-adapter";
+} from "@/lib/credentials/browser";
 
 type BrowserApiClientOptions = {
   devProfileId?: string;
@@ -38,7 +38,7 @@ function isMutationMethod(method: string) {
 export function createBrowserApiClient({
   devProfileId = "",
   devProfileOverrideEnabled = false,
-  sessionPort = createSupabaseBrowserSessionAdapter(),
+  sessionPort = createBrowserSessionAdapter(),
   onWorkspaceTransition = target => window.location.replace(target),
 }: BrowserApiClientOptions = {}) {
   let transitioning = false;
@@ -86,10 +86,9 @@ export function createBrowserApiClient({
     session: BrowserSessionSnapshot | null,
   ) {
     const headers = new Headers(requestInit.headers);
-    if (session?.accessToken && !headers.has("authorization")) {
-      headers.set("authorization", `Bearer ${session.accessToken}`);
-    }
-    const response = await fetch(input, { ...requestInit, headers });
+    const received = await fetch(input, { credentials: "same-origin", ...requestInit, headers });
+    const response = session && sessionPort.isCurrent && !sessionPort.isCurrent(session)
+      ? Response.json({ error: "Die Sitzung wurde ersetzt.", code: "session_superseded" }, { status: 409 }) : received;
     return {
       attachedSession: session,
       response,

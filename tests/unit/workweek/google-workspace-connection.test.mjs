@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-const core = await import("../../../src/features/team-workweek/server/google-workspace-oauth-core.ts");
+const core = await import("../../../src/lib/credentials/internal/google-calendar-protocol.ts");
 const connectionModel = await import("../../../src/features/team-workweek/model/google-workspace-connection.ts");
 
 const key = Buffer.alloc(32, 7);

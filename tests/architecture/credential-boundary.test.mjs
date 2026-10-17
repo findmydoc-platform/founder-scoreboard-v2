@@ -86,3 +86,22 @@ test("an exact legacy adapter edge does not admit another compatibility wrapper"
     assert.match(failures[0], /src\/new.ts.*internal credential adapter/);
   }, [{ from: "src/legacy.ts", to: "src/lib/credentials/internal/provider.ts" }]);
 });
+
+test("browser callers may use the public transport without exposing its private adapter", () => {
+  fixture({
+    "src/browser.ts": "import { session } from '@/lib/credentials/browser'; session();",
+    "src/lib/credentials/browser.ts": "export { session } from './internal/browser-session';",
+    "src/lib/credentials/internal/browser-session.ts": "export const session = () => fetch('/api/auth/session');",
+  }, failures => assert.deepEqual(failures, []));
+});
+
+test("the browser transport cannot re-export or acquire a server credential adapter", () => {
+  fixture({
+    "src/lib/credentials/browser.ts": "export * from './internal/provider';",
+  }, failures => assert.match(failures.join("\n"), /browser transport cannot acquire server/));
+});
+
+test("the private browser adapter cannot restore an independent Auth SDK", () => {
+  fixture({ "src/lib/credentials/internal/browser-session.ts": "import { createClient } from '@supabase/supabase-js';" },
+    failures => assert.match(failures.join("\n"), /browser transport cannot acquire authentication SDKs/));
+});

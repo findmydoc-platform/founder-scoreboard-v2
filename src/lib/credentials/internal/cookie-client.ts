@@ -20,7 +20,14 @@ function createCookieContext(jar: Jar, replace = false, request?: NextRequest) {
   const env = environment();
   const pending = new Map<string, Cookie>();
   const headers = new Headers();
-  const all = () => jar.getAll?.() || [];
+  const all = () => {
+    const values = new Map((jar.getAll?.() || []).map(cookie => [cookie.name, cookie.value]));
+    for (const cookie of pending.values()) {
+      if (cookie.options?.maxAge === 0) values.delete(cookie.name);
+      else values.set(cookie.name, cookie.value);
+    }
+    return [...values].map(([name, value]) => ({ name, value }));
+  };
   const base = env ? `sb-${new URL(env.url).hostname.split(".")[0]}-auth-token` : "sb-session-auth-token";
   const pointer = `${base}-active`;
   const existing = all().find(cookie => cookie.name === pointer)?.value;
@@ -46,6 +53,16 @@ function createCookieContext(jar: Jar, replace = false, request?: NextRequest) {
       put({ name: cookie.name, value: "", options: { path: "/", maxAge: 0, httpOnly: true, sameSite: "lax", secure } });
     }
   };
+  // Adopt existing cookies once into HttpOnly storage. Legacy refreshes never set a pointer.
+  if (legacy) {
+    const previous = all();
+    const scopedPresent = previous.some(cookie => cookie.name === scoped || cookie.name.startsWith(`${scoped}.`));
+    for (const cookie of previous) if (cookie.name === base || cookie.name.startsWith(`${base}.`) || cookie.name.startsWith(`${base}-code-verifier`)) {
+      if (!scopedPresent) put({ name: scoped + cookie.name.slice(base.length), value: cookie.value,
+        options: { path: "/", httpOnly: true, sameSite: "lax", secure, maxAge: 400*24*3600 } });
+      put({ name: cookie.name, value: "", options: { path: "/", maxAge: 0, httpOnly: true, sameSite: "lax", secure } });
+    }
+  }
   const client = env ? createServerClient(env.url, env.key, {
     cookieOptions: { name: scoped },
     global: { fetch: workspaceDataFetch },
@@ -53,18 +70,12 @@ function createCookieContext(jar: Jar, replace = false, request?: NextRequest) {
     cookies: {
       getAll() {
         if (all().some(cookie => cookie.name === revoked && cookie.value === "1")) return [];
-        const values = all();
-        if (!legacy) return values;
-        return values.filter(cookie => !cookie.name.startsWith(scoped)).map(cookie => cookie.name === base || cookie.name.startsWith(`${base}.`) || cookie.name.startsWith(`${base}-code-verifier`)
-          ? { ...cookie, name: scoped + cookie.name.slice(base.length) } : cookie);
+        return all();
       },
       setAll(changes, cacheHeaders) {
         activate();
         for (const cookie of changes) {
           put({ ...cookie, options: { ...cookie.options, httpOnly: true, secure } });
-          // Compatibility only until #492 removes browser SDK session ownership.
-          const name = base + cookie.name.slice(scoped.length);
-          put({ ...cookie, name, options: { ...cookie.options, httpOnly: false, secure } });
         }
         Object.entries(cacheHeaders || privateHeaders).forEach(([name, value]) => headers.set(name, value));
       },

@@ -10,12 +10,15 @@ function encrypted(value) {
   return [Buffer.alloc(12, 2), cipher.getAuthTag(), bytes].map(part => part.toString("base64url")).join(".");
 }
 function fixture() {
-  for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: "https://vault.example.test", SUPABASE_URL: "https://vault.example.test", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", SUPABASE_SECRET_KEY: "synthetic-service", NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon", SUPABASE_ANON_KEY:"synthetic-anon", SUPABASE_PUBLISHABLE_KEY:"synthetic-anon", REQUIRE_SUPABASE_AUTH:"true", GITHUB_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32,1).toString("base64") })) vi.stubEnv(name,value);
+  for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: "https://vault.example.test", SUPABASE_URL: "https://vault.example.test", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", SUPABASE_SECRET_KEY: "synthetic-service", NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon", SUPABASE_ANON_KEY:"synthetic-anon", SUPABASE_PUBLISHABLE_KEY:"synthetic-anon", REQUIRE_SUPABASE_AUTH:"true", GITHUB_APP_CLIENT_ID:"synthetic-client", GITHUB_APP_CLIENT_SECRET:"synthetic-client-secret", GITHUB_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32,1).toString("base64") })) vi.stubEnv(name,value);
   const row = { profile_id: "author-1", github_login: "author", github_user_id: 42, encrypted_access_token: encrypted("synthetic-user"), encrypted_refresh_token: encrypted("synthetic-refresh"), access_token_expires_at: new Date(Date.now()+3600000).toISOString(), refresh_token_expires_at: new Date(Date.now()+7200000).toISOString(), connection_id: "connection-1", credential_version: 0, refresh_claim_id: null, revoked_at: null };
   const requests = [];
-  const control={vaultReads:0,onVault:async()=>{},onUse:async()=>{},ownedTasks:new Set(["task-1","task-2"]),expectedToken:"synthetic-user",lockedAt:new Date().toISOString()};
+  const control={vaultReads:0,onVault:async()=>{},onUse:async()=>{},onClaim:async()=>{},tokenPosts:[],ownedTasks:new Set(["task-1","task-2"]),expectedToken:"synthetic-user",lockedAt:new Date().toISOString()};
   vi.stubGlobal("fetch", async (input, options) => {
     const request = new Request(input,options); const url = new URL(request.url);
+    if (url.href === "https://github.com/login/oauth/access_token") {control.tokenPosts.push(await request.text());return Response.json({access_token:"synthetic-rotated",refresh_token:"synthetic-rotated-refresh",expires_in:3600});}
+    if (url.pathname === "/rest/v1/rpc/claim_github_user_refresh") {await control.onClaim();return Response.json("claim-1");}
+    if (url.pathname === "/rest/v1/rpc/finalize_github_user_refresh") return Response.json(true);
     if (url.hostname === "api.github.com") {
       requests.push(request);
       expect(request.headers.get("authorization")).toBe(`Bearer ${control.expectedToken}`);
@@ -107,11 +110,18 @@ test("legitimate credential rotation within the issued connection remains usable
   expect(await state.send()).toMatchObject({id:77});expect(state.requests).toHaveLength(1);
 });
 test("known access-token expiry crossed during final validation cannot dispatch",async()=>{
-  const state=await claimedAccess(),expires=Date.now()+61000;let acquired=false;
+  const state=fixture(),expires=Date.now()+301000,encode=value=>Buffer.from(JSON.stringify(value)).toString("base64url");
   state.row.access_token_expires_at=new Date(expires).toISOString();
-  state.control.onUse=async()=>{acquired=true;};
+  const unsigned=`${encode({alg:"HS256",typ:"JWT"})}.${encode({iss:"https://vault.example.test/auth/v1",sub:"user-1",aud:"authenticated",role:"authenticated",session_id:"00000000-0000-4000-8000-000000000001",exp:Math.floor(Date.now()/1000)+3600})}`;
+  const token=`${unsigned}.${createHmac("sha256","synthetic-signature").update(unsigned).digest("base64url")}`;
+  const request=new NextRequest("https://application.example.test/api/tasks/task-1/attachments",{headers:{authorization:`Bearer ${token}`}});
+  const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
+  const path=".fmd-attachments/tasks/task-1/controlled.txt";
+  const access=await authorizeCredentialAction({credential:{kind:"session-request",request},action:"github.attachment.write",target:{taskId:"task-1",repository:"findmydoc-platform/management",path}});
+  let acquired=false;state.control.onUse=async()=>{acquired=true;};
   state.control.onVault=async()=>{if(acquired){vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(expires);}};
-  await expect(state.send()).rejects.toThrow();expect(state.requests).toHaveLength(0);
+  await expect(access.github.request(`https://api.github.com/repos/findmydoc-platform/management/contents/${path}`,{method:"PUT",operation:"mutation",body:{content:"aGVsbG8="}})).rejects.toThrow();
+  expect(acquired).toBe(true);expect(state.control.tokenPosts).toHaveLength(0);expect(state.requests).toHaveLength(0);
 });
 
 test("an attachment target cannot be rebound to another task after its original ownership changes",async()=>{
@@ -126,4 +136,19 @@ test("an attachment target cannot be rebound to another task after its original 
   state.control.ownedTasks.delete("task-1");input.target.taskId="task-2";
   await expect(access.github.request(`https://api.github.com/repos/findmydoc-platform/management/contents/${path}`,{method:"PUT",operation:"mutation",body:{content:"aGVsbG8="}})).rejects.toThrow();
   expect(state.requests).toHaveLength(0);
+});
+
+test("an OAuth configuration change while claiming refresh cannot send the stored credential to a new client",async()=>{
+  const state=fixture();state.row.access_token_expires_at=new Date(Date.now()-1000).toISOString();
+  state.control.onClaim=async()=>{await Promise.resolve();vi.stubEnv("GITHUB_APP_CLIENT_ID","replacement-client");};
+  const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
+  await expect(authorizeCredentialAction({credential:{kind:"github-comment-delivery",commentId:5,claimToken:"claim-1"},action:"github.comment.deliver"})).rejects.toThrow();
+  expect(state.control.tokenPosts).toHaveLength(0);expect(state.requests).toHaveLength(0);
+});
+
+test.each(["before-call","during-lookup"])("an issued user capability cannot refresh under changed OAuth configuration %s",async stage=>{
+  const state=await claimedAccess();state.row.access_token_expires_at=new Date(Date.now()-1000).toISOString();let reads=0;
+  if(stage==="before-call")vi.stubEnv("GITHUB_APP_CLIENT_ID","replacement-client");
+  else state.control.onVault=async()=>{if(++reads===2)vi.stubEnv("GITHUB_APP_CLIENT_ID","replacement-client");};
+  await expect(state.send()).rejects.toThrow();expect(state.control.tokenPosts).toHaveLength(0);expect(state.requests).toHaveLength(0);
 });

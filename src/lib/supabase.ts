@@ -1,7 +1,6 @@
-import { createBrowserClient } from "@supabase/ssr";
+import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-let browserClient: SupabaseClient | null = null;
 let serverClient: SupabaseClient | null = null;
 
 const browserSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -26,23 +25,6 @@ function runtimeSupabaseAnonKey() {
 
 export function hasSupabaseEnv() {
   return Boolean((browserSupabaseUrl && browserSupabaseAnonKey) || (runtimeSupabaseUrl() && runtimeSupabaseAnonKey()));
-}
-
-export function getBrowserSupabase() {
-  if (!browserSupabaseUrl || !browserSupabaseAnonKey) return null;
-  browserClient ??= createBrowserClient(
-    browserSupabaseUrl,
-    browserSupabaseAnonKey,
-    {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        flowType: "pkce",
-      },
-    },
-  );
-  return browserClient;
 }
 
 export function getServerSupabase() {

@@ -2,7 +2,7 @@ import ts from "typescript";
 import path from "node:path";
 
 const internalDirectory = "src/lib/credentials/internal/";
-const publicEntry = "src/lib/credentials/index.ts";
+const publicEntries = new Set(["src/lib/credentials/index.ts", "src/lib/credentials/browser.ts"]);
 
 export function verifyCredentialBoundary({ root, legacyEdges = [], protectedModules = [], legacyTransports = [], collect = false }) {
   const configPath = path.join(root, "tsconfig.json");
@@ -24,7 +24,14 @@ export function verifyCredentialBoundary({ root, legacyEdges = [], protectedModu
       const resolved = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule;
       const to = resolved && !resolved.isExternalLibraryImport ? relative(resolved.resolvedFileName) : specifier;
       const edge = `${from} -> ${to}`;
-      if (to.startsWith(internalDirectory) && from !== publicEntry && !from.startsWith(internalDirectory) && !allowed.has(edge)) {
+      if (from === "src/lib/credentials/internal/browser-session.ts" && (/^@supabase\//.test(to) || protectedModules.includes(to))) {
+        failures.push(`${edge}: browser transport cannot acquire authentication SDKs or protected server helpers`);
+      }
+      if ((from === "src/lib/credentials/browser.ts" || from === "src/lib/credentials/internal/browser-session.ts")
+        && to.startsWith(internalDirectory) && to !== "src/lib/credentials/internal/browser-session.ts") {
+        failures.push(`${edge}: browser transport cannot acquire server credential adapters`);
+      }
+      if (to.startsWith(internalDirectory) && !publicEntries.has(from) && !from.startsWith(internalDirectory) && !allowed.has(edge)) {
         failures.push(`${edge}: internal credential adapter is private`);
       }
       const sensitive = protectedModules.includes(to) || /^@supabase\//.test(to)

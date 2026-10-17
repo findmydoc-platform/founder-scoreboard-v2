@@ -15,7 +15,6 @@ import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { normalizePlanningHeaderData } from "@/lib/planning-header-data";
 import { taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
-import { hasSupabaseEnv } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData, Task } from "@/lib/types";
 
 export type PlanningBootstrapStateOptions = {
@@ -63,8 +62,6 @@ export function usePlanningBootstrapState({
   const auth = usePlanningAuth({
     authRequired,
     source,
-    safeInitialData,
-    safeInitialHeaderData,
     taskCount: data.tasks.length,
     workspace,
     initialAuthUser,
@@ -78,8 +75,8 @@ export function usePlanningBootstrapState({
     onSignedOut: clearSelectedTask,
   });
 
-  const authAvailable = hasSupabaseEnv();
-  const currentGithubLogin = String(auth.authUser?.user_metadata?.user_name || auth.authUser?.user_metadata?.preferred_username || "");
+  const authAvailable = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const currentGithubLogin = String(auth.authUser?.githubLogin || "");
   const requestContext = usePlanningRequestContext({
     source,
     profiles: data.profiles,
