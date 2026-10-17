@@ -1,18 +1,11 @@
 import Link from "next/link";
 import { AppBrand } from "@/shared/atoms/app-brand";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
-import { assertGoogleSession, requireWorkspaceAccess, workspaceAccessContext } from "@/lib/workspace-access";
+import { authorizeCredentialAction } from "@/lib/credentials";
 
 export const dynamic = "force-dynamic";
 export default async function LinkGooglePage() {
-  const client = await getServerAuthSupabase();
-  const user = client ? (await client.auth.getUser()).data.user : null;
-  const context = await workspaceAccessContext(user ? { userId: user.id } : {}).catch(() => null);
+  const { user, context, approved } = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.link-page" });
   const available = context?.mode === "linking";
-  const session = user && context?.linked && context.linkingEnforced ? (await client?.auth.getSession())?.data.session : null;
-  const approved = session && user ? await Promise.all([
-    requireWorkspaceAccess({ userId: user.id }), assertGoogleSession(session.access_token, user.id),
-  ]).then(() => true).catch(() => false) : false;
   return <main className="grid min-h-screen place-items-center bg-[#f4f7fb] px-4 py-8 text-slate-900">
     <section className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-7 shadow-xl">
       <AppBrand />

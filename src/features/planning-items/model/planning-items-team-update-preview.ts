@@ -1,11 +1,8 @@
 import type { NextRequest } from "next/server";
 import {
-  buildPlanningItemUpdatePreview,
-  createTeamRevisePlanningItems,
   parsePlanningItemPatchPayload,
   planningItemReviseCommand,
 } from "@/features/planning-items/model/planning-item-update";
-import { actorContextFromPlanningTokenAuth } from "@/features/planning-items/model/planning-actor-context-server";
 import {
   handlePlanningItemsRequest,
   planningItemsError,
@@ -13,7 +10,6 @@ import {
 } from "@/features/planning-items/model/planning-items-route";
 import { previewPlanningItemGitHubSync } from "@/features/planning-items/model/planning-items-github-sync-preview";
 import { isStrategicPlanningItemType } from "@/features/planning-items/model/planning-items-contract";
-import { buildTeamPlanningDependencyPreview } from "@/features/planning-items/model/planning-items-team-dependency";
 
 export async function handleTeamPlanningItemUpdatePreview(
   request: NextRequest,
@@ -26,13 +22,11 @@ export async function handleTeamPlanningItemUpdatePreview(
   };
   return handlePlanningItemsRequest(request, {
     operation: "planningItems.update",
+    itemId: (await context.params).id.trim(),
     mode: "preview",
-    requiredScopes: ["write:planning-items:update"],
-    resolveAdditionalScopes: async () => {
+    requiresGitHubSync: async () => {
       const payload = await parseRequest();
-      return payload.ok && payload.githubSyncMode
-        ? ["write:planning-items:github-sync"]
-        : [];
+      return Boolean(payload.ok && payload.githubSyncMode);
     },
   }, "Planning-Items-Update konnte nicht geprüft werden.", async (permission) => {
     const parsed = await parseRequest();
@@ -41,45 +35,25 @@ export async function handleTeamPlanningItemUpdatePreview(
     if (!itemId) return planningItemsError("Planungselement-ID ist erforderlich.", 400);
 
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
-
-    const actor = actorContextFromPlanningTokenAuth({
-      ok: true,
-      profile: { id: permission.profile.id, platformRole: permission.profile.platformRole },
-      tokenId: permission.tokenId,
-      scopes: permission.scopes,
-    });
-    if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
     if (parsed.dependency) {
-      const result = await buildTeamPlanningDependencyPreview({
-        actor: actor.actor,
-        itemId,
+      const result = await permission.planningItems.buildDependencyPreview({
         expectedUpdatedAt: parsed.expectedUpdatedAt,
         dependency: parsed.dependency,
-        supabase: permission.supabase,
       });
       if (!result.ok) return planningItemsError(result.error, result.status);
       return planningItemsJson({ ok: true, valid: true, ...result.preview });
     }
 
-    const result = await buildPlanningItemUpdatePreview({
-      actor: permission.profile,
-      itemId,
+    const result = await permission.planningItems.buildUpdatePreview({
       parsed,
-      supabase: permission.supabase,
     });
     if (!result.ok) return planningItemsError(result.error, result.status);
 
     const { preview } = result;
-    const reviseResult = await createTeamRevisePlanningItems({
-      supabase: permission.supabase,
-      actor: actor.actor,
-      tokenId: permission.tokenId,
-      itemId,
+    const reviseResult = await permission.planningItems.revise({
       parsed,
       preparedPreview: preview,
-    }).run({
-      actor: actor.actor,
-      mode: "preview",
+    }, {
       command: planningItemReviseCommand(itemId, preview.itemType, parsed.expectedUpdatedAt, parsed.raw),
     });
     if (!reviseResult.ok && reviseResult.error.code !== "invalidCommand") {

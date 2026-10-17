@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { buildPlanningItemsContext } from "@/features/planning-items/model/planning-items-context";
 import {
   handlePlanningItemsRequest,
   planningItemsJson,
@@ -13,11 +12,10 @@ export async function handleTeamPlanningItemsContext(
     {
       operation: "planningContext.read",
       mode: "read",
-      requiredScopes: ["read:planning-context"],
     },
     "Planning-Kontext konnte nicht geladen werden.",
     async (permission) => {
-      const context = await buildPlanningItemsContext(permission.supabase, permission.profile);
+      const context = await permission.planningItems.readContext();
       return planningItemsJson({
         ok: true,
         context,

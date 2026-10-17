@@ -1,7 +1,10 @@
+vi.mock("server-only", () => ({}));
+vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], get: () => undefined, set: () => {} }) }));
 import { test, expect, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function startWith(identities, { access = { subject: "google-subject" }, completeError = null, linkingEnforced = false } = {}) {
+  vi.resetModules();
   const calls = [];
   const linkIdentity = vi.fn(async () => ({ data: { url: "https://accounts.google.com/authorize" }, error: null }));
   const signOut = vi.fn(async () => ({}));
@@ -23,7 +26,7 @@ async function startWith(identities, { access = { subject: "google-subject" }, c
       },
     }) },
     "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu" },
-    "@/lib/workspace-data-fetch": { sha256: value => value },
+    "@/lib/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
     "@/lib/workspace-access": { requireWorkspaceAccess, workspaceAccessContext: async () => ({ linkingEnforced }) },
   });
   const url = "https://founder-ops.findmydoc.eu/auth/google-link/start";

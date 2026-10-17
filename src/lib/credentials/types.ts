@@ -126,3 +126,17 @@ export type GitHubAppOperationalStatus = Readonly<{
   nextStep: string;
 }>;
 
+export type PersonalPlanningCredentialInput = {
+  credential: { kind: "personal-planning-token"; request: NextRequest };
+  action: "planning-items.access";
+  operation: "planningContext.read" | "planningItems.create" | "planningItems.update" | "planningItems.deleteEmpty" | "planningItems.githubSync";
+  mode: "read" | "preview" | "commit";
+  itemId?: string;
+};
+export type PersonalPlanningCredentialResult = Awaited<ReturnType<typeof import("./internal/personal-planning").authorizePersonalPlanning>>;
+
+export type PersonalPlanningTokenManagementInput = {
+  credential: { kind: "session-request"; request: NextRequest };
+  action: "planning-items.tokens.manage";
+};
+export type PersonalPlanningTokenManagementResult = Awaited<ReturnType<typeof import("./internal/personal-planning").authorizePersonalPlanningTokenManagement>>;

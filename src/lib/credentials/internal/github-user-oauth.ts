@@ -1,5 +1,5 @@
 import "server-only";
-import { getServerPlanningAuth } from "../../planning-auth-server";
+import { serverPlanningAuth } from "./server-session-view";
 import { safeRelativeNext } from "../../auth-redirect";
 import type { GitHubConnectionInput, GitHubConnectionResult } from "../types";
 import { createGitHubAppOAuthState, githubAppAuthorizationUrl, exchangeGitHubAppCode, githubUserForAppUserToken,
@@ -10,7 +10,7 @@ export async function authorizeGitHubConnection(input:GitHubConnectionInput):Pro
   const request=input.credential.request;
   const callback=new URL("/api/github-app/callback",request.url).toString();
   if(input.action==="github.connection.start") {
-    const auth=await getServerPlanningAuth();
+    const auth=await serverPlanningAuth();
     if(!auth.ok || !auth.profile) throw new Error("Anmeldung erforderlich.");
     const next=safeRelativeNext(request.nextUrl.searchParams.get("next"));
     const state=createGitHubAppOAuthState({userId:auth.user.id,profileId:auth.profile.id,next});
@@ -20,7 +20,7 @@ export async function authorizeGitHubConnection(input:GitHubConnectionInput):Pro
   const raw=request.nextUrl.searchParams.get("state") || "";
   if(!code || !raw) throw new Error("GitHub Callback ist unvollständig.");
   const state=verifyGitHubAppOAuthState(raw);
-  const auth=await getServerPlanningAuth();
+  const auth=await serverPlanningAuth();
   if(!auth.ok || !auth.profile || auth.user.id!==state.userId || auth.profile.id!==state.profileId) throw new Error("GitHub-Verbindung passt nicht zur angemeldeten Person.");
   const expected=await oauthConnectionSnapshot(auth.profile);
   const token=await exchangeGitHubAppCode(code,callback);

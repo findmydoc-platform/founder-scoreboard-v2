@@ -39,7 +39,9 @@ test("Preview rejects a nonmember and fails closed when Directory is unavailable
 
 test("Preview reports the configured login mode instead of hiding login", async () => {
   vi.stubEnv("VERCEL_ENV", "preview");
+  vi.resetModules();
   const route = await importTestModule("src/app/api/auth/login-mode/route.ts", {
+    "server-only": {},
     "@/lib/workspace-access": { workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true }) },
   });
   const response = await route.GET();
@@ -54,12 +56,7 @@ async function linkingPage(context = {}, user = { id: "user-1" }) {
   const page = await importTestModule("src/app/auth/link-google/page.tsx", {
     "next/link": { default: ({ children, ...props }) => createElement("a", props, children) },
     "@/shared/atoms/app-brand": { AppBrand: () => null },
-    "@/lib/supabase-server": {
-      getServerAuthSupabase: async () => ({ auth: { getUser: async () => ({ data: { user } }) } }),
-    },
-    "@/lib/workspace-access": {
-      workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true, linked: false, profileId: "founder", ...context }),
-    },
+    "@/lib/credentials": { authorizeCredentialAction: async () => ({ user, approved: false, context: { mode: "linking", linkingEnforced: true, linked: false, profileId: "founder", ...context } }) },
   });
   return renderToStaticMarkup(await page.default());
 }

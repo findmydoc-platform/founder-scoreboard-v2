@@ -34,8 +34,15 @@ async function loadRoute(authResult) {
         },
       },
       "@/features/planning-items/model/planning-items-contract": contract,
-      "@/features/planning-items/model/planning-items-token": {
-        requireTeamPlanningItemScope: async () => authResult,
+      "@/lib/credentials": {
+        authorizeCredentialAction: async input => {
+          if (!authResult.ok) return authResult;
+          const base = input.operation === "planningContext.read" ? "read:planning-context" : input.operation === "planningItems.create" ? "write:planning-items:create" : "write:planning-items:update";
+          return { ...authResult, requiredScopes: [base], missingScopes: authResult.scopes.includes(base) ? [] : [base], planningItems: { requireGitHubSync: () => {
+            const requiredScopes = contract.TEAM_PLANNING_ITEM_SCOPES.filter(scope => scope === base || scope === "write:planning-items:github-sync");
+            return { requiredScopes, missingScopes: requiredScopes.filter(scope => !authResult.scopes.includes(scope)) };
+          } } };
+        },
       },
     },
   );
@@ -96,9 +103,9 @@ test("Planning API returns a structured denied preview before calling the handle
       operation: "planningItems.update",
       mode: "preview",
       requiredScopes: ["write:planning-items:update"],
-      resolveAdditionalScopes: async () => {
+      requiresGitHubSync: async () => {
         payloadChecks += 1;
-        return ["write:planning-items:github-sync"];
+        return true;
       },
     },
     "fallback",
@@ -140,9 +147,9 @@ test("Planning API denies the base scope before resolving payload-dependent scop
       operation: "planningItems.create",
       mode: "preview",
       requiredScopes: ["write:planning-items:create"],
-      resolveAdditionalScopes: async () => {
+      requiresGitHubSync: async () => {
         payloadChecks += 1;
-        return ["write:planning-items:github-sync"];
+        return true;
       },
     },
     "fallback",

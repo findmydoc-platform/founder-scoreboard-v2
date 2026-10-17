@@ -1,9 +1,7 @@
 import { auditRequestMetadata } from "@/lib/api-input";
 import { after, type NextRequest } from "next/server";
 import { isUuid } from "@/features/planning-items/model/planning-items-contract";
-import { actorContextFromPlanningTokenAuth } from "@/features/planning-items/model/planning-actor-context-server";
 import {
-  createEmptyEpicDeletePlanningItems,
   emptyEpicDeleteCommand,
   emptyEpicDeleteError,
   emptyEpicDeleteTeamItem,
@@ -21,11 +19,6 @@ import {
   planningItemsTokenInactiveError,
 } from "@/features/planning-items/model/planning-items-route";
 import {
-  dispatchAndLoadPlanningGitHubProjections,
-} from "@/features/planning-items/model/planning-items-github-projection";
-import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
-import {
-  commitTeamPlanningItemUpdate,
   type TeamPlanningItemUpdateTransaction,
 } from "@/features/planning-items/model/planning-items-team-update";
 
@@ -78,13 +71,11 @@ export async function handleTeamPlanningItemUpdate(
   };
   return handlePlanningItemsRequest(request, {
     operation: "planningItems.update",
+    itemId: (await context.params).id.trim(),
     mode: "commit",
-    requiredScopes: ["write:planning-items:update"],
-    resolveAdditionalScopes: async () => {
+    requiresGitHubSync: async () => {
       const payload = await parseRequest();
-      return payload.ok && payload.githubSyncMode
-        ? ["write:planning-items:github-sync"]
-        : [];
+      return Boolean(payload.ok && payload.githubSyncMode);
     },
   }, "Planning-Items-Update konnte nicht gespeichert werden.", async (permission) => {
     const parsed = await parseRequest();
@@ -95,26 +86,12 @@ export async function handleTeamPlanningItemUpdate(
     const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
     if (!isUuid(idempotencyKey)) return planningItemsError("Gültiger UUID-Idempotency-Key ist erforderlich.", 400);
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
-
-    const actor = actorContextFromPlanningTokenAuth({
-      ok: true,
-      profile: { id: permission.profile.id, platformRole: permission.profile.platformRole },
-      tokenId: permission.tokenId,
-      scopes: permission.scopes,
-    });
-    if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
     const metadata = auditRequestMetadata(request);
-    const result = await commitTeamPlanningItemUpdate({
-      actor: actor.actor,
-      itemId,
+    const result = await permission.planningItems.commitUpdate({
       parsed,
       idempotencyKey,
       requestMetadata: { requestIp: metadata.request_ip || undefined, userAgent: metadata.user_agent || undefined },
-    }, {
-      supabase: permission.supabase,
-      dispatchGitHubProjections: dispatchAndLoadPlanningGitHubProjections,
-      scheduleAfter: after,
-    });
+    }, after);
     if (!result.ok) {
       if (result.code === "TOKEN_INACTIVE") return planningItemsTokenInactiveError();
       if (result.details) return planningItemsJson({ ok: false, error: result.error, ...result.details }, result.status);
@@ -132,8 +109,8 @@ export async function handleTeamPlanningItemDelete(
     request,
     {
       operation: "planningItems.deleteEmpty",
+      itemId: (await context.params).id.trim(),
       mode: "commit",
-      requiredScopes: ["write:planning-items:delete-empty"],
     },
     "Planning-Items-Löschung konnte nicht gespeichert werden.",
     async (permission) => {
@@ -150,35 +127,17 @@ export async function handleTeamPlanningItemDelete(
       const parsed = parseEmptyEpicDeletePayload(await request.json().catch(() => null));
       if (!parsed.ok) return planningItemsError(parsed.error, 400);
 
-      const replay = await permission.supabase
-        .from("team_planning_item_delete_requests")
-        .select("request_hash,response,contract_version")
-        .eq("token_id", permission.tokenId)
-        .eq("idempotency_key", idempotencyKey)
-        .maybeSingle();
+      const replay = await permission.planningItems.readDeleteReplay(idempotencyKey);
       if (replay.error) throw Object.assign(new Error(replay.error.message), { code: replay.error.code });
       const stored = replay.data as StoredDeleteRequest | null;
       if (stored && Number(stored.contract_version || 1) < 2) {
         return planningItemsError("Idempotency-Key gehört zu einem älteren API-Vertrag.", 409);
       }
-      if (!stored && !await hasCanonicalTeamPlanningItem(permission.supabase, itemId)) {
+      if (!stored && !await permission.planningItems.hasCanonicalItem()) {
         return planningItemsError("Planungselement wurde nicht gefunden.", 404);
       }
-
-      const actor = actorContextFromPlanningTokenAuth({
-        ok: true,
-        profile: {
-          id: permission.profile.id,
-          platformRole: permission.profile.platformRole,
-        },
-        tokenId: permission.tokenId,
-        scopes: permission.scopes,
-      });
-      if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
       const metadata = auditRequestMetadata(request);
-      const result = await createEmptyEpicDeletePlanningItems(permission.supabase).run({
-        actor: actor.actor,
-        mode: "commit",
+      const result = await permission.planningItems.delete({
         command: emptyEpicDeleteCommand(itemId, parsed.expectedUpdatedAt),
         idempotencyKey,
         requestMetadata: {
