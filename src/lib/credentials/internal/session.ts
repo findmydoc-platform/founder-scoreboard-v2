@@ -1,4 +1,6 @@
 import "server-only";
+import { resolveSessionRequest } from "./session-request";
+import type { CredentialAction } from "../types";
 import { createClient, isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { createHash, randomBytes } from "node:crypto";
 import { WorkspaceAccessError, workspaceIdentity } from "../../workspace-identity";
@@ -106,21 +108,22 @@ function boundDataFetch(binding: SessionBinding): typeof fetch {
   };
 }
 
-type SessionAction = "calendar.read" | "workweek.private.read" | "workweek.private.write" | "session.planning" | "session.home";
+type SessionAction = CredentialAction | "calendar.read" | "workweek.private.read" | "workweek.private.write" | "session.planning" | "session.home";
 type SessionDataResult = Extract<CalendarCredentialResult, { ok: false }> | {
   ok: true; profile: Extract<CalendarCredentialResult, { ok: true }>["profile"]; user: User;
   data: SupabaseClient; readOwnerConflict(versionId: string): Promise<{ data: { resolution_version_id: string } | null; error: { message: string } | null }>;
 };
 
 export async function authorizeSessionData(request: NextRequest, action: SessionAction, startedAt = Date.now()): Promise<SessionDataResult> {
-  const header = request.headers.get("authorization");
-  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  const transport = resolveSessionRequest(request);
+  if (transport.denial) return transport.denial;
+  const token = transport.token;
   if (!token) return { ok: false, status: 401, error: "Anmeldung erforderlich." };
   try {
     const environment = clients();
     const verified = await environment.auth.auth.getClaims(token);
     if (verified.error) {
-      if (isAuthRetryableFetchError(verified.error) || (verified.error.status || 0) >= 500) throw unavailable();
+      if (isAuthRetryableFetchError(verified.error) || (verified.error.status || 0) >= 500) return { ok: false, status: 503, error: "Anmeldung konnte vorübergehend nicht geprüft werden." };
       return invalidSession();
     }
     const claims = verified.data?.claims;
@@ -133,7 +136,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     // Signature validity does not defer mutable account validity, profile binding or session admission.
     const user = await environment.auth.auth.getUser(token);
     if (user.error) {
-      if (isAuthRetryableFetchError(user.error) || (user.error.status || 0) >= 500) throw unavailable();
+      if (isAuthRetryableFetchError(user.error) || (user.error.status || 0) >= 500) return { ok: false, status: 503, error: "Anmeldung konnte vorübergehend nicht geprüft werden." };
       return invalidSession();
     }
     if (user.data.user?.id !== claims.sub) return invalidSession();
