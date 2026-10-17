@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
 
   if (error) return apiError(error.message, 500);
 
-  const status = googleChatDeliveryStatus();
+  const status = await googleChatDeliveryStatus();
   return NextResponse.json({
     ok: true,
     googleChat: status,
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => ({}))) as DeliveryRequestPayload;
   const limit = safeLimit(payload.limit);
   let requestedEventIds = safeEventIds(payload.eventIds);
-  const deliveryStatus = googleChatDeliveryStatus();
+  const deliveryStatus = await googleChatDeliveryStatus();
 
   if (!deliveryStatus.ready) {
     const missing = deliveryStatus.webhookConfigured || deliveryStatus.apiConfigured

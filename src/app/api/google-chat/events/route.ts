@@ -23,8 +23,8 @@ function safeString(value: unknown, fallback = "unknown") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
-function routeStatus() {
-  const status = googleChatDeliveryStatus();
+async function routeStatus() {
+  const status = await googleChatDeliveryStatus();
   return {
     endpoint,
     ready: status.ready,
@@ -35,7 +35,7 @@ function routeStatus() {
 }
 
 export async function GET() {
-  const status = routeStatus();
+  const status = await routeStatus();
 
   return NextResponse.json({
     ok: true,
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     return apiError("Ungültiges Google-Chat-Event.", 400);
   }
 
-  const status = routeStatus();
+  const status = await routeStatus();
   const eventType = safeString(payload.type);
 
   if (eventType === "MESSAGE") {
