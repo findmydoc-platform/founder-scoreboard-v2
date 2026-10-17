@@ -30,7 +30,7 @@ beforeEach(() => {
     set: (name, value) => values.set(name, value), delete: name => values.delete(name) };
   for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: authOrigin, SUPABASE_URL: authOrigin,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_ANON_KEY: "synthetic-anon",
-    SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", APP_URL: appOrigin })) vi.stubEnv(name, value);
+    SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", APP_URL: appOrigin, VERCEL_ENV: "preview" })) vi.stubEnv(name, value);
   network = async (input, init) => {
     const req = new Request(input, init); const url = new URL(req.url);
     if (url.origin !== authOrigin) throw new Error("Unexpected provider");

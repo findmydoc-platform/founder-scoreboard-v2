@@ -19,6 +19,8 @@ export type {
   GitHubInstallationCapability,
 } from "./types";
 
+export type { ServerSessionView, SessionLinkPageState } from "./session-types";
+
 export function authorizeCredentialAction(input: SessionPlanningInput): Promise<ServerPlanningAuth>;
 export function authorizeCredentialAction(input: SessionHomeInput): Promise<AppWorkspace>;
 export function authorizeCredentialAction(input: SessionLinkPageInput): Promise<SessionLinkPageState>;
@@ -48,5 +50,5 @@ export function authorizeCredentialAction(input: CredentialActionInput | Calenda
   }
   if (input.action === "workweek.private.read" || input.action === "workweek.private.write") return authorizePrivateDraft(input as PrivateDraftCredentialInput);
   if (input.action === "calendar.read") return authorizeCalendar(input.credential.request);
-  return authorizeLegacySession(input);
+  return authorizeLegacySession(input as CredentialActionInput);
 }
