@@ -45,7 +45,7 @@ export type GitHubInstallationCapability = Readonly<{
 export type GitHubInstallationAction = "github.projection.apply" | "github.lifecycle.apply" | "github.issue.read" | "github.project.read" | "github.team.read" | "github.asset.read";
 export type GitHubInstallationInput = {
   [Action in GitHubInstallationAction]: {
-    credential: { kind: "github-installation" } | { kind: "github-claimed-job"; claim: GitHubJobContext };
+    credential: Action extends "github.lifecycle.apply" ? { kind: "github-claimed-job"; claim: GitHubJobContext } : { kind: "github-installation" } | { kind: "github-claimed-job"; claim: GitHubJobContext };
     action: Action;
     target: { repositories: readonly string[]; organization?: string; assetUrl?: string };
   }
