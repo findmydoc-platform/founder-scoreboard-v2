@@ -1,3 +1,5 @@
+import { subIssueParentQuery } from "../github-graphql-documents";
+import type { GitHubResourceCredential } from "../github-http";
 import "server-only";
 
 import { listGitHubIssueBlockedBy } from "../github";
@@ -26,21 +28,6 @@ export type GitHubSubIssueParentObservation = Readonly<{
   issueNumber: number;
 }> | null;
 
-const subIssueParentQuery = `query FounderOpsInboundSubIssueParent(
-  $owner: String!,
-  $repo: String!,
-  $number: Int!
-) {
-  repository(owner: $owner, name: $repo) {
-    issue(number: $number) {
-      id
-      number
-      repository { nameWithOwner }
-      parent { number repository { nameWithOwner } }
-    }
-  }
-}`;
-
 export async function loadGitHubSubIssueParentObservation({
   childRepositoryFullName,
   childIssueNumber,
@@ -50,7 +37,7 @@ export async function loadGitHubSubIssueParentObservation({
   childRepositoryFullName: string;
   childIssueNumber: number;
   childIssueNodeId: string;
-  token: string;
+  token: GitHubResourceCredential;
 }): Promise<GitHubSubIssueParentObservation> {
   const childRepository = splitGitHubRepository(childRepositoryFullName);
   const data = await githubGraphql<SubIssueParentData>({
@@ -94,7 +81,7 @@ export async function loadGitHubDependencyObservation({
   blockedIssueNumber: number;
   blockingRepositoryFullName: string;
   blockingIssueNumber: number;
-  token: string;
+  token: GitHubResourceCredential;
 }) {
   const blockedRepository = splitGitHubRepository(blockedRepositoryFullName);
   const blockingRepository = splitGitHubRepository(blockingRepositoryFullName);

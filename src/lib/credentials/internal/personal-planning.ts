@@ -29,7 +29,7 @@ const forbidden = (): never => { throw Object.assign(new Error("Planning-API-Ber
 export async function authorizePersonalPlanning(input: PersonalPlanningCredentialInput) {
   const { operation, mode } = input;
   const scope = operationScopes[operation];
-  if (!scope || (operation === "planningContext.read" ? mode !== "read" : mode === "read")
+  if (input.action !== "planning-items.access" || !["read", "preview", "commit"].includes(mode) || typeof scope !== "string" || (operation === "planningContext.read" ? mode !== "read" : mode === "read")
     || (operation === "planningItems.githubSync" && mode !== "commit")) {
     return { ok: false, status: 500, code: "AUTHORIZATION_UNAVAILABLE", error: "Planning-API-Berechtigung konnte nicht geprüft werden." } as Failure;
   }

@@ -45,6 +45,32 @@ The private draft GET and POST use `workweek.private.read` and `workweek.private
 | `src/lib/local-development-auth.ts`, local-login route and dev profile override | Development-only simulated profile | Existing host/environment gate; deny deployed entry points | #489, #491 |
 | `src/app/api/health/route.ts` | Existing public readiness probe using server database access | Return readiness/configuration booleans only, without granting a human actor or returning credentials | #499, #505 |
 
+## GitHub installation migration
+
+Issue #495 moves App JWT signing, installation access acquisition, expiry handling, process-local reuse and installation operational status into the private credential adapter. The existing runtime private-key file import is confined to that adapter. The public entry returns a constrained installation transport for a semantic action and explicit repository target, never a token. Configuration fingerprints bind app identity, installation ID and key configuration; repository bindings distinguish cache entries. Reuse ends five minutes before the provider expiry. Concurrent misses share one acquisition, including the same sanitized failure. Cache entries are bounded and resource mutations are never replayed after a credential or network failure.
+
+All nine production acquisition families now use the public entry:
+
+| Actual caller | Action and continuing resource ownership |
+| --- | --- |
+| Task sync route | `github.projection.apply`; `projectTaskToGitHub` retains preflight, lock, locked reload, CAS, hard and warning projections, persistence and typed cleanup |
+| Planning Items GitHub execution | `github.projection.apply`; preflighted task projections remain serial |
+| Planning trash lifecycle | `github.lifecycle.apply`; existing durable claims, desired-state issue updates and comment markers remain in the workflow |
+| Planning webhook processing | `github.issue.read`; current issue, relationship and Project observations remain resource adapters |
+| Issue-comment webhook processing | `github.issue.read`; explicit delivered repository and received issue identity remain authoritative |
+| Task GitHub comments route | `github.issue.read`; explicit task repository, evidence permission and comment import rules remain authoritative |
+| GitHub Project administration route | Separate `github.project.read` and `github.team.read`; administrator activation and transaction authority remain independent |
+| Configured mention-team resolver | `github.team.read`; organization target and safe fallback remain explicit |
+| GitHub asset relay | `github.asset.read`; exact initial URL, host allowlist, manual redirects, redirect limit and image response check remain effective |
+
+The GitHub status route and administration read model obtain safe operational status through the same entry. Status makes a bounded read and compares the returned installation ID with configuration. Its output contains no provider diagnostics or key paths. A usable installation never grants a FounderOps role or a personal-token action. The user-token vault, OAuth connection and user-authored comment, review and attachment credentials remain separate for #496.
+
+`github-http.ts` remains the only API transport. Resource functions accept the opaque installation capability while retaining legacy user credentials until #496. The capability checks HTTPS API origin, allowed repository/search targets, semantic read/write limits and exact existing GraphQL documents before dispatch. Static documents are shared with their resource adapters; domain interpretation and orchestration stay outside credentials. Repository variables are checked against the target; GitHub remains authoritative for granted provider permissions, opaque node IDs and Project visibility. Installation issuance requests only the target repository names. It preserves configured provider grants rather than requiring new grants.
+
+Asset downloads stay outside GitHub JSON API semantics. Their private adapter checks every redirect and sends installation Authorization only to `github.com`, never to a CDN. The route receives a response, never a credential. The dependency policy removes migrated legacy edges and the route's network allowance. No broad library or filesystem exception is added.
+
+Observable coverage uses the public entry and real comments, native relationship and archive resource workflows with synthetic GitHub responses. It covers warm and expiring access, concurrent acquisition, changed installation, denied target, provider denial/unavailability, read-only access, exact GraphQL restrictions, private diagnostics and ambiguous mutation success followed by resource reconciliation. Existing projection, serial execution and HTTP metadata suites retain their contracts. No production provider or database is needed for this slice. These tests measure controlled protocol behavior and make no claim about production request duration.
+
 ## Executable dependency rule
 
 `pnpm verify:credentials` runs compiler-resolved fixture projects and the repository check. `pnpm build` also runs the repository check before Next.js compilation. Resolution honors `@/` and relative imports. The check visits imports, re-exports, namespace imports, literal dynamic imports, import-equals and CommonJS. New helpers cannot indirectly expose an internal adapter or a protected legacy entry because the helper's own edge fails. Non-literal runtime loads fail closed. Type-only imports remain usable.

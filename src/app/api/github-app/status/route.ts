@@ -1,6 +1,7 @@
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiContext } from "@/lib/api-response";
-import { getGitHubAppOperationalStatus, getGitHubUserConnectionStatus } from "@/lib/github-app";
+import { getGitHubUserConnectionStatus } from "@/lib/github-app";
 import { countWaitingGitHubCommentsForAuthor } from "@/lib/github-comment-delivery";
 import { requireTeamMember } from "@/lib/authz";
 
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     apiContext.supabase,
     apiContext.permission.profile?.id || "",
   ).catch(() => 0);
-  const installationStatus = await getGitHubAppOperationalStatus();
+  const installationStatus = await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.installation.status" });
 
   return NextResponse.json({
     installation: { available: installationStatus.available },

@@ -6,7 +6,7 @@ test("immediate lifecycle drains claim only the caller-provided root task set", 
   const calls = [];
   const worker = await importTestModule("src/lib/planning-github-lifecycle.ts", {
     "server-only": {},
-    "./github-app": { getGitHubAppInstallationToken: async () => "token" },
+    "./credentials": { authorizeCredentialAction: async () => ({ github: "token" }) },
     "./planning-github-lifecycle-github": {
       closeGitHubIssueNotPlanned: async () => {},
       reopenGitHubIssueForPlanning: async () => {},
@@ -41,7 +41,7 @@ test("maintenance lifecycle drains retain the global claim contract", async () =
   const calls = [];
   const worker = await importTestModule("src/lib/planning-github-lifecycle.ts", {
     "server-only": {},
-    "./github-app": { getGitHubAppInstallationToken: async () => "token" },
+    "./credentials": { authorizeCredentialAction: async () => ({ github: "token" }) },
     "./planning-github-lifecycle-github": {
       closeGitHubIssueNotPlanned: async () => {},
       reopenGitHubIssueForPlanning: async () => {},

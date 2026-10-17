@@ -55,8 +55,8 @@ test("GitHub mention-team validation rejects invalid slugs and muted teams", asy
 test("configured mention teams fall back when GitHub no longer accepts the team", async () => {
   const valid = await importTestModule("src/lib/github-mention-team-config.ts", {
     "server-only": {},
-    "./github-app": {
-      getGitHubAppInstallationToken: async () => "installation-token",
+    "./credentials": {
+      authorizeCredentialAction: async () => ({ github: "installation-token" }),
     },
     "./github-mention-team": {
       validateGitHubMentionTeam: async () => ({ slug: "founderops" }),
@@ -69,8 +69,8 @@ test("configured mention teams fall back when GitHub no longer accepts the team"
 
   const invalid = await importTestModule("src/lib/github-mention-team-config.ts", {
     "server-only": {},
-    "./github-app": {
-      getGitHubAppInstallationToken: async () => "installation-token",
+    "./credentials": {
+      authorizeCredentialAction: async () => ({ github: "installation-token" }),
     },
     "./github-mention-team": {
       validateGitHubMentionTeam: async () => {

@@ -1,25 +1,40 @@
-import { authorizePersonalPlanning, authorizePersonalPlanningTokenManagement } from "./internal/personal-planning";
-import type { PersonalPlanningCredentialInput, PersonalPlanningCredentialResult, PersonalPlanningTokenManagementInput, PersonalPlanningTokenManagementResult } from "./types";
-import { authorizePrivateDraft } from "./internal/private-draft";
-import type { PrivateDraftCredentialInput, PrivateDraftCredentialResult, PrivateDraftReadResult, PrivateDraftWriteResult } from "./types";
 import "server-only";
+import { authorizePersonalPlanning, authorizePersonalPlanningTokenManagement } from "./internal/personal-planning";
 import { authorizeCalendar } from "./internal/session";
-import type { CalendarCredentialInput, CalendarCredentialResult } from "./types";
+import { authorizePrivateDraft } from "./internal/private-draft";
 import { authorizeLegacySession } from "./internal/legacy-session";
-import type { CredentialActionInput, CredentialActionResult } from "./types";
+import { authorizeGitHubInstallation, installationOperationalStatus } from "./internal/github-installation";
+import type {
+  CalendarCredentialInput, CalendarCredentialResult, CredentialActionInput, CredentialActionResult,
+  PrivateDraftCredentialInput, PrivateDraftCredentialResult, PrivateDraftReadResult, PrivateDraftWriteResult,
+  GitHubInstallationInput, GitHubInstallationResult, GitHubInstallationStatusInput,
+  PersonalPlanningCredentialInput, PersonalPlanningCredentialResult, PersonalPlanningTokenManagementInput, PersonalPlanningTokenManagementResult,
+} from "./types";
+import type { GitHubAppOperationalStatus } from "../github-app";
 
-export type { CredentialAction, CredentialActionInput, CredentialActionResult, CalendarCredentialInput, CalendarCredentialResult, CalendarReadCapability } from "./types";
+export type {
+  CredentialAction, CredentialActionInput, CredentialActionResult,
+  CalendarCredentialInput, CalendarCredentialResult, CalendarReadCapability,
+  GitHubInstallationCapability,
+} from "./types";
 
 export function authorizeCredentialAction(input: PersonalPlanningTokenManagementInput): Promise<PersonalPlanningTokenManagementResult>;
 export function authorizeCredentialAction(input: PersonalPlanningCredentialInput): Promise<PersonalPlanningCredentialResult>;
+export function authorizeCredentialAction(input: GitHubInstallationInput): Promise<GitHubInstallationResult>;
+export function authorizeCredentialAction(input: GitHubInstallationStatusInput): Promise<GitHubAppOperationalStatus>;
 export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {action: "workweek.private.read"}): Promise<PrivateDraftReadResult>;
 export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {action: "workweek.private.write"}): Promise<PrivateDraftWriteResult>;
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
-export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult> {
+export function authorizeCredentialAction(input: CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput): Promise<CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult> {
+  if (input.action.startsWith("github.") && input.credential.kind !== "github-installation") {
+    return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
+  }
+  if (input.action === "github.projection.apply" || input.action === "github.lifecycle.apply" || input.action === "github.issue.read" || input.action === "github.project.read" || input.action === "github.team.read" || input.action === "github.asset.read") return authorizeGitHubInstallation(input);
+  if (input.action === "github.installation.status") return installationOperationalStatus();
   if (input.credential.kind === "personal-planning-token") return authorizePersonalPlanning(input as PersonalPlanningCredentialInput);
   if (input.credential.kind !== "session-request") {
-    return Promise.resolve({ ok: false, status: 401, error: "Anmeldung erforderlich." });
+    return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
   }
   if (input.action === "planning-items.tokens.manage") return authorizePersonalPlanningTokenManagement(input as PersonalPlanningTokenManagementInput);
   if (input.action === "workweek.private.read" || input.action === "workweek.private.write") return authorizePrivateDraft(input as PrivateDraftCredentialInput);

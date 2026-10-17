@@ -1,3 +1,4 @@
+import type { GitHubResourceCredential } from "../github-http";
 import { GitHubContentLengthError } from "../github-issue-content";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deliverPendingGitHubComments } from "../github-comment-delivery";
@@ -217,7 +218,7 @@ async function releaseGitHubSyncLock(
 
 type TaskGitHubProjectionInput = {
   supabase: SupabaseClient;
-  installationToken: string;
+  installationToken: GitHubResourceCredential;
   taskId: string;
   actorProfileId: string;
   createIfMissing: boolean;

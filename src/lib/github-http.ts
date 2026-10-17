@@ -1,3 +1,6 @@
+import type { GitHubInstallationCapability } from "./credentials";
+export type GitHubResourceCredential = string | GitHubInstallationCapability;
+
 export const GITHUB_API_VERSION = "2022-11-28";
 export const GITHUB_ISSUE_DEPENDENCY_API_VERSION = "2026-03-10";
 
@@ -36,7 +39,7 @@ export class GitHubApiError extends Error {
 }
 
 type GitHubRequestBaseOptions = {
-  token: string;
+  token: GitHubResourceCredential;
   body?: unknown;
   apiVersion?: string;
   cache?: RequestCache;
@@ -173,6 +176,10 @@ function networkError(message: string, method: string) {
 
 export async function githubRequest(url: string, options: GitHubRequestOptions) {
   if (!options.token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+  if (typeof options.token !== "string") {
+    const { token, ...requestOptions } = options;
+    return token.request(url, requestOptions);
+  }
 
   const method = (options.method || "GET").toUpperCase();
   const operation = operationKind(options, method);

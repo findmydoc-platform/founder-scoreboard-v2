@@ -1,7 +1,8 @@
+import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { authorizeCredentialAction, type GitHubInstallationCapability } from "@/lib/credentials";
 import { persistGitHubSyncFailure } from "@/lib/github-sync-failure-persistence";
 import {
   taskGitHubSyncFailure,
@@ -160,9 +161,9 @@ export async function executePlanningItemGitHubSyncs({
   }
   if (!executable.length) return results;
 
-  let installationToken = "";
+  let installationToken: GitHubInstallationCapability;
   try {
-    installationToken = await getGitHubAppInstallationToken();
+    installationToken = (await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.projection.apply", target: { repositories: FOUNDEROPS_GITHUB_REPOSITORIES } })).github;
   } catch (error) {
     const message = error instanceof Error
       ? error.message

@@ -1,3 +1,4 @@
+import type { GitHubResourceCredential } from "./github-http";
 import { githubJson, type GitHubOperationKind } from "./github-http";
 
 type GraphQLError = {
@@ -12,7 +13,7 @@ type GraphQLResult<T> = {
 export type GitHubGraphqlInput = {
   query: string;
   variables?: Record<string, unknown>;
-  token: string;
+  token: GitHubResourceCredential;
   operation: GitHubOperationKind;
   errorMessage: string;
   missingDataMessage?: string;

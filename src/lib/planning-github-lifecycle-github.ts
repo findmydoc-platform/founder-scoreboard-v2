@@ -1,3 +1,4 @@
+import type { GitHubResourceCredential } from "./github-http";
 import "server-only";
 
 import { createGitHubIssueComment, listGitHubIssueComments } from "./github";
@@ -24,7 +25,7 @@ async function ensurePlanningGitHubLifecycleComment({
   issueNumber: number;
   comment: string;
   marker: string;
-  token: string;
+  token: GitHubResourceCredential;
   repository?: string | null;
 }) {
   const markerToken = `<!-- ${marker} -->`;
@@ -47,7 +48,7 @@ export async function closeGitHubIssueNotPlanned({
   taskId: string;
   sourceRevision: number;
   comment: string;
-  token: string;
+  token: GitHubResourceCredential;
   repository?: string | null;
 }) {
   const { owner, repo } = splitGitHubRepository(repository);
@@ -80,7 +81,7 @@ export async function reopenGitHubIssueForPlanning({
   taskId: string;
   sourceRevision: number;
   comment: string;
-  token: string;
+  token: GitHubResourceCredential;
   repository?: string | null;
 }) {
   const { owner, repo } = splitGitHubRepository(repository);
