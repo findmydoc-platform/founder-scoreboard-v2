@@ -1,3 +1,5 @@
+import type { NextRequest } from "next/server";
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -8,8 +10,8 @@ import {
   type PreparedWorkweekPublication,
 } from "./team-workweek-publication-core";
 import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, ensureGoogleWorkweekEffect, recoverGoogleWorkweekWrite } from "./team-workweek-immediate-effects";
-import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
-import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
+import { GoogleWorkspaceOAuthContractError } from "@/lib/google-calendar-errors";
+import { calendarForWorkweekOwner } from "./team-workweek-calendar";
 import { compensateTeamWorkweekGeneration, executeTeamWorkweekPublication, type WorkweekExecutionDelayClass } from "./team-workweek-execution";
 
 type PublicationErrorCode =
@@ -144,6 +146,7 @@ async function markDelayed(
 }
 
 export async function publishTeamWorkweek({
+  request,
   serviceSupabase,
   userSupabase,
   versionId,
@@ -167,6 +170,7 @@ export async function publishTeamWorkweek({
   recoverWrite?: typeof recoverGoogleWorkweekWrite;
   now?: () => Date;
   transitionsFirst?: boolean;
+  request?: NextRequest;
 }): Promise<TeamWorkweekPublicationResult> {
   const preparedResponse = await userSupabase.rpc("prepare_team_workweek_publication", {
     p_version_id: versionId, p_write_journal_version: 1,
@@ -191,9 +195,9 @@ export async function publishTeamWorkweek({
     };
   }
 
-  let accessToken: string;
+  let accessToken: GoogleCalendarCapability;
   try {
-    accessToken = await getGoogleWorkspaceAccessToken(serviceSupabase, publication.ownerProfileId);
+    accessToken = await calendarForWorkweekOwner(serviceSupabase, publication.ownerProfileId, request);
   } catch (error) {
     const observedAt = now().toISOString();
     const reconnectRequired = error instanceof GoogleWorkspaceOAuthContractError && error.code === "reconnect_required";

@@ -12,11 +12,11 @@ it("preserves elapsed provisional occurrences and recovers the same cutoff after
     if(init.method){mutations.push(init.method);event={...JSON.parse(init.body as string),etag:"after"};throw new Error("lost response");}
     return Response.json(event);
   };
-  const result=await cleanupGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl:fetchImpl as typeof fetch});
+  const result=await cleanupGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect,fetchImpl:fetchImpl as typeof fetch});
   expect(result.state).toBe("confirmed");
   expect(mutations).toEqual(["PUT"]);
   expect(event.recurrence).toEqual(bounded.recurrence);
-  await cleanupGoogleWorkweekEffect({accessToken:"token",effect,fetchImpl:fetchImpl as typeof fetch});
+  await cleanupGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect,fetchImpl:fetchImpl as typeof fetch});
   expect(mutations).toEqual(["PUT"]);
 });
 
@@ -24,9 +24,9 @@ it("does not restore a predecessor over an elapsed provisional segment", async()
   const cutoff={...payload,recurrence:["RRULE:FREQ=WEEKLY;UNTIL=20261012T075959Z"]};
   const retained={...effect,operation:"update" as const,payload:cutoff,expectedPayload:payload,expectedEtag:"before",cleanupPayload:cutoff,cleanupDisposition:"retain" as const};
   const writes:string[]=[];
-  expect((await cleanupGoogleWorkweekEffect({accessToken:"token",effect:retained,fetchImpl:async(_url,init={})=>{if(init.method)writes.push(init.method);return Response.json({...cutoff,etag:"cutoff"});}})).state).toBe("confirmed");
+  expect((await cleanupGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect:retained,fetchImpl:async(_url,init={})=>{if(init.method)writes.push(init.method);return Response.json({...cutoff,etag:"cutoff"});}})).state).toBe("confirmed");
   expect(writes).toEqual([]);
-  expect(await cleanupGoogleWorkweekEffect({accessToken:"token",effect:retained,fetchImpl:async()=>Response.json({...payload,etag:"externally-restored"})})).toEqual({state:"delayed",errorClass:"provider_identity_mismatch"});
+  expect(await cleanupGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect:retained,fetchImpl:async()=>Response.json({...payload,etag:"externally-restored"})})).toEqual({state:"delayed",errorClass:"provider_identity_mismatch"});
 });
 
 it("does not apply an unfinished disconnect cutoff after its deadline, but recovers its already-applied payload",async()=>{
@@ -34,7 +34,7 @@ it("does not apply an unfinished disconnect cutoff after its deadline, but recov
   const plan={...effect,cleanupDeadline:"2026-10-14T12:00:01Z"};
   const now=()=>new Date("2026-10-19T12:00:00Z");
   const fetchImpl:typeof fetch=async(_url,init={})=>{if(init.method)writes++;return Response.json({...payload,etag:"before"});};
-  expect(await cleanupGoogleWorkweekEffect({accessToken:"token",effect:plan,now,fetchImpl})).toEqual({state:"delayed",errorClass:"provider_identity_mismatch"});
+  expect(await cleanupGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect:plan,now,fetchImpl})).toEqual({state:"delayed",errorClass:"provider_identity_mismatch"});
   expect(writes).toBe(0);
-  expect((await cleanupGoogleWorkweekEffect({accessToken:"token",effect:plan,now,fetchImpl:async()=>Response.json({...bounded,etag:"after"})})).state).toBe("confirmed");
+  expect((await cleanupGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect:plan,now,fetchImpl:async()=>Response.json({...bounded,etag:"after"})})).state).toBe("confirmed");
 });

@@ -20,8 +20,8 @@ const publicationServer = await importTestModule(
   {
     "server-only": {},
     "./team-workweek-publication-core": publicationCore,
-    "./google-workspace-oauth-core": { GoogleWorkspaceOAuthContractError: MockGoogleWorkspaceOAuthContractError },
-    "./google-workspace-oauth": { getGoogleWorkspaceAccessToken: async () => "token" },
+    "@/lib/google-calendar-errors": { GoogleWorkspaceOAuthContractError: MockGoogleWorkspaceOAuthContractError },
+    "./team-workweek-calendar": { calendarForWorkweekOwner: async () => ({request:(url,init)=>fetch(url,init)}) },
   },
 );
 
