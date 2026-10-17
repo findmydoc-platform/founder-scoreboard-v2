@@ -1,18 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { apiError, requireApiContext } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
-import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 
 export async function GET(request: NextRequest) {
-  const apiContext = await requireApiContext(
-    request,
-    requireTeamMember,
-  );
+  const apiContext = await requirePlanningContext(request, "planning.backlog.read");
   if (!apiContext.ok) return apiContext.response;
-  const result = await createSupabaseBacklogReadModel(apiContext.supabase).load({
-    authorized: true,
-    actorProfileId: apiContext.permission.profile?.id || null,
-  });
+  const result = await apiContext.planning.loadBacklog();
   if (result.status === "forbidden") return apiError("Backlog darf nicht geladen werden.", 403);
   if (result.status === "unavailable") return apiError("Backlog konnte nicht geladen werden.", 503);
   return NextResponse.json({ model: result.model });
