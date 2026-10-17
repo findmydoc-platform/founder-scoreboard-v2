@@ -1,4 +1,6 @@
 import "server-only";
+import { resolveSessionRequest } from "./session-request";
+import type { CredentialAction } from "../types";
 import { createClient, isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { createHash, randomBytes } from "node:crypto";
 import { WorkspaceAccessError, workspaceIdentity } from "../../workspace-identity";
@@ -106,15 +108,16 @@ function boundDataFetch(binding: SessionBinding): typeof fetch {
   };
 }
 
-type SessionAction = "calendar.read" | "workweek.private.read" | "workweek.private.write" | "session.planning" | "session.home";
+type SessionAction = CredentialAction | "calendar.read" | "workweek.private.read" | "workweek.private.write" | "session.planning" | "session.home";
 type SessionDataResult = Extract<CalendarCredentialResult, { ok: false }> | {
   ok: true; profile: Extract<CalendarCredentialResult, { ok: true }>["profile"]; user: User;
   data: SupabaseClient; readOwnerConflict(versionId: string): Promise<{ data: { resolution_version_id: string } | null; error: { message: string } | null }>;
 };
 
 export async function authorizeSessionData(request: NextRequest, action: SessionAction, startedAt = Date.now()): Promise<SessionDataResult> {
-  const header = request.headers.get("authorization");
-  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  const transport = resolveSessionRequest(request);
+  if (transport.denial) return transport.denial;
+  const token = transport.token;
   if (!token) return { ok: false, status: 401, error: "Anmeldung erforderlich." };
   try {
     const environment = clients();

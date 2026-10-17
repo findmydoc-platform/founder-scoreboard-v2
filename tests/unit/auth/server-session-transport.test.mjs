@@ -284,3 +284,10 @@ test("SSR membership deadline includes preceding cookie renewal and cannot resta
     expect(await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" })).toMatchObject({ ok: false, status: 503 });
   } finally { vi.useRealTimers(); }
 });
+
+test("cookie-authenticated calendar requests use the real credential seam without a browser Bearer token", async () => {
+  jar.set(cookieBase, encode(session()));
+  const { authorizeCredentialAction } = await publicModule();
+  const result = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("/api/team-workweek/team") }, action: "calendar.read" });
+  expect(result.ok).toBe(true);
+});
