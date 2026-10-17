@@ -8,7 +8,7 @@ The table records observed contracts. Controlled Auth, Directory and provider pr
 
 Ticket 503 adds real private-Workweek HTTP read states, controlled mixed-snapshot interleaving, foreign-user permit transfer, simultaneously live cache instances and a copied public capability at its original expiry. Existing positive and negative contracts remain in their focused suites. No production code changed for these acceptance cases.
 
-The final isolated verification cycle passed. Migration and database gates ran on `307d8745fc0a537310ae3df7cc4425d0ea044ee7`; after two test-fixture repairs, the ordinary full suite and final lint/build/architecture gates passed on `ae655c595a9e15641beaaae4eb12c9c2e773709d`. Runtime source, schema and workflows remained unchanged from `17955b50917034c49ebb1b758635d8c07c8dccbc`. The final documentation commit changes no executable source. The exact results and retained failed run are recorded below.
+The final isolated verification cycle passed. Migration and database gates ran on `307d8745fc0a537310ae3df7cc4425d0ea044ee7`; after two test-fixture repairs, the ordinary full suite and final lint/build/architecture gates passed on `ae655c595a9e15641beaaae4eb12c9c2e773709d`. Runtime source, schema and workflows remained unchanged from `17955b50917034c49ebb1b758635d8c07c8dccbc`. Post-test closeout changes only documentation and removes an extra terminal blank line from two source files; their bytes match the tested source after terminal-newline normalization, and runtime behavior is unchanged. The exact results and retained failed run are recorded below.
 
 ## Caller and credential matrix
 
