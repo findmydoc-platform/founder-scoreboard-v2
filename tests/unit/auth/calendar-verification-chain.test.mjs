@@ -7,7 +7,7 @@ const userId = "a1111111-1111-4111-8111-111111111111";
 const sessionId = "b1111111-1111-4111-8111-111111111111";
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "calendar-proof", alg: "ES256", use: "sig" };
-let counts, member, directoryFailure, sessionAllowed, mappedProfile, rows, delayDirectory, role, permits, dataFailure, changedBindingAt, deniedAccountAt, currentUser;
+let counts, member, directoryFailure, sessionAllowed, mappedProfile, rows, delayDirectory, role, permits, dataFailure, changedBindingAt, deniedAccountAt, currentUser, precedingAuthDelay;
 
 function token(overrides = {}) {
   const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -24,7 +24,7 @@ async function protocol(input, init) {
   const url = new URL(request.url);
   const count = category => { counts[category] = (counts[category] || 0) + 1; };
   if (url.pathname.endsWith("/.well-known/jwks.json")) { count("jwks"); return Response.json({ keys: [jwk] }); }
-  if (url.pathname === "/auth/v1/user") { count("auth"); if (deniedAccountAt && counts.auth >= deniedAccountAt) return Response.json({ message: "Account unavailable" }, { status: 401 }); return Response.json({ id: currentUser, aud: "authenticated", identities: [] }); }
+  if (url.pathname === "/auth/v1/user") { count("auth"); if (counts.auth === 1 && precedingAuthDelay) vi.setSystemTime(Date.now() + precedingAuthDelay); if (deniedAccountAt && counts.auth >= deniedAccountAt) return Response.json({ message: "Account unavailable" }, { status: 401 }); return Response.json({ id: currentUser, aud: "authenticated", identities: [] }); }
   if (url.pathname.endsWith("/rpc/workspace_access_context")) {
     count("binding");
     return Response.json({ mode: "linking", linkingEnforced: true, userId: currentUser, profileId: changedBindingAt && counts.binding >= changedBindingAt ? "rebound-profile" : mappedProfile, linked: true,
@@ -64,7 +64,7 @@ beforeEach(() => {
   for (const [key, value] of Object.entries({ SUPABASE_URL: origin, SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service",
     REQUIRE_SUPABASE_AUTH: "true", VERCEL_OIDC_TOKEN: token(), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience",
     GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "reader@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu" })) vi.stubEnv(key, value);
-  counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId;
+  counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId; precedingAuthDelay = 0;
   vi.stubGlobal("fetch", protocol);
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -102,6 +102,7 @@ test("activity cannot renew original membership evidence and outage at exact exp
 
 test("a verification that finishes at its original deadline provides no usable evidence", async () => {
   const route = await application(); const jwt = token(); const started = Date.now();
+  precedingAuthDelay = 600000;
   delayDirectory = async () => vi.setSystemTime(started + 900000);
   expect((await route.GET(request(jwt))).status).toBe(503);
   expect(counts.data || 0).toBe(0);
