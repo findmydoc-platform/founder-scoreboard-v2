@@ -70,7 +70,10 @@ test("GitHub unchanged title succeeds without a write", async () => {
 });
 
 function browser(db: ReturnType<typeof database>, payload: TaskUpdatePayload, auth = permission as Extract<AuthzResult, { ok: true }>) {
-  return createPlanningItemRevision(db.client).commitBrowserRevision({ itemId: "deliverable", payload: { expectedUpdatedAt: revision, ...payload }, permission: auth });
+  return createPlanningItemRevision(db.client, async () => {
+    await db.client.rpc("administrator_access_snapshot");
+    return { ok: false, status: 403, code: "administrator_access_expired", error: "Der Adminzugang ist abgelaufen." };
+  }).commitBrowserRevision({ itemId: "deliverable", payload: { expectedUpdatedAt: revision, ...payload }, permission: auth });
 }
 
 function github(db: ReturnType<typeof database>, patch: Record<string, unknown>) {

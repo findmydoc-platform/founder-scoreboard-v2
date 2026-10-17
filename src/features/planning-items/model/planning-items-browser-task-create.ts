@@ -1,32 +1,28 @@
 import { codepointLength } from "@/lib/github-issue-content";
 import { planningText, planningContentFromRow } from "./planning-item-content";
-import { validateStoredPlanningContent } from "./planning-item-content-server";
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requirePlanningContributor } from "@/lib/authz";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import { slugify } from "@/lib/slug";
 import { taskStatuses } from "@/lib/status";
 import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { PlanningItemRaciAssignment, Task, TaskRelation, TaskRelationType, TaskType } from "@/lib/types";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { newlyMentionedProfilesByField } from "@/lib/mentions";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
-import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { isReviewStateLocked, reviewStateLockMessage, TASK_COMPLETED_LOCKED_MESSAGE } from "@/features/reviews/model/task-review-state";
 import { unsupportedSubIssueCreateField } from "@/features/tasks/model/task-creation-draft";
 import { normalizeFixedDate } from "@/features/planning-items/model/deliverable-schedule";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
-import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
 import {
   browserCreateTransactionFromResult,
-  createBrowserCreatePlanningItems,
+  type BrowserCreateWriter,
   planningItemCreateCommand,
 } from "@/features/planning-items/model/planning-items-create";
 import {
-  createPlanningApprovalPlanningItems,
   decidePlanningApprovalCommand,
   planningApprovalTaskFromResult,
 } from "@/features/planning-items/model/planning-items-approval";
@@ -140,10 +136,10 @@ export function buildCreateMentionNotifications(input: Readonly<{
 }
 
 export async function handleBrowserTaskCreate(request: NextRequest) {
-  const context = await requireJsonApiContext<CreateTaskPayload>(request, requirePlanningContributor, {});
+  const context = await requirePlanningJsonContext<CreateTaskPayload>(request, "planning.task.create", {});
   if (!context.ok) return context.response;
 
-  const { payload, permission, supabase } = context;
+  const { payload, permission, planning } = context;
   const unknownField = Object.keys(payload).find((field) => !createTaskPayloadFields.has(field as keyof CreateTaskPayload));
   if (unknownField) return apiError(`Unbekanntes Feld: ${unknownField}.`, 400);
   const requestedType = payload.taskType || "deliverable";
@@ -171,7 +167,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     if (payload.targetDate && !targetDate) return apiError("Zieldatum ist ungültig.", 400);
     const idBase = `${permission.profile?.id || "planning"}-${slugify(title, { maxLength: 70 }) || "neues-planungselement"}`;
     const id = `${idBase}-${creationRequestId.replaceAll("-", "").slice(0, 12)}`;
-    const lengthErrors = await validateStoredPlanningContent(supabase, {
+    const lengthErrors = await planning.validateContent({
       id, title, taskType: requestedType, description: planningText(payload.description),
       intendedOutcome: planningText(payload.strategy?.goal || payload.intendedOutcome),
       scopeConstraints: planningText(payload.strategy?.scopeConstraints || payload.scopeConstraints),
@@ -221,9 +217,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     ];
     let strategicMentionNotifications: ReturnType<typeof buildCreateMentionNotifications> = [];
     if (strategicMentionFields.some((field) => field.current.includes("@"))) {
-      const { data: mentionProfiles, error: mentionProfilesError } = await supabase
-        .from("profiles")
-        .select("id,name,github_login");
+      const { data: mentionProfiles, error: mentionProfilesError } = await planning.readMentionProfiles();
       if (mentionProfilesError) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
       strategicMentionNotifications = buildCreateMentionNotifications({
         taskId: id,
@@ -233,12 +227,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
         profiles: mentionProfiles || [],
       });
     }
-    const actor = actorContextFromSessionAuth({ ok: true, profile: permission.profile });
-    if (!actor.ok) return apiError("Planungselement konnte nicht erstellt werden.", 500);
-    const planningItems = createBrowserCreatePlanningItems({
-      supabase,
-      actor: actor.actor,
-      writer: {
+    if (!permission.profile) return apiError("Planungselement konnte nicht erstellt werden.", 500);
+    const writer: BrowserCreateWriter = {
         kind: "strategic",
         params: {
           item: strategicItem,
@@ -246,11 +236,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
           raciAssignments: requestedType === "initiative" ? raciAssignments : [],
           notifications: strategicMentionNotifications,
         },
-      },
-    });
-    const result = await planningItems.run({
-      actor: actor.actor,
-      mode: "commit",
+      };
+    const result = await planning.runCreate(writer, {
       command: planningItemCreateCommand([{
         itemType: requestedType,
         title,
@@ -267,7 +254,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
         responsibleProfileIds: raciAssignments.filter((assignment) => assignment.role === "responsible").map((assignment) => assignment.profileId),
         consultedProfileIds: raciAssignments.filter((assignment) => assignment.role === "consulted").map((assignment) => assignment.profileId),
         informedProfileIds: raciAssignments.filter((assignment) => assignment.role === "informed").map((assignment) => assignment.profileId),
-      }], actor.actor.profileId),
+      }], permission.profile.id),
     });
     if (!result.ok) {
       if (result.error.code === "conflict") return apiError("Planungselement existiert bereits.", 409);
@@ -280,7 +267,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     const profileIds = [created.assignee, created.owner, created.created_by]
       .filter((value): value is string => typeof value === "string" && Boolean(value));
     const { data: profileRows } = profileIds.length
-      ? await supabase.from("profiles").select("id,name").in("id", [...new Set(profileIds)])
+      ? await planning.readProfileNames([...new Set(profileIds)])
       : { data: [] };
     const profileNameById = new Map((profileRows || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
     let responseTask = mapTaskRow(created, profileNameById, {
@@ -298,9 +285,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
         })) : [],
       });
     if (requestedType === "initiative" && payload.approveNow) {
-      const approval = await createPlanningApprovalPlanningItems(supabase, "initiative").run({
-        actor: actor.actor,
-        mode: "commit",
+      const approval = await planning.runCreateApproval("initiative", {
         command: decidePlanningApprovalCommand(id, {
           expectedApprovalRevision: 1,
           action: "approve",
@@ -344,11 +329,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   const parentTaskId = taskType === "sub_issue" || taskType === "deliverable" ? payload.parentTaskId || "" : "";
 
   if (taskType === "deliverable" && parentTaskId) {
-    const { data: initiativeRow, error: initiativeError } = await supabase
-      .from(ACTIVE_TASKS_TABLE)
-      .select("id,owner,approval_status,task_type")
-      .eq("id", parentTaskId)
-      .maybeSingle();
+    const { data: initiativeRow, error: initiativeError } = await planning.readCreateParent(parentTaskId);
     if (initiativeError || !initiativeRow || initiativeRow.task_type !== "initiative") {
       return apiError("Initiative wurde nicht gefunden.", 404);
     }
@@ -358,12 +339,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
 
   let reviewOwnerProfileId: string | null = null;
   if (taskType === "deliverable" && initiative) {
-    const { data: accountable, error: accountableError } = await supabase
-      .from("planning_item_raci_assignments")
-      .select("profile_id")
-      .eq("task_id", initiative.id)
-      .eq("role", "accountable")
-      .maybeSingle();
+    const { data: accountable, error: accountableError } = await planning.readAccountable(initiative.id);
     if (accountableError) return apiError(accountableError.message, 500);
     reviewOwnerProfileId = accountable?.profile_id || initiative.owner || null;
   }
@@ -379,11 +355,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     return apiError("Sub-Issue braucht ein Deliverable.", 400);
   }
   if (taskType === "sub_issue") {
-    const { data: parent, error: parentError } = await supabase
-      .from(ACTIVE_TASKS_TABLE)
-      .select("id,title,task_type,approval_status,status,review_status,score_final")
-      .eq("id", parentTaskId)
-      .single();
+    const { data: parent, error: parentError } = await planning.readCreateParent(parentTaskId);
     if (parentError || !parent || parent.task_type !== "deliverable") return apiError("Deliverable wurde nicht gefunden.", 404);
     if (isReviewStateLocked(parent.review_status, parent.score_final)) {
       return apiError(reviewStateLockMessage(parent.review_status, parent.score_final), 409);
@@ -399,11 +371,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     if (!relationType || !relationTypes.has(relationType)) {
       return apiError("Ungültige Abhängigkeitsart.", 400);
     }
-    const { data: relatedTask, error: relatedTaskError } = await supabase
-      .from(ACTIVE_TASKS_TABLE)
-      .select("id")
-      .eq("id", relatedTaskId)
-      .maybeSingle();
+    const { data: relatedTask, error: relatedTaskError } = await planning.readCreateParent(relatedTaskId);
     if (relatedTaskError || !relatedTask) return apiError("Verknüpfte Aufgabe wurde nicht gefunden.", 404);
   }
 
@@ -437,7 +405,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     scoreRelevant,
     githubRepo: githubRepository.repository,
   });
-  const lengthErrors = await validateStoredPlanningContent(supabase, planningContentFromRow(insert));
+  const lengthErrors = await planning.validateContent(planningContentFromRow(insert));
   if (lengthErrors.length) return NextResponse.json({ error: lengthErrors[0].message, lengthErrors }, { status: 400 });
 
 
@@ -452,9 +420,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     { key: "definition-of-done", current: String(insert.definition_of_done || "") },
   ];
   if (createMentionFields.some((field) => field.current.includes("@"))) {
-    const { data: mentionProfiles, error: mentionProfilesError } = await supabase
-      .from("profiles")
-      .select("id,name,github_login");
+    const { data: mentionProfiles, error: mentionProfilesError } = await planning.readMentionProfiles();
     if (mentionProfilesError) return apiError("Erwähnungen konnten nicht aufgelöst werden.", 500);
     notifications.push(...buildCreateMentionNotifications({
       taskId: id,
@@ -465,10 +431,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     }));
   }
   if (taskType === "deliverable" && !payload.approveNow) {
-    const { data: leads, error: leadError } = await supabase
-      .from("profiles")
-      .select("id")
-      .in("platform_role", ["ceo", "deputy"]);
+    const { data: leads, error: leadError } = await planning.readLeadIds();
     if (leadError) return apiError(leadError.message, 500);
     notifications.push(...(leads || [])
       .filter((lead) => lead.id !== permission.profile?.id)
@@ -486,12 +449,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
       ? "Sub-Issue erstellt"
       : "Deliverable vorgeschlagen";
   const requestMetadata = auditRequestMetadata(request);
-  const actor = actorContextFromSessionAuth({ ok: true, profile: permission.profile });
-  if (!actor.ok) return apiError("Aufgabe konnte nicht erstellt werden.", 500);
-  const planningItems = createBrowserCreatePlanningItems({
-    supabase,
-    actor: actor.actor,
-    writer: {
+  if (!permission.profile) return apiError("Aufgabe konnte nicht erstellt werden.", 500);
+  const writer: BrowserCreateWriter = {
       kind: "delivery",
       params: {
         taskInsert: insert,
@@ -503,11 +462,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
         notifications,
         approveNow: false,
       },
-    },
-  });
-  const createResult = await planningItems.run({
-    actor: actor.actor,
-    mode: "commit",
+    };
+  const createResult = await planning.runCreate(writer, {
     command: planningItemCreateCommand([{
       itemType: taskType,
       title,
@@ -526,7 +482,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
       hours: payload.hours,
       githubRepo: payload.githubRepo,
       status,
-    }], actor.actor.profileId),
+    }], permission.profile.id),
     requestMetadata: { requestIp: requestMetadata.request_ip || undefined, userAgent: requestMetadata.user_agent || undefined },
   });
   if (!createResult.ok) {
@@ -545,9 +501,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
 
   let approvedTask: Task | null = null;
   if (taskType === "deliverable" && payload.approveNow) {
-    const approval = await createPlanningApprovalPlanningItems(supabase, "deliverable").run({
-      actor: actor.actor,
-      mode: "commit",
+    const approval = await planning.runCreateApproval("deliverable", {
       command: decidePlanningApprovalCommand(created.id, {
         expectedApprovalRevision: Number(created.approval_revision || 1),
         action: "approve",
@@ -560,7 +514,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
 
   const profileIds = [...new Set([created.assignee, created.owner, created.created_by].filter((value): value is string => typeof value === "string" && Boolean(value)))];
   const { data: profileRows } = profileIds.length
-    ? await supabase.from("profiles").select("id,name").in("id", profileIds)
+    ? await planning.readProfileNames(profileIds)
     : { data: [] };
   const profileNameById = new Map((profileRows || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
 

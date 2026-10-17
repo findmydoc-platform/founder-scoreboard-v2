@@ -2,12 +2,10 @@ import { FOUNDEROPS_GITHUB_REPOSITORIES } from "@/lib/github-project-config";
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { apiError, authzError } from "@/lib/api-response";
-import { bearerToken, requireActiveAdministrator, resolveAdministratorAccessFailure } from "@/lib/authz";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import { validGitHubTeamSlug, validateGitHubMentionTeam } from "@/lib/github-mention-team";
 import { validateFounderOpsGitHubProject } from "@/lib/github-project";
 import { validGitHubProjectNumber, validGitHubProjectOwner } from "@/lib/github-project-config";
-import { getSupabaseForToken } from "@/lib/supabase-user";
 
 type GitHubProjectSettingsPayload = {
   expectedGithubProjectOwner?: string;
@@ -30,11 +28,8 @@ type GitHubProjectSettingsTransactionResult = {
 const projectId = "findmydoc-founder-execution";
 
 export async function PATCH(request: NextRequest) {
-  const permission = await requireActiveAdministrator(request);
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "account.github-project.update" });
   if (!permission.ok) return authzError(permission);
-  const token = bearerToken(request);
-  const supabase = token ? getSupabaseForToken(token) : null;
-  if (!supabase) return apiError("Anmeldung erforderlich.", 401);
   const payload = await request.json().catch(() => ({})) as GitHubProjectSettingsPayload;
   const expectedMentionTeamSlug = payload.expectedGithubMentionTeamSlug?.trim().toLowerCase() || "";
   const mentionTeamSlug = payload.githubMentionTeamSlug?.trim().toLowerCase() || "";
@@ -66,23 +61,21 @@ export async function PATCH(request: NextRequest) {
   }
 
   const metadata = auditRequestMetadata(request);
-  const { data, error } = await supabase.rpc("update_administration_github_project_transaction_v2", {
-    p_project_id: projectId,
-    p_expected_owner: payload.expectedGithubProjectOwner,
-    p_expected_number: payload.expectedGithubProjectNumber,
-    p_expected_team_slug: expectedMentionTeamSlug,
-    p_github_project_owner: payload.githubProjectOwner,
-    p_github_project_number: payload.githubProjectNumber,
-    p_github_mention_team_slug: mentionTeamSlug || null,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent || null,
+  const { data, error } = await permission.account.updateGitHubProject({
+    expectedOwner: payload.expectedGithubProjectOwner,
+    expectedNumber: payload.expectedGithubProjectNumber,
+    expectedTeamSlug: expectedMentionTeamSlug,
+    owner: payload.githubProjectOwner,
+    number: payload.githubProjectNumber,
+    teamSlug: mentionTeamSlug,
+    metadata,
   });
 
   if (error) {
     if (error.code === "P0001") return apiError("Die GitHub-Project-Einstellung wurde parallel geändert. Bitte neu laden.", 409);
     if (error.code === "P0002") return apiError("FounderOps-Projekt wurde nicht gefunden.", 404);
     if (error.code === "42501") {
-      return authzError(await resolveAdministratorAccessFailure(supabase));
+      return authzError(await permission.account.administratorFailure());
     }
     if (error.code === "22023") return apiError("GitHub-Organisation oder Project-Nummer ist ungültig.", 400);
     return apiError("Die GitHub-Project-Einstellung konnte nicht gespeichert werden.", 500);

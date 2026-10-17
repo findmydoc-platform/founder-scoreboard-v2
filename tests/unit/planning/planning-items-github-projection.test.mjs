@@ -3,6 +3,7 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const finalized = [];
+const executions = [];
 let executionResult = {
   status: "synced",
   code: "github_sync_succeeded",
@@ -21,9 +22,10 @@ const projection = await importTestModule(
   {
     "server-only": {},
     "@/features/planning-items/model/planning-items-github-sync": {
-      executeClaimedPlanningItemGitHubSyncs: async ({ targets }) => new Map(
-        targets.map((target) => [target.itemId, executionResult]),
-      ),
+      executeClaimedPlanningItemGitHubSyncs: async ({ targets, claim }) => {
+        executions.push({ targets, claim });
+        return new Map(targets.map((target) => [target.itemId, executionResult]));
+      },
     },
   },
 );
@@ -66,6 +68,7 @@ test("dispatcher claims and finalizes the durable request instead of bypassing t
 
   assert.equal(calls[0].name, "claim_planning_github_projection_requests");
   assert.equal(calls[0].params.p_operation_id, "team-update:token:key");
+  assert.deepEqual(executions.at(-1).claim, { family: "planning-projection", id: "request-1", lockToken: calls[0].params.p_lock_token });
   assert.equal(finalized.length, 1);
   assert.equal(finalized[0].p_succeeded, true);
   assert.equal(result.results.get("task-1").status, "synced");

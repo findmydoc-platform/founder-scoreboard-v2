@@ -1,10 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { apiError, requireApiContext } from "@/lib/api-response";
-import { requireOperationalLead } from "@/lib/authz";
-import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 import {
-  createSprintAssignmentPlanningItems,
   parseSprintAssignmentRequest,
   sprintAssignmentCommand,
   sprintAssignmentError,
@@ -12,25 +10,13 @@ import {
 } from "@/features/planning-items/model/planning-items-sprint-assignment";
 
 export async function PATCH(request: NextRequest) {
-  const apiContext = await requireApiContext(request, requireOperationalLead, {
-    supabaseUnavailableMessage: "Sprint-Zuordnungen konnten nicht dauerhaft gespeichert werden.",
-  });
-  if (!apiContext.ok) return apiContext.response;
-
   const payload = parseSprintAssignmentRequest(await request.json().catch(() => null));
+  const apiContext = await requirePlanningContext(request, "planning.sprint.assign", typeof payload === "string" ? "" : payload.sprintId,
+    "Sprint-Zuordnungen konnten nicht dauerhaft gespeichert werden.", typeof payload === "string" ? [] : payload.assignments.map(item => item.taskId));
+  if (!apiContext.ok) return apiContext.response;
   if (typeof payload === "string") return apiError(payload, 400);
-  const actor = actorContextFromSessionAuth({
-    ok: true,
-    profile: apiContext.permission.profile ? {
-      id: apiContext.permission.profile.id,
-      platformRole: apiContext.permission.profile.platformRole,
-    } : null,
-  });
-  if (!actor.ok) return apiError("Nur CEO oder Deputy können Sprint-Zuordnungen ändern.", 403);
   const metadata = auditRequestMetadata(request);
-  const result = await createSprintAssignmentPlanningItems(apiContext.supabase).run({
-    actor: actor.actor,
-    mode: "commit",
+  const result = await apiContext.planning.runSprintAssignment({
     command: sprintAssignmentCommand(payload),
     requestMetadata: {
       requestIp: metadata.request_ip || undefined,

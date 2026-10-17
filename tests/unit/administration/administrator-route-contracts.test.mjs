@@ -1,113 +1,73 @@
-import { vi } from "vitest";
-vi.mock("@/lib/supabase-user", async () => vi.importMock("@/lib/supabase"));
-import assert from "node:assert/strict";
-import { beforeEach, test } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
+import { FOUNDEROPS_GITHUB_REPOSITORIES, FOUNDEROPS_GITHUB_PROJECT_FIELDS } from "@/lib/github-project-config";
 
-let rpcError = null;
-let rpcData = null;
-const rpcCalls = [];
-
-const nextServer = { NextResponse: { json: (body, init) => Response.json(body, init) } };
-const apiResponse = {
-  apiError: (error, status) => Response.json({ error }, { status }),
-  authzError: (permission) => Response.json({
-    error: permission.error,
-    ...(permission.code ? { code: permission.code } : {}),
-  }, { status: permission.status }),
-};
-const supabase = {
-  rpc: async (name, params) => {
-    rpcCalls.push([name, params]);
-    return { data: rpcData, error: rpcError };
-  },
-};
-
-const githubRoute = await importTestModule("src/app/api/founderops-settings/github-project/route.ts", {
-  "next/server": nextServer,
-  "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "127.0.0.1", user_agent: "test" }) },
-  "@/lib/api-response": apiResponse,
-  "@/lib/authz": {
-    bearerToken: () => "session-token",
-    requireActiveAdministrator: async () => ({ ok: true, profile: { id: "administrator" } }),
-    resolveAdministratorAccessFailure: async () => ({
-      ok: false,
-      status: 403,
-      code: "administrator_access_expired",
-      error: "Der Adminzugang ist abgelaufen.",
-    }),
-  },
-  "@/lib/credentials": { authorizeCredentialAction: async () => ({ github: "installation-token" }) },
-  "@/lib/github-project": {
-    validateFounderOpsGitHubProject: async () => ({
-      title: "FounderOps",
-      url: "https://github.com/orgs/findmydoc-platform/projects/21",
-      repositories: [],
-      fields: [],
-    }),
-  },
-  "@/lib/github-mention-team": {
-    validGitHubTeamSlug: (value) => typeof value === "string" && value.length > 0,
-    validateGitHubMentionTeam: async () => ({ slug: "founderops", name: "FounderOps", url: "https://github.com/orgs/findmydoc-platform/teams/founderops", notificationsEnabled: true }),
-  },
-  "@/lib/supabase": { getSupabaseForToken: () => supabase },
-});
-
+const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+let protocol;
+let providerCalls;
 beforeEach(() => {
-  rpcCalls.length = 0;
-  rpcError = null;
-  rpcData = null;
+  vi.resetModules();
+  protocol = administratorProtocol();
+  providerCalls = [];
+  for (const [key, value] of Object.entries({ GITHUB_APP_ID: "123", GITHUB_APP_INSTALLATION_ID: "456", GITHUB_APP_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }), GITHUB_APP_PRIVATE_KEY_PATH: "" })) vi.stubEnv(key, value);
+  const authFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.hostname !== "api.github.com") return authFetch(request);
+    providerCalls.push(url.pathname);
+    if (url.pathname === "/app/installations/456/access_tokens") return Response.json({ token: "synthetic-installation", expires_at: new Date(Date.now() + 3600000).toISOString() });
+    if (url.pathname === "/graphql") {
+      if (protocol.state.providerDenied) return Response.json({ message: "Forbidden" }, { status: 403 });
+      return Response.json({ data: { organization: { projectV2: { id: "synthetic-project", number: 22, title: "FounderOps", closed: false, url: "https://github.com/orgs/findmydoc-platform/projects/22", repositories: { nodes: FOUNDEROPS_GITHUB_REPOSITORIES.map(nameWithOwner => ({ nameWithOwner })), totalCount: FOUNDEROPS_GITHUB_REPOSITORIES.length }, fields: { nodes: FOUNDEROPS_GITHUB_PROJECT_FIELDS } } } } });
+    }
+    if (url.pathname === "/orgs/findmydoc-platform/teams/founderops") return Response.json({ slug: "founderops", name: "FounderOps", notification_setting: "notifications_enabled" });
+    throw new Error("Unexpected synthetic GitHub protocol");
+  });
 });
-
-function patchRequest(url, body) {
-  return new Request(url, { method: "PATCH", body: JSON.stringify(body) });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+const payload = { expectedGithubProjectOwner: "findmydoc-platform", expectedGithubProjectNumber: 21, githubProjectOwner: "findmydoc-platform", githubProjectNumber: 22 };
+async function patch(body = payload) {
+  const route = await importTestModule("src/app/api/founderops-settings/github-project/route.ts", { "server-only": {} });
+  return route.PATCH(protocol.request("/api/founderops-settings/github-project", "PATCH", body));
 }
 
-test("GitHub Project adapter maps post-guard authority loss to the late expiry code", async () => {
-  rpcError = { code: "42501" };
-
-  const response = await githubRoute.PATCH(patchRequest(
-    "http://localhost/api/founderops-settings/github-project",
-    {
-      expectedGithubProjectOwner: "findmydoc-platform",
-      expectedGithubProjectNumber: 21,
-      expectedGithubMentionTeamSlug: "founderops",
-      githubProjectOwner: "findmydoc-platform",
-      githubProjectNumber: 22,
-      githubMentionTeamSlug: "founderops",
-    },
-  ));
-
-  assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), {
-    code: "administrator_access_expired",
-    error: "Der Adminzugang ist abgelaufen.",
-  });
-  assert.equal(rpcCalls[0][0], "update_administration_github_project_transaction_v2");
+test("GitHub Project preserves post-guard expiry classification through actual provider and user-RPC protocols", async () => {
+  protocol.state.responses.update_administration_github_project_transaction_v2 = () => {
+    protocol.state.snapshot = { eligible: true, active: false, expiresAt: null };
+    return Response.json({ code: "42501" }, { status: 403 });
+  };
+  const response = await patch({ ...payload, expectedGithubMentionTeamSlug: "founderops", githubMentionTeamSlug: "founderops" });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ code: "administrator_access_expired", error: "Der Adminzugang ist abgelaufen." });
+  expect(protocol.calls[0].name).toBe("update_administration_github_project_transaction_v2");
 });
 
-test("GitHub Project adapter preserves the legacy payload without a mention team", async () => {
-  rpcData = {
-    project: {
-      id: "findmydoc-founder-execution",
-      githubProjectOwner: "findmydoc-platform",
-      githubProjectNumber: 22,
-      githubMentionTeamSlug: null,
-    },
-  };
+test("GitHub Project preserves the legacy payload without a mention team", async () => {
+  protocol.state.responses.update_administration_github_project_transaction_v2 = { project: { id: "findmydoc-founder-execution", githubProjectOwner: "findmydoc-platform", githubProjectNumber: 22, githubMentionTeamSlug: null } };
+  const response = await patch();
+  expect(response.status).toBe(200);
+  expect(protocol.calls[0].body).toMatchObject({ p_expected_team_slug: "", p_github_mention_team_slug: null });
+  expect((await response.json()).mentionTeam).toBeNull();
+});
 
-  const response = await githubRoute.PATCH(patchRequest(
-    "http://localhost/api/founderops-settings/github-project",
-    {
-      expectedGithubProjectOwner: "findmydoc-platform",
-      expectedGithubProjectNumber: 21,
-      githubProjectOwner: "findmydoc-platform",
-      githubProjectNumber: 22,
-    },
-  ));
+test("an inactive administrator cannot start project validation", async () => {
+  protocol.state.snapshot = { eligible: true, active: false, expiresAt: null };
+  expect((await patch()).status).toBe(403);
+  expect(providerCalls).toEqual([]);
+  expect(protocol.calls).toEqual([]);
+});
 
-  assert.equal(response.status, 200);
-  assert.equal(rpcCalls[0][1].p_expected_team_slug, "");
-  assert.equal(rpcCalls[0][1].p_github_mention_team_slug, null);
-  assert.equal((await response.json()).mentionTeam, null);
+test("project provider denial preserves 422 and never starts the settings transaction", async () => {
+  protocol.state.providerDenied = true;
+  expect((await patch()).status).toBe(422);
+  expect(protocol.calls).toEqual([]);
+});
+
+test.each([["P0001", 409], ["P0002", 404], ["22023", 400], ["unexpected", 500]])("project transaction %s keeps its existing response contract", async (code, status) => {
+  protocol.state.responses.update_administration_github_project_transaction_v2 = () => Response.json({ code, message: "Sensitive upstream detail" }, { status: 400 });
+  const response = await patch();
+  expect(response.status).toBe(status);
+  expect(JSON.stringify(await response.json())).not.toContain("Sensitive upstream detail");
 });
