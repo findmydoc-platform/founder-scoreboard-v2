@@ -1,6 +1,6 @@
+import { GitHubConnectionError } from "@/lib/github-app-errors";
 import { after, NextResponse, type NextRequest } from "next/server";
-import { exchangeGitHubAppCode, githubUserForAppUserToken, storeGitHubAppUserToken, verifyGitHubAppOAuthState } from "@/lib/github-app";
-import { getServerPlanningAuth } from "@/lib/planning-auth-server";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { getServerSupabase } from "@/lib/supabase";
 import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
 import { deliverPendingGitHubReviews } from "@/lib/github-review-delivery";
@@ -12,28 +12,14 @@ function redirectError(request: NextRequest, next: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const code = request.nextUrl.searchParams.get("code") || "";
-  const stateValue = request.nextUrl.searchParams.get("state") || "";
   let next = "/";
 
   try {
-    if (!code || !stateValue) throw new Error("GitHub Callback ist unvollständig.");
-    const state = verifyGitHubAppOAuthState(stateValue);
-    next = state.next || "/";
-
-    const auth = await getServerPlanningAuth();
-    if (!auth.ok || !auth.profile || auth.user.id !== state.userId || auth.profile.id !== state.profileId) {
-      return redirectError(request, next);
-    }
-
-    const supabase = getServerSupabase();
-    if (!supabase) throw new Error("Supabase Service Role ist nicht konfiguriert.");
-
-    const redirectUri = new URL("/api/github-app/callback", request.url).toString();
-    const token = await exchangeGitHubAppCode(code, redirectUri);
-    const githubUser = await githubUserForAppUserToken(token.access_token || "");
-    await storeGitHubAppUserToken({ supabase, profile: auth.profile, githubUser, token });
-    const connectedProfileId = auth.profile.id;
+    const connected=await authorizeCredentialAction({credential:{kind:"github-oauth-request",request},action:"github.connection.complete"});
+    next=connected.next;
+    const connectedProfileId=connected.profileId;
+    const supabase=getServerSupabase();
+    if(!supabase) throw new Error("Supabase Service Role ist nicht konfiguriert.");
     after(async () => {
       await Promise.all([
         deliverPendingGitHubComments({
@@ -50,7 +36,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.redirect(new URL(next, request.url));
-  } catch {
-    return redirectError(request, next);
+  } catch(error) {
+    return redirectError(request, error instanceof GitHubConnectionError ? error.next : next);
   }
 }

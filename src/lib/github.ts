@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
 import { subIssueRelationshipQuery, connectSubIssueMutation, linkedPullRequestsQuery } from "./github-graphql-documents";
 import type { GitHubResourceCredential } from "./github-http";
 import type { LinkedPullRequest } from "./types";
 import { githubGraphql } from "./github-graphql";
-import { GITHUB_ISSUE_DEPENDENCY_API_VERSION, githubJson } from "./github-http";
+import { GITHUB_ISSUE_DEPENDENCY_API_VERSION, githubJson, githubRequest } from "./github-http";
 import { normalizeGitHubRepository, requireAllowedGitHubRepository, splitGitHubRepository } from "./github-repositories";
 
 export { GitHubApiError } from "./github-http";
@@ -330,32 +331,43 @@ export async function listGitHubIssueBlockedBy(
 export async function uploadGitHubAttachment(
   path: string,
   content: Buffer,
-  token: string,
+  token: GitHubResourceCredential,
   message = "Add Founder Scoreboard attachment",
   repository?: string | null,
 ) {
   const { owner, repo } = splitGitHubRepository(repository);
-  const result = await githubJson<{
-    content?: {
-      download_url?: string | null;
-      html_url?: string | null;
-    };
-  }>(
-    `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`,
-    {
-      token,
-      method: "PUT",
-      operation: "mutation",
-      body: {
-        message,
-        content: content.toString("base64"),
-        branch: process.env.GITHUB_SYNC_BRANCH || "main",
-      },
-      errorMessage: "GitHub-Anhang konnte nicht gespeichert werden",
-    },
-  );
+  if (!path || path.split("/").some(part => !part || part === "." || part === "..")) throw new Error("GitHub-Anhangsziel ist ungültig.");
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}`;
+  const branch = process.env.GITHUB_SYNC_BRANCH || "main";
+  // Git's blob identity permits byte-for-byte reconciliation without another write.
+  const expectedSha = createHash("sha1").update(`blob ${content.length}\0`).update(content).digest("hex");
+  type Attachment = { sha?:string; download_url?:string|null; html_url?:string|null };
+  async function observe() {
+    const response = await githubRequest(`${url}?ref=${encodeURIComponent(branch)}`, {
+      token, operation:"read", allowedStatuses:[404], errorMessage:"GitHub-Anhang konnte nicht geprüft werden",
+    });
+    if(response.status===404) return null;
+    const current=await response.json() as Attachment;
+    if(current.sha!==expectedSha) throw new Error("Am GitHub-Anhangsziel liegt bereits ein anderer Inhalt.");
+    return current;
+  }
+  let uploaded=await observe();
+  if(!uploaded) {
+    try {
+      const result=await githubJson<{content?:Attachment}>(url,{
+        token,method:"PUT",operation:"mutation",body:{message,content:content.toString("base64"),branch},
+        errorMessage:"GitHub-Anhang konnte nicht gespeichert werden",
+      });
+      uploaded=result.content || null;
+    } catch(error) {
+      // A lost response may follow a successful write. Observe once; never replay the PUT.
+      uploaded=await observe().catch(()=>null);
+      if(!uploaded) throw error;
+    }
+  }
+
   return {
-    rawUrl: result.content?.download_url || githubRawUrl(path, repository),
-    htmlUrl: result.content?.html_url || "",
+    rawUrl: uploaded?.download_url || githubRawUrl(path, repository),
+    htmlUrl: uploaded?.html_url || "",
   };
 }

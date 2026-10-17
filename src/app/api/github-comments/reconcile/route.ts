@@ -35,7 +35,7 @@ async function authorizedSupabase(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const context = await authorizedSupabase(request);
   if (!context.ok) return context.response;
-  const preview = await previewPendingGitHubComments(context.supabase, 100);
+  const preview = await previewPendingGitHubComments(context.supabase, request, 100);
   return NextResponse.json({ ok: true, preview });
 }
 

@@ -1,32 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createGitHubAppOAuthState, githubAppAuthorizationUrl } from "@/lib/github-app";
-import { getServerPlanningAuth } from "@/lib/planning-auth-server";
-
-export const dynamic = "force-dynamic";
-
-function safeRelativeNext(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
+import { authorizeCredentialAction } from "@/lib/credentials";
+import { safeRelativeNext } from "@/lib/auth-redirect";
+export const dynamic="force-dynamic";
+export async function GET(request:NextRequest) {
   try {
-    const parsed = new URL(value, "http://localhost");
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    const access=await authorizeCredentialAction({credential:{kind:"github-oauth-request",request},action:"github.connection.start"});
+    return NextResponse.redirect(access.redirect!);
   } catch {
-    return "/";
+    return NextResponse.redirect(new URL(`/auth/error?next=${encodeURIComponent(safeRelativeNext(request.nextUrl.searchParams.get("next")))}`,request.url));
   }
-}
-
-export async function GET(request: NextRequest) {
-  const auth = await getServerPlanningAuth();
-  const next = safeRelativeNext(request.nextUrl.searchParams.get("next"));
-  if (!auth.ok || !auth.profile) {
-    return NextResponse.redirect(new URL(`/auth/error?next=${encodeURIComponent(next)}`, request.url));
-  }
-
-  const redirectUri = new URL("/api/github-app/callback", request.url).toString();
-  const state = createGitHubAppOAuthState({
-    userId: auth.user.id,
-    profileId: auth.profile.id,
-    next,
-  });
-
-  return NextResponse.redirect(githubAppAuthorizationUrl({ state, redirectUri }));
 }

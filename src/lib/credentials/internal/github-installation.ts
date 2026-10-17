@@ -6,7 +6,7 @@ import { GitHubApiError, githubJson, githubRequest, type GitHubRequestOptions } 
 import { GitHubAppConfigurationError } from "../../github-app-errors";
 import { allowedGitHubRepositories } from "../../github-repositories";
 import type { GitHubInstallationInput, GitHubInstallationCapability } from "../types";
-import type { GitHubAppOperationalStatus } from "../../github-app";
+import type { GitHubAppOperationalStatus } from "../types";
 
 const tokenRefreshWindowMs = 5 * 60 * 1000;
 function env(name: string) { return process.env[name]?.trim() || ""; }
