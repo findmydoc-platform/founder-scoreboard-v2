@@ -1,7 +1,7 @@
 import "server-only";
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
-import { getServerServiceRoleSupabase } from "./supabase-service-role";
-import { authorizeWorkspaceIdentity, WorkspaceAccessError, type WorkspaceIdentity } from "./workspace-identity";
+import { getServerServiceRoleSupabase } from "./service-client";
+import { authorizeWorkspaceIdentity, WorkspaceAccessError, type WorkspaceIdentity } from "../../workspace-identity";
 import { isWorkspaceGroupMember } from "./workspace-directory";
 
 export type WorkspaceLoginMode = "legacy" | "linking" | "google";

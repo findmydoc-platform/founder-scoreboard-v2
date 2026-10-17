@@ -2,11 +2,11 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { getServerAuthSupabase } from "./cookie-client";
+import { getServerServiceRoleSupabase } from "@/lib/credentials/internal/service-client";
 import { authOrigin } from "@/lib/auth-redirect";
-import { sha256 } from "@/lib/workspace-data-fetch";
-import { requireWorkspaceAccess, workspaceAccessContext } from "@/lib/workspace-access";
+import { sha256 } from "@/lib/credentials/internal/workspace-data-fetch";
+import { requireWorkspaceAccess, workspaceAccessContext } from "@/lib/credentials/internal/workspace-access";
 
 export async function POST(request: NextRequest) {
   try {

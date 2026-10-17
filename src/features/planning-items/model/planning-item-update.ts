@@ -6,7 +6,7 @@ import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import {
   validReviewEvidenceUrl,
 } from "@/features/reviews/model/review-evidence";
-import type { getServerSupabase } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
@@ -47,7 +47,7 @@ import type { ActorContext } from "./actor-context";
 import type { PlanningError, PlanningItems, PlanningItemChanges, PlanningResult, ReviseItem } from "./planning-items";
 import { parseTeamPlanningDependency } from "./planning-items-team-dependency-contract";
 
-type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
+type SupabaseServer = SupabaseClient;
 type UnknownRecord = Record<string, unknown>;
 type DatabaseRow = Record<string, unknown>;
 export type PlanningItemReplayType = TeamPlanningItemType;

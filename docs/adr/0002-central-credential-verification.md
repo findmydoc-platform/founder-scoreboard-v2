@@ -5,15 +5,15 @@
 | Name | Content |
 | --- | --- |
 | Author | Sebastian Schütze |
-| Version | 0.2 |
+| Version | 0.3 |
 | Date | 17.10.2026 |
 | Status | Draft |
 
 ## Background
 
-FounderOps accepts user sessions, personal Planning Items tokens and technical request credentials. It also obtains credentials for outgoing GitHub, Google, Notion and database operations. Authentication, Workspace membership, authorization and refresh knowledge currently spans callers, guards, transports and provider helpers.
+FounderOps accepts user sessions, personal Planning Items tokens and technical request credentials. It also obtains credentials for outgoing GitHub, Google, Notion and database operations. Before this change, authentication, Workspace membership, authorization and refresh knowledge spanned callers, guards, transports and provider helpers.
 
-This record follows **ADR according to Nygard**, using the [Website ADR template](https://github.com/findmydoc-platform/website/blob/eda78ba87601db5f00fe8c218ce1acd36e6b0b1d/docs/adrs/templates/adr-templates.md). It records the architecture decision and its consequences; it does not assert implementation or deployment. The existing [Task GitHub projection decision](0001-deep-task-github-projection.md) remains in force. The architecture constraints are approved by spec #487. Document status remains Draft; the expand step in #488 is implemented, subsequent migration and production deployment are separate states.
+This record follows **ADR according to Nygard**, using the [Website ADR template](https://github.com/findmydoc-platform/website/blob/eda78ba87601db5f00fe8c218ce1acd36e6b0b1d/docs/adrs/templates/adr-templates.md). It records the architecture decision and its consequences; it does not assert implementation or deployment. The existing [Task GitHub projection decision](0001-deep-task-github-projection.md) remains in force. The architecture constraints are approved by spec #487. Document status remains Draft. The implementation now includes the migration and contract closeout; production deployment and the separate acceptance measurements remain distinct states.
 
 ## Problem Description
 
@@ -43,9 +43,11 @@ Calendar loading and the private workweek draft are the first end-to-end proof c
 
 ## Technical Debt
 
-The migration temporarily supports old and new internals while callers move. The exact legacy dependency and network-reference allowances are recorded in `scripts/lib/credential-boundary-policy.json`; #502 removes these allowances and the legacy delegation adapter. The inventory in `docs/credential-verification-inventory.md` maps each family to its migration ticket. The forwarding entry introduced by #488 is only the expand step and does not satisfy whole-application acceptance. It is not complete until the old verification exports and independent caller-side refresh paths are removed and the dependency rule rejects their reintroduction.
+The contract closeout removes the legacy guards, client-argument delegation, unrestricted server/browser acquisition helpers and public verification-only action variants. Live session, Workspace, permit, provider-proof and service-client implementations are private to the credential module. The inventory in `docs/credential-verification-inventory.md` records actual application actions and deliberately public contracts.
 
-The first production slice in #489 caches membership evidence for calendar reads. Role, account and binding checks remain live because their existing stronger mutable contracts must continue to hold. Browser and Proxy lifecycle migration remains assigned to #491 and #492.
+The resolved dependency verifier rejects SDK acquisition, private imports, computed loaders and independent transport outside the declared resource boundaries. The browser dependency graph and production static-bundle verifier provide separate source and emitted-artifact checks. The remaining transport declarations are resource protocols, not transitional verification exceptions.
+
+Membership evidence is cached within its original deadline. Role, account and binding checks remain live. Shared header caches hold data only; each invocation checks its own authority before cache hits and uses its own guarded client on a miss. Confirmed operations retain only their exact existing accounting authority, bound to accepted operation IDs and captured database configuration.
 
 Process-local caches can repeat verification after cold starts or on other instances. Their deadlines still bound role and membership staleness. Cache effectiveness and total remaining network requests must be measured before adding shared storage.
 

@@ -3,9 +3,10 @@ import { authorizeDeliveryAdmission, DeliveryAdmissionDenied } from "./delivery-
 import { reassertDeliveryAdmission } from "./delivery-admission-scope";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import "server-only";
-import { GitHubApiError, githubRequest, type GitHubRequestOptions } from "../../github-http";
+import { GitHubApiError, githubRequest, type GitHubRequestOptions } from "./github-http-transport";
 import { requireAllowedGitHubRepository } from "../../github-repositories";
 import { GitHubAppUserTokenRequiredError } from "../../github-app-errors";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthenticatedProfile } from "../../types";
 import type { GitHubAuthoredCredentialInput, GitHubAuthoredCredentialResult, GitHubAttachmentInput, GitHubUserCapability, GitHubSessionInput } from "../types";
 import { authorizeSessionPolicy } from "./session-policy";
@@ -128,12 +129,14 @@ export async function authorizeGitHubAttachment(input:GitHubAttachmentInput):Pro
     return current.assertCurrent;
   },(url,options)=>url.pathname===expected && ((options.method||"GET")==="GET" || (options.method==="PUT" && options.operation==="mutation")))};
 }
-export async function githubConnectionSession(input:GitHubSessionInput) {
+export async function githubConnectionSession(input:GitHubSessionInput, binding?: { profileId: string; vault: SupabaseClient }) {
   const permission=await authorizeSessionPolicy(input.credential.request,"team.read");
   if(!permission.ok || !permission.profile) throw required();
+  if (binding && permission.profile.id !== binding.profileId) throw required();
+  const vault = binding?.vault || userVault();
   if(input.action==="github.connection.disconnect") {
-    await revokeGitHubAppUserConnection(userVault(),permission.profile);
+    await revokeGitHubAppUserConnection(vault,permission.profile);
     return {ok:true as const};
   }
-  return getGitHubUserConnectionStatus(userVault(),permission.profile);
+  return getGitHubUserConnectionStatus(vault,permission.profile);
 }

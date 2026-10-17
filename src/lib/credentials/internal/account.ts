@@ -18,7 +18,7 @@ import { emptyPlanningHeaderData, loadPlanningHeaderData } from "../../planning-
 import { planningHeaderSlotLoaders } from "./planning-header-cache";
 import { platformReleaseSeed } from "@/features/platform-releases/model/platform-release-seed";
 import { loadPlatformReleases } from "@/features/platform-releases/server/platform-release-read-model-supabase";
-import { requiresSupabaseAuth } from "../../supabase";
+import { requiresSupabaseAuth } from "../../supabase-configuration";
 
 const accountActions = new Set(["account.profile.read", "account.settings.update", "account.github-project.update", "account.notifications.update", "account.tour.acknowledge", "account.preview.write", "account.preview.read", "account.governance.update", "releases.read", "releases.seen"]);
 function configurationFingerprint() {

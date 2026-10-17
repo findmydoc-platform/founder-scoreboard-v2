@@ -1,24 +1,19 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
-  disconnectGoogleWorkspace,
-  getGoogleWorkspaceDisconnectView,
   GoogleWorkspaceDisconnectError,
 } from "@/features/team-workweek/server/google-workspace-disconnect";
-import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { apiError, authzError, readJsonPayload } from "@/lib/api-response";
+import { authorizeCredentialAction } from "@/lib/credentials";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const apiContext = await requireApiContext(request, requireTeamMember);
-  if (!apiContext.ok) return apiContext.response;
-  const ownerProfileId = apiContext.permission.profile?.id;
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "connection.google.disconnect.preview" });
+  if (!permission.ok) return authzError(permission);
+  const ownerProfileId = permission.profile?.id;
   if (!ownerProfileId) return apiError("Gebundenes Teamprofil erforderlich.", 403);
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!serviceSupabase) return apiError("Trennungsvorschau ist nicht verfügbar.", 503);
   try {
-    const disconnect = await getGoogleWorkspaceDisconnectView(serviceSupabase, ownerProfileId);
+    const disconnect = await permission.resource.readGoogleDisconnect();
     return NextResponse.json({ disconnect });
   } catch {
     return apiError("Trennungsvorschau ist nicht verfügbar.", 503);
@@ -26,19 +21,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const apiContext = await requireApiContext(request, requireTeamMember);
-  if (!apiContext.ok) return apiContext.response;
-  const ownerProfileId = apiContext.permission.profile?.id;
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "connection.google.disconnect" });
+  if (!permission.ok) return authzError(permission);
+  const ownerProfileId = permission.profile?.id;
   if (!ownerProfileId) return apiError("Gebundenes Teamprofil erforderlich.", 403);
   const payload = await readJsonPayload<unknown>(request, null);
   const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
   if (Object.keys(input).some((key) => key !== "confirm") || input.confirm !== true) {
     return apiError("Trennung muss ausdrücklich bestätigt werden.", 400);
   }
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!serviceSupabase) return apiError("Trennung ist nicht verfügbar.", 503);
   try {
-    const result = await disconnectGoogleWorkspace({ request, ownerProfileId, serviceSupabase });
+    const result = await permission.resource.disconnectGoogle();
     return NextResponse.json({ result }, { status: result.state === "completed" ? 200 : 202 });
   } catch (error) {
     if (error instanceof GoogleWorkspaceDisconnectError) {

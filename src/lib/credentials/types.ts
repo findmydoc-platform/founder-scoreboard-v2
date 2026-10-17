@@ -1,26 +1,6 @@
 import type { GitHubJobContext } from "./github-job-types";
 import type { NextRequest } from "next/server";
-import type { AuthzResult } from "../authz";
-
-export type CredentialAction =
-  | "calendar.read"
-  | "workweek.private.read"
-  | "workweek.private.write"
-  | "team.read"
-  | "planning.contribute"
-  | "governance.ceo"
-  | "operations.lead"
-  | "planning.correct"
-  | "operations.correct"
-  | "administration.technical"
-  | "administration.eligibility";
-
-export type CredentialActionInput = {
-  credential: { kind: "session-request"; request: NextRequest };
-  action: CredentialAction;
-};
-
-export type CredentialActionResult = AuthzResult | CalendarCredentialResult | PrivateDraftCredentialResult;
+import type { AuthzResult } from "./auth-types";
 
 export type CalendarPublication = Readonly<{
   id: string; owner_profile_id: string; effective_from: string; effective_to: string | null;
@@ -112,7 +92,7 @@ export type GitHubAuthoredCredentialInput =
   | { credential: {kind:"github-review-delivery";reviewId:number;claimToken:string};action:"github.review.deliver" };
 export type GitHubAuthoredCredentialResult = {ok:true;github:GitHubUserCapability};
 export type GitHubConnectionInput = {[Action in "github.connection.start"|"github.connection.complete"]:{credential:{kind:"github-oauth-request";request:NextRequest};action:Action}}["github.connection.start"|"github.connection.complete"];
-export type GitHubConnectionResult = {ok:true;next:string;profileId:string;redirect?:string};
+export type GitHubConnectionResult = {ok:true;next:string;profileId:string;redirect?:string; resumePendingComments?: () => Promise<unknown>; resumePendingReviews?: () => Promise<unknown>};
 export type GitHubSessionInput = {[Action in "github.connection.status"|"github.connection.disconnect"]:{credential:{kind:"session-request";request:NextRequest};action:Action}}["github.connection.status"|"github.connection.disconnect"];
 export type GitHubConnectionStatus = {connected:boolean;needsReconnect:boolean;expiresAt:string|null};
 export type GitHubAttachmentInput = {

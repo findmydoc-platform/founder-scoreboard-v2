@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const draftModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
@@ -9,32 +11,14 @@ const calendarModel = await importTestModule(
 );
 const publishedModel = await import("../../../src/features/team-workweek/model/published-team-workweek.ts");
 
-let authResult;
+let protocol;
 let berlinTodayCalls;
 let rows;
 let queryStatuses;
-
-function apiError(message, status) {
-  return Response.json({ error: message }, { status });
-}
-
-function supabaseQuery() {
-  return {
-    select() { return this; },
-    eq(column, value) {
-      if (column === "status") queryStatuses.push(value);
-      return this;
-    },
-    or() { return this; },
-    order() { return this; },
-    returns() { return Promise.resolve({ data: rows, error: null }); },
-  };
-}
-
 const route = await importTestModule(
   "src/app/api/team-workweek/team/route.ts",
   {
-    "next/server": { NextResponse: { json: (value) => Response.json(value) } },
+    "next/server": { NextResponse: { json: (value, init) => Response.json(value, init) } },
     "@/features/team-workweek/model/team-workweek-calendar": calendarModel,
     "@/features/team-workweek/model/team-workweek-draft": {
       ...draftModel,
@@ -44,33 +28,27 @@ const route = await importTestModule(
       },
     },
     "@/features/team-workweek/model/published-team-workweek": publishedModel,
-    "@/lib/api-response": {
-      apiError,
-      requireApiContext: async () => authResult,
-    },
-    "@/lib/credentials": { authorizeCredentialAction: async () => authResult.permission },
+    "server-only": {},
   },
 );
 
-function request(search = "") {
-  return { nextUrl: { searchParams: new URLSearchParams(search) } };
-}
-
+function request(search = "") { return protocol.request(`/api/team-workweek/team?${search}`); }
 test.beforeEach(() => {
-  authResult = {
-    ok: true,
-    permission: { profile: { id: "profile-1", platformRole: "founder" }, calendar: {
-      readPublications: () => supabaseQuery().eq("status", "published").returns(),
-      readPublishedOwners: () => supabaseQuery().eq("status", "published").returns(),
-    } },
-  };
-  berlinTodayCalls = 0;
-  queryStatuses = [];
-  rows = [];
+  protocol = administratorProtocol();
+  const authFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const operation = new Request(input, init), url = new URL(operation.url);
+    if (url.pathname === "/rest/v1/team_workweek_publications") {
+      queryStatuses.push(url.searchParams.get("status")?.replace(/^eq\./, ""));
+      return Response.json(rows);
+    }
+    return authFetch(operation);
+  });
+  berlinTodayCalls = 0; queryStatuses = []; rows = [];
 });
 
 test("team calendar rejects unauthenticated requests before reading publications", async () => {
-  authResult = { ok: false, response: apiError("Anmeldung erforderlich.", 401) };
+  protocol.state.authError = 401;
   const response = await route.GET(request("from=2026-08-24&to=2026-10-04"));
   assert.equal(response.status, 401);
   assert.deepEqual(queryStatuses, []);

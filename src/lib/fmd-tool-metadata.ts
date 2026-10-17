@@ -120,13 +120,17 @@ async function readLimitedText(response: Response) {
   return new TextDecoder("utf-8", { fatal: false }).decode(Buffer.concat(chunks));
 }
 
-async function fetchMetadataHtml(url: URL, redirectCount = 0): Promise<{ html: string; finalUrl: string }> {
+type MetadataAdmission = { current(): Promise<void>; assertCurrent(): void };
+
+async function fetchMetadataHtml(url: URL, admission?: MetadataAdmission, redirectCount = 0): Promise<{ html: string; finalUrl: string }> {
   await assertPublicHttpUrl(url);
 
+  await admission?.current();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), metadataTimeoutMs);
 
   try {
+    admission?.assertCurrent();
     const response = await fetch(url, {
       headers: {
         accept: "text/html,application/xhtml+xml",
@@ -142,7 +146,7 @@ async function fetchMetadataHtml(url: URL, redirectCount = 0): Promise<{ html: s
       const location = response.headers.get("location");
       const redirectedUrl = location ? normalizeMetadataUrl(location, url.toString()) : null;
       if (!redirectedUrl) throw new Error("Weiterleitung konnte nicht gelesen werden.");
-      return fetchMetadataHtml(redirectedUrl, redirectCount + 1);
+      return fetchMetadataHtml(redirectedUrl, admission, redirectCount + 1);
     }
 
     if (!response.ok) throw new Error(`Metadaten konnten nicht geladen werden (${response.status}).`);
@@ -158,11 +162,11 @@ async function fetchMetadataHtml(url: URL, redirectCount = 0): Promise<{ html: s
   }
 }
 
-export async function loadFmdToolMetadata(value: string): Promise<FmdToolMetadata> {
+export async function loadFmdToolMetadata(value: string, admission?: MetadataAdmission): Promise<FmdToolMetadata> {
   const url = normalizeMetadataUrl(value);
   if (!url) throw new Error("URL muss mit http:// oder https:// beginnen.");
 
-  const { html, finalUrl } = await fetchMetadataHtml(url);
+  const { html, finalUrl } = await fetchMetadataHtml(url, admission);
   const imageUrl = normalizeMetadataUrl(
     metaContent(html, "property", "og:image")
       || metaContent(html, "name", "twitter:image"),

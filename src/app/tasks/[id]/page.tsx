@@ -10,9 +10,8 @@ import { parseTaskCommentTarget } from "@/features/tasks/model/task-comment-targ
 import { authorizeCredentialAction } from "@/lib/credentials";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
-import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
-import { requiresSupabaseAuth } from "@/lib/supabase";
+import { requiresSupabaseAuth } from "@/lib/supabase-configuration";
 import type { AuthenticatedProfile } from "@/lib/types";
 import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
 
@@ -31,7 +30,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
   let administratorAccess: AdministratorAccessSnapshot | undefined;
   const authRequired = requiresSupabaseAuth();
   if (authRequired) {
-    const auth = await getServerPlanningAuth();
+    const auth = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" });
     if (!auth.ok) {
       redirectForWorkspaceGate(auth.code);
       return <PlanningApp initialData={emptyPlanningShellState} initialHeaderData={emptyPlanningHeaderData} initialWorkspace="planning" source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;

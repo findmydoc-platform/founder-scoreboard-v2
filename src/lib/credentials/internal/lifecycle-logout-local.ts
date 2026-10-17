@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { authOrigin } from "@/lib/auth-redirect";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
+import { getServerAuthSupabase } from "./cookie-client";
 
 export async function POST(request: NextRequest) {
   try {

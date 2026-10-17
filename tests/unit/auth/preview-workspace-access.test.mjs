@@ -10,9 +10,9 @@ async function fixture(change = {}, member = true) {
   const identity = { sub: "google-subject", iss: "https://accounts.google.com", email: "member@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } };
   const context = { mode: "linking", linkingEnforced: true, linked: true, userId: "user-1", profileId: "founder", identity, ...change };
   const isWorkspaceGroupMember = vi.fn().mockResolvedValue(member);
-  const access = await importTestModule("src/lib/workspace-access.ts", {
+  const access = await importTestModule("src/lib/credentials/internal/workspace-access.ts", {
     "server-only": {},
-    "./supabase-service-role": { getServerServiceRoleSupabase: () => ({ rpc: async () => ({ data: context, error: null }) }) },
+    "./service-client": { getServerServiceRoleSupabase: () => ({ rpc: async () => ({ data: context, error: null }) }) },
     "./workspace-directory": { isWorkspaceGroupMember },
   });
   return { access, isWorkspaceGroupMember };
@@ -42,7 +42,7 @@ test("Preview reports the configured login mode instead of hiding login", async 
   vi.resetModules();
   const route = await importTestModule("src/app/api/auth/login-mode/route.ts", {
     "server-only": {},
-    "@/lib/workspace-access": { workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true }) },
+    "@/lib/credentials/internal/workspace-access": { workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true }) },
   });
   const response = await route.GET();
   expect(response.status).toBe(200);

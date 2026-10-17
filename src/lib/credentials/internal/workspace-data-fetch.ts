@@ -1,8 +1,8 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { assertGoogleSession, requireWorkspaceAccess } from "./workspace-access";
-import { getServerServiceRoleSupabase } from "./supabase-service-role";
-import { WorkspaceAccessError } from "./workspace-identity";
+import { getServerServiceRoleSupabase } from "./service-client";
+import { WorkspaceAccessError } from "../../workspace-identity";
 
 export const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 

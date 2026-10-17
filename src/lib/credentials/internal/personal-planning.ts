@@ -1,6 +1,6 @@
-import { authorizeLegacySession } from "./legacy-session";
-import { getServerSupabase } from "@/lib/supabase";
-import { createTeamPlanningItemsToken, mapTeamPlanningItemsTokenRecord } from "@/features/planning-items/model/planning-items-token";
+import { authorizeSessionPolicy } from "./session-policy";
+import { getServerSupabase } from "@/lib/credentials/internal/server-data-client";
+import { createTeamPlanningItemsToken, mapTeamPlanningItemsTokenRecord } from "./planning-items/issuance";
 import "server-only";
 import type { PersonalPlanningCredentialInput } from "../types";
 import { requireTeamPlanningItemScope, type TeamPlanningItemsAuthResult } from "./planning-items/token";
@@ -126,7 +126,7 @@ export async function authorizePersonalPlanning(input: PersonalPlanningCredentia
 export async function authorizePersonalPlanningTokenManagement(input: import("../types").PersonalPlanningTokenManagementInput) {
   const supabase = getServerSupabase();
   if (!supabase) return { ok: false as const, status: 501, error: "Supabase ist für Planning-API-Tokens erforderlich." };
-  const permission = await authorizeLegacySession({ credential: input.credential, action: "planning.contribute" });
+  const permission = await authorizeSessionPolicy(input.credential.request, "planning.contribute");
   if (!permission.ok) return permission;
   if (!permission.profile) return { ok: false as const, status: 403, error: "Profil konnte nicht bestimmt werden." };
   const profileId = permission.profile.id;

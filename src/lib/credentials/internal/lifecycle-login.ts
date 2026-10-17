@@ -1,7 +1,7 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
-import { workspaceAccessContext } from "@/lib/workspace-access";
+import { getServerAuthSupabase } from "./cookie-client";
+import { workspaceAccessContext } from "@/lib/credentials/internal/workspace-access";
 import { authOrigin, safeRelativeNext } from "@/lib/auth-redirect";
 import { randomBytes } from "node:crypto";
 

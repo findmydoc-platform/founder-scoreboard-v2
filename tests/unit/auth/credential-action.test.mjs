@@ -17,10 +17,10 @@ test("the seam verifies a bearer and preserves founder versus CEO action authori
   const protocol = administratorProtocol();
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   const credential = { kind: "session-request", request: protocol.request() };
-  expect(await authorizeCredentialAction({ credential, action: "planning.contribute" })).toMatchObject({
+  expect(await authorizeCredentialAction({ credential, action: "tools.create" })).toMatchObject({
     ok: true, profile: { id: "synthetic-profile", platformRole: "founder" },
   });
-  expect(await authorizeCredentialAction({ credential, action: "governance.ceo" })).toEqual({
+  expect(await authorizeCredentialAction({ credential, action: "account.governance.update", targetProfileId: "synthetic-profile" })).toEqual({
     ok: false, status: 403, error: "Keine Berechtigung für diese Aktion.",
   });
 });

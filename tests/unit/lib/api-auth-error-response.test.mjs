@@ -1,6 +1,4 @@
 import { vi } from "vitest";
-vi.mock("@/lib/supabase-user", async () => vi.importMock("@/lib/supabase"));
-vi.mock("@/lib/workspace-access", () => ({ requireWorkspaceAccess: async () => null }));
 import assert from "node:assert/strict";
 import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
 import { afterEach, beforeEach, test } from "vitest";
@@ -14,10 +12,10 @@ const { apiError, authzError } = await importTestModule("src/lib/api-response.ts
   "./supabase": { getServerSupabase: () => ({}) },
 });
 
-const authz = await importTestModule("src/lib/authz.ts", { "server-only": {} });
+const { authorizeCredentialAction: authorize } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
 
 test("an invalid application session is marked for browser recovery", async () => {
-  const permission = await authz.requirePlanningContributor(protocol.request());
+  const permission = await authorize({ credential: { kind: "session-request", request: protocol.request() }, action: "tools.create" });
   assert.deepEqual(permission, {
     ok: false,
     status: 401,
@@ -57,7 +55,7 @@ test("authorization response fields cannot forge the pre-effect marker", async (
 test("a retryable Supabase Auth outage is not marked as an invalid session", async () => {
   protocol.state.authError = 503;
 
-  const permission = await authz.requirePlanningContributor(protocol.request());
+  const permission = await authorize({ credential: { kind: "session-request", request: protocol.request() }, action: "tools.create" });
 
   assert.deepEqual(permission, {
     ok: false,
@@ -70,77 +68,20 @@ test("a retryable Supabase Auth outage is not marked as an invalid session", asy
   });
 });
 
-function sessionSupabase({ profile = null, profileError = null } = {}) {
-  const user = { id: "auth-user", user_metadata: {} };
-  return {
-    user,
-    client: {
-      auth: {
-        getUser: async () => ({ data: { user }, error: null }),
-      },
-      async rpc(name) {
-        assert.equal(name, "current_authenticated_profile");
-        return { data: profile, error: profileError };
-      },
-      from() {
-        return {
-          select() { return this; },
-          eq() { return this; },
-          async maybeSingle() {
-            return { data: profile, error: profileError };
-          },
-        };
-      },
-    },
-  };
-}
 
 test("session authorization returns a valid mapped team profile", async () => {
-  const fixture = sessionSupabase({
-    profile: {
-      id: "profile-1",
-      name: "Delegate",
-      platform_role: "deputy",
-      github_login: "delegate",
-    },
-  });
-
-  const result = await authz.requireTeamMemberForSession(fixture.client);
-
-  assert.deepEqual(result, {
-    ok: true,
-    user: fixture.user,
-    profile: {
-      id: "profile-1",
-      name: "Delegate",
-      platformRole: "deputy",
-      githubLogin: "",
-    },
-  });
+  protocol.state.authError = null; protocol.state.role = "deputy";
+  const result = await authorize({ credential: { kind: "session-request", request: protocol.request() }, action: "tools.create" });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.profile, { id: "synthetic-profile", name: "Synthetic Founder", platformRole: "deputy", githubLogin: "" });
 });
-
 test("session authorization fails closed for an unmapped user", async () => {
-  const fixture = sessionSupabase();
-
-  const result = await authz.requireTeamMemberForSession(fixture.client);
-
-  assert.deepEqual(result, {
-    ok: false,
-    status: 403,
-    error: "Dieses Konto ist keinem Teamprofil zugeordnet.",
-    user: fixture.user,
-  });
+  protocol.state.authError = null; protocol.state.profile = false;
+  const result = await authorize({ credential: { kind: "session-request", request: protocol.request() }, action: "tools.create" });
+  assert.deepEqual(result, { ok: false, status: 403, error: "Dieses Konto ist keinem Teamprofil zugeordnet." });
 });
-
 test("session authorization fails closed when profile lookup is ambiguous", async () => {
-  const fixture = sessionSupabase({ profileError: new Error("ambiguous") });
-
-  const result = await authz.requireTeamMemberForSession(fixture.client);
-
-  assert.deepEqual(result, {
-    ok: false,
-    status: 403,
-    error: "Teamprofil konnte nicht eindeutig geprüft werden.",
-    user: fixture.user,
-  });
+  protocol.state.authError = null; protocol.state.profileError = true;
+  const result = await authorize({ credential: { kind: "session-request", request: protocol.request() }, action: "tools.create" });
+  assert.deepEqual(result, { ok: false, status: 403, error: "Teamprofil konnte nicht eindeutig geprüft werden." });
 });

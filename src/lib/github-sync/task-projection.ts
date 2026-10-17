@@ -242,7 +242,7 @@ export function projectTaskToGitHub(
 ): Promise<TaskGitHubProjectionResult>;
 export async function projectTaskToGitHub({
   supabase,
-  installationToken = "",
+  installationToken,
   taskId,
   actorProfileId,
   createIfMissing,
@@ -273,6 +273,10 @@ export async function projectTaskToGitHub({
         issueNumber: eligibility.issueNumber,
       },
     };
+  }
+
+  if (!installationToken) {
+    throw new Error("GitHub projection requires an authorized resource capability.");
   }
 
   const resourceKey = githubSyncResourceKey(

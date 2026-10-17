@@ -18,8 +18,8 @@ let context = { linked: true, identity: googleIdentity };
 
 const route = await importTestModule("src/app/api/auth/account-state/route.ts", {
   "next/server": { NextResponse: { json: (body, init) => Response.json(body, init) } },
-  "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: { getUser: async () => ({ data: { user }, error: null }) } }) },
-  "@/lib/workspace-access": { workspaceAccessContext: async () => context },
+  "@/lib/credentials/internal/cookie-client": { cookieSession: async () => ({ complete: response => response, revoke() {} }), getServerAuthSupabase: async () => ({ auth: { getUser: async () => ({ data: { user }, error: null }) } }) },
+  "@/lib/credentials/internal/workspace-access": { workspaceAccessContext: async () => context },
 });
 
 beforeEach(() => {

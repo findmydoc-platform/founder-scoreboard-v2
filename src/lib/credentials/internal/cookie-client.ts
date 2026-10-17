@@ -3,7 +3,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
-import { workspaceDataFetch } from "../../workspace-data-fetch";
+import { workspaceDataFetch } from "./workspace-data-fetch";
 
 type Cookie = { name: string; value: string; options?: CookieOptions };
 type Jar = { getAll(): Array<{ name: string; value: string }>; set(name: string, value: string, options?: CookieOptions): unknown };

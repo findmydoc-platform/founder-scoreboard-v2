@@ -15,7 +15,7 @@ export type WorkweekPublicationBookkeeping = {
   delay(errorClass: string, observedAt: string): Promise<RpcResult>;
 };
 export type WorkweekBookkeeping = {
-  forPublication(publication: PreparedWorkweekPublication): WorkweekPublicationBookkeeping;
+  forPublication(publication: PreparedWorkweekPublication | Pick<PreparedWorkweekPublication, "id" | "ownerProfileId" | "attemptGeneration" | "writeJournalVersion" | "effects" | "series" | "transitions" | "publicationRevision">): WorkweekPublicationBookkeeping;
   published(publication: { id: string; status: string }): void;
   completeConflict(values: { publicationId: string; conflictId: string; ownerProfileId: string; revision: number; resolvedAt: string }): Promise<RpcResult>;
   recordReconciliation(values: { publicationId: string; revision: number; observedAt: string }): Promise<RpcResult>;

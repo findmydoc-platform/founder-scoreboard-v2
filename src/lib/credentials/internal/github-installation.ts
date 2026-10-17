@@ -4,7 +4,7 @@ import { installationGraphqlDocuments } from "../../github-graphql-documents";
 import { allowedGitHubAssetUrl } from "../../github-asset-policy";
 import "server-only";
 import { createHash, createSign } from "node:crypto";
-import { GitHubApiError, githubJson, githubRequest, type GitHubRequestOptions } from "../../github-http";
+import { GitHubApiError, githubJson, githubRequest, type GitHubRequestOptions } from "./github-http-transport";
 import { GitHubAppConfigurationError } from "../../github-app-errors";
 import { allowedGitHubRepositories } from "../../github-repositories";
 import type { GitHubInstallationInput, GitHubInstallationCapability } from "../types";
@@ -29,8 +29,7 @@ async function githubAppPrivateKey() {
   const keyPath = env("GITHUB_APP_PRIVATE_KEY_PATH");
   if (!keyPath) throw new GitHubAppConfigurationError("GITHUB_APP_PRIVATE_KEY oder GITHUB_APP_PRIVATE_KEY_PATH ist nicht gesetzt.");
   // Keep runtime-only private key files out of Next's static output trace.
-  const runtimeImport = Function("specifier", "return import(specifier)") as (specifier: string) => Promise<typeof import("node:fs/promises")>;
-  const { readFile } = await runtimeImport("node:fs/promises");
+  const { readFile } = process.getBuiltinModule("node:fs").promises;
   try {
     return await readFile(resolvePrivateKeyPath(keyPath), "utf8");
   } catch {

@@ -1,3 +1,7 @@
+import { authorizePublicResource } from "./internal/public-resources";
+import type { PublicResourceInput, PublicResourceResult } from "./public-resource-types";
+import { authorizeResource, isResourceAction } from "./internal/resources";
+import type { ResourceCredentialInput, ResourceCredentialResult } from "./resource-types";
 import { authorizeNotificationDelivery } from "./internal/notification-delivery";
 import { authorizeNotificationDigest } from "./internal/notification-digest";
 import { authorizeDeliveryReconciliation } from "./internal/delivery-reconciliation";
@@ -37,10 +41,9 @@ import "server-only";
 import { authorizePersonalPlanning, authorizePersonalPlanningTokenManagement } from "./internal/personal-planning";
 import { authorizeCalendar } from "./internal/session";
 import { authorizePrivateDraft } from "./internal/private-draft";
-import { authorizeLegacySession } from "./internal/legacy-session";
 import { authorizeGitHubInstallation, installationOperationalStatus } from "./internal/github-installation";
 import type {
-  CalendarCredentialInput, CalendarCredentialResult, CredentialActionInput, CredentialActionResult,
+  CalendarCredentialInput, CalendarCredentialResult,
   PrivateDraftCredentialInput, PrivateDraftCredentialResult, PrivateDraftReadResult, PrivateDraftWriteResult,
   GitHubInstallationInput, GitHubInstallationResult, GitHubInstallationStatusInput,
   PersonalPlanningCredentialInput, PersonalPlanningCredentialResult, PersonalPlanningTokenManagementInput, PersonalPlanningTokenManagementResult,
@@ -48,7 +51,6 @@ import type {
 import type { GitHubAppOperationalStatus } from "./types";
 
 export type {
-  CredentialAction, CredentialActionInput, CredentialActionResult,
   CalendarCredentialInput, CalendarCredentialResult, CalendarReadCapability,
   GitHubInstallationCapability, GitHubUserCapability, GoogleCalendarCapability,
 } from "./types";
@@ -56,6 +58,8 @@ export type {
 
 export type { ServerSessionView, SessionLinkPageState } from "./session-types";
 
+export function authorizeCredentialAction(input: PublicResourceInput): Promise<PublicResourceResult>;
+export function authorizeCredentialAction(input: ResourceCredentialInput): Promise<ResourceCredentialResult>;
 export function authorizeCredentialAction(input: NotificationDeliveryInput): Promise<NotificationDeliveryResult>;
 export function authorizeCredentialAction(input: NotificationDigestInput): Promise<NotificationDigestResult>;
 export function authorizeCredentialAction(input: GitHubReconciliationInput): Promise<GitHubReconciliationResult>;
@@ -92,9 +96,10 @@ export function authorizeCredentialAction(input: GitHubInstallationStatusInput):
 export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {action: "workweek.private.read"}): Promise<PrivateDraftReadResult>;
 export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {action: "workweek.private.write"}): Promise<PrivateDraftWriteResult>;
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
-export function authorizeCredentialAction(input: CredentialActionInput): Promise<CredentialActionResult>;
 
-export function authorizeCredentialAction(input: NotificationDeliveryInput | NotificationDigestInput | GitHubReconciliationInput | PlanningTrashMaintenanceInput | GoogleCalendarInput | GoogleCalendarConnectionInput | CredentialActionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | CronWebhookInput | AccountCredentialInput | ReleaseIngestCredentialInput | GitHubWebhookInput | DecisionLogCredentialInput | PlanningCredentialInput): Promise<NotificationDeliveryResult | NotificationDigestResult | GitHubReconciliationResult | PlanningTrashMaintenanceResult | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string} | CredentialActionResult | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | CronWebhookResult | AccountCredentialResult | ReleaseIngestCredentialResult | GitHubWebhookResult | DecisionLogCredentialResult | PlanningCredentialResult> {
+export function authorizeCredentialAction(input: PublicResourceInput | NotificationDeliveryInput | NotificationDigestInput | GitHubReconciliationInput | PlanningTrashMaintenanceInput | GoogleCalendarInput | GoogleCalendarConnectionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | CronWebhookInput | AccountCredentialInput | ReleaseIngestCredentialInput | GitHubWebhookInput | DecisionLogCredentialInput | PlanningCredentialInput | ResourceCredentialInput): Promise<NotificationDeliveryResult | NotificationDigestResult | GitHubReconciliationResult | PlanningTrashMaintenanceResult | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string} | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | CronWebhookResult | AccountCredentialResult | ReleaseIngestCredentialResult | GitHubWebhookResult | DecisionLogCredentialResult | PlanningCredentialResult | ResourceCredentialResult | PublicResourceResult> {
+  if (input.action === "health.inspect" || input.action === "historical-initiative.resolve") return Promise.resolve(authorizePublicResource(input));
+  if (isResourceAction(input.action)) return authorizeResource(input as ResourceCredentialInput);
   if ((input.action.startsWith("notifications.") || input.action.startsWith("github.reconciliation.")) && input.credential.kind !== "notification-delivery-request") return Promise.resolve({ok:false,status:403,error:"Keine Berechtigung für diese Aktion."});
   if (input.action === "notifications.delivery.inspect" || input.action === "notifications.delivery.run") return authorizeNotificationDelivery(input as NotificationDeliveryInput);
   if (input.action === "notifications.digest.generate") return authorizeNotificationDigest(input as NotificationDigestInput);
@@ -139,7 +144,7 @@ export function authorizeCredentialAction(input: NotificationDeliveryInput | Not
   if (input.action === "planning-items.tokens.manage") return authorizePersonalPlanningTokenManagement(input as PersonalPlanningTokenManagementInput);
   if (input.action === "workweek.private.read" || input.action === "workweek.private.write") return authorizePrivateDraft(input as PrivateDraftCredentialInput);
   if (input.action === "calendar.read") return authorizeCalendar(input.credential.request);
-  return authorizeLegacySession(input as CredentialActionInput);
+  return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
 }
 
 export type { GitHubJobContext } from "./github-job-types";

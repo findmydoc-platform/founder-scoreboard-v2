@@ -7,7 +7,7 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
-import { requiresSupabaseAuth } from "@/lib/supabase";
+import { requiresSupabaseAuth } from "@/lib/supabase-configuration";
 
 type Props = {
   params: Promise<{ version: string }>;

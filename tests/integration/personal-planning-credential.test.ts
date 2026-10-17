@@ -87,7 +87,7 @@ it("personal planning HTTP contracts retain accounting, owner restrictions, revo
     const access = await authorizeCredentialAction({ credential: { kind: "personal-planning-token", request: new NextRequest("https://app.example.test", { headers: { authorization: `Bearer ${first.token}` } }) }, action: "planning-items.access", operation: "planningContext.read", mode: "read" });
     expect(access).toMatchObject({ ok: true, profile: { id: profileId, platformRole: "founder" } });
     expect("authority" in access).toBe(false);
-    const browserAdministration = await authorizeCredentialAction({ credential: { kind: "session-request", request: sessionRequest() }, action: "administration.technical" });
+    const browserAdministration = await authorizeCredentialAction({ credential: { kind: "session-request", request: sessionRequest() }, action: "administration.technical.update", targetProfileId: otherProfileId });
     expect(browserAdministration).toMatchObject({ ok: true });
     const personalDelete = await authorizeCredentialAction({ credential: { kind: "personal-planning-token", request: new NextRequest("https://app.example.test", { headers: { authorization: `Bearer ${first.token}` } }) }, action: "planning-items.access", operation: "planningItems.deleteEmpty", mode: "commit", itemId: "synthetic-epic" });
     expect(personalDelete).toMatchObject({ ok: false, status: 403, code: "TOKEN_PROFILE_FORBIDDEN" });

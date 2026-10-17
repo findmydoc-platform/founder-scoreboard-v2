@@ -1,7 +1,7 @@
 # Library and Server Boundary Rules
 
-- Keep authorization policy centralized in `authz.ts`, platform policy helpers, and existing API context helpers. Do not duplicate role matrices in unrelated helpers.
-- Client paths may call only `getBrowserSupabase`; server paths use the existing server helpers. Never pass service-role credentials or clients across the boundary, and put new secret-only helpers in server-only modules.
+- Authorize server actions through `authorizeCredentialAction` from `@/lib/credentials`. Keep shared role policy and credential lifecycle inside `credentials/internal/`; feature modules retain domain rules and response mapping.
+- Browser paths use the public browser session adapter. Server callers receive fixed action-bound capabilities, never SDK clients, tokens, generic query callbacks or caller-selected verification modes. Keep SDK acquisition and raw credential transports private to `credentials/internal/`.
 - Keep GitHub App installation tokens separate from encrypted user tokens, and never return either token class to the browser.
 - Prefer pure named functions for mapping, validation, sorting, policy, and error classification so they can be tested directly.
 - Keep React rendering components out of `src/lib`. Domain-specific helpers may depend on the owning feature model only when that boundary is already intentional.
@@ -10,7 +10,7 @@
 
 ## GitHub API Mutation Rules
 
-- Send every `api.github.com` request through `github-http.ts`. Only approved GitHub resource adapters may import that transport; OAuth token exchange is the explicit non-API exception.
+- Send GitHub resource operations through `github-http.ts` with an authorized installation or user capability. Raw HTTP and credentials belong to the private credential transport; OAuth token exchange remains its separate protocol.
 - Classify every non-GET request as `read` or `mutation`. A GraphQL query sent with `POST` is a read; GraphQL and REST writes are mutations.
 - Give every mutation one explicit idempotency contract: desired-state reconciliation, a durable domain marker or operation ID for create-once behavior, or a resource-specific ensure-absent flow.
 - Implement mutation workflows as observe, compare, apply, and reconcile. Never blindly retry a mutation after a timeout, network error, or 5xx response; observe GitHub first because the prior attempt may have succeeded.

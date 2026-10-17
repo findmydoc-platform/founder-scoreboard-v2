@@ -1,6 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { workspaceAccessContext } from "@/lib/workspace-access";
+import { workspaceAccessContext } from "@/lib/credentials/internal/workspace-access";
 export async function GET() {
   try {
     const { mode, linkingEnforced } = await workspaceAccessContext();

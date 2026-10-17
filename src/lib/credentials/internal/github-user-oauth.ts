@@ -1,5 +1,8 @@
 import { GitHubConnectionError } from "../../github-app-errors";
 import "server-only";
+import { planningService } from "./planning-service";
+import { deliverPendingGitHubComments } from "../../github-comment-delivery";
+import { deliverPendingGitHubReviews } from "../../github-review-delivery";
 import { serverPlanningAuth } from "./server-session-view";
 import { safeRelativeNext } from "../../auth-redirect";
 import type { GitHubConnectionInput, GitHubConnectionResult } from "../types";
@@ -28,6 +31,12 @@ export async function authorizeGitHubConnection(input:GitHubConnectionInput):Pro
   const token=await exchangeGitHubAppCode(code,callback);
   const githubUser=await githubUserForAppUserToken(token.access_token || "");
   await storeGitHubAppUserToken({supabase:userVault(),profile:auth.profile,githubUser,token,expected});
-  return {ok:true,next:safeRelativeNext(state.next),profileId:auth.profile.id};
+  const service = planningService(false);
+  if (!service) throw new Error("Supabase Service Role ist nicht konfiguriert.");
+  const profileId = auth.profile.id;
+  return {ok:true,next:safeRelativeNext(state.next),profileId,
+    resumePendingComments: () => deliverPendingGitHubComments({ supabase: service, authorProfileId: profileId, limit: 100 }),
+    resumePendingReviews: () => deliverPendingGitHubReviews({ supabase: service, authorProfileId: profileId, limit: 100 }),
+  };
   } catch { throw new GitHubConnectionError(safeRelativeNext(state.next)); }
 }

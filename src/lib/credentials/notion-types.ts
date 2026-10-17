@@ -1,5 +1,5 @@
 import type { AuthenticatedProfile, PlanningHeaderData } from "../types";
-import type { AuthzResult } from "../authz";
+import type { AuthzResult } from "./auth-types";
 
 export type NotionDecisionLogCapability = Readonly<{
   queryPage(cursor?: string): Promise<{ ok: boolean; payload: unknown }>;

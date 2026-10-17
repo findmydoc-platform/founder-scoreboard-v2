@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { getServerAuthSupabase } from "@/lib/supabase-server";
-import { workspaceAccessContext } from "@/lib/workspace-access";
+import { getServerAuthSupabase } from "./cookie-client";
+import { workspaceAccessContext } from "@/lib/credentials/internal/workspace-access";
 import { workspaceAvatarUrl, workspaceIdentity } from "@/lib/workspace-identity";
 
 export async function GET() {

@@ -1,5 +1,8 @@
 import type { NextRequest } from "next/server";
-import type { ServerPlanningAuth } from "../planning-auth-server";
+import type { User } from "@supabase/supabase-js";
+import type { AuthenticatedProfile } from "../types";
+import type { SessionAuthorityContext } from "@/features/administrator-access/model/administrator-access";
+import type { AuthErrorCode } from "../auth-error-contract";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 
 export type SessionHttpAction = "session.proxy" | "session.login-start" | "session.login" | "session.callback" | "session.link" | "session.logout-local" | "session.local-login"
@@ -17,7 +20,12 @@ export type SessionLinkPageState = {
   context: { mode: string; linked: boolean; linkingEnforced: boolean; profileId: string | null } | null;
   approved: boolean;
 };
-export type { ServerPlanningAuth, AppWorkspace };
+export type { AppWorkspace };
+
+export type ServerPlanningAuth =
+  | { ok: true; user: User; profile: AuthenticatedProfile | null; authority: SessionAuthorityContext | null }
+  | { ok: false; status: number; error: string; code?: AuthErrorCode; user: User | null };
+
 
 export type ServerSessionView = {
   user: { id: string; email?: string; githubLogin?: string; displayName?: string; avatarUrl?: string };
