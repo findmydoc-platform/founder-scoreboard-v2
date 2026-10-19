@@ -236,3 +236,12 @@ Preview Google login enforces the same Workspace group, verified identity, profi
 Set a trusted HTTPS `APP_URL`, or leave it unset in Preview to use the platform-provided `VERCEL_URL`. Request Host headers cannot select a login return origin. Production still requires its configured `APP_URL`.
 
 Set `NOTION_DECISION_LOG_ENABLED=false` in an isolated test deployment to prevent Notion requests without replacing or deleting existing sensitive credentials. The integration remains enabled by default.
+
+
+### Explicit shared-backend auth smoke test
+
+A bounded auth smoke test may use the production backend only after explicit operator approval. Dispatch `Deploy Preview` manually on the intended branch with `shared_backend_auth_smoke=true` and `expected_sha` equal to the full checked-out commit SHA. The guard rejects automatic events, missing or mismatched SHAs, disabled authentication, and keys that do not match the selected backend. Normal Preview runs still require an isolated database.
+
+The workflow pulls branch-specific Preview variables and passes only the approved Supabase, Workspace reader, origin, authentication, and integration-disable settings to the prebuilt runtime. Configure temporary backend access only for that branch. Set `NOTION_DECISION_LOG_ENABLED=false` and `GOOGLE_CHAT_DELIVERY_ENABLED=false`. Keep deployment protection and existing Workspace membership checks enabled. Register only the exact deployment callback URL, and verify schema compatibility before deployment. This workflow does not apply migrations.
+
+Use an already mapped, Google-linked account. Test login, reload, multiple tabs, explicit session refresh, and local session clearing. The normal logout action is global and must not be used with an active production account during this smoke test. Do not change roles, provider policy, token lifetimes, or planning data. Remove the test deployment, temporary branch variables, and added callback URL afterward. Report the tested commit and any excluded or blocked checks without recording credentials or token values.

@@ -50,3 +50,37 @@ test.each([
 ])("rejects unsafe Preview setting %s", (key, value) => {
   expect(() => verifyPreviewEnvironment({ ...environment(), [key]: value }, "productionref")).toThrow();
 });
+
+const smokeRun = overrides => ({
+  enabled: true,
+  eventName: "workflow_dispatch",
+  expectedSha: "a".repeat(40),
+  actualSha: "a".repeat(40),
+  ...overrides,
+});
+
+test("accepts the production backend only for an explicitly approved manual commit", () => {
+  expect(verifyPreviewEnvironment(environment(), "previewref", { sharedBackendSmoke: smokeRun() })).toBe("previewref");
+});
+
+
+test.each([
+  { enabled: false },
+  { eventName: "pull_request" },
+  { eventName: "push" },
+  { expectedSha: "b".repeat(40) },
+  { expectedSha: "" },
+  { expectedSha: "main", actualSha: "main" },
+  { actualSha: undefined },
+])("rejects an unapproved shared-backend run %j", overrides => {
+  expect(() => verifyPreviewEnvironment(environment(), "previewref", { sharedBackendSmoke: smokeRun(overrides) })).toThrow();
+});
+
+test("shared-backend approval cannot bypass required authentication or matching keys", () => {
+  expect(() => verifyPreviewEnvironment({ ...environment(), REQUIRE_SUPABASE_AUTH: "false" }, "previewref", { sharedBackendSmoke: smokeRun() })).toThrow(/authentication/);
+  expect(() => verifyPreviewEnvironment({ ...environment(), SUPABASE_SERVICE_ROLE_KEY: jwt("otherref", "service_role") }, "previewref", { sharedBackendSmoke: smokeRun() })).toThrow(/project and role/);
+});
+
+test("an invalid smoke authorization fails even when the backend is unconfigured", () => {
+  expect(() => verifyPreviewEnvironment({ REQUIRE_SUPABASE_AUTH: "true" }, "productionref", { allowUnconfigured: true, sharedBackendSmoke: smokeRun({ eventName: "pull_request" }) })).toThrow(/manual run/);
+});
