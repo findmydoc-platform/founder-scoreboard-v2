@@ -8,7 +8,7 @@ import { HeaderCalendarAction } from "@/features/planning/molecules/header-calen
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { workweekLabel, workweekStart } from "../model/team-workweek-week";
-import { addCalendarDays } from "../model/team-workweek-calendar";
+import { addCalendarDays, berlinCivilInstant } from "../model/team-workweek-calendar";
 import { nextMondayIso } from "../model/team-workweek-draft";
 import { PrivateTeamWorkweekCard } from "./private-team-workweek-card";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -538,8 +538,8 @@ export const ExplainsOnlyAffectedSundayClockLabels: Story = {
 };
 
 export const RetainsThePreparedMondayDuringCurrentCorrections: Story = {
-  args: { profile, apiClient: client({ googleConnected: true, immediateAllowed: true, minimumEffectiveFrom: "2026-10-26", preparedSuccessor: {
-    ...latestPublished, id: "retained", effectiveFrom: "2026-10-19", effectiveAt: "2026-10-18T22:00:00Z",
+  args: { profile, apiClient: client({ googleConnected: true, immediateAllowed: true, minimumEffectiveFrom: addCalendarDays(nextMondayIso(), 7), preparedSuccessor: {
+    ...latestPublished, id: "retained", effectiveFrom: nextMondayIso(), effectiveAt: new Date(berlinCivilInstant(nextMondayIso(), "00:00")).toISOString(),
   } }) },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

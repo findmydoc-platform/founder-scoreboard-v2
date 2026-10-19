@@ -3,6 +3,16 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { parseEnvLine } from "./lib/env.mjs";
 
+export function parseSharedBackendSmokeEnvironment(contents) {
+  try {
+    const env = JSON.parse(contents);
+    if (!env || typeof env !== "object" || Array.isArray(env)) throw new Error();
+    return env;
+  } catch {
+    throw new Error("Shared-backend smoke configuration must be a valid JSON object");
+  }
+}
+
 export function verifyPreviewEnvironment(env, productionRef, { allowUnconfigured = false, sharedBackendSmoke } = {}) {
   if (!productionRef) throw new Error("Production Supabase project reference is required");
   if (env.REQUIRE_SUPABASE_AUTH !== "true") throw new Error("Preview must require authentication");
@@ -43,7 +53,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const sharedSmoke = process.env.SHARED_BACKEND_AUTH_SMOKE === "true";
     const contents = await readFile(".vercel/.env.preview.local", "utf8");
     const env = sharedSmoke
-      ? JSON.parse(process.env.SHARED_BACKEND_SMOKE_ENV_JSON || "{}")
+      ? parseSharedBackendSmokeEnvironment(process.env.SHARED_BACKEND_SMOKE_ENV_JSON || "{}")
       : Object.fromEntries(contents.split(/\r?\n/).map(parseEnvLine).filter(Boolean));
     // The workflow supplies this value to both the build and deployment command.
     env.REQUIRE_SUPABASE_AUTH = process.env.REQUIRE_SUPABASE_AUTH ?? env.REQUIRE_SUPABASE_AUTH;

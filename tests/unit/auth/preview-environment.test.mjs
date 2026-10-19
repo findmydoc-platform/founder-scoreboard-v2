@@ -1,5 +1,22 @@
 import { expect, test } from "vitest";
-import { verifyPreviewEnvironment } from "../../../scripts/verify-preview-environment.mjs";
+import { parseSharedBackendSmokeEnvironment, verifyPreviewEnvironment } from "../../../scripts/verify-preview-environment.mjs";
+
+test("parses the shared-backend configuration without changing its values", () => {
+  const env = environment();
+  expect(parseSharedBackendSmokeEnvironment(JSON.stringify(env))).toEqual(env);
+});
+
+test.each([
+  '{"SUPABASE_SERVICE_ROLE_KEY": synthetic_private_credential}',
+  '{"SUPABASE_SERVICE_ROLE_KEY":"synthetic_private_credential",}',
+  "null",
+  "[]",
+  '"synthetic_private_credential"',
+])("rejects invalid smoke configuration without including its contents", contents => {
+  expect(() => parseSharedBackendSmokeEnvironment(contents)).toThrow(
+    /^Shared-backend smoke configuration must be a valid JSON object$/,
+  );
+});
 
 const jwt = (ref, role) => `header.${Buffer.from(JSON.stringify({ ref, role })).toString("base64url")}.signature`;
 const environment = () => ({
