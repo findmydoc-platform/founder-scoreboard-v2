@@ -53,7 +53,6 @@ jobs:
       REQUIRE_SUPABASE_AUTH: "true"
       SHARED_BACKEND_AUTH_SMOKE: ${{ github.event_name == 'workflow_dispatch' && inputs.shared_backend_auth_smoke == true }}
       EXPECTED_SMOKE_SHA: ${{ inputs.expected_sha }}
-      PREVIEW_BRANCH: ${{ github.head_ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
 
@@ -113,11 +112,13 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           bash ./.github/scripts/deploy/assert-vercel-project-binding.sh
-          pnpm dlx vercel@"${VERCEL_CLI_VERSION}" pull --yes --environment=preview --git-branch="$PREVIEW_BRANCH" --token="$VERCEL_TOKEN"
+          pnpm dlx vercel@"${VERCEL_CLI_VERSION}" pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
       - name: Verify Preview database and export approved runtime configuration
         id: preview_database
         if: steps.preview_guard.outputs.ready == 'true'
+        env:
+          SHARED_BACKEND_SMOKE_ENV_JSON: ${{ github.event_name == 'workflow_dispatch' && inputs.shared_backend_auth_smoke == true && secrets.AUTH_SMOKE_ENV_JSON || '' }}
         run: node scripts/verify-preview-environment.mjs --allow-unconfigured --export-runtime
 
       - name: Build Vercel Output

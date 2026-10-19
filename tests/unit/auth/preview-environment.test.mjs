@@ -7,6 +7,8 @@ const environment = () => ({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: jwt("previewref", "anon"),
   SUPABASE_SERVICE_ROLE_KEY: jwt("previewref", "service_role"),
   REQUIRE_SUPABASE_AUTH: "true",
+  NOTION_DECISION_LOG_ENABLED: "false",
+  GOOGLE_CHAT_DELIVERY_ENABLED: "false",
 });
 
 test("accepts an isolated database with matching keys and required authentication", () => {
@@ -83,4 +85,9 @@ test("shared-backend approval cannot bypass required authentication or matching 
 
 test("an invalid smoke authorization fails even when the backend is unconfigured", () => {
   expect(() => verifyPreviewEnvironment({ REQUIRE_SUPABASE_AUTH: "true" }, "productionref", { allowUnconfigured: true, sharedBackendSmoke: smokeRun({ eventName: "pull_request" }) })).toThrow(/manual run/);
+});
+
+
+test.each(["NOTION_DECISION_LOG_ENABLED", "GOOGLE_CHAT_DELIVERY_ENABLED"])("shared-backend smoke requires %s to remain disabled", key => {
+  expect(() => verifyPreviewEnvironment({ ...environment(), [key]: "true" }, "previewref", { sharedBackendSmoke: smokeRun() })).toThrow(/integrations/);
 });

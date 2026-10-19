@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { parseEnvLine } from "./lib/env.mjs";
 
@@ -11,6 +11,9 @@ export function verifyPreviewEnvironment(env, productionRef, { allowUnconfigured
       || !/^[a-f0-9]{40}$/.test(sharedBackendSmoke.expectedSha || "")
       || sharedBackendSmoke.expectedSha !== sharedBackendSmoke.actualSha) {
       throw new Error("Shared-backend smoke requires a manual run bound to the exact commit");
+    }
+    if (env.NOTION_DECISION_LOG_ENABLED !== "false" || env.GOOGLE_CHAT_DELIVERY_ENABLED !== "false") {
+      throw new Error("Shared-backend smoke requires external integrations to remain disabled");
     }
   }
   const configurationKeys = [
@@ -37,8 +40,11 @@ export function verifyPreviewEnvironment(env, productionRef, { allowUnconfigured
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
+    const sharedSmoke = process.env.SHARED_BACKEND_AUTH_SMOKE === "true";
     const contents = await readFile(".vercel/.env.preview.local", "utf8");
-    const env = Object.fromEntries(contents.split(/\r?\n/).map(parseEnvLine).filter(Boolean));
+    const env = sharedSmoke
+      ? JSON.parse(process.env.SHARED_BACKEND_SMOKE_ENV_JSON || "{}")
+      : Object.fromEntries(contents.split(/\r?\n/).map(parseEnvLine).filter(Boolean));
     // The workflow supplies this value to both the build and deployment command.
     env.REQUIRE_SUPABASE_AUTH = process.env.REQUIRE_SUPABASE_AUTH ?? env.REQUIRE_SUPABASE_AUTH;
     const ref = verifyPreviewEnvironment(env, process.env.PRODUCTION_SUPABASE_PROJECT_REF, {
@@ -59,8 +65,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         "GOOGLE_WORKSPACE_SERVICE_ACCOUNT", "GOOGLE_AUTHORIZED_GROUP",
         "NOTION_DECISION_LOG_ENABLED", "GOOGLE_CHAT_DELIVERY_ENABLED",
       ];
+      const selected = keys.filter(key => env[key] !== undefined);
+      if (selected.some(key => typeof env[key] !== "string")) throw new Error("Preview runtime values must be strings");
       const delimiter = randomUUID();
-      const lines = keys.filter(key => env[key] !== undefined).map(key => `${key}<<${delimiter}\n${env[key]}\n${delimiter}\n`);
+      const lines = selected.map(key => `${key}<<${delimiter}\n${env[key]}\n${delimiter}\n`);
+      if (sharedSmoke) {
+        const buildEnv = selected.map(key => `${key}=${JSON.stringify(env[key])}`).join("\n");
+        await writeFile(".vercel/.env.preview.local", `${buildEnv}\n`, { mode: 0o600 });
+      }
       await appendFile(process.env.GITHUB_ENV, lines.join(""));
     }
     console.log(ref === null
