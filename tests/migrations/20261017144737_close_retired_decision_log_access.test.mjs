@@ -1,11 +1,10 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { expect, it } from "vitest";
 import { applyMigration, assertRowsPreserved, resetLocalDatabaseTo, snapshotRows, withLocalDatabase } from "./helpers/migration-test-harness.mjs";
 import { asAuthenticated, captureDatabaseError } from "../integration/helpers/local-database";
 import { verifyCatalogSecurity } from "../../scripts/lib/database-security/catalog-security.mjs";
+import { localSupabaseStatus } from "../helpers/local-supabase-target.mjs";
 
 const migrationFile = resolve("supabase/migrations/20261017144737_close_retired_decision_log_access.sql");
 const columns = {
@@ -37,12 +36,7 @@ async function snapshot(client) {
 }
 
 it.sequential("closes retired Decision Log access without changing rows, foreign keys, sequences, RLS or service privileges", { timeout: 120000 }, async () => {
-  const { stdout } = await promisify(execFile)(resolve("node_modules/.bin/supabase"), ["status", "-o", "json"]);
-  const local = JSON.parse(stdout);
-  for (const [key, port] of [["API_URL", "56321"], ["DB_URL", "56322"]]) {
-    const target = new URL(local[key]);
-    if (!["localhost", "127.0.0.1"].includes(target.hostname) || target.port !== port) throw Error("Disposable target required");
-  }
+  await localSupabaseStatus();
   await resetLocalDatabaseTo("20261017100804");
   await withLocalDatabase(async client => {
     const suffix = randomUUID();
