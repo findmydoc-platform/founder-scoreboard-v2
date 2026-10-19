@@ -5,6 +5,7 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 let githubAppStatusCalls = 0;
 let githubAppStatusResult = null;
 let validatedMentionTeam = null;
+const safeChatStatus = {webhookConfigured:false,apiConfigured:false,deliveryEnabled:false,ready:false,mode:"not-configured"};
 
 beforeEach(() => {
   githubAppStatusCalls = 0;
@@ -79,9 +80,8 @@ function createSupabaseFixture({ projectError = null } = {}) {
 
   return {
     calls,
-    async rpc(name) {
-      assert.equal(name, "administrator_directory_snapshot");
-      calls.push({ rpc: name });
+    async readDirectory() {
+      calls.push({ rpc: "administrator_directory_snapshot" });
       return {
         data: {
           people: data.profiles.map((profile) => ({
@@ -106,26 +106,9 @@ function createSupabaseFixture({ projectError = null } = {}) {
         error: null,
       };
     },
-    from(table) {
-      const call = { table, select: "" };
-      calls.push(call);
-      const query = {
-        select(value) { call.select = value; return query; },
-        eq() { return query; },
-        order() { return query; },
-        limit() { return query; },
-        maybeSingle() {
-          return Promise.resolve({
-            data: data[table]?.[0] || null,
-            error: table === "projects" ? projectError : null,
-          });
-        },
-        then(resolve, reject) {
-          return Promise.resolve({ data: data[table] || [], error: null }).then(resolve, reject);
-        },
-      };
-      return query;
-    },
+    async readNotificationEvents() { calls.push({ table: "notification_events" }); return { data: data.notification_events, error: null }; },
+    async readNotificationDeliveries() { calls.push({ table: "notification_deliveries" }); return { data: data.notification_deliveries, error: null }; },
+    async readProject() { calls.push({ table: "projects" }); return { data: data.projects[0], error: projectError }; },
   };
 }
 
@@ -133,8 +116,10 @@ const { createSupabaseAdministrationReadModel } = await importTestModule(
   "src/features/administration/server/administration-read-model-supabase.ts",
   {
     "server-only": {},
-    "@/lib/github-app": {
-      getGitHubAppOperationalStatus: async () => {
+    "@/lib/credentials": {
+      authorizeCredentialAction: async (input) => {
+        if (input.action === "google-chat.status") return safeChatStatus;
+        assert.equal(input.action, "github.installation.status");
         githubAppStatusCalls += 1;
         return githubAppStatusResult;
       },
@@ -177,6 +162,7 @@ test("CEO eligibility view omits technical identity and delivery data", async ()
   assert.equal(result.model.githubProject, null);
   assert.equal(result.model.integrationStatus.githubApp, null);
   assert.equal(githubAppStatusCalls, 0);
+  assert.deepEqual(result.model.integrationStatus.googleChat, safeChatStatus);
   assert.deepEqual(result.model.notificationEvents, []);
   assert.deepEqual(result.model.notificationDeliveries, []);
   assert.deepEqual(supabase.calls.map((call) => call.rpc || call.table), ["administrator_directory_snapshot"]);
@@ -206,6 +192,7 @@ test("active administrator view projects technical identity and delivery operati
     nextStep: "",
   });
   assert.equal(githubAppStatusCalls, 1);
+  assert.deepEqual(result.model.integrationStatus.googleChat, safeChatStatus);
   assert.equal(result.model.integrationStatus.mentionTeam.state, "ready");
   assert.equal(result.model.integrationStatus.mentionTeam.githubHandle, "@findmydoc-platform/founderops");
   assert.deepEqual(result.model.notificationEvents.map(({ id }) => id), ["event"]);
@@ -270,4 +257,5 @@ test("active administrator view projects the provider-owned GitHub App status", 
     nextStep: "GitHub-App-ID, Installation und privaten Schlüssel in der Laufzeitkonfiguration prüfen.",
   });
   assert.equal(githubAppStatusCalls, 1);
+  assert.deepEqual(result.model.integrationStatus.googleChat, safeChatStatus);
 });

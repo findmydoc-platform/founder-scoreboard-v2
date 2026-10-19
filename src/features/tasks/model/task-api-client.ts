@@ -121,11 +121,38 @@ export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: st
   });
 }
 
-export function uploadTaskAttachmentRequest(apiClient: BrowserApiClient, taskId: string, file: File) {
+const pendingAttachmentOperations = new Map<string, string>();
+
+export async function uploadTaskAttachmentRequest(apiClient: BrowserApiClient, taskId: string, file: File) {
+  const payload = new Uint8Array(await file.arrayBuffer());
+  const identity = new TextEncoder().encode(`${taskId}\0${file.name}\0${file.type}\0`);
+  const bytes = new Uint8Array(identity.length + payload.length);
+  bytes.set(identity);
+  bytes.set(payload, identity.length);
+  const fingerprint = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
+    .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const key = `founderops-attachment-${fingerprint}`;
+  let operation = pendingAttachmentOperations.get(key);
+  try {
+    operation ||= sessionStorage.getItem(key) || undefined;
+  } catch { /* Retain retries in memory when browser storage is unavailable. */ }
+  operation ||= crypto.randomUUID();
+  pendingAttachmentOperations.set(key, operation);
+  try {
+    sessionStorage.setItem(key, operation);
+  } catch { /* The in-memory operation remains available. */ }
   const formData = new FormData();
   formData.append("file", file);
-  return apiClient.requestForm<{ error?: string; markdown?: string; activity?: TaskActivity }>(`/api/tasks/${taskId}/attachments`, formData, {
-  });
+  const result = await apiClient.requestForm<{ error?: string; markdown?: string; activity?: TaskActivity }>(
+    `/api/tasks/${taskId}/attachments`, formData, { headers: { "Idempotency-Key": operation } },
+  );
+  if (result.response.ok && result.body?.markdown) {
+    pendingAttachmentOperations.delete(key);
+    try {
+      sessionStorage.removeItem(key);
+    } catch { /* The completed operation is already removed from memory. */ }
+  }
+  return result;
 }
 
 export function importGitHubCommentsRequest(apiClient: BrowserApiClient, taskId: string) {

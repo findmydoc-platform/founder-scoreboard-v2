@@ -13,7 +13,7 @@ type PlanningBootShellProps = {
   title: string;
   description: string;
   error?: string;
-  authUser?: User | null;
+  authUser?: Pick<User, "id" | "email"> | null;
   authBusy?: boolean;
   onSignIn?: () => void;
   onSignOut?: () => void;

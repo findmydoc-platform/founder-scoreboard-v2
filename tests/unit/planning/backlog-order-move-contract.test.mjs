@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import { planningRouteProtocol } from "../../helpers/planning-route-protocol.mjs";
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const actor = {
@@ -8,36 +10,14 @@ const actor = {
   credential: { kind: "session" },
 };
 
-async function loadBacklogOrderRoute(run = async () => ({ ok: true, status: "committed", changes: [] })) {
-  return importTestModule("src/app/api/tasks/backlog-order/route.ts", {
-    "next/server": {
-      NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) },
-    },
-    "@/lib/api-input": {
-      auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test" }),
-    },
-    "@/lib/api-response": {
-      apiError: (error, status) => ({ body: { error }, status }),
-      requireApiContext: async () => ({
-        ok: true,
-        permission: { profile: { id: "ceo", platformRole: "ceo" } },
-        supabase: { private: "server-only" },
-      }),
-    },
-    "@/lib/authz": { requirePlanningContributor: () => ({}) },
-    "@/features/planning-items/model/planning-actor-context-server": {
-      actorContextFromSessionAuth: () => ({ ok: true, actor }),
-    },
-    "@/features/planning-items/model/planning-items-backlog-move": {
-      parseBacklogMoveRequest: (payload) => payload?.taskId ? payload : null,
-      backlogMoveCommand: (move) => ({ kind: "canonicalBacklogMove", move }),
-      createBacklogMovePlanningItems: () => ({ run }),
-      backlogMoveUpdatesFromChanges: (changes) => changes[0]?.after || [],
-      backlogMoveError: (error) => error.code === "conflict"
-        ? { message: "Backlog hat sich geändert. Bitte neu laden.", status: 409 }
-        : { message: "Backlog-Reihenfolge konnte nicht dauerhaft gespeichert werden.", status: 500 },
-    },
-  });
+async function loadBacklogOrderRoute(fail = false) {
+  const source = row("source", 10, "2026-08-12T10:00:00.000Z"), target = row("target", 20, "2026-08-12T10:01:00.000Z");
+  const protocol = planningRouteProtocol({ role: "ceo", tables: { tasks: [source, target], active_tasks: [source, target] }, responses: {
+    move_backlog_task_transaction: () => fail ? Response.json({ code: "P0001", message: "Conflict" }, { status: 409 })
+      : Response.json([{ id: "source", sortOrder: 20, updatedAt: "2026-08-12T12:00:00.000Z" }]),
+  } });
+  const route = await importTestModule("src/app/api/tasks/backlog-order/route.ts", { "server-only": {} });
+  return { ...protocol, PATCH: async payload => route.PATCH(protocol.request("/api/tasks/backlog-order", "PATCH", payload, { "x-forwarded-for": "192.0.2.1", "user-agent": "synthetic-agent" })) };
 }
 
 async function loadBacklogMoveModule() {
@@ -101,39 +81,18 @@ function supabaseFixture({ requested, active, rpcResult = { data: [], error: nul
 
 
 test("Browser adapter preserves validation, invocation metadata, and response shape", async () => {
-  const calls = [];
-  const { PATCH } = await loadBacklogOrderRoute(async (invocation) => {
-    calls.push(invocation);
-    return {
-      ok: true,
-      status: "committed",
-      changes: [{ field: "backlogOrder", after: [{ id: "source", sortOrder: 20, updatedAt: "2026-08-12T12:00:00.000Z" }] }],
-    };
-  });
-
-  const invalid = await PATCH({ json: async () => ({}) });
+  const protocol = await loadBacklogOrderRoute();
+  const invalid = await protocol.PATCH({});
   assert.equal(invalid.status, 400);
-  assert.equal(calls.length, 0);
-
-  const move = {
-    taskId: "source",
-    targetTaskId: "target",
-    placement: "after",
-    expectedTaskUpdatedAt: "2026-08-12T10:00:00.000Z",
-    expectedTargetUpdatedAt: "2026-08-12T10:01:00.000Z",
-  };
-  const response = await PATCH({ json: async () => move });
+  assert.equal(protocol.calls.length, 0);
+  const move = { taskId: "source", targetTaskId: "target", placement: "after", expectedTaskUpdatedAt: "2026-08-12T10:00:00.000Z", expectedTargetUpdatedAt: "2026-08-12T10:01:00.000Z" };
+  const response = await protocol.PATCH(move);
   assert.equal(response.status, 200);
-  assert.deepEqual(response.body, {
-    ok: true,
-    updates: [{ id: "source", sortOrder: 20, updatedAt: "2026-08-12T12:00:00.000Z" }],
-  });
-  assert.deepEqual(calls, [{
-    actor,
-    mode: "commit",
-    command: { kind: "canonicalBacklogMove", move },
-    requestMetadata: { requestIp: "test-ip", userAgent: "test" },
-  }]);
+  assert.deepEqual(await response.json(), { ok: true, updates: [{ id: "source", sortOrder: 20, updatedAt: "2026-08-12T12:00:00.000Z" }] });
+  assert.deepEqual(protocol.calls[0], { name: "move_backlog_task_transaction", body: {
+    p_task_id: "source", p_target_task_id: "target", p_placement: "after", p_expected_task_updated_at: move.expectedTaskUpdatedAt,
+    p_expected_target_updated_at: move.expectedTargetUpdatedAt, p_actor_profile_id: "synthetic-profile", p_request_ip: "192.0.2.1", p_user_agent: "synthetic-agent",
+  } });
 });
 
 test("module uses identical Preview and Commit policy and commits through one RPC", async () => {
@@ -225,11 +184,8 @@ test("module denies role, stale revision, and inactive state before the writer",
 });
 
 test("Browser error mapping remains stable", async () => {
-  const { PATCH } = await loadBacklogOrderRoute(async () => ({
-    ok: false,
-    error: { code: "conflict", reason: "state" },
-  }));
-  const response = await PATCH({ json: async () => ({ taskId: "source" }) });
+  const protocol = await loadBacklogOrderRoute(true);
+  const response = await protocol.PATCH({ taskId: "source", targetTaskId: "target", placement: "after", expectedTaskUpdatedAt: "2026-08-12T10:00:00.000Z", expectedTargetUpdatedAt: "2026-08-12T10:01:00.000Z" });
   assert.equal(response.status, 409);
-  assert.equal(response.body.error, "Backlog hat sich geändert. Bitte neu laden.");
+  assert.equal((await response.json()).error, "Backlog wurde parallel geändert. Bitte neu laden.");
 });

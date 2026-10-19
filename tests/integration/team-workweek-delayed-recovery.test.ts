@@ -80,7 +80,7 @@ it("waits for an actual late Google response before compensating a cancelled gen
       if (init?.method === "DELETE") { event = null; return new Response(null, { status: 204 }); }
       return event ? Response.json(event) : new Response(null, { status: 404 });
     };
-    const writing = ensureGoogleWorkweekEffect({ accessToken: "test", effect, fetchImpl: provider, writeJournal: journal(client, claim.id, effect.id) });
+    const writing = ensureGoogleWorkweekEffect({ accessToken: { request: (url: string | URL, init?: RequestInit) => fetch(url, init) }, effect, fetchImpl: provider, writeJournal: journal(client, claim.id, effect.id) });
     await started;
     expect((await service(client, () => client.query("select public.request_team_workweek_publication_restart($1,'delayed-owner') as result", [publication.id]))).rows[0].result.reason).toBe("in_progress");
     expect((await service(client, () => client.query("select public.claim_team_workweek_provider_operation($1,1,'publish') as result", [publication.id]))).rows[0].result.state).toBe("in_progress");
@@ -92,7 +92,7 @@ it("waits for an actual late Google response before compensating a cancelled gen
     const cleanupClaim = (await service(client, () => client.query("select public.claim_team_workweek_provider_operation($1,1,'cleanup') as result", [publication.id]))).rows[0].result;
     const plan = (await service(client, () => client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result", [publication.id]))).rows[0].result;
     for (const target of plan.effects) {
-      const result = await cleanupGoogleWorkweekEffect({ accessToken: "test", effect: target, fetchImpl: provider, writeJournal: journal(client, cleanupClaim.id, target.id) });
+      const result = await cleanupGoogleWorkweekEffect({ accessToken: { request: (url: string | URL, init?: RequestInit) => fetch(url, init) }, effect: target, fetchImpl: provider, writeJournal: journal(client, cleanupClaim.id, target.id) });
       expect(result.state).toBe("confirmed");
     }
     expect(event).toBeNull();
@@ -109,7 +109,7 @@ it("keeps a timed-out dispatch uncertain across 404 observations and aging until
       if (init?.method === "POST") throw new DOMException("Response lost", "TimeoutError");
       return event ? Response.json(event) : new Response(null, { status: 404 });
     };
-    const input = { accessToken: "test", effect, fetchImpl: provider, writeJournal: journal(client, claim.id, effect.id) };
+    const input = { accessToken: { request: (url: string | URL, init?: RequestInit) => fetch(url, init) }, effect, fetchImpl: provider, writeJournal: journal(client, claim.id, effect.id) };
     expect((await ensureGoogleWorkweekEffect(input)).state).toBe("delayed");
     expect((await service(client, () => client.query("select public.finish_team_workweek_provider_operation($1) as result", [claim.id]))).rows[0].result.state).toBe("uncertain");
     await client.query("update public.team_workweek_provider_operations set created_at=clock_timestamp()-interval '100 years' where id=$1", [claim.id]);

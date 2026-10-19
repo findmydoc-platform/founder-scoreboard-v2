@@ -81,7 +81,14 @@ async function loadTeamCreateRoute({
         dispatchAndLoadPlanningGitHubProjections: async () => new Map(),
       },
       "@/features/planning-items/model/planning-items-route": {
-        handlePlanningItemsRequest: async (_request, _scope, _fallback, handler) => handler(permission),
+        handlePlanningItemsRequest: async (_request, access, _fallback, handler) => handler({ ...permission, profile: { id: tokenActor.profileId, platformRole: "ceo" }, planningItems: {
+          create: async (dependencies, invocation) => {
+            captured.dependencies = dependencies;
+            captured.invocation = { ...invocation, mode: access.mode };
+            if (previewItems) dependencies.onPreview?.(previewItems);
+            return runResult;
+          },
+        } }),
         planningItemsError: (error, status) => ({ body: { ok: false, error }, status }),
         planningItemsJson: (body, status = 200) => ({ body, status }),
         planningItemsTokenInactiveError: () => ({

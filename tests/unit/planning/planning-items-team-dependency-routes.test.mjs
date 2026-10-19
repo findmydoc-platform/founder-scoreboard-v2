@@ -54,7 +54,8 @@ function queryResult(data = null) {
 }
 
 function commonMocks(dependencyModel, supabase = { from: () => queryResult() }, parsedPayload = parsed) {
-  return {
+  const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "planningToken", tokenId: "token-one", scopes: ["write:planning-items:update"] } };
+  const mocks = {
     "next/server": { after: () => undefined },
     "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }) },
     "@/features/planning-items/model/planning-actor-context-server": {
@@ -69,7 +70,17 @@ function commonMocks(dependencyModel, supabase = { from: () => queryResult() }, 
     },
     "@/features/planning-items/model/planning-items-route": {
       handlePlanningItemsRequest: async (_request, _access, _message, handler) => handler({
-        supabase,
+        planningItems: {
+          buildDependencyPreview: options => dependencyModel.buildTeamPlanningDependencyPreview({ ...options, actor, itemId: "blocked", supabase }),
+          commitUpdate: async (options, scheduleAfter) => {
+            const { commitTeamPlanningItemUpdate } = await importTestModule("src/features/planning-items/model/planning-items-team-update.ts", {
+              ...mocks,
+              "@/features/planning-items/model/planning-items-github-projection": { dispatchAndLoadPlanningGitHubProjections: async () => new Map() },
+              "@/features/planning-items/model/planning-items-reparent": {},
+            });
+            return commitTeamPlanningItemUpdate({ ...options, actor, itemId: "blocked" }, { supabase, dispatchGitHubProjections: async () => new Map(), scheduleAfter });
+          },
+        },
         profile: { id: "ceo", platformRole: "ceo" },
         tokenId: "token-one",
         scopes: ["write:planning-items:update"],
@@ -96,6 +107,7 @@ function commonMocks(dependencyModel, supabase = { from: () => queryResult() }, 
       ...dependencyModel,
     },
   };
+  return mocks;
 }
 
 test("context route exposes the canonical root dependency list", async () => {
@@ -113,7 +125,7 @@ test("context route exposes the canonical root dependency list", async () => {
       },
       "@/features/planning-items/model/planning-items-route": {
         handlePlanningItemsRequest: async (_request, _access, _message, handler) => handler({
-          supabase: {},
+          planningItems: { readContext: async () => ({ items: [], dependencies }) },
           profile: { id: "ceo", platformRole: "ceo" },
         }),
         planningItemsJson: (body) => ({ body, status: 200 }),

@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -5,11 +6,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ACTIVE_TASKS_TABLE } from "./planning-read-model";
 import { findExistingGitHubComment, githubCommentMarker } from "@/features/tasks/model/github-comment-delivery-policy";
 import { createGitHubIssueComment, GitHubApiError, listGitHubIssueComments } from "./github";
-import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "./github-app";
+import { GitHubAppUserTokenRequiredError } from "./github-app-errors";
+import { authorizeCredentialAction, type GitHubUserCapability } from "./credentials";
 import { resolveGitHubIssueNumber } from "./github-issue-reference";
 import { canonicalizeProfileMentionsForGitHub } from "./mentions";
 import { loadGitHubMentionTeam } from "./github-mention-team-config";
-import type { AuthenticatedProfile, GitHubCommentDeliveryStatus, PlatformRole } from "./types";
+import type { GitHubCommentDeliveryStatus, PlatformRole } from "./types";
 import type { GitHubCommentDeliverySummary } from "./github-sync/contract";
 
 type ClaimedDelivery = {
@@ -60,15 +62,6 @@ export type GitHubCommentDeliveryPreview = {
   waitingForIssue: number;
   failed: number;
 };
-
-function authenticatedProfile(row: ProfileRow): AuthenticatedProfile {
-  return {
-    id: row.id,
-    name: row.name,
-    platformRole: row.platform_role,
-    githubLogin: row.github_login || "",
-  };
-}
 
 function retryAt(attempts: number) {
   const delaySeconds = Math.min(60 * 60, 60 * (2 ** Math.min(attempts, 6)));
@@ -150,7 +143,7 @@ async function loadDeliveryContext(supabase: SupabaseClient, delivery: ClaimedDe
   };
 }
 
-export async function previewPendingGitHubComments(supabase: SupabaseClient, limit = 100) {
+export async function previewPendingGitHubComments(supabase: SupabaseClient, request:NextRequest, limit = 100) {
   const preview: GitHubCommentDeliveryPreview = {
     existing: 0,
     missing: 0,
@@ -191,7 +184,7 @@ export async function previewPendingGitHubComments(supabase: SupabaseClient, lim
       const cacheKey = `${profile.id}:${task.github_repo || "findmydoc-platform/management"}:${targetIssueNumber}`;
       let githubComments = commentsByAuthorAndIssue.get(cacheKey);
       if (!githubComments) {
-        const authorToken = await getGitHubUserTokenForProfile(supabase, authenticatedProfile(profile));
+        const authorToken = (await authorizeCredentialAction({credential:{kind:"github-comment-preview",commentId:comment.id,request},action:"github.comment.preview"})).github;
         githubComments = await listGitHubIssueComments(targetIssueNumber, authorToken, task.github_repo);
         commentsByAuthorAndIssue.set(cacheKey, githubComments);
       }
@@ -271,9 +264,9 @@ export async function deliverPendingGitHubComments({
         continue;
       }
 
-      let authorToken = "";
+      let authorToken:GitHubUserCapability;
       try {
-        authorToken = await getGitHubUserTokenForProfile(supabase, authenticatedProfile(profile));
+        authorToken = (await authorizeCredentialAction({credential:{kind:"github-comment-delivery",commentId:comment.id,claimToken:lockToken},action:"github.comment.deliver"})).github;
       } catch (tokenError) {
         if (!(tokenError instanceof GitHubAppUserTokenRequiredError)) throw tokenError;
         await finalizeDelivery(supabase, lockToken, comment.id, "waiting_for_author_connection", {

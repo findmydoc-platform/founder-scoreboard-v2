@@ -1,14 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
-  getOpenTeamWorkweekConflict,
-  resolveTeamWorkweekConflict,
   TeamWorkweekConflictError,
 } from "@/features/team-workweek/server/team-workweek-conflicts";
 import { TeamWorkweekPublicationError } from "@/features/team-workweek/server/team-workweek-publication";
-import { apiError, readJsonPayload, requireApiContext } from "@/lib/api-response";
-import { bearerToken, requireTeamMember } from "@/lib/authz";
-import { getSupabaseForToken } from "@/lib/supabase-user";
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { apiError, readJsonPayload } from "@/lib/api-response";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 
 export const dynamic = "force-dynamic";
 
@@ -27,32 +23,20 @@ function conflictError(error: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  const context = await requireApiContext(request, requireTeamMember);
+  const context = await requirePlanningContext(request, "workweek.conflict.read");
   if (!context.ok) return context.response;
-  const ownerProfileId = context.permission.profile?.id;
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!ownerProfileId) return apiError("Gebundenes Teamprofil erforderlich.", 403);
-  if (!serviceSupabase) return apiError("Synchronisationskonflikt ist nicht verfügbar.", 503);
   try {
-    return NextResponse.json({ conflict: await getOpenTeamWorkweekConflict(serviceSupabase, ownerProfileId) });
+    return NextResponse.json({ conflict: await context.planning.readWorkweekConflict() });
   } catch (error) {
     return conflictError(error);
   }
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireApiContext(request, requireTeamMember);
-  if (!context.ok) return context.response;
-  const ownerProfileId = context.permission.profile?.id;
-  const token = bearerToken(request);
-  const userSupabase = token ? getSupabaseForToken(token) : null;
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!ownerProfileId) return apiError("Gebundenes Teamprofil erforderlich.", 403);
-  if (!userSupabase) return apiError("Anmeldung erforderlich.", 401);
-  if (!serviceSupabase) return apiError("Synchronisationskonflikt ist nicht verfügbar.", 503);
-
   const payload = await readJsonPayload<unknown>(request, null);
   const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const context = await requirePlanningContext(request, "workweek.conflict.resolve", typeof input.conflictId === "string" ? input.conflictId : "");
+  if (!context.ok) return context.response;
   if (Object.keys(input).some((key) => !["conflictId", "conflictRevision", "decision"].includes(key))
     || typeof input.conflictId !== "string" || !UUID_PATTERN.test(input.conflictId)
     || !Number.isInteger(input.conflictRevision) || Number(input.conflictRevision) < 1
@@ -61,14 +45,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const publication = await resolveTeamWorkweekConflict({
-      conflictId: input.conflictId,
-      conflictRevision: Number(input.conflictRevision),
-      decision: input.decision,
-      ownerProfileId,
-      serviceSupabase,
-      userSupabase,
-    });
+    const publication = await context.planning.resolveWorkweekConflict(Number(input.conflictRevision), input.decision);
     return NextResponse.json({ publication }, { status: publication.status === "published" ? 200 : 202 });
   } catch (error) {
     return conflictError(error);

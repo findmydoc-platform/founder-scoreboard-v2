@@ -13,7 +13,7 @@
     "test:migrations": "NODE_OPTIONS=--no-deprecation vitest run --project migrations",
     "storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook dev --port 6006",
     "build-storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook build",
-    "build": "next build",
+    "build": "node scripts/verify-credential-boundary.mjs && next build && node scripts/verify-client-credentials.mjs",
     "start": "next start",
     "lint": "eslint",
     "review:route": "node scripts/route-maintainability-review.mjs",
@@ -26,7 +26,8 @@
     "local:reset": "node scripts/local-development.mjs reset",
     "local:seed": "node scripts/local-development.mjs seed",
     "local:stop": "node scripts/local-development.mjs stop",
-    "deploy:supabase-migrations": "node scripts/deploy-production-migrations.mjs"
+    "deploy:supabase-migrations": "node scripts/deploy-production-migrations.mjs",
+    "verify:credentials": "node --test tests/architecture/*.test.mjs && node scripts/verify-credential-boundary.mjs"
   },
   "dependencies": {
     "@icons-pack/react-simple-icons": "13.13.0",

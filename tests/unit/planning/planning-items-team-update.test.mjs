@@ -57,7 +57,7 @@ async function fixture({ stored = receipt(), parsed = parsedUpdate(), role = "ce
     async maybeSingle() { return { data: currentReceipt, error: null }; },
   };
   const supabase = { from: () => query };
-  const route = await importTestModule("src/features/planning-items/model/planning-items-team-update-route.ts", {
+  const mocks = {
     "next/server": { after: (callback) => scheduled.push(callback) },
     "@/lib/api-input": { auditRequestMetadata: () => ({ user_agent: "test-agent" }) },
     "@/features/planning-items/model/planning-actor-context-server": {
@@ -67,7 +67,7 @@ async function fixture({ stored = receipt(), parsed = parsedUpdate(), role = "ce
     "@/features/planning-items/model/planning-items-route": {
       handlePlanningItemsRequest: async (_request, _access, _message, handler) => {
         try {
-          return await handler({ supabase, profile: { id: actor.profileId, platformRole: role }, tokenId: "token-one", scopes: actor.credential.scopes });
+          return await handler({ planningItems: { commitUpdate: (options, scheduleAfter) => commitUpdate({ ...options, actor, itemId: "item-one" }, { supabase, dispatchGitHubProjections: mocks["@/features/planning-items/model/planning-items-github-projection"].dispatchAndLoadPlanningGitHubProjections, scheduleAfter }) }, profile: { id: actor.profileId, platformRole: role }, tokenId: "token-one", scopes: actor.credential.scopes });
         } catch {
           return { status: 500, body: { ok: false } };
         }
@@ -131,7 +131,9 @@ async function fixture({ stored = receipt(), parsed = parsedUpdate(), role = "ce
     },
     "@/features/planning-items/model/planning-items-empty-epic-delete": {},
     "@/features/planning-items/model/planning-items-team-canonical-item": {},
-  });
+  };
+  const { commitTeamPlanningItemUpdate: commitUpdate } = await importTestModule("src/features/planning-items/model/planning-items-team-update.ts", mocks);
+  const route = await importTestModule("src/features/planning-items/model/planning-items-team-update-route.ts", mocks);
   return {
     calls,
     writes,

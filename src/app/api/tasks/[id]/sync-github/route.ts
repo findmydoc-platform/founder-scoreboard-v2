@@ -1,16 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { invalidSessionBeforeEffectErrorCode } from "@/lib/auth-error-contract";
-import { requireTeamMember } from "@/lib/authz";
-import { requireJsonApiContext } from "@/lib/api-response";
-import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 import {
   parseTaskGitHubSyncCommand,
   taskGitHubSyncFailure,
   taskGitHubSyncHttpStatus,
   type TaskGitHubProjectionResult,
 } from "@/lib/github-sync/contract";
-import { projectTaskToGitHub } from "@/lib/github-sync/task-projection";
-import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 function apiContextFailure(
   status: number,
@@ -36,11 +32,8 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const apiContext = await requireJsonApiContext<unknown>(
-    request,
-    requireTeamMember,
-    null,
-  );
+  const { id } = await context.params;
+  const apiContext = await requirePlanningJsonContext<unknown>(request, "planning.github-sync.apply", null, id);
   if (!apiContext.ok) {
     if (apiContext.code === invalidSessionBeforeEffectErrorCode) {
       return apiContext.response;
@@ -58,12 +51,7 @@ export async function POST(
     ));
   }
 
-  const { id } = await context.params;
-  const { data: task, error: taskError } = await apiContext.supabase
-    .from(ACTIVE_TASKS_TABLE)
-    .select("task_type")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: task, error: taskError } = await apiContext.planning.readProjectionKind();
   if (taskError) {
     return syncResponse(taskGitHubSyncFailure("github_sync_unavailable", "Planungselement konnte nicht geladen werden."));
   }
@@ -74,24 +62,6 @@ export async function POST(
     return syncResponse(taskGitHubSyncFailure("github_sync_invalid_target", "Strategische Planungselemente werden nicht mit GitHub synchronisiert."));
   }
 
-  let installationToken = "";
-  try {
-    installationToken = await getGitHubAppInstallationToken();
-  } catch (error) {
-    return syncResponse(taskGitHubSyncFailure(
-      "github_sync_unavailable",
-      error instanceof Error
-        ? error.message
-        : "GitHub-Verbindung konnte nicht geprüft werden.",
-    ));
-  }
-
-  const result = await projectTaskToGitHub({
-    supabase: apiContext.supabase,
-    installationToken,
-    taskId: id,
-    actorProfileId: apiContext.permission.profile?.id || "",
-    createIfMissing: command.createIfMissing,
-  });
+  const result = await apiContext.planning.projectToGitHub(command.createIfMissing);
   return syncResponse(result);
 }

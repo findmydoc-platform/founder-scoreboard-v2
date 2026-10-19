@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireTeamMember } from "@/lib/authz";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { mapProfileFeatureTourAcknowledgement } from "@/lib/planning-row-mappers";
-import type { DbProfileFeatureTourAcknowledgement } from "@/lib/planning-row-types";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { apiError, authzError } from "@/lib/api-response";
 
 type Payload = {
   tourId?: string;
@@ -15,26 +14,18 @@ function cleanTourId(value: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<Payload>(request, requireTeamMember, {});
-  if (!context.ok) return context.response;
-
-  const profileId = context.permission.profile?.id || "";
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "account.tour.acknowledge" });
+  if (!permission.ok) return authzError(permission);
+  const payload = await request.json().catch(() => ({})) as Payload;
+  const profileId = permission.profile?.id || "";
   if (!profileId) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
-  const tourId = cleanTourId(context.payload.tourId);
+  const tourId = cleanTourId(payload.tourId);
   if (!tourId) return apiError("Tour-ID ist ungültig.", 400);
 
-  const { data, error } = await context.supabase
-    .from("profile_feature_tour_acknowledgements")
-    .upsert({
-      profile_id: profileId,
-      tour_id: tourId,
-      seen_at: new Date().toISOString(),
-    }, { onConflict: "profile_id,tour_id" })
-    .select("profile_id,tour_id,seen_at")
-    .single<DbProfileFeatureTourAcknowledgement>();
+  const { data, error } = await permission.account.acknowledgeTour(tourId);
 
   if (error) return apiError(error.message, error.code === "42P01" ? 503 : 500);
 
-  return NextResponse.json({ acknowledgement: mapProfileFeatureTourAcknowledgement(data) });
+  return NextResponse.json({ acknowledgement: mapProfileFeatureTourAcknowledgement(data!) });
 }

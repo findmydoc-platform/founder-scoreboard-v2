@@ -1,3 +1,4 @@
+import type { GitHubJobContext } from "./credentials/github-job-types";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -5,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { githubCommentMarkerId, githubReviewMarkerId } from "@/features/tasks/model/github-comment-delivery-policy";
 import { resolveGitHubCommentMentionSnapshot } from "@/lib/github-comment-mention-snapshot";
 import { loadGitHubMentionTeam } from "@/lib/github-mention-team-config";
-import { getGitHubAppInstallationToken } from "./github-app";
+import { authorizeCredentialAction } from "./credentials";
 import { getGitHubIssueComment, isGitHubIssueApiUrl } from "./github";
 
 type GitHubIssueCommentAction = "created" | "edited" | "deleted";
@@ -265,8 +266,9 @@ export function createSupabaseGitHubIssueCommentWebhookStore(
 
 async function loadCurrentGitHubIssueComment(
   delivery: ClaimedGitHubIssueCommentDelivery,
+  claim: GitHubJobContext,
 ): Promise<GitHubIssueCommentSnapshot> {
-  const token = await getGitHubAppInstallationToken();
+  const token = (await authorizeCredentialAction({ credential: { kind: "github-claimed-job", claim }, action: "github.issue.read", target: { repositories: [delivery.repositoryFullName] } })).github;
   const comment = await getGitHubIssueComment(
     delivery.commentId,
     token,
@@ -349,7 +351,7 @@ async function finalizeOrThrow(
 export async function processGitHubIssueCommentWebhookDelivery({
   deliveryId,
   store,
-  loadComment = loadCurrentGitHubIssueComment,
+  loadComment: suppliedCommentLoader,
 }: {
   deliveryId: string;
   store: GitHubIssueCommentWebhookStore;
@@ -358,6 +360,8 @@ export async function processGitHubIssueCommentWebhookDelivery({
   const lockToken = randomUUID();
   const delivery = await store.claim(deliveryId, lockToken);
   if (!delivery) return { kind: "skipped" };
+  const claim = Object.freeze({ family: "comment-webhook" as const, id: delivery.deliveryId, lockToken });
+  const loadComment = suppliedCommentLoader || ((value: ClaimedGitHubIssueCommentDelivery) => loadCurrentGitHubIssueComment(value, claim));
 
   try {
     const task = await store.resolveTask(delivery.repositoryFullName, delivery.issueNumber);

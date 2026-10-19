@@ -10,10 +10,10 @@ test("preserves the user JWT, releases permits after failure and never replays a
   });
   vi.stubGlobal("fetch",network);
   try {
-    const relay=await importTestModule("src/lib/workspace-data-fetch.ts",{
+    const relay=await importTestModule("src/lib/credentials/internal/workspace-data-fetch.ts",{
       "server-only":{},
       "./workspace-access":{requireWorkspaceAccess:async()=>({userId:"user-1"}),assertGoogleSession:async()=>"session-1"},
-      "./supabase-service-role":{getServerServiceRoleSupabase:()=>({auth:{getUser:async()=>({data:{user:{id:"user-1"}},error:null})},rpc})},
+      "./service-client":{getServerServiceRoleSupabase:()=>({auth:{getUser:async()=>({data:{user:{id:"user-1"}},error:null})},rpc})},
     });
     await expect(relay.workspaceDataFetch("https://database.example/rest/v1/rpc/operation",{method:"POST",headers:{authorization:"Bearer user-session"}})).rejects.toThrow("Connection lost");
     expect(network).toHaveBeenCalledTimes(1);

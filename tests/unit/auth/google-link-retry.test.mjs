@@ -1,7 +1,10 @@
+vi.mock("server-only", () => ({}));
+vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], get: () => undefined, set: () => {} }) }));
 import { test, expect, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function startWith(identities, { access = { subject: "google-subject" }, completeError = null, linkingEnforced = false } = {}) {
+  vi.resetModules();
   const calls = [];
   const linkIdentity = vi.fn(async () => ({ data: { url: "https://accounts.google.com/authorize" }, error: null }));
   const signOut = vi.fn(async () => ({}));
@@ -12,19 +15,19 @@ async function startWith(identities, { access = { subject: "google-subject" }, c
   });
   const route = await importTestModule("src/app/auth/google-link/start/route.ts", {
     "next/headers": { cookies: async () => ({ set: setCookie }) },
-    "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: {
+    "@/lib/credentials/internal/cookie-client": { cookieSession: async () => ({ complete: response => response, revoke() {} }), getServerAuthSupabase: async () => ({ auth: {
       getUser: async () => ({ data: { user: { id: "auth-user", identities } } }), linkIdentity,
       signOut,
     } }) },
-    "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => ({
+    "@/lib/credentials/internal/service-client": { getServerServiceRoleSupabase: () => ({
       rpc: async (name, args) => {
         calls.push({ name, args });
         return { error: name === "workspace_complete_link" ? completeError : null };
       },
     }) },
     "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu" },
-    "@/lib/workspace-data-fetch": { sha256: value => value },
-    "@/lib/workspace-access": { requireWorkspaceAccess, workspaceAccessContext: async () => ({ linkingEnforced }) },
+    "@/lib/credentials/internal/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
+    "@/lib/credentials/internal/workspace-access": { requireWorkspaceAccess, workspaceAccessContext: async () => ({ linkingEnforced }) },
   });
   const url = "https://founder-ops.findmydoc.eu/auth/google-link/start";
   const response = await route.POST({ url, headers: new Headers({ origin: "https://founder-ops.findmydoc.eu" }) });

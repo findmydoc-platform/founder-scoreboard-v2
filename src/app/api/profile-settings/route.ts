@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanOptionalText } from "@/lib/api-input";
-import { requireTeamMember } from "@/lib/authz";
+import { authorizeCredentialAction } from "@/lib/credentials";
 import { mapNotificationPreference, mapProfile, mapProfileUiPreference } from "@/lib/planning-row-mappers";
 import type { DbNotificationPreference, DbProfile, DbProfileUiPreference } from "@/lib/planning-row-types";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
-import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { apiError, authzError } from "@/lib/api-response";
 import { rootWorkspaceFromPreference } from "@/features/planning/model/workspace-preferences";
 import { buildProfileColorPatch, mapProfileColorTransactionError } from "@/features/profile/model/profile-color-api";
 import type { PlanningFilterPreferences, ViewMode } from "@/lib/types";
@@ -129,10 +129,9 @@ function cleanDefaultWorkspace(value: unknown) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const context = await requireJsonApiContext<ProfileSettingsPayload>(request, requireTeamMember, {});
-  if (!context.ok) return context.response;
-
-  const { payload, permission, supabase } = context;
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "account.settings.update" });
+  if (!permission.ok) return authzError(permission);
+  const payload = await request.json().catch(() => ({})) as ProfileSettingsPayload;
   const profileId = permission.profile?.id || "";
   if (!profileId) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
@@ -185,14 +184,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   const metadata = auditRequestMetadata(request);
-  const { data: transactionData, error: transactionError } = await supabase.rpc("update_profile_settings_transaction", {
-    p_profile_id: profileId,
-    p_profile_patch: profileUpdate,
-    p_ui_preferences: uiPreferenceUpdate,
-    p_notification_events: notificationEvents,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent,
-  });
+  const { data: transactionData, error: transactionError } = await permission.account.updateSettings({ profilePatch: profileUpdate, uiPreferences: uiPreferenceUpdate, notificationEvents, metadata });
 
   if (transactionError) {
     const colorError = mapProfileColorTransactionError(transactionError);

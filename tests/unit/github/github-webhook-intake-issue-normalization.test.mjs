@@ -1,29 +1,16 @@
 import assert from "node:assert/strict";
 
-import { createHash, createHmac } from "node:crypto";
+import { createHash } from "node:crypto";
 
 import { test } from "vitest";
 
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-const webhookSecret = "test-webhook-secret";
-
 const expectedInstallationId = "42";
 
 const expectedOrganizationId = "606";
 
-const allowedRepositories = new Set([
-  "findmydoc-platform/management",
-  "findmydoc-platform/website",
-  "findmydoc-platform/clinic-dashboard",
-]);
-
-const webhook = await importTestModule("src/lib/github-webhook-intake.ts", {
-  "server-only": {},
-  "./github-repositories": {
-    normalizeGitHubRepository: (value) => allowedRepositories.has(value) ? value : null,
-  },
-});
+const webhook = await importTestModule("src/lib/github-webhook-intake.ts", {"server-only":{}});
 
 function issuePayload(overrides = {}) {
   return {
@@ -62,10 +49,9 @@ function commentPayload(overrides = {}) {
   });
 }
 
-function signedEnvelope(body, {
+function rawEnvelope(body, {
   deliveryId = "delivery-123",
   eventName = "issues",
-  secret = webhookSecret,
 } = {}) {
   const rawBody = Buffer.from(typeof body === "string" ? body : JSON.stringify(body));
   return {
@@ -73,27 +59,25 @@ function signedEnvelope(body, {
     headers: {
       deliveryId,
       eventName,
-      signature: `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`,
+      signature: null,
     },
   };
 }
 
 function inspect(body, envelopeOptions = {}, intakeOptions = {}) {
-  return webhook.inspectGitHubIssueWebhook({
-    ...signedEnvelope(body, envelopeOptions),
-    webhookSecret,
+  return webhook.normalizeGitHubIssueWebhook({
+    ...rawEnvelope(body, envelopeOptions),
     expectedInstallationId,
     expectedOrganizationId,
     ...intakeOptions,
   });
 }
 
-test("a signed Issue event is normalized around stable GitHub identities", () => {
+test("an Issue event is normalized around stable GitHub identities", () => {
   const payload = issuePayload();
-  const envelope = signedEnvelope(payload);
-  const result = webhook.inspectGitHubIssueWebhook({
+  const envelope = rawEnvelope(payload);
+  const result = webhook.normalizeGitHubIssueWebhook({
     ...envelope,
-    webhookSecret,
     expectedInstallationId,
   });
 
@@ -154,12 +138,11 @@ test("Issue field events persist only the field name and reload values later", (
   assert.equal(Object.hasOwn(result.delivery, "field"), false);
 });
 
-test("a signed Issue comment event stores stable identities without comment content", () => {
+test("an Issue comment event stores stable identities without comment content", () => {
   const payload = commentPayload();
-  const envelope = signedEnvelope(payload, { eventName: "issue_comment" });
-  const result = webhook.inspectGitHubIssueWebhook({
+  const envelope = rawEnvelope(payload, { eventName: "issue_comment" });
+  const result = webhook.normalizeGitHubIssueWebhook({
     ...envelope,
-    webhookSecret,
     expectedInstallationId,
   });
 
@@ -204,28 +187,14 @@ test("a signed Issue comment event stores stable identities without comment cont
   assert.equal(Object.hasOwn(result.delivery, "commentBody"), false);
 });
 
-test("signature verification happens before payload parsing", () => {
-  const invalidSignature = webhook.inspectGitHubIssueWebhook({
-    rawBody: Buffer.from("not-json"),
-    headers: {
-      deliveryId: "delivery-123",
-      eventName: "issues",
-      signature: "sha256=" + "0".repeat(64),
-    },
-    webhookSecret,
-    expectedInstallationId,
-  });
-  assert.equal(invalidSignature.kind, "rejected");
-  assert.equal(invalidSignature.status, 401);
-  assert.equal(invalidSignature.code, "github_webhook_unauthorized");
-
+test("invalid payload data cannot be normalized", () => {
   const invalidPayload = inspect("not-json");
   assert.equal(invalidPayload.kind, "rejected");
   assert.equal(invalidPayload.status, 400);
   assert.equal(invalidPayload.code, "github_webhook_invalid_payload");
 });
 
-test("ping is acknowledged and signed unsupported events are ignored", () => {
+test("ping is acknowledged and unsupported events are ignored", () => {
   assert.deepEqual(inspect({ zen: "Keep it logically awesome." }, { eventName: "ping" }), { kind: "ping" });
   assert.deepEqual(inspect("not-json", { eventName: "pull_request" }), { kind: "ignored" });
 });

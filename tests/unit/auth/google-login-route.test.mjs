@@ -1,17 +1,21 @@
+vi.mock("server-only", () => ({}));
+vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], get: () => undefined, set: () => {} }) }));
 import { test, expect, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
+
+test.beforeEach(() => vi.resetModules());
 
 for (const mode of ["legacy", "linking", "google"]) {
   test(`login uses the authorized provider in ${mode} mode`, async () => {
     let options;
-    const route = await importTestModule("src/app/auth/login/route.ts", {
-      "@/lib/workspace-access": { workspaceAccessContext: async () => ({ mode }) },
+    const route = await importTestModule("src/app/api/auth/session/login/route.ts", {
+      "@/lib/credentials/internal/workspace-access": { workspaceAccessContext: async () => ({ mode }) },
       "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
-      "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: { signInWithOAuth: async input => { options = input; return { data: { url: "https://accounts.google.com/authorize" }, error: null }; } } }) },
+      "@/lib/credentials/internal/cookie-client": { cookieSession: async () => ({ complete: response => response, revoke() {} }), getServerAuthSupabase: async () => ({ auth: { signInWithOAuth: async input => { options = input; return { data: { url: "https://accounts.google.com/authorize" }, error: null }; } } }) },
     });
     const url = "https://founder-ops.findmydoc.eu/auth/login?provider=github";
-    const response = await route.GET({ url, nextUrl: new URL(url) });
-    expect(response.status).toBe(307);
+    const response = await route.POST({ url, nextUrl: new URL(url), headers: new Headers({ origin: "https://founder-ops.findmydoc.eu", "content-type": "application/json" }) });
+    expect(response.status).toBe(200);
     expect(options.provider).toBe(mode === "google" ? "google" : "github");
     if (mode === "google") {
       expect(options.options.scopes).toBe("openid email profile");
@@ -24,12 +28,12 @@ test("callback denies an unapproved Workspace identity and clears the new applic
   const signOut = vi.fn(async () => ({}));
   const route = await importTestModule("src/app/auth/callback/route.ts", {
     "next/headers": { cookies: async () => ({}) },
-    "@/lib/workspace-access": { requireWorkspaceAccess: async () => { throw new Error("Not a member"); } },
-    "@/lib/workspace-data-fetch": { sha256: value => value },
-    "@/lib/google-provider-proof": { verifyGoogleProviderToken: async () => {} },
-    "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => null },
+    "@/lib/credentials/internal/workspace-access": { requireWorkspaceAccess: async () => { throw new Error("Not a member"); } },
+    "@/lib/credentials/internal/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
+    "@/lib/credentials/internal/google-provider-proof": { verifyGoogleProviderToken: async () => {} },
+    "@/lib/credentials/internal/service-client": { getServerServiceRoleSupabase: () => null },
     "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
-    "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: { exchangeCodeForSession: async () => ({ data: { user: { id: "auth-user" }, session: { access_token: "session", refresh_token: "refresh" } }, error: null }), setSession: async () => ({ error: null }), signOut } }) },
+    "@/lib/credentials/internal/cookie-client": { cookieSession: async () => ({ complete: response => response, revoke() {} }), getServerAuthSupabase: async () => ({ auth: { exchangeCodeForSession: async () => ({ data: { user: { id: "auth-user" }, session: { access_token: "session", refresh_token: "refresh" } }, error: null }), setSession: async () => ({ error: null }), signOut } }) },
   });
   const url = "https://founder-ops.findmydoc.eu/auth/callback?code=example";
   const response = await route.GET({ url, nextUrl: new URL(url) });
@@ -38,6 +42,7 @@ test("callback denies an unapproved Workspace identity and clears the new applic
 });
 
 async function enforcedCallback({ linked, loginNonce = null, cookieNonce = null }) {
+  vi.resetModules();
   const signOut = vi.fn(async () => ({}));
   const rpc = vi.fn(async () => ({ error: null }));
   const verifyGoogleProviderToken = vi.fn(async () => {});
@@ -45,16 +50,16 @@ async function enforcedCallback({ linked, loginNonce = null, cookieNonce = null 
   const token = `e.${Buffer.from(JSON.stringify({ session_id: sessionId })).toString("base64url")}.s`;
   const route = await importTestModule("src/app/auth/callback/route.ts", {
     "next/headers": { cookies: async () => ({ get: () => ({ value: cookieNonce }), set: vi.fn() }) },
-    "@/lib/workspace-access": {
+    "@/lib/credentials/internal/workspace-access": {
       workspaceAccessContext: async () => ({ mode: "linking", linkingEnforced: true, profileId: "founder", linked }),
       requireWorkspaceAccess: async () => ({ subject: "google-subject" }),
       assertGoogleSession: async () => {},
     },
-    "@/lib/workspace-data-fetch": { sha256: value => value },
-    "@/lib/google-provider-proof": { verifyGoogleProviderToken },
-    "@/lib/supabase-service-role": { getServerServiceRoleSupabase: () => ({ rpc }) },
+    "@/lib/credentials/internal/workspace-data-fetch": { sha256: value => value, workspaceDataFetch: async () => { throw new Error("Unexpected data transport in policy fixture"); } },
+    "@/lib/credentials/internal/google-provider-proof": { verifyGoogleProviderToken },
+    "@/lib/credentials/internal/service-client": { getServerServiceRoleSupabase: () => ({ rpc }) },
     "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
-    "@/lib/supabase-server": { getServerAuthSupabase: async () => ({ auth: {
+    "@/lib/credentials/internal/cookie-client": { cookieSession: async () => ({ complete: response => response, revoke() {} }), getServerAuthSupabase: async () => ({ auth: {
       exchangeCodeForSession: async () => ({ data: { user: { id: "auth-user" }, session: { access_token: token, refresh_token: "refresh", provider_token: "google-provider-token" } }, error: null }),
       setSession: async () => ({ error: null }), signOut,
     } }) },
@@ -87,5 +92,15 @@ test("only a nonce-matched Google callback can approve a session", async () => {
   const rejected = await enforcedCallback({ linked: true, loginNonce: "wrong", cookieNonce: "valid" });
   expect(new URL(rejected.response.headers.get("location")).pathname).toBe("/auth/error");
   expect(rejected.rpc).not.toHaveBeenCalled();
-  expect(rejected.signOut).toHaveBeenCalledWith({ scope: "local" });
+  expect(rejected.signOut).not.toHaveBeenCalled();
+});
+
+
+test("browser login redirects through the configured public origin behind a proxy", async () => {
+  const route = await importTestModule("src/app/auth/login/route.ts", {
+    "@/lib/auth-redirect": { authOrigin: () => "https://founder-ops.findmydoc.eu", safeRelativeNext: () => "/planning" },
+  });
+  const url = "http://localhost:3000/auth/login?next=/planning";
+  const response = route.GET({ url, nextUrl: new URL(url) });
+  expect(response.headers.get("location")).toBe("https://founder-ops.findmydoc.eu/auth/start?next=%2Fplanning");
 });

@@ -9,7 +9,7 @@ test("approves only a Google token returning the bound Workspace identity", asyn
   }), { status: 200 }));
   vi.stubGlobal("fetch", network);
   try {
-    const { verifyGoogleProviderToken } = await importTestModule("src/lib/google-provider-proof.ts", { "server-only": {} });
+    const { verifyGoogleProviderToken } = await importTestModule("src/lib/credentials/internal/google-provider-proof.ts", { "server-only": {} });
     await expect(verifyGoogleProviderToken("provider-token", identity)).resolves.toBeUndefined();
     expect(network).toHaveBeenCalledWith("https://openidconnect.googleapis.com/v1/userinfo", expect.objectContaining({
       headers: { Authorization: "Bearer provider-token" }, cache: "no-store",
@@ -24,7 +24,7 @@ test.each([
 ])("rejects a provider token for another identity: %#", async payload => {
   vi.stubGlobal("fetch", async () => new Response(JSON.stringify(payload), { status: 200 }));
   try {
-    const { verifyGoogleProviderToken } = await importTestModule("src/lib/google-provider-proof.ts", { "server-only": {} });
+    const { verifyGoogleProviderToken } = await importTestModule("src/lib/credentials/internal/google-provider-proof.ts", { "server-only": {} });
     await expect(verifyGoogleProviderToken("provider-token", identity)).rejects.toThrow();
   } finally { vi.unstubAllGlobals(); }
 });

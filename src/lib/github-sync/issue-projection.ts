@@ -1,3 +1,4 @@
+import type { GitHubResourceCredential } from "../github-http";
 import type { Task } from "../types";
 import { GitHubApiError, githubJson, githubRequest } from "../github-http";
 import {
@@ -111,7 +112,7 @@ function hasMatchingLegacyFounderOpsTaskId(task: Task, body?: string | null) {
   return taskIds.size === 1 && taskIds.has(task.id);
 }
 
-async function assignableGitHubLogin(login: string, token: string, repository: string) {
+async function assignableGitHubLogin(login: string, token: GitHubResourceCredential, repository: string) {
   const { owner, repo } = splitGitHubRepository(repository);
   let response: Response;
   try {
@@ -133,7 +134,7 @@ function matchingTaskIssue(items: GitHubIssueSearchResult[], marker: string) {
   return items.find((issue) => !issue.pull_request && issue.body?.includes(marker)) || null;
 }
 
-async function findGitHubIssueByTaskMarker(taskId: string, token: string, repository: string) {
+async function findGitHubIssueByTaskMarker(taskId: string, token: GitHubResourceCredential, repository: string) {
   const { owner, repo } = splitGitHubRepository(repository);
   const marker = taskIssueMarker(taskId);
   const markerToken = marker.slice(5, -4).trim();
@@ -212,7 +213,7 @@ async function updateValidatedGitHubIssue(
   task: Task,
   issueNumber: number,
   payload: GitHubIssuePayload,
-  token: string,
+  token: GitHubResourceCredential,
   owner: string,
   repo: string,
   repository: string,
@@ -244,7 +245,7 @@ async function updateValidatedGitHubIssue(
   });
 }
 
-async function createGitHubIssue(payload: GitHubIssuePayload, token: string, owner: string, repo: string) {
+async function createGitHubIssue(payload: GitHubIssuePayload, token: GitHubResourceCredential, owner: string, repo: string) {
   return githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues`, {
     token,
     method: "POST",
@@ -262,7 +263,7 @@ export async function projectTaskGitHubIssue({
   mentionTeam,
 }: {
   task: Task;
-  token: string;
+  token: GitHubResourceCredential;
   assigneeLogin?: string;
   mentionProfiles?: MentionProfile[];
   mentionTeam?: MentionTeam;

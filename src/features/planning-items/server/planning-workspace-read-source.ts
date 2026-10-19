@@ -118,7 +118,7 @@ export async function loadPlanningWorkspaceModel(
   if (projectResult.error || !projectResult.data || profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error || sprintResult.error || relationResult.error || preferenceResult.error) {
     return { status: "unavailable" };
   }
-  const people = await withWorkspaceProfileAvatars(((profileResult.data || []) as DbProfile[]).map(mapProfile));
+  const people = await withWorkspaceProfileAvatars(((profileResult.data || []) as DbProfile[]).map(mapProfile), supabase);
   const items = mapPlanningSummaryRows(
     (itemResult.data || []) as unknown as DbTask[],
     people,

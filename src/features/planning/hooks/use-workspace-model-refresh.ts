@@ -15,7 +15,7 @@ import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/mode
 
 type UseCurrentWorkspaceModelRefreshOptions = {
   apiClient: BrowserApiClient;
-  authUser: User | null;
+  authUser: Pick<User, "id"> | null;
   headerData: PlanningHeaderData;
   serverCurrentProfile: AuthenticatedProfile | null;
   setData: Dispatch<SetStateAction<PlanningShellState>>;

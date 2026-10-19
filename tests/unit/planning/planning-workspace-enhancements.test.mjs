@@ -1,42 +1,23 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-async function loadRevisionRoute({ apiContext, queryResult } = {}) {
-  const calls = [];
-  const teamGuard = () => ({ ok: true });
-  const builder = {
-    select(...args) { calls.push(["select", ...args]); return this; },
-    eq(...args) { calls.push(["eq", ...args]); return this; },
-    order(...args) { calls.push(["order", ...args]); return this; },
-    async limit(...args) {
-      calls.push(["limit", ...args]);
-      return queryResult || { data: [], error: null, count: 0 };
-    },
-  };
-  let receivedGuard = null;
-  const route = await importTestModule("src/app/api/planning-revision/route.ts", {
-    "next/server": {
-      NextResponse: {
-        json: (body, init = {}) => ({ body, headers: init.headers || {}, status: init.status || 200 }),
-      },
-    },
-    "@/lib/api-response": {
-      apiError: (error, status) => ({ body: { error }, headers: {}, status }),
-      requireApiContext: async (_request, guard) => {
-        receivedGuard = guard;
-        return apiContext || {
-          ok: true,
-          supabase: {
-            from(table) { calls.push(["from", table]); return builder; },
-          },
-        };
-      },
-    },
-    "@/lib/authz": { requireTeamMember: teamGuard },
-    "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
+async function loadRevisionRoute({ queryResult = { data: [], count: 0 }, denied = false } = {}) {
+  const protocol = administratorProtocol({ role: "viewer", profile: !denied });
+  const calls = [], authFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/active_tasks") {
+      calls.push(url);
+      return queryResult.error ? Response.json(queryResult.error, { status: 503 })
+        : Response.json(queryResult.data, { headers: { "content-range": `0-0/${queryResult.count}` } });
+    }
+    return authFetch(request);
   });
-  return { ...route, calls, teamGuard, receivedGuard: () => receivedGuard };
+  const route = await importTestModule("src/app/api/planning-revision/route.ts", { "server-only": {} });
+  return { calls, GET: async () => { const response = await route.GET(protocol.request()); return { status: response.status, body: await response.json(), headers: Object.fromEntries(response.headers) }; } };
 }
 
 test("planning task revisions compare active count and newest server timestamp", async () => {
@@ -62,19 +43,15 @@ test("planning revision route preserves authorization, exact count, latest times
     },
   });
   const response = await route.GET({});
-  assert.equal(route.receivedGuard(), route.teamGuard);
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, {
     revision: { activeTaskCount: 17, latestUpdatedAt: "2026-08-03T12:00:00.000Z" },
   });
-  assert.equal(response.headers["Cache-Control"], "private, no-store");
-  assert.deepEqual(route.calls, [
-    ["from", "active_tasks"],
-    ["select", "updated_at", { count: "exact" }],
-    ["eq", "project_id", "findmydoc-founder-execution"],
-    ["order", "updated_at", { ascending: false }],
-    ["limit", 1],
-  ]);
+  assert.equal(response.headers["cache-control"], "private, no-store");
+  assert.equal(route.calls.length, 1);
+  assert.equal(route.calls[0].searchParams.get("project_id"), "eq.findmydoc-founder-execution");
+  assert.equal(route.calls[0].searchParams.get("select"), "updated_at");
+  assert.equal(route.calls[0].searchParams.get("limit"), "1");
 
   const empty = await loadRevisionRoute({ queryResult: { data: [], error: null, count: 0 } });
   assert.deepEqual((await empty.GET({})).body.revision, { activeTaskCount: 0, latestUpdatedAt: "" });
@@ -84,8 +61,7 @@ test("planning revision route preserves authorization, exact count, latest times
   assert.equal(failedResponse.status, 500);
   assert.equal(failedResponse.body.error, "Planungsänderungen konnten nicht geprüft werden.");
 
-  const deniedResponse = { status: 403, body: { error: "Nicht erlaubt" } };
-  const denied = await loadRevisionRoute({ apiContext: { ok: false, response: deniedResponse } });
-  assert.equal(await denied.GET({}), deniedResponse);
+  const denied = await loadRevisionRoute({ denied: true });
+  assert.equal((await denied.GET()).status, 403);
   assert.deepEqual(denied.calls, []);
 });

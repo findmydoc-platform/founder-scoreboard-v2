@@ -3,11 +3,12 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createGitHubIssueComment, GitHubApiError, listGitHubIssueComments } from "./github";
-import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "./github-app";
+import { GitHubAppUserTokenRequiredError } from "./github-app-errors";
+import { authorizeCredentialAction, type GitHubUserCapability } from "./credentials";
 import { resolveGitHubIssueNumber } from "./github-issue-reference";
 import { loadGitHubMentionTeam } from "./github-mention-team-config";
 import { canonicalizeProfileMentionsForGitHub } from "./mentions";
-import type { AuthenticatedProfile, GitHubCommentDeliveryStatus, PlatformRole } from "./types";
+import type { GitHubCommentDeliveryStatus, PlatformRole } from "./types";
 
 type ClaimedReviewDelivery = {
   task_review_id: number;
@@ -38,10 +39,6 @@ const decisionLabels = {
 
 function marker(reviewId: number) {
   return `fmd-review-id:${reviewId}`;
-}
-
-function authenticatedProfile(row: ProfileRow): AuthenticatedProfile {
-  return { id: row.id, name: row.name, platformRole: row.platform_role, githubLogin: row.github_login || "" };
 }
 
 function retryAt(attempts: number) {
@@ -121,9 +118,9 @@ export async function deliverPendingGitHubReviews({ supabase, taskId, authorProf
         summary.waitingForAuthorConnection += 1;
         continue;
       }
-      let token = "";
+      let token:GitHubUserCapability;
       try {
-        token = await getGitHubUserTokenForProfile(supabase, authenticatedProfile(loaded.profile));
+        token = (await authorizeCredentialAction({credential:{kind:"github-review-delivery",reviewId:loaded.review.id,claimToken:lockToken},action:"github.review.deliver"})).github;
       } catch (tokenError) {
         if (!(tokenError instanceof GitHubAppUserTokenRequiredError)) throw tokenError;
         await finalize(supabase, lockToken, loaded.review.id, "waiting_for_author_connection", { statusReason: "author_connection_required", issueNumber });

@@ -1,9 +1,11 @@
+import { vi as mockRuntime } from "vitest";
+mockRuntime.mock("server-only", () => ({}));
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 test("REQUIRE_SUPABASE_AUTH disables auth only for explicit local development", async () => {
-  const supabase = await importTestModule("src/lib/supabase.ts", {
+  const supabase = await importTestModule("src/lib/supabase-configuration.ts", {
     "@supabase/ssr": { createBrowserClient: () => ({}) },
     "@supabase/supabase-js": { createClient: () => ({}) },
   });

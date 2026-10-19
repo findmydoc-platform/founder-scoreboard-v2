@@ -1,3 +1,4 @@
+import type { GitHubResourceCredential } from "./github-http";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getGitHubIssue, githubRepoSlug } from "./github";
 import { parseGitHubIssueUrl, resolveGitHubIssueNumber } from "./github-issue-reference";
@@ -49,7 +50,7 @@ function assertConsistentParentReference(parent: GitHubSubIssueParentRow, reposi
 export async function preflightGitHubSubIssueParent(
   supabase: SupabaseClient,
   task: Pick<Task, "parentTaskId">,
-  token: string,
+  token: GitHubResourceCredential,
 ): Promise<GitHubSubIssueParentContext> {
   if (!task.parentTaskId) {
     throw new Error("Das Sub-Issue hat kein Parent-Deliverable.");

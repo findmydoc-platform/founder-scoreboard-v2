@@ -1,16 +1,19 @@
+import type { WorkweekBookkeeping } from "./team-workweek-bookkeeping";
+import type { NextRequest } from "next/server";
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
 
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadTeamWorkweekObservationContext } from "./team-workweek-observation-context";
 import { berlinTodayIso, nextVersionMondayIso } from "../model/team-workweek-draft";
-import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
+import { calendarForWorkweekOwner } from "./team-workweek-calendar";
 import {
   observeGoogleWorkweek,
   type GoogleWorkweekObservation,
   type GoogleWorkweekReconciliationResult,
 } from "./team-workweek-reconciliation-core";
-import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
+import { GoogleWorkspaceOAuthContractError } from "@/lib/google-calendar-errors";
 import {
   publishTeamWorkweek,
   type TeamWorkweekPublicationDelayClass,
@@ -114,6 +117,7 @@ async function loadObservationContext(serviceSupabase:SupabaseClient,ownerProfil
 }
 
 async function observeCurrentGoogle({
+  request,
   getAccessToken,
   now,
   observe,
@@ -121,7 +125,8 @@ async function observeCurrentGoogle({
   serviceSupabase,
   context: providedContext,
 }: {
-  getAccessToken: typeof getGoogleWorkspaceAccessToken;
+  request?: NextRequest;
+  getAccessToken: typeof calendarForWorkweekOwner;
   now: () => Date;
   observe: typeof observeGoogleWorkweek;
   ownerProfileId: string;
@@ -129,9 +134,9 @@ async function observeCurrentGoogle({
   context?: Awaited<ReturnType<typeof loadObservationContext>>;
 }) {
   const context = providedContext || await loadObservationContext(serviceSupabase, ownerProfileId,now());
-  let accessToken: string;
+  let accessToken: GoogleCalendarCapability;
   try {
-    accessToken = await getAccessToken(serviceSupabase, ownerProfileId);
+    accessToken = await getAccessToken(serviceSupabase, ownerProfileId, request);
   } catch (error) {
     throw new TeamWorkweekConflictError(
       "unavailable",
@@ -159,14 +164,16 @@ async function observeCurrentGoogle({
 }
 
 export async function detectTeamWorkweekParallelConflict({
-  getAccessToken = getGoogleWorkspaceAccessToken,
+  request,
+  getAccessToken = calendarForWorkweekOwner,
   now = () => new Date(),
   observe = observeGoogleWorkweek,
   ownerProfileId,
   serviceSupabase,
   versionId,
 }: {
-  getAccessToken?: typeof getGoogleWorkspaceAccessToken;
+  request?: NextRequest;
+  getAccessToken?: typeof calendarForWorkweekOwner;
   now?: () => Date;
   observe?: typeof observeGoogleWorkweek;
   ownerProfileId: string;
@@ -194,7 +201,7 @@ export async function detectTeamWorkweekParallelConflict({
     const context=await loadObservationContext(serviceSupabase,ownerProfileId,now(),versionResponse.data.base_publication_id || undefined);
     // Verify retained physical cutoffs before a fresh owner publication. Partial
     // Google state is neither imported as a template nor reported as confirmed.
-    current = await observeCurrentGoogle({ getAccessToken, now, observe, ownerProfileId, serviceSupabase,context });
+    current = await observeCurrentGoogle({ request, getAccessToken, now, observe, ownerProfileId, serviceSupabase,context });
   } catch (error) {
     if (error instanceof TeamWorkweekConflictError && error.code === "not_found") return { state: "clear" };
     throw error;
@@ -272,10 +279,12 @@ export async function getOpenTeamWorkweekConflict(serviceSupabase: SupabaseClien
 }
 
 export async function resolveTeamWorkweekConflict({
+  request,
+  bookkeeping,
   conflictId,
   conflictRevision,
   decision,
-  getAccessToken = getGoogleWorkspaceAccessToken,
+  getAccessToken = calendarForWorkweekOwner,
   now = () => new Date(),
   observe = observeGoogleWorkweek,
   ownerProfileId,
@@ -286,7 +295,9 @@ export async function resolveTeamWorkweekConflict({
   conflictId: string;
   conflictRevision: number;
   decision: "founderops" | "google";
-  getAccessToken?: typeof getGoogleWorkspaceAccessToken;
+  request?: NextRequest;
+  bookkeeping?: WorkweekBookkeeping;
+  getAccessToken?: typeof calendarForWorkweekOwner;
   now?: () => Date;
   observe?: typeof observeGoogleWorkweek;
   ownerProfileId: string;
@@ -319,16 +330,16 @@ export async function resolveTeamWorkweekConflict({
     if(operation.error) throw new TeamWorkweekConflictError("unavailable","Auflösungsstatus ist nicht verfügbar.");
     if(operation.data?.attempt_generation){
       if(conflict.decision!==decision) throw new TeamWorkweekConflictError("stale","Konflikt wurde bereits anders entschieden.");
-      const publication=await publish({serviceSupabase,userSupabase,versionId:conflict.resolution_version_id,now});
+      const publication=await publish({request,bookkeeping,serviceSupabase,userSupabase,versionId:conflict.resolution_version_id,now});
       if(publication.status==="published"){
-        const completed=await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution",{p_conflict_id:conflictId,p_owner_profile_id:ownerProfileId,p_conflict_revision:conflictRevision,p_resolved_at:publication.lastSyncAt || now().toISOString()});
+        const completed=bookkeeping ? await bookkeeping.completeConflict({publicationId:publication.id,conflictId,ownerProfileId,revision:conflictRevision,resolvedAt:publication.lastSyncAt || now().toISOString()}) : await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution",{p_conflict_id:conflictId,p_owner_profile_id:ownerProfileId,p_conflict_revision:conflictRevision,p_resolved_at:publication.lastSyncAt || now().toISOString()});
         if(completed.error) throw new TeamWorkweekConflictError("unavailable","Bestätigte Konfliktauflösung konnte nicht abgeschlossen werden.");
       }
       return publication;
     }
   }
   const context = await loadObservationContext(serviceSupabase, ownerProfileId, now(), conflict.base_publication_id);
-  const current = await observeCurrentGoogle({ getAccessToken, now, observe, ownerProfileId, serviceSupabase, context });
+  const current = await observeCurrentGoogle({ request, getAccessToken, now, observe, ownerProfileId, serviceSupabase, context });
   let versionId = conflict.resolution_version_id;
   if (!versionId) {
     if (current.publication.id !== conflict.base_publication_id || !(current.observation.state === "changed" || (current.observation.state==="conflict" && current.observation.observations))) {
@@ -379,9 +390,9 @@ export async function resolveTeamWorkweekConflict({
   }
 
   if (!versionId) throw new TeamWorkweekConflictError("unavailable", "Konfliktauflösung ist unvollständig.");
-  const publication = await publish({ serviceSupabase, userSupabase, versionId, now, transitionsFirst: true });
+  const publication = await publish({ request, bookkeeping, serviceSupabase, userSupabase, versionId, now, transitionsFirst: true });
   if (publication.status === "published") {
-    const completed = await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution", {
+    const completed = bookkeeping ? await bookkeeping.completeConflict({ publicationId: publication.id, conflictId, ownerProfileId, revision: conflictRevision, resolvedAt: publication.lastSyncAt || now().toISOString() }) : await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution", {
       p_conflict_id: conflictId,
       p_owner_profile_id: ownerProfileId,
       p_conflict_revision: conflictRevision,

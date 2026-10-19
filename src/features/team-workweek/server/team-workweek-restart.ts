@@ -1,9 +1,12 @@
+import type { WorkweekBookkeeping } from "./team-workweek-bookkeeping";
+import type { NextRequest } from "next/server";
+import type { GoogleCalendarCapability } from "@/lib/credentials";
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { inflateTeamWorkweekWindows, type PrivateTeamWorkweekVersion } from "../model/team-workweek-draft";
 import { compensateTeamWorkweekGeneration } from "./team-workweek-execution";
-import { GoogleWorkspaceOAuthContractError } from "./google-workspace-oauth-core";
-import { getGoogleWorkspaceAccessToken } from "./google-workspace-oauth";
+import { GoogleWorkspaceOAuthContractError } from "@/lib/google-calendar-errors";
+import { calendarForWorkweekOwner } from "./team-workweek-calendar";
 import { TeamWorkweekPublicationError } from "./team-workweek-publication";
 import type { WorkweekRecoveryReason } from "./team-workweek-provider-operations";
 import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, recoverGoogleWorkweekWrite } from "./team-workweek-immediate-effects";
@@ -11,20 +14,22 @@ import { cleanupGoogleWorkweekEffect, discoverGoogleWorkweekInstance, recoverGoo
 type VersionRow={id:string;owner_profile_id:string;effective_from:string;activation_mode:"immediate"|"future_monday";base_publication_id:string|null;base_publication_revision:number|null;timezone:"Europe/Berlin";created_at:string;retired_at:string|null;restarted_version_id:string|null;team_workweek_windows:Array<{weekday:number;start_minute:number;end_minute:number}>};
 export type TeamWorkweekRestartResult={version?:PrivateTeamWorkweekVersion;restart:{state:"ready"|"delayed";recovery:"retry"|"reconnect"|"identity_conflict"|null;reason?:WorkweekRecoveryReason}};
 export async function restartPrivateTeamWorkweek({
-  ownerProfileId, versionId, userSupabase, serviceSupabase,
+  ownerProfileId, versionId, userSupabase, serviceSupabase, request, bookkeeping,
   now = () => new Date(),
-  accessTokenForOwner = getGoogleWorkspaceAccessToken,
+  accessTokenForOwner = calendarForWorkweekOwner,
   compensate = compensateTeamWorkweekGeneration,
   cleanupEffect = cleanupGoogleWorkweekEffect,
   discoverInstance = discoverGoogleWorkweekInstance,
   recoverWrite = recoverGoogleWorkweekWrite,
 }: {
+  request?: NextRequest;
+  bookkeeping?: WorkweekBookkeeping;
   ownerProfileId: string;
   versionId: string;
   userSupabase: SupabaseClient;
   serviceSupabase: SupabaseClient;
   now?: () => Date;
-  accessTokenForOwner?: typeof getGoogleWorkspaceAccessToken;
+  accessTokenForOwner?: typeof calendarForWorkweekOwner;
   compensate?: typeof compensateTeamWorkweekGeneration;
   cleanupEffect?: typeof cleanupGoogleWorkweekEffect;
   discoverInstance?: typeof discoverGoogleWorkweekInstance;
@@ -56,13 +61,16 @@ export async function restartPrivateTeamWorkweek({
         if(cancellation.error)throw new TeamWorkweekPublicationError("conflict","Der Veröffentlichungsversuch konnte noch nicht angehalten werden.");
         if(cancellation.data?.state!=="ready" && cancellation.data?.reason!=="uncertain")return {restart:{state:"delayed",recovery:"retry",reason:cancellation.data?.reason||"in_progress"}};
       }else if(new Date(publication.data.effective_at)>now())throw new TeamWorkweekPublicationError("conflict","Die Veröffentlichung läuft noch. Lade ihren aktuellen Stand erneut.");
-      let token:string;
-      try{token=await accessTokenForOwner(serviceSupabase,ownerProfileId);}catch(error){
+      let token:GoogleCalendarCapability;
+      try{token=await accessTokenForOwner(serviceSupabase,ownerProfileId,request);}catch(error){
         if(error instanceof GoogleWorkspaceOAuthContractError)return {restart:{state:"delayed",recovery:error.code==="provider_revoked" || error.code==="reconnect_required"?"reconnect":"retry"}};
         throw error;
       }
       let reason:WorkweekRecoveryReason|undefined;
-      const failure=await compensate({accessToken:token,publicationId:publication.data.id,generation:publication.data.attempt_generation,serviceSupabase,now,journaled,cleanupEffect,discoverInstance,recoverWrite,onRecoveryReason:value=>{reason=value;}});
+      const publicationBookkeeping = bookkeeping?.forPublication({ id: publication.data.id, sourceVersionId: versionId, ownerProfileId,
+        attemptGeneration: publication.data.attempt_generation, writeJournalVersion: publication.data.write_journal_version, effectiveAt: publication.data.effective_at,
+        status: "preparing", syncState: "pending", effectiveFrom: "", timezone: "Europe/Berlin", publicationRevision: 0, publishedAt: null, lastSyncAt: null, series: [], transitions: [], effects: [] });
+      const failure=await compensate({accessToken:token,publicationId:publication.data.id,generation:publication.data.attempt_generation,serviceSupabase,bookkeeping:publicationBookkeeping,now,journaled,cleanupEffect,discoverInstance,recoverWrite,onRecoveryReason:value=>{reason=value;}});
       if(failure)return {restart:{state:"delayed",recovery:failure==="oauth_reconnect_required"?"reconnect":failure==="provider_identity_mismatch"?"identity_conflict":"retry",...(reason?{reason}:{})}};
     }
   }

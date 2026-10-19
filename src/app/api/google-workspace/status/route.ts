@@ -1,27 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getGoogleWorkspaceConnectionStatus } from "@/features/team-workweek/server/google-workspace-oauth";
-import { apiError, requireApiContext } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
-import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { authorizeCredentialAction } from "@/lib/credentials";
+import { apiError, authzError } from "@/lib/api-response";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const context = await requireApiContext(request, requireTeamMember);
-  if (!context.ok) return context.response;
-  const profileId = context.permission.profile?.id || "";
-  if (!profileId) return apiError("Teamprofil ist nicht verfügbar.", 403);
-  const supabase = getServerServiceRoleSupabase();
-  if (!supabase) return apiError("Google-Verbindungsstatus ist nicht verfügbar.", 503);
-
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "connection.google.read" });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile?.id) return apiError("Teamprofil ist nicht verfügbar.", 403);
   try {
-    const [connection, cleanup] = await Promise.all([
-      getGoogleWorkspaceConnectionStatus(supabase, profileId),
-      supabase.from("google_workspace_disconnect_operations").select("id")
-        .eq("owner_profile_id", profileId).neq("state", "completed").limit(1),
-    ]);
-    if (cleanup.error) return apiError("Google-Verbindungsstatus ist nicht verfügbar.", 503);
-    return NextResponse.json({ connection, disconnectPending: Boolean(cleanup.data?.length) });
+    return NextResponse.json(await permission.resource.readGoogleConnection());
   } catch {
     return apiError("Google-Verbindungsstatus ist nicht verfügbar.", 503);
   }

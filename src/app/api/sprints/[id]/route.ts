@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, isIsoDate } from "@/lib/api-input";
-import { requireOperationalLead } from "@/lib/authz";
-import { apiError, requireApiContext } from "@/lib/api-response";
-import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { apiError } from "@/lib/api-response";
+import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 
 type UpdateSprintPayload = {
   name?: string;
@@ -15,19 +14,14 @@ type UpdateSprintPayload = {
 const sprintStatuses = new Set(["planning", "active", "review", "closed"]);
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireOperationalLead);
+  const { id } = await context.params;
+  const apiContext = await requirePlanningContext(request, "planning.sprint.update", id);
   if (!apiContext.ok) return apiContext.response;
 
-  const { permission, supabase } = apiContext;
-
-  const { id } = await context.params;
+  const { planning } = apiContext;
   const payload = (await request.json()) as UpdateSprintPayload;
 
-  const { data: current, error: currentError } = await supabase
-    .from("sprints")
-    .select("id,project_id,name,status,start_date,end_date,review_due_at,score_locked,updated_at")
-    .eq("id", id)
-    .single();
+  const { data: current, error: currentError } = await planning.readSprintSchedule();
 
   if (currentError || !current) return apiError("Sprint wurde nicht gefunden.", 404);
   if (current.score_locked) return apiError("Gelockte Sprints können nicht mehr geändert werden.", 409);
@@ -70,10 +64,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     || (update.end_date !== undefined && update.end_date !== current.end_date);
 
   if (timelineChanged) {
-    const { count, error: taskCountError } = await supabase
-      .from(ACTIVE_TASKS_TABLE)
-      .select("id", { count: "exact", head: true })
-      .eq("sprint_id", id);
+    const { count, error: taskCountError } = await planning.readSprintTaskCount();
 
     if (taskCountError) return apiError(taskCountError.message, 500);
     if ((count || 0) > 0) {
@@ -99,14 +90,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const metadata = auditRequestMetadata(request);
-  const { data: updated, error: updateError } = await supabase.rpc("update_sprint_schedule_transaction", {
-    p_sprint_id: id,
-    p_expected_updated_at: current.updated_at,
-    p_sprint_patch: update,
-    p_actor_profile_id: permission.profile?.id || null,
-    p_request_ip: metadata.request_ip,
-    p_user_agent: metadata.user_agent || null,
-  });
+  const { data: updated, error: updateError } = await planning.commitSprintSchedule({ expectedUpdatedAt: current.updated_at, patch: update }, metadata);
   if (updateError) {
     if (updateError.code === "P0001") return apiError("Sprint wurde parallel geändert. Bitte neu laden.", 409);
     if (updateError.code === "P0002") return apiError("Sprint oder FounderOps-Prozesseinstellung wurde nicht gefunden.", 404);

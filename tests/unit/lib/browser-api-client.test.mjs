@@ -13,9 +13,9 @@ afterEach(() => {
 function sessionPort({
   recovery = {
     kind: "refreshed",
-    session: { accessToken: "refreshed-token", userId: "user-a" },
+    session: { revision: "refreshed-token", userId: "user-a" },
   },
-  snapshot = { accessToken: "current-token", userId: "user-a" },
+  snapshot = { revision: "current-token", userId: "user-a" },
 } = {}) {
   return {
     current: vi.fn().mockResolvedValue(snapshot),
@@ -72,8 +72,8 @@ test("a Workspace dependency outage does not navigate to Google login", async ()
   assert.equal(session.recover.mock.calls.length, 0);
 });
 
-test("a review mutation sends the browser credentials returned by the session port", async () => {
-  const session = sessionPort({ snapshot: { accessToken: "fresh-token", userId: "user-a" } });
+test("a review mutation uses browser cookie transport without an authorization token", async () => {
+  const session = sessionPort({ snapshot: { revision: "fresh-token", userId: "user-a" } });
   const apiClient = browserApiModule.createBrowserApiClient({ sessionPort: session });
   const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ task: { id: "task-1" }, review: { id: "review-1" } }));
   globalThis.fetch = fetchMock;
@@ -85,7 +85,7 @@ test("a review mutation sends the browser credentials returned by the session po
 
   assert.equal(session.current.mock.calls.length, 1);
   assert.equal(fetchMock.mock.calls.length, 1);
-  assert.equal(new Headers(fetchMock.mock.calls[0][1].headers).get("authorization"), "Bearer fresh-token");
+  assert.equal(new Headers(fetchMock.mock.calls[0][1].headers).get("authorization"), null);
 });
 
 test("a marked review 401 refreshes and replays the identical JSON mutation once", async () => {
@@ -112,9 +112,9 @@ test("a marked review 401 refreshes and replays the identical JSON mutation once
   assert.equal(result.body.review.id, "review-1");
   assert.equal(fetchMock.mock.calls.length, 2);
   assert.equal(session.recover.mock.calls.length, 1);
-  assert.deepEqual(session.recover.mock.calls[0][0], { accessToken: "current-token", userId: "user-a" });
-  assert.equal(new Headers(fetchMock.mock.calls[0][1].headers).get("authorization"), "Bearer current-token");
-  assert.equal(new Headers(fetchMock.mock.calls[1][1].headers).get("authorization"), "Bearer refreshed-token");
+  assert.deepEqual(session.recover.mock.calls[0][0], { revision: "current-token", userId: "user-a" });
+  assert.equal(new Headers(fetchMock.mock.calls[0][1].headers).get("authorization"), null);
+  assert.equal(new Headers(fetchMock.mock.calls[1][1].headers).get("authorization"), null);
   assert.equal(fetchMock.mock.calls[0][1].body, JSON.stringify(payload));
   assert.equal(fetchMock.mock.calls[1][1].body, JSON.stringify(payload));
 });
@@ -135,7 +135,7 @@ test("a second marked 401 clears the local session without a third request", asy
 
   assert.equal(result.response.status, 401);
   assert.equal(fetchMock.mock.calls.length, 2);
-  assert.deepEqual(session.clearIfCurrent.mock.calls, [[{ accessToken: "refreshed-token", userId: "user-a" }]]);
+  assert.deepEqual(session.clearIfCurrent.mock.calls, [[{ revision: "refreshed-token", userId: "user-a" }]]);
 });
 
 test("a transient refresh failure returns the original marked 401 without clearing the session", async () => {
