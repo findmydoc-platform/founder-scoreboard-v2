@@ -25,6 +25,10 @@ it("calendar authorization retains PostgREST JWT, individual permit and session 
   try {
     await database.query("insert into auth.users(id,email,role,aud,email_confirmed_at) values ($1,'synthetic-calendar@example.test','authenticated','authenticated',now())", [userId]);
     await database.query("insert into public.profiles(id,auth_user_id,name,platform_role) values ($1,$2,'Synthetic Calendar','founder')", [profileId,userId]);
+    const effectiveFrom = (await database.query("select date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date as value")).rows[0].value;
+    const sourceVersionId = (await database.query("insert into public.team_workweek_versions(owner_profile_id,effective_from) values($1,$2) returning id", [profileId,effectiveFrom])).rows[0].id;
+    const publicationId = (await database.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,status,sync_state,published_at,last_sync_at)
+      values($1,$2,$3,'[]','published','confirmed',clock_timestamp(),clock_timestamp()) returning id`, [sourceVersionId,profileId,effectiveFrom])).rows[0].id;
     await database.query("insert into auth.identities(user_id,provider,provider_id,identity_data) values ($1,'google',$2,$3)", [userId,subject,JSON.stringify({ sub: subject, iss: "https://accounts.google.com", email: "synthetic-calendar@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } })]);
     await database.query("insert into workspace_private.identity_bindings(user_id,google_subject) values ($1,$2)", [userId,subject]);
     await database.query("insert into auth.sessions(id,user_id,created_at) values ($1,$2,now())", [sessionId,userId]);
@@ -48,6 +52,7 @@ it("calendar authorization retains PostgREST JWT, individual permit and session 
       return originalFetch(request);
     });
     const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+    const { authorizeSessionData } = await importTestModule("src/lib/credentials/internal/session.ts", { "server-only": {} });
     const authorize = () => authorizeCredentialAction({ credential: { kind: "session-request", request: { headers: new Headers({ authorization: `Bearer ${token}` }) } as NextRequest }, action: "calendar.read" });
     const authorized = await authorize();
     expect(authorized).toMatchObject({ ok: true, profile: { id: profileId } });
@@ -55,12 +60,37 @@ it("calendar authorization retains PostgREST JWT, individual permit and session 
     const reads = await Promise.all([authorized.calendar.readPublications("2026-01-01"), authorized.calendar.readPublishedOwners()]);
     expect(reads.every(result => result.error === null)).toBe(true);
     expect(membershipReads).toBe(1);
+    const internalAuthorization = await authorizeSessionData({ headers: new Headers({ authorization: `Bearer ${token}` }) } as NextRequest, "calendar.read");
+    expect(internalAuthorization.ok).toBe(true);
+    if (!internalAuthorization.ok) throw new Error("Expected bound calendar data access");
+    const relation = "team_workweek_publications!team_workweek_publications_owner_profile_id_fkey";
+    const snapshot = await internalAuthorization.data.from("profiles").select(
+      `id,published:${relation}(),calendar:${relation}(id,owner_profile_id,effective_from,effective_to,effective_at,effective_until,timezone,published_at,last_sync_at,publication_revision,windows),tail:${relation}(id,effective_from,publication_revision)`,
+      { count: "exact" },
+    )
+      .eq("published.status", "published").not("published", "is", null)
+      .eq("calendar.status", "published").eq("tail.status", "published")
+      .or(`effective_to.is.null,effective_to.gte.${effectiveFrom}`, { referencedTable: "calendar" })
+      .or(`effective_to.is.null,effective_to.gte.${effectiveFrom}`, { referencedTable: "tail" })
+      .order("id", { ascending: true }).limit(100)
+      .order("effective_from", { referencedTable: "calendar", ascending: false })
+      .order("publication_revision", { referencedTable: "calendar", ascending: false })
+      .order("id", { referencedTable: "calendar", ascending: false }).limit(100, { referencedTable: "calendar" })
+      .order("effective_from", { referencedTable: "tail", ascending: true })
+      .order("publication_revision", { referencedTable: "tail", ascending: true })
+      .order("id", { referencedTable: "tail", ascending: true }).limit(1, { referencedTable: "tail" });
+    expect(snapshot.error).toBeNull();
+    expect(snapshot.count).toBeGreaterThanOrEqual(1);
+    const snapshotRows = snapshot.data as unknown as Array<{ id: string; calendar: Array<{ id: string }>; tail: Array<{ id: string }> }>;
+    expect(snapshotRows.find(row => row.id === profileId)).toMatchObject({ calendar: [{ id: publicationId }], tail: [{ id: publicationId }] });
     const headers = { apikey: local.ANON_KEY, authorization: `Bearer ${token}` };
     expect((await originalFetch(`${local.API_URL}/rest/v1/team_workweek_publications?select=id`, { headers })).status).toBe(403);
+    expect((await originalFetch(`${local.API_URL}/rest/v1/profiles?select=id`, { headers })).status).toBe(403);
     await database.query("delete from auth.sessions where id=$1", [sessionId]);
     expect(await authorize()).toMatchObject({ ok: false });
     // A capability issued before removal cannot issue a later operation permit.
     expect((await authorized.calendar.readPublishedOwners()).error).not.toBeNull();
+    expect((await internalAuthorization.data.from("profiles").select("id").limit(1)).error).not.toBeNull();
     expect(membershipReads).toBe(1);
   } finally {
     vi.unstubAllGlobals(); vi.unstubAllEnvs();
