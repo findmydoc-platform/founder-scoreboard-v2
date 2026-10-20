@@ -9,7 +9,7 @@ const sessionId = "b1111111-1111-4111-8111-111111111111";
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "calendar-proof", alg: "ES256", use: "sig" };
 let output, stdoutWrite, stdoutBaseWrite, listeners;
-let cleanupFailure, dataRetry, directoryBody, directoryThrow;
+let cleanupFailure, dataRetry, directoryBody, directoryThrow, profileFailure, permitFailure;
 let counts, member, directoryFailure, sessionAllowed, mappedProfile, rows, delayDirectory, role, permits, dataFailure, changedBindingAt, deniedAccountAt, currentUser, precedingAuthDelay;
 
 function token(overrides = {}) {
@@ -43,9 +43,9 @@ async function protocol(input, init) {
     if (delayDirectory) await delayDirectory();
     return directoryFailure ? Response.json({ error: "unavailable" }, { status: 503 }) : Response.json({ isMember: member });
   }
-  if (url.pathname.endsWith("/rpc/workspace_issue_permit")) { count("permit"); permits.push(await request.json()); return new Response(null, { status: 204 }); }
+  if (url.pathname.endsWith("/rpc/workspace_issue_permit")) { count("permit"); permits.push(await request.json()); if (permitFailure) return Response.json(permitFailure, { status: 403 }); return new Response(null, { status: 204 }); }
   if (url.pathname.endsWith("/rpc/workspace_release_permit")) { count("release"); return cleanupFailure ? Response.json({ code: "private-cleanup-code", message: "seeded-private-cleanup-message" }, { status: 400 }) : new Response(null, { status: 204 }); }
-  if (url.pathname.endsWith("/rpc/current_authenticated_profile")) { count("profile"); return Response.json({ id: mappedProfile, name: "Founder", platform_role: role }); }
+  if (url.pathname.endsWith("/rpc/current_authenticated_profile")) { count("profile"); if (profileFailure) return Response.json(profileFailure, { status: 403 }); return Response.json({ id: mappedProfile, name: "Founder", platform_role: role }); }
   if (url.pathname === "/rest/v1/team_workweek_publications") {
     count("data");
     expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
@@ -79,7 +79,7 @@ beforeEach(() => {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_URL: origin, SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", SUPABASE_SECRET_KEY: "synthetic-service",
     REQUIRE_SUPABASE_AUTH: "true", VERCEL_OIDC_TOKEN: token(), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience",
     GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "reader@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu" })) vi.stubEnv(key, value);
-  cleanupFailure = false; dataRetry = false; directoryBody = null; directoryThrow = null;
+  profileFailure = null; permitFailure = null; cleanupFailure = false; dataRetry = false; directoryBody = null; directoryThrow = null;
   counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId; precedingAuthDelay = 0;
   vi.stubGlobal("fetch", protocol);
 });
@@ -423,6 +423,70 @@ test.each([
     expect(output.some(event => event.event === "operation.failed")).toBe(false);
     if (expectedStatus === 401) expect(summary.deniedCode).toBe(body.code);
   }
+});
+
+test("an authoritative profile denial remains a safe denied calendar result through proxy and SDK", async () => {
+  profileFailure = { code: "42501", message: "seeded-private-profile-denial", details: "seeded-private-detail", hint: "seeded-private-hint" };
+  const route = await application();
+  const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
+  const incoming = request();
+  const forwarded = await proxy(incoming);
+  incoming.headers.set("x-founderops-proxy-observation", forwarded.headers.get("x-middleware-request-x-founderops-proxy-observation"));
+  const response = await route.GET(incoming);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: "Teamprofil konnte nicht eindeutig geprüft werden." });
+  const summary = output.find(event => event.event === "request.completed" && event.stage === "route");
+  expect(summary).toMatchObject({ requestId: response.headers.get("x-request-id"), status: 403, outcome: "denied", severity: "info",
+    proxy: { requestId: response.headers.get("x-request-id"), outcome: "success" }, completeness: { correlation: "complete" },
+    externalCalls: { operations: { "calendar.profile": 1, "workspace.permit.issue": 1, "workspace.permit.release": 1 } } });
+  expect(summary).not.toHaveProperty("failure");
+  expect(output.some(event => event.event === "operation.failed")).toBe(false);
+  expect(JSON.stringify(output)).not.toContain("seeded-private");
+  expect(counts.data || 0).toBe(0);
+  expect(counts.permit).toBe(1); expect(counts.release).toBe(1);
+});
+
+test("an authoritative permit denial remains denied without dispatching profile or data", async () => {
+  permitFailure = { code: "42501", message: "seeded-private-permit-denial", details: "seeded-private-detail", hint: "seeded-private-hint" };
+  const route = await application();
+  const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
+  const incoming = request();
+  const forwarded = await proxy(incoming);
+  incoming.headers.set("x-founderops-proxy-observation", forwarded.headers.get("x-middleware-request-x-founderops-proxy-observation"));
+  const response = await route.GET(incoming);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: "Teamprofil konnte nicht eindeutig geprüft werden." });
+  const summary = output.find(event => event.event === "request.completed" && event.stage === "route");
+  expect(summary).toMatchObject({ requestId: response.headers.get("x-request-id"), status: 403, outcome: "denied", severity: "info",
+    proxy: { requestId: response.headers.get("x-request-id"), outcome: "success" }, completeness: { correlation: "complete" },
+    externalCalls: { operations: { "workspace.permit.issue": 1 } } });
+  expect(summary).not.toHaveProperty("failure");
+  expect(output.some(event => event.event === "operation.failed")).toBe(false);
+  expect(JSON.stringify(output)).not.toContain("seeded-private");
+  expect(counts.profile || 0).toBe(0); expect(counts.data || 0).toBe(0);
+  expect(counts.permit).toBe(1); expect(counts.release || 0).toBe(0);
+});
+
+test.each(["calendar.profile", "workspace.permit.issue"])("a genuine %s provider error remains an error despite a safe denied public response", async operation => {
+  const failure = { code: "PGRST000", message: "seeded-private-provider-error", details: "seeded-private-detail", hint: "seeded-private-hint" };
+  if (operation === "calendar.profile") profileFailure = failure;
+  else permitFailure = failure;
+  const route = await application();
+  const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
+  const incoming = request();
+  const forwarded = await proxy(incoming);
+  incoming.headers.set("x-founderops-proxy-observation", forwarded.headers.get("x-middleware-request-x-founderops-proxy-observation"));
+  const response = await route.GET(incoming);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: "Teamprofil konnte nicht eindeutig geprüft werden." });
+  const summary = output.find(event => event.event === "request.completed" && event.stage === "route");
+  expect(summary).toMatchObject({ requestId: response.headers.get("x-request-id"), status: 403, outcome: "error", severity: "error",
+    failure: { operation, errorCode: "provider_request_failed", errorCategory: "provider_http_error" } });
+  expect(output).toEqual(expect.arrayContaining([expect.objectContaining({ event: "operation.failed", operation, severity: "error" })]));
+  expect(JSON.stringify(output)).not.toContain("seeded-private");
+  expect(counts.data || 0).toBe(0); expect(counts.permit).toBe(1);
+  expect(counts.profile || 0).toBe(operation === "calendar.profile" ? 1 : 0);
+  expect(counts.release || 0).toBe(operation === "calendar.profile" ? 1 : 0);
 });
 
 test.each(["not-json", JSON.stringify({ version: 1, requestId: "forged", instanceId: "forged", status: 200, outcome: "success", durationMs: 0 }), "x".repeat(1024)])("invalid proxy metadata cannot select context or alter authorization", async metadata => {

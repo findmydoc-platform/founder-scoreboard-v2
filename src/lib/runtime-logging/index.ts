@@ -106,7 +106,13 @@ export function observeCalendarResultPhase<T extends { error: unknown }>(operati
 }
 
 export function recordCalendarResult(operation: SafeOperation, error: unknown, errorCode: SafeFailure["errorCode"] = "provider_request_failed") {
-  if (error) recordCalendarFailure({ operation, errorCode, errorCategory: "provider_http_error" });
+  try {
+    // Only known authority results are denials; other RPC errors remain failures.
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    const expectedDenial = (["calendar.profile", "workspace.permit.issue"].includes(operation) && code === "42501")
+      || (operation === "calendar.profile" && code === "workspace_access_denied");
+    if (error && !expectedDenial) recordCalendarFailure({ operation, errorCode, errorCategory: "provider_http_error" });
+  } catch { /* Diagnostics must not change the SDK result. */ }
 }
 
 export function observeCalendarHttp(operation: SafeOperation, dispatch: () => Promise<Response>): Promise<Response> {
@@ -117,7 +123,9 @@ export function observeCalendarHttp(operation: SafeOperation, dispatch: () => Pr
   return observeCalendarPhase(operation, async () => {
     const response = await dispatch();
     const expectedAuthDenial = ["supabase.user", "supabase.refresh"].includes(operation) && response.status >= 400 && response.status < 500;
-    if (!response.ok && !expectedAuthDenial) recordCalendarFailure({ operation, errorCode: "provider_request_failed", errorCategory: "provider_http_error", providerStatus: response.status });
+    // Let the existing SDK result distinguish an authority denial from a provider failure.
+    const deferredRpcDenial = ["calendar.profile", "workspace.permit.issue"].includes(operation) && response.status === 403;
+    if (!response.ok && !expectedAuthDenial && !deferredRpcDenial) recordCalendarFailure({ operation, errorCode: "provider_request_failed", errorCategory: "provider_http_error", providerStatus: response.status });
     return response;
   }, "http");
 }
