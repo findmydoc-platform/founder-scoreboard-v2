@@ -9,6 +9,7 @@ const sessionId = "b1111111-1111-4111-8111-111111111111";
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "calendar-proof", alg: "ES256", use: "sig" };
 let output, stdoutWrite, stdoutBaseWrite, listeners;
+let cleanupFailure, dataRetry, directoryBody, directoryThrow;
 let counts, member, directoryFailure, sessionAllowed, mappedProfile, rows, delayDirectory, role, permits, dataFailure, changedBindingAt, deniedAccountAt, currentUser, precedingAuthDelay;
 
 function token(overrides = {}) {
@@ -37,15 +38,18 @@ async function protocol(input, init) {
   if (url.hostname === "iamcredentials.googleapis.com") { count("impersonation"); return Response.json({ accessToken: "synthetic-directory", expireTime: new Date(Date.now()+3600000).toISOString() }); }
   if (url.hostname === "admin.googleapis.com") {
     count("directory");
+    if (directoryThrow) throw directoryThrow;
+    if (directoryBody) return directoryBody();
     if (delayDirectory) await delayDirectory();
     return directoryFailure ? Response.json({ error: "unavailable" }, { status: 503 }) : Response.json({ isMember: member });
   }
   if (url.pathname.endsWith("/rpc/workspace_issue_permit")) { count("permit"); permits.push(await request.json()); return new Response(null, { status: 204 }); }
-  if (url.pathname.endsWith("/rpc/workspace_release_permit")) { count("release"); return new Response(null, { status: 204 }); }
+  if (url.pathname.endsWith("/rpc/workspace_release_permit")) { count("release"); return cleanupFailure ? Response.json({ code: "private-cleanup-code", message: "seeded-private-cleanup-message" }, { status: 400 }) : new Response(null, { status: 204 }); }
   if (url.pathname.endsWith("/rpc/current_authenticated_profile")) { count("profile"); return Response.json({ id: mappedProfile, name: "Founder", platform_role: role }); }
   if (url.pathname === "/rest/v1/team_workweek_publications") {
     count("data");
     expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
+    if (dataRetry && counts.data === 1) return Response.json({ message: "seeded-private-transient-failure" }, { status: 503 });
     return dataFailure ? Response.json({ message: "query rejected" }, { status: 400 }) : Response.json(rows);
   }
   throw new Error(`Unexpected protocol ${url.origin}${url.pathname}`);
@@ -75,6 +79,7 @@ beforeEach(() => {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_URL: origin, SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", SUPABASE_SECRET_KEY: "synthetic-service",
     REQUIRE_SUPABASE_AUTH: "true", VERCEL_OIDC_TOKEN: token(), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience",
     GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "reader@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu" })) vi.stubEnv(key, value);
+  cleanupFailure = false; dataRetry = false; directoryBody = null; directoryThrow = null;
   counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId; precedingAuthDelay = 0;
   vi.stubGlobal("fetch", protocol);
 });
@@ -93,11 +98,32 @@ test("calendar route reuses membership through the real verification and permit 
   const cold = { ...counts };
   expect(cold.directory).toBe(1);
   expect(cold.permit).toBe(3);
+  expect(output.filter(event => event.event === "request.completed").at(-1)).toMatchObject({
+    membership: { result: "miss", reason: "not_found", evidenceAgeMs: 0, remainingLifetimeMs: 900000, expired: false },
+    directoryCredential: { result: "renewed" },
+  });
   expect((await route.GET(request(jwt))).status).toBe(200);
   expect(counts.directory).toBe(1);
   expect(counts.permit).toBe(6);
   expect(counts.data).toBe(4);
   expect(counts.auth).toBe(8);
+  expect(output.filter(event => event.event === "request.completed").at(-1)).toMatchObject({
+    membership: { result: "hit", reason: "cached", evidenceAgeMs: 0, remainingLifetimeMs: 900000, expired: false },
+  });
+});
+
+test("calendar summary counts actual private transport attempts and declares OIDC exclusions", async () => {
+  const route = await application();
+  expect((await route.GET(request())).status).toBe(200);
+  const summary = output.filter(event => event.event === "request.completed").at(-1);
+  expect(summary).toMatchObject({ externalCalls: { total: 21 + (counts.jwks || 0), operations: { "supabase.user": 4, "workspace.context": 4, "workspace.session": 1,
+    "workspace.permit.issue": 3, "workspace.permit.release": 3, "calendar.profile": 1, "calendar.publications": 2,
+    "directory.sts": 1, "directory.iam": 1, "directory.membership": 1,
+  } }, completeness: { externalCallsScope: "private_supabase_and_explicit_directory_http", externalCallsComplete: false,
+    uninstrumented: ["vercel_oidc_internal"] } });
+  expect(summary.phases).toEqual(expect.arrayContaining([
+    expect.objectContaining({ operation: "directory.membership", kind: "http", outcome: "success" }),
+  ]));
 });
 
 test("activity cannot renew original membership evidence and outage at exact expiry denies", async () => {
@@ -112,6 +138,9 @@ test("activity cannot renew original membership evidence and outage at exact exp
   vi.setSystemTime(started + 900000);
   expect((await route.GET(request(jwt))).status).toBe(503);
   expect(counts.directory).toBe(2);
+  expect(output.filter(event => event.event === "request.completed").at(-1)).toMatchObject({
+    membership: { result: "expired", reason: "observed_expiry", expired: true, evidenceAgeMs: null, remainingLifetimeMs: null }, detailRetained: true,
+  });
   directoryFailure = false;
   expect((await route.GET(request(jwt))).status).toBe(403);
 });
@@ -182,6 +211,13 @@ test("equivalent concurrent misses share membership but retain distinct permits"
   expect(output.filter(event => event.event === "request.completed").map(event => event.requestId).sort())
     .toEqual(responses.map(response => response.headers.get("x-request-id")).sort());
   expect(counts.directory).toBe(1);
+  const summaries = output.filter(event => event.event === "request.completed");
+  const executing = summaries.find(event => event.membership.result === "miss");
+  const waiting = summaries.find(event => event.membership.result === "coalesced");
+  expect(executing.externalCalls.operations["directory.membership"]).toBe(1);
+  expect(waiting.externalCalls.operations["directory.membership"]).toBeUndefined();
+  expect(waiting.membership.waitMs).toBeGreaterThanOrEqual(0);
+  expect(waiting.membership.cacheOwnerId).toBe(executing.membership.cacheOwnerId);
   expect(permits).toHaveLength(6);
   expect(new Set(permits.map(permit => permit.p_hash)).size).toBe(6);
   expect(permits.every(permit => permit.p_user_id === userId && permit.p_session_id === sessionId)).toBe(true);
@@ -193,6 +229,8 @@ test("instance replacement cannot reuse another instance's membership cache", as
   vi.resetModules(); route = await application(); member = false;
   expect((await route.GET(request(jwt))).status).toBe(403);
   expect(counts.directory).toBe(2);
+  const owners = output.filter(event => event.event === "request.completed").map(event => event.membership.cacheOwnerId);
+  expect(new Set(owners).size).toBe(2);
 });
 
 test("two live module instances have independent evidence and each keeps its original deadline", async () => {
@@ -281,6 +319,10 @@ test("shared verification failure neither allows callers nor poisons the next at
   expect(release).toBeTypeOf("function"); release();
   expect((await Promise.all(calls)).map(response => response.status)).toEqual([503, 503]);
   expect(counts.directory).toBe(1);
+  const summaries = output.filter(event => event.event === "request.completed");
+  expect(summaries.map(event => event.membership.result).sort()).toEqual(["coalesced", "miss"]);
+  expect(summaries.reduce((sum, event) => sum + (event.externalCalls.operations["directory.membership"] || 0), 0)).toBe(1);
+  expect(summaries.every(event => event.membership.evidenceAgeMs === null && event.detailRetained)).toBe(true);
   directoryFailure = false; delayDirectory = null;
   expect((await route.GET(request(jwt))).status).toBe(200);
   expect(counts.directory).toBe(2);
@@ -328,7 +370,7 @@ test("calendar response correlates with a safe compact summary through real auth
   expect(output.find(event => event.event === "request.completed")).toMatchObject({
     schemaVersion: 1, scope: "calendar", operation: "calendar.request", severity: "info",
     requestId: response.headers.get("x-request-id"), method: "GET", route: "/api/team-workweek/team", status: 200,
-    stage: "route", outcome: "success", completeness: { correlation: "missing", externalCallsComplete: false, cache: "unavailable" },
+    stage: "route", outcome: "success", completeness: { correlation: "missing", externalCallsComplete: false, cache: "observed" },
   });
   expect(counts.directory).toBe(1);
   expect(counts.permit).toBe(3);
@@ -352,7 +394,7 @@ test("the proxy replaces forged diagnostics and the route incorporates only its 
   expect(response.headers.get("x-request-id")).toBe(forwarded.headers.get("x-request-id"));
   expect(event).toMatchObject({ requestId: response.headers.get("x-request-id"),
     proxy: { requestId: response.headers.get("x-request-id"), instanceId: expect.any(String), durationMs: expect.any(Number) },
-    completeness: { correlation: "complete", externalCallsComplete: false },
+    completeness: { correlation: "complete", externalCallsComplete: true },
   });
   expect(response.headers.has("x-founderops-proxy-observation")).toBe(false);
   expect(event.observedProcessingMs).toBeCloseTo(event.durationMs + event.proxy.durationMs, 3);
@@ -374,7 +416,7 @@ test.each([
     expect(body).toEqual({ error: "Veröffentlichte Grundwochen konnten nicht geladen werden." });
     expect(output.find(event => event.event === "operation.failed")).toMatchObject({
       requestId: response.headers.get("x-request-id"), operation: "calendar.publications", severity: "error",
-      failure: { errorCode: "calendar_data_unavailable", errorCategory: "unexpected_error" },
+      failure: { errorCode: "provider_request_failed", errorCategory: "provider_http_error" },
     });
   } else {
     expect(summary.outcome).toBe(expectedStatus === 400 ? "invalid_input" : "denied");
@@ -446,4 +488,133 @@ test("segment duration remains monotonic when wall time jumps during calendar ve
     expect(summary.durationMs).toBe((monotonic - 100));
     expect(summary.observedProcessingMs).toBe(summary.durationMs);
   } finally { clock.mockRestore(); }
+});
+
+
+test("calendar phases preserve sibling intervals, source failures and local preparation", async () => {
+  const route = await application();
+  expect((await route.GET(request())).status).toBe(200);
+  const summary = output.filter(event => event.event === "request.completed").at(-1);
+  const phases = summary.phases;
+  const publications = phases.find(phase => phase.operation === "calendar.publications" && phase.kind === "operation");
+  const owners = phases.find(phase => phase.operation === "calendar.owners");
+  expect(publications).toBeDefined(); expect(owners).toBeDefined();
+  expect(publications.parentId).toBe(owners.parentId);
+  expect(owners.parentId).not.toBe(publications.id);
+  expect(Math.min(publications.offsetMs + publications.durationMs, owners.offsetMs + owners.durationMs))
+    .toBeGreaterThan(Math.max(publications.offsetMs, owners.offsetMs));
+  expect(phases.find(phase => phase.operation === "calendar.prepare")).toBeDefined();
+  expect(phases.filter(phase => phase.kind === "http").every(phase => phase.parentId)).toBe(true);
+  expect(summary.durationMs).toBeLessThan(phases.reduce((sum, phase) => sum + phase.durationMs, 0));
+});
+
+
+test("warm evidence reports its original age and the shorter JWT deadline", async () => {
+  const route = await application(); const started = Date.now(); const jwt = token({ exp: started / 1000 + 60 });
+  expect((await route.GET(request(jwt))).status).toBe(200);
+  vi.setSystemTime(started + 30_000);
+  expect((await route.GET(request(jwt))).status).toBe(200);
+  expect(output.filter(event => event.event === "request.completed").at(-1).membership).toMatchObject({
+    result: "hit", evidenceAgeMs: 30_000, remainingLifetimeMs: 30_000,
+  });
+  expect(counts.directory).toBe(1);
+});
+
+test("late data failure retains earlier warm-hit verification without leaking provider text", async () => {
+  const route = await application(); const jwt = token();
+  expect((await route.GET(request(jwt))).status).toBe(200);
+  dataFailure = true;
+  expect((await route.GET(request(jwt))).status).toBe(503);
+  const summary = output.filter(event => event.event === "request.completed").at(-1);
+  expect(summary).toMatchObject({ membership: { result: "hit" }, detailRetained: true,
+    failure: { operation: "calendar.publications", errorCategory: "provider_http_error", providerStatus: 400 } });
+  expect(summary.phases).toEqual(expect.arrayContaining([expect.objectContaining({ operation: "supabase.claims" })]));
+  expect(JSON.stringify(output)).not.toMatch(/query rejected|synthetic-service|member@findmydoc|google-subject|synthetic-audience|reader@example/);
+});
+
+
+test("suppressed permit cleanup errors remain observable without replay or response changes", async () => {
+  const route = await application(); cleanupFailure = true;
+  const response = await route.GET(request());
+  expect(response.status).toBe(200);
+  expect(counts.data).toBe(2); expect(counts.permit).toBe(3); expect(counts.release).toBe(3);
+  expect(output).toEqual(expect.arrayContaining([expect.objectContaining({ event: "operation.failed",
+    operation: "workspace.permit.release", failure: expect.objectContaining({ errorCode: "permit_cleanup_failed" }) })]));
+  const summary = output.filter(event => event.event === "request.completed").at(-1);
+  expect(summary).toMatchObject({ status: 200, severity: "error", detailRetained: true });
+  expect(output.filter(event => event.event === "operation.failed").every(event => event.status === undefined)).toBe(true);
+  expect(JSON.stringify(output)).not.toMatch(/private-cleanup|seeded-private/);
+});
+
+test("existing SDK retries count each actual dispatch and release without adding work", async () => {
+  const route = await application(); dataRetry = true;
+  expect((await route.GET(request())).status).toBe(200);
+  expect(counts.data).toBe(3); expect(counts.permit).toBe(4); expect(counts.release).toBe(4);
+  const summary = output.filter(event => event.event === "request.completed").at(-1);
+  expect(summary.externalCalls.operations).toMatchObject({ "calendar.publications": 3, "workspace.permit.issue": 4, "workspace.permit.release": 4 });
+  expect(JSON.stringify(output)).not.toContain("seeded-private");
+});
+
+test.each([
+  ["invalid-json", () => new Response("seeded-private-json", { headers: { "content-type": "application/json" } }), null, "invalid_response"],
+  ["invalid-shape", () => Response.json({ isMember: "seeded-private-value" }), null, "invalid_response"],
+  ["transport", null, new TypeError("seeded-private-network"), "transport_error"],
+  ["timeout", null, new DOMException("seeded-private-timeout", "TimeoutError"), "timeout"],
+])("Directory %s failure keeps its safe source classification and public auth response", async (_name, body, thrown, category) => {
+  const route = await application(); directoryBody = body; directoryThrow = thrown;
+  const response = await route.GET(request());
+  expect(response.status).toBe(503); expect((await response.json()).code).toBe("workspace_access_unavailable");
+  const summary = output.filter(event => event.event === "request.completed").at(-1);
+  expect(summary.failure).toMatchObject({ operation: "directory.membership", errorCategory: category });
+  expect(JSON.stringify(output)).not.toContain("seeded-private");
+});
+
+
+test("live account denial remains an expected denial without an unexpected-error event", async () => {
+  const route = await application(); deniedAccountAt = 1;
+  const response = await route.GET(request());
+  expect(response.status).toBe(401);
+  expect(output.filter(event => event.event === "request.completed").at(-1)).toMatchObject({ outcome: "denied", severity: "info" });
+  expect(output.some(event => event.event === "operation.failed")).toBe(false);
+});
+
+
+test("observed capacity removal stays distinct from an unexplained missing entry", async () => {
+  const route = await application(); const original = token({ scope: "capacity-original" });
+  expect((await route.GET(request(original))).status).toBe(200);
+  for (let index = 0; index < 1024; index++) {
+    expect((await route.GET(request(token({ scope: `capacity-${index}` })))).status).toBe(200);
+    // The test observes serialized output; keep fixture retention independent of runtime buffering.
+    if (index < 1023) output.length = 0;
+  }
+  expect(output.filter(event => event.event === "request.completed").at(-1).membership).toMatchObject({ result: "miss", reason: "not_found", capacityEvictions: 1 });
+  expect((await route.GET(request(original))).status).toBe(200);
+  expect(output.filter(event => event.event === "request.completed").at(-1).membership.reason).toBe("not_found");
+  expect(counts.directory).toBe(1026);
+}, 30000);
+
+
+test("sink failure preserves existing SDK retries and the evidence deadline", async () => {
+  const route = await application(); const started = Date.now(); const jwt = token();
+  expect((await route.GET(request(jwt))).status).toBe(200);
+  stdoutWrite.mockImplementation((line, ...args) => {
+    if (typeof line === "string" && line.includes('"scope":"calendar"')) throw new Error("seeded-private-sink-failure");
+    return stdoutBaseWrite(line, ...args);
+  });
+  counts.data = 0; dataRetry = true;
+  const before = { ...counts };
+  expect((await route.GET(request(jwt))).status).toBe(200);
+  expect(counts.data).toBe(3); expect(counts.permit - before.permit).toBe(4); expect(counts.release - before.release).toBe(4);
+  vi.setSystemTime(started + 900000); directoryFailure = true;
+  expect((await route.GET(request(jwt))).status).toBe(503);
+  expect(counts.directory).toBe(2);
+});
+
+
+test("nonpilot proxy requests emit no calendar telemetry", async () => {
+  const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
+  const response = await proxy(new NextRequest("https://application.example.test/planning"));
+  expect(response.status).toBe(200);
+  expect(response.headers.has("x-request-id")).toBe(false);
+  expect(output).toEqual([]);
 });

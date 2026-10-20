@@ -1,5 +1,6 @@
 import "server-only";
 
+import { observedSupabaseFetch } from "./observed-fetch";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let serviceRoleClient: SupabaseClient | null = null;
@@ -11,6 +12,7 @@ export function getServerServiceRoleSupabase() {
 
   serviceRoleClient ??= createClient(url, serviceRoleKey, {
     auth: { persistSession: false },
+    global: { fetch: observedSupabaseFetch },
   });
   return serviceRoleClient;
 }

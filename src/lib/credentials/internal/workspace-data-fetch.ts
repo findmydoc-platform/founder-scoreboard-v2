@@ -1,4 +1,6 @@
 import "server-only";
+import { observedSupabaseFetch } from "./observed-fetch";
+import { classifyCalendarError, observeCalendarPhase, recordCalendarResult, recordCalendarFailure } from "../../runtime-logging";
 import { createHash, randomBytes } from "node:crypto";
 import { assertGoogleSession, requireWorkspaceAccess } from "./workspace-access";
 import { getServerServiceRoleSupabase } from "./service-client";
@@ -9,14 +11,14 @@ export const sha256 = (value: string) => createHash("sha256").update(value).dige
 export const workspaceDataFetch: typeof fetch = async (input, init) => {
   const request = new Request(input, init);
   const url = new URL(request.url);
-  if (!url.pathname.startsWith("/rest/v1/")) return fetch(request);
+  if (!url.pathname.startsWith("/rest/v1/")) return observedSupabaseFetch(request);
   const token = request.headers.get("authorization")?.replace(/^Bearer /i, "") || "";
   const service = getServerServiceRoleSupabase();
   if (!service || !token) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
   const { data, error } = await service.auth.getUser(token);
   if (error || !data.user) throw new WorkspaceAccessError(403, "workspace_access_denied");
   const identity = await requireWorkspaceAccess({ userId: data.user.id });
-  if (!identity) return fetch(request);
+  if (!identity) return observedSupabaseFetch(request);
   const sessionId = await assertGoogleSession(token, identity.userId);
   const permit = randomBytes(32).toString("base64url");
   const hash = sha256(permit);
@@ -26,9 +28,14 @@ export const workspaceDataFetch: typeof fetch = async (input, init) => {
   });
   if (issued.error) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
   request.headers.set("x-founderops-workspace-permit", permit);
-  try { return await fetch(request); }
+  try { return await observedSupabaseFetch(request); }
   finally {
     // Never replay the user operation when cleanup fails; permits also expire independently.
-    await Promise.resolve(service.rpc("workspace_release_permit", { p_hash: hash })).catch(() => undefined);
+    await observeCalendarPhase("workspace.permit.release", async () => {
+      const released = await service.rpc("workspace_release_permit", { p_hash: hash });
+      recordCalendarResult("workspace.permit.release", released.error, "permit_cleanup_failed");
+    }).catch(error => {
+        recordCalendarFailure({ operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: classifyCalendarError(error) });
+    });
   }
 };

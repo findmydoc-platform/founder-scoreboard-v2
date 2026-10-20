@@ -97,3 +97,41 @@ test("a backed-up fallback never accumulates another write until drain", async (
   logger.completed(completion());
   expect(fallback.lines).toHaveLength(2);
 });
+
+
+test("fast successful hits retain exactly one deterministic request-ID sample in ten", async () => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink(); const logger = createRuntimeLogger(sink, new Sink());
+  const phases = [{ id: "route:1", operation: "calendar.authorization", kind: "operation", offsetMs: 0, durationMs: 5, outcome: "success" }];
+  for (let id = 0; id < 10; id++) logger.completed({ ...completion(), requestId: `8ea34e08-8cc2-42ad-a562-87b7${id.toString(16).padStart(8, "0")}`,
+    membership: { result: "hit", reason: "cached", cacheOwnerId: instanceId, evidenceAgeMs: 10, remainingLifetimeMs: 899990, expired: false }, phases });
+  const records = sink.lines.map(line => JSON.parse(line));
+  expect(records).toHaveLength(10);
+  expect(records.filter(record => record.detailRetained).map(record => record.requestId)).toEqual(["8ea34e08-8cc2-42ad-a562-87b700000000"]);
+  expect(records.filter(record => !record.detailRetained).every(record => record.phases.length === 0)).toBe(true);
+});
+
+test("tail selection retains misses, expiry, errors and exact-threshold slowness", async () => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink(); const logger = createRuntimeLogger(sink, new Sink());
+  const phase = { id: "route:1", operation: "calendar.authorization", kind: "operation", offsetMs: 0, durationMs: 1, outcome: "success" };
+  for (const mode of ["miss", "expired", "error", "slow"]) logger.completed({ ...completion(), requestId: "8ea34e08-8cc2-42ad-a562-87b700000001",
+    durationMs: mode === "slow" ? 2000 : 1, outcome: mode === "error" ? "error" : "success", phases: [phase],
+    ...(mode === "miss" || mode === "expired" ? { membership: { result: mode, reason: mode === "miss" ? "not_found" : "observed_expiry", cacheOwnerId: instanceId, evidenceAgeMs: null, remainingLifetimeMs: null, expired: mode === "expired" } } : {}),
+  });
+  expect(sink.lines.map(line => JSON.parse(line)).every(record => record.detailRetained && record.phases.length === 1)).toBe(true);
+});
+
+test("phase truncation preserves compact failure, cache, counters and coverage within the byte bound", async () => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink();
+  const secret = "seeded-private-phase-message";
+  createRuntimeLogger(sink, new Sink()).completed({ ...completion(), outcome: "error",
+    failure: { operation: "calendar.publications", errorCode: "calendar_data_unavailable", errorCategory: "provider_http_error", providerStatus: 503 },
+    membership: { result: "miss", reason: "not_found", cacheOwnerId: instanceId, evidenceAgeMs: null, remainingLifetimeMs: null, expired: false, token: secret },
+    externalCalls: { total: 80, complete: false, operations: { "calendar.publications": 80, [secret]: 999 } },
+    phases: Array.from({ length: 80 }, (_, index) => ({ id: `route:${index + 1}`, operation: "calendar.publications", kind: "http", offsetMs: index, durationMs: 1, outcome: "error", message: secret })),
+  });
+  expect(sink.lines).toHaveLength(1); expect(Buffer.byteLength(sink.lines[0])).toBeLessThanOrEqual(16 * 1024);
+  expect(sink.lines[0]).not.toContain(secret);
+  expect(JSON.parse(sink.lines[0])).toMatchObject({ externalCalls: { total: 80, operations: { "calendar.publications": 80 } },
+    completeness: { externalCallsComplete: false, phasesTruncated: true }, membership: { result: "miss" }, failure: { providerStatus: 503 } });
+  expect(JSON.parse(sink.lines[0]).phases.length).toBeLessThanOrEqual(64);
+});

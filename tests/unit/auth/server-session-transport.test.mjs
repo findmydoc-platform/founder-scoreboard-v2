@@ -6,7 +6,7 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 const authOrigin = "https://session-auth.example.test";
 const appOrigin = "https://application.example.test";
 const cookieBase = "sb-session-auth-auth-token";
-let jar, activeJar, refreshes, network;
+let jar, activeJar, refreshes, network, output, stdoutWrite, listeners;
 function jwt(userId = "user-1", expires = Math.floor(Date.now()/1000)+3600) {
   const part = value => Buffer.from(JSON.stringify(value)).toString("base64url");
   const body = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, exp: expires, iat: Math.floor(Date.now()/1000), aud: "authenticated", role: "authenticated", amr: [{ method: "oauth" }], iss: `${authOrigin}/auth/v1`, session_id: "b1111111-1111-4111-8111-111111111111" })}`;
@@ -24,7 +24,13 @@ function request(path, init = {}) {
 async function publicModule() { return importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "next/headers": { cookies: async () => activeJar || jar } }); }
 
 beforeEach(() => {
-  vi.resetModules(); refreshes = 0; activeJar = null;
+  vi.resetModules(); refreshes = 0; activeJar = null; output = [];
+  listeners = [process.stdout, process.stderr].map(stream => ({ stream, error: stream.listeners("error"), drain: stream.listeners("drain") }));
+  const write = process.stdout.write.bind(process.stdout);
+  stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation((line, ...args) => {
+    if (typeof line === "string" && line.includes('"scope":"calendar"')) { output.push(JSON.parse(line)); return true; }
+    return write(line, ...args);
+  });
   const values = new Map();
   jar = { getAll: () => [...values].map(([name, value]) => ({ name, value })), get: name => values.has(name) ? { value: values.get(name) } : undefined,
     set: (name, value) => values.set(name, value), delete: name => values.delete(name) };
@@ -48,7 +54,14 @@ beforeEach(() => {
   };
   vi.stubGlobal("fetch", (...args) => network(...args));
 });
-afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  stdoutWrite.mockRestore();
+  for (const { stream, error, drain } of listeners) {
+    for (const listener of stream.listeners("error")) if (!error.includes(listener)) stream.off("error", listener);
+    for (const listener of stream.listeners("drain")) if (!drain.includes(listener)) stream.off("drain", listener);
+  }
+  vi.unstubAllEnvs(); vi.unstubAllGlobals();
+});
 
 test("Proxy propagates refreshed cookies to the downstream request and actual returned response", async () => {
   jar.set(cookieBase, encode(session(true)));
@@ -431,6 +444,10 @@ test("calendar correlation preserves refreshed cookies across the complete proxy
   const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
   const route = await importTestModule("src/app/api/team-workweek/team/route.ts", { "server-only": {} });
   const forwarded = await proxy(incoming);
+  const metadata = forwarded.headers.get("x-middleware-request-x-founderops-proxy-observation");
+  expect(Buffer.byteLength(metadata)).toBeLessThan(1024);
+  expect(JSON.parse(metadata).externalCalls).toMatchObject({ total: 2, operations: { "supabase.refresh": 1, "supabase.user": 1 } });
+  expect(JSON.parse(metadata).phases.length).toBeGreaterThan(0);
   expect(refreshes).toBe(1);
   const active = "legacy".padEnd(32, "0");
   expect(forwarded.cookies.get(`${cookieBase}-g-${active}`)?.httpOnly).toBe(true);
@@ -445,4 +462,8 @@ test("calendar correlation preserves refreshed cookies across the complete proxy
   expect(response.headers.get("x-request-id")).toBe(forwarded.headers.get("x-request-id"));
   expect(response.headers.has("x-founderops-proxy-observation")).toBe(false);
   expect(await response.json()).toMatchObject({ workweeks: [], publishedOwnerIds: [] });
+  expect(output.find(event => event.stage === "route")).toMatchObject({ externalCalls: { total: 14,
+    operations: { "supabase.refresh": 1, "supabase.user": 6, "workspace.context": 4, "calendar.profile": 1, "calendar.publications": 2 } },
+    membership: { result: "bypass", reason: "not_required", evidenceAgeMs: null, remainingLifetimeMs: null }, completeness: { correlation: "complete", externalCallsComplete: true } });
+  expect(JSON.stringify(output)).not.toMatch(/synthetic-service|refresh-user|access_token|refresh_token|session-auth.example/);
 });
