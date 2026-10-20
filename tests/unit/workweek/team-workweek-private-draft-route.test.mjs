@@ -405,17 +405,30 @@ test("an explicit empty selected context is accepted once", async () => {
 test.each(["base identity","base revision"])("parallel publication changes cannot mix a captured selected context: %s", async change => {
   editContext = {basePublicationId:"publication-1",basePublicationRevision:1};
   publications = [publicationRow()];
-  let release;
-  publicationGate = {promise:new Promise(resolve => {release=resolve;})};
+  const contextCaptured = Promise.withResolvers();
+  const publicationReleased = Promise.withResolvers();
+  publicationGate = publicationReleased;
+  const fetchProtocol = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const response = await fetchProtocol(input, init);
+    const url = new URL(input instanceof Request ? input.url : input);
+    if (url.pathname.endsWith("/rpc/team_workweek_edit_context")) contextCaptured.resolve();
+    return response;
+  });
   const route = await application(); const response = route.GET(request(token(),"?week=2026-10-19"));
-  for (let attempt=0;attempt<100 && !calls.some(call => call.path.endsWith("/rpc/team_workweek_edit_context"));attempt++) await new Promise(resolve => setImmediate(resolve));
-  expect(calls.some(call => call.path.endsWith("/rpc/team_workweek_edit_context"))).toBe(true);
-  publications = [publicationRow(change === "base identity" ? {id:"publication-2"} : {publication_revision:2})];
-  release();
-  const result = await response;
-  expect(result.status).toBe(409);
-  expect(await result.json()).toMatchObject({code:"edit_context_stale"});
-  expect(calls.filter(call => call.path.endsWith("/rpc/team_workweek_edit_context"))).toHaveLength(1);
+  try {
+    await Promise.race([contextCaptured.promise, response.then(() => { throw new Error("Draft request completed before edit context was captured"); })]);
+    expect(calls.some(call => call.path.endsWith("/rpc/team_workweek_edit_context"))).toBe(true);
+    publications = [publicationRow(change === "base identity" ? {id:"publication-2"} : {publication_revision:2})];
+    publicationReleased.resolve();
+    const result = await response;
+    expect(result.status).toBe(409);
+    expect(await result.json()).toMatchObject({code:"edit_context_stale"});
+    expect(calls.filter(call => call.path.endsWith("/rpc/team_workweek_edit_context"))).toHaveLength(1);
+  } finally {
+    publicationReleased.resolve();
+    await Promise.allSettled([response]);
+  }
 });
 
 
