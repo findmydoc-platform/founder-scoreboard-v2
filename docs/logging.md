@@ -6,6 +6,8 @@ The pilot covers `GET /api/team-workweek/team`, its existing session proxy, and 
 
 The implementation completes the scope of [#518](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/518) and [#519](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/519). The production acceptance below records real-request correlation, observed Vercel log classification, and the existing retention entitlement. Its results apply to the inspected deployment and bounded sample.
 
+The production acceptance and serialized example below predate the calendar snapshot implementation in PR #522. They remain evidence for the deployment and commit inspected on 2026-10-20; they do not establish production behavior or performance for the new read path.
+
 ## Decisions and rationale
 
 - Use a small server-only adapter around standalone Pino. The adapter accepts approved event shapes, not arbitrary objects or free-text messages. Pino remains replaceable behind that boundary.
@@ -85,13 +87,15 @@ The pilot records Directory credential reuse/renewal as a safe outcome and measu
 
 ## Timing and outbound attempts
 
-Use monotonic elapsed time within each segment. Measure the proxy, complete route, authorization, provider operations, parallel calendar-data operations, and local response preparation. Parent durations include their children; they must not be added together. Parallel operations have their own offsets and durations.
+Use monotonic elapsed time within each segment. Measure the proxy, complete route, authorization, provider operations, snapshot and continuation reads, and local response preparation. Parent durations include their children; they must not be added together. Independently dispatched continuation requests have their own offsets and durations.
 
 The route summary contains its local total and the observed proxy duration. Their sum may be reported as observed application processing time because these segments run sequentially, but it excludes the transfer gap, platform queuing, and browser network time. Never label it browser latency or end-to-end request duration. Do not subtract monotonic timestamps from different runtimes.
 
 Count actual HTTP dispatch attempts at the private transport boundaries. Include existing retries without adding any. Inject the observer into every Supabase client used by the pilot, including auth/JWKS, service RPCs, cookie handling, and data operations. Observe the existing explicit Directory fetches. Do not replace global fetch or inspect bodies. Distinguish fetch time to response headers from the surrounding SDK phase, which also includes response processing.
 
 The declared scope is `private_supabase_and_explicit_directory_http`. Counts cover each actual dispatch through the pilot's auth/JWKS, service, cookie and bound-data SDK fetches, explicit Auth settings and Directory STS/IAM/membership requests. OIDC acquisition has a timed operation, but its internal requests remain excluded as `vercel_oidc_internal`. Unknown private operations lower completeness. Missing proxy metadata also sets route `externalCallsComplete: false`; available route counts remain useful partial observations. `externalCallsComplete` never claims unrestricted request-wide external coverage. Shared verification attempts belong to the request that executes them, not every waiter. Existing network failures and responses must pass through unchanged.
+
+Calendar reads use the fixed operation `calendar.snapshot` for the profile-root PostgREST request, including its embedded published-owner existence check, bounded calendar rows and tail marker. If the embedded rows omit the marker, every continuation dispatch is counted under `calendar.publications`; it receives its own existing authority check and permit lifecycle. These phases describe actual request boundaries. A joined row is not counted as a separate HTTP request, and phase durations are not summed into a synthetic total.
 
 ## Production emission and retention
 
@@ -150,7 +154,7 @@ The run used calendar GETs and read-only platform inspection. It changed no plan
 
 ## Synthetic output example
 
-This compact warm-hit record comes from the real serialized adapter with synthetic inputs. Its 19 attempts include one proxy user check and 18 route attempts. OIDC internals remain excluded. The empty phase array is deliberate detail sampling, not zero application work.
+This compact warm-hit record comes from the real serialized adapter with synthetic inputs and reflects the pre-snapshot production path. Its 19 attempts include one proxy user check and 18 route attempts. OIDC internals remain excluded. The empty phase array is deliberate detail sampling, not zero application work.
 
 ```json
 {

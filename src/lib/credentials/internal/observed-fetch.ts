@@ -17,6 +17,7 @@ export const observedSupabaseFetch: typeof fetch = (input, init) => {
     else if (pathname === "/rest/v1/rpc/workspace_issue_permit") operation = "workspace.permit.issue";
     else if (pathname === "/rest/v1/rpc/workspace_release_permit") operation = "workspace.permit.release";
     else if (pathname === "/rest/v1/rpc/current_authenticated_profile") operation = "calendar.profile";
+    else if (pathname === "/rest/v1/profiles") operation = "calendar.snapshot";
     else if (pathname === "/rest/v1/team_workweek_publications") operation = "calendar.publications";
   } catch { /* An unrecognized attempt lowers coverage without leaking its input. */ }
   if (!calendarObservationActive()) return fetch(input, init);

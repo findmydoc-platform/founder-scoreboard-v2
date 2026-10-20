@@ -10,7 +10,8 @@ import { WorkspaceAccessError, workspaceIdentity } from "../../workspace-identit
 import { invalidSessionBeforeEffectErrorCode } from "../../auth-error-contract";
 import { isWorkspaceGroupMember } from "./workspace-directory";
 import type { AccessContext } from "./workspace-access";
-import type { CalendarCredentialResult, CalendarPublication } from "../types";
+import { createCalendarReader } from "./calendar-reader";
+import type { CalendarCredentialResult } from "../types";
 import type { NextRequest } from "next/server";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -260,13 +261,5 @@ export async function authorizeCalendar(request: NextRequest): Promise<CalendarC
   const authorized = await observeCalendarPhase("calendar.authorization", () => authorizeSessionData(request, "calendar.read"));
   if (!authorized.ok) return authorized;
   const { data, profile } = authorized;
-  return { ok: true, profile, calendar: {
-    readPublications: async (earliestDate: string) => await observeCalendarResultPhase("calendar.publications", () => data.from("team_workweek_publications")
-      .select("id,owner_profile_id,effective_from,effective_to,effective_at,effective_until,timezone,published_at,last_sync_at,publication_revision,windows")
-      .eq("status", "published").or(`effective_to.is.null,effective_to.gte.${earliestDate}`)
-      .order("effective_from", { ascending: false }).order("publication_revision", { ascending: false }).order("id", { ascending: false })
-      .returns<CalendarPublication[]>()),
-    readPublishedOwners: async () => await observeCalendarResultPhase("calendar.owners", () => data.from("team_workweek_publications").select("owner_profile_id").eq("status", "published")
-      .returns<Array<{ owner_profile_id: string }>>()),
-  } };
+  return { ok: true, profile, calendar: createCalendarReader(data) };
 }

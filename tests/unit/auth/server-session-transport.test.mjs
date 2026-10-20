@@ -438,8 +438,8 @@ test("calendar correlation preserves refreshed cookies across the complete proxy
   jar.set(cookieBase, encode(session(true)));
   const incoming = request("/api/team-workweek/team", { headers: { "x-request-id": "forged", "x-founderops-proxy-observation": "forged" } });
   const previous = network;
-  network = async (input, init) => new URL(input instanceof Request ? input.url : String(input)).pathname === "/rest/v1/team_workweek_publications"
-    ? Response.json([]) : previous(input, init);
+  network = async (input, init) => new URL(input instanceof Request ? input.url : String(input)).pathname === "/rest/v1/profiles"
+    ? Response.json([], { headers: { "content-range": "*/0" } }) : previous(input, init);
   await publicModule();
   const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
   const route = await importTestModule("src/app/api/team-workweek/team/route.ts", { "server-only": {} });
@@ -462,8 +462,8 @@ test("calendar correlation preserves refreshed cookies across the complete proxy
   expect(response.headers.get("x-request-id")).toBe(forwarded.headers.get("x-request-id"));
   expect(response.headers.has("x-founderops-proxy-observation")).toBe(false);
   expect(await response.json()).toMatchObject({ workweeks: [], publishedOwnerIds: [] });
-  expect(output.find(event => event.stage === "route")).toMatchObject({ externalCalls: { total: 14,
-    operations: { "supabase.refresh": 1, "supabase.user": 6, "workspace.context": 4, "calendar.profile": 1, "calendar.publications": 2 } },
+  expect(output.find(event => event.stage === "route")).toMatchObject({ externalCalls: { total: 11,
+    operations: { "supabase.refresh": 1, "supabase.user": 5, "workspace.context": 3, "calendar.profile": 1, "calendar.snapshot": 1 } },
     membership: { result: "bypass", reason: "not_required", evidenceAgeMs: null, remainingLifetimeMs: null }, completeness: { correlation: "complete", externalCallsComplete: true } });
   expect(JSON.stringify(output)).not.toMatch(/synthetic-service|refresh-user|access_token|refresh_token|session-auth.example/);
 });

@@ -9,10 +9,14 @@ export type CalendarPublication = Readonly<{
   windows: Array<{ weekday: number; startMinute: number; endMinute: number }>;
 }>;
 
+export type CalendarSnapshot = Readonly<{
+  publications: CalendarPublication[];
+  publishedOwnerIds: string[];
+}>;
+
 type ReadResult<T> = Promise<{ data: T | null; error: { message: string } | null }>;
 export type CalendarReadCapability = Readonly<{
-  readPublications(earliestDate: string): ReadResult<CalendarPublication[]>;
-  readPublishedOwners(): ReadResult<Array<{ owner_profile_id: string }>>;
+  readSnapshot(earliestDate: string): ReadResult<CalendarSnapshot>;
 }>;
 export type CalendarCredentialInput = { credential: { kind: "session-request"; request: NextRequest }; action: "calendar.read" };
 export type CalendarCredentialResult = Extract<AuthzResult, { ok: false }>
