@@ -327,10 +327,16 @@ test("Planning polling clears loaded protected state after permanent Auth denial
   const context = await newBrowserContext();
   try {
     const page = await context.newPage();
+    await page.clock.install();
+    const initialRevision = page.waitForResponse(response => new URL(response.url()).pathname === "/api/planning-revision");
     await page.goto(`${appOrigin}/auth/login?next=%2Fplanning`);
     await page.waitForURL(`${appOrigin}/planning`);
     await page.getByRole("button", { name: /Account-Menü öffnen/ }).waitFor();
-    await page.clock.install();
+    const revision = await checkpoint("initial planning revision", initialRevision);
+    expect(revision.status()).toBe(200);
+    expect(await revision.finished()).toBeNull();
+    // Let the completed initial check settle before advancing its polling interval.
+    await page.evaluate(() => new Promise<void>(resolve => setTimeout(resolve, 0)));
     await page.evaluate("window.__samePlanningDocument = true");
     const cleared = page.waitForResponse(response => new URL(response.url()).pathname === "/api/auth/session/clear");
     permanentAuthDenial = true;
