@@ -38,9 +38,16 @@ test.beforeEach(() => {
   const authFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input, init) => {
     const operation = new Request(input, init), url = new URL(operation.url);
-    if (url.pathname === "/rest/v1/team_workweek_publications") {
-      queryStatuses.push(url.searchParams.get("status")?.replace(/^eq\./, ""));
-      return Response.json(rows);
+    if (url.pathname === "/rest/v1/profiles") {
+      queryStatuses.push(url.searchParams.get("calendar.status")?.replace(/^eq\./, ""));
+      const earliestDate = url.searchParams.get("calendar.or")?.match(/effective_to\.gte\.(\d{4}-\d{2}-\d{2})/)?.[1] ?? "0000-01-01";
+      const relevant = rows.filter(row => row.effective_to == null || row.effective_to >= earliestDate)
+        .sort((left, right) => right.effective_from.localeCompare(left.effective_from)
+          || right.publication_revision - left.publication_revision || right.id.localeCompare(left.id));
+      if (!rows.length) return Response.json([], { headers: { "content-range": "*/0" } });
+      return Response.json([{ id: "profile-1", published: [{}], calendar: relevant,
+        tail: relevant.length ? [{ id: relevant.at(-1).id, effective_from: relevant.at(-1).effective_from,
+          publication_revision: relevant.at(-1).publication_revision }] : [] }], { headers: { "content-range": "0-0/1" } });
     }
     return authFetch(operation);
   });
@@ -114,7 +121,7 @@ test("range responses stay additive, published-only, overlap-filtered, and provi
   assert.equal(berlinTodayCalls, 1);
   assert.ok(Array.isArray(body.workweeks));
   assert.deepEqual(body.currentWorkweeks.map((entry) => entry.id), ["inside"]);
-  assert.deepEqual(body.calendarWorkweeks.map((entry) => entry.id), ["inside", "future"]);
+  assert.deepEqual(body.calendarWorkweeks.map((entry) => entry.id), ["future", "inside"]);
   assert.deepEqual(Object.keys(body.calendarWorkweeks[0]).sort(), [
     "effectiveFrom",
     "effectiveTo",
