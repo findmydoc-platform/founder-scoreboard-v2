@@ -4,7 +4,7 @@ import type { Writable } from "node:stream";
 
 export type Stage = "proxy" | "route";
 export type Outcome = "success" | "denied" | "invalid_input" | "error";
-export const safeOperations = ["calendar.request", "session.proxy", "calendar.authorization", "calendar.publications", "calendar.owners", "calendar.prepare", "calendar.data", "calendar.profile",
+export const safeOperations = ["calendar.request", "session.proxy", "calendar.authorization", "calendar.snapshot", "calendar.publications", "calendar.prepare", "calendar.data", "calendar.profile",
   "supabase.claims", "supabase.jwks", "supabase.user", "supabase.refresh", "supabase.settings", "supabase.other", "workspace.context", "workspace.session", "workspace.membership", "workspace.wait",
   "workspace.permit.issue", "workspace.permit.release", "directory.reader", "directory.oidc", "directory.sts", "directory.iam", "directory.membership"] as const;
 export type SafeOperation = typeof safeOperations[number];

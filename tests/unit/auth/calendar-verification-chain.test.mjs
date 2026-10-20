@@ -10,7 +10,66 @@ const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "calendar-proof", alg: "ES256", use: "sig" };
 let output, stdoutWrite, stdoutBaseWrite, listeners;
 let cleanupFailure, dataRetry, directoryBody, directoryThrow, profileFailure, permitFailure;
-let counts, member, directoryFailure, sessionAllowed, mappedProfile, rows, delayDirectory, role, permits, dataFailure, changedBindingAt, deniedAccountAt, currentUser, precedingAuthDelay;
+let counts, member, directoryFailure, sessionAllowed, mappedProfile, rows, publishedOwners, delayDirectory, role, permits, dataFailure, publicationPageFailure,
+  changedBindingAt, deniedAccountAt, currentUser, precedingAuthDelay, profilePageLimit, calendarEmbedLimit, publicationPageLimit,
+  profileCountOffset, duplicateContinuation, brokenContinuation;
+
+const compareText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+const compareRows = (left, right) => compareText(right.effective_from, left.effective_from)
+  || Number(right.publication_revision) - Number(left.publication_revision)
+  || compareText(right.id, left.id);
+const publicationId = index => `f${index.toString(16).padStart(7, "0")}-1111-4111-8111-${index.toString(16).padStart(12, "0")}`;
+const publication = (index, ownerProfileId, effectiveFrom, effectiveTo = null) => ({
+  id: publicationId(index), owner_profile_id: ownerProfileId, effective_from: effectiveFrom, effective_to: effectiveTo,
+  timezone: "Europe/Berlin", published_at: "2026-10-01T08:00:00Z", last_sync_at: "2026-10-01T08:00:00Z",
+  publication_revision: index + 1, windows: [], status: "published",
+});
+const isPublished = row => row.status === undefined || row.status === "published";
+const selectedPublication = row => ({ id: row.id, owner_profile_id: row.owner_profile_id, effective_from: row.effective_from,
+  effective_to: row.effective_to ?? null, ...(row.effective_at === undefined ? {} : { effective_at: row.effective_at }),
+  ...(row.effective_until === undefined ? {} : { effective_until: row.effective_until }), timezone: row.timezone,
+  published_at: row.published_at, last_sync_at: row.last_sync_at, publication_revision: row.publication_revision, windows: row.windows });
+
+function profileRows(url) {
+  const earliestDate = url.searchParams.get("calendar.or")?.match(/effective_to\.gte\.(\d{4}-\d{2}-\d{2})/)?.[1] ?? "0000-01-01";
+  const owners = new Set([...publishedOwners, ...rows.filter(isPublished).map(row => row.owner_profile_id)]);
+  const sortedOwners = [...owners].sort(compareText);
+  const cursorFilter = url.searchParams.get("id");
+  const afterId = cursorFilter?.startsWith("gt.") ? cursorFilter.slice(3) : undefined;
+  const remaining = sortedOwners.filter(owner => afterId === undefined || compareText(owner, afterId) > 0);
+  const count = Math.max(0, remaining.length + profileCountOffset);
+  const pageOwners = remaining.slice(0, Math.min(100, profilePageLimit));
+  const result = pageOwners.map(owner => {
+    const relevant = rows.filter(row => isPublished(row) && row.owner_profile_id === owner
+      && (row.effective_to == null || row.effective_to >= earliestDate)).sort(compareRows);
+    return { id: owner, published: [{}], calendar: relevant.slice(0, calendarEmbedLimit).map(selectedPublication),
+      tail: relevant.length ? [{ id: relevant.at(-1).id, effective_from: relevant.at(-1).effective_from,
+        publication_revision: relevant.at(-1).publication_revision }] : [] };
+  });
+  if (pageOwners.length && count !== remaining.length) return Response.json(result, { headers: { "content-range": `0-${result.length - 1}/${count}` } });
+  return Response.json(result, { headers: { "content-range": result.length ? `0-${result.length - 1}/${count}` : `*/${count}` } });
+}
+
+function publicationRows(url) {
+  const ownerId = url.searchParams.get("owner_profile_id")?.replace(/^eq\./, "");
+  const filters = url.searchParams.get("or") ?? "";
+  const earliestDate = filters.match(/effective_to\.gte\.(\d{4}-\d{2}-\d{2})/)?.[1] ?? "0000-01-01";
+  const cursorDate = filters.match(/effective_from\.lt\.(\d{4}-\d{2}-\d{2})/)?.[1];
+  const cursorRevision = filters.match(/publication_revision\.lt\.(\d+)/)?.[1];
+  const cursorId = filters.match(/id\.lt\.([0-9a-f-]{36})/i)?.[1];
+  let result = rows.filter(row => isPublished(row) && row.owner_profile_id === ownerId
+    && (row.effective_to == null || row.effective_to >= earliestDate)).sort(compareRows);
+  if (cursorDate && cursorRevision && cursorId) result = result.filter(row => row.effective_from < cursorDate
+    || (row.effective_from === cursorDate && row.publication_revision < Number(cursorRevision))
+    || (row.effective_from === cursorDate && row.publication_revision === Number(cursorRevision) && row.id < cursorId));
+  if (brokenContinuation) return [];
+  let page = result.slice(0, Math.min(100, publicationPageLimit));
+  if (duplicateContinuation && cursorId) {
+    const duplicate = rows.find(row => row.id === cursorId);
+    if (duplicate) page = [selectedPublication(duplicate), ...page];
+  }
+  return page.map(selectedPublication);
+}
 
 function token(overrides = {}) {
   const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -46,17 +105,29 @@ async function protocol(input, init) {
   if (url.pathname.endsWith("/rpc/workspace_issue_permit")) { count("permit"); permits.push(await request.json()); if (permitFailure) return Response.json(permitFailure, { status: 403 }); return new Response(null, { status: 204 }); }
   if (url.pathname.endsWith("/rpc/workspace_release_permit")) { count("release"); return cleanupFailure ? Response.json({ code: "private-cleanup-code", message: "seeded-private-cleanup-message" }, { status: 400 }) : new Response(null, { status: 204 }); }
   if (url.pathname.endsWith("/rpc/current_authenticated_profile")) { count("profile"); if (profileFailure) return Response.json(profileFailure, { status: 403 }); return Response.json({ id: mappedProfile, name: "Founder", platform_role: role }); }
-  if (url.pathname === "/rest/v1/team_workweek_publications") {
-    count("data");
+  if (url.pathname === "/rest/v1/profiles") {
+    count("data"); count("snapshot");
     expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
     if (dataRetry && counts.data === 1) return Response.json({ message: "seeded-private-transient-failure" }, { status: 503 });
-    return dataFailure ? Response.json({ message: "query rejected" }, { status: 400 }) : Response.json(rows);
+    return dataFailure ? Response.json({ message: "query rejected" }, { status: 400 }) : profileRows(url);
+  }
+  if (url.pathname === "/rest/v1/team_workweek_publications") {
+    count("data"); count("publications");
+    expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
+    if (dataFailure || publicationPageFailure) return Response.json({ message: "query rejected" }, { status: 400 });
+    return Response.json(publicationRows(url));
   }
   throw new Error(`Unexpected protocol ${url.origin}${url.pathname}`);
 }
 
 async function application() {
   return importTestModule("src/app/api/team-workweek/team/route.ts", { "server-only": {} });
+}
+async function authorizedSnapshot(earliestDate = "2026-10-17") {
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const authorized = await authorizeCredentialAction({ credential: { kind: "session-request", request: request() }, action: "calendar.read" });
+  if (!authorized.ok) throw new Error("Expected calendar authorization");
+  return authorized.calendar.readSnapshot(earliestDate);
 }
 function request(jwt = token(), search = "") {
   const url = new URL(`https://application.example.test/api/team-workweek/team${search}`);
@@ -112,7 +183,8 @@ beforeEach(() => {
     REQUIRE_SUPABASE_AUTH: "true", VERCEL_OIDC_TOKEN: token(), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience",
     GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "reader@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu" })) vi.stubEnv(key, value);
   profileFailure = null; permitFailure = null; cleanupFailure = false; dataRetry = false; directoryBody = null; directoryThrow = null;
-  counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId; precedingAuthDelay = 0;
+  counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; publishedOwners = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; publicationPageFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId; precedingAuthDelay = 0;
+  profilePageLimit = 100; calendarEmbedLimit = 100; publicationPageLimit = 100; profileCountOffset = 0; duplicateContinuation = false; brokenContinuation = false;
   vi.stubGlobal("fetch", protocol);
 });
 afterEach(() => {
@@ -129,16 +201,16 @@ test("calendar route reuses membership through the real verification and permit 
   expect(first.status).toBe(200);
   const cold = { ...counts };
   expect(cold.directory).toBe(1);
-  expect(cold.permit).toBe(3);
+  expect(cold.permit).toBe(2);
   expect(output.filter(event => event.event === "request.completed").at(-1)).toMatchObject({
     membership: { result: "miss", reason: "not_found", evidenceAgeMs: 0, remainingLifetimeMs: 900000, expired: false },
     directoryCredential: { result: "renewed" },
   });
   expect((await route.GET(request(jwt))).status).toBe(200);
   expect(counts.directory).toBe(1);
-  expect(counts.permit).toBe(6);
-  expect(counts.data).toBe(4);
-  expect(counts.auth).toBe(8);
+  expect(counts.permit).toBe(4);
+  expect(counts.data).toBe(2);
+  expect(counts.auth).toBe(6);
   expect(output.filter(event => event.event === "request.completed").at(-1)).toMatchObject({
     membership: { result: "hit", reason: "cached", evidenceAgeMs: 0, remainingLifetimeMs: 900000, expired: false },
   });
@@ -148,8 +220,8 @@ test("calendar summary counts actual private transport attempts and declares OID
   const route = await application();
   expect((await route.GET(request())).status).toBe(200);
   const summary = output.filter(event => event.event === "request.completed").at(-1);
-  expect(summary).toMatchObject({ externalCalls: { total: 21 + (counts.jwks || 0), operations: { "supabase.user": 4, "workspace.context": 4, "workspace.session": 1,
-    "workspace.permit.issue": 3, "workspace.permit.release": 3, "calendar.profile": 1, "calendar.publications": 2,
+  expect(summary).toMatchObject({ externalCalls: { total: 16 + (counts.jwks || 0), operations: { "supabase.user": 3, "workspace.context": 3, "workspace.session": 1,
+    "workspace.permit.issue": 2, "workspace.permit.release": 2, "calendar.profile": 1, "calendar.snapshot": 1,
     "directory.sts": 1, "directory.iam": 1, "directory.membership": 1,
   } }, completeness: { externalCallsScope: "private_supabase_and_explicit_directory_http", externalCallsComplete: false,
     uninstrumented: ["vercel_oidc_internal"] } });
@@ -219,7 +291,7 @@ test("session removal and role removal remain authoritative on membership hits",
   sessionAllowed = true; role = "unknown-role";
   expect((await route.GET(request(jwt))).status).toBe(403);
   expect(counts.directory).toBe(1);
-  expect(counts.data).toBe(2);
+  expect(counts.data).toBe(1);
 });
 
 test("changed token, session and scope cannot share membership evidence", async () => {
@@ -245,8 +317,8 @@ test("equivalent concurrent misses share membership but retain distinct permits"
   expect(waiting.externalCalls.operations["directory.membership"]).toBeUndefined();
   expect(waiting.membership.waitMs).toBeGreaterThanOrEqual(0);
   expect(waiting.membership.cacheOwnerId).toBe(executing.membership.cacheOwnerId);
-  expect(permits).toHaveLength(6);
-  expect(new Set(permits.map(permit => permit.p_hash)).size).toBe(6);
+  expect(permits).toHaveLength(4);
+  expect(new Set(permits.map(permit => permit.p_hash)).size).toBe(4);
   expect(permits.every(permit => permit.p_user_id === userId && permit.p_session_id === sessionId)).toBe(true);
 });
 
@@ -285,10 +357,10 @@ test("copying an issued public capability cannot restart its original evidence l
   expect(permission.ok).toBe(true);
   vi.setSystemTime(started + 899999);
   const copied = { ...permission, calendar: { ...permission.calendar } };
-  expect((await copied.calendar.readPublishedOwners()).error).toBeNull();
+  expect((await copied.calendar.readSnapshot("2026-10-17")).error).toBeNull();
   const dispatched = counts.data;
   vi.setSystemTime(started + 900000);
-  expect((await copied.calendar.readPublishedOwners()).error).not.toBeNull();
+  expect((await copied.calendar.readSnapshot("2026-10-17")).error).not.toBeNull();
   expect(counts.data).toBe(dispatched);
   expect(counts.directory).toBe(1);
 });
@@ -306,24 +378,125 @@ test("calendar maps publications and owners without provider or private fields",
   expect(JSON.stringify(body)).not.toMatch(/private-provider|private-draft|refresh_token/);
 });
 
+test("published owners survive historical expiry while calendar response retains past, current and future plans", async () => {
+  const route = await application();
+  rows = [
+    publication(1, "owner-history", "2026-10-05", "2026-10-16"),
+    publication(2, "owner-current", "2026-10-12"),
+    publication(3, "owner-future", "2026-10-19"),
+    publication(4, "owner-expired", "2025-10-06", "2025-10-12"),
+    { ...publication(5, "owner-draft", "2026-10-19"), status: "preparing", published_at: null },
+    { ...publication(6, "owner-inactive", "2026-10-19"), status: "inactive" },
+  ];
+
+  const ranged = await route.GET(request(token(), "?from=2026-10-05&to=2026-10-31"));
+  expect(ranged.status).toBe(200);
+  const rangedBody = await ranged.json();
+  expect(rangedBody.publishedOwnerIds).toEqual(["owner-current", "owner-expired", "owner-future", "owner-history"]);
+  expect(rangedBody.calendarWorkweeks.map(workweek => workweek.id)).toEqual([publicationId(3), publicationId(2), publicationId(1)]);
+  expect(rangedBody.currentWorkweeks.map(workweek => workweek.ownerProfileId)).toContain("owner-current");
+  expect(rangedBody.upcomingWorkweeks.map(workweek => workweek.ownerProfileId)).toContain("owner-future");
+
+  const current = await route.GET(request(token()));
+  expect(current.status).toBe(200);
+  const currentBody = await current.json();
+  expect(currentBody.publishedOwnerIds).toEqual(rangedBody.publishedOwnerIds);
+  expect(currentBody.calendarWorkweeks).toBeUndefined();
+  expect(currentBody.currentWorkweeks.map(workweek => workweek.ownerProfileId)).toContain("owner-current");
+  expect(currentBody.upcomingWorkweeks.map(workweek => workweek.ownerProfileId)).toContain("owner-future");
+  expect(JSON.stringify(currentBody)).not.toMatch(/owner-draft|owner-inactive/);
+});
+
+test("profile keyset pagination returns every published owner beyond one hundred", async () => {
+  publishedOwners = Array.from({ length: 101 }, (_, index) => `owner-${String(index).padStart(3, "0")}`);
+  const snapshot = await authorizedSnapshot();
+  expect(snapshot.error).toBeNull();
+  expect(snapshot.data?.publishedOwnerIds).toEqual([...publishedOwners].sort(compareText));
+  expect(snapshot.data?.publications).toEqual([]);
+  expect(counts.snapshot).toBe(2);
+});
+
+test("publication continuation fully loads histories above one thousand rows", async () => {
+  const ownerProfileId = "owner-history";
+  rows = Array.from({ length: 1001 }, (_, index) => {
+    const effectiveFrom = new Date(Date.UTC(2026, 9, 19 + index)).toISOString().slice(0, 10);
+    return publication(index + 1, ownerProfileId, effectiveFrom);
+  });
+  const snapshot = await authorizedSnapshot();
+  expect(snapshot.error).toBeNull();
+  expect(snapshot.data?.publishedOwnerIds).toEqual([ownerProfileId]);
+  expect(snapshot.data?.publications).toHaveLength(1001);
+  expect(snapshot.data?.publications[0].id).toBe(publicationId(1001));
+  expect(snapshot.data?.publications.at(-1)?.id).toBe(publicationId(1));
+  expect(counts.snapshot).toBe(1);
+  expect(counts.publications).toBe(10);
+});
+
+test("a truncated embedded page is completed through the tail marker", async () => {
+  rows = Array.from({ length: 101 }, (_, index) => publication(index + 1, "owner-history", new Date(Date.UTC(2026, 9, 19 + index)).toISOString().slice(0, 10)));
+  calendarEmbedLimit = 20;
+  const snapshot = await authorizedSnapshot("2026-10-01");
+  expect(snapshot.error).toBeNull();
+  expect(snapshot.data?.publications).toHaveLength(101);
+  expect(snapshot.data?.publications.at(-1)?.id).toBe(publicationId(1));
+  expect(counts.snapshot).toBe(1);
+  expect(counts.publications).toBe(1);
+});
+
+test.each([
+  ["duplicate rows", { duplicateContinuation: true }],
+  ["a missing tail marker", { brokenContinuation: true }],
+  ["a later-page provider error", { publicationPageFailure: true }],
+])("%s fails the complete snapshot without returning partial data", async (_name, failure) => {
+  rows = Array.from({ length: 3 }, (_, index) => publication(index + 1, "owner-history", `2026-10-${String(19 - index).padStart(2, "0")}`));
+  calendarEmbedLimit = 1;
+  if (failure.duplicateContinuation) duplicateContinuation = true;
+  if (failure.brokenContinuation) brokenContinuation = true;
+  if (failure.publicationPageFailure) publicationPageFailure = true;
+  const snapshot = await authorizedSnapshot();
+  expect(snapshot.data).toBeNull();
+  expect(snapshot.error).not.toBeNull();
+});
+
+test("a failed publication continuation preserves the safe HTTP error without a partial calendar", async () => {
+  const route = await application();
+  rows = Array.from({ length: 3 }, (_, index) => publication(index + 1, "owner-history", `2026-10-${String(19 - index).padStart(2, "0")}`));
+  calendarEmbedLimit = 1;
+  publicationPageFailure = true;
+  const response = await route.GET(request());
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: "Veröffentlichte Grundwochen konnten nicht geladen werden." });
+});
+
+test.each([
+  ["no profile progress", () => { profilePageLimit = 0; }],
+  ["an inconsistent exact count", () => { profileCountOffset = 1; }],
+])("%s fails instead of returning a partial snapshot", async (_name, prepare) => {
+  publishedOwners = ["owner-1"];
+  prepare();
+  const snapshot = await authorizedSnapshot();
+  expect(snapshot.data).toBeNull();
+  expect(snapshot.error).not.toBeNull();
+});
+
 test("data failure preserves safe HTTP error and releases every issued permit", async () => {
   const route = await application(); dataFailure = true;
   const response = await route.GET(request());
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: "Veröffentlichte Grundwochen konnten nicht geladen werden." });
-  expect(counts.data).toBe(2);
+  expect(counts.data).toBe(1);
   expect(counts.release).toBe(counts.permit);
 });
 
 test("changed account or profile binding between parallel operations denies the complete result", async () => {
   const route = await application(); const jwt = token();
-  changedBindingAt = 4;
+  changedBindingAt = 3;
   expect((await route.GET(request(jwt))).status).toBe(503);
-  expect(counts.data).toBe(1);
+  expect(counts.data || 0).toBe(0);
   changedBindingAt = null;
-  deniedAccountAt = counts.auth + 4;
+  deniedAccountAt = counts.auth + 3;
   expect((await route.GET(request(jwt))).status).toBe(503);
-  expect(counts.data).toBe(2);
+  expect(counts.data || 0).toBe(0);
 });
 
 test("an already issued capability cannot outlive original evidence", async () => {
@@ -332,7 +505,7 @@ test("an already issued capability cannot outlive original evidence", async () =
   expect(permission.ok).toBe(true);
   const authBefore = counts.auth;
   vi.setSystemTime(Date.now() + 900000);
-  expect((await permission.calendar.readPublishedOwners()).error).not.toBeNull();
+  expect((await permission.calendar.readSnapshot("2026-10-17")).error).not.toBeNull();
   expect(counts.auth).toBe(authBefore);
   expect(counts.data || 0).toBe(0);
 });
@@ -395,8 +568,8 @@ test("calendar response correlates with a safe compact summary through real auth
     stage: "route", outcome: "success", completeness: { correlation: "missing", externalCallsComplete: false, cache: "observed" },
   });
   expect(counts.directory).toBe(1);
-  expect(counts.permit).toBe(3);
-  expect(counts.release).toBe(3);
+  expect(counts.permit).toBe(2);
+  expect(counts.release).toBe(2);
 });
 
 
@@ -437,7 +610,7 @@ test.each([
   if (expectedStatus === 503) {
     expect(body).toEqual({ error: "Veröffentlichte Grundwochen konnten nicht geladen werden." });
     expect(output.find(event => event.event === "operation.failed")).toMatchObject({
-      requestId: response.headers.get("x-request-id"), operation: "calendar.publications", severity: "error",
+      requestId: response.headers.get("x-request-id"), operation: "calendar.snapshot", severity: "error",
       failure: { errorCode: "provider_request_failed", errorCategory: "provider_http_error" },
     });
   } else {
@@ -542,10 +715,10 @@ test.each(["throw", "backpressure", "async"])("%s sink failure preserves calenda
   expect(await response.json()).toEqual(baselineBody);
   expect(response.headers.get("x-request-id")).toMatch(/^[a-f0-9-]{36}$/);
   expect(counts.directory).toBe(before.directory);
-  expect(counts.auth - before.auth).toBe(4);
-  expect(counts.permit - before.permit).toBe(3);
-  expect(counts.release - before.release).toBe(3);
-  expect(counts.data - before.data).toBe(2);
+  expect(counts.auth - before.auth).toBe(3);
+  expect(counts.permit - before.permit).toBe(2);
+  expect(counts.release - before.release).toBe(2);
+  expect(counts.data - before.data).toBe(1);
 });
 
 test("a route exception keeps its identity and private text stays out of failure output", async () => {
@@ -577,18 +750,15 @@ test("segment duration remains monotonic when wall time jumps during calendar ve
 });
 
 
-test("calendar phases preserve sibling intervals, source failures and local preparation", async () => {
+test("calendar snapshot phases preserve request intervals, source failures and local preparation", async () => {
   const route = await application();
   expect((await route.GET(request())).status).toBe(200);
   const summary = output.filter(event => event.event === "request.completed").at(-1);
   const phases = summary.phases;
-  const publications = phases.find(phase => phase.operation === "calendar.publications" && phase.kind === "operation");
-  const owners = phases.find(phase => phase.operation === "calendar.owners");
-  expect(publications).toBeDefined(); expect(owners).toBeDefined();
-  expect(publications.parentId).toBe(owners.parentId);
-  expect(owners.parentId).not.toBe(publications.id);
-  expect(Math.min(publications.offsetMs + publications.durationMs, owners.offsetMs + owners.durationMs))
-    .toBeGreaterThan(Math.max(publications.offsetMs, owners.offsetMs));
+  const snapshot = phases.find(phase => phase.operation === "calendar.snapshot" && phase.kind === "operation");
+  expect(snapshot).toBeDefined();
+  expect(phases.some(phase => phase.operation === "calendar.owners")).toBe(false);
+  expect(phases.some(phase => phase.operation === "calendar.publications")).toBe(false);
   expect(phases.find(phase => phase.operation === "calendar.prepare")).toBeDefined();
   expect(phases.filter(phase => phase.kind === "http").every(phase => phase.parentId)).toBe(true);
   expect(summary.durationMs).toBeLessThan(phases.reduce((sum, phase) => sum + phase.durationMs, 0));
@@ -613,7 +783,7 @@ test("late data failure retains earlier warm-hit verification without leaking pr
   expect((await route.GET(request(jwt))).status).toBe(503);
   const summary = output.filter(event => event.event === "request.completed").at(-1);
   expect(summary).toMatchObject({ membership: { result: "hit" }, detailRetained: true,
-    failure: { operation: "calendar.publications", errorCategory: "provider_http_error", providerStatus: 400 } });
+    failure: { operation: "calendar.snapshot", errorCategory: "provider_http_error", providerStatus: 400 } });
   expect(summary.phases).toEqual(expect.arrayContaining([expect.objectContaining({ operation: "supabase.claims" })]));
   expect(JSON.stringify(output)).not.toMatch(/query rejected|synthetic-service|member@findmydoc|google-subject|synthetic-audience|reader@example/);
 });
@@ -623,7 +793,7 @@ test("suppressed permit cleanup errors remain observable without replay or respo
   const route = await application(); cleanupFailure = true;
   const response = await route.GET(request());
   expect(response.status).toBe(200);
-  expect(counts.data).toBe(2); expect(counts.permit).toBe(3); expect(counts.release).toBe(3);
+  expect(counts.data).toBe(1); expect(counts.permit).toBe(2); expect(counts.release).toBe(2);
   expect(output).toEqual(expect.arrayContaining([expect.objectContaining({ event: "operation.failed",
     operation: "workspace.permit.release", failure: expect.objectContaining({ errorCode: "permit_cleanup_failed" }) })]));
   const summary = output.filter(event => event.event === "request.completed").at(-1);
@@ -635,9 +805,9 @@ test("suppressed permit cleanup errors remain observable without replay or respo
 test("existing SDK retries count each actual dispatch and release without adding work", async () => {
   const route = await application(); dataRetry = true;
   expect((await route.GET(request())).status).toBe(200);
-  expect(counts.data).toBe(3); expect(counts.permit).toBe(4); expect(counts.release).toBe(4);
+  expect(counts.data).toBe(2); expect(counts.permit).toBe(3); expect(counts.release).toBe(3);
   const summary = output.filter(event => event.event === "request.completed").at(-1);
-  expect(summary.externalCalls.operations).toMatchObject({ "calendar.publications": 3, "workspace.permit.issue": 4, "workspace.permit.release": 4 });
+  expect(summary.externalCalls.operations).toMatchObject({ "calendar.snapshot": 2, "workspace.permit.issue": 3, "workspace.permit.release": 3 });
   expect(JSON.stringify(output)).not.toContain("seeded-private");
 });
 
@@ -690,7 +860,7 @@ test("sink failure preserves existing SDK retries and the evidence deadline", as
   counts.data = 0; dataRetry = true;
   const before = { ...counts };
   expect((await route.GET(request(jwt))).status).toBe(200);
-  expect(counts.data).toBe(3); expect(counts.permit - before.permit).toBe(4); expect(counts.release - before.release).toBe(4);
+  expect(counts.data).toBe(2); expect(counts.permit - before.permit).toBe(3); expect(counts.release - before.release).toBe(3);
   vi.setSystemTime(started + 900000); directoryFailure = true;
   expect((await route.GET(request(jwt))).status).toBe(503);
   expect(counts.directory).toBe(2);

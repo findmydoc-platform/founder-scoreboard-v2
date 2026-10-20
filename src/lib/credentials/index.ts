@@ -51,7 +51,7 @@ import type {
 import type { GitHubAppOperationalStatus } from "./types";
 
 export type {
-  CalendarCredentialInput, CalendarCredentialResult, CalendarReadCapability,
+  CalendarCredentialInput, CalendarCredentialResult, CalendarReadCapability, CalendarSnapshot,
   GitHubInstallationCapability, GitHubUserCapability, GoogleCalendarCapability,
 } from "./types";
 

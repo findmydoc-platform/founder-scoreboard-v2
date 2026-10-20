@@ -124,6 +124,9 @@ beforeAll(async () => {
       const manifest = { schemaVersion: 2, version: "v1.0.0", summary, highlights: [], changes: [], components: [], visuals: [], publishedAt: "2026-10-01T00:00:00Z" };
       send([{ version: "v1.0.0", summary, published_at: manifest.publishedAt, manifest_digest: "synthetic", manifest }]); return;
     }
+    if (url.pathname === "/rest/v1/profiles") {
+      response.writeHead(200, { "content-type": "application/json", "content-range": "*/0" }); response.end("[]"); return;
+    }
     if (url.pathname.startsWith("/rest/v1/")) { send([]); return; }
     send({ error: "Unscripted synthetic protocol" }, 501);
   });

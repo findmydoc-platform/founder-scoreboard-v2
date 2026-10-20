@@ -51,16 +51,12 @@ async function calendarResponse(request: NextRequest) {
   const referenceDate = berlinTodayIso(now);
   // Retain current and all future plans, plus history needed by the requested range.
   const earliestDate = requestedRange.range && requestedRange.range.from < referenceDate ? requestedRange.range.from : referenceDate;
-  const [publications, owners] = await observeCalendarPhase("calendar.data", () => Promise.all([
-    permission.calendar.readPublications(earliestDate),
-    // An owner with historical hours is still published, even without a current plan.
-    permission.calendar.readPublishedOwners(),
-  ]));
-  const { data, error } = publications;
-  if (error || owners.error) {
-    recordCalendarFailure({ operation: "calendar.publications", errorCode: "calendar_data_unavailable", errorCategory: "unexpected_error" });
+  const snapshot = await observeCalendarPhase("calendar.data", () => permission.calendar.readSnapshot(earliestDate));
+  if (snapshot.error || !snapshot.data) {
+    recordCalendarFailure({ operation: "calendar.snapshot", errorCode: "calendar_data_unavailable", errorCategory: "unexpected_error" });
     return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
   }
+  const { publications: data, publishedOwnerIds } = snapshot.data;
 
   return observeCalendarPreparation(() => {
     const visible = selectVisibleTeamWorkweeks((data || []).map((row) => ({
@@ -99,7 +95,7 @@ async function calendarResponse(request: NextRequest) {
     return NextResponse.json({
       referenceDate,
       upcomingWorkweeks: allCalendarWorkweeks.filter(row => (row.effectiveAt ? Date.parse(row.effectiveAt) > now.getTime() : row.effectiveFrom > referenceDate) && (!row.effectiveUntil || Date.parse(row.effectiveUntil) > Date.parse(row.effectiveAt || `${row.effectiveFrom}T00:00:00Z`)) && (!row.effectiveTo || row.effectiveTo >= row.effectiveFrom)),
-      publishedOwnerIds: [...new Set((owners.data || []).map(row => row.owner_profile_id))],
+      publishedOwnerIds,
       workweeks,
       currentWorkweeks,
       ...(calendarWorkweeks ? { calendarWorkweeks } : {}),
