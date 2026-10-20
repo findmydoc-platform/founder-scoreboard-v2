@@ -153,7 +153,7 @@ AI agents handling this repository must inspect the GitHub Actions summary and t
 
 Use GitHub Actions job logs and the deployment summary to inspect deployment status. The workflow output URL is the operational source of truth for the deployed environment.
 
-The calendar runtime logging contract is documented in [Runtime logging](logging.md). The implemented pilot provides `x-request-id`, safe proxy/route summaries, observed membership/cache lifetimes, local phase intervals and scoped actual HTTP-attempt counts. Missing proxy data and uninstrumented OIDC internals remain explicit. Deployment, deployed severity classification and the actual existing retention window remain pending separate production acceptance.
+The calendar runtime logging contract is documented in [Runtime logging](logging.md). The deployed pilot provides `x-request-id`, safe proxy/route summaries, observed membership/cache lifetimes, local phase intervals and scoped actual HTTP-attempt counts. Missing proxy data and uninstrumented OIDC internals remain explicit. [Bounded production acceptance on 2026-10-20](logging.md#production-acceptance-on-2026-10-20) passed: request correlation and cache hits were observed, application `info` and `warn` both appeared as Vercel log-line `info`, and the existing Pro with Observability Plus entitlement established 30-day runtime-log retention. The acceptance record lists cases that were not observed in production.
 
 ## Supabase Auth
 
