@@ -245,9 +245,11 @@ test("a held Workspace read expires at its original verification start even with
     return authFetch(request);
   });
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "@vercel/oidc": { getVercelOidcToken: async () => "synthetic-oidc" }, "next/cache": { unstable_cache: load => load } });
-  const started = Date.now(), permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "events.read" });
+  const started = Date.now();
+  vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(started);
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "events.read" });
   assert.equal(permission.ok, true, JSON.stringify(permission));
-  vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(started + 900001);
+  vi.setSystemTime(started + 900001);
   assert.equal((await permission.resource.loadWorkspace()).status, "unavailable");
   assert.equal(reads, 0); assert.equal(memberships, 1);
 });
