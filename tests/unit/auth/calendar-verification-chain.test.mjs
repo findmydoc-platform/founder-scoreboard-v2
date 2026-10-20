@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
+import { NextRequest } from "next/server";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
@@ -7,6 +8,7 @@ const userId = "a1111111-1111-4111-8111-111111111111";
 const sessionId = "b1111111-1111-4111-8111-111111111111";
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "calendar-proof", alg: "ES256", use: "sig" };
+let output, stdoutWrite, stdoutBaseWrite, listeners;
 let counts, member, directoryFailure, sessionAllowed, mappedProfile, rows, delayDirectory, role, permits, dataFailure, changedBindingAt, deniedAccountAt, currentUser, precedingAuthDelay;
 
 function token(overrides = {}) {
@@ -54,11 +56,19 @@ async function application() {
 }
 function request(jwt = token(), search = "") {
   const url = new URL(`https://application.example.test/api/team-workweek/team${search}`);
-  return { headers: new Headers({ authorization: `Bearer ${jwt}` }), nextUrl: url };
+  return new NextRequest(url, { headers: { authorization: `Bearer ${jwt}` } });
 }
 
 beforeEach(() => {
   vi.resetModules();
+  output = [];
+  listeners = [process.stdout, process.stderr].map(stream => ({ stream, error: stream.listeners("error"), drain: stream.listeners("drain") }));
+  const write = process.stdout.write.bind(process.stdout);
+  stdoutBaseWrite = write;
+  stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation((line, ...args) => {
+    if (typeof line === "string" && line.includes('"scope":"calendar"')) { output.push(JSON.parse(line)); return true; }
+    return write(line, ...args);
+  });
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-17T10:00:00Z"));
   for (const [key, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: origin, NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-anon",
@@ -68,7 +78,12 @@ beforeEach(() => {
   counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId; precedingAuthDelay = 0;
   vi.stubGlobal("fetch", protocol);
 });
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+afterEach(() => {
+  stdoutWrite.mockRestore();
+  for (const { stream, error, drain } of listeners) {
+    for (const listener of stream.listeners("error")) if (!error.includes(listener)) stream.off("error", listener);
+    for (const listener of stream.listeners("drain")) if (!drain.includes(listener)) stream.off("drain", listener);
+  } vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 test("calendar route reuses membership through the real verification and permit chain", async () => {
   const route = await application();
@@ -161,7 +176,11 @@ test("equivalent concurrent misses share membership but retain distinct permits"
   const calls = [route.GET(request(jwt)), route.GET(request(jwt))];
   for (let attempts=0; attempts<100 && (!release || counts.session !== 2); attempts++) await new Promise(resolve => setImmediate(resolve));
   expect(release).toBeTypeOf("function"); release();
-  expect((await Promise.all(calls)).map(response => response.status)).toEqual([200, 200]);
+  const responses = await Promise.all(calls);
+  expect(responses.map(response => response.status)).toEqual([200, 200]);
+  expect(new Set(responses.map(response => response.headers.get("x-request-id"))).size).toBe(2);
+  expect(output.filter(event => event.event === "request.completed").map(event => event.requestId).sort())
+    .toEqual(responses.map(response => response.headers.get("x-request-id")).sort());
   expect(counts.directory).toBe(1);
   expect(permits).toHaveLength(6);
   expect(new Set(permits.map(permit => permit.p_hash)).size).toBe(6);
@@ -298,4 +317,133 @@ test("distinct users keep separate evidence even with otherwise matching provide
   currentUser = userId; mappedProfile = "profile-1";
   expect((await route.GET(request(firstToken))).status).toBe(200);
   expect(counts.directory).toBe(2);
+});
+
+
+test("calendar response correlates with a safe compact summary through real authorization", async () => {
+  const route = await application();
+  const response = await route.GET(request());
+  expect(response.status).toBe(200);
+  expect(response.headers.get("x-request-id")).toMatch(/^[a-f0-9-]{36}$/);
+  expect(output.find(event => event.event === "request.completed")).toMatchObject({
+    schemaVersion: 1, scope: "calendar", operation: "calendar.request", severity: "info",
+    requestId: response.headers.get("x-request-id"), method: "GET", route: "/api/team-workweek/team", status: 200,
+    stage: "route", outcome: "success", completeness: { correlation: "missing", externalCallsComplete: false, cache: "unavailable" },
+  });
+  expect(counts.directory).toBe(1);
+  expect(counts.permit).toBe(3);
+  expect(counts.release).toBe(3);
+});
+
+
+test("the proxy replaces forged diagnostics and the route incorporates only its bounded safe summary", async () => {
+  const route = await application();
+  const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
+  const incoming = request();
+  incoming.headers.set("x-request-id", "forged-request");
+  incoming.headers.set("x-founderops-proxy-observation", "forged-private-host-and-token");
+  const forwarded = await proxy(incoming);
+  const metadata = forwarded.headers.get("x-middleware-request-x-founderops-proxy-observation");
+  expect(Buffer.byteLength(metadata)).toBeLessThan(1024);
+  expect(metadata).not.toContain("forged");
+  incoming.headers.set("x-founderops-proxy-observation", metadata);
+  const response = await route.GET(incoming);
+  const event = output.find(value => value.stage === "route");
+  expect(response.headers.get("x-request-id")).toBe(forwarded.headers.get("x-request-id"));
+  expect(event).toMatchObject({ requestId: response.headers.get("x-request-id"),
+    proxy: { requestId: response.headers.get("x-request-id"), instanceId: expect.any(String), durationMs: expect.any(Number) },
+    completeness: { correlation: "complete", externalCallsComplete: false },
+  });
+  expect(response.headers.has("x-founderops-proxy-observation")).toBe(false);
+  expect(event.observedProcessingMs).toBeCloseTo(event.durationMs + event.proxy.durationMs, 3);
+});
+
+test.each([
+  ["denied", "malformed", "", 401, false],
+  ["invalid input", null, "?from=invalid&to=2026-10-30", 400, false],
+  ["handled provider failure", null, "", 503, true],
+])("%s returns its context ID and preserves the safe response contract", async (_name, jwt, search, expectedStatus, failData) => {
+  const route = await application(); dataFailure = failData;
+  const response = await route.GET(request(jwt ?? token(), search));
+  expect(response.status).toBe(expectedStatus);
+  const body = await response.json();
+  const summary = output.find(event => event.event === "request.completed");
+  expect(summary.requestId).toBe(response.headers.get("x-request-id"));
+  expect(summary.status).toBe(expectedStatus);
+  if (expectedStatus === 503) {
+    expect(body).toEqual({ error: "Veröffentlichte Grundwochen konnten nicht geladen werden." });
+    expect(output.find(event => event.event === "operation.failed")).toMatchObject({
+      requestId: response.headers.get("x-request-id"), operation: "calendar.publications", severity: "error",
+      failure: { errorCode: "calendar_data_unavailable", errorCategory: "unexpected_error" },
+    });
+  } else {
+    expect(summary.outcome).toBe(expectedStatus === 400 ? "invalid_input" : "denied");
+    expect(output.some(event => event.event === "operation.failed")).toBe(false);
+    if (expectedStatus === 401) expect(summary.deniedCode).toBe(body.code);
+  }
+});
+
+test.each(["not-json", JSON.stringify({ version: 1, requestId: "forged", instanceId: "forged", status: 200, outcome: "success", durationMs: 0 }), "x".repeat(1024)])("invalid proxy metadata cannot select context or alter authorization", async metadata => {
+  const route = await application(); const incoming = request();
+  incoming.headers.set("x-request-id", "forged");
+  incoming.headers.set("x-founderops-proxy-observation", metadata);
+  const response = await route.GET(incoming);
+  expect(response.status).toBe(200);
+  const summary = output.find(event => event.event === "request.completed");
+  expect(summary.requestId).toBe(response.headers.get("x-request-id"));
+  expect(summary.requestId).not.toBe("forged");
+  expect(summary.completeness.correlation).toBe("invalid");
+  expect(summary.proxy).toBeUndefined();
+});
+
+test.each(["throw", "backpressure", "async"])("%s sink failure preserves calendar response, dispatch counts and permit cleanup", async mode => {
+  const route = await application(); const jwt = token();
+  const baseline = await route.GET(request(jwt)); const baselineBody = await baseline.json();
+  const before = { ...counts };
+  const write = stdoutBaseWrite;
+  stdoutWrite.mockImplementation((line, ...args) => {
+    if (typeof line === "string" && line.includes('"scope":"calendar"')) {
+      if (mode === "throw") throw new Error("seeded-private-logger-exception");
+      return false;
+    }
+    return write(line, ...args);
+  });
+  if (mode === "async") process.stdout.emit("error", new Error("seeded-private-stream-error"));
+  const response = await route.GET(request(jwt));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(baselineBody);
+  expect(response.headers.get("x-request-id")).toMatch(/^[a-f0-9-]{36}$/);
+  expect(counts.directory).toBe(before.directory);
+  expect(counts.auth - before.auth).toBe(4);
+  expect(counts.permit - before.permit).toBe(3);
+  expect(counts.release - before.release).toBe(3);
+  expect(counts.data - before.data).toBe(2);
+});
+
+test("a route exception keeps its identity and private text stays out of failure output", async () => {
+  const route = await application(); const incoming = request();
+  const applicationError = new Error("seeded-private-application-exception", { cause: new Error("seeded-private-cause") });
+  const search = vi.spyOn(incoming.nextUrl.searchParams, "get").mockImplementation(() => { throw applicationError; });
+  try { await expect(route.GET(incoming)).rejects.toBe(applicationError); } finally { search.mockRestore(); }
+  expect(output.find(event => event.event === "operation.failed")).toMatchObject({
+    failure: { operation: "calendar.request", errorCode: "calendar_boundary_failure", errorCategory: "unexpected_error" }, severity: "error",
+  });
+  expect(output.find(event => event.event === "request.completed")).toMatchObject({ status: 500, outcome: "error" });
+  expect(JSON.stringify(output)).not.toContain("seeded-private");
+});
+
+
+test("segment duration remains monotonic when wall time jumps during calendar verification", async () => {
+  let monotonic = 100;
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => monotonic);
+  vi.stubGlobal("fetch", async (...args) => { monotonic += 10; vi.setSystemTime(Date.now() - 60_000); return protocol(...args); });
+  try {
+    const route = await application();
+    const response = await route.GET(request());
+    expect(response.status).toBe(200);
+    const summary = output.find(event => event.event === "request.completed");
+    expect(summary.durationMs).toBeGreaterThan(0);
+    expect(summary.durationMs).toBe((monotonic - 100));
+    expect(summary.observedProcessingMs).toBe(summary.durationMs);
+  } finally { clock.mockRestore(); }
 });

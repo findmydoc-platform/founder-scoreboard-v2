@@ -1,0 +1,99 @@
+import { EventEmitter } from "node:events";
+import { afterEach, expect, test, vi } from "vitest";
+import { importTestModule } from "../../helpers/vitest-module.mjs";
+
+class Sink extends EventEmitter {
+  lines: string[] = [];
+  write(line: string) { this.lines.push(line); return true; }
+}
+const requestId = "8ea34e08-8cc2-42ad-a562-87b7c11362b4";
+const instanceId = "2f281f12-aaed-4f75-8b2f-1b69a5c6645c";
+const completion = () => ({ requestId, instanceId, stage: "route", status: 200, outcome: "success", durationMs: 5,
+  completeness: { correlation: "missing", externalCallsComplete: false, cache: "unavailable" } });
+const adapter = () => importTestModule("src/lib/runtime-logging/output.ts", { "server-only": {} });
+afterEach(() => vi.restoreAllMocks());
+
+test("the serialized event projects approved fields and omits seeded private data", async () => {
+  const { createRuntimeLogger } = await adapter();
+  const sink = new Sink(); const fallback = new Sink();
+  const logger = createRuntimeLogger(sink, fallback);
+  const secret = "seeded-cookie-token-private-host.example.invalid";
+  const event = { ...completion(), token: secret, headers: { authorization: secret }, message: secret,
+    err: new Error(secret, { cause: new Error(secret) }), deploymentId: secret, vercelId: secret,
+    proxy: { requestId, instanceId, durationMs: 3, status: 200, outcome: "success", cookie: secret },
+  };
+  logger.completed(event);
+  expect(sink.lines).toHaveLength(1);
+  expect(sink.lines[0]).not.toContain(secret);
+  expect(JSON.parse(sink.lines[0])).toMatchObject({ event: "request.completed", severity: "info", level: 30,
+    schemaVersion: 1, scope: "calendar", operation: "calendar.request", requestId, instanceId,
+    proxy: { requestId, instanceId, durationMs: 3 }, observedProcessingMs: 8,
+  });
+  expect(JSON.parse(sink.lines[0])).not.toHaveProperty("pid");
+  expect(JSON.parse(sink.lines[0])).not.toHaveProperty("hostname");
+  expect(fallback.lines).toEqual([]);
+});
+
+test.each([1999.999, 2000])("local observed processing threshold %s ms selects application severity", async elapsed => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink();
+  createRuntimeLogger(sink, new Sink()).completed({ ...completion(), durationMs: elapsed - 1000,
+    proxy: { requestId, instanceId, durationMs: 1000, status: 200, outcome: "success" } });
+  expect(JSON.parse(sink.lines[0])).toMatchObject({ severity: elapsed < 2000 ? "info" : "warn", observedProcessingMs: elapsed });
+});
+
+test.each(["sync", "async", "backpressure", "serialization", "fallback"])("%s failure drops bounded telemetry without escaping or recursing", async mode => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink(); const fallback = new Sink();
+  const logger = createRuntimeLogger(sink, fallback);
+  const privateError = new Error("seeded-private-cookie-and-provider-stack");
+  if (mode === "sync" || mode === "fallback") sink.write = () => { throw privateError; };
+  if (mode === "async") sink.emit("error", privateError);
+  if (mode === "backpressure") sink.write = (line: string) => { sink.lines.push(line); return false; };
+  if (mode === "fallback") fallback.write = () => { throw privateError; };
+  const event = completion();
+  if (mode === "serialization") Object.defineProperty(event, "requestId", { get() { throw privateError; } });
+  for (let attempt = 0; attempt < 100; attempt++) expect(() => logger.completed(event)).not.toThrow();
+  expect(sink.lines.length).toBeLessThanOrEqual(1);
+  expect(fallback.lines.length).toBeLessThanOrEqual(1);
+  expect([...sink.lines, ...fallback.lines].join("")).not.toContain(privateError.message);
+  expect(() => fallback.emit("error", privateError)).not.toThrow();
+  if (mode === "backpressure") {
+    sink.emit("drain");
+    logger.completed(completion());
+    expect(sink.lines).toHaveLength(2);
+  }
+});
+
+test("only approved failures are serialized, with fixed messages and bounded output", async () => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink();
+  const logger = createRuntimeLogger(sink, new Sink());
+  const secret = "seeded-provider-code-and-stack";
+  const failure = { operation: "calendar.publications", errorCode: "calendar_data_unavailable", errorCategory: "provider_http_error", providerStatus: 503,
+    message: secret, stack: secret, cause: new Error(secret) };
+  logger.failed({ ...completion(), outcome: "error", failure, phases: Array.from({ length: 5000 }, () => ({ message: secret })) }, failure);
+  logger.completed({ ...completion(), outcome: "error", failure });
+  expect(sink.lines.map(line => JSON.parse(line).event)).toEqual(["operation.failed", "request.completed"]);
+  for (const line of sink.lines) {
+    expect(Buffer.byteLength(line)).toBeLessThanOrEqual(16 * 1024);
+    expect(line).not.toContain(secret);
+    expect(JSON.parse(line)).toMatchObject({ severity: "error", failure: { errorCode: "calendar_data_unavailable", providerStatus: 503 } });
+  }
+  logger.failed(completion(), { operation: secret, errorCode: secret, errorCategory: "unexpected_error" });
+  expect(sink.lines).toHaveLength(2);
+});
+
+test("a backed-up fallback never accumulates another write until drain", async () => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink(); const fallback = new Sink();
+  sink.write = () => { throw new Error("seeded-private-sink-error"); };
+  fallback.write = (line: string) => { fallback.lines.push(line); return false; };
+  const now = vi.spyOn(performance, "now");
+  const logger = createRuntimeLogger(sink, fallback);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    now.mockReturnValue(attempt * 60_001);
+    logger.completed(completion());
+  }
+  expect(fallback.lines).toHaveLength(1);
+  fallback.emit("drain");
+  now.mockReturnValue(6_000_100);
+  logger.completed(completion());
+  expect(fallback.lines).toHaveLength(2);
+});

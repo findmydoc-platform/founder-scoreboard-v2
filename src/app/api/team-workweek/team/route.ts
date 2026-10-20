@@ -9,6 +9,7 @@ import { selectVisibleTeamWorkweeks } from "@/features/team-workweek/model/publi
 import { apiError, authzError } from "@/lib/api-response";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import type { CalendarPublication } from "@/lib/credentials/types";
+import { observeCalendarRoute, recordCalendarDenial, recordCalendarFailure } from "@/lib/runtime-logging";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +30,17 @@ function calendarWorkweek(row: PublishedVersionRow): CalendarTeamWorkweek {
   };
 }
 
-export async function GET(request: NextRequest) {
+export function GET(request: NextRequest) {
+  return observeCalendarRoute(request, () => calendarResponse(request));
+}
+
+async function calendarResponse(request: NextRequest) {
   const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "calendar.read" });
-  if (!permission.ok) return authzError(permission);
+  if (!permission.ok) {
+    recordCalendarDenial(permission.code);
+    if (permission.status >= 500) recordCalendarFailure({ operation: "calendar.authorization", errorCode: "calendar_authorization_unavailable", errorCategory: "unexpected_error" });
+    return authzError(permission);
+  }
   const requestedRange = validateCalendarWorkweekRange(
     request.nextUrl.searchParams.get("from"),
     request.nextUrl.searchParams.get("to"),
@@ -48,7 +57,10 @@ export async function GET(request: NextRequest) {
     permission.calendar.readPublishedOwners(),
   ]);
   const { data, error } = publications;
-  if (error || owners.error) return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
+  if (error || owners.error) {
+    recordCalendarFailure({ operation: "calendar.publications", errorCode: "calendar_data_unavailable", errorCategory: "unexpected_error" });
+    return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
+  }
 
   const visible = selectVisibleTeamWorkweeks((data || []).map((row) => ({
     ownerProfileId: row.owner_profile_id,

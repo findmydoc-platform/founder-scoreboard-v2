@@ -153,6 +153,8 @@ AI agents handling this repository must inspect the GitHub Actions summary and t
 
 Use GitHub Actions job logs and the deployment summary to inspect deployment status. The workflow output URL is the operational source of truth for the deployed environment.
 
+The calendar runtime logging contract is documented in [Runtime logging](logging.md). The first implementation slice provides `x-request-id`, safe proxy/route summaries and explicit incomplete cache/provider coverage. Deployment, deployed severity classification and the actual existing retention window remain pending separate production acceptance.
+
 ## Supabase Auth
 
 Before production login works, configure Supabase Auth:

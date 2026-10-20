@@ -398,3 +398,51 @@ test("server components can read an adopted legacy session even when their cooki
   const { authorizeCredentialAction } = await publicModule();
   expect(await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" })).toMatchObject({ ok: true, user: { id: "user-1" } });
 });
+
+test("calendar diagnostic serialization failure cannot discard refreshed proxy cookies", async () => {
+  jar.set(cookieBase, encode(session(true)));
+  const incoming = request("/api/team-workweek/team");
+  await publicModule();
+  const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
+  const stringify = JSON.stringify;
+  const serialization = vi.spyOn(JSON, "stringify").mockImplementation((value, ...args) => {
+    if (value?.version === 1) throw new Error("seeded-private-serialization-error");
+    return stringify(value, ...args);
+  });
+  vi.doMock("server-only", () => ({}));
+  try {
+    const response = await proxy(incoming);
+    expect(response.status).toBe(200);
+    expect(refreshes).toBe(1);
+    const active = "legacy".padEnd(32, "0");
+    expect(response.cookies.get(`${cookieBase}-g-${active}`)?.httpOnly).toBe(true);
+    expect(response.headers.get("x-middleware-request-cookie")).toContain(`${cookieBase}-g-${active}=`);
+    expect(response.headers.get("x-request-id")).toMatch(/^[a-f0-9-]{36}$/);
+  } finally { serialization.mockRestore(); vi.doUnmock("server-only"); }
+});
+
+test("calendar correlation preserves refreshed cookies across the complete proxy and route path", async () => {
+  jar.set(cookieBase, encode(session(true)));
+  const incoming = request("/api/team-workweek/team", { headers: { "x-request-id": "forged", "x-founderops-proxy-observation": "forged" } });
+  const previous = network;
+  network = async (input, init) => new URL(input instanceof Request ? input.url : String(input)).pathname === "/rest/v1/team_workweek_publications"
+    ? Response.json([]) : previous(input, init);
+  await publicModule();
+  const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
+  const route = await importTestModule("src/app/api/team-workweek/team/route.ts", { "server-only": {} });
+  const forwarded = await proxy(incoming);
+  expect(refreshes).toBe(1);
+  const active = "legacy".padEnd(32, "0");
+  expect(forwarded.cookies.get(`${cookieBase}-g-${active}`)?.httpOnly).toBe(true);
+  const nextHeaders = new Headers(incoming.headers);
+  for (const name of forwarded.headers.get("x-middleware-override-headers").split(",")) {
+    const value = forwarded.headers.get(`x-middleware-request-${name}`);
+    if (value !== null) nextHeaders.set(name, value); else nextHeaders.delete(name);
+  }
+  const downstream = new NextRequest(incoming.url, { headers: nextHeaders });
+  const response = await route.GET(downstream);
+  expect(response.status).toBe(200);
+  expect(response.headers.get("x-request-id")).toBe(forwarded.headers.get("x-request-id"));
+  expect(response.headers.has("x-founderops-proxy-observation")).toBe(false);
+  expect(await response.json()).toMatchObject({ workweeks: [], publishedOwnerIds: [] });
+});
