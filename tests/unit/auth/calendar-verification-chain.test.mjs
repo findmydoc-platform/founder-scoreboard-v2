@@ -63,6 +63,38 @@ function request(jwt = token(), search = "") {
   return new NextRequest(url, { headers: { authorization: `Bearer ${jwt}` } });
 }
 
+async function concurrentVerification(route, jwt) {
+  const directoryEntered = Promise.withResolvers();
+  const waiterAdmitted = Promise.withResolvers();
+  const directoryReleased = Promise.withResolvers();
+  const calls = [];
+  const fetchProtocol = globalThis.fetch;
+  delayDirectory = () => { directoryEntered.resolve(); return directoryReleased.promise; };
+  vi.stubGlobal("fetch", async (input, init) => {
+    const response = await fetchProtocol(input, init);
+    const url = new URL(input instanceof Request ? input.url : input);
+    if (url.pathname.endsWith("/rpc/workspace_linking_session_allowed") && counts.session === 2) {
+      // The returned response's promise continuations reach membership before this next turn.
+      setImmediate(waiterAdmitted.resolve);
+    }
+    return response;
+  });
+  try {
+    calls.push(route.GET(request(jwt)));
+    await Promise.race([directoryEntered.promise, calls[0].then(() => { throw new Error("Initiator completed before Directory arrived"); })]);
+    calls.push(route.GET(request(jwt)));
+    await Promise.race([waiterAdmitted.promise, calls[1].then(() => { throw new Error("Waiter completed before session admission"); })]);
+    expect(counts.directory).toBe(1);
+    directoryReleased.resolve();
+    return await Promise.all(calls);
+  } finally {
+    directoryReleased.resolve();
+    await Promise.allSettled(calls);
+    delayDirectory = null;
+    vi.stubGlobal("fetch", fetchProtocol);
+  }
+}
+
 beforeEach(() => {
   vi.resetModules();
   output = [];
@@ -200,12 +232,7 @@ test("changed token, session and scope cannot share membership evidence", async 
 
 test("equivalent concurrent misses share membership but retain distinct permits", async () => {
   const route = await application(); const jwt = token();
-  let release;
-  delayDirectory = () => new Promise(resolve => { release = resolve; });
-  const calls = [route.GET(request(jwt)), route.GET(request(jwt))];
-  for (let attempts=0; attempts<100 && (!release || counts.session !== 2); attempts++) await new Promise(resolve => setImmediate(resolve));
-  expect(release).toBeTypeOf("function"); release();
-  const responses = await Promise.all(calls);
+  const responses = await concurrentVerification(route, jwt);
   expect(responses.map(response => response.status)).toEqual([200, 200]);
   expect(new Set(responses.map(response => response.headers.get("x-request-id"))).size).toBe(2);
   expect(output.filter(event => event.event === "request.completed").map(event => event.requestId).sort())
@@ -312,12 +339,7 @@ test("an already issued capability cannot outlive original evidence", async () =
 
 test("shared verification failure neither allows callers nor poisons the next attempt", async () => {
   const route = await application(); const jwt = token(); directoryFailure = true;
-  let release;
-  delayDirectory = () => new Promise(resolve => { release = resolve; });
-  const calls = [route.GET(request(jwt)), route.GET(request(jwt))];
-  for (let attempts=0; attempts<100 && (!release || counts.session !== 2); attempts++) await new Promise(resolve => setImmediate(resolve));
-  expect(release).toBeTypeOf("function"); release();
-  expect((await Promise.all(calls)).map(response => response.status)).toEqual([503, 503]);
+  expect((await concurrentVerification(route, jwt)).map(response => response.status)).toEqual([503, 503]);
   expect(counts.directory).toBe(1);
   const summaries = output.filter(event => event.event === "request.completed");
   expect(summaries.map(event => event.membership.result).sort()).toEqual(["coalesced", "miss"]);
