@@ -1,10 +1,10 @@
 # Runtime logging contract
 
-Status: calendar pilot implemented; deployment and production acceptance pending.
+Status: calendar pilot deployed; bounded production acceptance passed on 2026-10-20.
 
 The pilot covers `GET /api/team-workweek/team`, its existing session proxy, and the private credential/provider transports it reaches. One route completion links the response ID to the safe proxy summary, membership evidence, actual HTTP-attempt counts, and bounded local phase intervals. It preserves the credential and cookie chain.
 
-The implementation completes the local scope of [#518](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/518) and [#519](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/519). No deployment or production configuration change is included. Real-request correlation, Vercel sink classification, and the project's actual existing retention window still require a separately authorized workflow deployment and acceptance check.
+The implementation completes the scope of [#518](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/518) and [#519](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/519). The production acceptance below records real-request correlation, observed Vercel log classification, and the existing retention entitlement. Its results apply to the inspected deployment and bounded sample.
 
 ## Decisions and rationale
 
@@ -128,6 +128,25 @@ Use Freeman and Pryce's Outside-In TDD and Kent Beck's Test Desiderata when impl
 5. Fail the logger synchronously, during serialization, asynchronously at the sink, and under backpressure. Preserve status, body, thrown application error, cookie changes, cache lifetime, dispatch/retry count, and permit cleanup. Emit no recursive failure storm.
 6. Exercise late failures, both sides of the slow threshold, deterministic sampling, and truncation. Compact completions and required detailed observations must survive the production logger level.
 7. After a separately authorized deployment, inspect real calendar requests. Verify one completion record explains the proxy and route work, cache outcome, safe failures, and declared external-call coverage; verify severity classification and actual retention. Synthetic local timings do not replace production evidence.
+
+## Production acceptance on 2026-10-20
+
+Result: **passed for the bounded production sample**. The active `founder-ops` production deployment was `dpl_7Ss9nCMomXPAw6WdZ4YJSAQk1BXV`, built from commit `9546c8db60085973b2a61fc2bd7cf30ebc9547d5`. The successful [production workflow](https://github.com/findmydoc-platform/founder-scoreboard-v2/actions/runs/39426408444) recorded the same deployment URL that Vercel reported as READY and assigned to the production domain.
+
+Checks ran from 13:17:29 to 13:24:33 UTC. There were 18 targeted calendar GETs: one calendar UI load, ten sequential calls, three parallel calls, one invalid range, one anonymous navigation plus a header-observed anonymous GET in a separate browser context, and one authenticated call after the anonymous check. Response headers were captured for 17 requests. Full application log messages were read through the verified `vercel-findmydoc` CLI profile because the connector shortened longer messages. Queries used the exact deployment, test window, and captured request IDs.
+
+| Check | Result and evidence | Remaining gap |
+| --- | --- | --- |
+| Success and correlation | All 15 header-observed successful calls returned 200. Each of the 17 captured response IDs matched exactly one proxy completion and one route completion, with complete proxy-to-route correlation. IDs were distinct; no internal diagnostic headers were exposed. | None in the inspected sample. |
+| Cache behavior | Two misses and 14 hits across two opaque cache owners. Hits dispatched no Directory membership verification. Observed evidence age plus remaining lifetime stayed at 900,000 ms. | Expiry, eviction, bypass, and coalesced verification did not occur. Cache-owner changes alone do not establish a physical instance change or a miss cause. |
+| Parallel isolation | Three concurrent calls returned 200 with separate IDs and matching summaries; all used existing membership evidence. | No shared in-flight verification occurred in this warm sample. |
+| Invalid input and missing session | Invalid range returned 400 with `invalid_input` at `info`. The separate anonymous context returned 401 with `denied` at `info`, unavailable membership evidence, and zero scoped outbound attempts. The existing authenticated context subsequently returned 200. | No role or credential changes were made to generate other denials. |
+| Output bounds and privacy | All 34 inspected events parsed as JSON and matched the approved field sets. Largest event: 8,325 UTF-8 bytes; maximum 46 phases and 6,774 phase-detail bytes. No disallowed fields or credential, identity, URL, or private-host patterns were found in those events. | This sample does not establish absence of sensitive data in all application logs. |
+| Timing and outbound attempts | Durations were finite and nonnegative; observed processing matched route duration plus observed proxy duration. Scoped attempt totals matched operation counts and retained complete HTTP phases. OIDC internals remained explicitly excluded. | Browser elapsed time is not the application's observed processing time. |
+| Detail selection and Vercel level | All 34 selection decisions matched the contract: eight slow, two sampled, two non-success, and 22 compact completions. Application `info` and `warn` both appeared as Vercel log-line `info`, consistent with stdout delivery. Search the structured `severity` field to find slow application warnings. | No application error or sampled fast-hit route detail occurred; their production classification was not exercised. No faults were injected. |
+| Existing retention | Read-only team configuration confirmed active Pro billing, enabled `observabilityBase` with quantity 1 and its Observability entitlement. The Observability Plus disabled-project list was empty. This establishes the existing **30-day runtime-log retention** under the [published limits](https://vercel.com/docs/logs/runtime#limits) and [project inclusion rules](https://vercel.com/docs/observability/observability-plus#managing-projects). | Entitlement evidence, not a 30-day aging experiment. Recheck after plan or project-inclusion changes. |
+
+The run used calendar GETs and read-only platform inspection. It changed no planning data, roles, credentials, Supabase settings, retention settings, or deployment configuration, performed no cache purge or lifetime change, and triggered no deployment. Raw logs stayed in memory; only these aggregate results are retained. Automated controlled tests remain the evidence for the unobserved cache boundaries, provider failures, logger failures, and backpressure. This acceptance found no confirmed application defect; #517, #518, and #519 remain closed.
 
 ## Synthetic output example
 
