@@ -3,6 +3,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
+import { observeCalendarPhase, recordCalendarResult } from "../../runtime-logging";
 import { workspaceDataFetch } from "./workspace-data-fetch";
 
 type Cookie = { name: string; value: string; options?: CookieOptions };
@@ -108,7 +109,11 @@ export async function getServerAuthSupabase() { return (await cookieSession()).c
 
 export async function maintainSessionProxy(request: NextRequest) {
   const context = createCookieContext({ getAll: () => request.cookies.getAll(), set: (name, value) => request.cookies.set(name, value) }, false, request);
-  if (context.client) await context.client.auth.getUser();
+  if (context.client) await observeCalendarPhase("supabase.user", async () => {
+    const result = await context.client!.auth.getUser();
+    if (result.error && (result.error.status || 0) >= 500) recordCalendarResult("supabase.user", result.error);
+    return result;
+  });
   // Construct after the awaited SDK call so downstream request cookies and returned cookies agree.
   return context.complete(NextResponse.next({ request }));
 }
