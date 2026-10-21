@@ -63,7 +63,7 @@ it("calendar authorization retains PostgREST JWT, individual permit and session 
       if (url.hostname === "iamcredentials.googleapis.com") return Response.json({ accessToken: "synthetic-reader", expireTime: new Date(Date.now()+3600000).toISOString() });
       if (url.hostname === "admin.googleapis.com") { membershipReads++; return Response.json({ isMember: true }); }
       if (url.origin !== new URL(local.API_URL).origin) throw new Error("Unexpected external provider in calendar test");
-      if (url.pathname === "/rest/v1/rpc/workspace_issue_permit") permitPaths.push((await request.clone().json()).p_path);
+      if (url.pathname === "/rest/v1/rpc/workspace_calendar_prepare") permitPaths.push((await request.clone().json()).p_path);
       if (["/rest/v1/profiles", "/rest/v1/team_workweek_publications"].includes(url.pathname)) dataPaths.push(url.pathname);
       const response = await originalFetch(request);
       if (url.pathname === "/rest/v1/profiles" && revokeAfterProfileRead) {

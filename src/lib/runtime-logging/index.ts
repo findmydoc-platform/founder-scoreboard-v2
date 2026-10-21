@@ -109,7 +109,7 @@ export function recordCalendarResult(operation: SafeOperation, error: unknown, e
   try {
     // Only known authority results are denials; other RPC errors remain failures.
     const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
-    const expectedDenial = (["calendar.profile", "workspace.permit.issue"].includes(operation) && code === "42501")
+    const expectedDenial = (["calendar.profile", "workspace.permit.issue", "workspace.dispatch.prepare"].includes(operation) && code === "42501")
       || (operation === "calendar.profile" && code === "workspace_access_denied");
     if (error && !expectedDenial) recordCalendarFailure({ operation, errorCode, errorCategory: "provider_http_error" });
   } catch { /* Diagnostics must not change the SDK result. */ }
@@ -124,7 +124,7 @@ export function observeCalendarHttp(operation: SafeOperation, dispatch: () => Pr
     const response = await dispatch();
     const expectedAuthDenial = ["supabase.user", "supabase.refresh"].includes(operation) && response.status >= 400 && response.status < 500;
     // Let the existing SDK result distinguish an authority denial from a provider failure.
-    const deferredRpcDenial = ["calendar.profile", "workspace.permit.issue"].includes(operation) && response.status === 403;
+    const deferredRpcDenial = ["calendar.profile", "workspace.permit.issue", "workspace.dispatch.prepare"].includes(operation) && response.status === 403;
     if (!response.ok && !expectedAuthDenial && !deferredRpcDenial) recordCalendarFailure({ operation, errorCode: "provider_request_failed", errorCategory: "provider_http_error", providerStatus: response.status });
     return response;
   }, "http");
