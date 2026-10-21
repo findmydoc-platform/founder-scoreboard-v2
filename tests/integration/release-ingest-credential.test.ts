@@ -7,12 +7,13 @@ import { importTestModule } from "../helpers/vitest-module.mjs";
 import { platformReleaseFixture } from "../helpers/platform-release-fixture.mjs";
 import { canonicalPlatformReleaseManifest } from "../../src/features/platform-releases/model/platform-release-manifest";
 
-it("actual release ingest retains one immutable stored release and notification through identical retry and changed-manifest conflict", async () => {
+it.each([undefined, "Klarere Terminsuche"])("actual release ingest retains title %s through identical retry and changed-manifest conflict", async (title) => {
   const local = await localSupabaseStatus();
   const db = new pg.Client(local.DB_URL);
   await db.connect();
   const profileId = `release-ingest-${randomUUID()}`, version = `v999.0.${Date.now()}`;
   const manifest = platformReleaseFixture();
+  if (title !== undefined) manifest.title = title;
   manifest.version = version;
   for (const component of manifest.components) component.release = `https://github.com/${component.repository}/releases/tag/${version}`;
   manifest.manifestDigest = createHash("sha256").update(canonicalPlatformReleaseManifest(manifest)).digest("hex");
@@ -36,7 +37,9 @@ it("actual release ingest retains one immutable stored release and notification 
     const first = await POST(request()), replay = await POST(request());
     expect(first.status).toBe(201); expect(replay.status).toBe(200);
     expect(await replay.json()).toMatchObject({ ok: true, replayed: true });
-    const changed = { ...manifest, summary: "Andere gültige Zusammenfassung." };
+    const changed = title === undefined
+      ? { ...manifest, summary: "Andere gültige Zusammenfassung." }
+      : { ...manifest, title: "Passende Termine schneller finden" };
     changed.manifestDigest = createHash("sha256").update(canonicalPlatformReleaseManifest(changed)).digest("hex");
     expect((await POST(request(changed))).status).toBe(409);
     expect((await POST(request(manifest, "wrong"))).status).toBe(401);

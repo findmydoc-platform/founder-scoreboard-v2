@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
 import { platformReleaseRequest } from "../model/platform-release-api";
-import { formatReleaseDate, type PlatformReleaseRecord } from "../model/platform-release-model";
+import { formatReleaseDate, releaseTitle, type PlatformReleaseRecord } from "../model/platform-release-model";
 import { platformReleaseSeed } from "../model/platform-release-seed";
 
 type Props = {
@@ -30,6 +30,10 @@ export function PlatformReleaseSidebarCard({ compact = false, mobile = false, on
   }, []);
 
   if (!release) return null;
+  return <PlatformReleaseSidebarCardView release={release} compact={compact} mobile={mobile} onNavigate={onNavigate} />;
+}
+
+export function PlatformReleaseSidebarCardView({ release, compact = false, mobile = false, onNavigate }: Props & { release: PlatformReleaseRecord }) {
   const unread = !release.seenAt;
   const href = `/team/platform-releases/${encodeURIComponent(release.version)}`;
 
@@ -39,7 +43,7 @@ export function PlatformReleaseSidebarCard({ compact = false, mobile = false, on
         href={href}
         data-tour-id="current-platform-release"
         title={`Neu auf der Plattform · ${release.version}`}
-        aria-label={`Neu auf der Plattform: ${release.summary}`}
+        aria-label={`Neu auf der Plattform: ${releaseTitle(release)}`}
         className="relative mx-auto grid h-10 w-10 place-items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-700 transition hover:bg-blue-100"
       >
         <Sparkles size={18} aria-hidden="true" />
@@ -66,7 +70,8 @@ export function PlatformReleaseSidebarCard({ compact = false, mobile = false, on
           <ChevronRight size={16} className="shrink-0 text-blue-600" aria-hidden="true" />
         </span>
         <span className="mt-1 block text-xs font-medium leading-4 text-blue-700">{release.version} · {formatReleaseDate(release.publishedAt)}</span>
-        <span className={`mt-2 block text-xs leading-4 text-slate-600 ${mobile ? "line-clamp-3" : "line-clamp-4"}`}>{release.summary}</span>
+        <span className="mt-2 block break-words text-sm font-semibold leading-5">{releaseTitle(release)}</span>
+        <span className="mt-2 block break-words text-xs leading-4 text-slate-600">{release.summary}</span>
       </div>
     </Link>
   );

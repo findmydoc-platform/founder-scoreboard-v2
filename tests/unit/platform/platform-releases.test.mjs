@@ -109,6 +109,36 @@ test("Manifest v3 supports registered application releases and optional deployme
   assert.equal(manifestContract.validatePlatformReleaseManifest({ ...manifest, changes: [{ ...manifest.changes[0], componentKeys: ["dashboard"] }] }).ok, false);
 });
 
+test("Manifest v3 accepts a short digest-bound title without rewriting historical manifests", () => {
+  const legacy = applicationFixture();
+  const before = manifestContract.canonicalPlatformReleaseManifest(legacy);
+  assert.equal(manifestContract.validatePlatformReleaseManifest(legacy).ok, true);
+  assert.equal(Object.hasOwn(legacy, "title"), false);
+  assert.equal(manifestContract.canonicalPlatformReleaseManifest(legacy), before);
+
+  const titled = { ...legacy, title: "Klinikgruppen im Dashboard vorbereitet" };
+  assert.equal(manifestContract.validatePlatformReleaseManifest(titled).ok, true);
+  assert.notEqual(manifestContract.canonicalPlatformReleaseManifest(titled), before);
+  assert.notEqual(
+    manifestContract.canonicalPlatformReleaseManifest({ ...titled, title: "Klinikwechsel vorbereitet" }),
+    manifestContract.canonicalPlatformReleaseManifest(titled),
+  );
+  for (const title of ["", "   ", "Zeile eins\nZeile zwei", "a".repeat(66), null, 42]) {
+    assert.equal(manifestContract.validatePlatformReleaseManifest({ ...legacy, title }).ok, false);
+  }
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...legacy, title: "a".repeat(65) }).ok, true);
+});
+
+test("Titled releases enforce compact summaries and change titles while keeping legacy limits", () => {
+  const legacy = applicationFixture();
+  const long = { ...legacy, summary: "a".repeat(161), changes: [{ ...legacy.changes[0], title: "a".repeat(66) }] };
+  assert.equal(manifestContract.validatePlatformReleaseManifest(long).ok, true);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...long, title: "Klinikgruppen" }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...legacy, title: "Klinikgruppen", summary: "a".repeat(161) }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...legacy, title: "Klinikgruppen", changes: long.changes }).ok, false);
+  assert.equal(manifestContract.validatePlatformReleaseManifest({ ...legacy, title: "Klinikgruppen", summary: "a".repeat(160), changes: [{ ...legacy.changes[0], title: "a".repeat(65) }] }).ok, true);
+});
+
 test("Manifest v3 binds change provenance to the declared components", () => {
   const application = applicationFixture();
   const dashboardSha = "b".repeat(40);
