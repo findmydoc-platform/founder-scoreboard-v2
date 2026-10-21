@@ -24,7 +24,8 @@ async function protocol(input, init) {
   if (path.endsWith("/.well-known/jwks.json")) return Response.json({ keys: [jwk] });
   if (path === "/auth/v1/user") { userResponses++; return liveUser ? liveUser(userResponses) : Response.json({ id: userId, aud: "authenticated" }); }
   if (path === "/auth/v1/settings") return Response.json({ external: { google: true } });
-  if (path.endsWith("/rpc/workspace_access_context")) return Response.json({ mode, linkingEnforced: enforced,
+  if (path.endsWith("/rpc/workspace_access_context") || path.endsWith("/rpc/workspace_calendar_entry")) return Response.json({ mode, linkingEnforced: enforced,
+    sessionAllowed: (mode === "google" || (mode === "linking" && enforced)) ? true : null, sessionError: false,
     userId, profileId: "calendar-member", linked: true, identity: { sub: "google-member", email: "member@findmydoc.eu",
       email_verified: true, iss: "https://accounts.google.com", custom_claims: { hd: "findmydoc.eu" } } });
   if (path.endsWith("/rpc/workspace_linking_session_allowed") || path.endsWith("/rpc/workspace_session_allowed")) return Response.json(true);
@@ -80,7 +81,8 @@ test("a viewer reads Calendar with grouped preparation while preserving user JWT
   expect(await authorized.calendar.readSnapshot("2026-10-21")).toEqual({ data: { publishedOwnerIds: [], publications: [] }, error: null });
   expect(preparations).toHaveLength(2);
   expect(userResponses).toBe(3);
-  expect(attempts.filter(path => path.endsWith("/rpc/workspace_access_context"))).toHaveLength(1);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_access_context"))).toHaveLength(0);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_calendar_entry"))).toHaveLength(1);
   expect(attempts.filter(path => path.endsWith("/rpc/workspace_issue_permit"))).toHaveLength(0);
   expect(releases).toHaveLength(2);
   for (const [index, request] of dispatched.entries()) {

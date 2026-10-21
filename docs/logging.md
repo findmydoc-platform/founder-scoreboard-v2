@@ -55,6 +55,10 @@ Classify failures where the operation is known, before existing code collapses s
 
 For example, distinguish failure of `supabase.user`, `workspace.context`, `workspace.permit.issue`, `workspace.permit.release`, `directory.sts`, `directory.iam`, and `directory.membership`. These are static operation identifiers, not URLs. A failed cleanup remains observable even when the existing application intentionally suppresses its exception.
 
+Calendar entry now reports the fixed `workspace.entry` operation for its grouped Workspace-context and session-admission request. Count its HTTP attempt once. Its logical checks do not add `workspace.context` or `workspace.session` attempts. Separate context requests by other actions retain their existing identifiers. A malformed grouped response is an `invalid_response`; an admission-provider failure becomes observable only after the existing identity and OAuth checks have passed. Request arguments and provider details remain excluded.
+
+In the entry-only change, an ordinary warm enforced-linking Cookie load uses 13 observed attempts rather than 14, including all four live `supabase.user` attempts. Google-only mode retains its settings attempt and uses 14 rather than 15. These intermediate budgets assume warm asymmetric signing keys, a membership hit, one snapshot request and no refresh or retry. They do not describe the final combined optimization or prove a latency improvement. Legacy and unenforced linking replace a context attempt without reducing their total. Historical measurements below retain their original implementation context.
+
 Expected authorization denials remain denied outcomes with the existing safe code. They are not automatically unexpected application errors. An internal error code does not change the public error body or status. Any future change to that public contract requires its own decision and focused tests.
 
 Use Pino redaction as additional protection after the approved-field projection. Never pass raw `Error` objects to Pino's default serializer or a fallback logger.
