@@ -110,6 +110,7 @@ export type PlatformReleaseManifestV2 = PlatformReleaseManifestBase & {
 
 export type PlatformReleaseManifestV3 = PlatformReleaseManifestBase & {
   schemaVersion: 3;
+  title?: string;
   releaseMode: "application" | "platform";
   notificationMode: "standard" | "silent";
   source: { kind: "native" } | { kind: "github-release-import"; importedAt: string };
@@ -307,11 +308,17 @@ export function validatePlatformReleaseManifest(value: unknown): ValidationResul
   if (!isObject(value)) return { ok: false, error: "Manifest muss ein JSON-Objekt sein." };
   if (value.schemaVersion !== 2 && value.schemaVersion !== 3) return { ok: false, error: "Nur Manifest-Schema v2 und v3 werden unterstützt." };
   const schemaVersion = value.schemaVersion;
+  const hasTitle = schemaVersion === 3 && Object.hasOwn(value, "title");
+  const editorialLine = (text: unknown, maximum: number) => typeof text === "string"
+    && Boolean(text.trim()) && text.length <= maximum && !/[\r\n]/.test(text);
+  if (hasTitle && !editorialLine(value.title, 65)) return { ok: false, error: "Titel muss eine nicht leere Zeile mit höchstens 65 Zeichen sein." };
   if (typeof value.version !== "string" || !/^v\d+\.\d+\.\d+$/.test(value.version)) return { ok: false, error: "Version muss dem Format vX.Y.Z entsprechen." };
   if (typeof value.summary !== "string" || !value.summary.trim() || value.summary.length > 1000) return { ok: false, error: "Zusammenfassung fehlt oder ist zu lang." };
+  if (hasTitle && !editorialLine(value.summary, 160)) return { ok: false, error: "Kurzfassung muss eine nicht leere Zeile mit höchstens 160 Zeichen sein." };
   if (!isStringArray(value.highlights, 6) || value.highlights.length < 1) return { ok: false, error: "Ein bis sechs Highlights sind erforderlich." };
   const changes = value.changes;
   if (!Array.isArray(changes) || changes.length > 500 || !changes.every(schemaVersion === 2 ? validChangeV2 : validChangeV3)) return { ok: false, error: "Änderungen sind ungültig." };
+  if (hasTitle && !changes.every((change) => editorialLine(change.title, 65) && editorialLine(change.summary, 360))) return { ok: false, error: "Änderungstitel oder Beschreibung überschreitet die redaktionellen Grenzen." };
   const changeIds = new Set(changes.map((change) => (change as PlatformReleaseChangeV2 | PlatformReleaseChangeV3).id));
   if (value.highlights.some((id) => !changeIds.has(id))) return { ok: false, error: "Jedes Highlight muss auf eine Änderung verweisen." };
   const components = value.components;

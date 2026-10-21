@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { platformReleaseRequest } from "../model/platform-release-api";
 import { platformReleaseReferenceUrl } from "../model/platform-release-manifest";
-import { formatReleaseDate, highlightedChanges, releaseKindLabel, type PlatformReleasePlanningLink, type PlatformReleaseRecord } from "../model/platform-release-model";
+import { formatReleaseDate, highlightedChanges, releaseKindLabel, releaseTitle, type PlatformReleasePlanningLink, type PlatformReleaseRecord } from "../model/platform-release-model";
 import { taskDetailHrefWithReturnTo } from "@/features/tasks/model/task-detail-return-navigation";
 
 type Props = {
@@ -44,7 +44,7 @@ function PlanningLinks({ release }: { release: PlatformReleaseRecord }) {
         </details>
       ) : null}
       {!links.length ? <p className="text-sm leading-6 text-slate-500">Noch keine Planungszuordnung erkannt.</p> : null}
-      <p className="text-xs leading-5 text-slate-400">Über Pull Requests und Issues automatisch zugeordnet</p>
+      <p className="text-xs leading-5 text-slate-500">Über Pull Requests und Issues automatisch zugeordnet</p>
     </div>
   );
 }
@@ -147,7 +147,9 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
   const [allChangesOpen, setAllChangesOpen] = useState(false);
   const [technicalOpen, setTechnicalOpen] = useState(technicalInitiallyOpen);
   const highlights = highlightedChanges(release);
-  const nonHighlights = release.manifest.changes.filter((change) => !release.manifest.highlights.includes(change.id));
+  const visibleHighlights = highlights.slice(0, 3);
+  const visibleHighlightIds = new Set(visibleHighlights.map((change) => change.id));
+  const remainingChanges = release.manifest.changes.filter((change) => !visibleHighlightIds.has(change.id));
 
   useEffect(() => {
     if (release.seenAt || !release.notificationId) return;
@@ -175,7 +177,8 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-blue-700">
               <span>{releaseKindLabel(release)} {release.version}</span><span className="text-slate-400">•</span><span className="normal-case tracking-normal text-slate-500">{formatReleaseDate(release.publishedAt)}</span>
             </div>
-            <h1 className="mt-3 max-w-3xl text-[24px] font-semibold leading-[1.18] tracking-tight text-slate-950 sm:text-4xl sm:leading-tight">{release.summary}</h1>
+            <h1 className="mt-3 max-w-3xl break-words text-[24px] font-semibold leading-[1.18] tracking-tight text-slate-950 sm:text-4xl sm:leading-tight">{releaseTitle(release)}</h1>
+            <p className="mt-4 max-w-3xl break-words text-base leading-7 text-slate-600">{release.summary}</p>
             <ul className="mt-5 space-y-2 text-sm leading-6 text-slate-600">
               {highlights.slice(0, 6).map((change) => <li key={change.id} className="flex gap-3"><span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" /><span>{change.title}</span></li>)}
             </ul>
@@ -183,16 +186,16 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
 
           <section className="pt-7">
             <h2 className="text-xl font-semibold text-slate-950">Was sich verbessert hat</h2>
-            <div className="mt-6">{highlights.slice(0, 3).map((change) => <ChangeEntry key={change.id} release={release} change={change} />)}</div>
+            <div className="mt-6">{visibleHighlights.map((change) => <ChangeEntry key={change.id} release={release} change={change} />)}</div>
           </section>
 
-          <div className="mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
+          {remainingChanges.length ? <div className="mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
             <button type="button" onClick={() => setAllChangesOpen((open) => !open)} aria-expanded={allChangesOpen} className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left hover:bg-slate-50 sm:px-5">
-              <span><span className="block text-sm font-semibold text-blue-800">Alle Änderungen und Fehlerbehebungen anzeigen</span><span className="mt-1 block text-xs text-slate-500">{Math.max(nonHighlights.length, release.manifest.changes.length - 3)} weitere Einträge</span></span>
+              <span><span className="block text-sm font-semibold text-blue-800">Alle Änderungen und Fehlerbehebungen anzeigen</span><span className="mt-1 block text-xs text-slate-500">{remainingChanges.length} weitere Einträge</span></span>
               <ChevronDown size={18} className={`shrink-0 text-blue-700 transition ${allChangesOpen ? "rotate-180" : ""}`} />
             </button>
-            {allChangesOpen ? <div className="border-t border-slate-200 px-4 py-2 sm:px-5">{release.manifest.changes.slice(3).map((change) => <ChangeEntry key={change.id} release={release} change={change} />)}</div> : null}
-          </div>
+            {allChangesOpen ? <div className="border-t border-slate-200 px-4 py-2 sm:px-5">{remainingChanges.map((change) => <ChangeEntry key={change.id} release={release} change={change} />)}</div> : null}
+          </div> : null}
 
           <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
             <button type="button" onClick={() => setTechnicalOpen((open) => !open)} aria-expanded={technicalOpen} className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left hover:bg-slate-50 sm:px-5">
