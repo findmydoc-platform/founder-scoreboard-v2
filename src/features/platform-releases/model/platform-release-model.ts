@@ -48,6 +48,12 @@ export function highlightedChanges(release: PlatformReleaseRecord) {
   return release.manifest.highlights.map((id) => changes.get(id)).filter(Boolean) as PlatformReleaseManifest["changes"];
 }
 
+export function releaseTitle(release: PlatformReleaseRecord) {
+  return release.manifest.schemaVersion === 3 && release.manifest.title?.trim()
+    ? release.manifest.title.trim()
+    : `findmydoc ${release.version}`;
+}
+
 export function releaseKindLabel(release: PlatformReleaseRecord) {
   return release.manifest.schemaVersion === 3 && release.manifest.releaseMode === "application"
     ? "Anwendungs-Release"

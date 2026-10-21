@@ -3,7 +3,7 @@
 import { ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { compareReleaseVersions, formatReleaseDate, isMajorRelease, releaseApplicationNames, releaseQuarter, type PlatformReleaseRecord } from "../model/platform-release-model";
+import { compareReleaseVersions, formatReleaseDate, isMajorRelease, releaseApplicationNames, releaseQuarter, releaseTitle, type PlatformReleaseRecord } from "../model/platform-release-model";
 
 type Props = { releases: PlatformReleaseRecord[] };
 type Filter = "all" | "Website" | "Clinic Dashboard" | "other";
@@ -18,7 +18,7 @@ export function PlatformReleaseArchive({ releases }: Props) {
     const matchesFilter = filter === "all"
       || filter === "other" && applications.some((application) => application !== "Website" && application !== "Clinic Dashboard")
       || applications.includes(filter);
-    const searchText = `${release.version} ${release.summary} ${release.manifest.changes.map((change) => `${change.title} ${change.summary}`).join(" ")}`.toLowerCase();
+    const searchText = `${release.version} ${releaseTitle(release)} ${release.summary} ${release.manifest.changes.map((change) => `${change.title} ${change.summary}`).join(" ")}`.toLowerCase();
     return matchesFilter && searchText.includes(query.trim().toLowerCase());
   }).slice(0, visibleCount);
   const grouped = filtered.reduce<Map<string, PlatformReleaseRecord[]>>((groups, release) => {
@@ -65,7 +65,7 @@ export function PlatformReleaseArchive({ releases }: Props) {
                       </span>
                       <span className="mt-1 block text-sm text-slate-500">{formatReleaseDate(release.publishedAt)}</span>
                     </span>
-                    <span className="text-sm font-medium leading-6 text-slate-800">{release.summary}</span>
+                    <span className="min-w-0 break-words"><span className="block text-sm font-semibold leading-6 text-slate-900">{releaseTitle(release)}</span><span className="mt-1 block text-sm leading-6 text-slate-600">{release.summary}</span></span>
                     <span className="flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-blue-700 sm:block">
                       {releaseApplicationNames(release).map((application) => <span key={application} className="sm:block">{application}</span>)}
                     </span>
