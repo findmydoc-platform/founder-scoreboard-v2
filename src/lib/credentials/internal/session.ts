@@ -82,11 +82,69 @@ async function workspaceContext(service: SupabaseClient, userId: string): Promis
   return { linkingEnforced: false, ...result.data };
 }
 
+type CalendarEntry = AccessContext & { sessionAllowed: boolean | null; sessionError: boolean };
+
+async function calendarEntry(service: SupabaseClient, userId: string, sessionId: string): Promise<CalendarEntry> {
+  const result = await observeCalendarResultPhase("workspace.entry", () => service.rpc("workspace_calendar_entry", { p_user_id: userId, p_session_id: sessionId }));
+  const context = result.data;
+  if (result.error || !context || !["legacy", "linking", "google"].includes(context.mode)
+    || typeof context.linkingEnforced !== "boolean"
+    || !(context.userId === null || typeof context.userId === "string")
+    || !(context.profileId === null || typeof context.profileId === "string")
+    || !(context.linked === null || typeof context.linked === "boolean")
+    || !(context.identity === null || (typeof context.identity === "object" && !Array.isArray(context.identity)))) {
+    if (!result.error) recordCalendarFailure({ operation: "workspace.entry", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+    throw unavailable();
+  }
+  return { linkingEnforced: false, ...result.data };
+}
+
 type SessionBinding = {
   token: string; userId: string; sessionId: string; profileId: string; deadline: number;
-  workspace: boolean; url: string; service: SupabaseClient; auth: SupabaseClient;
+  workspace: boolean; calendar: boolean; url: string; service: SupabaseClient; auth: SupabaseClient;
   mode: AccessContext["mode"]; linkingEnforced: boolean; subject?: string; email?: string;
 };
+
+async function dispatchCalendarRequest(binding: SessionBinding, request: Request, url: URL, assertDispatch?: () => void) {
+  if (Date.now() >= binding.deadline) throw loginRequired();
+  const permit = randomBytes(32).toString("base64url");
+  const hash = digest(permit);
+  let cleanup = true;
+  try {
+    const prepared = await observeCalendarResultPhase("workspace.dispatch.prepare", () => binding.service.rpc("workspace_calendar_prepare", {
+      p_hash: hash, p_user_id: binding.userId, p_jwt_hash: digest(binding.token), p_method: request.method,
+      p_path: url.pathname.slice("/rest/v1".length), p_session_id: binding.sessionId,
+      p_profile_id: binding.profileId, p_mode: binding.mode, p_linking_enforced: binding.linkingEnforced,
+      p_subject: binding.subject ?? null, p_email: binding.email ?? null,
+    }).abortSignal(AbortSignal.timeout(5000)));
+    if (prepared.error) {
+      // A rejected transaction issued no permit; other failures may have lost its response.
+      if (prepared.error.code === "42501") { cleanup = false; throw denied(); }
+      // Abort is terminal to the private SDK, including an enclosing GET retry loop.
+      throw new DOMException("Calendar dispatch preparation failed", "AbortError");
+    }
+    if (typeof prepared.data !== "boolean" || prepared.data !== binding.workspace) {
+      recordCalendarFailure({ operation: "workspace.dispatch.prepare", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+      // Abort is terminal to the private SDK, including an enclosing GET retry loop.
+      throw new DOMException("Calendar dispatch preparation failed", "AbortError");
+    }
+    cleanup = prepared.data;
+    if (Date.now() >= binding.deadline) throw loginRequired();
+    assertDispatch?.();
+    if (prepared.data) request.headers.set("x-founderops-workspace-permit", permit);
+    return await observedSupabaseFetch(request);
+  } finally {
+    if (cleanup) {
+      // The known hash allows bounded cleanup even when the writing response was lost.
+      await observeCalendarPhase("workspace.permit.release", async () => {
+        const released = await binding.service.rpc("workspace_release_permit", { p_hash: hash }).abortSignal(AbortSignal.timeout(5000));
+        recordCalendarResult("workspace.permit.release", released.error, "permit_cleanup_failed");
+      }).catch(error => {
+        recordCalendarFailure({ operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: classifyCalendarError(error) });
+      });
+    }
+  }
+}
 
 function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): typeof fetch {
   return async (input, init) => {
@@ -102,6 +160,10 @@ function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): t
         throw denied();
       }
       if (user.data.user?.id !== binding.userId) throw denied();
+      if (binding.calendar) {
+        request.headers.set("authorization", `Bearer ${binding.token}`);
+        return await dispatchCalendarRequest(binding, request, url, assertDispatch);
+      }
       const current = await workspaceContext(binding.service, binding.userId);
       if (current.userId !== binding.userId || current.profileId !== binding.profileId
         || current.mode !== binding.mode || current.linkingEnforced !== binding.linkingEnforced) throw denied();
@@ -182,7 +244,8 @@ export async function authorizeSessionData(request: NextRequest, action: Session
       return invalidSession();
     }
     if (user.data.user?.id !== claims.sub) return invalidSession();
-    const context = await workspaceContext(environment.service, claims.sub);
+    const entry = action === "calendar.read" ? await calendarEntry(environment.service, claims.sub, claims.session_id) : null;
+    const context = entry ?? await workspaceContext(environment.service, claims.sub);
     if (context.userId !== claims.sub || !context.profileId) {
       return { ok: false, status: 403, error: "Dieses Konto ist keinem Teamprofil zugeordnet." };
     }
@@ -193,12 +256,20 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     if (workspace) {
       if (context.mode === "linking" && !context.linked) throw new WorkspaceAccessError(403, "workspace_link_required");
       if (!context.linked || !context.identity) throw denied();
+      if (entry && typeof context.identity.iss !== "string") throw denied();
       const identity = workspaceIdentity({ id: claims.sub, identities: [{ provider: "google", identity_data: context.identity }] });
       subject = identity.subject; email = identity.email;
       if (!Array.isArray(claims.amr) || !claims.amr.some(entry => typeof entry === "object" && entry.method === "oauth")) throw loginRequired();
-      const session = await observeCalendarResultPhase("workspace.session", () => environment.service.rpc(context.mode === "linking" ? "workspace_linking_session_allowed" : "workspace_session_allowed", {
-        p_user_id: claims.sub, p_session_id: claims.session_id,
-      }));
+      // Interpret admission only after the same binding, identity and AMR checks as the separate path.
+      const session = entry ? { data: entry.sessionAllowed, error: entry.sessionError }
+        : await observeCalendarResultPhase("workspace.session", () => environment.service.rpc(context.mode === "linking" ? "workspace_linking_session_allowed" : "workspace_session_allowed", {
+          p_user_id: claims.sub, p_session_id: claims.session_id,
+        }));
+      if (entry && (typeof entry.sessionAllowed !== "boolean" || typeof entry.sessionError !== "boolean")) {
+        recordCalendarFailure({ operation: "workspace.entry", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+        throw unavailable();
+      }
+      if (entry?.sessionError) recordCalendarFailure({ operation: "workspace.entry", errorCode: "provider_request_failed", errorCategory: "provider_http_error" });
       if (session.error) throw unavailable();
       if (session.data !== true) throw loginRequired();
       if (context.mode === "google") {
@@ -224,7 +295,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     }
     if (!workspace) recordCalendarMembership({ result: "bypass", reason: "not_required", cacheOwnerId, evidenceAgeMs: null, remainingLifetimeMs: null, expired: false });
     const binding: SessionBinding = { token, userId: claims.sub, sessionId: claims.session_id,
-      profileId: context.profileId, deadline, workspace, url: environment.url, service: environment.service, auth: environment.auth,
+      profileId: context.profileId, deadline, workspace, calendar: action === "calendar.read", url: environment.url, service: environment.service, auth: environment.auth,
       mode: context.mode, linkingEnforced: context.linkingEnforced, subject, email };
     const constrainedData = (assertDispatch: () => void) => createClient(environment.url, environment.key, { ...environment.options,
       global: { headers: { Authorization: `Bearer ${token}` }, fetch: boundDataFetch(binding, assertDispatch) },

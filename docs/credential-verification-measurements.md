@@ -244,3 +244,52 @@ Build/readiness/login are one setup observation per version, outside the 30 warm
 ## Final verification source
 
 The earlier complete global checks passed on test-source candidate `ae655c595a9e15641beaaae4eb12c9c2e773709d`, after two fixture-only repairs retained with their observed failures. At that measured checkpoint, runtime source was `17955b50917034c49ebb1b758635d8c07c8dccbc`. The matched measurements retain that source and schema metadata. The subsequent session-lifecycle correction has a different executable source and new regression evidence in the [post-acceptance record](credential-verification-acceptance.md#post-acceptance-session-lifecycle-and-module-coverage); these historical measurements are not a measurement of that correction. The final global client scan is 63 chunks/maps and 2,231,432 bytes; it is separate from both the measurement build (183/2,390,345) and ticket 502’s earlier build (63/2,231,293).
+
+## Grouped Calendar authorization comparison
+
+The comparison for #523 and #526 ran on 2026-10-21. Before is `d906a9a50b1d60755055d443603b5ff9348997d8`; After runtime is `b13c5b00eefde93e2029828df45ab8968daa6e9a`. Both use the same dependency installation and disposable database with additive grouped RPCs present. The baseline invokes its original separate operations. Neither revision is patched for measurement.
+
+The host runs Darwin arm64 and Node v26.12.0. The pinned Supabase CLI is v2.115.0 and the actual Auth container is GoTrue v2.195.0. Auth issues a real ES256 token with a key ID. Synthetic account setup signs in with a password, adds an OAuth AMR record to the disposable session, and refreshes through real Auth. Real `/user`, JWKS and PostgREST requests remain unmodified. This prepares synthetic OAuth session state; it does not exercise an external Google login. Only Google STS, IAM and Directory protocols return fixed synthetic responses, without delays. Google-only accounting also simulates the settings response because the disposable Auth provider configuration does not meet production Google-only configuration.
+
+Each version runs in its own resident Vitest worker with independent module caches. The timed operation starts immediately before the public Cookie proxy action and stops after `authorizeCredentialAction` and its returned `calendar.readSnapshot` complete. It excludes imports, worker startup, account/fixture creation and result hashing. It measures the complete public credential journey, not browser navigation, a running Next.js HTTP server or production TTFB. A pass-through observer counts every actual fetch attempt and checks that protected requests retain the exact original JWT. No production testing flag or cache mutation interface is added.
+
+The matched fixture uses the same viewer, JWT, Workspace linking policy, published owner, publication and date. Five untimed warmups per worker follow its initial cold request. Each batch then runs twenty ABBA blocks, giving 40 samples per version. Three batches use fresh workers. Samples remain within the original membership and JWT deadlines. Each of the 240 timed samples has the expected request count, four regular live Auth checks, no Directory request, refresh or retry, and an identical full snapshot digest. The timing host runs the shared local Docker infrastructure; no build, broad test suite or other deliberate CPU-heavy task runs during sampling. This does not imply a dedicated physical host or a cold database/OS cache.
+
+| Batch | Before median / Q1 / Q3, ms | After median / Q1 / Q3, ms | Paired median saving, ms |
+| --- | --- | --- | --- |
+| 1 | 113.77 / 109.23 / 119.02 | 110.51 / 106.32 / 117.72 | 2.95 |
+| 2 | 109.87 / 104.92 / 121.01 | 102.88 / 99.02 / 110.58 | 5.99 |
+| 3 | 107.80 / 105.72 / 110.32 | 103.62 / 101.65 / 105.76 | 4.28 |
+
+For even sample sizes, the median averages the middle pair. Quartiles linearly interpolate the sorted array at `(n - 1) * p`. Paired savings compare corresponding Before/After samples within each ABBA block.
+
+Each batch median is lower after grouping. Variability overlaps and individual samples regress: the paired differences range from -82.68 to 51.24 ms, and batch 2's maximum is 246.40 ms Before versus 260.50 ms After. No sample is discarded. An earlier exploratory series also had lower batch medians but failed a later Google fixture assertion; it is excluded from this accepted table. The retained warm batches completed before a separate Google fixture setup failed. A corrected accounting rerun retained those raw timings, completed the comparison assertions and created a fresh real Auth session after Google-mode activation. Failed fixture attempts are not provider or performance successes. Raw arrays and task-specific drivers remain outside the repository.
+
+This is a repeatable local median improvement under the declared conditions. It establishes no fixed percentage, general production speedup or improvement for every mode or request.
+
+### Actual attempt accounting
+
+For the ordinary warm Cookie path, the phase budget is proxy 1, entry 3 to 2, protected profile 5 to 4, and first snapshot 5 to 4. Profile and snapshot each retain their original user-JWT request, independent live Auth and separate permit cleanup. Logical phase spans add no HTTP count.
+
+| Matched scenario | Before | After | Conditions and result |
+| --- | --- | --- | --- |
+| Warm enforced linking, Cookie | 14 | 11 | One owner/publication; four regular `/user` requests; no refresh/retry/Directory |
+| Warm enforced linking, Bearer | 13 | 10 | Same complete result; no Cookie proxy |
+| Fresh worker/signing keys and membership | 18 | 15 | One real JWKS request and three simulated Google requests in addition to the warm budget |
+| Warm Google-only, Cookie | 15 | 12 | Real Auth/PostgREST; settings response simulated explicitly; no membership request |
+| Legacy, Cookie | 9 | 9 | No membership or permit issuance; no latency benefit established |
+| Unenforced linking, Cookie | 9 | 9 | No membership or permit issuance; no latency benefit established |
+| 101 publications for one owner | 19 | 15 | Complete history includes one independently authorized publication continuation |
+| 101 owners and 201 publications | 24 | 19 | Both pagination dimensions; complete identical snapshots |
+
+Additional count scenarios are one matched observation each, not repeated latency evidence. The Google-only warm observation was slightly slower after grouping, as were the legacy and unenforced-linking observations. They are not included in the three enforced-linking timing batches. A separate matched date-range observation uses a valid publication supersession chain and returns the same 39 relevant publications from the 101-publication owner history. Published owner membership remains intact.
+
+Symmetric JWT verification, concurrent/coalesced membership, expired evidence, Cookie refresh and permitted-read retries remain separate controlled regression scenarios. Symmetric verification adds its real Auth fallback to claim verification; it is not an asymmetric warm-key measurement. Each additional permitted Calendar attempt has fresh live Auth, grouped preparation, user-JWT dispatch and cleanup, compared with five separate attempts before grouping. Refresh traffic and retries must be counted as actual attempts, never blended into the ordinary budget. The controlled transport tests verify those paths and uncertainty/no-replay behavior; this experiment claims no real-provider latency result for them.
+
+### Repeating the comparison
+
+Use an isolated disposable Supabase project and verify its configured target before connecting. The integration runner resets the entire configured database; a separate worktree alone is insufficient isolation. Keep the baseline executable outside the implementation checkout and use matching dependencies. Seed synthetic Auth, strict identity binding, session admission and the same Calendar data, then pass the same real session to independent resident workers. Stub only the explicitly declared external protocols and deny unexpected hosts. Observe fetches without retaining URLs, headers, bodies, credentials or identities.
+
+Warm workers independently, alternate ABBA order and time only the complete public journey with a monotonic clock. Assert the expected attempt map, original JWT use and full result equality in every sample. Record sample arrays privately and publish revision IDs, sample size, quantiles, ordering, exclusions and adverse results. Repeat with fresh workers before accepting a latency gain. Keep cold keys/membership, Google settings, transport, pagination, refresh and retry cases separate. Rerun production observation only after a separately authorized deployment; historical production data above does not measure this optimization.
+
+The Migration Integration CI job now allows 30 minutes. Its previous 20-minute budget expired during cleanup after all 30 migration test files had passed on the combined runtime candidate. The additional time retains the complete migration suite and unconditional cleanup; no check or assertion is removed.

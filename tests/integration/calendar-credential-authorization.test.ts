@@ -28,7 +28,7 @@ it("calendar authorization retains PostgREST JWT, individual permit and session 
   try {
     await database.query("insert into auth.users(id,email,role,aud,email_confirmed_at) values ($1,'synthetic-calendar@example.test','authenticated','authenticated',now())", [userId]);
     await database.query("insert into public.profiles(id,auth_user_id,name,platform_role) values ($1,$2,'Synthetic Calendar','founder')", [profileId,userId]);
-    const effectiveFrom = (await database.query("select date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date as value")).rows[0].value.toISOString().slice(0, 10);
+    const effectiveFrom = (await database.query("select to_char(date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin'),'YYYY-MM-DD') as value")).rows[0].value;
     const sourceVersionId = (await database.query("insert into public.team_workweek_versions(owner_profile_id,effective_from) values($1,$2) returning id", [profileId,effectiveFrom])).rows[0].id;
     const publicationId = (await database.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,status,sync_state,published_at,last_sync_at)
       values($1,$2,$3,'[]','published','confirmed',clock_timestamp(),clock_timestamp()) returning id`, [sourceVersionId,profileId,effectiveFrom])).rows[0].id;
@@ -63,7 +63,7 @@ it("calendar authorization retains PostgREST JWT, individual permit and session 
       if (url.hostname === "iamcredentials.googleapis.com") return Response.json({ accessToken: "synthetic-reader", expireTime: new Date(Date.now()+3600000).toISOString() });
       if (url.hostname === "admin.googleapis.com") { membershipReads++; return Response.json({ isMember: true }); }
       if (url.origin !== new URL(local.API_URL).origin) throw new Error("Unexpected external provider in calendar test");
-      if (url.pathname === "/rest/v1/rpc/workspace_issue_permit") permitPaths.push((await request.clone().json()).p_path);
+      if (url.pathname === "/rest/v1/rpc/workspace_calendar_prepare") permitPaths.push((await request.clone().json()).p_path);
       if (["/rest/v1/profiles", "/rest/v1/team_workweek_publications"].includes(url.pathname)) dataPaths.push(url.pathname);
       const response = await originalFetch(request);
       if (url.pathname === "/rest/v1/profiles" && revokeAfterProfileRead) {

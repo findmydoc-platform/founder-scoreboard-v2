@@ -55,6 +55,10 @@ Classify failures where the operation is known, before existing code collapses s
 
 For example, distinguish failure of `supabase.user`, `workspace.context`, `workspace.permit.issue`, `workspace.permit.release`, `directory.sts`, `directory.iam`, and `directory.membership`. These are static operation identifiers, not URLs. A failed cleanup remains observable even when the existing application intentionally suppresses its exception.
 
+Calendar entry now reports the fixed `workspace.entry` operation for its grouped Workspace-context and session-admission request. Count its HTTP attempt once. Its logical checks do not add `workspace.context` or `workspace.session` attempts. Separate context requests by other actions retain their existing identifiers. A malformed grouped response is an `invalid_response`; an admission-provider failure becomes observable only after the existing identity and OAuth checks have passed. Request arguments and provider details remain excluded.
+
+The combined Calendar entry and dispatch operations use 11 observed attempts rather than 14 for an ordinary warm enforced-linking Cookie load, including all four live `supabase.user` attempts. Google-only mode retains its settings attempt and uses 12 rather than 15. These budgets require warm asymmetric signing keys, a membership hit, one snapshot request and no refresh or retry. Legacy and unenforced linking retain their totals. The [controlled local comparison](credential-verification-measurements.md#grouped-calendar-authorization-comparison) records actual transport counts and separate elapsed times. Historical production measurements below retain their original implementation context.
+
 Expected authorization denials remain denied outcomes with the existing safe code. They are not automatically unexpected application errors. An internal error code does not change the public error body or status. Any future change to that public contract requires its own decision and focused tests.
 
 Use Pino redaction as additional protection after the approved-field projection. Never pass raw `Error` objects to Pino's default serializer or a fallback logger.
@@ -228,3 +232,12 @@ This compact warm-hit record comes from the real serialized adapter with synthet
 - [Vercel runtime logs](https://vercel.com/docs/logs/runtime) and [request headers](https://vercel.com/docs/headers/request-headers).
 
 Private production diagnosis, request samples, and operator artifacts are not part of this contract and must remain outside the repository.
+
+
+## Calendar dispatch preparation
+
+Calendar loads use the fixed operation identifier `workspace.dispatch.prepare` for the private `workspace_calendar_prepare` request. One HTTP attempt performs current binding validation, mode-dependent session admission and permit issuance where required. Its enclosing operation phase adds no external-call count. `workspace.permit.release` continues to count the separate cleanup request. Other session actions retain `workspace.context` and `workspace.permit.issue`.
+
+A PostgreSQL `42501` preparation result is an authority denial. A transport failure, timeout, unexpected provider status or invalid result remains a provider failure, even where the existing protected profile error contract returns HTTP 403. Preparation responses and arguments never enter logs. An uncertain outcome may add a cleanup attempt but never a replay of the writing preparation operation. A private terminal transport failure prevents the enclosing GET retry loop from repeating uncertain preparation. Logging failure cannot change the Calendar result.
+
+For the defined warm enforced-linking path with the original entry flow, dispatch grouping saves two attempts (14 to 12 including Cookie proxy); each additional Calendar request saves one more. Grouped entry additionally reduces the one-page total to 11. Google-only mode retains its settings request. Cold keys, membership misses, refresh, retries and legacy/unenforced modes require separate accounting. Historical examples in this document describe their original deployed implementation and must not be read as measurements of grouped preparation.

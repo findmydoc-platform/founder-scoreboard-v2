@@ -13,7 +13,9 @@ export const observedSupabaseFetch: typeof fetch = (input, init) => {
     else if (pathname === "/auth/v1/token") operation = "supabase.refresh";
     else if (pathname === "/auth/v1/settings") operation = "supabase.settings";
     else if (pathname === "/rest/v1/rpc/workspace_access_context") operation = "workspace.context";
+    else if (pathname === "/rest/v1/rpc/workspace_calendar_entry") operation = "workspace.entry";
     else if (["/rest/v1/rpc/workspace_session_allowed", "/rest/v1/rpc/workspace_linking_session_allowed"].includes(pathname)) operation = "workspace.session";
+    else if (pathname === "/rest/v1/rpc/workspace_calendar_prepare") operation = "workspace.dispatch.prepare";
     else if (pathname === "/rest/v1/rpc/workspace_issue_permit") operation = "workspace.permit.issue";
     else if (pathname === "/rest/v1/rpc/workspace_release_permit") operation = "workspace.permit.release";
     else if (pathname === "/rest/v1/rpc/current_authenticated_profile") operation = "calendar.profile";

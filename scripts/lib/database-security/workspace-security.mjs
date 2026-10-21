@@ -18,9 +18,18 @@ export async function verifyWorkspaceSecurity(client, failures) {
     limit 1`);
   if (!previewBoundary.rowCount) failures.push("Workspace preview Storage boundary missing");
   for (const role of ["anon", "authenticated"]) {
-    for (const signature of ["public.workspace_record_google_login(uuid,uuid,text)", "public.workspace_linking_session_allowed(uuid,uuid)", "public.workspace_issue_permit(text,uuid,text,text,text,uuid)"]) {
+    for (const signature of ["public.workspace_record_google_login(uuid,uuid,text)", "public.workspace_linking_session_allowed(uuid,uuid)", "public.workspace_issue_permit(text,uuid,text,text,text,uuid)", "public.workspace_calendar_prepare(text,uuid,text,text,text,uuid,text,text,boolean,text,text)", "public.workspace_calendar_entry(uuid,uuid)"]) {
       const access = await client.query("select has_function_privilege($1,$2,'execute') as allowed", [role, signature]);
       if (access.rows[0]?.allowed) failures.push(`${signature} exposed to ${role}`);
+    }
+  }
+  for (const signature of ["public.workspace_calendar_entry(uuid,uuid)", "public.workspace_calendar_prepare(text,uuid,text,text,text,uuid,text,text,boolean,text,text)"]) {
+    const preparation = await client.query(`select pg_get_userbyid(proowner) as owner,prosecdef,proconfig,
+      has_function_privilege('service_role',oid,'execute') as server_execute
+      from pg_proc where oid=to_regprocedure($1)`,[signature]);
+    if (preparation.rowCount !== 1 || preparation.rows[0].owner !== "postgres" || !preparation.rows[0].prosecdef
+      || !preparation.rows[0].proconfig?.includes('search_path=""') || !preparation.rows[0].server_execute) {
+      failures.push(`Calendar preparation server contract missing or unsafe: ${signature}`);
     }
   }
   const channels = await client.query(`select policyname from pg_policies where schemaname='realtime'
