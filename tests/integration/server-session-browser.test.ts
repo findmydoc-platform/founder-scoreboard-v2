@@ -99,12 +99,14 @@ beforeAll(async () => {
       if (holdLogout) { heldLogoutScope = url.searchParams.get("scope"); logoutEntered?.(); await heldResponse(release => { releaseLogout = release; }); }
       response.writeHead(204); response.end(); return;
     }
-    if (url.pathname === "/rest/v1/rpc/workspace_access_context") {
-      if (holdLogin) { holdLogin = false; loginEntered?.(); await new Promise<void>(resolve => { releaseLogin = resolve; }); }
+    if (["/rest/v1/rpc/workspace_access_context", "/rest/v1/rpc/workspace_calendar_entry"].includes(url.pathname)) {
+      if (holdLogin && url.pathname.endsWith("workspace_access_context")) { holdLogin = false; loginEntered?.(); await new Promise<void>(resolve => { releaseLogin = resolve; }); }
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
       send({ mode: workspaceMode, linkingEnforced, linked: workspaceLinked, userId: body.p_user_id || loginUser, profileId: mapped ? "synthetic-profile" : null,
+        sessionAllowed: workspaceMode === "legacy" || !linkingEnforced ? null : loginRecorded, sessionError: false,
         identity: workspaceMode === "legacy" ? null : { sub: "synthetic-google-subject", iss: "https://accounts.google.com", email: "synthetic@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } } }); return; }
+    if (url.pathname === "/rest/v1/rpc/workspace_calendar_prepare") { send(workspaceMode === "google" || (workspaceMode === "linking" && linkingEnforced)); return; }
     if (url.pathname === "/rest/v1/rpc/workspace_begin_link" || url.pathname === "/rest/v1/rpc/workspace_complete_link" || url.pathname === "/rest/v1/rpc/workspace_record_google_login") {
       const chunks = []; for await (const chunk of request) chunks.push(chunk); const body = JSON.parse(Buffer.concat(chunks).toString());
       if (body.p_user_id !== userA) { send({ message: "Wrong bound actor" }, 403); return; }
