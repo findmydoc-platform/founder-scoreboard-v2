@@ -6,7 +6,7 @@ export type Stage = "proxy" | "route";
 export type Outcome = "success" | "denied" | "invalid_input" | "error";
 export const safeOperations = ["calendar.request", "session.proxy", "calendar.authorization", "calendar.snapshot", "calendar.publications", "calendar.prepare", "calendar.data", "calendar.profile",
   "supabase.claims", "supabase.jwks", "supabase.user", "supabase.refresh", "supabase.settings", "supabase.other", "workspace.context", "workspace.entry", "workspace.session", "workspace.membership", "workspace.wait",
-  "workspace.permit.issue", "workspace.permit.release", "directory.reader", "directory.oidc", "directory.sts", "directory.iam", "directory.membership"] as const;
+  "workspace.dispatch.prepare", "workspace.permit.issue", "workspace.permit.release", "directory.reader", "directory.oidc", "directory.sts", "directory.iam", "directory.membership"] as const;
 export type SafeOperation = typeof safeOperations[number];
 export type Phase = { id: string; parentId?: string; operation: SafeOperation; kind: "operation" | "http"; offsetMs: number; durationMs: number; outcome: "success" | "error" };
 export type ExternalCalls = { total: number; operations: Partial<Record<SafeOperation, number>>; complete: boolean };

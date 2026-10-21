@@ -105,6 +105,47 @@ type SessionBinding = {
   mode: AccessContext["mode"]; linkingEnforced: boolean; subject?: string; email?: string;
 };
 
+async function dispatchCalendarRequest(binding: SessionBinding, request: Request, url: URL, assertDispatch?: () => void) {
+  if (Date.now() >= binding.deadline) throw loginRequired();
+  const permit = randomBytes(32).toString("base64url");
+  const hash = digest(permit);
+  let cleanup = true;
+  try {
+    const prepared = await observeCalendarResultPhase("workspace.dispatch.prepare", () => binding.service.rpc("workspace_calendar_prepare", {
+      p_hash: hash, p_user_id: binding.userId, p_jwt_hash: digest(binding.token), p_method: request.method,
+      p_path: url.pathname.slice("/rest/v1".length), p_session_id: binding.sessionId,
+      p_profile_id: binding.profileId, p_mode: binding.mode, p_linking_enforced: binding.linkingEnforced,
+      p_subject: binding.subject ?? null, p_email: binding.email ?? null,
+    }).abortSignal(AbortSignal.timeout(5000)));
+    if (prepared.error) {
+      // A rejected transaction issued no permit; other failures may have lost its response.
+      if (prepared.error.code === "42501") { cleanup = false; throw denied(); }
+      // Abort is terminal to the private SDK, including an enclosing GET retry loop.
+      throw new DOMException("Calendar dispatch preparation failed", "AbortError");
+    }
+    if (typeof prepared.data !== "boolean" || prepared.data !== binding.workspace) {
+      recordCalendarFailure({ operation: "workspace.dispatch.prepare", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+      // Abort is terminal to the private SDK, including an enclosing GET retry loop.
+      throw new DOMException("Calendar dispatch preparation failed", "AbortError");
+    }
+    cleanup = prepared.data;
+    if (Date.now() >= binding.deadline) throw loginRequired();
+    assertDispatch?.();
+    if (prepared.data) request.headers.set("x-founderops-workspace-permit", permit);
+    return await observedSupabaseFetch(request);
+  } finally {
+    if (cleanup) {
+      // The known hash allows bounded cleanup even when the writing response was lost.
+      await observeCalendarPhase("workspace.permit.release", async () => {
+        const released = await binding.service.rpc("workspace_release_permit", { p_hash: hash }).abortSignal(AbortSignal.timeout(5000));
+        recordCalendarResult("workspace.permit.release", released.error, "permit_cleanup_failed");
+      }).catch(error => {
+        recordCalendarFailure({ operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: classifyCalendarError(error) });
+      });
+    }
+  }
+}
+
 function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): typeof fetch {
   return async (input, init) => {
     try {
@@ -119,12 +160,15 @@ function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): t
         throw denied();
       }
       if (user.data.user?.id !== binding.userId) throw denied();
+      if (binding.calendar) {
+        request.headers.set("authorization", `Bearer ${binding.token}`);
+        return await dispatchCalendarRequest(binding, request, url, assertDispatch);
+      }
       const current = await workspaceContext(binding.service, binding.userId);
       if (current.userId !== binding.userId || current.profileId !== binding.profileId
         || current.mode !== binding.mode || current.linkingEnforced !== binding.linkingEnforced) throw denied();
       if (binding.workspace) {
         if (!current.linked || !current.identity) throw denied();
-        if (binding.calendar && typeof current.identity.iss !== "string") throw denied();
         const identity = workspaceIdentity({ id: binding.userId, identities: [{ provider: "google", identity_data: current.identity }] });
         if (identity.subject !== binding.subject || identity.email !== binding.email) throw denied();
       }

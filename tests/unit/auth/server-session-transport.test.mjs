@@ -45,6 +45,7 @@ beforeEach(() => {
       const claims = JSON.parse(Buffer.from(req.headers.get("authorization").slice(7).split(".")[1], "base64url"));
       return Response.json({ id: claims.sub, aud: "authenticated", user_metadata: {} });
     }
+    if (url.pathname.endsWith("/rpc/workspace_calendar_prepare")) return Response.json(false);
     if ((url.pathname.endsWith("/rpc/workspace_access_context") || url.pathname.endsWith("/rpc/workspace_calendar_entry"))) return Response.json({ mode: "legacy", linkingEnforced: false, userId: "user-1", profileId: "profile-1", linked: false, identity: null });
     if (url.pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json({ id: "profile-1", name: "Founder", platform_role: "founder" });
     if (url.pathname.endsWith("/rpc/administrator_access_snapshot")) return Response.json({ eligible: false, active: false });
@@ -463,7 +464,7 @@ test("calendar correlation preserves refreshed cookies across the complete proxy
   expect(response.headers.has("x-founderops-proxy-observation")).toBe(false);
   expect(await response.json()).toMatchObject({ workweeks: [], publishedOwnerIds: [] });
   expect(output.find(event => event.stage === "route")).toMatchObject({ externalCalls: { total: 11,
-    operations: { "supabase.refresh": 1, "supabase.user": 5, "workspace.context": 2, "workspace.entry": 1, "calendar.profile": 1, "calendar.snapshot": 1 } },
+    operations: { "supabase.refresh": 1, "supabase.user": 5, "workspace.dispatch.prepare": 2, "workspace.entry": 1, "calendar.profile": 1, "calendar.snapshot": 1 } },
     membership: { result: "bypass", reason: "not_required", evidenceAgeMs: null, remainingLifetimeMs: null }, completeness: { correlation: "complete", externalCallsComplete: true } });
   expect(JSON.stringify(output)).not.toMatch(/synthetic-service|refresh-user|access_token|refresh_token|session-auth.example/);
 });
