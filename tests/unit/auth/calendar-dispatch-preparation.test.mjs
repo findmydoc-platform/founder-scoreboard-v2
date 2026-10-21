@@ -34,7 +34,7 @@ async function protocol(input, init) {
   if (url.hostname === "admin.googleapis.com") return Response.json({ isMember: true });
   if (path.endsWith("/rpc/workspace_calendar_prepare")) {
     const body = await request.json(); preparations.push(body);
-    await duringPreparation?.(body, preparations.length);
+    await duringPreparation?.(body);
     if (preparedResponse) return preparedResponse(body, preparations.length);
     return Response.json(mode === "google" || (mode === "linking" && enforced));
   }
