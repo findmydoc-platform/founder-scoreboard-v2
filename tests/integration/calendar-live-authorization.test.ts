@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { NextRequest } from "next/server";
 import { expect, it, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
@@ -10,6 +11,9 @@ it("real Auth and PostgREST retain Calendar roles, exact JWTs, complete historie
   let currentToken = "", revokeAfterProfile = false;
   let attempts: string[] = [], directory = 0;
   let currentSessionId = "";
+  let rejectDatabasePath = "", rejectedDatabaseStatus: number | null = null, databaseJwtReplacement = "";
+  const rejectedDatabasePaths: string[] = [];
+  let successfulAuthUserResponses = 0;
   try {
     for (const [name,value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL:fixture.local.API_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY:fixture.local.ANON_KEY,
       SUPABASE_SERVICE_ROLE_KEY:fixture.local.SERVICE_ROLE_KEY,GOOGLE_WORKLOAD_IDENTITY_AUDIENCE:"synthetic-calendar-audience",
@@ -26,7 +30,18 @@ it("real Auth and PostgREST retain Calendar roles, exact JWTs, complete historie
         // Compare in memory; never print a JWT in assertion diagnostics.
         expect(request.headers.get("authorization") === `Bearer ${currentToken}`).toBe(true);
       }
+      let injectedInvalidJwt = false;
+      if (url.pathname === rejectDatabasePath) {
+        request.headers.set("authorization", `Bearer ${databaseJwtReplacement}`);
+        rejectDatabasePath = "";
+        injectedInvalidJwt = true;
+      }
       const response = await originalFetch(request);
+      if (url.pathname === "/auth/v1/user" && response.ok) successfulAuthUserResponses++;
+      if (injectedInvalidJwt) {
+        rejectedDatabaseStatus = response.status;
+        rejectedDatabasePaths.push(url.pathname);
+      }
       if (url.pathname === "/rest/v1/profiles" && revokeAfterProfile) {
         revokeAfterProfile = false;
         await fixture.database.query("delete from auth.sessions where id=$1", [currentSessionId]);
@@ -92,6 +107,62 @@ it("real Auth and PostgREST retain Calendar roles, exact JWTs, complete historie
         expect(revoked.ok).toBe(false);
       }
     }
+    await fixture.mode("linking");
+    const actor = await fixture.actor("viewer");
+    await fixture.publish(actor.profileId);
+    currentToken = actor.session.access_token;
+    vi.stubEnv("VERCEL_OIDC_TOKEN",currentToken);
+    const request = () => new NextRequest("https://application.example.test/api/team-calendar", {headers:{authorization:`Bearer ${currentToken}`}});
+    const tampered = `${currentToken.slice(0,currentToken.lastIndexOf(".")+1)}${Buffer.alloc(64).toString("base64url")}`;
+    const claims = JSON.parse(Buffer.from(currentToken.split(".")[1],"base64url").toString("utf8"));
+    const expiredHeader = Buffer.from(JSON.stringify({alg:"HS256",typ:"JWT"})).toString("base64url");
+    const expiredPayload = Buffer.from(JSON.stringify({...claims,exp:Math.floor(Date.now()/1000)-60})).toString("base64url");
+    const expiredUnsigned = `${expiredHeader}.${expiredPayload}`;
+    const expired = `${expiredUnsigned}.${createHmac("sha256",fixture.local.JWT_SECRET).update(expiredUnsigned).digest("base64url")}`;
+    const invalidTokens = [tampered,expired];
+
+    const authorized = await authorizeCredentialAction({credential:{kind:"session-request",request:request()},action:"calendar.read"});
+    expect(authorized.ok).toBe(true);
+    if (!authorized.ok) throw new Error("Expected real Auth to authorize the Calendar read before PostgREST denial");
+    expect((await authorized.calendar.readSnapshot("2026-10-19")).error).toBeNull();
+    for (const invalid of invalidTokens) {
+      const headers={apikey:fixture.local.ANON_KEY,authorization:`Bearer ${invalid}`};
+      expect((await originalFetch(`${fixture.local.API_URL}/rest/v1/rpc/current_authenticated_profile`,{method:"POST",headers})).status).toBe(401);
+      expect((await originalFetch(`${fixture.local.API_URL}/rest/v1/team_workweek_publications?select=id`,{headers})).status).toBe(401);
+    }
+
+    for (const invalid of invalidTokens) {
+      attempts=[];
+      successfulAuthUserResponses=0;
+      rejectedDatabaseStatus=null;
+      databaseJwtReplacement=invalid;
+      rejectDatabasePath="/rest/v1/rpc/current_authenticated_profile";
+      const rejectedProfile = await authorizeCredentialAction({credential:{kind:"session-request",request:request()},action:"calendar.read"});
+      expect(rejectedProfile).toMatchObject({ok:false,status:403});
+      expect(successfulAuthUserResponses).toBeGreaterThan(0);
+      expect(rejectedDatabaseStatus).toBe(401);
+      expect(rejectDatabasePath).toBe("");
+    }
+
+    for (const invalid of invalidTokens) {
+      successfulAuthUserResponses=0;
+      rejectedDatabaseStatus=null;
+      databaseJwtReplacement=invalid;
+      rejectDatabasePath="/rest/v1/team_workweek_publications";
+      const rejectedCalendar = await authorized.calendar.readSnapshot("2026-10-19");
+      expect(successfulAuthUserResponses).toBeGreaterThan(0);
+      expect(rejectedDatabaseStatus).toBe(401);
+      expect(rejectDatabasePath).toBe("");
+      expect(rejectedCalendar.data).toBeNull();
+      expect(rejectedCalendar.error).toEqual({message:"Calendar snapshot is unavailable."});
+    }
+    expect(rejectedDatabasePaths).toEqual([
+      "/rest/v1/rpc/current_authenticated_profile",
+      "/rest/v1/rpc/current_authenticated_profile",
+      "/rest/v1/team_workweek_publications",
+      "/rest/v1/team_workweek_publications",
+    ]);
+
     for (const change of ["ban","delete","unmap"] as const) {
       const actor = await fixture.actor();
       currentToken = actor.session.access_token;
