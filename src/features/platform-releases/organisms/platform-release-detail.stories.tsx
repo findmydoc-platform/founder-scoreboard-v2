@@ -34,6 +34,13 @@ export const ThreeReorderedHighlights: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("3 weitere Einträge")).toBeVisible();
+    await expect(
+      canvas.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent?.trim()),
+    ).toEqual([
+      "Entwürfe bei Klinikwechseln schützen",
+      "Interne Admin-Verwaltung begrenzen",
+      "Berechtigte Kliniken gemeinsam verwalten",
+    ]);
     await userEvent.click(canvas.getByRole("button", { name: /Alle Änderungen und Fehlerbehebungen anzeigen/ }));
     for (const change of args.release.manifest.changes) {
       await expect(canvas.getAllByRole("heading", { level: 3, name: change.title })).toHaveLength(1);
