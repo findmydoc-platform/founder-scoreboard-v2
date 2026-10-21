@@ -45,7 +45,7 @@ beforeEach(() => {
       const claims = JSON.parse(Buffer.from(req.headers.get("authorization").slice(7).split(".")[1], "base64url"));
       return Response.json({ id: claims.sub, aud: "authenticated", user_metadata: {} });
     }
-    if (url.pathname.endsWith("/rpc/workspace_access_context")) return Response.json({ mode: "legacy", linkingEnforced: false, userId: "user-1", profileId: "profile-1", linked: false, identity: null });
+    if ((url.pathname.endsWith("/rpc/workspace_access_context") || url.pathname.endsWith("/rpc/workspace_calendar_entry"))) return Response.json({ mode: "legacy", linkingEnforced: false, userId: "user-1", profileId: "profile-1", linked: false, identity: null });
     if (url.pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json({ id: "profile-1", name: "Founder", platform_role: "founder" });
     if (url.pathname.endsWith("/rpc/administrator_access_snapshot")) return Response.json({ eligible: false, active: false });
     if (url.pathname === "/rest/v1/profile_ui_preferences") return Response.json({ default_workspace: "profile" });
@@ -288,7 +288,7 @@ async function googleFlow({ providerSubject = "google-subject", providerStatus =
       expect(body.code_verifier).toBeTypeOf("string");
       return Response.json({ ...session(), provider_token: "synthetic-google-provider-proof" });
     }
-    if (url.pathname.endsWith("/rpc/workspace_access_context")) return Response.json({ mode: "linking", linkingEnforced: true, linked: true, userId: "user-1", profileId: "profile-1", identity });
+    if ((url.pathname.endsWith("/rpc/workspace_access_context") || url.pathname.endsWith("/rpc/workspace_calendar_entry"))) return Response.json({ mode: "linking", linkingEnforced: true, linked: true, userId: "user-1", profileId: "profile-1", identity });
     if (url.hostname === "sts.googleapis.com") return Response.json({ access_token: "synthetic-exchange" });
     if (url.hostname === "iamcredentials.googleapis.com") return Response.json({ accessToken: "synthetic-directory", expireTime: new Date(Date.now()+3600000).toISOString() });
     if (url.hostname === "admin.googleapis.com") return Response.json({ isMember: member });
@@ -354,7 +354,7 @@ test("SSR membership deadline includes preceding cookie renewal and cannot resta
     network = async (input, init) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       if (url.pathname === "/auth/v1/token") { vi.setSystemTime(started+600000); return Response.json(session()); }
-      if (url.pathname.endsWith("/rpc/workspace_access_context")) return Response.json({ mode: "linking", linkingEnforced: true, linked: true, userId: "user-1", profileId: "profile-1",
+      if ((url.pathname.endsWith("/rpc/workspace_access_context") || url.pathname.endsWith("/rpc/workspace_calendar_entry"))) return Response.json({ mode: "linking", linkingEnforced: true, linked: true, userId: "user-1", profileId: "profile-1",
         identity: { sub: "google-subject", iss: "https://accounts.google.com", email: "member@findmydoc.eu", email_verified: true, custom_claims: { hd: "findmydoc.eu" } } });
       if (url.pathname.endsWith("/rpc/workspace_linking_session_allowed")) return Response.json(true);
       if (url.pathname.endsWith("/rpc/workspace_issue_permit") || url.pathname.endsWith("/rpc/workspace_release_permit")) return new Response(null, { status: 204 });
@@ -463,7 +463,7 @@ test("calendar correlation preserves refreshed cookies across the complete proxy
   expect(response.headers.has("x-founderops-proxy-observation")).toBe(false);
   expect(await response.json()).toMatchObject({ workweeks: [], publishedOwnerIds: [] });
   expect(output.find(event => event.stage === "route")).toMatchObject({ externalCalls: { total: 11,
-    operations: { "supabase.refresh": 1, "supabase.user": 5, "workspace.context": 3, "calendar.profile": 1, "calendar.snapshot": 1 } },
+    operations: { "supabase.refresh": 1, "supabase.user": 5, "workspace.context": 2, "workspace.entry": 1, "calendar.profile": 1, "calendar.snapshot": 1 } },
     membership: { result: "bypass", reason: "not_required", evidenceAgeMs: null, remainingLifetimeMs: null }, completeness: { correlation: "complete", externalCallsComplete: true } });
   expect(JSON.stringify(output)).not.toMatch(/synthetic-service|refresh-user|access_token|refresh_token|session-auth.example/);
 });

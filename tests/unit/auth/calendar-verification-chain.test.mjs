@@ -9,6 +9,7 @@ const sessionId = "b1111111-1111-4111-8111-111111111111";
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "calendar-proof", alg: "ES256", use: "sig" };
 let output, stdoutWrite, stdoutBaseWrite, listeners;
+let entryFailure, entryResult, delayEntry, workspaceMode, linkingEnforced, identityOverride;
 let cleanupFailure, dataRetry, directoryBody, directoryThrow, profileFailure, permitFailure;
 let counts, member, directoryFailure, sessionAllowed, mappedProfile, rows, publishedOwners, delayDirectory, role, permits, dataFailure, publicationPageFailure,
   changedBindingAt, deniedAccountAt, currentUser, precedingAuthDelay, profilePageLimit, calendarEmbedLimit, publicationPageLimit,
@@ -87,12 +88,15 @@ async function protocol(input, init) {
   const count = category => { counts[category] = (counts[category] || 0) + 1; };
   if (url.pathname.endsWith("/.well-known/jwks.json")) { count("jwks"); return Response.json({ keys: [jwk] }); }
   if (url.pathname === "/auth/v1/user") { count("auth"); if (counts.auth === 1 && precedingAuthDelay) vi.setSystemTime(Date.now() + precedingAuthDelay); if (deniedAccountAt && counts.auth >= deniedAccountAt) return Response.json({ message: "Account unavailable" }, { status: 401 }); return Response.json({ id: currentUser, aud: "authenticated", identities: [] }); }
-  if (url.pathname.endsWith("/rpc/workspace_access_context")) {
+  if (url.pathname.endsWith("/rpc/workspace_access_context") || url.pathname.endsWith("/rpc/workspace_calendar_entry")) {
+    const entry = url.pathname.endsWith("/rpc/workspace_calendar_entry");
+    if (entry) { count("entry"); if (delayEntry) await delayEntry(); if (entryFailure) return Response.json(entryFailure, { status: 503 }); if (entryResult) return Response.json(entryResult); }
     count("binding");
-    return Response.json({ mode: "linking", linkingEnforced: true, userId: currentUser, profileId: changedBindingAt && counts.binding >= changedBindingAt ? "rebound-profile" : mappedProfile, linked: true,
-      identity: { sub: "google-subject", email: "member@findmydoc.eu", email_verified: true, iss: "https://accounts.google.com", custom_claims: { hd: "findmydoc.eu" } } });
+    return Response.json({ ...(entry ? { sessionAllowed, sessionError: false } : {}), mode: workspaceMode, linkingEnforced, userId: currentUser, profileId: changedBindingAt && counts.binding >= changedBindingAt ? "rebound-profile" : mappedProfile, linked: true,
+      identity: { sub: "google-subject", email: "member@findmydoc.eu", email_verified: true, iss: "https://accounts.google.com", custom_claims: { hd: "findmydoc.eu" }, ...identityOverride } });
   }
   if (url.pathname.endsWith("/rpc/workspace_linking_session_allowed")) { count("session"); return Response.json(sessionAllowed); }
+  if (url.pathname === "/auth/v1/settings") { count("settings"); return Response.json({ external: { google: true, email: false } }); }
   if (url.hostname === "sts.googleapis.com") { count("exchange"); return Response.json({ access_token: "synthetic-exchange" }); }
   if (url.hostname === "iamcredentials.googleapis.com") { count("impersonation"); return Response.json({ accessToken: "synthetic-directory", expireTime: new Date(Date.now()+3600000).toISOString() }); }
   if (url.hostname === "admin.googleapis.com") {
@@ -107,13 +111,13 @@ async function protocol(input, init) {
   if (url.pathname.endsWith("/rpc/current_authenticated_profile")) { count("profile"); if (profileFailure) return Response.json(profileFailure, { status: 403 }); return Response.json({ id: mappedProfile, name: "Founder", platform_role: role }); }
   if (url.pathname === "/rest/v1/profiles") {
     count("data"); count("snapshot");
-    expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
+    if (workspaceMode === "google" || (workspaceMode === "linking" && linkingEnforced)) expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
     if (dataRetry && counts.data === 1) return Response.json({ message: "seeded-private-transient-failure" }, { status: 503 });
     return dataFailure ? Response.json({ message: "query rejected" }, { status: 400 }) : profileRows(url);
   }
   if (url.pathname === "/rest/v1/team_workweek_publications") {
     count("data"); count("publications");
-    expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
+    if (workspaceMode === "google" || (workspaceMode === "linking" && linkingEnforced)) expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
     if (dataFailure || publicationPageFailure) return Response.json({ message: "query rejected" }, { status: 400 });
     return Response.json(publicationRows(url));
   }
@@ -144,7 +148,7 @@ async function concurrentVerification(route, jwt) {
   vi.stubGlobal("fetch", async (input, init) => {
     const response = await fetchProtocol(input, init);
     const url = new URL(input instanceof Request ? input.url : input);
-    if (url.pathname.endsWith("/rpc/workspace_linking_session_allowed") && counts.session === 2) {
+    if (url.pathname.endsWith("/rpc/workspace_calendar_entry") && counts.entry === 2) {
       // The returned response's promise continuations reach membership before this next turn.
       setImmediate(waiterAdmitted.resolve);
     }
@@ -182,6 +186,7 @@ beforeEach(() => {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_URL: origin, SUPABASE_ANON_KEY: "synthetic-anon", SUPABASE_PUBLISHABLE_KEY: "synthetic-anon", SUPABASE_SERVICE_ROLE_KEY: "synthetic-service", SUPABASE_SECRET_KEY: "synthetic-service",
     REQUIRE_SUPABASE_AUTH: "true", VERCEL_OIDC_TOKEN: token(), GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience",
     GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "reader@example.test", GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu" })) vi.stubEnv(key, value);
+  workspaceMode = "linking"; linkingEnforced = true; entryFailure = null; entryResult = null; delayEntry = null; identityOverride = {};
   profileFailure = null; permitFailure = null; cleanupFailure = false; dataRetry = false; directoryBody = null; directoryThrow = null;
   counts = {}; member = true; directoryFailure = false; sessionAllowed = true; mappedProfile = "profile-1"; rows = []; publishedOwners = []; delayDirectory = null; role = "founder"; permits = []; dataFailure = false; publicationPageFailure = false; changedBindingAt = null; deniedAccountAt = null; currentUser = userId; precedingAuthDelay = 0;
   profilePageLimit = 100; calendarEmbedLimit = 100; publicationPageLimit = 100; profileCountOffset = 0; duplicateContinuation = false; brokenContinuation = false;
@@ -220,7 +225,7 @@ test("calendar summary counts actual private transport attempts and declares OID
   const route = await application();
   expect((await route.GET(request())).status).toBe(200);
   const summary = output.filter(event => event.event === "request.completed").at(-1);
-  expect(summary).toMatchObject({ externalCalls: { total: 16 + (counts.jwks || 0), operations: { "supabase.user": 3, "workspace.context": 3, "workspace.session": 1,
+  expect(summary).toMatchObject({ externalCalls: { total: 15 + (counts.jwks || 0), operations: { "supabase.user": 3, "workspace.context": 2, "workspace.entry": 1,
     "workspace.permit.issue": 2, "workspace.permit.release": 2, "calendar.profile": 1, "calendar.snapshot": 1,
     "directory.sts": 1, "directory.iam": 1, "directory.membership": 1,
   } }, completeness: { externalCallsScope: "private_supabase_and_explicit_directory_http", externalCallsComplete: false,
@@ -873,4 +878,126 @@ test("nonpilot proxy requests emit no calendar telemetry", async () => {
   expect(response.status).toBe(200);
   expect(response.headers.has("x-request-id")).toBe(false);
   expect(output).toEqual([]);
+});
+
+
+test.each([["linking", 13], ["google", 14]])("warm %s Calendar load groups entry admission and retains its user-bound transport budget", async (mode, budget) => {
+  workspaceMode = mode;
+  const route = await application(); const jwt = token();
+  expect((await route.GET(request(jwt))).status).toBe(200);
+  output.length = 0;
+  const { proxy } = await importTestModule("src/proxy.ts", { "server-only": {} });
+  const incoming = new NextRequest("https://application.example.test/api/team-workweek/team", { headers: {
+    cookie: `sb-calendar-auth-auth-token=base64-${Buffer.from(JSON.stringify({ access_token: jwt, refresh_token: "synthetic-refresh", expires_at: Math.floor(Date.now()/1000) + 3600, token_type: "bearer", user: { id: userId } })).toString("base64url")}`,
+  } });
+  const forwarded = await proxy(incoming);
+  incoming.headers.set("x-founderops-proxy-observation", forwarded.headers.get("x-middleware-request-x-founderops-proxy-observation"));
+  const response = await route.GET(incoming);
+  expect(response.status).toBe(200);
+  expect(output.find(event => event.event === "request.completed" && event.stage === "route")).toMatchObject({
+    externalCalls: { total: budget, operations: { "supabase.user": 4, "workspace.entry": 1, "workspace.context": 2,
+      "workspace.permit.issue": 2, "workspace.permit.release": 2, "calendar.profile": 1, "calendar.snapshot": 1 } },
+    completeness: { correlation: "complete", externalCallsComplete: true }, membership: { result: "hit" },
+  });
+});
+
+
+test("Calendar rejects an issuer encoded as an array before membership or data", async () => {
+  identityOverride = { iss: ["https://accounts.google.com"] };
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const result = await authorizeCredentialAction({ credential: { kind: "session-request", request: request() }, action: "calendar.read" });
+  expect(result).toMatchObject({ ok: false, status: 403, code: "workspace_access_denied" });
+  expect(counts.directory || 0).toBe(0); expect(counts.profile || 0).toBe(0);
+});
+
+
+test.each(["ceo", "founder", "deputy", "viewer"])("grouped Calendar entry retains complete published reads for %s", async supportedRole => {
+  role = supportedRole;
+  rows = [publication(1, mappedProfile, "2026-10-19")];
+  const result = await authorizedSnapshot();
+  expect(result.error).toBeNull();
+  expect(result.data.publishedOwnerIds).toEqual([mappedProfile]);
+  expect(result.data.publications.map(row => row.id)).toEqual([publicationId(1)]);
+});
+
+test.each([["legacy", false], ["linking", false], ["linking", true], ["google", false]])("grouped Calendar entry preserves %s mode with linking enforcement %s", async (mode, enforcement) => {
+  workspaceMode = mode; linkingEnforced = enforcement;
+  sessionAllowed = mode === "google" || enforcement;
+  expect((await authorizedSnapshot()).error).toBeNull();
+  expect(counts.entry).toBe(1);
+  expect(counts.session || 0).toBe(0);
+  expect(counts.directory || 0).toBe(mode === "google" || enforcement ? 1 : 0);
+  expect(counts.settings || 0).toBe(mode === "google" ? 1 : 0);
+});
+
+test.each([
+  { email_verified: "true" }, { email_verified: 1 }, { sub: 1 }, { sub: "" }, { email: 1 }, { email: "" },
+  { custom_claims: { hd: ["findmydoc.eu"] } }, { iss: ["accounts.google.com"] },
+])("grouped Calendar entry rejects malformed identity types %j", async identity => {
+  identityOverride = identity;
+  const route = await application();
+  const response = await route.GET(request());
+  expect(response.status).toBe(403);
+  expect(counts.directory || 0).toBe(0); expect(counts.profile || 0).toBe(0); expect(counts.permit || 0).toBe(0);
+});
+
+test("entry admission failure retains identity and OAuth error precedence", async () => {
+  entryResult = { mode: "linking", linkingEnforced: true, userId, profileId: mappedProfile, linked: true,
+    identity: { sub: "google-subject", email: "member@findmydoc.eu", email_verified: false, iss: "accounts.google.com", custom_claims: { hd: "findmydoc.eu" } },
+    sessionAllowed: false, sessionError: true };
+  const route = await application();
+  expect(await (await route.GET(request())).json()).toMatchObject({ code: "workspace_access_denied" });
+  entryResult.identity.email_verified = true;
+  expect(await (await route.GET(request(token({ amr: [{ method: "password" }] })))).json()).toMatchObject({ code: "workspace_google_login_required" });
+  expect(output.some(event => event.event === "operation.failed")).toBe(false);
+  expect((await route.GET(request())).status).toBe(503);
+  expect(output.some(event => event.event === "operation.failed" && event.operation === "workspace.entry")).toBe(true);
+  expect(counts.profile || 0).toBe(0);
+});
+
+test.each([null, "true", 1])("invalid grouped admission %j fails closed as an unavailable provider result", async admission => {
+  sessionAllowed = admission;
+  const route = await application();
+  expect((await route.GET(request())).status).toBe(503);
+  expect(counts.directory || 0).toBe(0); expect(counts.permit || 0).toBe(0);
+  expect(output.filter(event => event.event === "request.completed").at(-1).failure).toMatchObject({ operation: "workspace.entry", errorCategory: "invalid_response" });
+});
+
+test("grouped entry provider failure stays safe and cannot dispatch a profile", async () => {
+  entryFailure = { code: "PGRST000", message: "seeded-private-entry-message", details: "seeded-private-details" };
+  const route = await application();
+  const response = await route.GET(request());
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: "Workspace-Zugang konnte vorübergehend nicht geprüft werden.", code: "workspace_access_unavailable" });
+  expect(counts.profile || 0).toBe(0);
+  expect(output.filter(event => event.event === "request.completed").at(-1).failure).toMatchObject({ operation: "workspace.entry", errorCategory: "provider_http_error" });
+  expect(JSON.stringify(output)).not.toContain("seeded-private");
+});
+
+test("a rebound profile after slow grouped entry is rejected before the protected profile dispatch", async () => {
+  const route = await application();
+  changedBindingAt = 2;
+  delayEntry = async () => { vi.setSystemTime(Date.now() + 30_000); };
+  expect((await route.GET(request())).status).toBe(403);
+  expect(counts.profile || 0).toBe(0); expect(counts.data || 0).toBe(0); expect(counts.permit || 0).toBe(0);
+});
+
+
+test("malformed grouped context cannot replace the server's typed binding", async () => {
+  entryResult = { mode: "linking", linkingEnforced: true, userId, profileId: mappedProfile, linked: "true",
+    identity: { sub: "google-subject", email: "member@findmydoc.eu", email_verified: true, iss: "accounts.google.com", custom_claims: { hd: "findmydoc.eu" } },
+    sessionAllowed: true, sessionError: false };
+  const route = await application();
+  expect((await route.GET(request())).status).toBe(503);
+  expect(counts.directory || 0).toBe(0); expect(counts.profile || 0).toBe(0);
+  expect(output.filter(event => event.event === "request.completed").at(-1).failure).toMatchObject({ operation: "workspace.entry", errorCategory: "invalid_response" });
+});
+
+
+test("an issuer type change during membership lookup prevents later profile dispatch", async () => {
+  delayDirectory = async () => { identityOverride = { iss: ["accounts.google.com"] }; };
+  const route = await application();
+  expect((await route.GET(request())).status).toBe(403);
+  expect(counts.directory).toBe(1);
+  expect(counts.profile || 0).toBe(0); expect(counts.data || 0).toBe(0); expect(counts.permit || 0).toBe(0);
 });

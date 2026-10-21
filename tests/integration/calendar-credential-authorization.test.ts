@@ -28,7 +28,7 @@ it("calendar authorization retains PostgREST JWT, individual permit and session 
   try {
     await database.query("insert into auth.users(id,email,role,aud,email_confirmed_at) values ($1,'synthetic-calendar@example.test','authenticated','authenticated',now())", [userId]);
     await database.query("insert into public.profiles(id,auth_user_id,name,platform_role) values ($1,$2,'Synthetic Calendar','founder')", [profileId,userId]);
-    const effectiveFrom = (await database.query("select date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date as value")).rows[0].value.toISOString().slice(0, 10);
+    const effectiveFrom = (await database.query("select to_char(date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin'),'YYYY-MM-DD') as value")).rows[0].value;
     const sourceVersionId = (await database.query("insert into public.team_workweek_versions(owner_profile_id,effective_from) values($1,$2) returning id", [profileId,effectiveFrom])).rows[0].id;
     const publicationId = (await database.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,status,sync_state,published_at,last_sync_at)
       values($1,$2,$3,'[]','published','confirmed',clock_timestamp(),clock_timestamp()) returning id`, [sourceVersionId,profileId,effectiveFrom])).rows[0].id;
