@@ -23,12 +23,14 @@ export async function verifyWorkspaceSecurity(client, failures) {
       if (access.rows[0]?.allowed) failures.push(`${signature} exposed to ${role}`);
     }
   }
-  const preparation = await client.query(`select pg_get_userbyid(proowner) as owner,prosecdef,proconfig,
-    has_function_privilege('service_role',oid,'execute') as server_execute
-    from pg_proc where oid=to_regprocedure('public.workspace_calendar_prepare(text,uuid,text,text,text,uuid,text,text,boolean,text,text)')`);
-  if (preparation.rowCount !== 1 || preparation.rows[0].owner !== "postgres" || !preparation.rows[0].prosecdef
-    || !preparation.rows[0].proconfig?.includes('search_path=""') || !preparation.rows[0].server_execute) {
-    failures.push("Calendar dispatch preparation server contract missing or unsafe");
+  for (const signature of ["public.workspace_calendar_entry(uuid,uuid)", "public.workspace_calendar_prepare(text,uuid,text,text,text,uuid,text,text,boolean,text,text)"]) {
+    const preparation = await client.query(`select pg_get_userbyid(proowner) as owner,prosecdef,proconfig,
+      has_function_privilege('service_role',oid,'execute') as server_execute
+      from pg_proc where oid=to_regprocedure($1)`,[signature]);
+    if (preparation.rowCount !== 1 || preparation.rows[0].owner !== "postgres" || !preparation.rows[0].prosecdef
+      || !preparation.rows[0].proconfig?.includes('search_path=""') || !preparation.rows[0].server_execute) {
+      failures.push(`Calendar preparation server contract missing or unsafe: ${signature}`);
+    }
   }
   const channels = await client.query(`select policyname from pg_policies where schemaname='realtime'
     and tablename='messages' and cmd in ('SELECT','ALL')`);

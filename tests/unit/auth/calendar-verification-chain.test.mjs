@@ -106,6 +106,27 @@ async function protocol(input, init) {
     if (delayDirectory) await delayDirectory();
     return directoryFailure ? Response.json({ error: "unavailable" }, { status: 503 }) : Response.json({ isMember: member });
   }
+  if (url.pathname.endsWith("/rpc/workspace_calendar_prepare")) {
+    count("binding");
+    const body = await request.json();
+    const currentProfile = changedBindingAt && counts.binding >= changedBindingAt ? "rebound-profile" : mappedProfile;
+    const identity = { sub: "google-subject", email: "member@findmydoc.eu", email_verified: true,
+      iss: "https://accounts.google.com", custom_claims: { hd: "findmydoc.eu" }, ...identityOverride };
+    const workspace = workspaceMode === "google" || (workspaceMode === "linking" && linkingEnforced);
+    if (body.p_user_id !== currentUser || body.p_profile_id !== currentProfile || body.p_mode !== workspaceMode
+      || body.p_linking_enforced !== linkingEnforced || (workspace && (!sessionAllowed
+        || typeof identity.iss !== "string" || !["accounts.google.com", "https://accounts.google.com"].includes(identity.iss)
+        || identity.email_verified !== true || identity.custom_claims?.hd !== "findmydoc.eu"
+        || typeof identity.sub !== "string" || !identity.sub || identity.sub !== body.p_subject
+        || typeof identity.email !== "string" || !identity.email || identity.email !== body.p_email))) {
+      return Response.json({ code: "42501", message: "Workspace binding denied" }, { status: 403 });
+    }
+    if (workspace) {
+      count("permit"); permits.push(body);
+      if (permitFailure) return Response.json(permitFailure, { status: 403 });
+    }
+    return Response.json(workspace);
+  }
   if (url.pathname.endsWith("/rpc/workspace_issue_permit")) { count("permit"); permits.push(await request.json()); if (permitFailure) return Response.json(permitFailure, { status: 403 }); return new Response(null, { status: 204 }); }
   if (url.pathname.endsWith("/rpc/workspace_release_permit")) { count("release"); return cleanupFailure ? Response.json({ code: "private-cleanup-code", message: "seeded-private-cleanup-message" }, { status: 400 }) : new Response(null, { status: 204 }); }
   if (url.pathname.endsWith("/rpc/current_authenticated_profile")) { count("profile"); if (profileFailure) return Response.json(profileFailure, { status: 403 }); return Response.json({ id: mappedProfile, name: "Founder", platform_role: role }); }
@@ -225,8 +246,8 @@ test("calendar summary counts actual private transport attempts and declares OID
   const route = await application();
   expect((await route.GET(request())).status).toBe(200);
   const summary = output.filter(event => event.event === "request.completed").at(-1);
-  expect(summary).toMatchObject({ externalCalls: { total: 15 + (counts.jwks || 0), operations: { "supabase.user": 3, "workspace.context": 2, "workspace.entry": 1,
-    "workspace.permit.issue": 2, "workspace.permit.release": 2, "calendar.profile": 1, "calendar.snapshot": 1,
+  expect(summary).toMatchObject({ externalCalls: { total: 13 + (counts.jwks || 0), operations: { "supabase.user": 3, "workspace.entry": 1,
+    "workspace.dispatch.prepare": 2, "workspace.permit.release": 2, "calendar.profile": 1, "calendar.snapshot": 1,
     "directory.sts": 1, "directory.iam": 1, "directory.membership": 1,
   } }, completeness: { externalCallsScope: "private_supabase_and_explicit_directory_http", externalCallsComplete: false,
     uninstrumented: ["vercel_oidc_internal"] } });
@@ -638,7 +659,7 @@ test("an authoritative profile denial remains a safe denied calendar result thro
   const summary = output.find(event => event.event === "request.completed" && event.stage === "route");
   expect(summary).toMatchObject({ requestId: response.headers.get("x-request-id"), status: 403, outcome: "denied", severity: "info",
     proxy: { requestId: response.headers.get("x-request-id"), outcome: "success" }, completeness: { correlation: "complete" },
-    externalCalls: { operations: { "calendar.profile": 1, "workspace.permit.issue": 1, "workspace.permit.release": 1 } } });
+    externalCalls: { operations: { "calendar.profile": 1, "workspace.dispatch.prepare": 1, "workspace.permit.release": 1 } } });
   expect(summary).not.toHaveProperty("failure");
   expect(output.some(event => event.event === "operation.failed")).toBe(false);
   expect(JSON.stringify(output)).not.toContain("seeded-private");
@@ -659,7 +680,7 @@ test("an authoritative permit denial remains denied without dispatching profile 
   const summary = output.find(event => event.event === "request.completed" && event.stage === "route");
   expect(summary).toMatchObject({ requestId: response.headers.get("x-request-id"), status: 403, outcome: "denied", severity: "info",
     proxy: { requestId: response.headers.get("x-request-id"), outcome: "success" }, completeness: { correlation: "complete" },
-    externalCalls: { operations: { "workspace.permit.issue": 1 } } });
+    externalCalls: { operations: { "workspace.dispatch.prepare": 1 } } });
   expect(summary).not.toHaveProperty("failure");
   expect(output.some(event => event.event === "operation.failed")).toBe(false);
   expect(JSON.stringify(output)).not.toContain("seeded-private");
@@ -667,7 +688,7 @@ test("an authoritative permit denial remains denied without dispatching profile 
   expect(counts.permit).toBe(1); expect(counts.release || 0).toBe(0);
 });
 
-test.each(["calendar.profile", "workspace.permit.issue"])("a genuine %s provider error remains an error despite a safe denied public response", async operation => {
+test.each(["calendar.profile", "workspace.dispatch.prepare"])("a genuine %s provider error remains an error despite a safe denied public response", async operation => {
   const failure = { code: "PGRST000", message: "seeded-private-provider-error", details: "seeded-private-detail", hint: "seeded-private-hint" };
   if (operation === "calendar.profile") profileFailure = failure;
   else permitFailure = failure;
@@ -686,7 +707,7 @@ test.each(["calendar.profile", "workspace.permit.issue"])("a genuine %s provider
   expect(JSON.stringify(output)).not.toContain("seeded-private");
   expect(counts.data || 0).toBe(0); expect(counts.permit).toBe(1);
   expect(counts.profile || 0).toBe(operation === "calendar.profile" ? 1 : 0);
-  expect(counts.release || 0).toBe(operation === "calendar.profile" ? 1 : 0);
+  expect(counts.release || 0).toBe(1);
 });
 
 test.each(["not-json", JSON.stringify({ version: 1, requestId: "forged", instanceId: "forged", status: 200, outcome: "success", durationMs: 0 }), "x".repeat(1024)])("invalid proxy metadata cannot select context or alter authorization", async metadata => {
@@ -812,7 +833,7 @@ test("existing SDK retries count each actual dispatch and release without adding
   expect((await route.GET(request())).status).toBe(200);
   expect(counts.data).toBe(2); expect(counts.permit).toBe(3); expect(counts.release).toBe(3);
   const summary = output.filter(event => event.event === "request.completed").at(-1);
-  expect(summary.externalCalls.operations).toMatchObject({ "calendar.snapshot": 2, "workspace.permit.issue": 3, "workspace.permit.release": 3 });
+  expect(summary.externalCalls.operations).toMatchObject({ "calendar.snapshot": 2, "workspace.dispatch.prepare": 3, "workspace.permit.release": 3 });
   expect(JSON.stringify(output)).not.toContain("seeded-private");
 });
 
@@ -881,7 +902,7 @@ test("nonpilot proxy requests emit no calendar telemetry", async () => {
 });
 
 
-test.each([["linking", 13], ["google", 14]])("warm %s Calendar load groups entry admission and retains its user-bound transport budget", async (mode, budget) => {
+test.each([["linking", 11], ["google", 12]])("warm %s Calendar load groups entry admission and retains its user-bound transport budget", async (mode, budget) => {
   workspaceMode = mode;
   const route = await application(); const jwt = token();
   expect((await route.GET(request(jwt))).status).toBe(200);
@@ -895,8 +916,8 @@ test.each([["linking", 13], ["google", 14]])("warm %s Calendar load groups entry
   const response = await route.GET(incoming);
   expect(response.status).toBe(200);
   expect(output.find(event => event.event === "request.completed" && event.stage === "route")).toMatchObject({
-    externalCalls: { total: budget, operations: { "supabase.user": 4, "workspace.entry": 1, "workspace.context": 2,
-      "workspace.permit.issue": 2, "workspace.permit.release": 2, "calendar.profile": 1, "calendar.snapshot": 1 } },
+    externalCalls: { total: budget, operations: { "supabase.user": 4, "workspace.entry": 1,
+      "workspace.dispatch.prepare": 2, "workspace.permit.release": 2, "calendar.profile": 1, "calendar.snapshot": 1 } },
     completeness: { correlation: "complete", externalCallsComplete: true }, membership: { result: "hit" },
   });
 });

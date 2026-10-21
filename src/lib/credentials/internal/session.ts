@@ -169,7 +169,6 @@ function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): t
         || current.mode !== binding.mode || current.linkingEnforced !== binding.linkingEnforced) throw denied();
       if (binding.workspace) {
         if (!current.linked || !current.identity) throw denied();
-        if (binding.calendar && typeof current.identity.iss !== "string") throw denied();
         const identity = workspaceIdentity({ id: binding.userId, identities: [{ provider: "google", identity_data: current.identity }] });
         if (identity.subject !== binding.subject || identity.email !== binding.email) throw denied();
       }
