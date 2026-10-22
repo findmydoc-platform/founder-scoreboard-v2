@@ -4,7 +4,7 @@ import { runtimeRoute, type RuntimeRouteKey } from "./routes";
 import type { Writable } from "node:stream";
 
 export type Stage = "proxy" | "route";
-export type Outcome = "success" | "denied" | "invalid_input" | "error";
+export type Outcome = "success" | "denied" | "invalid_input" | "rejected" | "error";
 export const safeOperations = ["request.workflow", "credential.action", "response.prepare", "supabase.auth.other", "supabase.db.read", "supabase.db.write", "supabase.db.rpc", "supabase.db.planning.read", "supabase.db.planning.write", "supabase.db.identity.read", "supabase.db.identity.write", "supabase.db.identity.rpc", "google.calendar.read", "google.calendar.mutation", "google.oauth", "google.userinfo", "google.chat.mutation", "github.read", "github.mutation", "github.oauth", "calendar.request", "session.proxy", "calendar.authorization", "calendar.snapshot", "calendar.publications", "calendar.prepare", "calendar.data", "calendar.profile",
   "supabase.claims", "supabase.jwks", "supabase.user", "supabase.refresh", "supabase.settings", "supabase.other", "workspace.context", "workspace.entry", "workspace.session", "workspace.membership", "workspace.wait",
   "workspace.dispatch.prepare", "workspace.permit.issue", "workspace.permit.release", "directory.reader", "directory.oidc", "directory.sts", "directory.iam", "directory.membership"] as const;
@@ -41,7 +41,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 export const isRequestId = (value: unknown): value is string => typeof value === "string" && uuidPattern.test(value);
 const duration = (value: number) => Number.isFinite(value) && value >= 0 && value <= 86_400_000 ? Math.round(value * 1000) / 1000 : 0;
 const status = (value: number) => Number.isInteger(value) && value >= 100 && value <= 599 ? value : 500;
-const outcomes = new Set<Outcome>(["success", "denied", "invalid_input", "error"]);
+const outcomes = new Set<Outcome>(["success", "denied", "invalid_input", "rejected", "error"]);
 const operations = new Set<string>(safeOperations);
 const categories = new Set<FailureCategory>(["timeout", "transport_error", "provider_http_error", "invalid_response", "configuration_error", "unexpected_error"]);
 const errorCodes = new Set(["request_boundary_failure", "calendar_boundary_failure", "calendar_authorization_unavailable", "calendar_data_unavailable", "provider_request_failed", "provider_response_invalid", "provider_configuration_invalid", "permit_cleanup_failed"]);

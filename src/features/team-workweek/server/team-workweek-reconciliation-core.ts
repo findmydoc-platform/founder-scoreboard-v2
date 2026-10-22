@@ -114,6 +114,7 @@ async function readKnownEvent({
     let response: Response;
     try {
       response = await fetchImpl(eventEndpoint(series), {
+        allowedStatuses: [404, 410],
         headers: { },
         cache: "no-store",
       });

@@ -44,7 +44,7 @@ export type WorkweekProviderWriteJournal = Readonly<{
   outcome: (state: "settled" | "uncertain") => Promise<void>;
 }>;
 
-async function mutate(fetchImpl: GoogleCalendarCapability["request"], url: string, init: RequestInit, journal?: WorkweekProviderWriteJournal) {
+async function mutate(fetchImpl: GoogleCalendarCapability["request"], url: string, init: NonNullable<Parameters<GoogleCalendarCapability["request"]>[1]>, journal?: WorkweekProviderWriteJournal) {
   await journal?.beforeWrite();
   try {
     const response = await fetchImpl(url, init);
@@ -87,6 +87,7 @@ function errorFor(response: Response): GoogleWorkweekSeriesResult {
 async function observe(fetchImpl: GoogleCalendarCapability["request"], accessToken: GoogleCalendarCapability, effect: PreparedWorkweekEffect, restoring = false, cancellationFence = false) {
   try {
     const response = await fetchImpl(endpoint(effect), {
+      allowedStatuses: [404, 410],
       headers: { }, cache: "no-store", signal: AbortSignal.timeout(8_000),
     });
     if (response.status === 404 || response.status === 410) return { state: "absent" as const };
@@ -157,6 +158,7 @@ export async function cleanupGoogleWorkweekEffect({ accessToken, effect, fetchIm
   try {
     if (readOnly) return { state: "delayed", errorClass: "provider_unavailable" };
     const response = await mutate(fetchImpl, `${endpoint(effect)}?sendUpdates=none`, {
+      allowedStatuses: updating ? undefined : [404, 410],
       method: updating ? "PUT" : "DELETE", headers: { "if-match": observed.etag,
         ...(updating ? {"content-type":"application/json"} : {}) },
       ...(updating ? {body:JSON.stringify({...effect.expectedPayload,status:"confirmed"})} : {}),

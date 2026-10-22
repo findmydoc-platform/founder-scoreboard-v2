@@ -120,7 +120,7 @@ export function recordRuntimeResult(operation: SafeOperation, error: unknown, er
   } catch { /* Diagnostics must not change the SDK result. */ }
 }
 
-export function observeProviderHttp(operation: SafeOperation, dispatch: () => Promise<Response>): Promise<Response> {
+export function observeProviderHttp(operation: SafeOperation, dispatch: () => Promise<Response>, allowedStatuses: readonly number[] = []): Promise<Response> {
   const calls = contexts.getStore()?.completion.externalCalls;
   const started = performance.now();
   try {
@@ -131,7 +131,7 @@ export function observeProviderHttp(operation: SafeOperation, dispatch: () => Pr
     const expectedAuthDenial = ["supabase.user", "supabase.refresh"].includes(operation) && response.status >= 400 && response.status < 500;
     // Let the existing SDK result distinguish an authority denial from a provider failure.
     const deferredRpcDenial = ["calendar.profile", "supabase.db.identity.rpc", "workspace.permit.issue", "workspace.dispatch.prepare"].includes(operation) && response.status === 403;
-    if (!response.ok && !expectedAuthDenial && !deferredRpcDenial) recordRuntimeFailure({ operation, errorCode: "provider_request_failed", errorCategory: "provider_http_error", providerStatus: response.status });
+    if (!response.ok && !allowedStatuses.includes(response.status) && !expectedAuthDenial && !deferredRpcDenial) recordRuntimeFailure({ operation, errorCode: "provider_request_failed", errorCategory: "provider_http_error", providerStatus: response.status });
     return response;
   }, "http").finally(() => {
     try {
@@ -156,8 +156,8 @@ function finish(context: ReturnType<typeof begin>, response?: Response) {
   const value = context.completion;
   value.durationMs = Math.max(0, performance.now() - context.started);
   value.status = response?.status || 500;
-  value.outcome = value.failure || !response || value.status >= 500 ? "error" : value.status === 400 ? "invalid_input"
-    : value.status === 401 || value.status === 403 ? "denied" : "success";
+  value.outcome = value.failure || !response || value.status >= 500 ? "error" : [400, 422].includes(value.status) ? "invalid_input"
+    : value.status === 401 || value.status === 403 ? "denied" : value.status >= 400 ? "rejected" : "success";
   emit(value);
   return value;
 }

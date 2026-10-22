@@ -164,7 +164,7 @@ export async function githubRequest(
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
         ...(options.cache ? { cache: options.cache } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
-      });
+      }, options.allowedStatuses);
     } catch {
       if (options.signal?.aborted) throw networkError(options.errorMessage, method);
       if (attempt < maximumAttempts) {

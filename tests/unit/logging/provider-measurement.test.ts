@@ -122,7 +122,10 @@ test("the actual proxy replaces valid forged summaries and correlates the static
   expect(response.headers.get("x-request-id")).toBe(forwarded.headers.get("x-request-id"));
   const completion = records().find(record => record.event === "request.completed" && record.stage === "route");
   expect(completion).toMatchObject({ externalCalls: { total: 0 }, completeness: { correlation: "complete", proxyObserved: true, externalCallsComplete: true } });
-  expect(JSON.stringify(records())).not.toMatch(/seeded-private-id|9999/);
+  expect(completion.requestId).not.toBe(forgedId);
+  expect(completion.externalCalls.operations).not.toHaveProperty("github.read");
+  expect(completion.proxy.durationMs).not.toBe(9999);
+  expect(JSON.stringify(records())).not.toContain("seeded-private-id");
 });
 
 test("sink failures preserve a completed write and the original thrown application error", async () => {
@@ -145,4 +148,35 @@ test("sink failures preserve a completed write and the original thrown applicati
   const original = new Error("seeded-private-application-error");
   await expect(observeRuntimeRoute("task.github-sync", request, async () => { throw original; })).rejects.toBe(original);
   expect(fallback.mock.calls.flat().join("")).not.toContain("seeded-private");
+});
+
+
+test.each([404, 403, 503])("GitHub accepted dependency absence preserves counts and only accepts its declared status: %s", async status => {
+  configureGitHub(); const records = capture(); let deletes = 0;
+  vi.stubGlobal("fetch", async (input: string) => {
+    if (String(input).endsWith("/access_tokens")) return Response.json({ token: "synthetic-installation", expires_at: new Date(Date.now() + 3600000).toISOString() });
+    deletes++; return Response.json({ message: "synthetic-provider-result" }, { status });
+  });
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const { observeRuntimeRoute } = await import("../../../src/lib/runtime-logging");
+  await observeRuntimeRoute("task.github-sync", new Request("https://example.test/"), async () => {
+    const { github } = await authorizeCredentialAction({ credential: { kind: "github-installation" }, action: "github.projection.apply", target: { repositories: ["findmydoc-platform/management"] } });
+    const deletion = github.request("https://api.github.com/repos/findmydoc-platform/management/issues/1/dependencies/blocked_by/2", { method: "DELETE", operation: "mutation", allowedStatuses: [404], errorMessage: "safe" });
+    if (status === 404) expect((await deletion).status).toBe(404);
+    else await expect(deletion).rejects.toMatchObject({ status });
+    return Response.json({ ok: status === 404 });
+  });
+  expect(deletes).toBe(1);
+  const completion = records().find(record => record.event === "request.completed");
+  expect(completion).toMatchObject({ outcome: status === 404 ? "success" : "error", externalCalls: { total: 2, operations: { "github.mutation": 2 } } });
+  expect(completion.externalCalls.durationMsByOperation["github.mutation"]).toBeGreaterThan(0);
+  expect(records().filter(record => record.event === "operation.failed")).toHaveLength(status === 404 ? 0 : 1);
+});
+
+test.each([[404, "rejected"], [409, "rejected"], [422, "invalid_input"], [424, "rejected"], [429, "rejected"]])("HTTP status %s retains a non-success completion", async (status, outcome) => {
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "0"); const records = capture();
+  const { observeRuntimeRoute } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  const response = await observeRuntimeRoute("workweek.draft.write", new Request("https://example.test/"), async () => Response.json({ code: "synthetic-result" }, { status: Number(status) }));
+  expect(response.status).toBe(status);
+  expect(records().find(record => record.event === "request.completed")).toMatchObject({ status, outcome, retentionReason: "non_success", detailRetained: true });
 });

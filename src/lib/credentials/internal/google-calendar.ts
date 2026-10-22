@@ -50,9 +50,10 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
   const initial = await calendarAccess(profileId,snapshot.connection_id,configuration);
   const assertInitial = await authorizeDispatch(snapshot.connection_id,initial,configuration);
   assertInitial();
-  const calendar: GoogleCalendarCapability = Object.freeze({ async request(value: string | URL, init: RequestInit = {}) {
+  const calendar: GoogleCalendarCapability = Object.freeze({ async request(value: string | URL, init: NonNullable<Parameters<GoogleCalendarCapability["request"]>[1]> = {}) {
     const url = new URL(value);
-    const options = {...init};
+    const { allowedStatuses: requestedStatuses, ...options } = init;
+    const absenceStatuses = requestedStatuses?.filter(status => status === 404 || status === 410);
     const headers = new Headers(options.headers);
     const method = options.method || "GET";
     if (url.protocol !== "https:" || url.hostname !== "www.googleapis.com" || url.port || url.username || url.password || url.hash
@@ -64,7 +65,8 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
     const assertCurrent = await authorizeDispatch(snapshot.connection_id,access,configuration);
     assertCurrent();
     // Every resource attempt re-enters this transport. Credential renewal never replays a mutation.
-    return observedProviderFetch(method === "GET" ? "google.calendar.read" : "google.calendar.mutation", url,{...options,method,headers,cache:"no-store",redirect:"manual"});
+    const allowedStatuses = ["GET", "DELETE"].includes(method) && /^\/calendar\/v3\/calendars\/primary\/events\/[^/]+$/.test(url.pathname) ? absenceStatuses : undefined;
+    return observedProviderFetch(method === "GET" ? "google.calendar.read" : "google.calendar.mutation", url,{...options,method,headers,cache:"no-store",redirect:"manual"}, allowedStatuses);
   }});
   assertInitial();
   return {ok:true as const,calendar};

@@ -42,7 +42,7 @@ export function observedDirectoryFetch(operation: "directory.sts" | "directory.i
 }
 
 
-export function observedProviderFetch(operation: SafeOperation, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export function observedProviderFetch(operation: SafeOperation, input: RequestInfo | URL, init?: RequestInit, allowedStatuses?: readonly number[]): Promise<Response> {
   if (!runtimeObservationActive()) return fetch(input, init);
-  return observeProviderHttp(operation, () => fetch(input, init));
+  return observeProviderHttp(operation, () => fetch(input, init), allowedStatuses);
 }
