@@ -1,3 +1,4 @@
+import { observedProviderFetch } from "./observed-fetch";
 import { bindGitHubJob } from "./github-job";
 import { reassertDeliveryAdmission } from "./delivery-admission-scope";
 import { installationGraphqlDocuments } from "../../github-graphql-documents";
@@ -259,7 +260,7 @@ async function fetchGitHubAsset(value: string, token: string, authorizeDispatch:
     // This URL passed the asset-host allowlist; every redirect is checked before the next request.
     const assertCurrent = await authorizeDispatch();
     assertCurrent();
-    const response: Response = await fetch(url, {
+    const response: Response = await observedProviderFetch("github.read", url, {
       method: "GET",
       headers,
       cache: "no-store",

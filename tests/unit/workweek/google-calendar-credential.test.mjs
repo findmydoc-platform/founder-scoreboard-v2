@@ -148,3 +148,32 @@ test("disconnect confirms an observed provider effect after the initiating owner
   expect(response.status).toBe(202);
   expect(await response.json()).toEqual({ result: { state: "remove_pending", recovery: "retry" } });
 });
+
+test("Google status HTTP measurement counts every Auth, database and Calendar dispatch once", async () => {
+  const state = fixture();
+  const transport = globalThis.fetch;
+  const actual = [];
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init);
+    actual.push(new URL(request.url).pathname);
+    if (new URL(request.url).pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json({ id: "owner-1", name: "Synthetic owner", platform_role: "founder" });
+    return transport(input, init);
+  });
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "100");
+  const lines = [];
+  const output = vi.spyOn(process.stdout, "write").mockImplementation(line => { lines.push(String(line)); return true; });
+  try {
+    const { GET } = await importTestModule("src/app/api/google-workspace/status/route.ts", { "server-only": {} });
+    const response = await GET(new NextRequest("https://application.example.test/api/google-workspace/status", { headers: state.request.headers }));
+    expect(response.status).toBe(200);
+    const event = lines.map(line => JSON.parse(line)).find(record => record.event === "request.completed");
+    expect(event).toMatchObject({ method: "GET", route: "/api/google-workspace/status", externalCalls: { total: actual.length, providers: { google_workspace: 1 } } });
+    expect(event.externalCalls.providers.supabase_auth).toBe(actual.filter(path => path.startsWith("/auth/")).length);
+    expect(event.externalCalls.providers.supabase_db).toBe(actual.filter(path => path.startsWith("/rest/")).length);
+    expect(event.externalCalls.operations).not.toHaveProperty("calendar.snapshot");
+    expect(event.externalCalls.operations).not.toHaveProperty("supabase.other");
+    expect(event.phases.some(phase => phase.operation === "credential.action")).toBe(true);
+    expect(event.phases.some(phase => phase.operation === "response.prepare")).toBe(true);
+    expect(lines.join("")).not.toMatch(/synthetic-calendar|synthetic-service|owner-1|user-1|calendar-auth/);
+  } finally { output.mockRestore(); }
+});

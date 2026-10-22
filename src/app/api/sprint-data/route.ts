@@ -1,8 +1,9 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, authzError } from "@/lib/api-response";
 import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const apiContext = await requirePlanningContext(request, "planning.sprint.read");
   if (!apiContext.ok) return apiContext.response;
   const currentProfile = apiContext.permission.profile;
@@ -12,5 +13,7 @@ export async function GET(request: NextRequest) {
   if (!header.ok) return authzError(header);
   if (result.status === "forbidden") return apiError("Sprint darf nicht geladen werden.", 403);
   if (result.status === "unavailable") return apiError("Sprint konnte nicht geladen werden.", 503);
-  return NextResponse.json({ model: result.model, headerData: header.headerData, currentProfile });
+  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, headerData: header.headerData, currentProfile }));
 }
+
+export const GET = observeRuntimeHandler("planning.sprint", handleGET);

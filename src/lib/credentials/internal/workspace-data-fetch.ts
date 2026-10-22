@@ -1,6 +1,6 @@
 import "server-only";
 import { observedSupabaseFetch } from "./observed-fetch";
-import { classifyCalendarError, observeCalendarPhase, recordCalendarResult, recordCalendarFailure } from "../../runtime-logging";
+import { classifyRuntimeError, observeRuntimePhase, recordRuntimeResult, recordRuntimeFailure } from "../../runtime-logging";
 import { createHash, randomBytes } from "node:crypto";
 import { assertGoogleSession, requireWorkspaceAccess } from "./workspace-access";
 import { getServerServiceRoleSupabase } from "./service-client";
@@ -31,11 +31,11 @@ export const workspaceDataFetch: typeof fetch = async (input, init) => {
   try { return await observedSupabaseFetch(request); }
   finally {
     // Never replay the user operation when cleanup fails; permits also expire independently.
-    await observeCalendarPhase("workspace.permit.release", async () => {
+    await observeRuntimePhase("workspace.permit.release", async () => {
       const released = await service.rpc("workspace_release_permit", { p_hash: hash });
-      recordCalendarResult("workspace.permit.release", released.error, "permit_cleanup_failed");
+      recordRuntimeResult("workspace.permit.release", released.error, "permit_cleanup_failed");
     }).catch(error => {
-        recordCalendarFailure({ operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: classifyCalendarError(error) });
+        recordRuntimeFailure({ operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: classifyRuntimeError(error) });
     });
   }
 };

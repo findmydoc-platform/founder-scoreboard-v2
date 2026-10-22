@@ -1,3 +1,4 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { type NextRequest, NextResponse } from "next/server";
 import {
   TeamWorkweekPublicationError,
@@ -25,10 +26,10 @@ function publicationFailureResponse(error: unknown) {
         : error.code === "conflict"
           ? 409
           : 503;
-  return NextResponse.json({ error: error.message, code: error.code, ...(error.completionPending ? { completionPending: true } : {}) }, { status });
+  return observeRuntimePreparation(() => NextResponse.json({ error: error.message, code: error.code, ...(error.completionPending ? { completionPending: true } : {}) }, { status }));
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const payload = await readJsonPayload<unknown>(request, null);
   const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
   const context = await requirePlanningContext(request, "workweek.publish", typeof input.versionId === "string" ? input.versionId : "");
@@ -43,19 +44,19 @@ export async function POST(request: NextRequest) {
       return apiError("Google wurde geändert. Gleiche Google zuerst ab und prüfe danach deine private Version.", 409);
     }
     if (preflight.state === "conflict") {
-      return NextResponse.json({
+      return observeRuntimePreparation(() => NextResponse.json({
         error: "FounderOps und Google wurden parallel geändert. Wähle bewusst eine Variante.",
         conflict: preflight.conflict,
-      }, { status: 409 });
+      }, { status: 409 }));
     }
     const publication = await context.planning.publishWorkweek();
-    return NextResponse.json({ publication }, { status: publication.syncState === "delayed" ? 202 : 200 });
+    return observeRuntimePreparation(() => NextResponse.json({ publication }, { status: publication.syncState === "delayed" ? 202 : 200 }));
   } catch (error) {
     if (error instanceof TeamWorkweekConflictError) {
       if (error.delayClass) {
         try {
           const publication = await context.planning.delayWorkweek();
-          return NextResponse.json({ publication }, { status: publication.syncState === "delayed" ? 202 : 200 });
+          return observeRuntimePreparation(() => NextResponse.json({ publication }, { status: publication.syncState === "delayed" ? 202 : 200 }));
         } catch (delayError) {
           return publicationFailureResponse(delayError);
         }
@@ -66,3 +67,5 @@ export async function POST(request: NextRequest) {
     return publicationFailureResponse(error);
   }
 }
+
+export const POST = observeRuntimeHandler("workweek.publish", handlePOST);

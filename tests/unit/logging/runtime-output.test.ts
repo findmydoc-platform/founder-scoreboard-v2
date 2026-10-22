@@ -11,7 +11,7 @@ const instanceId = "2f281f12-aaed-4f75-8b2f-1b69a5c6645c";
 const completion = () => ({ requestId, instanceId, stage: "route", status: 200, outcome: "success", durationMs: 5,
   completeness: { correlation: "missing", externalCallsComplete: false, cache: "unavailable" } });
 const adapter = () => importTestModule("src/lib/runtime-logging/output.ts", { "server-only": {} });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 test("the serialized event projects approved fields and omits seeded private data", async () => {
   const { createRuntimeLogger } = await adapter();
@@ -134,4 +134,29 @@ test("phase truncation preserves compact failure, cache, counters and coverage w
   expect(JSON.parse(sink.lines[0])).toMatchObject({ externalCalls: { total: 80, operations: { "calendar.publications": 80 } },
     completeness: { externalCallsComplete: false, phasesTruncated: true }, membership: { result: "miss" }, failure: { providerStatus: 503 } });
   expect(JSON.parse(sink.lines[0]).phases.length).toBeLessThanOrEqual(64);
+});
+
+
+test("registered requests retain their static method and route and aggregate the four provider areas", async () => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink();
+  createRuntimeLogger(sink, new Sink()).completed({ ...completion(), routeKey: "task.comment",
+    externalCalls: { total: 6, complete: true, operations: { "supabase.user": 1, "supabase.db.read": 2, "google.calendar.read": 1, "github.read": 1, "github.mutation": 1 } },
+  });
+  expect(JSON.parse(sink.lines[0])).toMatchObject({ scope: "planning", operation: "request.workflow", method: "POST", route: "/api/tasks/[id]/comments",
+    externalCalls: { total: 6, providers: { supabase_auth: 1, supabase_db: 2, google_workspace: 1, github: 2 } },
+    completeness: { externalCallsScope: "registered_provider_transports", externalCallsComplete: false, uninstrumented: ["vercel_oidc_internal", "browser_and_ssr"] },
+  });
+});
+
+test("server detail percentage retains bounded phases without accepting caller detail flags", async () => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink(); const logger = createRuntimeLogger(sink, new Sink());
+  const value = { ...completion(), requestId: "8ea34e08-8cc2-42ad-a562-87b700000001", routeKey: "task.detail",
+    phases: [{ id: "route:1", operation: "request.workflow", kind: "operation", offsetMs: 0, durationMs: 1, outcome: "success" }], detailPercent: 100 };
+  logger.completed(value);
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "100");
+  logger.completed(value);
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "101");
+  logger.completed(value);
+  expect(sink.lines.map(line => JSON.parse(line).detailRetained)).toEqual([false, true, false]);
+  expect(JSON.parse(sink.lines[1])).toMatchObject({ retentionReason: "configured_sample", phases: value.phases });
 });

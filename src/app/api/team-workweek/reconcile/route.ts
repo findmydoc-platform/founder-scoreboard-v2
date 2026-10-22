@@ -1,3 +1,4 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { type NextRequest, NextResponse } from "next/server";
 import {
   TeamWorkweekReconciliationError,
@@ -7,7 +8,7 @@ import { requirePlanningContext } from "@/features/planning/server/planning-api-
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const context = await requirePlanningContext(request, "workweek.reconcile");
   if (!context.ok) return context.response;
   const payload = await readJsonPayload<unknown>(request, null);
@@ -17,9 +18,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const reconciliation = await context.planning.reconcileWorkweek();
-    return NextResponse.json({ reconciliation }, {
+    return observeRuntimePreparation(() => NextResponse.json({ reconciliation }, {
       status: reconciliation.state === "delayed" ? 202 : reconciliation.state === "conflict" ? 409 : 200,
-    });
+    }));
   } catch (error) {
     if (!(error instanceof TeamWorkweekReconciliationError)) {
       return apiError("Google-Abgleich konnte nicht abgeschlossen werden.", 503);
@@ -28,3 +29,5 @@ export async function POST(request: NextRequest) {
     return apiError(error.message, status);
   }
 }
+
+export const POST = observeRuntimeHandler("workweek.reconcile", handlePOST);

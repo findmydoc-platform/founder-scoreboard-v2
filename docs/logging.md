@@ -1,30 +1,48 @@
 # Runtime logging contract
 
-Status: calendar pilot deployed; bounded production acceptance passed on 2026-10-20.
+Status: the calendar pilot passed bounded production acceptance on 2026-10-20. The current implementation extends its central measurement to the registered routes below; that historical acceptance does not validate the extension.
 
-The pilot covers `GET /api/team-workweek/team`, its existing session proxy, and the private credential/provider transports it reaches. One route completion links the response ID to the safe proxy summary, membership evidence, actual HTTP-attempt counts, and bounded local phase intervals. It preserves the credential and cookie chain.
+The central module covers 25 registered method/route pairs, their existing session proxy, and the private Supabase Auth, Supabase database, Google Workspace and GitHub transports they reach. One route completion links the response ID to the safe proxy summary, membership evidence, actual HTTP-attempt counts, and bounded local phase intervals. It preserves the credential and cookie chain.
 
-The implementation completes the scope of [#518](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/518) and [#519](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/519). The production acceptance below records real-request correlation, observed Vercel log classification, and the existing retention entitlement. Its results apply to the inspected deployment and bounded sample.
+The original pilot completed the scope of [#518](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/518) and [#519](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/519). The production acceptance below records real-request correlation, observed Vercel log classification, and the existing retention entitlement. Its results apply to the inspected deployment and bounded sample.
 
 The production acceptance and serialized example below predate the calendar snapshot implementation in PR #522. They remain evidence for the deployment and commit inspected on 2026-10-20; they do not establish production behavior or performance for the new read path.
+
+## Registered HTTP scope
+
+`src/lib/runtime-logging/routes.ts` owns the static method/route catalog. Dynamic task IDs and query strings are used by the existing application only; output contains the fixed `[id]` template. Unknown route keys are dropped at serialization. The proxy selects only catalog entries and replaces caller-supplied diagnostic values before forwarding.
+
+| Area | Registered method and route |
+| --- | --- |
+| Calendar | GET `/api/team-workweek/team` |
+| Planning | GET `/api/planning-header-data`, `/api/planning-board-data`, `/api/planning-revision`, `/api/sprint-data`, `/api/strategic-planning-data` |
+| Task | GET `/api/tasks/[id]/detail-data`; POST `/api/tasks/[id]/comments`, `/api/tasks/[id]/github-comments`, `/api/tasks/[id]/sync-github` |
+| GitHub connection | GET `/api/github-app/status`; DELETE `/api/github-app/connection` |
+| Workweek | GET and POST `/api/team-workweek/private-draft` and `/api/team-workweek/conflict`; POST `/api/team-workweek/publish`, `/api/team-workweek/reconcile`, `/api/team-workweek/restart` |
+| Google connection | GET `/api/google-workspace/status`; GET and POST `/api/google-workspace/disconnect` |
+| Notifications | GET `/api/notifications-data`; GET and POST `/api/notifications/deliver` |
+
+The central module owns request contexts, static operations, counters, timing and safe output. Routes only select their catalog entry. `request.workflow` encloses the non-Calendar handler; `credential.action` measures the public credential decision, including execution where that existing action executes work itself. Existing Auth and Workspace phases remain nested below it. HTTP phases identify actual provider attempts. `response.prepare` measures synchronous JSON response construction at the registered handlers and their shared response helpers. It does not measure transfer to the browser. The existing Calendar workflow keeps its detailed Calendar operations.
+
+Membership and Directory credential observations retain their existing meaning. Other data or credential cache outcomes are not inferred from request counts. A low count is not evidence of a cache hit, and a new `instanceId` is not proof of a cold process start.
 
 ## Decisions and rationale
 
 - Use a small server-only adapter around standalone Pino. The adapter accepts approved event shapes, not arbitrary objects or free-text messages. Pino remains replaceable behind that boundary.
 - Reuse the website's structured event and context conventions. Do not import its logging modules, initialize Payload, or adopt its exception-retention exception.
-- Use Vercel runtime logs as the initial destination. Additional log storage, PostHog integration, metrics exporters, distributed tracing, dashboards, and instrumentation of other routes require a separate scope decision.
+- Use Vercel runtime logs as the initial destination. Additional log storage, PostHog integration, metrics exporters, distributed tracing, dashboards, and routes outside the fixed catalog require a separate scope decision.
 - Keep application logs, metrics, and traces distinct. Logs describe individual events; metrics describe aggregates; traces connect execution across boundaries. Pino alone does not create distributed traces.
 - Preserve the [authentication contract](auth-flow.md). Logging must not change authorization results, credential binding, cache deadlines, retry behavior, permit cleanup, or mutations.
 
-The pilot exposes its random application request ID in the response header and uses the existing Vercel retention window without an additional archive. Neither setting is an authorization input.
+The module exposes its random application request ID in the response header and uses the existing Vercel retention window without an additional archive. Neither setting is an authorization input.
 
 ## Implemented output
 
 `src/lib/runtime-logging` owns the server-only Pino adapter and independent proxy/route contexts. It uses a local writable stream without a worker or network transport. Unknown fields are dropped before Pino redaction. Only reviewed operations, codes, enums, bounded numeric values and validated deployment identifiers reach output. Neither Pino bindings nor arbitrary messages are exposed to callers.
 
-Every compact completion is emitted at an info-capable threshold. Records include `schemaVersion: 1`, a fixed `scope: calendar`, static method/route, timestamp, UUID request/runtime IDs, status, outcome, duration, observed processing time and completeness. The route embeds the approved proxy summary when available. Deployment environment, deployment ID, region and Vercel header ID are optional and omitted unless they match the adapter's conservative accepted formats. This does not imply equality with Vercel's runtime Request Id.
+Every compact completion is emitted at an info-capable threshold. Records include `schemaVersion: 1`, a catalog-owned `scope: calendar | planning | workweek | github | notifications`, static method/route, timestamp, UUID request/runtime IDs, status, outcome, duration, observed processing time and completeness. The route embeds the approved proxy summary when available. Deployment environment, deployment ID, region and Vercel header ID are optional and omitted unless they match the adapter's conservative accepted formats. This does not imply equality with Vercel's runtime Request Id.
 
-The pilot classifies failures at their observed source before public response mapping. Approved provider HTTP, network, timeout, invalid-response and configuration categories accompany static operation names. Expected access denials retain their existing public `deniedCode` and do not become unexpected application errors. A provider attempt or suppressed cleanup can fail while the factual response remains HTTP 200; the summary then retains the safe failure at `error`. Thrown application errors retain their original identity; raw errors never reach either output stream.
+The module classifies failures at their observed source before public response mapping. Approved provider HTTP, network, timeout, invalid-response and configuration categories accompany static operation names. Expected access denials retain their existing public `deniedCode` and do not become unexpected application errors. A provider attempt or suppressed cleanup can fail while the factual response remains HTTP 200; the summary then retains the safe failure at `error`. Thrown application errors retain their original identity; raw errors never reach either output stream.
 
 The internal `x-founderops-proxy-observation` request header carries a schema-tagged summary below 1 KiB. Proxy execution deletes incoming diagnostic values before session maintenance and rebuilds Next.js request-override headers after refresh. Existing `Set-Cookie`, cache-control and downstream cookie updates remain intact. Route execution uses its own AsyncLocalStorage context and validates the forwarded summary. Missing or malformed metadata creates a fresh local ID and records `missing` or `invalid` correlation.
 
@@ -65,13 +83,13 @@ Use Pino redaction as additional protection after the approved-field projection.
 
 ## Request and instance correlation
 
-Create a fresh request ID at proxy entry for the pilot route. Remove or overwrite caller-supplied application diagnostic headers before forwarding. Re-establish a local request context at route entry; do not assume that AsyncLocalStorage or module globals span proxy and route execution.
+Create a fresh request ID at proxy entry for a registered route. Remove or overwrite caller-supplied application diagnostic headers before forwarding. Re-establish a local request context at route entry; do not assume that AsyncLocalStorage or module globals span proxy and route execution.
 
 Forward only the bounded, approved proxy summary through internal request metadata. Preserve refreshed cookies and existing response behavior. Use Next.js request-header forwarding, not response-header forwarding. Treat malformed metadata as unavailable telemetry, never as an auth failure or authorization grant. A missing context gets a fresh local ID and an explicit incomplete-correlation indication.
 
 Record proxy and route instance IDs separately. A random runtime ID identifies an observed lifetime, not a physical Vercel machine. Generate a cache-owner ID alongside the membership-evidence store so that its lifetime is unambiguous. Never use credential material to construct either identifier.
 
-Return the application `requestId` as `x-request-id` on pilot responses produced by the proxy or route, including successful, denied, invalid-input, and handled-error responses. The header must match the context that produced the response. Keep proxy summaries, auth outcomes, cache details, and internal metadata server-side. The ID is a diagnostic reference, not a credential. Failures before application execution are outside this header guarantee.
+Return the application `requestId` as `x-request-id` on registered responses produced by the proxy or route, including successful, denied, invalid-input, and handled-error responses. The header must match the context that produced the response. Keep proxy summaries, auth outcomes, cache details, and internal metadata server-side. The ID is a diagnostic reference, not a credential. Failures before application execution are outside this header guarantee.
 
 The application request ID, `x-vercel-id`, and Vercel's runtime Request Id are distinct identifiers. Verify their association in the deployed runtime instead of assuming equality.
 
@@ -95,9 +113,13 @@ Use monotonic elapsed time within each segment. Measure the proxy, complete rout
 
 The route summary contains its local total and the observed proxy duration. Their sum may be reported as observed application processing time because these segments run sequentially, but it excludes the transfer gap, platform queuing, and browser network time. Never label it browser latency or end-to-end request duration. Do not subtract monotonic timestamps from different runtimes.
 
-Count actual HTTP dispatch attempts at the private transport boundaries. Include existing retries without adding any. Inject the observer into every Supabase client used by the pilot, including auth/JWKS, service RPCs, cookie handling, and data operations. Observe the existing explicit Directory fetches. Do not replace global fetch or inspect bodies. Distinguish fetch time to response headers from the surrounding SDK phase, which also includes response processing.
+Count actual HTTP dispatch attempts in the private transports, after their existing authority checks. Include existing retries without adding any. The common Supabase observer covers auth/JWKS, service RPCs, cookie handling, bound data operations and the guarded planning, account, delivery and confirmed-bookkeeping transports. Provider observers cover explicit Directory, Google OAuth/userinfo, Calendar, Chat, GitHub resource/token/asset and GitHub OAuth requests. Global fetch is unchanged. Observation never reads a body. HTTP duration ends when fetch resolves or rejects; it does not measure response-body consumption. The enclosing credential/workflow phases include that work when it occurs before they complete.
 
-The declared scope is `private_supabase_and_explicit_directory_http`. Counts cover each actual dispatch through the pilot's auth/JWKS, service, cookie and bound-data SDK fetches, explicit Auth settings and Directory STS/IAM/membership requests. OIDC acquisition has a timed operation, but its internal requests remain excluded as `vercel_oidc_internal`. Unknown private operations lower completeness. Missing proxy metadata also sets route `externalCallsComplete: false`; available route counts remain useful partial observations. `externalCallsComplete` never claims unrestricted request-wide external coverage. Shared verification attempts belong to the request that executes them, not every waiter. Existing network failures and responses must pass through unchanged.
+The declared scope is `registered_provider_transports`. `externalCalls.operations` contains finite reviewed operation identifiers. `externalCalls.providers` groups attempts into `supabase_auth`, `supabase_db`, `google_workspace`, `github` and `unknown`. Grouped Workspace RPCs count as database attempts; a logical authorization phase adds no request. GitHub GraphQL POST uses the existing explicit read/mutation classification. Supabase `rpc` identifies a transport, not proof of a read or mutation: RPC names and arguments are never serialized. Known planning and identity tables have static groups; other PostgREST requests use generic read/write groups. Calendar-only snapshot labels stay limited to the Calendar route.
+
+`externalCalls.durationMsByOperation` retains summed HTTP-attempt time for every approved operation even when phase detail is sampled out or truncated. These sums can overlap during concurrency and must never be presented as elapsed request time. Use `durationMs` for the route segment and `observedProcessingMs` for the sum of observed proxy and route segments. Browser/network delivery and gaps between runtime invocations remain outside those values.
+
+OIDC acquisition has a timed operation, but its internal requests remain excluded as `vercel_oidc_internal`. Browser-originated requests, SSR work, unregistered routes, Notion and tool-metadata transports are outside this catalog. The completion lists `browser_and_ssr` alongside OIDC as exclusions. Unknown private operations lower completeness. Missing proxy metadata also sets route `externalCallsComplete: false`; available route counts remain useful partial observations. `externalCallsComplete` means complete within the declared transport scope, never unrestricted request-wide external coverage. Shared verification or credential-acquisition attempts belong to the request that executes them, not every waiter. Existing network failures and responses pass through unchanged.
 
 Calendar reads use the fixed operation `calendar.snapshot` for the profile-root PostgREST request, including its embedded published-owner existence check, bounded calendar rows and tail marker. If the embedded rows omit the marker, every continuation dispatch is counted under `calendar.publications`; it receives its own existing authority check and permit lifecycle. These phases describe actual request boundaries. A joined row is not counted as a separate HTTP request, and phase durations are not summed into a synthetic total.
 
@@ -119,6 +141,12 @@ Application severity and Vercel's displayed log level are separate. Verify the s
 
 Sampling controls emission, not storage lifetime. Use the existing Vercel retention window without a new archive. The pilot requires no additional minimum retention period. Verify and record the project's actual window before later production acceptance so that operators know how long a request remains available. Longer retrospective diagnosis requires a separate retention decision before introducing storage or changing configuration.
 
+## Server-controlled measurement detail
+
+`RUNTIME_LOG_DETAIL_PERCENT` optionally selects a whole percentage from `0` through `100` for successful fast-request detail. Only that server environment variable is read. Incoming headers, request bodies and query parameters cannot select detail, skip authorization or force a provider operation. Omitted, empty or invalid values retain the existing deterministic one-in-ten request-ID selection. Configured values use the same request ID across proxy and route and report `retentionReason: configured_sample` when selected. Errors, slow requests and membership misses/expiry retain detail independently of this percentage, including when it is zero.
+
+A later authorized measurement window can use `RUNTIME_LOG_DETAIL_PERCENT=100`. Compact completions, attempt counters and duration aggregates are emitted at every setting. The 64-phase, 10,000-detail-byte and 16 KiB event limits still apply at 100 percent; check `phasesTruncated` before treating detail as complete. Restore the default after the window. This change does not set production configuration, change retention, run a performance series or add a measurement script to the repository. The later deterministic series requires separate user approval and uses temporary code outside the repository.
+
 ## Logger failure behavior
 
 Keep the first sink local, with no network destination or worker transport. Handle synchronous adapter/serialization failures and asynchronous writable-stream errors. Do not await telemetry network delivery or stream drain in the auth/data path. Bound memory; drop telemetry on sink failure or backpressure rather than retrying application work.
@@ -127,7 +155,7 @@ If available, use a fixed, rate-limited safe fallback marker for logger failure.
 
 ## Acceptance checks for implementation
 
-Use Freeman and Pryce's Outside-In TDD and Kent Beck's Test Desiderata when implementing observable behavior. The implementation uses the complete calendar HTTP/proxy/credential seam and the narrow serialized-output seam. Controlled tests cover response IDs, safe output, forged/missing metadata, cookie refresh, cache paths and original/JWT deadlines, concurrent request isolation and shared ownership, actual retries, overlapping monotonic intervals, late failures, threshold boundaries, sampling, bounds and sink isolation. Production checks require separate deployment authorization.
+Use Freeman and Pryce's Outside-In TDD and Kent Beck's Test Desiderata when implementing observable behavior. The implementation uses the HTTP/proxy/credential seam and the serialized-output seam. Provider-extension tests cross the actual Google status and task-detail routes, the public GitHub credential/resource operations, and the existing Calendar proxy flow. They cover exact dispatch counts, GraphQL reads, unchanged retry/no-replay behavior, concurrent isolation, forged metadata, dropped output and phase truncation with retained duration aggregates. Controlled tests cover response IDs, safe output, forged/missing metadata, cookie refresh, cache paths and original/JWT deadlines, concurrent request isolation and shared ownership, actual retries, overlapping monotonic intervals, late failures, threshold boundaries, sampling, bounds and sink isolation. Production checks require separate deployment authorization.
 
 1. Seed distinctive secret values into exceptions, causes, unknown fields, headers, URLs, and bodies. Assert their absence from the actual serialized output, including fallback output. Assert the approved safe code and operation remain present.
 2. Exercise proxy-to-route correlation with forged diagnostic headers, cookie refresh, missing metadata, and concurrent requests. Preserve cookies and responses; reject forged context without affecting authorization. Assert that `x-request-id` matches the producing context on successful, denied, invalid-input, and handled-error responses, and that internal diagnostic metadata does not appear in response headers.

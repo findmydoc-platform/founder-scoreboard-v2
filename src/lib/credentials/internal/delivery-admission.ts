@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -108,7 +109,7 @@ export function deliveryStore(admission: DeliveryAdmission): SupabaseClient {
             return Response.json({ message: error.message, code: "delivery_admission_denied" }, { status: error.status });
           throw error;
         }
-        return fetch(input, init);
+        return observedSupabaseFetch(input, init);
       },
     } });
 }
@@ -124,7 +125,7 @@ export function bookkeepingStore(admission: DeliveryAdmission): SupabaseClient {
         }
         throw error;
       }
-      return fetch(input, init);
+      return observedSupabaseFetch(input, init);
     },
   } });
 }

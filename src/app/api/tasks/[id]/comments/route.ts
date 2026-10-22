@@ -1,3 +1,4 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
@@ -8,7 +9,7 @@ type CommentPayload = {
   comment?: string;
 };
 
-export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   const apiContext = await requirePlanningJsonContext<CommentPayload>(request, "planning.comment.create", {}, id);
   if (!apiContext.ok) return apiContext.response;
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     ? "not_applicable"
     : delivery?.data?.status || transaction?.deliveryStatus || "pending";
 
-  return NextResponse.json({
+  return observeRuntimePreparation(() => NextResponse.json({
     ok: true,
     comment: {
       id: created.id,
@@ -85,5 +86,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       level: "info",
       message: "Kommentar gespeichert. Veröffentlichung wartet auf deine GitHub-Verbindung.",
     } : null,
-  });
+  }));
 }
+
+export const POST = observeRuntimeHandler("task.comment", handlePOST);

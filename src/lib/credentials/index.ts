@@ -1,3 +1,4 @@
+import { observeRuntimePhase } from "../runtime-logging";
 import { authorizePublicResource } from "./internal/public-resources";
 import type { PublicResourceInput, PublicResourceResult } from "./public-resource-types";
 import { authorizeResource, isResourceAction } from "./internal/resources";
@@ -98,53 +99,55 @@ export function authorizeCredentialAction(input: PrivateDraftCredentialInput & {
 export function authorizeCredentialAction(input: CalendarCredentialInput): Promise<CalendarCredentialResult>;
 
 export function authorizeCredentialAction(input: PublicResourceInput | NotificationDeliveryInput | NotificationDigestInput | GitHubReconciliationInput | PlanningTrashMaintenanceInput | GoogleCalendarInput | GoogleCalendarConnectionInput | CalendarCredentialInput | PrivateDraftCredentialInput | GitHubInstallationInput | GitHubInstallationStatusInput | GitHubAuthoredCredentialInput | GitHubAttachmentInput | GitHubSessionInput | GitHubConnectionInput | PersonalPlanningCredentialInput | PersonalPlanningTokenManagementInput | SessionLifecycleInput | SessionCookieResponseInput | SessionPlanningInput | SessionHomeInput | SessionLinkPageInput | AdministratorCredentialInput | GoogleChatDeliveryInput | GoogleChatStatusInput | CronWebhookInput | AccountCredentialInput | ReleaseIngestCredentialInput | GitHubWebhookInput | DecisionLogCredentialInput | PlanningCredentialInput | ResourceCredentialInput): Promise<NotificationDeliveryResult | NotificationDigestResult | GitHubReconciliationResult | PlanningTrashMaintenanceResult | {ok:true;calendar:GoogleCalendarCapability} | GoogleWorkspaceConnectionStatus | {next:string;redirect?:string} | CalendarCredentialResult | PrivateDraftCredentialResult | GitHubInstallationResult | GitHubAppOperationalStatus | GitHubAuthoredCredentialResult | GitHubConnectionStatus | GitHubConnectionResult | {ok:true} | PersonalPlanningCredentialResult | PersonalPlanningTokenManagementResult | Response | ServerPlanningAuth | AppWorkspace | SessionLinkPageState | AdministratorCredentialResult | GoogleChatDeliveryResult | GoogleChatDeliveryStatus | CronWebhookResult | AccountCredentialResult | ReleaseIngestCredentialResult | GitHubWebhookResult | DecisionLogCredentialResult | PlanningCredentialResult | ResourceCredentialResult | PublicResourceResult> {
-  if (input.action === "health.inspect" || input.action === "historical-initiative.resolve") return Promise.resolve(authorizePublicResource(input));
-  if (isResourceAction(input.action)) return authorizeResource(input as ResourceCredentialInput);
-  if ((input.action.startsWith("notifications.") || input.action.startsWith("github.reconciliation.")) && input.credential.kind !== "notification-delivery-request") return Promise.resolve({ok:false,status:403,error:"Keine Berechtigung für diese Aktion."});
-  if (input.action === "notifications.delivery.inspect" || input.action === "notifications.delivery.run") return authorizeNotificationDelivery(input as NotificationDeliveryInput);
-  if (input.action === "notifications.digest.generate") return authorizeNotificationDigest(input as NotificationDigestInput);
-  if (input.action === "github.reconciliation.preview" || input.action === "github.reconciliation.deliver") return authorizeDeliveryReconciliation(input as GitHubReconciliationInput);
-  if (input.action.startsWith("maintenance.planning-trash.")) return authorizePlanningTrashMaintenance(input as PlanningTrashMaintenanceInput);
-  if (input.action === "github.webhooks.drain") return input.credential.kind === "cron-request" ? authorizeCronWebhook(input) : Promise.resolve({ ok: false as const, status: 401 as const, error: "Ungültiger Cron-Secret." });
-  if (input.action === "platform-release.ingest") return authorizeReleaseIngest(input);
-  if (input.action === "github.webhook.accept") return input.credential.kind === "github-webhook-request" ? authorizeGitHubWebhook(input) : Promise.resolve({kind:"rejected" as const,status:403 as const,code:"github_webhook_unauthorized",message:"GitHub webhook credential is required."});
-  if (input.action === "decision-log.read") return authorizeDecisionLog(input);
-  if (isPlanningAction(input.action)) return authorizePlanning(input as PlanningCredentialInput);
-  if (input.action === "google-calendar.connection.start" || input.action === "google-calendar.connection.complete") return authorizeGoogleCalendarConnection(input as GoogleCalendarConnectionInput);
-  if (input.action === "google-calendar.workweek" || input.action === "google-calendar.connection.status" || input.action === "google-calendar.connection.remove") return authorizeGoogleCalendar(input as GoogleCalendarInput);
-  if (input.action === "google-chat.status" && input.credential.kind === "google-chat-configuration") return Promise.resolve(googleChatStatus());
-  if (input.action.startsWith("google-chat.")) return authorizeGoogleChat(input as GoogleChatDeliveryInput);
-  if (input.action.startsWith("account.") || input.action === "releases.read" || input.action === "releases.seen") return authorizeAccount(input as AccountCredentialInput);
-  if (["administrator-access.read", "administrator-access.activate", "administrator-access.end", "administration.directory.read", "administration.eligibility.manage", "administration.technical.update"].includes(input.action)) return authorizeAdministrator(input as AdministratorCredentialInput);
-  if (input.credential.kind === "server-cookies") {
-    if (input.action === "session.planning") return serverPlanningAuth();
-    if (input.action === "session.home") return serverHomeWorkspace();
-    if (input.action === "session.link-page") return serverLinkPage();
-    return executeSessionLifecycle(input as SessionCookieResponseInput);
-  }
-  if (input.credential.kind === "http-request") return executeSessionLifecycle(input as SessionLifecycleInput);
+  return observeRuntimePhase("credential.action", async () => {
+    if (input.action === "health.inspect" || input.action === "historical-initiative.resolve") return Promise.resolve(authorizePublicResource(input));
+    if (isResourceAction(input.action)) return authorizeResource(input as ResourceCredentialInput);
+    if ((input.action.startsWith("notifications.") || input.action.startsWith("github.reconciliation.")) && input.credential.kind !== "notification-delivery-request") return Promise.resolve({ok:false,status:403,error:"Keine Berechtigung für diese Aktion."});
+    if (input.action === "notifications.delivery.inspect" || input.action === "notifications.delivery.run") return authorizeNotificationDelivery(input as NotificationDeliveryInput);
+    if (input.action === "notifications.digest.generate") return authorizeNotificationDigest(input as NotificationDigestInput);
+    if (input.action === "github.reconciliation.preview" || input.action === "github.reconciliation.deliver") return authorizeDeliveryReconciliation(input as GitHubReconciliationInput);
+    if (input.action.startsWith("maintenance.planning-trash.")) return authorizePlanningTrashMaintenance(input as PlanningTrashMaintenanceInput);
+    if (input.action === "github.webhooks.drain") return input.credential.kind === "cron-request" ? authorizeCronWebhook(input) : Promise.resolve({ ok: false as const, status: 401 as const, error: "Ungültiger Cron-Secret." });
+    if (input.action === "platform-release.ingest") return authorizeReleaseIngest(input);
+    if (input.action === "github.webhook.accept") return input.credential.kind === "github-webhook-request" ? authorizeGitHubWebhook(input) : Promise.resolve({kind:"rejected" as const,status:403 as const,code:"github_webhook_unauthorized",message:"GitHub webhook credential is required."});
+    if (input.action === "decision-log.read") return authorizeDecisionLog(input);
+    if (isPlanningAction(input.action)) return authorizePlanning(input as PlanningCredentialInput);
+    if (input.action === "google-calendar.connection.start" || input.action === "google-calendar.connection.complete") return authorizeGoogleCalendarConnection(input as GoogleCalendarConnectionInput);
+    if (input.action === "google-calendar.workweek" || input.action === "google-calendar.connection.status" || input.action === "google-calendar.connection.remove") return authorizeGoogleCalendar(input as GoogleCalendarInput);
+    if (input.action === "google-chat.status" && input.credential.kind === "google-chat-configuration") return Promise.resolve(googleChatStatus());
+    if (input.action.startsWith("google-chat.")) return authorizeGoogleChat(input as GoogleChatDeliveryInput);
+    if (input.action.startsWith("account.") || input.action === "releases.read" || input.action === "releases.seen") return authorizeAccount(input as AccountCredentialInput);
+    if (["administrator-access.read", "administrator-access.activate", "administrator-access.end", "administration.directory.read", "administration.eligibility.manage", "administration.technical.update"].includes(input.action)) return authorizeAdministrator(input as AdministratorCredentialInput);
+    if (input.credential.kind === "server-cookies") {
+      if (input.action === "session.planning") return serverPlanningAuth();
+      if (input.action === "session.home") return serverHomeWorkspace();
+      if (input.action === "session.link-page") return serverLinkPage();
+      return executeSessionLifecycle(input as SessionCookieResponseInput);
+    }
+    if (input.credential.kind === "http-request") return executeSessionLifecycle(input as SessionLifecycleInput);
 
-  if (input.action==="github.connection.start" || input.action==="github.connection.complete") return authorizeGitHubConnection(input);
-  if (input.action==="github.comment.deliver" || input.action==="github.comment.preview" || input.action==="github.review.deliver") return authorizeAuthoredGitHub(input);
-  if (input.action==="github.attachment.write") return authorizeGitHubAttachment(input);
-  if (input.action==="github.connection.status" || input.action==="github.connection.disconnect") return githubConnectionSession(input);
+    if (input.action==="github.connection.start" || input.action==="github.connection.complete") return authorizeGitHubConnection(input);
+    if (input.action==="github.comment.deliver" || input.action==="github.comment.preview" || input.action==="github.review.deliver") return authorizeAuthoredGitHub(input);
+    if (input.action==="github.attachment.write") return authorizeGitHubAttachment(input);
+    if (input.action==="github.connection.status" || input.action==="github.connection.disconnect") return githubConnectionSession(input);
 
-  if (input.action.startsWith("github.") && input.credential.kind !== "github-installation" && input.credential.kind !== "github-claimed-job") {
+    if (input.action.startsWith("github.") && input.credential.kind !== "github-installation" && input.credential.kind !== "github-claimed-job") {
+      return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
+    }
+    if (input.action === "github.projection.apply" || input.action === "github.lifecycle.apply" || input.action === "github.issue.read" || input.action === "github.project.read" || input.action === "github.team.read" || input.action === "github.asset.read") return authorizeGitHubInstallation(input);
+    if (input.action === "github.installation.status") {
+      if (input.credential.kind !== "github-installation") return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
+      return installationOperationalStatus();
+    }
+    if (input.credential.kind === "personal-planning-token") return authorizePersonalPlanning(input as PersonalPlanningCredentialInput);
+    if (input.credential.kind !== "session-request") {
+      return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
+    }
+    if (input.action === "planning-items.tokens.manage") return authorizePersonalPlanningTokenManagement(input as PersonalPlanningTokenManagementInput);
+    if (input.action === "workweek.private.read" || input.action === "workweek.private.write") return authorizePrivateDraft(input as PrivateDraftCredentialInput);
+    if (input.action === "calendar.read") return authorizeCalendar(input.credential.request);
     return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
-  }
-  if (input.action === "github.projection.apply" || input.action === "github.lifecycle.apply" || input.action === "github.issue.read" || input.action === "github.project.read" || input.action === "github.team.read" || input.action === "github.asset.read") return authorizeGitHubInstallation(input);
-  if (input.action === "github.installation.status") {
-    if (input.credential.kind !== "github-installation") return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
-    return installationOperationalStatus();
-  }
-  if (input.credential.kind === "personal-planning-token") return authorizePersonalPlanning(input as PersonalPlanningCredentialInput);
-  if (input.credential.kind !== "session-request") {
-    return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
-  }
-  if (input.action === "planning-items.tokens.manage") return authorizePersonalPlanningTokenManagement(input as PersonalPlanningTokenManagementInput);
-  if (input.action === "workweek.private.read" || input.action === "workweek.private.write") return authorizePrivateDraft(input as PrivateDraftCredentialInput);
-  if (input.action === "calendar.read") return authorizeCalendar(input.credential.request);
-  return Promise.resolve({ ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." });
+  });
 }
 
 export type { GitHubJobContext } from "./github-job-types";

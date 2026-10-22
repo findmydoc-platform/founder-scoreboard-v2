@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { WorkspaceAccessError } from "../../workspace-identity";
@@ -32,7 +33,7 @@ export function accountService(strict: boolean, current: () => Promise<void>, as
         const failure = error instanceof WorkspaceAccessError ? error : new WorkspaceAccessError(503, "workspace_access_unavailable");
         return Response.json({ code: failure.code, message: failure.message }, { status: failure.status });
       }
-      return fetch(request);
+      return observedSupabaseFetch(request);
     } },
   });
 }

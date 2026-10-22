@@ -1,4 +1,5 @@
 import "server-only";
+import { observedProviderFetch } from "./observed-fetch";
 import { GitHubApiError, GITHUB_API_VERSION } from "../../github-http-contract";
 import type { GitHubOperationKind } from "../../github-http-contract";
 export { GitHubApiError, GITHUB_API_VERSION, GITHUB_ISSUE_DEPENDENCY_API_VERSION } from "../../github-http-contract";
@@ -157,7 +158,7 @@ export async function githubRequest(
     const assertCurrent = authorizeDispatch ? await authorizeDispatch() : undefined;
     assertCurrent?.();
     try {
-      response = await fetch(url, {
+      response = await observedProviderFetch(operation === "read" ? "github.read" : "github.mutation", url, {
         method,
         headers: githubHeaders(options.token, options.apiVersion),
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),

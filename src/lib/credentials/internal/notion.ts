@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
@@ -79,7 +80,7 @@ export async function authorizeDecisionLog(input: DecisionLogCredentialInput): P
         const url = new URL(outgoing.url), expected = new URL(dataConfiguration.url);
         if (url.origin !== expected.origin || !url.pathname.startsWith("/rest/v1/")) throw unavailable();
         assertCurrent(); assertData();
-        return fetch(outgoing);
+        return observedSupabaseFetch(outgoing);
       } catch { return Response.json({ message: "Decision Log ist gerade nicht verfügbar." }, { status: 403 }); }
     } },
   });

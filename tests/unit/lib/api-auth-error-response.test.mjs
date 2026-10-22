@@ -9,7 +9,7 @@ let protocol;
 beforeEach(() => { protocol = administratorProtocol({ authError: 401 }); });
 
 const { apiError, authzError } = await importTestModule("src/lib/api-response.ts", {
-  "./supabase": { getServerSupabase: () => ({}) },
+  "server-only": {},
 });
 
 const { authorizeCredentialAction: authorize } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });

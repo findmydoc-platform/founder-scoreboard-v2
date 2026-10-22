@@ -1,3 +1,4 @@
+import { observedProviderFetch } from "./observed-fetch";
 import "server-only";
 import { GoogleWorkspaceOAuthContractError } from "../../google-calendar-errors";
 import { authorizeSessionPolicy } from "./session-policy";
@@ -63,7 +64,7 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
     const assertCurrent = await authorizeDispatch(snapshot.connection_id,access,configuration);
     assertCurrent();
     // Every resource attempt re-enters this transport. Credential renewal never replays a mutation.
-    return fetch(url,{...options,method,headers,cache:"no-store",redirect:"manual"});
+    return observedProviderFetch(method === "GET" ? "google.calendar.read" : "google.calendar.mutation", url,{...options,method,headers,cache:"no-store",redirect:"manual"});
   }});
   assertInitial();
   return {ok:true as const,calendar};

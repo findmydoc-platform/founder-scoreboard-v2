@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { observeCalendarResultPhase } from "../../runtime-logging";
+import { observeRuntimeResultPhase } from "../../runtime-logging";
 import type { CalendarPublication, CalendarSnapshot } from "../types";
 
 const pageSize = 100;
@@ -84,7 +84,7 @@ async function readProfilePage(data: SupabaseClient, earliestDate: string, after
     .order("publication_revision", { referencedTable: "tail", ascending: true })
     .order("id", { referencedTable: "tail", ascending: true }).limit(1, { referencedTable: "tail" });
   if (afterId !== undefined) query = query.gt("id", afterId);
-  return await observeCalendarResultPhase("calendar.snapshot", () => query.returns<ProfileRow[]>());
+  return await observeRuntimeResultPhase("calendar.snapshot", () => query.returns<ProfileRow[]>());
 }
 
 async function readPublicationPage(data: SupabaseClient, ownerProfileId: string, earliestDate: string, cursor?: PublicationCursor) {
@@ -95,7 +95,7 @@ async function readPublicationPage(data: SupabaseClient, ownerProfileId: string,
   query = query.or(filter)
     .order("effective_from", { ascending: false }).order("publication_revision", { ascending: false }).order("id", { ascending: false })
     .limit(pageSize);
-  return await observeCalendarResultPhase("calendar.publications", () => query.returns<CalendarPublication[]>());
+  return await observeRuntimeResultPhase("calendar.publications", () => query.returns<CalendarPublication[]>());
 }
 
 async function completeOwnerPublications(data: SupabaseClient, ownerProfileId: string, earliestDate: string, embedded: CalendarPublication[], markers: TailMarker[]) {

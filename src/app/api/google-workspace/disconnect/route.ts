@@ -1,3 +1,4 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { type NextRequest, NextResponse } from "next/server";
 import {
   GoogleWorkspaceDisconnectError,
@@ -7,20 +8,20 @@ import { authorizeCredentialAction } from "@/lib/credentials";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "connection.google.disconnect.preview" });
   if (!permission.ok) return authzError(permission);
   const ownerProfileId = permission.profile?.id;
   if (!ownerProfileId) return apiError("Gebundenes Teamprofil erforderlich.", 403);
   try {
     const disconnect = await permission.resource.readGoogleDisconnect();
-    return NextResponse.json({ disconnect });
+    return observeRuntimePreparation(() => NextResponse.json({ disconnect }));
   } catch {
     return apiError("Trennungsvorschau ist nicht verfügbar.", 503);
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "connection.google.disconnect" });
   if (!permission.ok) return authzError(permission);
   const ownerProfileId = permission.profile?.id;
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
   }
   try {
     const result = await permission.resource.disconnectGoogle();
-    return NextResponse.json({ result }, { status: result.state === "completed" ? 200 : 202 });
+    return observeRuntimePreparation(() => NextResponse.json({ result }, { status: result.state === "completed" ? 200 : 202 }));
   } catch (error) {
     if (error instanceof GoogleWorkspaceDisconnectError) {
       return apiError(error.message, error.code === "conflict" ? 409 : 503);
@@ -40,3 +41,7 @@ export async function POST(request: NextRequest) {
     return apiError("Google-Verbindung konnte nicht getrennt werden.", 503);
   }
 }
+
+export const GET = observeRuntimeHandler("google.disconnect.preview", handleGET);
+
+export const POST = observeRuntimeHandler("google.disconnect", handlePOST);

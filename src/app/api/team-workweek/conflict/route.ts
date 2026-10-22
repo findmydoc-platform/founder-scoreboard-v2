@@ -1,3 +1,4 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { type NextRequest, NextResponse } from "next/server";
 import {
   TeamWorkweekConflictError,
@@ -22,17 +23,18 @@ function conflictError(error: unknown) {
   return apiError("Synchronisationskonflikt konnte nicht verarbeitet werden.", 503);
 }
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const context = await requirePlanningContext(request, "workweek.conflict.read");
   if (!context.ok) return context.response;
   try {
-    return NextResponse.json({ conflict: await context.planning.readWorkweekConflict() });
+    const conflict = await context.planning.readWorkweekConflict();
+    return observeRuntimePreparation(() => NextResponse.json({ conflict }));
   } catch (error) {
     return conflictError(error);
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const payload = await readJsonPayload<unknown>(request, null);
   const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
   const context = await requirePlanningContext(request, "workweek.conflict.resolve", typeof input.conflictId === "string" ? input.conflictId : "");
@@ -46,8 +48,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const publication = await context.planning.resolveWorkweekConflict(Number(input.conflictRevision), input.decision);
-    return NextResponse.json({ publication }, { status: publication.status === "published" ? 200 : 202 });
+    return observeRuntimePreparation(() => NextResponse.json({ publication }, { status: publication.status === "published" ? 200 : 202 }));
   } catch (error) {
     return conflictError(error);
   }
 }
+
+export const GET = observeRuntimeHandler("workweek.conflict.read", handleGET);
+
+export const POST = observeRuntimeHandler("workweek.conflict.resolve", handlePOST);

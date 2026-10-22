@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { authorizeDeliveryAdmission, deliveryStore, DeliveryAdmissionDenied } from "./delivery-admission";
 import { runWithDeliveryAdmission } from "./delivery-admission-scope";
@@ -31,7 +32,7 @@ export async function authorizeDeliveryReconciliation(input: GitHubReconciliatio
             throw error;
           }
         }
-        return fetch(input, init);
+        return observedSupabaseFetch(input, init);
       } } });
   async function runJob<T>(job: () => Promise<T>) {
     return runWithDeliveryAdmission(admission.reassert, async () => {
