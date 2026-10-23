@@ -1,5 +1,29 @@
 # Credential verification measurements
 
+## Bound GitHub status resource operation
+
+On 2026-10-23, the complete GitHub status route was compared against `512a589b35370e569879b6fd402bf46e36355692` with the same synthetic fixture. The route still returns the user connection, waiting-comment count and independently obtained installation availability. Its resource operation now calls the existing private user-status implementation through its already bound, guarded database adapter. It no longer starts a second full session admission inside that operation. The standalone session-status action, disconnect and installation-status implementation are unchanged.
+
+The integration fixture uses real local Auth, asymmetric JWT verification, JWKS and PostgREST. Synthetic OAuth session state is prepared before counting. Google STS, IAM and Directory and GitHub installation HTTP use fixed synthetic responses. Unexpected external requests fail. The cold observation includes fresh signing-key and membership evidence; the second invocation reuses those caches. Both observations include the pending-comment HEAD and separate installation GET. They exclude fixture creation, imports, a running Next.js server and the cookie proxy. These are direct Bearer route counts, not the historical production count of 41 that includes the cookie proxy, and establish no production latency result.
+
+| Actual HTTP operation | Before cold / warm | After cold / warm |
+| --- | --- | --- |
+| JWKS | 1 / 0 | 1 / 0 |
+| Auth user | 8 / 8 | 6 / 6 |
+| Workspace access context | 8 / 8 | 6 / 6 |
+| Linking session admission | 2 / 2 | 1 / 1 |
+| Permit issue | 6 / 6 | 5 / 5 |
+| Current authenticated profile | 6 / 6 | 5 / 5 |
+| Permit release | 6 / 6 | 5 / 5 |
+| Configured GitHub login | 1 / 1 | 1 / 1 |
+| User token row | 1 / 1 | 1 / 1 |
+| Waiting-comment count | 1 / 1 | 1 / 1 |
+| GitHub installation GET | 1 / 1 | 1 / 1 |
+| Directory STS, IAM and membership | 3 / 0 | 3 / 0 |
+| **Total** | **44 / 40** | **36 / 32** |
+
+The same fixture passed with baseline counts before the production change was restored. The retained `github-status-resource` integration test asserts the complete after budget and response. Focused cases retain all four existing reader roles, reject anonymous and unmapped actors, and exercise held operations after session loss, profile unbinding, role changes and Workspace-policy changes. Live connection revocation and login-association changes remain visible. Expiring tokens retain durable refresh claims, rotation, usage accounting on successful rotation, reconnect responses after unknown outcomes and protection against overwriting replacement connections. Ordinary status reads add no token-use mark. Credential reads and refresh claims retain the adapter's live dispatch checks, and the final live check still prevents a result after authority changes during the pending-comment read. Count failures retain their existing zero fallback.
+
 ## Scope and method
 
 These are local acceptance measurements, not a production latency guarantee. Before is `facc2e42ba0a95a8411e9d939cb909973b598122`; After is runtime source `17955b50917034c49ebb1b758635d8c07c8dccbc`. These measurements preceded the later bounded session-lifecycle and module-coverage correction; their source metadata and values are historical and unchanged. Both versions ran serially on the same Darwin arm64 host with Node v26.11.1 and Next.js 16.3.8, Postgres 17.6, synthetic users and fixed fixture dates. The Workweek DDL shared by both versions is byte-identical. Before used its actual 26-migration ledger; After used its actual 29-migration ledger. No new-schema assumption was imposed on the baseline.

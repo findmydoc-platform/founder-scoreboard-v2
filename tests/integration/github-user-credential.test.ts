@@ -1,6 +1,4 @@
-import {execFile} from "node:child_process";
-import {promisify} from "node:util";
-import {resolve} from "node:path";
+import {localSupabaseStatus} from "../helpers/local-supabase-target.mjs";
 import {createCipheriv,createHmac,randomUUID} from "node:crypto";
 import pg from "pg";
 import {expect,it,vi} from "vitest";
@@ -15,8 +13,7 @@ type Fixture={database:pg.Client;local:Record<string,string>;id:string;userId:st
   row():Promise<VaultRow>;rpc(name:string,body:unknown,credential?:string):Promise<RpcResult>;store(access?:string):Promise<RpcResult>;
 };
 async function fixture(run:(f:Fixture)=>Promise<void>) {
-  const {stdout}=await promisify(execFile)(resolve("node_modules/.bin/supabase"),["status","-o","json"]);
-  const local=JSON.parse(stdout);
+  const local=await localSupabaseStatus();
   const api=new URL(local.API_URL);
   if(!["localhost","127.0.0.1"].includes(api.hostname)) throw new Error("Disposable local target required");
   const database=new pg.Client(local.DB_URL);await database.connect();

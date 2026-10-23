@@ -4,6 +4,7 @@ import { getGoogleWorkspaceDisconnectView, disconnectGoogleWorkspace } from "@/f
 import { authorizeGoogleCalendar } from "./google-calendar";
 import { authorizeGitHubInstallation } from "./github-installation";
 import { githubConnectionSession } from "./github-user";
+import { getGitHubUserConnectionStatus } from "./github-user-vault";
 import { runWithDeliveryAdmission } from "./delivery-admission-scope";
 import { countWaitingGitHubCommentsForAuthor } from "../../github-comment-delivery";
 import { FOUNDEROPS_GITHUB_REPOSITORIES } from "../../github-project-config";
@@ -82,7 +83,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
     },
     async readGitHubConnection() {
       if (action !== "connection.github.read" || !profile) throw new Error("Keine Berechtigung für diese Aktion.");
-      const user = await githubConnectionSession({ credential: { kind: "session-request", request: context.request }, action: "github.connection.status" }, { profileId: profile.id, vault: service });
+      const user = await getGitHubUserConnectionStatus(service, profile);
       const waitingCommentCount = await countWaitingGitHubCommentsForAuthor(service, profile.id).catch(() => 0);
       await context.current(); context.assertCurrent();
       return { user, waitingCommentCount };
