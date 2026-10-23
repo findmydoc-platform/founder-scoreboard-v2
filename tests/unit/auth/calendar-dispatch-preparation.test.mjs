@@ -267,7 +267,7 @@ for (const role of ["ceo", "founder", "deputy", "viewer"]) test(`Planning revisi
 test("Planning revision denies a role change at the last current check before service dispatch", async () => {
   const authorized = await authorize(token(), "planning.revision.read");
   expect(authorized.ok).toBe(true);
-  duringPreparation = (_body) => { if (preparations.length === 3) profileRole = "founder"; };
+  duringPreparation = () => { if (preparations.length === 3) profileRole = "founder"; };
   expect((await authorized.planning.readRevision()).error).not.toBeNull();
   expect(preparations).toHaveLength(3);
   expect(releases).toHaveLength(3);
