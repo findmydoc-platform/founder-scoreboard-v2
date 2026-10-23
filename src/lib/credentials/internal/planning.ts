@@ -51,7 +51,7 @@ const planningPolicyActions: Record<PlanningCredentialInput["action"], SessionPo
   "planning.attachment.write": "planning.contribute",
   "planning.comment.create": "planning.contribute", "planning.blocker.report": "planning.contribute",
   "planning.focus.write": "planning.contribute", "planning.focus.delete": "planning.contribute", "planning.attendance.write": "planning.contribute",
-  "planning.revision.read": "planning.revision.read", "planning.board.read": "team.read", "planning.header.read": "team.read",
+  "planning.revision.read": "planning.revision.read", "planning.board.read": "planning.board.read", "planning.header.read": "team.read",
   "planning.backlog.read": "team.read", "planning.sprint.read": "team.read", "planning.task.read": "team.read",
   "planning.review.request": "planning.contribute", "planning.review.decide": "planning.contribute",
   "planning.review.withdraw": "planning.contribute", "planning.review.reopen": "planning.contribute",

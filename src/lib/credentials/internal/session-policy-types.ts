@@ -3,6 +3,7 @@ export type SessionPolicyAction =
   | "workweek.private.read"
   | "workweek.private.write"
   | "planning.revision.read"
+  | "planning.board.read"
   | "team.read"
   | "planning.contribute"
   | "governance.ceo"
