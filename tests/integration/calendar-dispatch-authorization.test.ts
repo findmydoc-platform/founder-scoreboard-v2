@@ -190,6 +190,7 @@ it("holds the configuration lock until issuance commits and invalidates the old 
 it("fails the security verifier when preparation execution, owner or search path is weakened",async () => {
   await withIsolatedLocalDatabase(async client => {
     const baseline: string[] = []; await verifyWorkspaceSecurity(client,baseline); expect(baseline).toEqual([]);
+    const schemaCreate = (await client.query("select has_schema_privilege('service_role','public','CREATE') as allowed")).rows[0].allowed;
     for (const statement of [
       `grant execute on function ${signature} to authenticated`,
       `revoke execute on function ${signature} from service_role`,
@@ -197,9 +198,13 @@ it("fails the security verifier when preparation execution, owner or search path
       `alter function ${signature} owner to service_role`,
     ]) {
       await client.query("savepoint preparation_contract");
+      // PostgreSQL requires the new owner to have CREATE on the containing schema.
+      if (statement.endsWith(" owner to service_role")) await client.query("grant create on schema public to service_role");
       await client.query(statement);
       const failures: string[] = []; await verifyWorkspaceSecurity(client,failures); expect(failures.length).toBeGreaterThan(0);
       await client.query("rollback to savepoint preparation_contract"); await client.query("release savepoint preparation_contract");
+      expect((await client.query("select has_schema_privilege('service_role','public','CREATE') as allowed")).rows[0].allowed).toBe(schemaCreate);
+      const restored: string[] = []; await verifyWorkspaceSecurity(client,restored); expect(restored).toEqual([]);
     }
   });
 });
