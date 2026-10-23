@@ -51,7 +51,7 @@ const planningPolicyActions: Record<PlanningCredentialInput["action"], SessionPo
   "planning.attachment.write": "planning.contribute",
   "planning.comment.create": "planning.contribute", "planning.blocker.report": "planning.contribute",
   "planning.focus.write": "planning.contribute", "planning.focus.delete": "planning.contribute", "planning.attendance.write": "planning.contribute",
-  "planning.revision.read": "planning.revision.read", "planning.board.read": "team.read", "planning.header.read": "team.read",
+  "planning.revision.read": "planning.revision.read", "planning.board.read": "planning.board.read", "planning.header.read": "team.read",
   "planning.backlog.read": "team.read", "planning.sprint.read": "team.read", "planning.task.read": "team.read",
   "planning.review.request": "planning.contribute", "planning.review.decide": "planning.contribute",
   "planning.review.withdraw": "planning.contribute", "planning.review.reopen": "planning.contribute",
@@ -120,7 +120,10 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   const current = async () => {
     if (!permission.data) return null;
     const result = await permission.data.rpc("current_authenticated_profile");
-    if (result.error) return { code: result.status >= 500 ? "workspace_access_unavailable" : result.error.code, message: "Berechtigung konnte nicht geprüft werden.", status: result.status >= 500 ? 503 : 403 };
+    if (result.error) {
+      const unavailable = result.status === 0 || result.status >= 500;
+      return { code: unavailable ? "workspace_access_unavailable" : result.error.code, message: "Berechtigung konnte nicht geprüft werden.", status: unavailable ? 503 : 403 };
+    }
     if (result.data?.id !== profile?.id || result.data?.platform_role !== profile?.platformRole) {
       const override = request.headers.get("x-fmd-dev-profile-id")?.trim();
       if (!override || override !== profile?.id || !isLocalLoginRequestAllowed(request.headers.get("host") || "")

@@ -296,7 +296,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     }
     if (!workspace) recordWorkspaceMembership({ result: "bypass", reason: "not_required", cacheOwnerId, evidenceAgeMs: null, remainingLifetimeMs: null, expired: false });
     const binding: SessionBinding = { token, userId: claims.sub, sessionId: claims.session_id,
-      profileId: context.profileId, deadline, workspace, groupedDispatch: action === "calendar.read" || action === "planning.revision.read", url: environment.url, service: environment.service, auth: environment.auth,
+      profileId: context.profileId, deadline, workspace, groupedDispatch: action === "calendar.read" || action === "planning.revision.read" || action === "planning.board.read", url: environment.url, service: environment.service, auth: environment.auth,
       mode: context.mode, linkingEnforced: context.linkingEnforced, subject, email };
     const constrainedData = (assertDispatch: () => void) => createClient(environment.url, environment.key, { ...environment.options,
       global: { headers: { Authorization: `Bearer ${token}` }, fetch: boundDataFetch(binding, assertDispatch) },
