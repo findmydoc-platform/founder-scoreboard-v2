@@ -180,3 +180,122 @@ test.each([[404, "rejected"], [409, "rejected"], [422, "invalid_input"], [424, "
   expect(response.status).toBe(status);
   expect(records().find(record => record.event === "request.completed")).toMatchObject({ status, outcome, retentionReason: "non_success", detailRetained: true });
 });
+
+
+test("completed measurements retain late operation aggregates and slow spans after phase truncation", async () => {
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "0"); const records = capture();
+  const { performance } = await import("node:perf_hooks");
+  let clock = 0; vi.spyOn(performance, "now").mockImplementation(() => clock);
+  const { observeRuntimeRoute, observeRuntimePhase, observeRuntimePreparation } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  await observeRuntimeRoute("planning.board", new Request("https://example.test/"), async () => {
+    for (let index = 0; index < 80; index++) await observeRuntimePhase("supabase.user", async () => { clock += 1; }, "http");
+    await observeRuntimePhase("workspace.permit.release", async () => { clock += 400; });
+    await observeRuntimePhase("workspace.permit.release", async () => { clock += 200; });
+    observeRuntimePreparation(() => { clock += 10; });
+    return Response.json({ unchanged: true });
+  });
+  const completion = records().find(record => record.event === "request.completed");
+  expect(completion).toMatchObject({ detailRetained: false, phases: [],
+    phaseAggregates: { "supabase.user": { http: [80, 80, 1] }, "workspace.permit.release": { operation: [2, 600, 400] }, "response.prepare": { operation: [1, 10, 10] } },
+    completeness: { phaseAggregatesComplete: true, phaseAggregatesScope: "route", phasesTruncated: true },
+  });
+  expect(completion.slowestPhases).toHaveLength(8);
+  expect(completion.slowestPhases).toContainEqual(expect.objectContaining({ operation: "workspace.permit.release", offsetMs: 80, durationMs: 400 }));
+  expect(completion.slowestPhases).toContainEqual(expect.objectContaining({ operation: "response.prepare", offsetMs: 680, durationMs: 10 }));
+});
+
+
+test("the public Board response distinguishes its reads, header, avatars, mapping and serialization", async () => {
+  const protocol = administratorProtocol({ role: "viewer" }); const records = capture();
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "100");
+  const authFetch = globalThis.fetch;
+  const reads: string[] = [];
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), path = new URL(request.url).pathname;
+    if (path === "/rest/v1/projects") { reads.push(path); return Response.json({ id: "findmydoc-founder-execution", name: "Synthetic board" }); }
+    if (path === "/rest/v1/profiles") { reads.push(path); return Response.json([{ id: "synthetic-profile", name: "Seeded private name", platform_role: "viewer" }]); }
+    if (path === "/rest/v1/rpc/workspace_access_contexts") return Response.json([{ profileId: "synthetic-profile", linked: false }]);
+    if (path.startsWith("/rest/v1/") && !path.includes("/rpc/")) { reads.push(path); return Response.json([]); }
+    return authFetch(request);
+  });
+  const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {}, "next/cache": { unstable_cache: (load: () => unknown) => load } });
+  const response = await GET(protocol.request("/api/planning-board-data?private=seeded-private"));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ model: { project: { name: "Synthetic board" } }, headerData: { quickLinks: { state: "ready" } }, currentProfile: { platformRole: "viewer" } });
+  const completion = records().find(record => record.event === "request.completed");
+  for (const operation of ["board.authorization", "board.load", "board.header", "board.project", "board.profiles", "board.items", "board.strategy", "board.raci", "board.links", "board.sprints", "board.relationships", "board.preferences", "board.avatars", "board.map", "response.prepare"]) {
+    expect(completion.phaseAggregates[operation]?.operation?.[0], operation).toBe(1);
+  }
+  expect(reads.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
+  expect(JSON.stringify(records())).not.toMatch(/seeded-private|Seeded private name|synthetic-profile/);
+});
+
+
+test("late failed HTTP spans keep their error outcome outside retained chronological detail", async () => {
+  const records = capture();
+  const { performance } = await import("node:perf_hooks"); let clock = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => clock);
+  const { observeRuntimeRoute, observeRuntimePhase, observeProviderHttp } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  const original = Response.json({ unchanged: true });
+  expect(await observeRuntimeRoute("planning.board", new Request("https://example.test/"), async () => {
+    for (let index = 0; index < 80; index++) await observeRuntimePhase("supabase.user", async () => { clock++; });
+    await observeProviderHttp("workspace.permit.release", async () => { clock += 500; return Response.json({ message: "seeded-private" }, { status: 503 }); });
+    return original;
+  })).toBe(original);
+  const record = records().find(record => record.event === "request.completed");
+  expect(record).toMatchObject({ outcome: "error", phaseAggregates: { "workspace.permit.release": { http: [1, 500, 500] } } });
+  expect(record.slowestPhases).toContainEqual(expect.objectContaining({ operation: "workspace.permit.release", kind: "http", outcome: "error", durationMs: 500 }));
+  expect(JSON.stringify(records())).not.toContain("seeded-private");
+});
+
+test("a completion reports unfinished observations and does not count a still-pending span", async () => {
+  const records = capture(); let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const { observeRuntimeRoute, observeRuntimePhase } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  let pending!: Promise<void>;
+  await observeRuntimeRoute("planning.board", new Request("https://example.test/"), async () => {
+    pending = observeRuntimePhase("board.header", () => gate);
+    return Response.json({ unchanged: true });
+  });
+  const record = records().find(record => record.event === "request.completed");
+  expect(record.completeness.phaseAggregatesComplete).toBe(false);
+  expect(record.phaseAggregates).not.toHaveProperty("board.header");
+  release(); await pending;
+  expect(records().filter(record => record.event === "request.completed")).toHaveLength(1);
+});
+
+test("proxy detail truncation keeps the existing forwarding budget and separate complete measurements", async () => {
+  const records = capture();
+  const { NextResponse } = await import("next/server");
+  const { observeRuntimeProxy, observeRuntimeRoute, observeRuntimePhase } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  const request = new NextRequest("https://example.test/api/planning-board-data");
+  const forwarded = await observeRuntimeProxy(request, async () => {
+    for (let index = 0; index < 80; index++) await observeRuntimePhase("supabase.user", async () => undefined);
+    return NextResponse.next();
+  });
+  const metadata = forwarded.headers.get("x-middleware-request-x-founderops-proxy-observation");
+  expect(metadata).toBeTruthy(); expect(Buffer.byteLength(metadata!)).toBeLessThan(1024);
+  await observeRuntimeRoute("planning.board", new Request(request.url, { headers: { "x-founderops-proxy-observation": metadata! } }), async () => Response.json({ unchanged: true }));
+  const completed = records().filter(record => record.event === "request.completed");
+  expect(completed).toHaveLength(2);
+  expect(completed[0]).toMatchObject({ stage: "proxy", requestId: forwarded.headers.get("x-request-id"), phaseAggregates: { "supabase.user": { operation: [80, expect.any(Number), expect.any(Number)] } }, completeness: { phaseAggregatesScope: "proxy", phaseAggregatesComplete: true } });
+  expect(completed[1]).toMatchObject({ stage: "route", requestId: completed[0].requestId, completeness: { correlation: "complete", phaseAggregatesScope: "route", phaseAggregatesComplete: true } });
+  expect(completed[1].phaseAggregates).not.toHaveProperty("supabase.user");
+});
+
+
+test("parallel inclusive span totals stay distinct from elapsed request time", async () => {
+  const records = capture(); const { performance } = await import("node:perf_hooks"); let clock = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => clock);
+  const { observeRuntimeRoute, observeRuntimePhase } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  await observeRuntimeRoute("planning.board", new Request("https://example.test/"), async () => {
+    let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+    const first = observeRuntimePhase("supabase.user", () => gate, "http");
+    const second = observeRuntimePhase("supabase.user", () => gate, "http");
+    clock = 10; release(); await Promise.all([first, second]);
+    return Response.json({ unchanged: true });
+  });
+  expect(records().find(record => record.event === "request.completed")).toMatchObject({ durationMs: 10,
+    phaseAggregates: { "supabase.user": { http: [2, 20, 10] }, "request.workflow": { operation: [1, 10, 10] } },
+  });
+});

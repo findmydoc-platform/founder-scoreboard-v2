@@ -3,14 +3,15 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { NextResponse, type NextRequest } from "next/server";
-import { createRuntimeLogger, isRequestId, safeFailure, safeProxy, type SafeOperation, type Phase, type MembershipObservation, type Completion, type ProxySummary, type SafeFailure, type Stage } from "./output";
+import { createRuntimeLogger, isRequestId, safeFailure, safeProxy, safeOperations, type SafeOperation, type Phase, type MembershipObservation, type Completion, type ProxySummary, type SafeFailure, type Stage } from "./output";
 
 import { matchRuntimeRoute, runtimeRoute, type RuntimeRouteKey } from "./routes";
 
 const instanceId = randomUUID();
 const proxyHeader = "x-founderops-proxy-observation";
-type Context = { completion: Completion; started: number; nextPhase: { value: number }; parentId?: string };
+type Context = { completion: Completion; started: number; nextPhase: { value: number }; parentId?: string; parentPhase?: Phase };
 const contexts = new AsyncLocalStorage<Context>();
+const measuredOperations = new Set<string>(safeOperations);
 let logger: ReturnType<typeof createRuntimeLogger> | undefined;
 const emit = (completion: Completion, failure?: SafeFailure) => {
   try {
@@ -42,7 +43,7 @@ function begin(stage: Stage, headers: Headers, routeKey: RuntimeRouteKey = "cale
     status: 500, outcome: "error", durationMs: 0, ...(proxy ? { proxy } : {}),
     vercelId: headers.get("x-vercel-id") || undefined,
     deploymentEnv: process.env.VERCEL_ENV, deploymentId: process.env.VERCEL_DEPLOYMENT_ID, region: process.env.VERCEL_REGION,
-    phases: [], externalCalls: { total: 0, operations: {}, durationMsByOperation: {}, complete: true },
+    phases: [], phaseMeasurement: { aggregates: {}, slowest: [], pending: 0, failed: false }, externalCalls: { total: 0, operations: {}, durationMsByOperation: {}, complete: true },
     completeness: { correlation, externalCallsComplete: false, cache: "unavailable" },
   };
   return { completion, started: performance.now(), nextPhase: { value: 0 } };
@@ -54,7 +55,7 @@ export function recordRuntimeFailure(reason: SafeFailure) {
     const failure = safeFailure(reason);
     if (!context || !failure) return;
     context.completion.failure ??= failure;
-    const phase = context.completion.phases?.find(value => value.id === context.parentId);
+    const phase = context.parentPhase;
     if (phase) phase.outcome = "error";
     emit(context.completion, failure);
   } catch { /* Telemetry is isolated from the observed operation. */ }
@@ -65,12 +66,29 @@ export const runtimeObservationScope = () => runtimeRoute(contexts.getStore()?.c
 
 function startPhase(operation: SafeOperation, kind: Phase["kind"]) {
   const context = contexts.getStore();
-  if (!context) return undefined;
+  if (!context || !measuredOperations.has(operation) || !["operation", "http"].includes(kind)) return undefined;
+  context.completion.phaseMeasurement!.pending++;
   const phase: Phase = { id: `${context.completion.stage}:${++context.nextPhase.value}`, ...(context.parentId ? { parentId: context.parentId } : {}),
     operation, kind, offsetMs: Math.max(0, performance.now() - context.started), durationMs: 0, outcome: "success" };
   if (context.completion.phases!.length < 64) context.completion.phases!.push(phase);
   else context.completion.phasesTruncated = true;
   return { context, phase, started: performance.now() };
+}
+
+function finishPhase(active: NonNullable<ReturnType<typeof startPhase>>) {
+  const measurement = active.context.completion.phaseMeasurement!;
+  try {
+    const phase = active.phase;
+    phase.durationMs = Math.max(0, performance.now() - active.started);
+    const kinds = measurement.aggregates[phase.operation] ??= {};
+    const aggregate = kinds[phase.kind] ??= [0, 0, 0];
+    aggregate[0]++;
+    aggregate[1] += phase.durationMs;
+    aggregate[2] = Math.max(aggregate[2], phase.durationMs);
+    measurement.slowest.push(phase);
+    measurement.slowest.sort((left, right) => right.durationMs - left.durationMs);
+    measurement.slowest.length = Math.min(measurement.slowest.length, 8);
+  } catch { measurement.failed = true; } finally { measurement.pending--; }
 }
 
 export function classifyRuntimeError(error: unknown): SafeFailure["errorCategory"] {
@@ -89,15 +107,15 @@ export function observeRuntimePhase<T>(operation: SafeOperation, run: () => Prom
       // HTTP dispatch is the failure origin; enclosing phases preserve its classification.
       if (kind === "http") recordRuntimeFailure({ operation, errorCode: "provider_request_failed", errorCategory: classifyRuntimeError(error) });
       throw error;
-    } finally { if (active) { try { active.phase.durationMs = Math.max(0, performance.now() - active.started); } catch { /* Best effort. */ } } }
+    } finally { if (active) finishPhase(active); }
   };
-  return active ? contexts.run({ ...active.context, parentId: active.phase.id }, execute) : execute();
+  return active ? contexts.run({ ...active.context, parentId: active.phase.id, parentPhase: active.phase }, execute) : execute();
 }
 
 export function observeRuntimePreparation<T>(run: () => T, operation: SafeOperation = "response.prepare"): T {
   let active: ReturnType<typeof startPhase>;
   try { active = startPhase(operation, "operation"); } catch { /* Best effort. */ }
-  try { return run(); } catch (error) { if (active) active.phase.outcome = "error"; throw error; } finally { if (active) { try { active.phase.durationMs = Math.max(0, performance.now() - active.started); } catch { /* Best effort. */ } } }
+  try { return run(); } catch (error) { if (active) active.phase.outcome = "error"; throw error; } finally { if (active) finishPhase(active); }
 }
 
 export const observeCalendarPreparation = <T>(run: () => T): T => observeRuntimePreparation(run, "calendar.prepare");
