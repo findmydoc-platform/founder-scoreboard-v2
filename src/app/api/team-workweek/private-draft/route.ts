@@ -1,3 +1,4 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { selectedWorkweek, workweekStart } from "@/features/team-workweek/model/team-workweek-week";
 import { type NextRequest, NextResponse } from "next/server";
 import {
@@ -45,9 +46,9 @@ function publicationPayload(row: PublicationRow | null) {
   } : null;
 }
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const context = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "workweek.private.read" });
-  if (!context.ok) return NextResponse.json({ error: context.error, ...("code" in context && context.code ? { code: context.code } : {}) }, { status: context.status });
+  if (!context.ok) return observeRuntimePreparation(() => NextResponse.json({ error: context.error, ...("code" in context && context.code ? { code: context.code } : {}) }, { status: context.status }));
   const draft = context.privateDraft;
 
   const ownerProfileId = context.profile.id;
@@ -132,14 +133,14 @@ export async function GET(request: NextRequest) {
     // Parallel reads may straddle another tab's publication. Never adopt a mixed base.
     if ((weekResponse.data.basePublicationId ?? null) !== (selectedBase?.id ?? null)
       || (weekResponse.data.basePublicationRevision ?? null) !== (selectedBase?.publication_revision ?? null)) {
-      return NextResponse.json({
+      return observeRuntimePreparation(() => NextResponse.json({
         code: "edit_context_stale",
         error: "Die Arbeitswoche wurde während des Ladens geändert. Lade den aktuellen Stand erneut.",
-      }, { status: 409 });
+      }, { status: 409 }));
     }
   }
 
-  return NextResponse.json({
+  return observeRuntimePreparation(() => NextResponse.json({
     pendingPublication: pending ? {
       id: pending.id, sourceVersionId: pending.source_version_id, effectiveFrom: pending.effective_from,
       resumeAllowed: !pending.restart_requested_at && (pending.attempt_generation === 0
@@ -167,12 +168,12 @@ export async function GET(request: NextRequest) {
       windows: inflatePublishedTeamWorkweekWindows(currentPublished.windows || []),
     } : null,
     minimumEffectiveFrom: nextVersionMondayIso(publications[0]?.effective_from || null),
-  });
+  }));
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const context = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "workweek.private.write" });
-  if (!context.ok) return NextResponse.json({ error: context.error, ...("code" in context && context.code ? { code: context.code } : {}) }, { status: context.status });
+  if (!context.ok) return observeRuntimePreparation(() => NextResponse.json({ error: context.error, ...("code" in context && context.code ? { code: context.code } : {}) }, { status: context.status }));
   const draft = context.privateDraft;
 
   const payload = await readJsonPayload<unknown>(request, null);
@@ -198,12 +199,12 @@ export async function POST(request: NextRequest) {
   });
   if (error) {
     if (error.code === "P0003" || error.code === "P0004") {
-      return NextResponse.json({
+      return observeRuntimePreparation(() => NextResponse.json({
         code: error.code === "P0003" ? "publication_pending" : "edit_context_stale",
         error: error.code === "P0003"
           ? "Eine frühere Veröffentlichung ist noch offen. Setze sie zuerst fort; deine Eingaben bleiben erhalten."
           : "Die Ausgangsversion hat sich geändert. Lade den aktuellen Stand; deine Eingaben bleiben erhalten.",
-      }, { status: 409 });
+      }, { status: 409 }));
     }
     const status = error.code === "22023" ? 400 : error.code === "42501" ? 403 : error.code === "P0003" || error.code === "P0004" ? 409 : 503;
     return apiError(
@@ -218,5 +219,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ version: data }, { status: 201 });
+  return observeRuntimePreparation(() => NextResponse.json({ version: data }, { status: 201 }));
 }
+
+export const GET = observeRuntimeHandler("workweek.draft.read", handleGET);
+
+export const POST = observeRuntimeHandler("workweek.draft.write", handlePOST);

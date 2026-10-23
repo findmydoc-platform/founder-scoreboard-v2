@@ -9,7 +9,7 @@ import { selectVisibleTeamWorkweeks } from "@/features/team-workweek/model/publi
 import { apiError, authzError } from "@/lib/api-response";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import type { CalendarPublication } from "@/lib/credentials/types";
-import { observeCalendarPhase, observeCalendarPreparation, observeCalendarRoute, recordCalendarDenial, recordCalendarFailure } from "@/lib/runtime-logging";
+import { observeRuntimePhase, observeCalendarPreparation, observeCalendarRoute, recordRuntimeDenial, recordRuntimeFailure } from "@/lib/runtime-logging";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +37,8 @@ export function GET(request: NextRequest) {
 async function calendarResponse(request: NextRequest) {
   const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "calendar.read" });
   if (!permission.ok) {
-    recordCalendarDenial(permission.code);
-    if (permission.status >= 500) recordCalendarFailure({ operation: "calendar.authorization", errorCode: "calendar_authorization_unavailable", errorCategory: "unexpected_error" });
+    recordRuntimeDenial(permission.code);
+    if (permission.status >= 500) recordRuntimeFailure({ operation: "calendar.authorization", errorCode: "calendar_authorization_unavailable", errorCategory: "unexpected_error" });
     return authzError(permission);
   }
   const requestedRange = validateCalendarWorkweekRange(
@@ -51,9 +51,9 @@ async function calendarResponse(request: NextRequest) {
   const referenceDate = berlinTodayIso(now);
   // Retain current and all future plans, plus history needed by the requested range.
   const earliestDate = requestedRange.range && requestedRange.range.from < referenceDate ? requestedRange.range.from : referenceDate;
-  const snapshot = await observeCalendarPhase("calendar.data", () => permission.calendar.readSnapshot(earliestDate));
+  const snapshot = await observeRuntimePhase("calendar.data", () => permission.calendar.readSnapshot(earliestDate));
   if (snapshot.error || !snapshot.data) {
-    recordCalendarFailure({ operation: "calendar.snapshot", errorCode: "calendar_data_unavailable", errorCategory: "unexpected_error" });
+    recordRuntimeFailure({ operation: "calendar.snapshot", errorCode: "calendar_data_unavailable", errorCategory: "unexpected_error" });
     return apiError("Veröffentlichte Grundwochen konnten nicht geladen werden.", 503);
   }
   const { publications: data, publishedOwnerIds } = snapshot.data;

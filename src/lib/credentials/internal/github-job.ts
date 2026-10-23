@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { GitHubInstallationAction } from "../types";
@@ -31,7 +32,7 @@ export async function bindGitHubJob(value: GitHubJobContext, action: GitHubInsta
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: (input, init) => {
       try { assertStorage(); } catch { return Promise.resolve(Response.json({ message: "GitHub job storage binding is no longer valid." }, { status: 401 })); }
-      return fetch(input, init);
+      return observedSupabaseFetch(input, init);
     } },
   });
   async function read() {

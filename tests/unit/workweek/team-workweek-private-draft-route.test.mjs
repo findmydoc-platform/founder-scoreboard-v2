@@ -165,10 +165,16 @@ test.each([null, "2026-10-19"])("expired automatic reconciliation preserves sele
 test("a selected context is consumed once and a mixed publication snapshot returns 409", async () => {
   publications = [publicationRow()];
   editContext = {basePublicationId:"publication-1",basePublicationRevision:2};
-  const route = await application(); const response = await route.GET(request(token(), "?week=2026-10-19"));
-  expect(response.status).toBe(409);
-  expect(await response.json()).toMatchObject({code:"edit_context_stale"});
-  expect(calls.filter(call => call.path.endsWith("/rpc/team_workweek_edit_context"))).toHaveLength(1);
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "0");
+  const events = [];
+  const output = vi.spyOn(process.stdout, "write").mockImplementation(line => { events.push(JSON.parse(String(line))); return true; });
+  try {
+    const route = await application(); const response = await route.GET(request(token(), "?week=2026-10-19"));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({code:"edit_context_stale"});
+    expect(calls.filter(call => call.path.endsWith("/rpc/team_workweek_edit_context"))).toHaveLength(1);
+    expect(events.find(event => event.event === "request.completed")).toMatchObject({ status: 409, outcome: "rejected", retentionReason: "non_success", detailRetained: true });
+  } finally { output.mockRestore(); }
 });
 
 test("a private draft future week chooses its own edit context and preserves recovery", async () => {

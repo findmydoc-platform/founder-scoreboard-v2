@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { projectionAccounting } from "./projection-accounting";
 import { runWithDeliveryAdmission } from "./delivery-admission-scope";
@@ -70,7 +71,7 @@ export async function authorizePlanningTrashMaintenance(input: PlanningTrashMain
         if (!confirmed) assertCurrent();
       } catch { return Response.json({ message: "Maintenance admission is no longer valid." }, { status: 401 }); }
       const startedAt = Date.now();
-      const response = await fetch(request);
+      const response = await observedSupabaseFetch(request);
       const claimFinalizer = path === "claim_planning_github_lifecycle_jobs" ? "finalize_planning_github_lifecycle_job"
         : path === "claim_planning_github_projection_requests" ? "finalize_planning_github_projection_request" : null;
       if (response.ok && claimFinalizer && typeof body.p_lock_token === "string") {

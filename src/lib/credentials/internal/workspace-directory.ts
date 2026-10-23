@@ -1,19 +1,19 @@
 import "server-only";
 import { observedDirectoryFetch } from "./observed-fetch";
-import { classifyCalendarError, observeCalendarPhase, recordCalendarFailure, recordDirectoryCredential } from "../../runtime-logging";
+import { classifyRuntimeError, observeRuntimePhase, recordRuntimeFailure, recordDirectoryCredential } from "../../runtime-logging";
 import { getVercelOidcToken } from "@vercel/oidc";
 
 let readerToken: { value: string; expiresAt: number; audience: string; account: string } | undefined;
 
 function invalidResponse(operation: "directory.sts" | "directory.iam" | "directory.membership", message: string): never {
-  recordCalendarFailure({ operation, errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+  recordRuntimeFailure({ operation, errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
   throw new Error(message);
 }
 
 async function oidcToken() {
-  return observeCalendarPhase("directory.oidc", async () => {
+  return observeRuntimePhase("directory.oidc", async () => {
     try { return await getVercelOidcToken(); } catch (error) {
-      recordCalendarFailure({ operation: "directory.oidc", errorCode: "provider_request_failed", errorCategory: classifyCalendarError(error) });
+      recordRuntimeFailure({ operation: "directory.oidc", errorCode: "provider_request_failed", errorCategory: classifyRuntimeError(error) });
       throw error;
     }
   });
@@ -21,12 +21,12 @@ async function oidcToken() {
 
 async function jsonRequest<T>(operation: "directory.sts" | "directory.iam" | "directory.membership", url: string, init: RequestInit,
   validate: (value: Awaited<ReturnType<Response["json"]>>) => T) {
-  return observeCalendarPhase(operation, async () => {
+  return observeRuntimePhase(operation, async () => {
     const response = await observedDirectoryFetch(operation, url, { ...init, cache: "no-store", signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw new Error("Workspace directory unavailable");
     let value;
     try { value = await response.json(); } catch (error) {
-      recordCalendarFailure({ operation, errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+      recordRuntimeFailure({ operation, errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
       throw error;
     }
     return validate(value);
@@ -38,10 +38,10 @@ export async function isWorkspaceGroupMember(email: string): Promise<boolean> {
   const account = process.env.GOOGLE_WORKSPACE_SERVICE_ACCOUNT;
   const group = process.env.GOOGLE_AUTHORIZED_GROUP;
   if (!audience || !account || group !== "internal-tool-founder-ops-access@findmydoc.eu") {
-    recordCalendarFailure({ operation: "directory.reader", errorCode: "provider_configuration_invalid", errorCategory: "configuration_error" });
+    recordRuntimeFailure({ operation: "directory.reader", errorCode: "provider_configuration_invalid", errorCategory: "configuration_error" });
     throw new Error("Workspace directory configuration missing");
   }
-  await observeCalendarPhase("directory.reader", async () => {
+  await observeRuntimePhase("directory.reader", async () => {
     if (!readerToken || readerToken.expiresAt < Date.now() + 60_000 || readerToken.account !== account || readerToken.audience !== audience) {
       const exchange = await jsonRequest("directory.sts", "https://sts.googleapis.com/v1/token", {
         method: "POST", headers: { "content-type": "application/json" },

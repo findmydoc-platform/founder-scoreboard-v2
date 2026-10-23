@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { projectionAccounting } from "./projection-accounting";
 import { reassertDeliveryAdmission, runWithDeliveryAdmission } from "./delivery-admission-scope";
@@ -90,7 +91,7 @@ export async function authorizeCronWebhook(input: CronWebhookInput): Promise<Cro
         }
         try { assertDatabaseBinding(); } catch { return Response.json({ message: "Cron storage binding is no longer valid." }, { status: 401 }); }
         const claimStartedAt = Date.now();
-        const response = await fetch(input, init);
+        const response = await observedSupabaseFetch(input, init);
         if (response.ok && (path === "claim_github_issue_comment_webhook_delivery" || path === "claim_github_planning_webhook_delivery")) {
           const value = await response.clone().json();
           const claimed = Array.isArray(value) ? value[0] : value;

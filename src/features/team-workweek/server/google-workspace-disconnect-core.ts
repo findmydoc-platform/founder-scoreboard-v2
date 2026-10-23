@@ -43,6 +43,7 @@ export async function observeGoogleWorkweekSeriesForDisconnect({
     const url = new URL(endpoint(target));
     url.searchParams.set("fields", "id,etag,extendedProperties/private");
     response = await fetchImpl(url, {
+      allowedStatuses: [404, 410],
       headers: { },
       cache: "no-store",
     });
@@ -84,6 +85,7 @@ export async function ensureGoogleWorkweekSeriesAbsent({
   let response: Response;
   try {
     response = await fetchImpl(endpoint(target), {
+      allowedStatuses: [404, 410],
       method: "DELETE",
       headers: {
         "if-match": target.expectedEtag,

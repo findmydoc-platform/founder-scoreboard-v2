@@ -1,3 +1,4 @@
+import { observedProviderFetch } from "./observed-fetch";
 import "server-only";
 import { safeRelativeNext } from "../../auth-redirect";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
@@ -115,7 +116,7 @@ function userTokenRequired(message = "GitHub-App-Verbindung fehlt. Bitte verbind
 }
 
 async function exchangeOrRefreshGitHubUserToken(params: URLSearchParams) {
-  const response = await fetch("https://github.com/login/oauth/access_token", {
+  const response = await observedProviderFetch("github.oauth", "https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: {
       accept: "application/json",

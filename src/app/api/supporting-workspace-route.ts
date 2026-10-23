@@ -1,3 +1,4 @@
+import { observeRuntimePreparation } from "@/lib/runtime-logging";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, authzError } from "@/lib/api-response";
 import { authorizeCredentialAction } from "@/lib/credentials";
@@ -13,5 +14,5 @@ export async function supportingWorkspaceGet(request: NextRequest, action: Resou
   const result = await permission.resource.loadWorkspace();
   if (result.status === "forbidden") return apiError(`${labels[action]} darf nicht geladen werden.`, 403);
   if (result.status === "unavailable") return apiError(`${labels[action]} konnte nicht geladen werden.`, 503);
-  return NextResponse.json({ model: result.model, headerData: result.headerData, currentProfile: permission.profile });
+  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, headerData: result.headerData, currentProfile: permission.profile }));
 }

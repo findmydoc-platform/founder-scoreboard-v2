@@ -148,3 +148,76 @@ test("disconnect confirms an observed provider effect after the initiating owner
   expect(response.status).toBe(202);
   expect(await response.json()).toEqual({ result: { state: "remove_pending", recovery: "retry" } });
 });
+
+test("Google status HTTP measurement counts every Auth, database and Calendar dispatch once", async () => {
+  const state = fixture();
+  const transport = globalThis.fetch;
+  const actual = [];
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init);
+    actual.push(new URL(request.url).pathname);
+    if (new URL(request.url).pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json({ id: "owner-1", name: "Synthetic owner", platform_role: "founder" });
+    return transport(input, init);
+  });
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "100");
+  const lines = [];
+  const output = vi.spyOn(process.stdout, "write").mockImplementation(line => { lines.push(String(line)); return true; });
+  try {
+    const { GET } = await importTestModule("src/app/api/google-workspace/status/route.ts", { "server-only": {} });
+    const response = await GET(new NextRequest("https://application.example.test/api/google-workspace/status", { headers: state.request.headers }));
+    expect(response.status).toBe(200);
+    const event = lines.map(line => JSON.parse(line)).find(record => record.event === "request.completed");
+    expect(event).toMatchObject({ method: "GET", route: "/api/google-workspace/status", externalCalls: { total: actual.length, providers: { google_workspace: 1 } } });
+    expect(event.externalCalls.providers.supabase_auth).toBe(actual.filter(path => path.startsWith("/auth/")).length);
+    expect(event.externalCalls.providers.supabase_db).toBe(actual.filter(path => path.startsWith("/rest/")).length);
+    expect(event.externalCalls.operations).not.toHaveProperty("calendar.snapshot");
+    expect(event.externalCalls.operations).not.toHaveProperty("supabase.other");
+    expect(event.phases.some(phase => phase.operation === "credential.action")).toBe(true);
+    expect(event.phases.some(phase => phase.operation === "response.prepare")).toBe(true);
+    expect(lines.join("")).not.toMatch(/synthetic-calendar|synthetic-service|owner-1|user-1|calendar-auth/);
+  } finally { output.mockRestore(); }
+});
+
+
+test.each([
+  { phase: "read", status: 404 }, { phase: "read", status: 410 },
+  { phase: "delete", status: 404 }, { phase: "delete", status: 410 },
+  { phase: "delete", status: 401 }, { phase: "delete", status: 403 }, { phase: "delete", status: 503 },
+  { phase: "ordinary", status: 404 }, { phase: "collection", status: 404 },
+])("Calendar absence measurement honors the owning operation: $phase $status", async ({ phase, status }) => {
+  const state = fixture(), transport = globalThis.fetch;
+  const actual = [];
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).hostname !== "www.googleapis.com") return transport(request);
+    actual.push(request.method);
+    expect(init).not.toHaveProperty("allowedStatuses");
+    if (phase === "delete" && request.method === "GET") return Response.json({ id: "event-1", etag: "etag-1", extendedProperties: { private: { founderopsWorkweekSeriesId: "series-1", founderopsWorkweekRevision: "1" } } });
+    return Response.json({ error: "synthetic-provider-result" }, { status });
+  });
+  const events = [];
+  const output = vi.spyOn(process.stdout, "write").mockImplementation(line => { events.push(JSON.parse(String(line))); return true; });
+  try {
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+    const { observeRuntimeRoute } = await import("../../../src/lib/runtime-logging");
+    const { ensureGoogleWorkweekSeriesAbsent } = await importTestModule("src/features/team-workweek/server/google-workspace-disconnect-core.ts");
+    await observeRuntimeRoute("google.disconnect", state.request, async () => {
+      const { calendar } = await authorizeCredentialAction({ credential: { kind: "session-request", request: state.request }, action: "google-calendar.workweek", target: { ownerProfileId: "owner-1" } });
+      if (phase === "ordinary" || phase === "collection") {
+        const suffix = phase === "ordinary" ? "/event-1" : "";
+        await calendar.request(`https://www.googleapis.com/calendar/v3/calendars/primary/events${suffix}`, phase === "collection" ? { allowedStatuses: [404] } : {});
+      } else {
+        const result = await ensureGoogleWorkweekSeriesAbsent({ accessToken: calendar, target: { calendarId: "primary", googleEventId: "event-1", seriesId: "series-1", expectedEtag: "etag-1", expectedFounderopsRevision: 1 } });
+        expect(result.state).toBe(status === 404 || status === 410 ? "confirmed" : "delayed");
+      }
+      return Response.json({ ok: true });
+    });
+    expect(actual).toEqual(phase === "delete" ? ["GET", "DELETE"] : ["GET"]);
+    const accepted = (phase === "read" || phase === "delete") && (status === 404 || status === 410);
+    const completion = events.find(event => event.event === "request.completed");
+    expect(completion.outcome).toBe(accepted ? "success" : "error");
+    expect(completion.externalCalls.providers.google_workspace).toBe(actual.length);
+    expect(completion.externalCalls.durationMsByOperation["google.calendar.read"]).toBeGreaterThan(0);
+    expect(events.filter(event => event.event === "operation.failed")).toHaveLength(accepted ? 0 : 1);
+  } finally { output.mockRestore(); }
+});

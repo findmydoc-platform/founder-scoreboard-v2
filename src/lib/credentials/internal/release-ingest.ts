@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
@@ -55,7 +56,7 @@ export async function authorizeReleaseIngest(input: ReleaseIngestCredentialInput
           dispatchDenial = current();
           if (request.method !== "POST" || url.origin !== expected.origin || url.pathname !== "/rest/v1/rpc/ingest_platform_release_v1") dispatchDenial = unavailable();
           if (dispatchDenial) return Promise.resolve(Response.json({ message: dispatchDenial.error }, { status: dispatchDenial.status }));
-          return fetch(request, { cache: "no-store", redirect: "manual" });
+          return observedSupabaseFetch(request, { cache: "no-store", redirect: "manual" });
         } },
       });
       const result = await client.rpc("ingest_platform_release_v1", { p_manifest: validation.manifest });

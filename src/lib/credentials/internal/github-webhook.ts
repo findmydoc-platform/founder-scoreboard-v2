@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -191,7 +192,7 @@ export async function authorizeGitHubWebhook(input: GitHubWebhookInput): Promise
             changed = true;
             return Response.json({ code: "github_webhook_unavailable", message: "GitHub webhook intake is unavailable." }, { status: 401 });
           }
-          return fetch(input, init);
+          return observedSupabaseFetch(input, init);
         } } });
   }
   catch {

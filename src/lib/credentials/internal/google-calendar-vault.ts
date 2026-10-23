@@ -1,3 +1,4 @@
+import { observedProviderFetch } from "./observed-fetch";
 import { GoogleWorkspaceOAuthContractError } from "../../google-calendar-errors";
 import { getServerServiceRoleSupabase } from "./service-client";
 import { createHash } from "node:crypto";
@@ -84,7 +85,7 @@ export function buildGoogleWorkspaceAuthorizationUrl(input: {
 }
 
 async function googleTokenRequest(body: URLSearchParams, classifyInvalidGrant = false) {
-  const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+  const response = await observedProviderFetch("google.oauth", GOOGLE_TOKEN_ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
@@ -132,7 +133,7 @@ export async function probeGoogleWorkspacePrimaryCalendar(accessToken: string, a
   url.searchParams.set("privateExtendedProperty", "founderOpsProbe=__never__");
   const assertCurrent = authorizeDispatch ? await authorizeDispatch() : undefined;
   assertCurrent?.();
-  const response = await fetch(url, {
+  const response = await observedProviderFetch("google.calendar.read", url, {
     headers: { authorization: `Bearer ${accessToken}` },
     cache: "no-store",
     signal: AbortSignal.timeout(5000),

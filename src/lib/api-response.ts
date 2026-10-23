@@ -1,3 +1,4 @@
+import { observeRuntimePreparation } from "@/lib/runtime-logging";
 import { NextResponse, type NextRequest } from "next/server";
 import type { AuthzResult } from "./credentials/auth-types";
 
@@ -5,18 +6,18 @@ type FailedAuthzResult = Extract<AuthzResult, { ok: false }>;
 type AuthzErrorFields = Record<string, unknown> & { code?: never; error?: never };
 
 export function apiError(error: string, status: number) {
-  return NextResponse.json({ error }, { status });
+  return observeRuntimePreparation(() => NextResponse.json({ error }, { status }));
 }
 
 export function authzError(permission: FailedAuthzResult, fields: AuthzErrorFields = {}) {
   const safeFields = { ...fields } as Record<string, unknown>;
   delete safeFields.code;
   delete safeFields.error;
-  return NextResponse.json({
+  return observeRuntimePreparation(() => NextResponse.json({
     ...safeFields,
     ...(permission.code ? { code: permission.code } : {}),
     error: permission.error,
-  }, { status: permission.status });
+  }, { status: permission.status }));
 }
 
 export function supabaseUnavailable(message = "Supabase env is not configured.") {

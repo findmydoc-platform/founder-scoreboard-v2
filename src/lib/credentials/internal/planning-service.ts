@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { AuthErrorCode } from "../../auth-error-contract";
@@ -30,7 +31,7 @@ export function planningService(strict: boolean, beforeDispatch?: () => Promise<
         if (active?.url !== captured.url || active.key !== captured.key) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
         const url = new URL(request.url), expected = new URL(captured.url);
         if (url.origin !== expected.origin || !url.pathname.startsWith("/rest/v1/")) throw new WorkspaceAccessError(403, "workspace_access_denied");
-        return fetch(request);
+        return observedSupabaseFetch(request);
       } catch (error) {
         if (error instanceof WorkspaceAccessError || error instanceof PlanningDispatchError) return Response.json({ code: error.code, message: error.message }, { status: error.status });
         return Response.json({ code: "workspace_access_unavailable", message: "Berechtigung konnte nicht geprüft werden." }, { status: 503 });

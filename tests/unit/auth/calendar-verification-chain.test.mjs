@@ -249,8 +249,8 @@ test("calendar summary counts actual private transport attempts and declares OID
   expect(summary).toMatchObject({ externalCalls: { total: 13 + (counts.jwks || 0), operations: { "supabase.user": 3, "workspace.entry": 1,
     "workspace.dispatch.prepare": 2, "workspace.permit.release": 2, "calendar.profile": 1, "calendar.snapshot": 1,
     "directory.sts": 1, "directory.iam": 1, "directory.membership": 1,
-  } }, completeness: { externalCallsScope: "private_supabase_and_explicit_directory_http", externalCallsComplete: false,
-    uninstrumented: ["vercel_oidc_internal"] } });
+  } }, completeness: { externalCallsScope: "registered_provider_transports", externalCallsComplete: false,
+    uninstrumented: ["vercel_oidc_internal", "browser_and_ssr"] } });
   expect(summary.phases).toEqual(expect.arrayContaining([
     expect.objectContaining({ operation: "directory.membership", kind: "http", outcome: "success" }),
   ]));

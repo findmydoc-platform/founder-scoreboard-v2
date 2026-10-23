@@ -1,3 +1,4 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { NextResponse, type NextRequest } from "next/server";
 import { invalidSessionBeforeEffectErrorCode } from "@/lib/auth-error-contract";
 import { requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
@@ -25,10 +26,10 @@ function syncResponse(
   result: TaskGitHubProjectionResult,
   status = taskGitHubSyncHttpStatus(result),
 ) {
-  return NextResponse.json(result, { status });
+  return observeRuntimePreparation(() => NextResponse.json(result, { status }));
 }
 
-export async function POST(
+async function handlePOST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
@@ -65,3 +66,5 @@ export async function POST(
   const result = await apiContext.planning.projectToGitHub(command.createIfMissing);
   return syncResponse(result);
 }
+
+export const POST = observeRuntimeHandler("task.github-sync", handlePOST);

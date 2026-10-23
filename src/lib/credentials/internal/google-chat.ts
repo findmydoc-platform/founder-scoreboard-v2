@@ -1,3 +1,4 @@
+import { observedProviderFetch } from "./observed-fetch";
 import { reassertDeliveryAdmission } from "./delivery-admission-scope";
 import "server-only";
 import { createHash, createSign } from "node:crypto";
@@ -67,7 +68,7 @@ async function issueToken(configuration: BotConfiguration): Promise<AccessToken>
   catch { return failure("GoogleChatCredentialInvalid", "Google Chat Service-Account konnte nicht geprüft werden."); }
   let response: Response;
   try {
-    response = await fetch(tokenEndpoint, { method: "POST", redirect: "error", headers: { "content-type": "application/x-www-form-urlencoded" },
+    response = await observedProviderFetch("google.oauth", tokenEndpoint, { method: "POST", redirect: "error", headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }) });
   } catch { return failure("GoogleChatCredentialUnavailable", "Google Chat Token konnte nicht erstellt werden."); }
   if (!response.ok) failure("GoogleChatCredentialUnavailable", `Google Chat Token konnte nicht erstellt werden: ${response.status}`);
@@ -106,7 +107,7 @@ async function dispatch(target: string, body: string, access?: { credential: Acc
   let response: Response;
   try {
     // A failed or lost response may follow a successful mutation. Never refresh and replay here.
-    response = await fetch(target, { method: "POST", redirect: "error", headers: { "content-type": "application/json; charset=UTF-8",
+    response = await observedProviderFetch("google.chat.mutation", target, { method: "POST", redirect: "error", headers: { "content-type": "application/json; charset=UTF-8",
       ...(access ? { authorization: `Bearer ${access.credential.value}` } : {}) }, body });
   } catch { return failure("GoogleChatDeliveryUnknown", access ? "Google Chat DM-Versand konnte nicht bestätigt werden." : "Google Chat Versand konnte nicht bestätigt werden."); }
   // Rejection invalidates only this exact entry. A late response cannot discard a newer token.

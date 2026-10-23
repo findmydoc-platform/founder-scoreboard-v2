@@ -1,6 +1,7 @@
+import { runtimeObservationScope } from "../../runtime-logging";
 import "server-only";
 import { observedSupabaseFetch } from "./observed-fetch";
-import { classifyCalendarError, observeCalendarPhase, observeCalendarResultPhase, recordCalendarResult, recordCalendarFailure, recordCalendarMembership } from "../../runtime-logging";
+import { classifyRuntimeError, observeRuntimePhase, observeRuntimeResultPhase, recordRuntimeResult, recordRuntimeFailure, recordWorkspaceMembership } from "../../runtime-logging";
 import { performance } from "node:perf_hooks";
 import { resolveSessionRequest } from "./session-request";
 import type { SessionPolicyAction } from "./session-policy-types";
@@ -31,7 +32,7 @@ async function membership(key: string, email: string, startedAt: number, credent
     if (candidate === key) expired = true;
     evidence.delete(candidate);
   }
-  const observe = (result: "hit" | "miss" | "expired" | "coalesced", entry?: { verifiedAt: number; expiresAt: number }, waitMs?: number) => recordCalendarMembership({
+  const observe = (result: "hit" | "miss" | "expired" | "coalesced", entry?: { verifiedAt: number; expiresAt: number }, waitMs?: number) => recordWorkspaceMembership({
     result, reason: result === "hit" ? "cached" : result === "coalesced" ? "in_flight" : expired ? "observed_expiry" : "not_found",
     cacheOwnerId, expired, ...(capacityEvictions ? { capacityEvictions } : {}), evidenceAgeMs: entry ? Math.max(0, Date.now() - entry.verifiedAt) : null,
     remainingLifetimeMs: entry ? Math.max(0, entry.expiresAt - Date.now()) : null, ...(waitMs === undefined ? {} : { waitMs }),
@@ -42,13 +43,13 @@ async function membership(key: string, email: string, startedAt: number, credent
   if (running) {
     const waiting = performance.now();
     observe("coalesced");
-    try { const entry = await observeCalendarPhase("workspace.wait", () => running); observe("coalesced", entry, performance.now() - waiting); return entry; }
+    try { const entry = await observeRuntimePhase("workspace.wait", () => running); observe("coalesced", entry, performance.now() - waiting); return entry; }
     catch (error) { observe("coalesced", undefined, performance.now() - waiting); throw error; }
   }
   observe(expired ? "expired" : "miss");
   const verification = (async () => {
     let member: boolean;
-    try { member = await observeCalendarPhase("workspace.membership", () => isWorkspaceGroupMember(email)); } catch { throw unavailable(); }
+    try { member = await observeRuntimePhase("workspace.membership", () => isWorkspaceGroupMember(email)); } catch { throw unavailable(); }
     if (!member) throw denied();
     const entry = { verifiedAt: startedAt, expiresAt: Math.min(startedAt + 900_000, credentialDeadline) };
     if (Date.now() >= entry.expiresAt) throw unavailable();
@@ -66,7 +67,7 @@ function clients() {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   if (!url || !key || !secret) {
-    recordCalendarFailure({ operation: "calendar.authorization", errorCode: "provider_configuration_invalid", errorCategory: "configuration_error" });
+    recordRuntimeFailure({ operation: "calendar.authorization", errorCode: "provider_configuration_invalid", errorCategory: "configuration_error" });
     throw unavailable();
   }
   const options = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: observedSupabaseFetch } };
@@ -74,9 +75,9 @@ function clients() {
 }
 
 async function workspaceContext(service: SupabaseClient, userId: string): Promise<AccessContext> {
-  const result = await observeCalendarResultPhase("workspace.context", () => service.rpc("workspace_access_context", { p_user_id: userId, p_profile_id: null }));
+  const result = await observeRuntimeResultPhase("workspace.context", () => service.rpc("workspace_access_context", { p_user_id: userId, p_profile_id: null }));
   if (result.error || !result.data || !["legacy", "linking", "google"].includes(result.data.mode)) {
-    if (!result.error) recordCalendarFailure({ operation: "workspace.context", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+    if (!result.error) recordRuntimeFailure({ operation: "workspace.context", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
     throw unavailable();
   }
   return { linkingEnforced: false, ...result.data };
@@ -85,7 +86,7 @@ async function workspaceContext(service: SupabaseClient, userId: string): Promis
 type CalendarEntry = AccessContext & { sessionAllowed: boolean | null; sessionError: boolean };
 
 async function calendarEntry(service: SupabaseClient, userId: string, sessionId: string): Promise<CalendarEntry> {
-  const result = await observeCalendarResultPhase("workspace.entry", () => service.rpc("workspace_calendar_entry", { p_user_id: userId, p_session_id: sessionId }));
+  const result = await observeRuntimeResultPhase("workspace.entry", () => service.rpc("workspace_calendar_entry", { p_user_id: userId, p_session_id: sessionId }));
   const context = result.data;
   if (result.error || !context || !["legacy", "linking", "google"].includes(context.mode)
     || typeof context.linkingEnforced !== "boolean"
@@ -93,7 +94,7 @@ async function calendarEntry(service: SupabaseClient, userId: string, sessionId:
     || !(context.profileId === null || typeof context.profileId === "string")
     || !(context.linked === null || typeof context.linked === "boolean")
     || !(context.identity === null || (typeof context.identity === "object" && !Array.isArray(context.identity)))) {
-    if (!result.error) recordCalendarFailure({ operation: "workspace.entry", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+    if (!result.error) recordRuntimeFailure({ operation: "workspace.entry", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
     throw unavailable();
   }
   return { linkingEnforced: false, ...result.data };
@@ -111,7 +112,7 @@ async function dispatchCalendarRequest(binding: SessionBinding, request: Request
   const hash = digest(permit);
   let cleanup = true;
   try {
-    const prepared = await observeCalendarResultPhase("workspace.dispatch.prepare", () => binding.service.rpc("workspace_calendar_prepare", {
+    const prepared = await observeRuntimeResultPhase("workspace.dispatch.prepare", () => binding.service.rpc("workspace_calendar_prepare", {
       p_hash: hash, p_user_id: binding.userId, p_jwt_hash: digest(binding.token), p_method: request.method,
       p_path: url.pathname.slice("/rest/v1".length), p_session_id: binding.sessionId,
       p_profile_id: binding.profileId, p_mode: binding.mode, p_linking_enforced: binding.linkingEnforced,
@@ -124,7 +125,7 @@ async function dispatchCalendarRequest(binding: SessionBinding, request: Request
       throw new DOMException("Calendar dispatch preparation failed", "AbortError");
     }
     if (typeof prepared.data !== "boolean" || prepared.data !== binding.workspace) {
-      recordCalendarFailure({ operation: "workspace.dispatch.prepare", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+      recordRuntimeFailure({ operation: "workspace.dispatch.prepare", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
       // Abort is terminal to the private SDK, including an enclosing GET retry loop.
       throw new DOMException("Calendar dispatch preparation failed", "AbortError");
     }
@@ -136,11 +137,11 @@ async function dispatchCalendarRequest(binding: SessionBinding, request: Request
   } finally {
     if (cleanup) {
       // The known hash allows bounded cleanup even when the writing response was lost.
-      await observeCalendarPhase("workspace.permit.release", async () => {
+      await observeRuntimePhase("workspace.permit.release", async () => {
         const released = await binding.service.rpc("workspace_release_permit", { p_hash: hash }).abortSignal(AbortSignal.timeout(5000));
-        recordCalendarResult("workspace.permit.release", released.error, "permit_cleanup_failed");
+        recordRuntimeResult("workspace.permit.release", released.error, "permit_cleanup_failed");
       }).catch(error => {
-        recordCalendarFailure({ operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: classifyCalendarError(error) });
+        recordRuntimeFailure({ operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: classifyRuntimeError(error) });
       });
     }
   }
@@ -153,9 +154,9 @@ function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): t
       const url = new URL(request.url);
       if (url.origin !== new URL(binding.url).origin || !url.pathname.startsWith("/rest/v1/")) throw denied();
       if (Date.now() >= binding.deadline) throw loginRequired();
-      const user = await observeCalendarPhase("supabase.user", () => binding.auth.auth.getUser(binding.token));
+      const user = await observeRuntimePhase("supabase.user", () => binding.auth.auth.getUser(binding.token));
       if (user.error) {
-        if (isAuthRetryableFetchError(user.error) || (user.error.status || 0) >= 500) recordCalendarResult("supabase.user", user.error);
+        if (isAuthRetryableFetchError(user.error) || (user.error.status || 0) >= 500) recordRuntimeResult("supabase.user", user.error);
         if (isAuthRetryableFetchError(user.error) || (user.error.status || 0) >= 500) throw unavailable();
         throw denied();
       }
@@ -180,7 +181,7 @@ function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): t
       }
       const permit = randomBytes(32).toString("base64url");
       const hash = digest(permit);
-      const issued = await observeCalendarResultPhase("workspace.permit.issue", () => binding.service.rpc("workspace_issue_permit", {
+      const issued = await observeRuntimeResultPhase("workspace.permit.issue", () => binding.service.rpc("workspace_issue_permit", {
         p_hash: hash, p_user_id: binding.userId, p_jwt_hash: digest(binding.token), p_method: request.method,
         p_path: url.pathname.slice("/rest/v1".length), p_session_id: binding.sessionId,
       }));
@@ -193,11 +194,11 @@ function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): t
         return await observedSupabaseFetch(request);
       } finally {
         // Cleanup never retries the operation, including a lost mutation response.
-        await observeCalendarPhase("workspace.permit.release", async () => {
+        await observeRuntimePhase("workspace.permit.release", async () => {
           const released = await binding.service.rpc("workspace_release_permit", { p_hash: hash });
-          recordCalendarResult("workspace.permit.release", released.error, "permit_cleanup_failed");
+          recordRuntimeResult("workspace.permit.release", released.error, "permit_cleanup_failed");
         }).catch(error => {
-          recordCalendarFailure({ operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: classifyCalendarError(error) });
+          recordRuntimeFailure({ operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: classifyRuntimeError(error) });
         });
       }
     } catch (error) {
@@ -223,9 +224,9 @@ export async function authorizeSessionData(request: NextRequest, action: Session
   if (!token) return { ok: false, status: 401, error: "Anmeldung erforderlich." };
   try {
     const environment = clients();
-    const verified = await observeCalendarPhase("supabase.claims", () => environment.auth.auth.getClaims(token));
+    const verified = await observeRuntimePhase("supabase.claims", () => environment.auth.auth.getClaims(token));
     if (verified.error) {
-      if (isAuthRetryableFetchError(verified.error) || (verified.error.status || 0) >= 500) recordCalendarResult("supabase.claims", verified.error);
+      if (isAuthRetryableFetchError(verified.error) || (verified.error.status || 0) >= 500) recordRuntimeResult("supabase.claims", verified.error);
       if (isAuthRetryableFetchError(verified.error) || (verified.error.status || 0) >= 500) return { ok: false, status: 503, error: "Anmeldung konnte vorübergehend nicht geprüft werden." };
       return invalidSession();
     }
@@ -237,9 +238,9 @@ export async function authorizeSessionData(request: NextRequest, action: Session
       || claims.exp * 1000 <= Date.now() || (typeof claims.nbf === "number" && claims.nbf * 1000 > Date.now())
       || typeof claims.session_id !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(claims.session_id)) return invalidSession();
     // Signature validity does not defer mutable account validity, profile binding or session admission.
-    const user = await observeCalendarPhase("supabase.user", () => environment.auth.auth.getUser(token));
+    const user = await observeRuntimePhase("supabase.user", () => environment.auth.auth.getUser(token));
     if (user.error) {
-      if (isAuthRetryableFetchError(user.error) || (user.error.status || 0) >= 500) recordCalendarResult("supabase.user", user.error);
+      if (isAuthRetryableFetchError(user.error) || (user.error.status || 0) >= 500) recordRuntimeResult("supabase.user", user.error);
       if (isAuthRetryableFetchError(user.error) || (user.error.status || 0) >= 500) return { ok: false, status: 503, error: "Anmeldung konnte vorübergehend nicht geprüft werden." };
       return invalidSession();
     }
@@ -262,27 +263,27 @@ export async function authorizeSessionData(request: NextRequest, action: Session
       if (!Array.isArray(claims.amr) || !claims.amr.some(entry => typeof entry === "object" && entry.method === "oauth")) throw loginRequired();
       // Interpret admission only after the same binding, identity and AMR checks as the separate path.
       const session = entry ? { data: entry.sessionAllowed, error: entry.sessionError }
-        : await observeCalendarResultPhase("workspace.session", () => environment.service.rpc(context.mode === "linking" ? "workspace_linking_session_allowed" : "workspace_session_allowed", {
+        : await observeRuntimeResultPhase("workspace.session", () => environment.service.rpc(context.mode === "linking" ? "workspace_linking_session_allowed" : "workspace_session_allowed", {
           p_user_id: claims.sub, p_session_id: claims.session_id,
         }));
       if (entry && (typeof entry.sessionAllowed !== "boolean" || typeof entry.sessionError !== "boolean")) {
-        recordCalendarFailure({ operation: "workspace.entry", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+        recordRuntimeFailure({ operation: "workspace.entry", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
         throw unavailable();
       }
-      if (entry?.sessionError) recordCalendarFailure({ operation: "workspace.entry", errorCode: "provider_request_failed", errorCategory: "provider_http_error" });
+      if (entry?.sessionError) recordRuntimeFailure({ operation: "workspace.entry", errorCode: "provider_request_failed", errorCategory: "provider_http_error" });
       if (session.error) throw unavailable();
       if (session.data !== true) throw loginRequired();
       if (context.mode === "google") {
-        await observeCalendarPhase("supabase.settings", async () => {
+        await observeRuntimePhase("supabase.settings", async () => {
           const settings = await observedSupabaseFetch(`${environment.url}/auth/v1/settings`, { headers: { apikey: environment.key }, cache: "no-store", signal: AbortSignal.timeout(5000) });
           if (!settings.ok) throw unavailable();
           let configuration;
           try { configuration = await settings.json(); } catch (error) {
-            recordCalendarFailure({ operation: "supabase.settings", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
+            recordRuntimeFailure({ operation: "supabase.settings", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
             throw error;
           }
           if (!configuration || configuration.external?.google !== true || Object.entries(configuration.external).some(([provider, enabled]) => provider !== "google" && enabled === true)) {
-            recordCalendarFailure({ operation: "supabase.settings", errorCode: "provider_configuration_invalid", errorCategory: "configuration_error" });
+            recordRuntimeFailure({ operation: "supabase.settings", errorCode: "provider_configuration_invalid", errorCategory: "configuration_error" });
             throw unavailable();
           }
         });
@@ -293,7 +294,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
         claims.aud, claims.role, claims.scope, action, "session-policy-v1"]));
       deadline = (await membership(key, identity.email, startedAt, deadline)).expiresAt;
     }
-    if (!workspace) recordCalendarMembership({ result: "bypass", reason: "not_required", cacheOwnerId, evidenceAgeMs: null, remainingLifetimeMs: null, expired: false });
+    if (!workspace) recordWorkspaceMembership({ result: "bypass", reason: "not_required", cacheOwnerId, evidenceAgeMs: null, remainingLifetimeMs: null, expired: false });
     const binding: SessionBinding = { token, userId: claims.sub, sessionId: claims.session_id,
       profileId: context.profileId, deadline, workspace, calendar: action === "calendar.read", url: environment.url, service: environment.service, auth: environment.auth,
       mode: context.mode, linkingEnforced: context.linkingEnforced, subject, email };
@@ -302,7 +303,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     });
     const data = constrainedData(() => {});
     // This live user-bound RPC also enforces profile rebinding and current role before every action.
-    const profile = await observeCalendarResultPhase("calendar.profile", () => data.rpc("current_authenticated_profile"));
+    const profile = await observeRuntimeResultPhase(runtimeObservationScope() === "calendar" ? "calendar.profile" : "supabase.db.identity.rpc", () => data.rpc("current_authenticated_profile"));
     if (Date.now() >= claims.exp * 1000) return invalidSession();
     if (Date.now() >= deadline) throw unavailable();
     if (profile.error) return { ok: false, status: 403, error: "Teamprofil konnte nicht eindeutig geprüft werden." };
@@ -329,7 +330,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
 }
 
 export async function authorizeCalendar(request: NextRequest): Promise<CalendarCredentialResult> {
-  const authorized = await observeCalendarPhase("calendar.authorization", () => authorizeSessionData(request, "calendar.read"));
+  const authorized = await observeRuntimePhase("calendar.authorization", () => authorizeSessionData(request, "calendar.read"));
   if (!authorized.ok) return authorized;
   const { data, profile } = authorized;
   return { ok: true, profile, calendar: createCalendarReader(data) };

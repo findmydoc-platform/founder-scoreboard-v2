@@ -167,6 +167,7 @@ async function observeSeries(
 ) {
   try {
     const response = await fetchImpl(eventEndpoint(series), {
+      allowedStatuses: [404],
       headers: { },
       cache: "no-store",
     });

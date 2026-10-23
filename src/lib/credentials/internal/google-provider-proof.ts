@@ -1,9 +1,10 @@
+import { observedProviderFetch } from "./observed-fetch";
 import "server-only";
 import type { WorkspaceIdentity } from "../../workspace-identity";
 
 export async function verifyGoogleProviderToken(providerToken: string | null | undefined, identity: WorkspaceIdentity) {
   if (!providerToken) throw new Error("Google provider token unavailable");
-  const response = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+  const response = await observedProviderFetch("google.userinfo", "https://openidconnect.googleapis.com/v1/userinfo", {
     headers: { Authorization: `Bearer ${providerToken}` },
     cache: "no-store",
     signal: AbortSignal.timeout(5000),

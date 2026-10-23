@@ -1,3 +1,4 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 import { authorizeCredentialAction } from "@/lib/credentials";
@@ -35,12 +36,12 @@ async function inspect(request: NextRequest) {
   if (error) return apiError("Zustellstatus konnte nicht geladen werden.",500);
 
   const status = await googleChatDeliveryStatus();
-  return NextResponse.json({
+  return observeRuntimePreparation(() => NextResponse.json({
     ok: true,
     googleChat: status,
     googleChatConfigured: status.webhookConfigured || status.apiConfigured,
     pending: count || 0,
-  });
+  }));
 }
 
 async function deliver(request: NextRequest) {
@@ -54,24 +55,24 @@ async function deliver(request: NextRequest) {
     const missing = deliveryStatus.webhookConfigured || deliveryStatus.apiConfigured
       ? "GOOGLE_CHAT_DELIVERY_ENABLED ist nicht auf true gesetzt."
       : "GOOGLE_CHAT_WEBHOOK_URL oder Google-Chat-Service-Account ist nicht gesetzt.";
-    return NextResponse.json({
+    return observeRuntimePreparation(() => NextResponse.json({
       error: missing,
       sent: 0,
       failed: 0,
       skipped: 0,
       googleChat: deliveryStatus,
-    }, { status: 424 });
+    }, { status: 424 }));
   }
 
   await permission.delivery.reconcile();
   const reservation = await permission.delivery.reserve();
   if (!reservation.ok) return authzError(reservation);
   const claim = reservation.claim;
-  if (!claim) return NextResponse.json({ok:true,sent:0,failed:0,skipped:0,results:[]});
+  if (!claim) return observeRuntimePreparation(() => NextResponse.json({ok:true,sent:0,failed:0,skipped:0,results:[]}));
   const loaded = await claim.load();
   if (!loaded.ok) { await claim.release(); return apiError("Zustelldaten konnten nicht geladen werden.",500); }
   const {events,existingDeliveries} = loaded;
-  if (!events.length) { await claim.release(); return NextResponse.json({ok:true,sent:0,failed:0,skipped:0,results:[]}); }
+  if (!events.length) { await claim.release(); return observeRuntimePreparation(() => NextResponse.json({ok:true,sent:0,failed:0,skipped:0,results:[]})); }
   const alreadyDelivered = new Set(
     (existingDeliveries || [])
       .filter((delivery: { event_id: number; status: string }) => delivery.status === "sent")
@@ -132,7 +133,7 @@ async function deliver(request: NextRequest) {
 
   if (!deliverableRows.length) {
     await claim.finalize();
-    return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: results.length, results });
+    return observeRuntimePreparation(() => NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: results.length, results }));
   }
 
   const appUrl = appUrlFromRequest(request);
@@ -198,24 +199,34 @@ async function deliver(request: NextRequest) {
 
   if (failed && !sent) {
     const errorMessage = results.find((result) => result.error)?.error || "Google Chat Versand fehlgeschlagen.";
-    return NextResponse.json({ error: errorMessage, sent, failed, skipped, results, ...(admissionFailureCode ? {code:admissionFailureCode}:{}) }, { status: admissionFailureStatus || statusCodeForError(errorMessage) });
+    return observeRuntimePreparation(() => NextResponse.json({ error: errorMessage, sent, failed, skipped, results, ...(admissionFailureCode ? {code:admissionFailureCode}:{}) }, { status: admissionFailureStatus || statusCodeForError(errorMessage) }));
   }
 
-  return NextResponse.json({ ok: true, sent, failed, skipped, results, googleChat: deliveryStatus });
+  return observeRuntimePreparation(() => NextResponse.json({ ok: true, sent, failed, skipped, results, googleChat: deliveryStatus }));
 }
 
-export async function POST(request:NextRequest) {
+async function handlePOST(request:NextRequest) {
   try { return await deliver(request); }
   catch (error) {
-    if (error && typeof error === "object" && "status" in error && typeof error.status === "number" && error instanceof Error) return NextResponse.json({error:error.message,...("code" in error && error.code ? {code:error.code}:{})},{status:error.status});
+    if (error && typeof error === "object" && "status" in error && typeof error.status === "number" && error instanceof Error) {
+      const status = error.status;
+      return observeRuntimePreparation(() => NextResponse.json({error:error.message,...("code" in error && error.code ? {code:error.code}:{})},{status}));
+    }
     return apiError("Zustellauftrag konnte nicht abgeschlossen werden.",500);
   }
 }
 
-export async function GET(request:NextRequest) {
+async function handleGET(request:NextRequest) {
   try { return await inspect(request); }
   catch (error) {
-    if (error instanceof Error && "status" in error && typeof error.status === "number") return NextResponse.json({error:error.message,...("code" in error && error.code ? {code:error.code}:{})},{status:error.status});
+    if (error instanceof Error && "status" in error && typeof error.status === "number") {
+      const status = error.status;
+      return observeRuntimePreparation(() => NextResponse.json({error:error.message,...("code" in error && error.code ? {code:error.code}:{})},{status}));
+    }
     return apiError("Zustellstatus konnte nicht geladen werden.",500);
   }
 }
+
+export const GET = observeRuntimeHandler("notifications.delivery.inspect", handleGET);
+
+export const POST = observeRuntimeHandler("notifications.delivery.run", handlePOST);

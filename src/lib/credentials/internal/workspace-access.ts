@@ -1,3 +1,4 @@
+import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { getServerServiceRoleSupabase } from "./service-client";
@@ -49,7 +50,7 @@ export async function assertGoogleSession(token: string, userId: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) throw unavailable();
-  const response = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key }, cache: "no-store", signal: AbortSignal.timeout(5000) }).catch(() => { throw unavailable(); });
+  const response = await observedSupabaseFetch(`${url}/auth/v1/settings`, { headers: { apikey: key }, cache: "no-store", signal: AbortSignal.timeout(5000) }).catch(() => { throw unavailable(); });
   if (!response.ok) throw unavailable();
   const settings = await response.json().catch(() => { throw unavailable(); });
   if (settings.external?.google !== true || Object.entries(settings.external).some(([provider, enabled]) => provider !== "google" && enabled === true)) throw unavailable();

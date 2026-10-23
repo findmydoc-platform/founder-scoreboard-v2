@@ -1,3 +1,4 @@
+import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { defaultGitHubRepository } from "@/lib/github-repositories";
 import { NextResponse, type NextRequest } from "next/server";
 import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
@@ -20,7 +21,7 @@ function extractEvidenceFromIssueBody(body: string) {
   return evidence.slice(0, 4000);
 }
 
-export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   const apiContext = await requirePlanningContext(request, "planning.github-comments.import", id);
   if (!apiContext.ok) return apiContext.response;
@@ -61,12 +62,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     importedEvidenceLink = extractEvidenceFromIssueBody(issue.body || "");
   } catch (githubError) {
     const message = githubError instanceof Error ? githubError.message : "GitHub-Kommentare konnten nicht geladen werden.";
-    return NextResponse.json(
+    return observeRuntimePreparation(() => NextResponse.json(
       {
         error: `${message}. Falls es danach weiter fehlschlägt, muss die GitHub App Zugriff auf findmydoc-platform/management haben.`,
       },
       { status: 502 },
-    );
+    ));
   }
 
   const currentEvidence = String(task.evidence_link || "").trim();
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (importedError) return apiError(importedError.message, 500);
 
-  return NextResponse.json({
+  return observeRuntimePreparation(() => NextResponse.json({
     ok: true,
     imported: Number(importResult?.imported || 0),
     evidenceLink: importedEvidenceLink,
@@ -174,5 +175,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       createdAt: comment.created_at,
       importedAt: comment.imported_at,
     })),
-  });
+  }));
 }
+
+export const POST = observeRuntimeHandler("task.github-comments", handlePOST);
