@@ -160,3 +160,31 @@ test("server detail percentage retains bounded phases without accepting caller d
   expect(sink.lines.map(line => JSON.parse(line).detailRetained)).toEqual([false, true, false]);
   expect(JSON.parse(sink.lines[1])).toMatchObject({ retentionReason: "configured_sample", phases: value.phases });
 });
+
+
+test("the actual emitted line preserves all operation aggregates and late slow spans within the byte budget", async () => {
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "100");
+  const { createRuntimeLogger, safeOperations } = await adapter(); const sink = new Sink(); const fallback = new Sink();
+  const aggregate = Object.fromEntries(safeOperations.map((operation: string) => [operation, { operation: [Number.MAX_SAFE_INTEGER, 86400000, 86400000], http: [Number.MAX_SAFE_INTEGER, 86400000, 86400000] }]));
+  const late = { id: "route:999999", parentId: "route:1", operation: "workspace.permit.release", kind: "http", offsetMs: 86400000, durationMs: 86400000, outcome: "error" };
+  const secret = "seeded-private-measurement";
+  createRuntimeLogger(sink, fallback).completed({ ...completion(), routeKey: "planning.board", outcome: "error",
+    deploymentEnv: "production", deploymentId: `dpl_${"x".repeat(64)}`, region: "fra1", vercelId: "fra1::fra1::abcde-1234567890123-abcdef123456",
+    proxy: { requestId, instanceId, durationMs: 86400000, status: 200, outcome: "success" },
+    failure: { operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: "provider_http_error", providerStatus: 503 },
+    deniedCode: "administrator_access_required", directoryCredential: { result: "renewed" },
+    membership: { result: "expired", reason: "observed_expiry", cacheOwnerId: instanceId, evidenceAgeMs: 86400000, remainingLifetimeMs: 86400000, expired: true, capacityEvictions: 1, waitMs: 86400000 },
+    externalCalls: { total: 999999, complete: true, operations: Object.fromEntries(safeOperations.map((operation: string) => [operation, Number.MAX_SAFE_INTEGER])), durationMsByOperation: Object.fromEntries(safeOperations.map((operation: string) => [operation, 86400000])) },
+    phaseMeasurement: { aggregates: { ...aggregate, [secret]: { http: [1, 1, 1] } }, slowest: Array.from({ length: 8 }, () => ({ ...late, token: secret })), pending: 0, failed: false },
+    phases: Array.from({ length: 64 }, (_, index) => ({ ...late, id: `route:${index + 1}`, operation: "supabase.user" })),
+  });
+  expect(sink.lines).toHaveLength(1);
+  expect(Buffer.byteLength(sink.lines[0])).toBeLessThanOrEqual(16 * 1024);
+  const record = JSON.parse(sink.lines[0]);
+  expect(record.phaseAggregates).toEqual(aggregate);
+  expect(record.slowestPhases).toEqual(Array.from({ length: 8 }, () => late));
+  expect(record.completeness).toMatchObject({ phaseAggregatesComplete: true, phasesTruncated: true });
+  expect(record.externalCalls.operations).toEqual(Object.fromEntries(safeOperations.map((operation: string) => [operation, Number.MAX_SAFE_INTEGER])));
+  expect(sink.lines[0]).not.toContain(secret);
+  expect(fallback.lines).toEqual([]);
+});

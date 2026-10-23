@@ -1,5 +1,7 @@
 import "server-only";
 
+import { observeRuntimePhase, observeRuntimePreparation } from "@/lib/runtime-logging";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PlanningWorkspaceLoadContext, PlanningWorkspaceLoadResult } from "@/features/planning-items/model/planning-workspace-model";
 import { mapTaskRelation } from "@/lib/planning-row-mappers";
@@ -105,40 +107,42 @@ export async function loadPlanningWorkspaceModel(
 ): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
   const [projectResult, profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult] = await Promise.all([
-    supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<ProjectRow>(),
-    supabase.from("profiles").select(planningProfileSelect).order("name"),
-    supabase.from(ACTIVE_TASKS_TABLE).select(planningSummarySelect).eq("project_id", planningProjectId).order("sort_order").order("id"),
-    supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"),
-    supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order"),
-    supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"),
-    supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked").order("start_date").order("id"),
-    supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).order("id").limit(500),
-    supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").order("profile_id"),
+    observeRuntimePhase("board.project", () => supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<ProjectRow>()),
+    observeRuntimePhase("board.profiles", () => supabase.from("profiles").select(planningProfileSelect).order("name")),
+    observeRuntimePhase("board.items", () => supabase.from(ACTIVE_TASKS_TABLE).select(planningSummarySelect).eq("project_id", planningProjectId).order("sort_order").order("id")),
+    observeRuntimePhase("board.strategy", () => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints")),
+    observeRuntimePhase("board.raci", () => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order")),
+    observeRuntimePhase("board.links", () => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id")),
+    observeRuntimePhase("board.sprints", () => supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked").order("start_date").order("id")),
+    observeRuntimePhase("board.relationships", () => supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).order("id").limit(500)),
+    observeRuntimePhase("board.preferences", () => supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").order("profile_id")),
   ]);
   if (projectResult.error || !projectResult.data || profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error || sprintResult.error || relationResult.error || preferenceResult.error) {
     return { status: "unavailable" };
   }
-  const people = await withWorkspaceProfileAvatars(((profileResult.data || []) as DbProfile[]).map(mapProfile), supabase);
-  const items = mapPlanningSummaryRows(
-    (itemResult.data || []) as unknown as DbTask[],
-    people,
-    (linkResult.data || []) as DbTaskLink[],
-    (strategyResult.data || []) as DbPlanningItemStrategy[],
-    (raciResult.data || []) as DbPlanningItemRaciAssignment[],
-  );
-  const activeIds = new Set(items.map((item) => item.id));
-  return {
-    status: "ready",
-    model: {
-      revision: items.reduce((latest, item) => item.updatedAt && item.updatedAt > latest ? item.updatedAt : latest, ""),
-      project: mapPlanningProject(projectResult.data),
-      items,
-      relationships: ((relationResult.data || []) as DbTaskRelation[])
-        .filter((relation) => activeIds.has(relation.task_id) && activeIds.has(relation.related_task_id))
-        .map(mapTaskRelation),
+  const people = await observeRuntimePhase("board.avatars", () => withWorkspaceProfileAvatars(((profileResult.data || []) as DbProfile[]).map(mapProfile), supabase));
+  return observeRuntimePreparation(() => {
+    const items = mapPlanningSummaryRows(
+      (itemResult.data || []) as unknown as DbTask[],
       people,
-      sprints: ((sprintResult.data || []) as DbSprint[]).map(mapSprint),
-      preferences: ((preferenceResult.data || []) as DbProfileUiPreference[]).map(mapProfileUiPreference),
-    },
-  };
+      (linkResult.data || []) as DbTaskLink[],
+      (strategyResult.data || []) as DbPlanningItemStrategy[],
+      (raciResult.data || []) as DbPlanningItemRaciAssignment[],
+    );
+    const activeIds = new Set(items.map((item) => item.id));
+    return {
+      status: "ready",
+      model: {
+        revision: items.reduce((latest, item) => item.updatedAt && item.updatedAt > latest ? item.updatedAt : latest, ""),
+        project: mapPlanningProject(projectResult.data),
+        items,
+        relationships: ((relationResult.data || []) as DbTaskRelation[])
+          .filter((relation) => activeIds.has(relation.task_id) && activeIds.has(relation.related_task_id))
+          .map(mapTaskRelation),
+        people,
+        sprints: ((sprintResult.data || []) as DbSprint[]).map(mapSprint),
+        preferences: ((preferenceResult.data || []) as DbProfileUiPreference[]).map(mapProfileUiPreference),
+      },
+    };
+  }, "board.map");
 }

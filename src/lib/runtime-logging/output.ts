@@ -7,9 +7,12 @@ export type Stage = "proxy" | "route";
 export type Outcome = "success" | "denied" | "invalid_input" | "rejected" | "error";
 export const safeOperations = ["request.workflow", "credential.action", "response.prepare", "supabase.auth.other", "supabase.db.read", "supabase.db.write", "supabase.db.rpc", "supabase.db.planning.read", "supabase.db.planning.write", "supabase.db.identity.read", "supabase.db.identity.write", "supabase.db.identity.rpc", "google.calendar.read", "google.calendar.mutation", "google.oauth", "google.userinfo", "google.chat.mutation", "github.read", "github.mutation", "github.oauth", "calendar.request", "session.proxy", "calendar.authorization", "calendar.snapshot", "calendar.publications", "calendar.prepare", "calendar.data", "calendar.profile",
   "supabase.claims", "supabase.jwks", "supabase.user", "supabase.refresh", "supabase.settings", "supabase.other", "workspace.context", "workspace.entry", "workspace.session", "workspace.membership", "workspace.wait",
-  "workspace.dispatch.prepare", "workspace.permit.issue", "workspace.permit.release", "directory.reader", "directory.oidc", "directory.sts", "directory.iam", "directory.membership"] as const;
+  "workspace.dispatch.prepare", "workspace.permit.issue", "workspace.permit.release", "directory.reader", "directory.oidc", "directory.sts", "directory.iam", "directory.membership", "board.authorization", "board.load", "board.header", "board.project", "board.profiles", "board.items", "board.strategy", "board.raci", "board.links", "board.sprints", "board.relationships", "board.preferences", "board.avatars", "board.map"] as const;
 export type SafeOperation = typeof safeOperations[number];
 export type Phase = { id: string; parentId?: string; operation: SafeOperation; kind: "operation" | "http"; offsetMs: number; durationMs: number; outcome: "success" | "error" };
+// Tuples keep the fixed operation catalog affordable inside the event byte budget.
+export type PhaseAggregates = Partial<Record<SafeOperation, Partial<Record<Phase["kind"], [count: number, totalMs: number, maxMs: number]>>>>;
+export type PhaseMeasurement = { aggregates: PhaseAggregates; slowest: Phase[]; pending: number; failed: boolean };
 export type ExternalCalls = { total: number; operations: Partial<Record<SafeOperation, number>>; durationMsByOperation?: Partial<Record<SafeOperation, number>>; complete: boolean };
 export type FailureCategory = "timeout" | "transport_error" | "provider_http_error" | "invalid_response" | "configuration_error" | "unexpected_error";
 export type SafeFailure = {
@@ -34,6 +37,7 @@ export type Completion = {
   externalCalls?: ExternalCalls;
   phases?: Phase[];
   phasesTruncated?: boolean;
+  phaseMeasurement?: PhaseMeasurement;
   completeness: { correlation: "complete" | "missing" | "invalid"; externalCallsComplete: false; cache: "unavailable" };
 };
 type LocalSink = Pick<Writable, "write" | "on"> & { writableNeedDrain?: boolean };
@@ -63,6 +67,18 @@ export function safePhases(values: Phase[] | undefined): Phase[] {
       operation: value.operation, kind: value.kind, offsetMs: duration(value.offsetMs), durationMs: duration(value.durationMs), outcome: value.outcome,
     }));
 }
+function safePhaseAggregates(value: PhaseAggregates): PhaseAggregates {
+  const result: PhaseAggregates = {};
+  for (const operation of safeOperations) {
+    for (const kind of ["operation", "http"] as const) {
+      const tuple = value?.[operation]?.[kind];
+      if (!Array.isArray(tuple) || tuple.length !== 3 || !Number.isSafeInteger(tuple[0]) || tuple[0] < 1) continue;
+      (result[operation] ??= {})[kind] = [tuple[0], duration(tuple[1]), duration(tuple[2])];
+    }
+  }
+  return result;
+}
+
 export function safeExternalCalls(value: ExternalCalls | undefined): ExternalCalls | undefined {
   if (!value || !Number.isSafeInteger(value.total) || value.total < 0) return undefined;
   const counts: Partial<Record<SafeOperation, number>> = {};
@@ -129,13 +145,14 @@ function project(value: Completion) {
   let truncated = value.phasesTruncated === true || proxy?.phasesTruncated === true || allPhases.length > 64 || (value.phases?.length || 0) > 64;
   // Reserve space for the fixed essential envelope, then shorten detail before serialization.
   while (Buffer.byteLength(JSON.stringify(phases)) > 10_000) { phases = phases.slice(0, -1); truncated = true; }
-  return {
+  const event = {
     schemaVersion: 1, scope: route.scope, timestamp: new Date().toISOString(), severity,
     requestId: value.requestId, instanceId: value.instanceId, stage: value.stage === "proxy" ? "proxy" : "route",
     operation: value.stage === "proxy" ? "session.proxy" : route.scope === "calendar" ? "calendar.request" : "request.workflow", method: route.method, route: route.route,
     status: status(value.status), outcome, durationMs: elapsed, observedProcessingMs,
     ...(proxy ? { proxy: { requestId: proxy.requestId, instanceId: proxy.instanceId, durationMs: proxy.durationMs, status: proxy.status, outcome: proxy.outcome } } : {}), ...(failure ? { failure } : {}),
     ...(combined ? { externalCalls: { total: combined.total, operations: combined.operations, providers, durationMsByOperation: combined.durationMsByOperation } } : {}),
+    ...(value.phaseMeasurement ? { phaseAggregates: safePhaseAggregates(value.phaseMeasurement.aggregates), slowestPhases: safePhases(value.phaseMeasurement.slowest).slice(0, 8) } : {}),
     phases, detailRetained: retainDetail, retentionReason,
     ...(safeMembership(value.membership) ? { membership: safeMembership(value.membership) } : {}),
     ...(value.directoryCredential && ["reused", "renewed"].includes(value.directoryCredential.result) ? { directoryCredential: { result: value.directoryCredential.result } } : {}),
@@ -145,12 +162,22 @@ function project(value: Completion) {
     ...(value.region && /^[a-z]{3}[1-9]$/.test(value.region) ? { region: value.region } : {}),
     ...(value.vercelId && /^[a-z]{3}[1-9]::(?:[a-z]{3}[1-9]::)?[a-z0-9]{5}-[0-9]{13}-[a-f0-9]{12}$/.test(value.vercelId) ? { vercelId: value.vercelId } : {}),
     completeness: {
+      phaseAggregatesScope: value.stage === "proxy" ? "proxy" : "route",
+      phaseAggregatesComplete: Boolean(value.phaseMeasurement && value.phaseMeasurement.pending === 0 && !value.phaseMeasurement.failed),
       correlation: ["complete", "missing", "invalid"].includes(value.completeness.correlation) ? value.completeness.correlation : "invalid",
       externalCallsScope: calls ? "registered_provider_transports" : "unavailable",
       externalCallsComplete: combined?.complete === true && (value.stage === "proxy" || Boolean(proxyCalls)),
       uninstrumented: ["vercel_oidc_internal", "browser_and_ssr"], proxyObserved: Boolean(proxy), cache: safeMembership(value.membership) ? "observed" : "unavailable", phasesComplete: retainDetail && !truncated && (value.stage === "proxy" || Boolean(proxy)), phasesTruncated: truncated,
     },
   };
+  // Measure the actual Pino envelope, not an independent detail allowance.
+  // Aggregate and slow-span evidence takes priority over chronological detail.
+  while (event.phases.length && Buffer.byteLength(JSON.stringify({ ...event, level: 50, event: "request.completed", msg: "Request completed" })) + 1 > 16 * 1024) {
+    event.phases.pop();
+    event.completeness.phasesTruncated = true;
+    event.completeness.phasesComplete = false;
+  }
+  return event;
 }
 
 export function createRuntimeLogger(sink: LocalSink = process.stdout, fallback: LocalSink = process.stderr) {
