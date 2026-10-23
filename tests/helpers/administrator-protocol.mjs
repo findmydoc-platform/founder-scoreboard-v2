@@ -26,7 +26,7 @@ export function administratorProtocol(initial = {}) {
     if (url.pathname === "/rest/v1/rpc/workspace_access_context") return Response.json({ mode: "legacy", userId, profileId: state.profile ? profileId : null });
     if (url.pathname === "/rest/v1/rpc/workspace_calendar_entry") return Response.json({ mode: "legacy", linkingEnforced: false,
       userId, profileId: state.profile ? profileId : null, linked: false, identity: null, sessionAllowed: null, sessionError: false });
-    if (url.pathname === "/rest/v1/rpc/workspace_calendar_prepare") return Response.json(false);
+    if (url.pathname === "/rest/v1/rpc/workspace_dispatch_prepare") return Response.json(false);
     if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") return state.profileError ? Response.json({ code: "PGRST116", message: "Ambiguous profile" }, { status: 400 }) : Response.json(state.profile ? { id: profileId, name: "Synthetic Founder", platform_role: state.role } : null);
     if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") return state.snapshotError ? Response.json({ code: state.snapshotError, message: "Private provider detail" }, { status: 403 }) : Response.json(state.snapshot);
     if (url.pathname.startsWith("/rest/v1/rpc/")) {

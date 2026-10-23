@@ -106,7 +106,7 @@ async function protocol(input, init) {
     if (delayDirectory) await delayDirectory();
     return directoryFailure ? Response.json({ error: "unavailable" }, { status: 503 }) : Response.json({ isMember: member });
   }
-  if (url.pathname.endsWith("/rpc/workspace_calendar_prepare")) {
+  if (url.pathname.endsWith("/rpc/workspace_dispatch_prepare")) {
     count("binding");
     const body = await request.json();
     const currentProfile = changedBindingAt && counts.binding >= changedBindingAt ? "rebound-profile" : mappedProfile;

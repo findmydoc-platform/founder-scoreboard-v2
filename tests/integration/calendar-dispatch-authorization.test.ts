@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import pg from "pg";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { verifyWorkspaceSecurity } from "../../scripts/lib/database-security/workspace-security.mjs";
 import { asAuthenticated, captureDatabaseError, localDatabaseUrl, withIsolatedLocalDatabase } from "./helpers/local-database";
 
@@ -9,9 +9,10 @@ const sid = "64000000-0000-4000-8000-000000000026";
 const profileId = "calendar-dispatch-member";
 const identity = { sub: "calendar-dispatch-sub", email: "calendar@findmydoc.eu", email_verified: true,
   iss: "https://accounts.google.com", custom_claims: { hd: "findmydoc.eu" } };
-const signature = "public.workspace_calendar_prepare(text,uuid,text,text,text,uuid,text,text,boolean,text,text)";
+describe.each(["workspace_calendar_prepare", "workspace_dispatch_prepare"])("%s authorization contract", rpc => {
+const signature = `public.${rpc}(text,uuid,text,text,text,uuid,text,text,boolean,text,text)`;
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
-const preparation = "select public.workspace_calendar_prepare($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) as required";
+const preparation = `select public.${rpc}($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) as required`;
 function parameters(overrides: Record<string, unknown> = {}) {
   const binding = { hash: digest("calendar-permit"), user: uid, jwt: digest("calendar-jwt"), method: "POST",
     path: "/rpc/current_authenticated_profile", session: sid, profile: profileId, mode: "linking", enforced: true,
@@ -186,18 +187,26 @@ it("holds the configuration lock until issuance commits and invalidates the old 
 });
 
 
-it("fails the security verifier when preparation execution or its fixed search path is weakened",async () => {
+it("fails the security verifier when preparation execution, owner or search path is weakened",async () => {
   await withIsolatedLocalDatabase(async client => {
     const baseline: string[] = []; await verifyWorkspaceSecurity(client,baseline); expect(baseline).toEqual([]);
+    const schemaCreate = (await client.query("select has_schema_privilege('service_role','public','CREATE') as allowed")).rows[0].allowed;
     for (const statement of [
       `grant execute on function ${signature} to authenticated`,
       `revoke execute on function ${signature} from service_role`,
       `alter function ${signature} set search_path=public`,
+      `alter function ${signature} owner to service_role`,
     ]) {
       await client.query("savepoint preparation_contract");
+      // PostgreSQL requires the new owner to have CREATE on the containing schema.
+      if (statement.endsWith(" owner to service_role")) await client.query("grant create on schema public to service_role");
       await client.query(statement);
       const failures: string[] = []; await verifyWorkspaceSecurity(client,failures); expect(failures.length).toBeGreaterThan(0);
       await client.query("rollback to savepoint preparation_contract"); await client.query("release savepoint preparation_contract");
+      expect((await client.query("select has_schema_privilege('service_role','public','CREATE') as allowed")).rows[0].allowed).toBe(schemaCreate);
+      const restored: string[] = []; await verifyWorkspaceSecurity(client,restored); expect(restored).toEqual([]);
     }
   });
+});
+
 });

@@ -102,17 +102,17 @@ async function calendarEntry(service: SupabaseClient, userId: string, sessionId:
 
 type SessionBinding = {
   token: string; userId: string; sessionId: string; profileId: string; deadline: number;
-  workspace: boolean; calendar: boolean; url: string; service: SupabaseClient; auth: SupabaseClient;
+  workspace: boolean; groupedDispatch: boolean; url: string; service: SupabaseClient; auth: SupabaseClient;
   mode: AccessContext["mode"]; linkingEnforced: boolean; subject?: string; email?: string;
 };
 
-async function dispatchCalendarRequest(binding: SessionBinding, request: Request, url: URL, assertDispatch?: () => void) {
+async function dispatchPreparedRequest(binding: SessionBinding, request: Request, url: URL, assertDispatch?: () => void) {
   if (Date.now() >= binding.deadline) throw loginRequired();
   const permit = randomBytes(32).toString("base64url");
   const hash = digest(permit);
   let cleanup = true;
   try {
-    const prepared = await observeRuntimeResultPhase("workspace.dispatch.prepare", () => binding.service.rpc("workspace_calendar_prepare", {
+    const prepared = await observeRuntimeResultPhase("workspace.dispatch.prepare", () => binding.service.rpc("workspace_dispatch_prepare", {
       p_hash: hash, p_user_id: binding.userId, p_jwt_hash: digest(binding.token), p_method: request.method,
       p_path: url.pathname.slice("/rest/v1".length), p_session_id: binding.sessionId,
       p_profile_id: binding.profileId, p_mode: binding.mode, p_linking_enforced: binding.linkingEnforced,
@@ -122,12 +122,12 @@ async function dispatchCalendarRequest(binding: SessionBinding, request: Request
       // A rejected transaction issued no permit; other failures may have lost its response.
       if (prepared.error.code === "42501") { cleanup = false; throw denied(); }
       // Abort is terminal to the private SDK, including an enclosing GET retry loop.
-      throw new DOMException("Calendar dispatch preparation failed", "AbortError");
+      throw new DOMException("Workspace dispatch preparation failed", "AbortError");
     }
     if (typeof prepared.data !== "boolean" || prepared.data !== binding.workspace) {
       recordRuntimeFailure({ operation: "workspace.dispatch.prepare", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
       // Abort is terminal to the private SDK, including an enclosing GET retry loop.
-      throw new DOMException("Calendar dispatch preparation failed", "AbortError");
+      throw new DOMException("Workspace dispatch preparation failed", "AbortError");
     }
     cleanup = prepared.data;
     if (Date.now() >= binding.deadline) throw loginRequired();
@@ -161,9 +161,9 @@ function boundDataFetch(binding: SessionBinding, assertDispatch?: () => void): t
         throw denied();
       }
       if (user.data.user?.id !== binding.userId) throw denied();
-      if (binding.calendar) {
+      if (binding.groupedDispatch) {
         request.headers.set("authorization", `Bearer ${binding.token}`);
-        return await dispatchCalendarRequest(binding, request, url, assertDispatch);
+        return await dispatchPreparedRequest(binding, request, url, assertDispatch);
       }
       const current = await workspaceContext(binding.service, binding.userId);
       if (current.userId !== binding.userId || current.profileId !== binding.profileId
@@ -296,7 +296,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     }
     if (!workspace) recordWorkspaceMembership({ result: "bypass", reason: "not_required", cacheOwnerId, evidenceAgeMs: null, remainingLifetimeMs: null, expired: false });
     const binding: SessionBinding = { token, userId: claims.sub, sessionId: claims.session_id,
-      profileId: context.profileId, deadline, workspace, calendar: action === "calendar.read", url: environment.url, service: environment.service, auth: environment.auth,
+      profileId: context.profileId, deadline, workspace, groupedDispatch: action === "calendar.read" || action === "planning.revision.read", url: environment.url, service: environment.service, auth: environment.auth,
       mode: context.mode, linkingEnforced: context.linkingEnforced, subject, email };
     const constrainedData = (assertDispatch: () => void) => createClient(environment.url, environment.key, { ...environment.options,
       global: { headers: { Authorization: `Bearer ${token}` }, fetch: boundDataFetch(binding, assertDispatch) },
