@@ -325,3 +325,20 @@ test("Planning board retains a successful result when bounded permit cleanup fai
   expect(releases).toHaveLength(11);
   expect(attempts.filter(path => path === "/rest/v1/projects")).toHaveLength(1);
 });
+
+test.each(["provider failure", "lost response"])("Planning board header retains unavailable status after preparation %s", async failure => {
+  const authorized = await authorize(token(), "planning.board.read");
+  expect(authorized.ok).toBe(true);
+  preparedResponse = () => {
+    if (failure === "lost response") throw new TypeError("Synthetic lost preparation response");
+    return Response.json({ message: "Sensitive preparation details" }, { status: 503 });
+  };
+  expect(await authorized.planning.loadHeader(["quickLinks", "calendarEvents"])).toEqual({
+    ok: false, status: 503, error: "Berechtigung konnte nicht geprüft werden.", code: "workspace_access_unavailable",
+  });
+  expect(preparations).toHaveLength(2);
+  expect(releases).toHaveLength(2);
+  expect(releases[1].p_hash).toBe(preparations[1].p_hash);
+  expect(dispatched).toHaveLength(1);
+  expect(attempts.filter(path => path === "/rest/v1/fmd_tools" || path === "/rest/v1/founder_events")).toHaveLength(0);
+});

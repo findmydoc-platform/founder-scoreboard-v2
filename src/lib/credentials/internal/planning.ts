@@ -120,7 +120,10 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   const current = async () => {
     if (!permission.data) return null;
     const result = await permission.data.rpc("current_authenticated_profile");
-    if (result.error) return { code: result.status >= 500 ? "workspace_access_unavailable" : result.error.code, message: "Berechtigung konnte nicht geprüft werden.", status: result.status >= 500 ? 503 : 403 };
+    if (result.error) {
+      const unavailable = result.status === 0 || result.status >= 500;
+      return { code: unavailable ? "workspace_access_unavailable" : result.error.code, message: "Berechtigung konnte nicht geprüft werden.", status: unavailable ? 503 : 403 };
+    }
     if (result.data?.id !== profile?.id || result.data?.platform_role !== profile?.platformRole) {
       const override = request.headers.get("x-fmd-dev-profile-id")?.trim();
       if (!override || override !== profile?.id || !isLocalLoginRequestAllowed(request.headers.get("host") || "")
