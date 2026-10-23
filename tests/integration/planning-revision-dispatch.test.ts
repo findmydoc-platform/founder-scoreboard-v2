@@ -42,6 +42,7 @@ it("real Auth and PostgREST retain Planning revision roles, JWTs and live checks
     for (const role of ["ceo", "founder", "deputy", "viewer"]) {
       const actor = await fixture.actor(role);
       token = actor.session.access_token;
+      vi.stubEnv("VERCEL_OIDC_TOKEN", token);
       const warm = await authorize();
       if (!warm.ok) throw new Error("Expected mapped Planning reader");
       expect((await warm.planning.readRevision()).error).toBeNull();
