@@ -1,7 +1,7 @@
 import "server-only";
 import { disconnectBookkeeping } from "./disconnect-bookkeeping";
 import { getGoogleWorkspaceDisconnectView, disconnectGoogleWorkspace } from "@/features/team-workweek/server/google-workspace-disconnect";
-import { authorizeGoogleCalendar } from "./google-calendar";
+import { boundGoogleConnectionStatus } from "./google-calendar";
 import { authorizeGitHubInstallation } from "./github-installation";
 import { githubConnectionSession } from "./github-user";
 import { getGitHubUserConnectionStatus } from "./github-user-vault";
@@ -67,7 +67,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
     async readGoogleConnection() {
       if (action !== "connection.google.read" || !profile || !context.strictService) throw new Error("Google-Verbindungsstatus ist nicht verfügbar.");
       const [connection, cleanup] = await Promise.all([
-        authorizeGoogleCalendar({ credential: { kind: "session-request", request: context.request }, action: "google-calendar.connection.status", target: { ownerProfileId: profile.id } }),
+        boundGoogleConnectionStatus({ ...context, profile }),
         context.strictService.from("google_workspace_disconnect_operations").select("id").eq("owner_profile_id", profile.id).neq("state", "completed").limit(1),
       ]);
       if (cleanup.error) throw new Error("Google-Verbindungsstatus ist nicht verfügbar.");

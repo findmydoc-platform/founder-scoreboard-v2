@@ -24,6 +24,30 @@ The integration fixture uses real local Auth, asymmetric JWT verification, JWKS 
 
 The same fixture passed with baseline counts before the production change was restored. The retained `github-status-resource` integration test asserts the complete after budget and response. Focused cases retain all four existing reader roles, reject anonymous and unmapped actors, and exercise held operations after session loss, profile unbinding, role changes and Workspace-policy changes. Live connection revocation and login-association changes remain visible. Expiring tokens retain durable refresh claims, rotation, usage accounting on successful rotation, reconnect responses after unknown outcomes and protection against overwriting replacement connections. Ordinary status reads add no token-use mark. Credential reads and refresh claims retain the adapter's live dispatch checks, and the final live check still prevents a result after authority changes during the pending-comment read. Count failures retain their existing zero fallback.
 
+## Bound Google Workspace status resource operation
+
+On 2026-10-23, the complete Google Workspace status route was compared against `d540758ae8798e0e11d2b16e908abf6bc3dfd323` with the same synthetic fixture. The resource operation reuses its existing session admission through a private status seam. Before raw vault access, the bound context still revalidates the current Auth session, mapped profile, exact admitted role and Workspace policy. It checks the original evidence deadline and configuration binding. The full session-policy owner check and connection snapshot immediately before the primary Calendar probe remain in place. Standalone status, Calendar mutations and disconnect operations retain their existing paths.
+
+The fixture uses real local Auth, asymmetric JWT verification, JWKS and PostgREST. Google STS, IAM, Directory and Calendar HTTP use synthetic responses; unexpected external requests fail. Counting starts after fixture setup and module imports. Cold includes signing-key and membership acquisition, and warm is the next invocation in the same worker. Both include pending-disconnect lookup, all three vault snapshots, the existing token-use RPC and one primary Calendar probe. The probe remains the five-second `GET /calendar/v3/calendars/primary/events` with `maxResults=1`, `fields=kind,summary` and the existing `founderOpsProbe=__never__` private-property filter. The scope excludes a running Next.js server and cookie proxy. Its baseline is 39 cold and 35 warm, not the historical production baseline of 36. This comparison establishes request savings, not production latency.
+
+| Actual HTTP operation | Before cold / warm | After cold / warm |
+| --- | --- | --- |
+| JWKS | 1 / 0 | 1 / 0 |
+| Auth user | 7 / 7 | 6 / 6 |
+| Workspace access context | 7 / 7 | 6 / 6 |
+| Linking session admission | 3 / 3 | 2 / 2 |
+| Permit issue | 4 / 4 | 4 / 4 |
+| Current authenticated profile | 4 / 4 | 4 / 4 |
+| Permit release | 4 / 4 | 4 / 4 |
+| Connection snapshots | 3 / 3 | 3 / 3 |
+| Existing token-use RPC | 1 / 1 | 1 / 1 |
+| Pending-disconnect lookup | 1 / 1 | 1 / 1 |
+| Primary Calendar probe | 1 / 1 | 1 / 1 |
+| Directory STS, IAM and membership | 3 / 0 | 3 / 0 |
+| **Total** | **39 / 35** | **36 / 32** |
+
+The public-route integration test asserts the complete response and after budget. Focused cases retain all four reader roles, anonymous and unmapped denials, held-resource denials after session/profile/role/Workspace changes, and rejection when the same session is mapped to a different owner. They also cover session loss and owner replacement after credential acquisition but before the probe, connection and token-version replacement, successful rotation, rejected/unavailable/uncertain refresh outcomes and a replacement connection during refresh. Scope, configuration and refresh deadlines retain their guards. Missing/revoked connections, pending-disconnect ownership and cleanup lookup failures retain their response semantics. No additional status token-use mark is introduced. Refresh claims, compare-and-swap finalization, encrypted storage and existing usage accounting remain owned by the credential implementation.
+
 ## Scope and method
 
 These are local acceptance measurements, not a production latency guarantee. Before is `facc2e42ba0a95a8411e9d939cb909973b598122`; After is runtime source `17955b50917034c49ebb1b758635d8c07c8dccbc`. These measurements preceded the later bounded session-lifecycle and module-coverage correction; their source metadata and values are historical and unchanged. Both versions ran serially on the same Darwin arm64 host with Node v26.11.1 and Next.js 16.3.8, Postgres 17.6, synthetic users and fixed fixture dates. The Workweek DDL shared by both versions is byte-identical. Before used its actual 26-migration ledger; After used its actual 29-migration ledger. No new-schema assumption was imposed on the baseline.

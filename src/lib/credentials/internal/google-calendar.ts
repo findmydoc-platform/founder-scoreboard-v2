@@ -11,22 +11,19 @@ import {
   type CalendarAccess,
 } from "./google-calendar-vault";
 import { GOOGLE_WORKSPACE_CALENDAR_SCOPE } from "./google-calendar-protocol";
+import type { NextRequest } from "next/server";
 import type { GoogleCalendarInput, GoogleCalendarCapability, GoogleCalendarConnectionInput } from "../types";
 
 function denied() { return new GoogleWorkspaceOAuthContractError("reconnect_required", "Gebundene Google-Verbindung ist erforderlich."); }
-export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
-  if (input.credential.kind !== "session-request") throw denied();
-  const ownerProfileId = input.target.ownerProfileId;
-  const operationId = "operationId" in input.target ? input.target.operationId : undefined;
-  const request = input.credential.request;
-  async function owner() {
+function calendarOwner(request: NextRequest, ownerProfileId: string) {
+  return async () => {
     const permission = await authorizeSessionPolicy(request,"team.read");
     if (!permission.ok || permission.profile?.id !== ownerProfileId || !("assertCurrent" in permission)) throw denied();
     return permission;
-  }
-  const permission = await owner();
-  const profileId = permission.profile.id;
-  async function authorizeDispatch(connectionId: string, access: CalendarAccess, configuration: string) {
+  };
+}
+function calendarDispatch(owner: ReturnType<typeof calendarOwner>, profileId: string) {
+  return async (connectionId: string, access: CalendarAccess, configuration: string) => {
     const currentAuthority = await owner();
     const current = await calendarSnapshot(profileId);
     if (!current || current.connection_id !== connectionId || current.revoked_at || current.primary_calendar_id !== "primary"
@@ -36,7 +33,29 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
       currentAuthority.assertCurrent();
       if (calendarConfiguration() !== configuration || Date.now() >= Math.min(access.expiresAt,access.refreshExpiresAt,refreshDeadline)) throw denied();
     };
-  }
+  };
+}
+export async function boundGoogleConnectionStatus(context: {
+  request: NextRequest;
+  profile: { id: string };
+  current(): Promise<void>;
+  assertCurrent(): void;
+}) {
+  // Reuse admission evidence, but revalidate its live binding before raw vault access.
+  await context.current();
+  context.assertCurrent();
+  const owner = calendarOwner(context.request, context.profile.id);
+  return getGoogleWorkspaceConnectionStatus(context.profile.id, calendarDispatch(owner, context.profile.id));
+}
+export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
+  if (input.credential.kind !== "session-request") throw denied();
+  const ownerProfileId = input.target.ownerProfileId;
+  const operationId = "operationId" in input.target ? input.target.operationId : undefined;
+  const request = input.credential.request;
+  const owner = calendarOwner(request, ownerProfileId);
+  const permission = await owner();
+  const profileId = permission.profile.id;
+  const authorizeDispatch = calendarDispatch(owner, profileId);
   if (input.action === "google-calendar.connection.status") return getGoogleWorkspaceConnectionStatus(profileId,authorizeDispatch);
   if (input.action === "google-calendar.connection.remove") {
     permission.assertCurrent();
