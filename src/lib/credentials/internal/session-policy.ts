@@ -21,7 +21,7 @@ const roleActions: Partial<Record<SessionPolicyAction, readonly PlatformRole[]>>
 };
 
 export function rolePermitsAction(action: SessionPolicyAction, role: PlatformRole) {
-  return roleActions[action]?.includes(role) === true;
+  return roleActions[action === "planning.revision.read" ? "team.read" : action]?.includes(role) === true;
 }
 
 export function currentAdministratorAccess(value: AdministratorAccessSnapshot | null): AdministratorAccessSnapshot {

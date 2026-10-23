@@ -10,7 +10,7 @@ const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "calendar-dispatch", alg: "ES256", use: "sig" };
 const digest = value => createHash("sha256").update(value).digest("hex");
 let attempts, preparations, releases, dispatched, mode, enforced, preparedResponse, duringPreparation,
-  cleanupFailure, profileFailure, dataFailure, userResponses, liveUser, owners, transientData;
+  cleanupFailure, profileFailure, dataFailure, userResponses, liveUser, owners, transientData, profileRole;
 function token() {
   const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
   const unsigned = `${encode({ alg: "ES256", typ: "JWT", kid: jwk.kid })}.${encode({ sub: userId, session_id: sessionId,
@@ -32,7 +32,7 @@ async function protocol(input, init) {
   if (url.hostname === "sts.googleapis.com") return Response.json({ access_token: "synthetic-sts" });
   if (url.hostname === "iamcredentials.googleapis.com") return Response.json({ accessToken: "synthetic-directory", expireTime: new Date(Date.now()+3600000).toISOString() });
   if (url.hostname === "admin.googleapis.com") return Response.json({ isMember: true });
-  if (path.endsWith("/rpc/workspace_calendar_prepare")) {
+  if (path.endsWith("/rpc/workspace_calendar_prepare") || path.endsWith("/rpc/workspace_dispatch_prepare")) {
     const body = await request.json(); preparations.push(body);
     await duringPreparation?.(body);
     if (preparedResponse) return preparedResponse(body, preparations.length);
@@ -46,7 +46,7 @@ async function protocol(input, init) {
   if (path.endsWith("/rpc/current_authenticated_profile")) {
     dispatched.push(request);
     return profileFailure ? Response.json({ message: "sensitive profile details" }, { status: 500 })
-      : Response.json({ id: "calendar-member", name: "Member", platform_role: "viewer" });
+      : Response.json({ id: "calendar-member", name: "Member", platform_role: profileRole });
   }
   if (path === "/rest/v1/profiles") {
     dispatched.push(request);
@@ -57,6 +57,7 @@ async function protocol(input, init) {
     const page = remaining.slice(0,100).map(id => ({ id, calendar: [], tail: [] }));
     return Response.json(page, { headers: { "content-range": page.length ? `0-${page.length-1}/${remaining.length}` : "*/0" } });
   }
+  if (path === "/rest/v1/active_tasks") return Response.json([{ updated_at: "2026-10-21T09:00:00Z" }], { headers: { "content-range": "0-0/1" } });
   throw new Error("Unexpected synthetic transport operation");
 }
 async function authorize(jwt = token(), action = "calendar.read") {
@@ -70,7 +71,7 @@ beforeEach(() => {
     GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-audience", GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "reader@example.test",
     GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu" })) vi.stubEnv(key, value);
   attempts = []; preparations = []; releases = []; dispatched = []; mode = "linking"; enforced = true;
-  preparedResponse = undefined; duringPreparation = undefined; cleanupFailure = false; profileFailure = false; dataFailure = false; userResponses = 0; liveUser = undefined; owners = []; transientData = false;
+  preparedResponse = undefined; duringPreparation = undefined; cleanupFailure = false; profileFailure = false; dataFailure = false; userResponses = 0; liveUser = undefined; owners = []; transientData = false; profileRole = "viewer";
   vi.stubGlobal("fetch", protocol);
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -194,3 +195,91 @@ test("a lost snapshot preparation response never causes the read SDK to prepare 
   expect(releases[1].p_hash).toBe(preparations[1].p_hash);
   expect(dispatched).toHaveLength(1);
 }, 20000);
+
+
+test("a warm Planning revision read uses 17 HTTP requests and three independently authorized grouped dispatches", async () => {
+  mode = "google";
+  const jwt = token();
+  const warm = await authorize(jwt, "planning.revision.read");
+  expect(warm.ok).toBe(true);
+  expect((await warm.planning.readRevision()).error).toBeNull();
+  attempts = []; preparations = []; releases = []; dispatched = []; userResponses = 0;
+  const authorized = await authorize(jwt, "planning.revision.read");
+  expect(authorized.ok).toBe(true);
+  expect(await authorized.planning.readRevision()).toMatchObject({ data: [{ updated_at: "2026-10-21T09:00:00Z" }], count: 1, error: null });
+  expect(attempts).toHaveLength(17);
+  expect(userResponses).toBe(4);
+  expect(preparations).toHaveLength(3);
+  expect(releases).toHaveLength(3);
+  expect(dispatched).toHaveLength(3);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_dispatch_prepare"))).toHaveLength(3);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_issue_permit"))).toHaveLength(0);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_access_context"))).toHaveLength(1);
+  expect(dispatched.every(request => request.headers.get("authorization") === `Bearer ${jwt}`)).toBe(true);
+});
+
+for (const response of [null, {}, "true", false, "lost"]) test(`Planning revision denies uncertain preparation ${JSON.stringify(response)} without reading data`, async () => {
+  const authorized = await authorize(token(), "planning.revision.read");
+  expect(authorized.ok).toBe(true);
+  preparedResponse = () => {
+    if (response === "lost") throw new TypeError("Synthetic lost preparation response");
+    return Response.json(response);
+  };
+  expect((await authorized.planning.readRevision()).error).not.toBeNull();
+  expect(preparations).toHaveLength(2);
+  expect(releases).toHaveLength(2);
+  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(0);
+});
+
+test("Planning revision retains live profile checks and denies unavailable profile before the service read", async () => {
+  const authorized = await authorize(token(), "planning.revision.read");
+  expect(authorized.ok).toBe(true);
+  profileFailure = true;
+  expect((await authorized.planning.readRevision()).error).not.toBeNull();
+  expect(preparations).toHaveLength(2);
+  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(0);
+});
+
+test("Planning revision permit release failure preserves the result without replay", async () => {
+  cleanupFailure = true;
+  const authorized = await authorize(token(), "planning.revision.read");
+  expect(authorized.ok).toBe(true);
+  expect((await authorized.planning.readRevision()).error).toBeNull();
+  expect(preparations).toHaveLength(3);
+  expect(releases).toHaveLength(3);
+  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
+});
+
+test("Planning board keeps the separate context and permit path", async () => {
+  expect(await authorize(token(), "planning.board.read")).toMatchObject({ ok: true });
+  expect(preparations).toHaveLength(0);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_access_context"))).toHaveLength(2);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_issue_permit"))).toHaveLength(1);
+});
+
+for (const role of ["ceo", "founder", "deputy", "viewer"]) test(`Planning revision keeps team read permission for ${role}`, async () => {
+  profileRole = role;
+  const authorized = await authorize(token(), "planning.revision.read");
+  expect(authorized.ok).toBe(true);
+  expect((await authorized.planning.readRevision()).error).toBeNull();
+});
+
+test("Planning revision denies a role change at the last current check before service dispatch", async () => {
+  const authorized = await authorize(token(), "planning.revision.read");
+  expect(authorized.ok).toBe(true);
+  duringPreparation = (_body) => { if (preparations.length === 3) profileRole = "founder"; };
+  expect((await authorized.planning.readRevision()).error).not.toBeNull();
+  expect(preparations).toHaveLength(3);
+  expect(releases).toHaveLength(3);
+  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(0);
+});
+
+test("Planning revision denies expiry during final preparation and releases without reading data", async () => {
+  const authorized = await authorize(token(), "planning.revision.read");
+  expect(authorized.ok).toBe(true);
+  duringPreparation = () => { if (preparations.length === 3) vi.setSystemTime(Date.now() + 900000); };
+  expect((await authorized.planning.readRevision()).error).not.toBeNull();
+  expect(preparations).toHaveLength(3);
+  expect(releases).toHaveLength(3);
+  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(0);
+});

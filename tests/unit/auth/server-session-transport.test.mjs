@@ -45,7 +45,7 @@ beforeEach(() => {
       const claims = JSON.parse(Buffer.from(req.headers.get("authorization").slice(7).split(".")[1], "base64url"));
       return Response.json({ id: claims.sub, aud: "authenticated", user_metadata: {} });
     }
-    if (url.pathname.endsWith("/rpc/workspace_calendar_prepare")) return Response.json(false);
+    if (url.pathname.endsWith("/rpc/workspace_dispatch_prepare")) return Response.json(false);
     if ((url.pathname.endsWith("/rpc/workspace_access_context") || url.pathname.endsWith("/rpc/workspace_calendar_entry"))) return Response.json({ mode: "legacy", linkingEnforced: false, userId: "user-1", profileId: "profile-1", linked: false, identity: null });
     if (url.pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json({ id: "profile-1", name: "Founder", platform_role: "founder" });
     if (url.pathname.endsWith("/rpc/administrator_access_snapshot")) return Response.json({ eligible: false, active: false });
