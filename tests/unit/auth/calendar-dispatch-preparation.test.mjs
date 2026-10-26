@@ -256,12 +256,15 @@ test("Planning revision permit release failure preserves the result without repl
 test("Planning board groups dispatch preparation while other team reads retain separate checks", async () => {
   expect(await authorize(token(), "planning.board.read")).toMatchObject({ ok: true });
   expect(preparations).toHaveLength(1);
-  expect(attempts.filter(path => path.endsWith("/rpc/workspace_access_context"))).toHaveLength(1);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_access_context"))).toHaveLength(0);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_calendar_entry"))).toHaveLength(1);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_linking_session_allowed") || path.endsWith("/rpc/workspace_session_allowed"))).toHaveLength(0);
   expect(attempts.filter(path => path.endsWith("/rpc/workspace_issue_permit"))).toHaveLength(0);
   preparations = []; attempts = [];
   expect(await authorize(token(), "planning.header.read")).toMatchObject({ ok: true });
   expect(preparations).toHaveLength(0);
   expect(attempts.filter(path => path.endsWith("/rpc/workspace_access_context"))).toHaveLength(2);
+  expect(attempts.filter(path => path.endsWith("/rpc/workspace_calendar_entry"))).toHaveLength(0);
   expect(attempts.filter(path => path.endsWith("/rpc/workspace_issue_permit"))).toHaveLength(1);
 });
 
