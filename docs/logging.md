@@ -83,12 +83,6 @@ The Board route adds static `board.authorization`, `board.load` and `board.heade
 
 The existing `response.prepare` span measures the Board's original `NextResponse.json` execution once. It does not include later network transfer. Server diagnostics do not read, clone or serialize the response body to count bytes. A client measurement may record received body bytes separately.
 
-Every repeated `current_authenticated_profile` call through the Planning credential's current-authority check has an enclosing `supabase.db.identity.rpc` operation span, as does initial session authorization. The operation includes the SDK call's live Auth check, dispatch preparation, profile HTTP attempt, permit release and SDK response-body processing. Its `http` span ends when fetch resolves. Both kinds reuse the existing aggregates and slowest-span list; an enclosing operation adds no HTTP attempt. Known authority denials retain their existing classification and public result.
-
-Only the Board's route completion can include `runtimeWindow: { scope: "shared_runtime_window", eventLoop: { activeMs, idleMs, utilization } }`. The adapter takes an event-loop-utilization snapshot when the route begins and requests its delta when the route finishes. `activeMs` and `idleMs` are milliseconds; `utilization` is a ratio from zero to one. The window covers the shared runtime, including concurrent requests and other activity. It is not per-request CPU time or a CPU-utilization measurement. It cannot attribute active time to a particular SDK phase.
-
-The runtime window is optional, remains present in compact completions when valid, and shares the existing 16 KiB line budget. Unavailable or throwing samplers and invalid numbers omit the window without changing the response or the remaining completion. Serialized durations must be finite and between zero and 86,400,000 ms; unknown fields are discarded. Sampling adds no intervals, histograms, observers or network calls. Proxy events and the proxy forwarding header carry no runtime window and retain their existing size limit.
-
 ## Privacy and safe failures
 
 Never serialize raw exceptions, stacks, causes, arbitrary provider codes/messages, request or provider bodies, headers, cookies, credentials, credential fingerprints, cache keys, user identities, private endpoints, or private hostnames. Do not read a body solely for logging.
