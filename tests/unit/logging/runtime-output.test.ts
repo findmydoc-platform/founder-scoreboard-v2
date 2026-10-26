@@ -34,6 +34,32 @@ test("the serialized event projects approved fields and omits seeded private dat
   expect(fallback.lines).toEqual([]);
 });
 
+test("only Board route completions serialize bounded runtime-window numbers and approved fields", async () => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink();
+  const logger = createRuntimeLogger(sink, new Sink());
+  const runtimeWindow = { scope: "shared_runtime_window", eventLoop: { activeMs: 12.1234, idleMs: 7.8766, utilization: 0.60617, token: "seeded-private" }, message: "seeded-private" };
+  for (const [routeKey, stage] of [["planning.board", "route"], ["planning.board", "proxy"], ["calendar.team", "route"], ["planning.header", "route"]]) {
+    logger.completed({ ...completion(), routeKey, stage, runtimeWindow });
+  }
+  expect(JSON.parse(sink.lines[0]).runtimeWindow).toEqual({ scope: "shared_runtime_window", eventLoop: { activeMs: 12.123, idleMs: 7.877, utilization: 0.60617 } });
+  expect(sink.lines.slice(1).map(line => JSON.parse(line).runtimeWindow)).toEqual([undefined, undefined, undefined]);
+  expect(sink.lines.join("")).not.toContain("seeded-private");
+});
+
+test.each([
+  { activeMs: NaN, idleMs: 1, utilization: 0.5 }, { activeMs: 1, idleMs: Infinity, utilization: 0.5 },
+  { activeMs: -1, idleMs: 1, utilization: 0.5 }, { activeMs: 1, idleMs: -1, utilization: 0.5 },
+  { activeMs: 86_400_001, idleMs: 1, utilization: 0.5 }, { activeMs: 1, idleMs: 86_400_001, utilization: 0.5 },
+  { activeMs: 1, idleMs: 1, utilization: NaN }, { activeMs: 1, idleMs: 1, utilization: -0.1 },
+  { activeMs: 1, idleMs: 1, utilization: 1.1 }, { activeMs: "seeded-private", idleMs: 1, utilization: 0.5 },
+])("invalid runtime-window data is omitted without losing the completion: %j", async eventLoop => {
+  const { createRuntimeLogger } = await adapter(); const sink = new Sink();
+  createRuntimeLogger(sink, new Sink()).completed({ ...completion(), routeKey: "planning.board", runtimeWindow: { scope: "shared_runtime_window", eventLoop } });
+  expect(sink.lines).toHaveLength(1);
+  expect(JSON.parse(sink.lines[0])).not.toHaveProperty("runtimeWindow");
+  expect(sink.lines[0]).not.toContain("seeded-private");
+});
+
 test.each([1999.999, 2000])("local observed processing threshold %s ms selects application severity", async elapsed => {
   const { createRuntimeLogger } = await adapter(); const sink = new Sink();
   createRuntimeLogger(sink, new Sink()).completed({ ...completion(), durationMs: elapsed - 1000,
@@ -169,6 +195,7 @@ test("the actual emitted line preserves all operation aggregates and late slow s
   const late = { id: "route:999999", parentId: "route:1", operation: "workspace.permit.release", kind: "http", offsetMs: 86400000, durationMs: 86400000, outcome: "error" };
   const secret = "seeded-private-measurement";
   createRuntimeLogger(sink, fallback).completed({ ...completion(), routeKey: "planning.board", outcome: "error",
+    runtimeWindow: { scope: "shared_runtime_window", eventLoop: { activeMs: 86400000, idleMs: 86400000, utilization: 1 } },
     deploymentEnv: "production", deploymentId: `dpl_${"x".repeat(64)}`, region: "fra1", vercelId: "fra1::fra1::abcde-1234567890123-abcdef123456",
     proxy: { requestId, instanceId, durationMs: 86400000, status: 200, outcome: "success" },
     failure: { operation: "workspace.permit.release", errorCode: "permit_cleanup_failed", errorCategory: "provider_http_error", providerStatus: 503 },
@@ -181,6 +208,7 @@ test("the actual emitted line preserves all operation aggregates and late slow s
   expect(sink.lines).toHaveLength(1);
   expect(Buffer.byteLength(sink.lines[0])).toBeLessThanOrEqual(16 * 1024);
   const record = JSON.parse(sink.lines[0]);
+  expect(record.runtimeWindow).toEqual({ scope: "shared_runtime_window", eventLoop: { activeMs: 86400000, idleMs: 86400000, utilization: 1 } });
   expect(record.phaseAggregates).toEqual(aggregate);
   expect(record.slowestPhases).toEqual(Array.from({ length: 8 }, () => late));
   expect(record.completeness).toMatchObject({ phaseAggregatesComplete: true, phasesTruncated: true });
