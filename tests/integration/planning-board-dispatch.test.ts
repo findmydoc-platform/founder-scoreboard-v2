@@ -132,6 +132,11 @@ it("real Board entry rejects profile, mode and session changes before the first 
       }
     }
     await fixture.mode("linking");
+    const entryPrivileges = await fixture.database.query(`select
+      has_function_privilege('anon', 'public.workspace_calendar_entry(uuid,uuid)', 'EXECUTE') as anon,
+      has_function_privilege('authenticated', 'public.workspace_calendar_entry(uuid,uuid)', 'EXECUTE') as authenticated,
+      has_function_privilege('service_role', 'public.workspace_calendar_entry(uuid,uuid)', 'EXECUTE') as service_role`);
+    expect(entryPrivileges.rows).toEqual([{ anon: false, authenticated: false, service_role: true }]);
     const actor = await fixture.actor();
     for (const credential of [fixture.local.ANON_KEY, actor.session.access_token]) {
       const response = await nativeFetch(`${fixture.local.API_URL}/rest/v1/rpc/workspace_calendar_entry`, {
