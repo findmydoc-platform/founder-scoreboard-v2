@@ -12,6 +12,7 @@ import { getServerAuthSupabase } from "./cookie-client";
 import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import { ACTIVE_TASKS_TABLE } from "../../planning-read-model";
+import { observeRuntimeResultPhase } from "../../runtime-logging";
 
 import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
 import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
@@ -119,7 +120,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   };
   const current = async () => {
     if (!permission.data) return null;
-    const result = await permission.data.rpc("current_authenticated_profile");
+    const result = await observeRuntimeResultPhase("supabase.db.identity.rpc", () => permission.data!.rpc("current_authenticated_profile"));
     if (result.error) {
       const unavailable = result.status === 0 || result.status >= 500;
       return { code: unavailable ? "workspace_access_unavailable" : result.error.code, message: "Berechtigung konnte nicht geprüft werden.", status: unavailable ? 503 : 403 };

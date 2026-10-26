@@ -1,7 +1,7 @@
 import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
-import { performance } from "node:perf_hooks";
+import { performance, type EventLoopUtilization } from "node:perf_hooks";
 import { NextResponse, type NextRequest } from "next/server";
 import { createRuntimeLogger, isRequestId, safeFailure, safeProxy, safeOperations, type SafeOperation, type Phase, type MembershipObservation, type Completion, type ProxySummary, type SafeFailure, type Stage } from "./output";
 
@@ -20,6 +20,16 @@ const emit = (completion: Completion, failure?: SafeFailure) => {
     else logger.completed(completion);
   } catch { /* Diagnostics must never change application execution. */ }
 };
+
+function eventLoopSnapshot(previous?: EventLoopUtilization): EventLoopUtilization | undefined {
+  try {
+    if (typeof performance.eventLoopUtilization !== "function") return undefined;
+    const sample = previous ? performance.eventLoopUtilization(previous) : performance.eventLoopUtilization();
+    if (![sample.active, sample.idle, sample.utilization].every(Number.isFinite)
+      || sample.active < 0 || sample.idle < 0 || sample.utilization < 0 || sample.utilization > 1) return undefined;
+    return sample;
+  } catch { return undefined; }
+}
 
 function begin(stage: Stage, headers: Headers, routeKey: RuntimeRouteKey = "calendar.team") {
   let proxy: ProxySummary | undefined;
@@ -46,7 +56,8 @@ function begin(stage: Stage, headers: Headers, routeKey: RuntimeRouteKey = "cale
     phases: [], phaseMeasurement: { aggregates: {}, slowest: [], pending: 0, failed: false }, externalCalls: { total: 0, operations: {}, durationMsByOperation: {}, complete: true },
     completeness: { correlation, externalCallsComplete: false, cache: "unavailable" },
   };
-  return { completion, started: performance.now(), nextPhase: { value: 0 } };
+  return { completion, started: performance.now(), nextPhase: { value: 0 },
+    eventLoopStart: stage === "route" && routeKey === "planning.board" ? eventLoopSnapshot() : undefined };
 }
 
 export function recordRuntimeFailure(reason: SafeFailure) {
@@ -172,6 +183,8 @@ export function recordRuntimeDenial(code: string | undefined) {
 
 function finish(context: ReturnType<typeof begin>, response?: Response) {
   const value = context.completion;
+  const eventLoop = context.eventLoopStart ? eventLoopSnapshot(context.eventLoopStart) : undefined;
+  if (eventLoop) value.runtimeWindow = { scope: "shared_runtime_window", eventLoop: { activeMs: eventLoop.active, idleMs: eventLoop.idle, utilization: eventLoop.utilization } };
   value.durationMs = Math.max(0, performance.now() - context.started);
   value.status = response?.status || 500;
   value.outcome = value.failure || !response || value.status >= 500 ? "error" : [400, 422].includes(value.status) ? "invalid_input"

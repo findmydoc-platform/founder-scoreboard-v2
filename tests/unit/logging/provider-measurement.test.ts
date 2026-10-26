@@ -18,6 +18,72 @@ function configureGitHub() {
   vi.stubEnv("GITHUB_APP_PRIVATE_KEY_PATH", ""); vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "100");
 }
 
+test("Board route completion retains the event-loop delta for its shared runtime window", async () => {
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "0");
+  const records = capture(); const { performance } = await import("node:perf_hooks");
+  const initial = { active: 100, idle: 400, utilization: 0.2 };
+  const sample = vi.spyOn(performance, "eventLoopUtilization").mockReturnValueOnce(initial)
+    .mockReturnValueOnce({ active: 12, idle: 8, utilization: 0.6 });
+  const { observeRuntimeRoute } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  const original = Response.json({ unchanged: true });
+  expect(await observeRuntimeRoute("planning.board", new Request("https://example.test/"), async () => original)).toBe(original);
+  expect(records().find(record => record.event === "request.completed")).toMatchObject({
+    detailRetained: false,
+    runtimeWindow: { scope: "shared_runtime_window", eventLoop: { activeMs: 12, idleMs: 8, utilization: 0.6 } },
+  });
+  expect(sample).toHaveBeenLastCalledWith(initial);
+});
+
+test("a failing Board sampler preserves the original application exception and its completion", async () => {
+  const records = capture(); const { performance } = await import("node:perf_hooks");
+  vi.spyOn(performance, "eventLoopUtilization").mockReturnValueOnce({ active: 1, idle: 3, utilization: 0.25 })
+    .mockImplementation(() => { throw new Error("seeded-private-sampler"); });
+  const { observeRuntimeRoute } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  const original = new Error("seeded-private-application-error");
+  await expect(observeRuntimeRoute("planning.board", new Request("https://example.test/"), async () => { throw original; })).rejects.toBe(original);
+  expect(records().find(record => record.event === "request.completed")).toMatchObject({ status: 500, outcome: "error" });
+  expect(records().every(record => !record.runtimeWindow)).toBe(true);
+  expect(JSON.stringify(records())).not.toContain("seeded-private");
+});
+
+test.each(["missing", "start throws", "end throws", "invalid start", "invalid end", "oversized delta"])(
+  "Board event-loop sampling remains optional when %s", async mode => {
+    const records = capture(); const { performance } = await import("node:perf_hooks");
+    const sample = vi.spyOn(performance, "eventLoopUtilization");
+    sample.mockReturnValueOnce({ active: 10, idle: 20, utilization: 1 / 3 }).mockReturnValue({ active: 2, idle: 3, utilization: 0.4 });
+    if (mode === "missing") Object.defineProperty(performance, "eventLoopUtilization", { configurable: true, value: undefined });
+    if (mode === "start throws") sample.mockReset().mockImplementation(() => { throw new Error("seeded-private-sampler"); });
+    if (mode === "end throws") sample.mockReset().mockReturnValueOnce({ active: 10, idle: 20, utilization: 1 / 3 }).mockImplementation(() => { throw new Error("seeded-private-sampler"); });
+    if (mode === "invalid start") sample.mockReset().mockReturnValue({ active: NaN, idle: 20, utilization: 0.2 });
+    if (mode === "invalid end") sample.mockReset().mockReturnValueOnce({ active: 10, idle: 20, utilization: 1 / 3 }).mockReturnValue({ active: 2, idle: Infinity, utilization: 0.2 });
+    if (mode === "oversized delta") sample.mockReset().mockReturnValueOnce({ active: 10, idle: 20, utilization: 1 / 3 }).mockReturnValue({ active: 86_400_001, idle: 3, utilization: 0.9 });
+    const { observeRuntimeRoute } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+    const original = Response.json({ unchanged: true });
+    expect(await observeRuntimeRoute("planning.board", new Request("https://example.test/"), async () => original)).toBe(original);
+    const completion = records().find(record => record.event === "request.completed");
+    expect(completion).toMatchObject({ status: 200, outcome: "success" });
+    expect(completion).not.toHaveProperty("runtimeWindow");
+    expect(JSON.stringify(records())).not.toContain("seeded-private");
+  },
+);
+
+test("event-loop sampling is limited to Board routes and never changes the proxy forwarding summary", async () => {
+  const records = capture(); const { performance } = await import("node:perf_hooks");
+  const sample = vi.spyOn(performance, "eventLoopUtilization").mockReturnValue({ active: 2, idle: 3, utilization: 0.4 });
+  const { NextResponse } = await import("next/server");
+  const { observeRuntimeRoute, observeRuntimeProxy } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  for (const routeKey of ["calendar.team", "planning.header", "planning.revision", "planning.sprint"] as const) {
+    await observeRuntimeRoute(routeKey, new Request("https://example.test/"), async () => Response.json({ unchanged: true }));
+  }
+  const forwarded = await observeRuntimeProxy(new NextRequest("https://example.test/api/planning-board-data"), async () => NextResponse.next());
+  expect(sample).not.toHaveBeenCalled();
+  const metadata = forwarded.headers.get("x-middleware-request-x-founderops-proxy-observation")!;
+  expect(Buffer.byteLength(metadata)).toBeLessThan(1024);
+  expect(JSON.parse(metadata)).not.toHaveProperty("runtimeWindow");
+  expect(records().filter(record => record.event === "request.completed")).toHaveLength(5);
+  expect(records().every(record => !record.runtimeWindow)).toBe(true);
+});
+
 test("public credential operations count actual GitHub attempts and preserve read retry and mutation no-replay", async () => {
   configureGitHub(); const records = capture(); let reads = 0; let writes = 0;
   vi.stubGlobal("fetch", async (input: string, init: RequestInit) => {
@@ -251,6 +317,7 @@ test("the public Board response distinguishes its reads, header, avatars, mappin
   expect(completion.phaseAggregates["board.strategy"].operation).toEqual([1, 0, 0]);
   expect([...completion.phases, ...completion.slowestPhases]).toContainEqual(expect.objectContaining({ operation: "board.items", offsetMs: 25, durationMs: 200 }));
   expect(reads.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
+  expect(completion.phaseAggregates["supabase.db.identity.rpc"].operation[0]).toBe(completion.externalCalls.operations["supabase.db.identity.rpc"]);
   expect(JSON.stringify(records())).not.toMatch(/seeded-private|Seeded private name|synthetic-profile/);
 });
 

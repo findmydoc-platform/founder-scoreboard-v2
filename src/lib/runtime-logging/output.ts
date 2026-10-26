@@ -23,6 +23,7 @@ export type SafeFailure = {
 };
 export type MembershipObservation = { result: "hit" | "miss" | "expired" | "coalesced" | "bypass"; reason: "cached" | "not_found" | "observed_expiry" | "in_flight" | "not_required"; cacheOwnerId: string; evidenceAgeMs: number | null; remainingLifetimeMs: number | null; expired: boolean; capacityEvictions?: number; waitMs?: number };
 export type DirectoryCredentialObservation = { result: "reused" | "renewed" };
+export type RuntimeWindow = { scope: "shared_runtime_window"; eventLoop: { activeMs: number; idleMs: number; utilization: number } };
 export type ProxySummary = { requestId: string; instanceId: string; durationMs: number; status: number; outcome: Outcome; failure?: SafeFailure; externalCalls?: ExternalCalls; phases?: Phase[]; phasesTruncated?: boolean };
 export type Completion = {
   routeKey?: RuntimeRouteKey;
@@ -38,6 +39,7 @@ export type Completion = {
   phases?: Phase[];
   phasesTruncated?: boolean;
   phaseMeasurement?: PhaseMeasurement;
+  runtimeWindow?: RuntimeWindow;
   completeness: { correlation: "complete" | "missing" | "invalid"; externalCallsComplete: false; cache: "unavailable" };
 };
 type LocalSink = Pick<Writable, "write" | "on"> & { writableNeedDrain?: boolean };
@@ -51,6 +53,16 @@ const categories = new Set<FailureCategory>(["timeout", "transport_error", "prov
 const errorCodes = new Set(["request_boundary_failure", "calendar_boundary_failure", "calendar_authorization_unavailable", "calendar_data_unavailable", "provider_request_failed", "provider_response_invalid", "provider_configuration_invalid", "permit_cleanup_failed"]);
 const deniedCodes = new Set(["workspace_access_denied", "workspace_access_unavailable", "workspace_link_required", "workspace_google_login_required",
   "session_invalid_before_effect", "administrator_access_required", "administrator_access_expired"]);
+
+function safeRuntimeWindow(value: RuntimeWindow | undefined): RuntimeWindow | undefined {
+  try {
+    if (value?.scope !== "shared_runtime_window") return undefined;
+    const { activeMs, idleMs, utilization } = value.eventLoop;
+    if (![activeMs, idleMs].every(number => Number.isFinite(number) && number >= 0 && number <= 86_400_000)
+      || !Number.isFinite(utilization) || utilization < 0 || utilization > 1) return undefined;
+    return { scope: "shared_runtime_window", eventLoop: { activeMs: duration(activeMs), idleMs: duration(idleMs), utilization } };
+  } catch { return undefined; }
+}
 
 export function safeFailure(value: SafeFailure | undefined): SafeFailure | undefined {
   if (!value || !operations.has(value.operation) || !errorCodes.has(value.errorCode) || !categories.has(value.errorCategory)) return undefined;
@@ -115,6 +127,7 @@ function project(value: Completion) {
   const proxy = safeProxy(value.proxy);
   const failure = safeFailure(value.failure) || safeFailure(proxy?.failure);
   const elapsed = duration(value.durationMs);
+  const runtimeWindow = value.routeKey === "planning.board" && value.stage === "route" ? safeRuntimeWindow(value.runtimeWindow) : undefined;
   const observedProcessingMs = elapsed + (proxy?.durationMs || 0);
   const outcome = failure ? "error" : outcomes.has(value.outcome) ? value.outcome : "error";
   const severity: "error" | "warn" | "info" = failure || outcome === "error" ? "error" : outcome === "success" && observedProcessingMs >= 2000 ? "warn" : "info";
@@ -150,6 +163,7 @@ function project(value: Completion) {
     requestId: value.requestId, instanceId: value.instanceId, stage: value.stage === "proxy" ? "proxy" : "route",
     operation: value.stage === "proxy" ? "session.proxy" : route.scope === "calendar" ? "calendar.request" : "request.workflow", method: route.method, route: route.route,
     status: status(value.status), outcome, durationMs: elapsed, observedProcessingMs,
+    ...(runtimeWindow ? { runtimeWindow } : {}),
     ...(proxy ? { proxy: { requestId: proxy.requestId, instanceId: proxy.instanceId, durationMs: proxy.durationMs, status: proxy.status, outcome: proxy.outcome } } : {}), ...(failure ? { failure } : {}),
     ...(combined ? { externalCalls: { total: combined.total, operations: combined.operations, providers, durationMsByOperation: combined.durationMsByOperation } } : {}),
     ...(value.phaseMeasurement ? { phaseAggregates: safePhaseAggregates(value.phaseMeasurement.aggregates), slowestPhases: safePhases(value.phaseMeasurement.slowest).slice(0, 8) } : {}),
