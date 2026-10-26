@@ -106,21 +106,51 @@ export async function loadPlanningWorkspaceModel(
   context: PlanningWorkspaceLoadContext,
 ): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
-  const [projectResult, profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult] = await Promise.all([
-    observeRuntimePhase("board.project", () => supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<ProjectRow>()),
-    observeRuntimePhase("board.profiles", () => supabase.from("profiles").select(planningProfileSelect).order("name")),
-    observeRuntimePhase("board.items", () => supabase.from(ACTIVE_TASKS_TABLE).select(planningSummarySelect).eq("project_id", planningProjectId).order("sort_order").order("id")),
-    observeRuntimePhase("board.strategy", () => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints")),
-    observeRuntimePhase("board.raci", () => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order")),
-    observeRuntimePhase("board.links", () => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id")),
-    observeRuntimePhase("board.sprints", () => supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked").order("start_date").order("id")),
-    observeRuntimePhase("board.relationships", () => supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).order("id").limit(500)),
-    observeRuntimePhase("board.preferences", () => supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").order("profile_id")),
+  let baseReadFailed = false;
+  const trackRead = <T extends { error: unknown }>(read: Promise<T>, missingData?: (result: T) => boolean): Promise<T> => read.then(
+    (result) => {
+      if (result.error || missingData?.(result)) baseReadFailed = true;
+      return result;
+    },
+    (error: unknown) => {
+      baseReadFailed = true;
+      throw error;
+    },
+  );
+  const projectRead = trackRead(observeRuntimePhase("board.project", () => supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<ProjectRow>()), (result) => !result.data);
+  const profileRead = trackRead(observeRuntimePhase("board.profiles", () => supabase.from("profiles").select(planningProfileSelect).order("name")));
+  type AvatarOutcome = { people: Profile[] } | { error: unknown };
+  let avatarWork: Promise<AvatarOutcome> | undefined;
+  const avatarStart = profileRead.then((result) => {
+    if (baseReadFailed || !result.data?.length) return;
+    avatarWork = observeRuntimePhase("board.avatars", () => withWorkspaceProfileAvatars((result.data as DbProfile[]).map(mapProfile), supabase)).then(
+      (people): AvatarOutcome => ({ people }),
+      (error: unknown): AvatarOutcome => ({ error }),
+    );
+  }, () => undefined);
+  const baseReads = Promise.all([
+    projectRead,
+    profileRead,
+    trackRead(observeRuntimePhase("board.items", () => supabase.from(ACTIVE_TASKS_TABLE).select(planningSummarySelect).eq("project_id", planningProjectId).order("sort_order").order("id"))),
+    trackRead(observeRuntimePhase("board.strategy", () => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"))),
+    trackRead(observeRuntimePhase("board.raci", () => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order"))),
+    trackRead(observeRuntimePhase("board.links", () => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"))),
+    trackRead(observeRuntimePhase("board.sprints", () => supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked").order("start_date").order("id"))),
+    trackRead(observeRuntimePhase("board.relationships", () => supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).order("id").limit(500))),
+    trackRead(observeRuntimePhase("board.preferences", () => supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").order("profile_id"))),
   ]);
+  const [projectResult, profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult] = await baseReads.catch(async (error: unknown) => {
+    // A failed base read owns the result, but started avatar dispatch must finish cleanup.
+    if (avatarWork) await avatarWork;
+    throw error;
+  });
+  await avatarStart;
+  const avatars = avatarWork ? await avatarWork : { people: [] };
   if (projectResult.error || !projectResult.data || profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error || sprintResult.error || relationResult.error || preferenceResult.error) {
     return { status: "unavailable" };
   }
-  const people = await observeRuntimePhase("board.avatars", () => withWorkspaceProfileAvatars(((profileResult.data || []) as DbProfile[]).map(mapProfile), supabase));
+  if ("error" in avatars) throw avatars.error;
+  const people = avatars.people;
   return observeRuntimePreparation(() => {
     const items = mapPlanningSummaryRows(
       (itemResult.data || []) as unknown as DbTask[],
