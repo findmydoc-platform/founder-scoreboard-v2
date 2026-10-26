@@ -17,11 +17,21 @@ it("pins one cleanup cutoff, retains actual elapsed history, and restarts withou
     await client.query("update public.team_workweek_publication_effects set state='confirmed',confirmed_etag='applied-cutoff',observed_at=clock_timestamp() where publication_id=$1 and kind='predecessor_cutoff'",[pub.id]);
     await client.query("select set_config('request.jwt.claim.role','service_role',true)");await client.query("set local role service_role");
     const plan=(await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result",[pub.id])).rows[0].result;
-    expect(plan.effects.map((effect:{cleanupDisposition:string})=>effect.cleanupDisposition)).toEqual(["preserve"]);
-    const planned=plan.effects[0];
+    const weekly=plan.effects.filter((effect:{kind:string})=>effect.kind==="weekly");
+    expect(weekly).toHaveLength(1);
+    const planned=weekly[0];
+    expect(planned.cleanupDisposition).toBe("preserve");
     expect(planned.cleanupPayload.recurrence[0]).toContain(";UNTIL=");
+    const crossing=plan.effects.filter((effect:{kind:string})=>effect.kind==="cleanup_crossing");
+    expect(crossing.length).toBeLessThanOrEqual(1);
+    expect(plan.effects).toHaveLength(1+crossing.length);
+    for(const occurrence of crossing){
+      expect(occurrence).toMatchObject({operation:"update",cleanupDisposition:"preserve",cleanupParentId:planned.id});
+      expect(occurrence.cleanupPayload.start).toEqual(occurrence.expectedPayload.start);
+      expect(new Date(occurrence.cleanupPayload.end.dateTime).toISOString()).toBe(new Date(plan.cleanupAt).toISOString());
+    }
     expect((await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result",[pub.id])).rows[0].result).toEqual(plan);
-    await client.query("select public.confirm_team_workweek_planned_cleanup($1,1,'history',true)",[planned.id]);
+    for(const effect of plan.effects)await client.query("select public.confirm_team_workweek_planned_cleanup($1,1,'history',true)",[effect.id]);
     const final=(await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result",[pub.id])).rows[0].result;
     const previous=final.effects.find((effect:{kind:string})=>effect.kind==="predecessor_cutoff");
     expect(previous.cleanupDisposition).toBe("retain");expect(previous.cleanupPayload).toEqual(cutoff);

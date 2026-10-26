@@ -26,7 +26,15 @@ it("publishes a managed Google correction through current activation while retai
     expect(publication.effects.find((effect:{kind:string})=>effect.kind==="predecessor_cutoff").expectedPayload.start).toEqual(observed.start);
     for(const effect of publication.effects){
       await client.query("set local role service_role");
-      await client.query("select public.confirm_team_workweek_effect($1,$2,'etag',$3)",[effect.id,effect.generation,effect.payload]);
+      let observedEffect=effect;
+      if(effect.kind==="crossing_instance"){
+        const original={...effect.expectedPayload,id:"fopsreconcile01_instance"};
+        observedEffect=(await client.query("select public.bind_team_workweek_crossing_instance($1,$2,$3,'instance-etag',$4) as effect",[effect.id,effect.generation,original.id,original])).rows[0].effect;
+        expect(observedEffect.expectedEtag).toBe("instance-etag");
+        expect(observedEffect.payload.start).toEqual(original.start);
+        expect(new Date(observedEffect.payload.end.dateTime).toISOString()).toBe(new Date(publication.effectiveAt).toISOString());
+      }
+      await client.query("select public.confirm_team_workweek_effect($1,$2,'etag',$3)",[observedEffect.id,observedEffect.generation,observedEffect.payload]);
       await client.query("reset role");
     }
     expect((await asAuthenticated(client,user,()=>client.query("select public.finalize_team_workweek_publication($1) as publication",[publication.id]))).rows[0].publication.status).toBe("published");
