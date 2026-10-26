@@ -83,17 +83,18 @@ async function workspaceContext(service: SupabaseClient, userId: string): Promis
   return { linkingEnforced: false, ...result.data };
 }
 
-type CalendarEntry = AccessContext & { sessionAllowed: boolean | null; sessionError: boolean };
+type WorkspaceEntry = AccessContext & { sessionAllowed: boolean | null; sessionError: boolean };
 
-async function calendarEntry(service: SupabaseClient, userId: string, sessionId: string): Promise<CalendarEntry> {
+async function workspaceEntry(service: SupabaseClient, userId: string, sessionId: string, action: "calendar.read" | "planning.board.read"): Promise<WorkspaceEntry> {
   const result = await observeRuntimeResultPhase("workspace.entry", () => service.rpc("workspace_calendar_entry", { p_user_id: userId, p_session_id: sessionId }));
   const context = result.data;
+  // Board preserves workspace_access_context validation; Calendar retains its stricter entry contract.
   if (result.error || !context || !["legacy", "linking", "google"].includes(context.mode)
-    || typeof context.linkingEnforced !== "boolean"
+    || (action === "calendar.read" && (typeof context.linkingEnforced !== "boolean"
     || !(context.userId === null || typeof context.userId === "string")
     || !(context.profileId === null || typeof context.profileId === "string")
     || !(context.linked === null || typeof context.linked === "boolean")
-    || !(context.identity === null || (typeof context.identity === "object" && !Array.isArray(context.identity)))) {
+    || !(context.identity === null || (typeof context.identity === "object" && !Array.isArray(context.identity)))))) {
     if (!result.error) recordRuntimeFailure({ operation: "workspace.entry", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
     throw unavailable();
   }
@@ -245,7 +246,8 @@ export async function authorizeSessionData(request: NextRequest, action: Session
       return invalidSession();
     }
     if (user.data.user?.id !== claims.sub) return invalidSession();
-    const entry = action === "calendar.read" ? await calendarEntry(environment.service, claims.sub, claims.session_id) : null;
+    const entry = action === "calendar.read" || action === "planning.board.read"
+      ? await workspaceEntry(environment.service, claims.sub, claims.session_id, action) : null;
     const context = entry ?? await workspaceContext(environment.service, claims.sub);
     if (context.userId !== claims.sub || !context.profileId) {
       return { ok: false, status: 403, error: "Dieses Konto ist keinem Teamprofil zugeordnet." };
@@ -257,7 +259,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     if (workspace) {
       if (context.mode === "linking" && !context.linked) throw new WorkspaceAccessError(403, "workspace_link_required");
       if (!context.linked || !context.identity) throw denied();
-      if (entry && typeof context.identity.iss !== "string") throw denied();
+      if (action === "calendar.read" && typeof context.identity.iss !== "string") throw denied();
       const identity = workspaceIdentity({ id: claims.sub, identities: [{ provider: "google", identity_data: context.identity }] });
       subject = identity.subject; email = identity.email;
       if (!Array.isArray(claims.amr) || !claims.amr.some(entry => typeof entry === "object" && entry.method === "oauth")) throw loginRequired();
@@ -266,7 +268,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
         : await observeRuntimeResultPhase("workspace.session", () => environment.service.rpc(context.mode === "linking" ? "workspace_linking_session_allowed" : "workspace_session_allowed", {
           p_user_id: claims.sub, p_session_id: claims.session_id,
         }));
-      if (entry && (typeof entry.sessionAllowed !== "boolean" || typeof entry.sessionError !== "boolean")) {
+      if (action === "calendar.read" && entry && (typeof entry.sessionAllowed !== "boolean" || typeof entry.sessionError !== "boolean")) {
         recordRuntimeFailure({ operation: "workspace.entry", errorCode: "provider_response_invalid", errorCategory: "invalid_response" });
         throw unavailable();
       }
