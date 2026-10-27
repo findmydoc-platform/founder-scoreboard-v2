@@ -175,7 +175,9 @@ test("the actual emitted line preserves all operation aggregates and late slow s
     deniedCode: "administrator_access_required", directoryCredential: { result: "renewed" },
     membership: { result: "expired", reason: "observed_expiry", cacheOwnerId: instanceId, evidenceAgeMs: 86400000, remainingLifetimeMs: 86400000, expired: true, capacityEvictions: 1, waitMs: 86400000 },
     externalCalls: { total: 999999, complete: true, operations: Object.fromEntries(safeOperations.map((operation: string) => [operation, Number.MAX_SAFE_INTEGER])), durationMsByOperation: Object.fromEntries(safeOperations.map((operation: string) => [operation, 86400000])) },
-    phaseMeasurement: { aggregates: { ...aggregate, [secret]: { http: [1, 1, 1] } }, slowest: Array.from({ length: 8 }, () => ({ ...late, token: secret })), pending: 0, failed: false },
+    phaseMeasurement: { aggregates: { ...aggregate, [secret]: { http: [1, 1, 1] } }, slowest: Array.from({ length: 8 }, () => ({ ...late, token: secret })),
+      chains: [{ truncated: false, nodes: Array.from({ length: 32 }, (_, index) => ({ completed: true, hasChildren: index < 31,
+        phase: { ...late, id: `route:${index + 1}`, parentId: index ? `route:${index}` : undefined, token: secret } })) }], pending: 0, failed: false },
     phases: Array.from({ length: 64 }, (_, index) => ({ ...late, id: `route:${index + 1}`, operation: "supabase.user" })),
   });
   expect(sink.lines).toHaveLength(1);
@@ -183,6 +185,8 @@ test("the actual emitted line preserves all operation aggregates and late slow s
   const record = JSON.parse(sink.lines[0]);
   expect(record.phaseAggregates).toEqual(aggregate);
   expect(record.slowestPhases).toEqual(Array.from({ length: 8 }, () => late));
+  expect(record.completeness.slowChainsTruncated).toBe(true);
+  for (const phase of record.slowChainPhases) if (phase.parentId) expect(record.slowChainPhases.some((parent: { id: string }) => parent.id === phase.parentId)).toBe(true);
   expect(record.completeness).toMatchObject({ phaseAggregatesComplete: true, phasesTruncated: true });
   expect(record.externalCalls.operations).toEqual(Object.fromEntries(safeOperations.map((operation: string) => [operation, Number.MAX_SAFE_INTEGER])));
   expect(sink.lines[0]).not.toContain(secret);

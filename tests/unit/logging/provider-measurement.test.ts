@@ -323,3 +323,34 @@ test("parallel inclusive span totals stay distinct from elapsed request time", a
     phaseAggregates: { "supabase.user": { http: [2, 20, 10] }, "request.workflow": { operation: [1, 10, 10] } },
   });
 });
+
+
+test("late slow HTTP observations retain their completed ancestor chain in compact output", async () => {
+  vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "0"); const records = capture();
+  const { performance } = await import("node:perf_hooks"); let clock = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => clock);
+  const { observeRuntimeRoute, observeRuntimePhase, observeProviderHttp } = await importTestModule("src/lib/runtime-logging/index.ts", { "server-only": {} });
+  await observeRuntimeRoute("planning.board", new Request("https://example.test/"), async () => {
+    for (let index = 0; index < 80; index++) await observeRuntimePhase("supabase.user", async () => { clock++; });
+    await observeRuntimePhase("board.load", () => observeRuntimePhase("board.sprints", () =>
+      observeRuntimePhase("supabase.db.planning.read", async () => {
+        await observeProviderHttp("workspace.dispatch.prepare", async () => { clock += 400; return Response.json({}); });
+        await observeProviderHttp("supabase.db.planning.read", async () => { clock += 30; return Response.json({}); });
+        await observeProviderHttp("workspace.permit.release", async () => { clock += 20; return Response.json({}); });
+      })));
+    return Response.json({ unchanged: true });
+  });
+  const record = records().find(record => record.event === "request.completed");
+  expect(record.phases).toEqual([]);
+  const chain = record.slowChainPhases;
+  expect(chain).toContainEqual(expect.objectContaining({ operation: "workspace.dispatch.prepare", offsetMs: 80, durationMs: 400 }));
+  for (const phase of chain) if (phase.parentId) expect(chain.some((parent: { id: string }) => parent.id === phase.parentId)).toBe(true);
+  const prepare = chain.find((phase: { operation: string }) => phase.operation === "workspace.dispatch.prepare");
+  const sdk = chain.find((phase: { id: string }) => phase.id === prepare.parentId);
+  expect(sdk).toMatchObject({ operation: "supabase.db.planning.read", kind: "operation", offsetMs: 80, durationMs: 450 });
+  const sprint = chain.find((phase: { id: string }) => phase.id === sdk.parentId);
+  expect(sprint).toMatchObject({ operation: "board.sprints", offsetMs: 80, durationMs: 450 });
+  expect(chain.find((phase: { id: string }) => phase.id === sprint.parentId)).toMatchObject({ operation: "board.load", durationMs: 450 });
+  expect(record.completeness).toMatchObject({ slowChainsComplete: true, slowChainsTruncated: true });
+  expect(chain.length).toBeLessThanOrEqual(32);
+});

@@ -3,13 +3,13 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { NextResponse, type NextRequest } from "next/server";
-import { createRuntimeLogger, isRequestId, safeFailure, safeProxy, safeOperations, type SafeOperation, type Phase, type MembershipObservation, type Completion, type ProxySummary, type SafeFailure, type Stage } from "./output";
+import { createRuntimeLogger, isRequestId, safeFailure, safeProxy, safeOperations, type SafeOperation, type Phase, type MembershipObservation, type Completion, type ProxySummary, type SafeFailure, type Stage, type PhaseNode } from "./output";
 
 import { matchRuntimeRoute, runtimeRoute, type RuntimeRouteKey } from "./routes";
 
 const instanceId = randomUUID();
 const proxyHeader = "x-founderops-proxy-observation";
-type Context = { completion: Completion; started: number; nextPhase: { value: number }; parentId?: string; parentPhase?: Phase };
+type Context = { completion: Completion; started: number; nextPhase: { value: number }; parentId?: string; parentPhase?: Phase; ancestors?: PhaseNode[]; chainTruncated?: boolean };
 const contexts = new AsyncLocalStorage<Context>();
 const measuredOperations = new Set<string>(safeOperations);
 let logger: ReturnType<typeof createRuntimeLogger> | undefined;
@@ -43,7 +43,7 @@ function begin(stage: Stage, headers: Headers, routeKey: RuntimeRouteKey = "cale
     status: 500, outcome: "error", durationMs: 0, ...(proxy ? { proxy } : {}),
     vercelId: headers.get("x-vercel-id") || undefined,
     deploymentEnv: process.env.VERCEL_ENV, deploymentId: process.env.VERCEL_DEPLOYMENT_ID, region: process.env.VERCEL_REGION,
-    phases: [], phaseMeasurement: { aggregates: {}, slowest: [], pending: 0, failed: false }, externalCalls: { total: 0, operations: {}, durationMsByOperation: {}, complete: true },
+    phases: [], phaseMeasurement: { aggregates: {}, slowest: [], pending: 0, failed: false, chains: [], chainsTruncated: false }, externalCalls: { total: 0, operations: {}, durationMsByOperation: {}, complete: true },
     completeness: { correlation, externalCallsComplete: false, cache: "unavailable" },
   };
   return { completion, started: performance.now(), nextPhase: { value: 0 } };
@@ -72,7 +72,12 @@ function startPhase(operation: SafeOperation, kind: Phase["kind"]) {
     operation, kind, offsetMs: Math.max(0, performance.now() - context.started), durationMs: 0, outcome: "success" };
   if (context.completion.phases!.length < 64) context.completion.phases!.push(phase);
   else context.completion.phasesTruncated = true;
-  return { context, phase, started: performance.now() };
+  const node: PhaseNode = { phase, completed: false, hasChildren: false };
+  const ancestors = context.ancestors || [];
+  if (ancestors.length) ancestors[ancestors.length - 1].hasChildren = true;
+  const chainTruncated = context.chainTruncated === true || ancestors.length >= 32;
+  const nodes = [...ancestors.slice(-31), node];
+  return { context, phase, node, nodes, chainTruncated, started: performance.now() };
 }
 
 function finishPhase(active: NonNullable<ReturnType<typeof startPhase>>) {
@@ -88,6 +93,14 @@ function finishPhase(active: NonNullable<ReturnType<typeof startPhase>>) {
     measurement.slowest.push(phase);
     measurement.slowest.sort((left, right) => right.durationMs - left.durationMs);
     measurement.slowest.length = Math.min(measurement.slowest.length, 8);
+    active.node.completed = true;
+    // Terminal spans preserve the provider boundary without ancestors displacing it.
+    if (!active.node.hasChildren) {
+      const chains = measurement.chains!;
+      chains.push({ nodes: active.nodes, truncated: active.chainTruncated });
+      chains.sort((left, right) => right.nodes[right.nodes.length - 1].phase.durationMs - left.nodes[left.nodes.length - 1].phase.durationMs);
+      if (chains.length > 8) { chains.length = 8; measurement.chainsTruncated = true; }
+    }
   } catch { measurement.failed = true; } finally { measurement.pending--; }
 }
 
@@ -109,7 +122,7 @@ export function observeRuntimePhase<T>(operation: SafeOperation, run: () => Prom
       throw error;
     } finally { if (active) finishPhase(active); }
   };
-  return active ? contexts.run({ ...active.context, parentId: active.phase.id, parentPhase: active.phase }, execute) : execute();
+  return active ? contexts.run({ ...active.context, parentId: active.phase.id, parentPhase: active.phase, ancestors: active.nodes, chainTruncated: active.chainTruncated }, execute) : execute();
 }
 
 export function observeRuntimePreparation<T>(run: () => T, operation: SafeOperation = "response.prepare"): T {
