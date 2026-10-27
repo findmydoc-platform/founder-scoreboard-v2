@@ -26,6 +26,7 @@ export type TaskDetailUnavailableArea = "discussion" | "relationships" | "timeli
 
 export type TaskDetailModel = Readonly<{
   revision: string;
+  coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea, "complete" | "partial">>>;
   project: Project;
   item: Task;
   ancestors: readonly Task[];

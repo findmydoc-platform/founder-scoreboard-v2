@@ -18,21 +18,37 @@ import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/mode
 type ProtectedPlanningShellStateCache = {
   authUserId: string;
   workspace?: AppWorkspace;
+  sessionRevision?: string;
+  authorityExpiresAt?: number;
   data: PlanningShellState;
   headerData: PlanningHeaderData;
   currentProfile: AuthenticatedProfile | null;
 };
 
-let protectedPlanningShellStateCache: ProtectedPlanningShellStateCache | null = null;
-// Logout must clear cached planning data even while a different workspace is mounted.
-createBrowserSessionAdapter().subscribe(session => { if (!session) protectedPlanningShellStateCache = null; });
+const protectedPlanningShellStateCaches = new Map<AppWorkspace | undefined, ProtectedPlanningShellStateCache>();
+let latestCacheScope: AppWorkspace | undefined;
+// Reusing data never renews the original session deadline or transfers it to a refreshed credential.
+createBrowserSessionAdapter().subscribe(session => {
+  for (const [scope, cache] of protectedPlanningShellStateCaches) {
+    if (!session || cache.authUserId !== session.userId || cache.sessionRevision !== session.revision) protectedPlanningShellStateCaches.delete(scope);
+  }
+});
 
-export function getProtectedPlanningShellStateCache() {
-  return protectedPlanningShellStateCache;
+export function getProtectedPlanningShellStateCache(workspace?: AppWorkspace, session?: ServerSessionView | null) {
+  const cache = protectedPlanningShellStateCaches.get(workspace ?? latestCacheScope) || null;
+  if (!cache) return null;
+  if (cache.authorityExpiresAt !== undefined && cache.authorityExpiresAt * 1000 <= Date.now()) {
+    protectedPlanningShellStateCaches.delete(workspace ?? latestCacheScope);
+    return null;
+  }
+  if (session !== undefined && (!session || cache.authUserId !== session.userId || cache.sessionRevision !== session.revision || cache.authorityExpiresAt !== session.expiresAt || session.expiresAt * 1000 <= Date.now())) return null;
+  return cache;
 }
 
-export function setProtectedPlanningShellStateCache(cache: ProtectedPlanningShellStateCache | null) {
-  protectedPlanningShellStateCache = cache;
+export function setProtectedPlanningShellStateCache(cache: ProtectedPlanningShellStateCache | null, workspace?: AppWorkspace) {
+  if (!cache) { if (workspace) protectedPlanningShellStateCaches.delete(workspace); else protectedPlanningShellStateCaches.clear(); return; }
+  latestCacheScope = cache.workspace;
+  protectedPlanningShellStateCaches.set(cache.workspace, cache);
 }
 
 type UsePlanningAuthOptions = {
@@ -136,7 +152,7 @@ export function usePlanningAuth({
     const clearProtected = () => {
       clearPlanningState();
       protectedDataUserIdRef.current = "";
-      protectedPlanningShellStateCache = null;
+      setProtectedPlanningShellStateCache(null);
       setServerCurrentProfile(null);
       setHeaderData(emptyPlanningHeaderData);
       setProtectedDataLoaded(false);
@@ -176,28 +192,25 @@ export function usePlanningAuth({
     let active = true;
     const authUserId = authUser.id;
 
-    if (protectedPlanningShellStateCache?.authUserId === authUserId && protectedPlanningShellStateCache.workspace === workspace) {
-      const cached = protectedPlanningShellStateCache;
-      queueMicrotask(() => {
-        if (!active) return;
-        protectedDataUserIdRef.current = authUserId;
-        setServerCurrentProfile(cached.currentProfile);
-        setData(cached.data, authUserId);
-        setHeaderData(cached.headerData);
-        setProtectedDataLoaded(true);
-        setAuthError("");
-      });
-      return () => {
-        active = false;
-      };
-    }
-
     async function loadProtectedPlanningShellState() {
       if (!taskCount) setProtectedDataLoaded(false);
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 10_000);
 
       try {
+        const sessions = createBrowserSessionAdapter();
+        const session = await sessions.current();
+        if (!active || session?.userId !== authUserId) return;
+        const cached = getProtectedPlanningShellStateCache(workspace, session);
+        if (cached) {
+          protectedDataUserIdRef.current = authUserId;
+          setServerCurrentProfile(cached.currentProfile);
+          setData(cached.data, authUserId);
+          setHeaderData(cached.headerData);
+          setProtectedDataLoaded(true);
+          setAuthError("");
+          return;
+        }
         const focusedPlanningRoute = workspace === "planning"
           ? "/api/planning-board-data"
           : workspace === "projects"
@@ -242,7 +255,9 @@ export function usePlanningAuth({
         protectedDataUserIdRef.current = authUserId;
         const nextData = normalizePlanningShellState(payloadData);
         const nextHeaderData = normalizePlanningHeaderData(payload.headerData);
-        protectedPlanningShellStateCache = { authUserId, workspace, data: nextData, headerData: nextHeaderData, currentProfile: payload.currentProfile };
+        const acceptedSession = await sessions.current();
+        if (!active || acceptedSession?.userId !== authUserId) return;
+        setProtectedPlanningShellStateCache({ authUserId, workspace, sessionRevision: acceptedSession.revision, authorityExpiresAt: acceptedSession.expiresAt, data: nextData, headerData: nextHeaderData, currentProfile: payload.currentProfile });
         setServerCurrentProfile(payload.currentProfile);
         setData(nextData, authUserId);
         setHeaderData(nextHeaderData);
@@ -310,7 +325,7 @@ export function usePlanningAuth({
     }
 
     protectedDataUserIdRef.current = "";
-    protectedPlanningShellStateCache = null;
+    setProtectedPlanningShellStateCache(null);
     setServerCurrentProfile(null);
     setAuthUser(null);
     setGithubInstallationAvailable(false);

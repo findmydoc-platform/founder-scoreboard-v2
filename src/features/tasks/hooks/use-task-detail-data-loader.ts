@@ -48,7 +48,10 @@ export function useTaskDetailDataLoader({
       try {
         const result = await planningState.loadTaskDetail(selectedTaskId);
         if (!active) return;
-        if (!result.ok) return;
+        if (!result.ok) {
+          setLoadState({ taskId: selectedTaskId, loading: false, error: result.error || "Task-Details konnten nicht geladen werden." });
+          return;
+        }
         setLoadedTaskIds((current) => {
           if (current.has(selectedTaskId)) return current;
           const next = new Set(current);

@@ -213,6 +213,11 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
 
       const model: TaskDetailModel = {
         revision: item.updatedAt || target.updated_at,
+        coverage: {
+          discussion: (comments.data?.length || 0) < taskDetailReadLimits.comments && (externalComments.data?.length || 0) < taskDetailReadLimits.externalComments ? "complete" : "partial",
+          relationships: (outgoingResult.data?.length || 0) < taskDetailReadLimits.relationships && (incomingResult.data?.length || 0) < taskDetailReadLimits.relationships && (blockers.data?.length || 0) < taskDetailReadLimits.blockers ? "complete" : "partial",
+          timeline: (activity.data?.length || 0) < taskDetailReadLimits.activity && (reviews.data?.length || 0) < taskDetailReadLimits.reviews ? "complete" : "partial",
+        },
         project: project(projectResult.data),
         item,
         ancestors: ancestorsResult.rows.flatMap((row) => tasksById.get(row.id) || []),

@@ -31,8 +31,8 @@ type UsePlanningHeaderDataOptions = {
   workspace: AppWorkspace;
 };
 
-function cacheHeaderData(authUserId: string, incoming: PlanningHeaderData) {
-  const cached = getProtectedPlanningShellStateCache();
+function cacheHeaderData(authUserId: string, workspace: AppWorkspace, incoming: PlanningHeaderData) {
+  const cached = getProtectedPlanningShellStateCache(workspace);
   if (cached?.authUserId !== authUserId) return;
   setProtectedPlanningShellStateCache({
     ...cached,
@@ -111,7 +111,7 @@ export function usePlanningHeaderData({
         setHeaderData((current) => {
           if (!active) return current;
           const mergedHeaderData = mergePlanningHeaderData(current, nextHeaderData);
-          cacheHeaderData(authUserId, nextHeaderData);
+          cacheHeaderData(authUserId, workspace, nextHeaderData);
           return mergedHeaderData;
         });
       } catch (error) {
@@ -133,7 +133,7 @@ export function usePlanningHeaderData({
       if (inFlightKeyRef.current === idleSlotKey) inFlightKeyRef.current = "";
       setLoadingSlots([]);
     };
-  }, [apiClient, authRequired, authUserId, idleSlotKey, protectedDataLoaded, setHeaderData]);
+  }, [apiClient, authRequired, authUserId, idleSlotKey, protectedDataLoaded, setHeaderData, workspace]);
 
   useEffect(() => {
     if (!authUserId) return;
@@ -160,7 +160,7 @@ export function usePlanningHeaderData({
         setHeaderData((current) => {
           if (!active) return current;
           const mergedHeaderData = mergePlanningHeaderData(current, nextHeaderData);
-          cacheHeaderData(authUserId, nextHeaderData);
+          cacheHeaderData(authUserId, workspace, nextHeaderData);
           return mergedHeaderData;
         });
       } catch (error) {

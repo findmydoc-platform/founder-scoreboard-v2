@@ -154,6 +154,7 @@ export function usePlanningAppController({
   const derivedState = usePlanningDerivedState({
     currentProfile,
     data,
+    workspaceTasks: planningState.workspace(workspace).tasks,
     filters,
     planningLevel,
     setInitiativeDialogDefaults,
@@ -213,6 +214,7 @@ export function usePlanningAppController({
     closeTaskPanel,
     currentProfile,
     data,
+    planningState,
     devProfileId,
     devRoleSwitchAvailable,
     filters,
