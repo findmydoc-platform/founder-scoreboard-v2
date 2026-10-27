@@ -19,7 +19,8 @@ export function createTaskEditing(adapter: EditingAdapter) {
     begin(taskId: string): PlanningTaskEditor {
       const context = Symbol(taskId);
       const generation = adapter.generation();
-      let basis = adapter.currentTask(taskId);
+      const openedTask = adapter.currentTask(taskId);
+      let basis = openedTask ? { ...openedTask } : null;
       let conflictBasis: Task | null = null;
       let phase: PlanningTaskEditorView["phase"] = "editing";
       let submitted: Partial<Task> | null = null;
@@ -50,7 +51,7 @@ export function createTaskEditing(adapter: EditingAdapter) {
             phase = "conflict";
             conflictBasis = null;
             try {
-              if ((await adapter.reload(taskId)).ok && sameSession()) conflictBasis = adapter.currentTask(taskId);
+              if ((await adapter.reload(taskId)).ok && sameSession()) { const latest = adapter.currentTask(taskId); conflictBasis = latest ? { ...latest } : null; }
             } catch { /* Keep the draft; resaving needs a successful authorized read. */ }
           } else if (result.kind === "sessionSuperseded" || result.kind === "authorityEnded") {
             phase = "ended";
@@ -68,7 +69,7 @@ export function createTaskEditing(adapter: EditingAdapter) {
           if (!current() || phase !== "conflict") return false;
           try {
             if (!(await adapter.reload(taskId)).ok || !current()) return false;
-            conflictBasis = adapter.currentTask(taskId);
+            { const latest = adapter.currentTask(taskId); conflictBasis = latest ? { ...latest } : null; }
             adapter.changed();
             return Boolean(conflictBasis?.updatedAt);
           } catch { return false; }

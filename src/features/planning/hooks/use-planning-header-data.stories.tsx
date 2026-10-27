@@ -23,7 +23,7 @@ function BackgroundHeaderStory() {
   const [requestCount, setRequestCount] = useState(0);
   const requests = useRef<((response: HeaderResponse) => void)[]>([]);
   useEffect(() => {
-    setProtectedPlanningShellStateCache({ authUserId: "story-user", data: emptyPlanningShellState, headerData: initialHeader, currentProfile: null });
+    setProtectedPlanningShellStateCache({ authUserId: "story-user", workspace: "planning", data: emptyPlanningShellState, headerData: initialHeader, currentProfile: null });
     return () => setProtectedPlanningShellStateCache(null);
   }, []);
   const [apiClient] = useState<BrowserApiClient>(() => ({
@@ -60,7 +60,7 @@ function BackgroundHeaderStory() {
       <button onClick={() => { setProtectedPlanningShellStateCache(null); setSignedIn(false); setHeaderData(initialHeader); }}>Sign out</button>
       <button onClick={() => setProtectedPlanningShellStateCache(null)}>Clear session cache</button>
       <button onClick={() => setProtectedPlanningShellStateCache({
-        authUserId: "story-user", currentProfile: null, headerData: initialHeader,
+        authUserId: "story-user", workspace: "planning", currentProfile: null, headerData: initialHeader,
         data: { ...emptyPlanningShellState, project: { ...emptyPlanningShellState.project, name: "New board" } },
       })}>Update board cache</button>
       {signedIn ? <NotificationInbox notifications={headerData.notifications} open onToggle={() => {}} /> : <p>Signed out</p>}

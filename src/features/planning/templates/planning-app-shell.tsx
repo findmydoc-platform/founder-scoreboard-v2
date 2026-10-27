@@ -61,7 +61,8 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
   const resolvedParentFilterId = planningLevel === "deliverable"
     ? filters.initiativeId === "Alle" ? "all" : filters.initiativeId
     : planningParentFilterId;
-  const planningLevelTasks = data.tasks.filter((task) => task.taskType === planningLevel);
+  const workspaceTasks = controller.planningState.workspace(controller.workspace).tasks;
+  const planningLevelTasks = workspaceTasks.filter((task) => task.taskType === planningLevel);
   const planningVisibleTasks = controller.visibleTasks.filter((task) => (
     task.taskType === planningLevel
     && (resolvedParentFilterId === "all" || task.parentTaskId === resolvedParentFilterId)
@@ -172,7 +173,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
             quickFilters={quickFilters}
             expanded={showFilters}
             visibleCount={controller.view === "board" ? planningVisibleTasks.length : controller.visibleTasks.length}
-            totalCount={controller.view === "board" ? planningLevelTasks.length : data.tasks.filter((task) => task.taskType !== "sub_issue").length}
+            totalCount={controller.view === "board" ? planningLevelTasks.length : workspaceTasks.filter((task) => task.taskType !== "sub_issue").length}
             showPlanningLevel={controller.view === "board"}
             onExpandedChange={controller.setShowFilters}
             onChange={setFilters}

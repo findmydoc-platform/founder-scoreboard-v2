@@ -11,10 +11,11 @@ import { emptyPlanningShellState } from "../model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import { getProtectedPlanningShellStateCache } from "./use-planning-auth";
+import type { TaskComment } from "@/lib/types";
 import type { BrowserApiClient, BrowserApiJsonResult } from "@/lib/browser-api-client";
 
 const task = taskDetailStoryTask({ id: "owner-task", title: "Before", updatedAt: "r1" });
-const initial = { ...emptyPlanningShellState, tasks: [task] };
+const initial = { ...emptyPlanningShellState, tasks: [task], taskComments: [{ id: 1, taskId: task.id, profileId: "story-profile", comment: "Loaded discussion", githubDeliveryStatus: "not_applicable", githubCommentUrl: "", createdAt: "2026-10-28T00:00:00Z" } satisfies TaskComment] };
 function PlanningOwnerStory() {
   const [, setHeaderData] = useState(emptyPlanningHeaderData);
   const owner = usePlanningStateOwner({ initialData: initial, initialHeaderData: emptyPlanningHeaderData, initialUserId: "owner-story", initialCurrentProfile: null, initialWorkspace: "planning", setHeaderData });
@@ -40,11 +41,14 @@ function PlanningOwnerStory() {
     <p>Task: {owner.data.tasks[0]?.title || "cleared"}</p>
     <p>Status: {owner.planningState.taskDetail(task.id).saveStatus}</p>
     <p>Cache: {getProtectedPlanningShellStateCache()?.data.tasks[0]?.title || "cleared"}</p>
+    <p>Discussion: {owner.planningState.taskDetail(task.id).comments.map(comment => comment.comment).join(", ")}</p>
+    <p>Workspace: {owner.planningState.workspace("planning").readStatus}</p>
     <p>Freshness: {owner.planningState.board().freshness}</p>
     <button onClick={() => { void owner.planningState.refreshWorkspace("planning"); }}>Refresh Board</button>
     <button onClick={() => { void updateTask(owner.data.tasks[0], { title: "Saved task" }); }}>Save task</button>
     <button onClick={() => network.pending.get("save")?.({ response: new Response(null), body: { task: { id: task.id, title: "Saved task", updatedAt: "r2" } } })}>Confirm save</button>
     <button onClick={() => network.pending.get("read")?.({ response: new Response(null), body: { model: { revision: "old", project: initial.project, items: initial.tasks, people: [], sprints: [], relationships: [], preferences: [] } } })}>Complete old refresh</button>
+    <button onClick={() => owner.acceptProtectedData({ ...initial, tasks: [{ ...task, title: "Old page task" }], taskComments: [] }, "owner-story")}>Hydrate old page</button>
     <button onClick={() => owner.setData(initial)}>Restore legacy snapshot</button>
     <button onClick={owner.clearPlanningState}>End session</button>
   </main>;
@@ -116,5 +120,19 @@ export const BoardMenuKeepsItsOpeningBasis: Story = {
     await waitFor(() => expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("1"));
     await waitFor(() => expect(canvas.queryByRole("button", { name: "Änderung erneut speichern" })).not.toBeInTheDocument());
     await expect(canvas.getByRole("button", { name: "Status für Board-Konflikt ändern" })).toHaveTextContent("Blockiert");
+  },
+};
+
+export const UntrustedHydrationRequestsFreshWorkspace: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Save task" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Confirm save" }));
+    await waitFor(() => expect(canvas.getByText("Status: saved")).toBeVisible());
+    await userEvent.click(canvas.getByRole("button", { name: "Hydrate old page" }));
+    await expect(canvas.getByText("Task: Saved task")).toBeVisible();
+    await expect(canvas.getByText("Cache: Saved task")).toBeVisible();
+    await expect(canvas.getByText("Discussion: Loaded discussion")).toBeVisible();
+    await expect(canvas.getByText("Workspace: loading")).toBeVisible();
   },
 };

@@ -6,13 +6,14 @@ import type { PlanningFilters, usePlanningViewState } from "@/features/planning/
 import { planningWorkspaces } from "@/features/planning/model/planning-app-model";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import type { PlanningShellState, Profile, ViewMode } from "@/lib/types";
+import type { PlanningShellState, Profile, Task, ViewMode } from "@/lib/types";
 
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
 type UsePlanningDerivedStateOptions = {
   currentProfile: Profile | null;
   data: PlanningShellState;
+  workspaceTasks?: readonly Task[];
   filters: PlanningFilters;
   planningLevel: PlanningLevel;
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
@@ -26,6 +27,7 @@ type UsePlanningDerivedStateOptions = {
 export function usePlanningDerivedState({
   currentProfile,
   data,
+  workspaceTasks,
   filters,
   planningLevel,
   setInitiativeDialogDefaults,
@@ -41,7 +43,7 @@ export function usePlanningDerivedState({
     visibleTasks,
   } = usePlanningTaskViewModel({
     currentProfile,
-    data,
+    data: workspaceTasks ? { ...data, tasks: [...workspaceTasks] } : data,
     filters,
     includeAssignedSubIssueParents: view === "board" && planningLevel === "deliverable",
   });
