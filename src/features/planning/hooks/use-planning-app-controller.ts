@@ -199,6 +199,8 @@ export function usePlanningAppController({
 
   return {
     actualProfile,
+    planningState,
+    beginTaskEdit: planningState.beginTaskEdit,
     authAvailable,
     authBusy,
     authChecked,

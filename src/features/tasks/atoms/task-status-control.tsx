@@ -31,6 +31,7 @@ type TaskStatusControlProps = {
   lockedReason?: string;
   showLockedReason?: boolean;
   onChange: (status: TaskStatus) => void;
+  onEditingStart?: () => void;
   options: TaskStatus[];
   selectClassName?: string;
   status: string;
@@ -43,6 +44,7 @@ export function TaskStatusControl({
   lockedReason,
   showLockedReason = true,
   onChange,
+  onEditingStart,
   options,
   selectClassName = "h-9 text-sm",
   status,
@@ -56,6 +58,7 @@ export function TaskStatusControl({
   if (canChange) {
     return (
       <CustomSelect
+        onOpen={onEditingStart}
         value={normalized}
         onChange={(value) => {
           if (!isTaskStatusChange(normalized, value)) return;

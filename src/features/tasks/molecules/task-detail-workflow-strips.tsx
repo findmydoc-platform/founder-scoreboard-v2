@@ -19,6 +19,7 @@ type Props = {
   canManageReviewOwner: boolean;
   forceReviewSetup?: boolean;
   pending: boolean;
+  onEditingStart?: () => void;
   onUpdate: (patch: Partial<Task>) => void;
   onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
 };
@@ -41,6 +42,7 @@ export function TaskDetailWorkflowStrips({
   forceReviewSetup = false,
   pending,
   onUpdate,
+  onEditingStart,
   onDecideApproval,
 }: Props) {
   const [decisionAction, setDecisionAction] = useState<ApprovalReasonAction | null>(null);
@@ -102,6 +104,7 @@ export function TaskDetailWorkflowStrips({
             <UserCheck size={15} className="text-slate-400" aria-hidden="true" />
             {canManageReviewOwner ? (
               <CustomSelect
+                onOpen={onEditingStart}
                 value={task.reviewOwnerProfileId || ""}
                 onChange={(reviewOwnerProfileId) => onUpdate({ reviewOwnerProfileId })}
                 disabled={pending}

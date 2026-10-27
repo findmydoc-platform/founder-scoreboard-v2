@@ -43,7 +43,6 @@ export function useTaskUpdateCommand({
   currentProfile,
   data,
   githubInstallationAvailable,
-  refreshCurrentWorkspaceModel,
   setSaveError,
   setStatusGuardNotice,
   setStatusGuardTaskId,
@@ -51,7 +50,7 @@ export function useTaskUpdateCommand({
   syncTaskToGitHub,
 }: UseTaskUpdateCommandOptions) {
 
-  const updateTask: TaskUpdateCommand = (task: Task, patch: Partial<Task>) => {
+  const updateTask: TaskUpdateCommand = (task: Task, patch: Partial<Task>, options) => {
     setSaveError("");
     setStatusGuardNotice("");
     setStatusGuardTaskId(null);
@@ -111,11 +110,9 @@ export function useTaskUpdateCommand({
       return Promise.resolve({ ok: false, error: founderTaskAssignmentGuardMessage(), status: 403 });
     }
 
-    const saving = planningState.saveTask(task, normalizedPatch).then(async (result) => {
+    const editor = options?.editor || planningState.beginTaskEdit(task.id);
+    const saving = (options?.resave ? editor.resave(normalizedPatch) : editor.save(normalizedPatch)).then((result) => {
       if (!result.ok) {
-        if (result.status === 409) {
-          try { await refreshCurrentWorkspaceModel(); } catch { /* Keep the rejected input available when refreshing fails. */ }
-        }
         setSaveError(result.error);
       } else if (normalizedPatch.status && hasGitHubIssue(task) && githubInstallationAvailable) {
         syncTaskToGitHub({ ...task, ...result.task }, { silent: true });

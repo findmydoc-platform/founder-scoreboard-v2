@@ -17,7 +17,7 @@ export function decideTaskApprovalRequest(apiClient: BrowserApiClient, taskId: s
 }
 
 export function updateTaskRequest(apiClient: BrowserApiClient, taskId: string, patch: unknown) {
-  return apiClient.requestJson<{ error?: string; activities?: TaskActivity[]; task?: Partial<Task> }>(`/api/tasks/${taskId}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; activities?: TaskActivity[]; task?: Partial<Task> }>(`/api/tasks/${taskId}`, {
     method: "PATCH",
     json: patch,
   });

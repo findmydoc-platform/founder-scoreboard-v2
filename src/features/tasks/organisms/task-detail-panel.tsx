@@ -1,5 +1,8 @@
 "use client";
 
+import type { PlanningTaskEditor } from "@/features/planning/model/planning-state";
+import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
+
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { TaskActionResult, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
@@ -40,7 +43,8 @@ type Props = {
   onBack?: () => void;
   onClose: () => void;
   onOpenTask: (taskId: string) => void;
-  onUpdate: (patch: Partial<Task>) => Promise<TaskUpdateResult> | void;
+  onBeginEdit?: () => PlanningTaskEditor;
+  onUpdate: (patch: Partial<Task>, options?: TaskUpdateOptions) => Promise<TaskUpdateResult> | void;
   onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment: (file: File) => Promise<string>;
   onImportGitHubComments: () => void;

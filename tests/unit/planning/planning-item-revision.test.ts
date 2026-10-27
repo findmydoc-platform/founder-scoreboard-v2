@@ -202,7 +202,7 @@ test.each([
 ])("Browser maps transaction error %s", async (code, kind, message) => {
   const db = database();
   db.rpc.mockResolvedValue({ data: null, error: { code, message: "Rejected" } });
-  expect(await browser(db, { title: "Changed title" })).toEqual({ ok: false, error: { kind, message } });
+  expect(await browser(db, { title: "Changed title" })).toEqual({ ok: false, error: { kind, message, ...(code === "P0001" ? { conflictReason: "revision" } : {}) } });
 });
 
 test("GitHub commits normalized evidence and status activities without notifications", async () => {

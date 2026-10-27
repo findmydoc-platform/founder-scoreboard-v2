@@ -33,7 +33,7 @@ export function usePlanningStateOwner(options: {
       adapter: {
         async saveTask(task, patch) {
           const { response, body } = await taskApi.updateTaskRequest(runtime.apiClient, task.id, taskUpdateRequestPayload(patch, task.updatedAt || ""));
-          if (!response.ok) throw Object.assign(new Error(body?.error || "Änderung konnte nicht gespeichert werden."), { status: response.status });
+          if (!response.ok) throw Object.assign(new Error(body?.error || "Änderung konnte nicht gespeichert werden."), { status: response.status, code: body?.code, kind: body?.conflictReason === "revision" ? "versionConflict" : undefined });
           return { task: body?.task || {}, activities: body?.activities };
         },
         async readTaskDetail(taskId) {

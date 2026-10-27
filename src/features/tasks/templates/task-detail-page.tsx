@@ -141,7 +141,8 @@ export function TaskDetailPage({
           commentImportNotice={controller.commentImportNotice}
           commentImportPending={controller.commentImportPendingTaskIds.has(task.id)}
           githubInstallationAvailable={controller.githubInstallationAvailable}
-          onUpdate={(patch) => controller.updateTask(task, patch)}
+          onBeginEdit={() => controller.beginTaskEdit(task.id)}
+          onUpdate={(patch, options) => controller.updateTask(task, patch, options)}
           onAddComment={(comment) => controller.addTaskComment(task, comment)}
           onUploadAttachment={(file) => controller.uploadTaskAttachment(task, file)}
           onImportGitHubComments={() => controller.importGitHubComments(task)}

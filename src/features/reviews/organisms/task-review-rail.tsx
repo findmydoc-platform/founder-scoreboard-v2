@@ -53,6 +53,7 @@ type Props = {
   onDirtyChange?: (dirty: boolean) => void;
   onReview: (task: Task, decision: ReviewDecision, score: number, checklist: TaskReviewChecklist, comment: string) => Promise<boolean> | boolean | void;
   onWithdraw: (task: Task, reason: string) => Promise<boolean> | boolean | void;
+  onEditingStart?: () => void;
   onReviewOwnerChange: (reviewOwnerProfileId: string) => void;
   onJumpToSection: (targetId: string) => void;
 };
@@ -81,6 +82,7 @@ export function TaskReviewRail({
   onReview,
   onWithdraw,
   onReviewOwnerChange,
+  onEditingStart,
   onJumpToSection,
 }: Props) {
   const { draft, dirty, setDraft } = useTaskReviewDraft(task.id, task.reviewRequestedAt || "", currentProfileId);
@@ -136,6 +138,7 @@ export function TaskReviewRail({
               <dd className="min-w-0 font-medium">
                 {canManageReviewOwner ? (
                   <CustomSelect
+                    onOpen={onEditingStart}
                     value={task.reviewOwnerProfileId || ""}
                     onChange={onReviewOwnerChange}
                     disabled={pending}

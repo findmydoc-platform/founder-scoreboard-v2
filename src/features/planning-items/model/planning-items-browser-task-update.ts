@@ -63,7 +63,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     });
     if (!result.ok) {
       const mapped = planningReviewError(result.error, "request");
-      return apiError(mapped.message, mapped.status);
+      return NextResponse.json({ error: mapped.message, ...(result.error.code === "conflict" && result.error.reason === "revision" ? { conflictReason: "revision" } : {}) }, { status: mapped.status });
     }
     const task = planningReviewTaskFromResult(result);
     if (result.status !== "committed" || !task) return apiError("Aufgabe konnte nicht gespeichert werden.", 500);
@@ -88,7 +88,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     });
     if (!result.ok) {
       const mapped = planningReparentError(result.error, "task");
-      return apiError(mapped.message, mapped.status);
+      return NextResponse.json({ error: mapped.message, ...(result.error.code === "conflict" && result.error.reason === "revision" ? { conflictReason: "revision" } : {}) }, { status: mapped.status });
     }
     const task = planningReparentTaskFromResult(result);
     if (result.status !== "committed" || !task) return apiError("Zuordnung konnte nicht gespeichert werden.", 500);
@@ -116,6 +116,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     return NextResponse.json({
       ...(result.error.code ? { code: result.error.code } : {}),
       error: result.error.message,
+      ...(result.error.conflictReason ? { conflictReason: result.error.conflictReason } : {}),
       ...(result.error.lengthErrors ? { lengthErrors: result.error.lengthErrors } : {}),
     }, { status });
   }
@@ -148,7 +149,7 @@ export async function handleBrowserTaskDelete(
     if (result.error.code === "conflict" && result.error.reason === "revision") {
       return apiError("Epic wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
     }
-    return apiError(mapped.message, mapped.status);
+    return NextResponse.json({ error: mapped.message, ...(result.error.code === "conflict" && result.error.reason === "revision" ? { conflictReason: "revision" } : {}) }, { status: mapped.status });
   }
   const item = result.items[0];
   if (!item || item.kind !== "epic") return apiError("Epic konnte nicht gelöscht werden.", 500);

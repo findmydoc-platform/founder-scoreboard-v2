@@ -44,6 +44,7 @@ type BrowserRevisionInput = Readonly<{
 type BrowserRevisionFailure = Readonly<{
   kind: "invalidCommand" | "forbidden" | "notFound" | "conflict" | "dependencyUnavailable";
   message: string;
+  conflictReason?: "revision";
   code?: Extract<AuthzResult, { ok: false }>["code"];
   lengthErrors?: Awaited<ReturnType<typeof validateStoredPlanningContent>>;
 }>;
@@ -60,7 +61,7 @@ const failureKinds: Record<number, BrowserRevisionFailure["kind"]> = {
 function browserFailure(
   message: string,
   status: number,
-  details: Pick<BrowserRevisionFailure, "code" | "lengthErrors"> = {},
+  details: Pick<BrowserRevisionFailure, "code" | "lengthErrors" | "conflictReason"> = {},
 ): Extract<BrowserRevisionResult, { ok: false }> {
   return { ok: false, error: { kind: failureKinds[status] || "dependencyUnavailable", message, ...details } };
 }
@@ -349,7 +350,7 @@ async function commitBrowserRevision(
       if (operationalCorrection && result.error.code === "forbidden" && result.error.reason === "administratorAccessRequired") {
         return administratorFailure(await administratorFailureForSession!());
       }
-      if (result.error.code === "conflict" && result.error.reason === "revision") return browserFailure("Planungselement wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
+      if (result.error.code === "conflict" && result.error.reason === "revision") return browserFailure("Planungselement wurde zwischenzeitlich geändert. Bitte neu laden.", 409, { conflictReason: "revision" });
       if (result.error.code === "notFound") return browserFailure("Planungselement wurde nicht gefunden.", 404);
       if (result.error.code === "invalidCommand") return browserFailure("Planungselement ist ungültig.", 400);
       if (result.error.code === "forbidden") return browserFailure("Planungselement konnte nicht geändert werden.", 403);
@@ -682,7 +683,7 @@ async function commitBrowserRevision(
       return administratorFailure(await administratorFailureForSession!());
     }
     if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision") {
-      return browserFailure("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
+      return browserFailure("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409, { conflictReason: "revision" });
     }
     if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "state") {
       if (reviseResult.error.details?.reviseState === "reviewLocked") {

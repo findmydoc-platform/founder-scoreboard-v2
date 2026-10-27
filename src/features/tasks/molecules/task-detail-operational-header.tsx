@@ -36,6 +36,7 @@ export type TaskDetailOperationalHeaderProps = {
   className?: string;
   actions?: ReactNode;
   onOpenTask?: (taskId: string) => void;
+  onEditingStart?: () => void;
   onUpdate: (patch: Partial<Task>) => void;
 };
 
@@ -293,6 +294,7 @@ export function TaskDetailOperationalHeader({
   actions,
   onOpenTask,
   onUpdate,
+  onEditingStart,
 }: TaskDetailOperationalHeaderProps) {
   const generatedTitleId = useId();
   const resolvedTitleId = titleId || generatedTitleId;
@@ -345,6 +347,7 @@ export function TaskDetailOperationalHeader({
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-slate-200 py-3">
         <div className="flex min-h-10 min-w-0 items-center">
           <TaskStatusControl
+            onEditingStart={onEditingStart}
             status={task.status}
             canChange={canChangeStatus && !pending}
             lockedReason={pending ? "Änderung wird gespeichert." : statusLockedReason}
@@ -359,6 +362,7 @@ export function TaskDetailOperationalHeader({
         {canManageTaskMeta ? (
           <OperationalFact label="Zuständig" emphasized icon={<UserRound size={16} />}>
             <CustomSelect
+              onOpen={onEditingStart}
               value={task.assigneeId || task.assignee}
               options={assigneeOptions(task.taskType, profiles)}
               disabled={pending}
@@ -376,6 +380,7 @@ export function TaskDetailOperationalHeader({
             {task.taskType !== "epic" && (canManageTaskMeta ? (
               <OperationalFact label="Priorität" hideLabel icon={<Flag size={16} />}>
                 <CustomSelect
+                  onOpen={onEditingStart}
                   value={task.priority}
                   options={priorityOptions}
                   disabled={pending}
@@ -393,6 +398,7 @@ export function TaskDetailOperationalHeader({
             {view.showTargetDate && (canManageTaskMeta ? (
               <OperationalFact label={task.taskType === "deliverable" ? "Fixtermin" : "Ziel"} icon={<CalendarDays size={16} />}>
                 <CustomDatePicker
+                  onOpen={onEditingStart}
                   value={view.targetDate || ""}
                   disabled={pending}
                   className="h-8 w-36 text-sm"

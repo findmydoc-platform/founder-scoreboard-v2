@@ -27,6 +27,7 @@ type TaskTableViewProps = {
   canChangeTaskStatus: (task: Task) => boolean;
   statusOptionsForTask: (task: Task) => TaskStatus[];
   onOpenTask: (taskId: string) => void;
+  onBeginTaskEdit?: (task: Task) => void;
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
   onFiltersChange: (filters: PlanningFilters) => void;
 };
@@ -98,6 +99,7 @@ export function TaskTableView({
   statusOptionsForTask,
   onOpenTask,
   onUpdateTask,
+  onBeginTaskEdit,
   onFiltersChange,
 }: TaskTableViewProps) {
   const sortKeys: TaskTableSort[] = ["title", "status", "assignee", "priority", "sprint", "start", "fixedDate"];
@@ -140,6 +142,7 @@ export function TaskTableView({
                   <label className="grid gap-1 text-xs font-semibold text-slate-500">
                     Status
                     <TaskStatusControl
+                      onEditingStart={() => onBeginTaskEdit?.(task)}
                       status={task.status}
                       canChange={canUpdateStatus}
                       onChange={(status) => onUpdateTask(task, { status })}
@@ -149,11 +152,11 @@ export function TaskTableView({
                   </label>
                   <label className="grid gap-1 text-xs font-semibold text-slate-500">
                     Zuständig
-                    <CustomSelect aria-label={`Zuständigkeit für ${task.title} ändern`} value={task.assigneeId || task.assignee} onChange={(value) => onUpdateTask(task, { assignee: value, assigneeId: value })} className="h-11 w-full text-sm" options={taskAssigneeOptions(task.taskType, profiles)} />
+                    <CustomSelect onOpen={() => onBeginTaskEdit?.(task)} aria-label={`Zuständigkeit für ${task.title} ändern`} value={task.assigneeId || task.assignee} onChange={(value) => onUpdateTask(task, { assignee: value, assigneeId: value })} className="h-11 w-full text-sm" options={taskAssigneeOptions(task.taskType, profiles)} />
                   </label>
                   <label className="grid gap-1 text-xs font-semibold text-slate-500 sm:col-span-2">
                     Sprint
-                    <CustomSelect aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => onUpdateTask(task, { sprintId: value })} className="h-11 w-full text-sm" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
+                    <CustomSelect onOpen={() => onBeginTaskEdit?.(task)} aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => onUpdateTask(task, { sprintId: value })} className="h-11 w-full text-sm" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
                   </label>
                 </div>
                 <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
@@ -198,6 +201,7 @@ export function TaskTableView({
                 </DataCell>
                 <DataCell>
                   <TaskStatusControl
+                    onEditingStart={() => onBeginTaskEdit?.(task)}
                     status={task.status}
                     canChange={canUpdateStatus}
                     onChange={(status) => onUpdateTask(task, { status })}
@@ -207,11 +211,11 @@ export function TaskTableView({
                   />
                 </DataCell>
                 <DataCell>
-                  <CustomSelect aria-label={`Zuständigkeit für ${task.title} ändern`} value={task.assigneeId || task.assignee} onChange={(value) => onUpdateTask(task, { assignee: value, assigneeId: value })} className="h-8 w-36 text-xs" options={taskAssigneeOptions(task.taskType, profiles)} />
+                  <CustomSelect onOpen={() => onBeginTaskEdit?.(task)} aria-label={`Zuständigkeit für ${task.title} ändern`} value={task.assigneeId || task.assignee} onChange={(value) => onUpdateTask(task, { assignee: value, assigneeId: value })} className="h-8 w-36 text-xs" options={taskAssigneeOptions(task.taskType, profiles)} />
                 </DataCell>
                 <DataCell><UiBadge tone={priorityBadgeTone(task.priority)}>{task.priority}</UiBadge></DataCell>
                 <DataCell>
-                  <CustomSelect aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => onUpdateTask(task, { sprintId: value })} className="h-8 w-36 text-xs" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
+                  <CustomSelect onOpen={() => onBeginTaskEdit?.(task)} aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => onUpdateTask(task, { sprintId: value })} className="h-8 w-36 text-xs" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
                 </DataCell>
                 <DataCell>{schedule.sprint ? dateRange(schedule.sprint) : "–"}</DataCell>
                 <DataCell>{schedule.fixedDate || "–"}</DataCell>

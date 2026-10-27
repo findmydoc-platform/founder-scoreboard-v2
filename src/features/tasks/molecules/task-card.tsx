@@ -326,11 +326,13 @@ export function RelationBadge({ label, count, tone = "slate" }: { label: string;
 
 function TaskCardStatusMenu({
   onStatusChange,
+  onStatusEditingStart,
   status,
   statusOptions,
   taskTitle,
 }: {
   onStatusChange?: (status: TaskStatus) => void;
+  onStatusEditingStart?: () => void;
   status: string;
   statusOptions?: TaskStatus[];
   taskTitle: string;
@@ -351,8 +353,9 @@ function TaskCardStatusMenu({
 
   return (
     <div data-task-card-interactive="true" className="mt-2.5 flex min-h-10 items-center justify-between gap-3 border-t border-slate-100 pt-2.5">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Status</span>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600">Status</span>
       <CustomActionMenu
+        onOpenChange={(open) => { if (open) onStatusEditingStart?.(); }}
         label={`Status für ${taskTitle} ändern`}
         triggerAriaLabel={`Status für ${taskTitle} ändern`}
         triggerLabel={currentStatus}
@@ -446,6 +449,7 @@ export function TaskCard({
   childItems,
   onOpenTask,
   onStatusChange,
+  onStatusEditingStart,
   onDragStart,
   onDragEnd,
   statusOptions,
@@ -463,6 +467,7 @@ export function TaskCard({
   childItems?: Task[];
   onOpenTask: (taskId: string) => void;
   onStatusChange?: (status: TaskStatus) => void;
+  onStatusEditingStart?: () => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
   onDragEnd?: () => void;
   statusOptions?: TaskStatus[];
@@ -512,7 +517,7 @@ export function TaskCard({
       </TaskReferenceLink>
       {showParentContext && directParentType && (
         <p className="mt-1.5 flex min-w-0 items-center gap-1 text-[11px] font-medium text-slate-500">
-          <span className="shrink-0 text-slate-400">{directParentType} ·</span>
+          <span className="shrink-0 text-slate-600">{directParentType} ·</span>
           <span className={`truncate ${directParent ? "" : "text-amber-700"}`} title={directParent?.title}>
             {directParent?.title || `Ohne ${directParentType}`}
           </span>
@@ -541,6 +546,7 @@ export function TaskCard({
         <span className="shrink-0">{task.taskType === "deliverable" && task.fixedDate ? `Fixtermin ${formatDate(task.fixedDate)}` : task.targetDate || ""}</span>
       </div>
       <TaskCardStatusMenu
+        onStatusEditingStart={onStatusEditingStart}
         onStatusChange={onStatusChange}
         status={task.status}
         statusOptions={statusOptions}

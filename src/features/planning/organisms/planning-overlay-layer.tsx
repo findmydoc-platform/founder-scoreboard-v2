@@ -157,7 +157,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onBack={taskPanelPreviousTask ? backTaskPanel : undefined}
           onClose={closeTaskPanel}
           onOpenTask={(taskId) => openTaskPanel(taskId, "push")}
-          onUpdate={(patch) => updateTask(selectedTask, patch)}
+          onBeginEdit={() => controller.beginTaskEdit(selectedTask.id)}
+          onUpdate={(patch, options) => updateTask(selectedTask, patch, options)}
           onAddComment={(comment) => addTaskComment(selectedTask, comment)}
           onUploadAttachment={(file) => uploadTaskAttachment(selectedTask, file)}
           onImportGitHubComments={() => importGitHubComments(selectedTask)}

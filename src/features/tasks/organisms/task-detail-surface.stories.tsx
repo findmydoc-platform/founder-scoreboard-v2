@@ -381,3 +381,62 @@ export const RequestReviewWithoutEvidence: Story = {
     await expect(args.onUpdate).not.toHaveBeenCalled();
   },
 };
+
+function ConflictEditingHarness(args: React.ComponentProps<typeof TaskDetailSurface>) {
+  const [attempts, setAttempts] = useState(0);
+  const [server] = useState(() => {
+    let current = { ...task, updatedAt: "opaque/r1" };
+    return { read: () => current, replace: (next: typeof current) => { current = next; } };
+  });
+  const [owner] = useState(() => createPlanningState({
+    userId: "conflict-story",
+    initialData: { ...emptyPlanningShellState, tasks: [server.read()] },
+    adapter: {
+      readWorkspace: async () => ({ data: { ...emptyPlanningShellState, tasks: [server.read()] } }),
+      readTaskDetail: async () => ({ model: { revision: "detail", project: emptyPlanningShellState.project, item: server.read(), ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } }),
+      async saveTask(basis, patch) {
+        setAttempts(count => count + 1);
+        if (basis.updatedAt !== server.read().updatedAt) throw Object.assign(new Error("Aufgabe wurde zwischenzeitlich geändert."), { status: 409, kind: "versionConflict" });
+        server.replace({ ...server.read(), ...patch, updatedAt: "opaque/saved" });
+        return { task: server.read() };
+      },
+    },
+  }));
+  const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
+  return <>
+    <button onClick={() => { server.replace({ ...server.read(), title: "Fremder Serverstand", updatedAt: "opaque/r2" }); void owner.planning.refreshWorkspace("planning"); }}>Background update</button>
+    <button onClick={() => { server.replace({ ...server.read(), title: "Noch neuerer Serverstand", updatedAt: "opaque/r3" }); }}>Another unseen update</button>
+    <output aria-label="Write attempts">{attempts}</output>
+    <TaskDetailSurface {...args} task={data.tasks[0]} onBeginEdit={() => owner.planning.beginTaskEdit(task.id)} onUpdate={(patch, options) => {
+      if (!options) throw new Error("No editing context was captured.");
+      return options.resave ? options.editor.resave(patch) : options.editor.save(patch);
+    }} />
+  </>;
+}
+
+export const RetainsOriginalBasisAndResavesDeliberately: Story = {
+  render: args => <ConflictEditingHarness {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.clear(title);
+    await userEvent.type(title, "Mein erhaltener Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Background update" }));
+    await expect(title).toHaveValue("Mein erhaltener Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(await canvas.findByRole("button", { name: "Erneut speichern" })).toBeEnabled();
+    await expect(canvas.getByLabelText("Write attempts")).toHaveTextContent("0");
+    await userEvent.click(canvas.getByText("Aktuellen Serverstand anzeigen"));
+    await expect(canvas.getByText("Fremder Serverstand", { selector: "dd" })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Another unseen update" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
+    await waitFor(() => expect(canvas.getByLabelText("Write attempts")).toHaveTextContent("1"));
+    await expect(title).toHaveValue("Mein erhaltener Entwurf");
+    await userEvent.click(canvas.getByText("Aktuellen Serverstand anzeigen"));
+    await expect(canvas.getByText("Noch neuerer Serverstand", { selector: "dd" })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
+    await waitFor(() => expect(canvas.getByLabelText("Write attempts")).toHaveTextContent("2"));
+    await waitFor(() => expect(canvas.queryByRole("textbox", { name: "Titel" })).not.toBeInTheDocument());
+  },
+};

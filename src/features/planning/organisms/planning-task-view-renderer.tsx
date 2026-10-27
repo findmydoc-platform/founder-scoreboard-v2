@@ -10,7 +10,7 @@ import { taskAssigneeProfile } from "@/features/tasks/model/task-card-presentati
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import { TaskBoardView } from "@/features/tasks/organisms/task-board-view";
-import { UiNotice } from "@/shared/atoms/ui-primitives";
+import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 function TaskViewLoading({ label }: { label: string }) {
   return <UiNotice role="status" tone="info">{label} wird geladen …</UiNotice>;
@@ -53,7 +53,11 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     setView,
     startTaskDrag,
     toggleInitiativeCollapse,
-    updateTask,
+    updateBoardTask,
+    beginBoardTaskEdit,
+    boardTaskEditConflict,
+    resaveBoardTask,
+    reloadBoardTaskConflict,
     view,
     viewerOpenSubIssueIdsByDeliverableId,
     visibleTasks,
@@ -86,6 +90,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
   return (
     <>
+      {boardTaskEditConflict ? <UiNotice tone="info" role="alert" className="mb-4">
+        <p>Die Aufgabe wurde zwischenzeitlich geändert. Deine abgesendete Änderung bleibt erhalten.</p>
+        <p className="mt-2">Aktueller Serverstand: {boardTaskEditConflict.serverTask?.title || "Noch nicht verfügbar"}</p>
+        <UiButton size="lg" type="button" disabled={!boardTaskEditConflict.canResave} onClick={() => { void resaveBoardTask(); }}>Änderung erneut speichern</UiButton>
+        {!boardTaskEditConflict.canResave ? <UiButton size="lg" type="button" onClick={() => { void reloadBoardTaskConflict(); }}>Aktuellen Stand erneut laden</UiButton> : null}
+      </UiNotice> : null}
       {deliveryOnlyViewLabel ? (
         <UiNotice className="mb-4" role="status" tone="info">
           {deliveryOnlyViewLabel} zeigt in dieser Version ausschließlich Deliverables. Deine gewählte Board-Ebene bleibt erhalten.
@@ -107,7 +117,8 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
             assigneeProfileForTask={(task) => taskAssigneeProfile(task, data.profiles)}
             onOpenTask={openTaskPanel}
             onCreateTask={setTaskDialogDefaults}
-            onChangeTaskStatus={(task, status) => updateTask(task, { status })}
+            onBeginTaskEdit={beginBoardTaskEdit}
+            onChangeTaskStatus={(task, status) => { void updateBoardTask(task, { status }); }}
             onDragOverStatus={setDragOverStatus}
             onDropTask={dropTaskOnStatus}
             onDragStart={startTaskDrag}
@@ -148,7 +159,8 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
               canChangeTaskStatus={canChangeTaskStatus}
               statusOptionsForTask={statusOptionsForTask}
               onOpenTask={openTaskPanel}
-              onUpdateTask={updateTask}
+              onBeginTaskEdit={beginBoardTaskEdit}
+              onUpdateTask={updateBoardTask}
               onFiltersChange={setFilters}
             />
           )}

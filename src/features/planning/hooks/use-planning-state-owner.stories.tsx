@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { usePlanningStateOwner } from "./use-planning-state-owner";
+import { usePlanningBoardState } from "./use-planning-board-state";
+import { PlanningTaskViewRenderer } from "../organisms/planning-task-view-renderer";
+import type { PlanningAppController } from "./use-planning-app-controller";
+import { createPlanningState } from "../model/internal/planning-state-owner";
 import { useTaskUpdateCommand } from "@/features/tasks/hooks/use-task-update-command";
 import { emptyPlanningShellState } from "../model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
@@ -67,5 +71,50 @@ export const ConfirmedTaskSurvivesRefreshAndLegacyRollback: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "End session" }));
     await expect(canvas.getByText("Task: cleared")).toBeVisible();
     await expect(canvas.getByText("Cache: cleared")).toBeVisible();
+  },
+};
+
+function BoardEditingStory() {
+  const [attempts, setAttempts] = useState(0);
+  const [server] = useState(() => {
+    let current = taskDetailStoryTask({ id: "board-conflict", title: "Board-Konflikt", status: "Offen", approvalStatus: "approved", updatedAt: "opaque/r1" });
+    return { read: () => current, replace: (next: typeof current) => { current = next; } };
+  });
+  const [owner] = useState(() => createPlanningState({ userId: "board-story", initialData: { ...emptyPlanningShellState, tasks: [server.read()] }, adapter: {
+    readWorkspace: async () => ({ data: { ...emptyPlanningShellState, tasks: [server.read()] } }),
+    readTaskDetail: async () => ({ model: { revision: "detail", project: initial.project, item: server.read(), ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } }),
+    async saveTask(basis, patch) {
+      setAttempts(count => count + 1);
+      if (basis.updatedAt !== server.read().updatedAt) throw Object.assign(new Error("Andere Version"), { status: 409, kind: "versionConflict" });
+      server.replace({ ...server.read(), ...patch, updatedAt: "opaque/r3" });
+      return { task: server.read() };
+    },
+  } }));
+  const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
+  useEffect(() => {
+    const background = () => { server.replace({ ...server.read(), priority: "P1", updatedAt: "opaque/r2" }); void owner.planning.refreshWorkspace("planning"); };
+    window.addEventListener("planning-story-background", background);
+    return () => window.removeEventListener("planning-story-background", background);
+  }, [owner, server]);
+  const [, setError] = useState("");
+  const { updateTask } = useTaskUpdateCommand({ planningState: owner.planning, data, currentProfile: null, canChangeTaskStatus: () => true, canCorrectOperationally: true, canManageFinalTaskStatus: true, canManageTaskMeta: true, githubInstallationAvailable: false, setSaveError: setError, setStatusGuardNotice: () => {}, setStatusGuardTaskId: () => {}, refreshCurrentWorkspaceModel: async () => {}, syncTaskToGitHub: () => {}, startTransition: action => action() });
+  const board = usePlanningBoardState({ planningState: owner.planning, data, canChangeTaskStatus: () => true, updateTask, setStatusGuardNotice: () => {}, setStatusGuardTaskId: () => {} });
+  const controller = { ...board, data, visibleTasks: data.tasks, canChangeTaskStatus: () => true, canManageFinalTaskStatus: true, canManageTaskMeta: true, filters: { initiativeId: "Alle" }, filtersAvailable: true, openTaskPanel: () => {}, planningLevel: "deliverable", planningParentFilterId: "all", selectedTaskId: null, setFilters: () => {}, setTaskDialogDefaults: () => {}, setView: () => {}, viewerOpenSubIssueIdsByDeliverableId: {}, view: "board" } as unknown as PlanningAppController;
+  return <><output aria-label="Board write attempts">{attempts}</output><PlanningTaskViewRenderer controller={controller} /></>;
+}
+export const BoardMenuKeepsItsOpeningBasis: Story = {
+  render: () => <BoardEditingStory />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Status für Board-Konflikt ändern" }));
+    window.dispatchEvent(new Event("planning-story-background"));
+    await waitFor(() => expect(canvas.getByText("P1")).toBeVisible());
+    await userEvent.click(within(document.body).getByRole("menuitem", { name: "Blockiert" }));
+    await expect(await canvas.findByRole("button", { name: "Änderung erneut speichern" })).toBeEnabled();
+    await expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("0");
+    await userEvent.click(canvas.getByRole("button", { name: "Änderung erneut speichern" }));
+    await waitFor(() => expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("1"));
+    await waitFor(() => expect(canvas.queryByRole("button", { name: "Änderung erneut speichern" })).not.toBeInTheDocument());
+    await expect(canvas.getByRole("button", { name: "Status für Board-Konflikt ändern" })).toHaveTextContent("Blockiert");
   },
 };

@@ -97,6 +97,7 @@ export function usePlanningCommandRegistry({
     setEpicDialogDefaults,
   });
   const boardState = usePlanningBoardState({
+    planningState: commandContext.planningState,
     canChangeTaskStatus: commandContext.canChangeTaskStatus,
     data,
     setStatusGuardNotice,

@@ -30,6 +30,7 @@ type Props = {
   onOpenTask: (taskId: string) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
   canRemoveRelation: (relation: TaskRelation) => boolean;
+  onLegacyEditingStart?: () => void;
   onUpdateLegacyDependsOn?: (value: string) => Promise<TaskUpdateResult>;
   onRelationDraftChange: (patch: Partial<TaskRelationshipDraft>) => void;
   onAddRelation: () => Promise<TaskActionResult>;
@@ -54,6 +55,7 @@ export function TaskRelationshipsSection({
   onRemoveRelation,
   canRemoveRelation,
   onUpdateLegacyDependsOn,
+  onLegacyEditingStart,
   onRelationDraftChange,
   onAddRelation,
 }: Props) {
@@ -221,6 +223,7 @@ export function TaskRelationshipsSection({
                 onClick={() => {
                   setLegacyDraft(legacyDependsOn);
                   setLegacyError("");
+                  onLegacyEditingStart?.();
                   setLegacyEditing(true);
                 }}
               >
