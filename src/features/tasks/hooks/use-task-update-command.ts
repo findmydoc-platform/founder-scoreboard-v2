@@ -110,7 +110,7 @@ export function useTaskUpdateCommand({
       return Promise.resolve({ ok: false, error: founderTaskAssignmentGuardMessage(), status: 403 });
     }
 
-    const editor = options?.editor || planningState.beginTaskEdit(task.id);
+    const editor = options?.editor || planningState.beginTaskEdit(task);
     const saving = (options?.resave ? editor.resave(normalizedPatch) : editor.save(normalizedPatch)).then((result) => {
       if (!result.ok) {
         setSaveError(result.error);

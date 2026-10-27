@@ -45,7 +45,7 @@ export interface PlanningState {
   protectedCache(workspace?: AppWorkspace): { tasks: readonly Task[] } | null;
   subscribe(listener: () => void): () => void;
   taskEdits(taskId: string): readonly PlanningTaskEditorView[];
-  beginTaskEdit(taskId: string): PlanningTaskEditor;
+  beginTaskEdit(task: Task | string): PlanningTaskEditor;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskUpdateResult>;
   loadTaskDetail(taskId: string): Promise<{ ok: boolean; error?: string; unavailable?: import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[] }>;
   refreshWorkspace(workspace: AppWorkspace): Promise<boolean>;

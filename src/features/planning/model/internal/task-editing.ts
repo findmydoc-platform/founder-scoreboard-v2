@@ -16,10 +16,11 @@ export function createTaskEditing(adapter: EditingAdapter) {
   return {
     views: (taskId: string) => [...retained.values()].filter(item => item.taskId === taskId).map(item => item.editor.view()),
     clear: () => retained.clear(),
-    begin(taskId: string): PlanningTaskEditor {
+    begin(task: Task | string): PlanningTaskEditor {
+      const taskId = typeof task === "string" ? task : task.id;
       const context = Symbol(taskId);
       const generation = adapter.generation();
-      const openedTask = adapter.currentTask(taskId);
+      const openedTask = typeof task === "string" ? adapter.currentTask(taskId) : task;
       let basis = openedTask ? { ...openedTask } : null;
       let conflictBasis: Task | null = null;
       let phase: PlanningTaskEditorView["phase"] = "editing";
@@ -51,7 +52,10 @@ export function createTaskEditing(adapter: EditingAdapter) {
             phase = "conflict";
             conflictBasis = null;
             try {
-              if ((await adapter.reload(taskId)).ok && sameSession()) { const latest = adapter.currentTask(taskId); conflictBasis = latest ? { ...latest } : null; }
+              if ((await adapter.reload(taskId)).ok && sameSession()) {
+                const latest = adapter.currentTask(taskId);
+                conflictBasis = latest ? { ...latest } : null;
+              }
             } catch { /* Keep the draft; resaving needs a successful authorized read. */ }
           } else if (result.kind === "sessionSuperseded" || result.kind === "authorityEnded") {
             phase = "ended";
@@ -63,13 +67,16 @@ export function createTaskEditing(adapter: EditingAdapter) {
         return result;
       }
       const editor: PlanningTaskEditor = {
-        view: () => ({ phase: sameSession() ? phase : "ended", submitted, serverTask: conflictBasis || adapter.currentTask(taskId), error, canResave: current() && phase === "conflict" && Boolean(conflictBasis?.updatedAt) }),
+        view: () => sameSession()
+          ? { phase, submitted, serverTask: conflictBasis || adapter.currentTask(taskId), error, canResave: current() && phase === "conflict" && Boolean(conflictBasis?.updatedAt) }
+          : { phase: "ended", submitted: null, serverTask: null, error: "Die Sitzung wurde ersetzt.", canResave: false },
         save,
         async refreshConflict() {
           if (!current() || phase !== "conflict") return false;
           try {
             if (!(await adapter.reload(taskId)).ok || !current()) return false;
-            { const latest = adapter.currentTask(taskId); conflictBasis = latest ? { ...latest } : null; }
+            const latest = adapter.currentTask(taskId);
+            conflictBasis = latest ? { ...latest } : null;
             adapter.changed();
             return Boolean(conflictBasis?.updatedAt);
           } catch { return false; }

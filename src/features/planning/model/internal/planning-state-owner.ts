@@ -75,65 +75,65 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     listeners.forEach(listener => listener());
   }
   function saveTaskWithContext(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult> {
-      if (!isActive()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 });
-      if (status.get(task.id) === "unconfirmed") return Promise.resolve({ ok: false, kind: "unconfirmed", error: "Die Speicherung ist noch nicht bestätigt." });
-      const generation = sessionGeneration;
-      const operation = Symbol(task.id);
-      pending.set(operation, { taskId: task.id, patch: { ...patch, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "", githubIssueSyncPendingSince: "" } });
-      status.set(task.id, "saving");
-      publish();
-      const previous = tails.get(task.id);
-      const saved = (async (): Promise<TaskUpdateResult> => {
-        if (previous) {
-          const predecessor = await previous.result;
-          if (!predecessor.ok && (previous.context === context || predecessor.kind === "unconfirmed")) {
-            if (isActive() && status.get(task.id) !== "unconfirmed") { pending.delete(operation); publish(); }
-            return predecessor;
-          }
-          if (predecessor.ok && previous.context === context) task = { ...task, updatedAt: predecessor.task.updatedAt || task.updatedAt };
+    if (!isActive()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 });
+    if (status.get(task.id) === "unconfirmed") return Promise.resolve({ ok: false, kind: "unconfirmed", error: "Die Speicherung ist noch nicht bestätigt." });
+    const generation = sessionGeneration;
+    const operation = Symbol(task.id);
+    pending.set(operation, { taskId: task.id, patch: { ...patch, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "", githubIssueSyncPendingSince: "" } });
+    status.set(task.id, "saving");
+    publish();
+    const previous = tails.get(task.id);
+    const saved = (async (): Promise<TaskUpdateResult> => {
+      if (previous) {
+        const predecessor = await previous.result;
+        if (!predecessor.ok && (previous.context === context || predecessor.kind === "unconfirmed")) {
+          if (isActive() && status.get(task.id) !== "unconfirmed") { pending.delete(operation); publish(); }
+          return predecessor;
         }
+        if (predecessor.ok && previous.context === context) task = { ...task, updatedAt: predecessor.task.updatedAt || task.updatedAt };
+      }
+      if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
+      try {
+        const current = confirmed.tasks.find(item => item.id === task.id);
+        if (current?.updatedAt && current.updatedAt !== task.updatedAt) throw Object.assign(new Error("Aufgabe wurde zwischenzeitlich geändert. Bitte den aktuellen Stand prüfen."), { status: 409, kind: "versionConflict" });
+        const result = await adapter.saveTask(task, patch);
+        if (!result.task.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
         if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
-        try {
-          const current = confirmed.tasks.find(item => item.id === task.id);
-          if (current?.updatedAt && current.updatedAt !== task.updatedAt) throw Object.assign(new Error("Aufgabe wurde zwischenzeitlich geändert. Bitte den aktuellen Stand prüfen."), { status: 409, kind: "versionConflict" });
-          const result = await adapter.saveTask(task, patch);
-          if (!result.task.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
-          if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
-          taskConfirmedAt.set(task.id, ++sequence);
-          const currentAfterWrite = confirmed.tasks.find(item => item.id === task.id);
-          const foreignConfirmed = currentAfterWrite?.updatedAt !== task.updatedAt && currentAfterWrite?.updatedAt !== result.task.updatedAt;
-          const saved = foreignConfirmed ? currentAfterWrite! : { ...result.task, id: task.id };
-          confirmed = task.taskType === "deliverable" && saved.approvalStatus !== undefined
-            ? applyDeliverableApprovalPatch(confirmed, { ...saved, approvalStatus: saved.approvalStatus })
-            : { ...confirmed, tasks: confirmed.tasks.map(item => item.id === task.id ? { ...item, ...saved } : item) };
-          if (result.activities?.length) confirmed = { ...confirmed, taskActivity: [...result.activities, ...confirmed.taskActivity] };
+        taskConfirmedAt.set(task.id, ++sequence);
+        const currentAfterWrite = confirmed.tasks.find(item => item.id === task.id);
+        const foreignConfirmed = currentAfterWrite?.updatedAt !== task.updatedAt && currentAfterWrite?.updatedAt !== result.task.updatedAt;
+        const saved = foreignConfirmed ? currentAfterWrite! : { ...result.task, id: task.id };
+        confirmed = task.taskType === "deliverable" && saved.approvalStatus !== undefined
+          ? applyDeliverableApprovalPatch(confirmed, { ...saved, approvalStatus: saved.approvalStatus })
+          : { ...confirmed, tasks: confirmed.tasks.map(item => item.id === task.id ? { ...item, ...saved } : item) };
+        if (result.activities?.length) confirmed = { ...confirmed, taskActivity: [...result.activities, ...confirmed.taskActivity] };
+        pending.delete(operation);
+        status.set(task.id, [...pending.values()].some(item => item.taskId === task.id) ? "saving" : "saved");
+        publish();
+        return { ok: true, task: result.task };
+      } catch (error) {
+        if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
+        const failure = error && typeof error === "object" ? error as { kind?: string; code?: string } : {};
+        const statusCode = typeof error === "object" && error !== null && "status" in error && typeof error.status === "number" ? error.status : undefined;
+        const kind = failure.kind === "versionConflict" ? "versionConflict"
+          : failure.code === "session_superseded" ? "sessionSuperseded"
+          : failure.code === "administrator_access_expired" || failure.code === "administrator_access_required" ? "authorityEnded"
+          : statusCode && statusCode < 500 ? "rejected" : "unconfirmed";
+        if (kind !== "unconfirmed") {
           pending.delete(operation);
-          status.set(task.id, [...pending.values()].some(item => item.taskId === task.id) ? "saving" : "saved");
-          publish();
-          return { ok: true, task: result.task };
-        } catch (error) {
-          if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
-          const failure = error && typeof error === "object" ? error as { kind?: string; code?: string } : {};
-          const statusCode = typeof error === "object" && error !== null && "status" in error && typeof error.status === "number" ? error.status : undefined;
-          const kind = failure.kind === "versionConflict" ? "versionConflict"
-            : failure.code === "session_superseded" ? "sessionSuperseded"
-            : failure.code === "administrator_access_expired" || failure.code === "administrator_access_required" ? "authorityEnded"
-            : statusCode && statusCode < 500 ? "rejected" : "unconfirmed";
-          if (kind !== "unconfirmed") {
-            pending.delete(operation);
-            status.set(task.id, "rejected");
-          } else {
-            status.set(task.id, "unconfirmed");
-            freshness = "stale";
-          }
-          publish();
-          return { ok: false, kind, code: failure.code, status: statusCode, error: error instanceof Error ? error.message : "Änderung konnte nicht gespeichert werden." };
+          status.set(task.id, "rejected");
+        } else {
+          status.set(task.id, "unconfirmed");
+          freshness = "stale";
         }
-      })();
-      tails.set(task.id, { context, result: saved });
-      void saved.then(() => { if (tails.get(task.id)?.result === saved && status.get(task.id) !== "unconfirmed") tails.delete(task.id); });
-      return saved;
-    }
+        publish();
+        return { ok: false, kind, code: failure.code, status: statusCode, error: error instanceof Error ? error.message : "Änderung konnte nicht gespeichert werden." };
+      }
+    })();
+    tails.set(task.id, { context, result: saved });
+    void saved.then(() => { if (tails.get(task.id)?.result === saved && status.get(task.id) !== "unconfirmed") tails.delete(task.id); });
+    return saved;
+  }
   const editing = createTaskEditing({
     currentTask: taskId => confirmed.tasks.find(task => task.id === taskId) || null,
     saveTask: saveTaskWithContext,

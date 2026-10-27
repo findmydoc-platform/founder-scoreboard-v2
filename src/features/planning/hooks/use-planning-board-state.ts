@@ -33,7 +33,7 @@ export function usePlanningBoardState({
     const existing = taskEditors[task.id];
     if (existing && existing.view().phase === "saving") return existing;
     existing?.close();
-    const editor = planningState.beginTaskEdit(task.id);
+    const editor = planningState.beginTaskEdit(task);
     setTaskEditors(current => ({ ...current, [task.id]: editor }));
     return editor;
   };

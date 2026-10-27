@@ -133,3 +133,34 @@ test("closing an editor leaves already submitted queued edits owned until their 
   await expect(secondSave).resolves.toMatchObject({ ok: true });
   expect(planning.protectedCache()?.tasks[0]).toMatchObject({ title: "Submitted second", updatedAt: "opaque/r3" });
 });
+
+test("a released editor handle cannot expose submitted input or server data after its session ends", async () => {
+  const write = deferred<{ task: Partial<Task> }>();
+  let sessionChanged!: (userId: string | null) => void;
+  const { planning } = createPlanningState({ userId: "user", initialData: initial, adapter: {
+    readWorkspace: async () => ({ data: initial }), saveTask: () => write.promise,
+    subscribeSession: listener => { sessionChanged = listener; return () => {}; },
+  } });
+  const editor = planning.beginTaskEdit(original.id);
+  const saved = editor.save({ title: "Protected input" });
+  sessionChanged(null);
+  expect(editor.view()).toMatchObject({ phase: "ended", submitted: null, serverTask: null, canResave: false });
+  expect(planning.taskEdits(original.id)).toEqual([]);
+  write.resolve({ task: { title: "Late", updatedAt: "opaque/late" } });
+  await expect(saved).resolves.toMatchObject({ ok: false, kind: "sessionSuperseded" });
+  expect(planning.protectedCache()).toBeNull();
+});
+
+test("a task snapshot shown by a caller cannot be rebased by opening its editor after a foreign read", async () => {
+  const foreign = { ...original, title: "New server", updatedAt: "opaque/r2" };
+  let writes = 0;
+  const { planning } = createPlanningState({ userId: "user", initialData: initial, adapter: {
+    readWorkspace: async () => ({ data: { ...initial, tasks: [foreign] } }), readTaskDetail: async () => ({ model: detail(foreign) }),
+    saveTask: async () => { writes++; return { task: foreign }; },
+  } });
+  await planning.refreshWorkspace("planning");
+  const editor = planning.beginTaskEdit(original);
+  await expect(editor.save({ title: "Old shown input" })).resolves.toMatchObject({ ok: false, kind: "versionConflict" });
+  expect(writes).toBe(0);
+  expect(editor.view().submitted).toEqual({ title: "Old shown input" });
+});
