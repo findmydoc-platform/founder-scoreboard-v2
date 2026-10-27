@@ -12,7 +12,9 @@ export type SafeOperation = typeof safeOperations[number];
 export type Phase = { id: string; parentId?: string; operation: SafeOperation; kind: "operation" | "http"; offsetMs: number; durationMs: number; outcome: "success" | "error" };
 // Tuples keep the fixed operation catalog affordable inside the event byte budget.
 export type PhaseAggregates = Partial<Record<SafeOperation, Partial<Record<Phase["kind"], [count: number, totalMs: number, maxMs: number]>>>>;
-export type PhaseMeasurement = { aggregates: PhaseAggregates; slowest: Phase[]; pending: number; failed: boolean };
+export type PhaseNode = { phase: Phase; completed: boolean; hasChildren: boolean };
+export type PhaseChain = { nodes: PhaseNode[]; truncated: boolean };
+export type PhaseMeasurement = { aggregates: PhaseAggregates; slowest: Phase[]; pending: number; failed: boolean; chains?: PhaseChain[]; chainsTruncated?: boolean };
 export type ExternalCalls = { total: number; operations: Partial<Record<SafeOperation, number>>; durationMsByOperation?: Partial<Record<SafeOperation, number>>; complete: boolean };
 export type FailureCategory = "timeout" | "transport_error" | "provider_http_error" | "invalid_response" | "configuration_error" | "unexpected_error";
 export type SafeFailure = {
@@ -79,6 +81,25 @@ function safePhaseAggregates(value: PhaseAggregates): PhaseAggregates {
   return result;
 }
 
+function safeSlowChains(measurement: PhaseMeasurement | undefined) {
+  const phases: Phase[] = [];
+  let truncated = measurement?.chainsTruncated === true;
+  let complete = Boolean(measurement && measurement.pending === 0 && !measurement.failed);
+  for (const chain of measurement?.chains?.slice(0, 8) || []) {
+    if (chain.truncated || chain.nodes.length > 32) { truncated = true; continue; }
+    if (chain.nodes.some(node => !node.completed)) { complete = false; continue; }
+    const path = safePhases(chain.nodes.map(node => node.phase));
+    // Reject the entire path if sanitization or a broken parent loses an ancestor.
+    if (path.length !== chain.nodes.length || path.some((phase, index) => index === 0 ? Boolean(phase.parentId) : phase.parentId !== path[index - 1].id)) {
+      truncated = true; complete = false; continue;
+    }
+    const additions = path.filter(phase => !phases.some(retained => retained.id === phase.id));
+    if (phases.length + additions.length > 32 || Buffer.byteLength(JSON.stringify([...phases, ...additions])) > 6000) { truncated = true; continue; }
+    phases.push(...additions);
+  }
+  return { phases, truncated, complete };
+}
+
 export function safeExternalCalls(value: ExternalCalls | undefined): ExternalCalls | undefined {
   if (!value || !Number.isSafeInteger(value.total) || value.total < 0) return undefined;
   const counts: Partial<Record<SafeOperation, number>> = {};
@@ -143,8 +164,9 @@ function project(value: Completion) {
   const allPhases = [...(proxy?.phases || []), ...safePhases(value.phases)];
   let phases = retainDetail ? allPhases.slice(0, 64) : [];
   let truncated = value.phasesTruncated === true || proxy?.phasesTruncated === true || allPhases.length > 64 || (value.phases?.length || 0) > 64;
-  // Reserve space for the fixed essential envelope, then shorten detail before serialization.
-  while (Buffer.byteLength(JSON.stringify(phases)) > 10_000) { phases = phases.slice(0, -1); truncated = true; }
+  const slowChains = safeSlowChains(value.phaseMeasurement);
+  // Share the existing detail allowance and keep selected chains ahead of chronology.
+  while (Buffer.byteLength(JSON.stringify([...phases, ...slowChains.phases])) > 10_000) { phases = phases.slice(0, -1); truncated = true; }
   const event = {
     schemaVersion: 1, scope: route.scope, timestamp: new Date().toISOString(), severity,
     requestId: value.requestId, instanceId: value.instanceId, stage: value.stage === "proxy" ? "proxy" : "route",
@@ -152,7 +174,7 @@ function project(value: Completion) {
     status: status(value.status), outcome, durationMs: elapsed, observedProcessingMs,
     ...(proxy ? { proxy: { requestId: proxy.requestId, instanceId: proxy.instanceId, durationMs: proxy.durationMs, status: proxy.status, outcome: proxy.outcome } } : {}), ...(failure ? { failure } : {}),
     ...(combined ? { externalCalls: { total: combined.total, operations: combined.operations, providers, durationMsByOperation: combined.durationMsByOperation } } : {}),
-    ...(value.phaseMeasurement ? { phaseAggregates: safePhaseAggregates(value.phaseMeasurement.aggregates), slowestPhases: safePhases(value.phaseMeasurement.slowest).slice(0, 8) } : {}),
+    ...(value.phaseMeasurement ? { phaseAggregates: safePhaseAggregates(value.phaseMeasurement.aggregates), slowestPhases: safePhases(value.phaseMeasurement.slowest).slice(0, 8), slowChainPhases: slowChains.phases } : {}),
     phases, detailRetained: retainDetail, retentionReason,
     ...(safeMembership(value.membership) ? { membership: safeMembership(value.membership) } : {}),
     ...(value.directoryCredential && ["reused", "renewed"].includes(value.directoryCredential.result) ? { directoryCredential: { result: value.directoryCredential.result } } : {}),
@@ -162,6 +184,7 @@ function project(value: Completion) {
     ...(value.region && /^[a-z]{3}[1-9]$/.test(value.region) ? { region: value.region } : {}),
     ...(value.vercelId && /^[a-z]{3}[1-9]::(?:[a-z]{3}[1-9]::)?[a-z0-9]{5}-[0-9]{13}-[a-f0-9]{12}$/.test(value.vercelId) ? { vercelId: value.vercelId } : {}),
     completeness: {
+      slowChainsComplete: slowChains.complete, slowChainsTruncated: slowChains.truncated,
       phaseAggregatesScope: value.stage === "proxy" ? "proxy" : "route",
       phaseAggregatesComplete: Boolean(value.phaseMeasurement && value.phaseMeasurement.pending === 0 && !value.phaseMeasurement.failed),
       correlation: ["complete", "missing", "invalid"].includes(value.completeness.correlation) ? value.completeness.correlation : "invalid",
@@ -176,6 +199,12 @@ function project(value: Completion) {
     event.phases.pop();
     event.completeness.phasesTruncated = true;
     event.completeness.phasesComplete = false;
+  }
+  // Preserve aggregate contracts even when the combined envelope needs less chain detail.
+  while (event.slowChainPhases?.length && Buffer.byteLength(JSON.stringify({ ...event, level: 50, event: "request.completed", msg: "Request completed" })) + 1 > 16 * 1024) {
+    // Drop descendants before parents so every remaining parent reference resolves.
+    event.slowChainPhases.pop();
+    event.completeness.slowChainsTruncated = true;
   }
   return event;
 }
