@@ -9,6 +9,7 @@ export type PlanningShellStateUpdater = (updater: (current: PlanningShellState) 
 export type PlanningStartTransition = (callback: () => void) => void;
 
 export type PlanningCommandContext = {
+  planningState: import("../model/planning-state").PlanningState;
   apiClient: BrowserApiClient;
   applyPlanningShellStateUpdate: PlanningShellStateUpdater;
   canChangeTaskStatus: (task: Task) => boolean;

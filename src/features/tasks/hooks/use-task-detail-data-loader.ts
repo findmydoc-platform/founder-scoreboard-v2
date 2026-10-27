@@ -1,22 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState, type TransitionStartFunction } from "react";
-import { requestTaskDetailData } from "@/features/tasks/model/task-api-client";
-import { applyTaskDetailModel, taskDetailDegradationMessage } from "@/features/tasks/model/task-detail-planning-shell-projection";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { PlanningShellState, Task } from "@/lib/types";
+import { taskDetailDegradationMessage } from "@/features/tasks/model/task-detail-planning-shell-projection";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import type { Task } from "@/lib/types";
 
 type UseTaskDetailDataLoaderOptions = {
-  apiClient: BrowserApiClient;
-  applyPlanningShellStateUpdate: (updater: (current: PlanningShellState) => PlanningShellState) => void;
+  planningState: PlanningState;
   selectedTask: Task | null;
   source: "supabase";
   startTransition: TransitionStartFunction;
 };
 
 export function useTaskDetailDataLoader({
-  apiClient,
-  applyPlanningShellStateUpdate,
+  planningState,
   selectedTask,
   source,
   startTransition,
@@ -49,11 +46,9 @@ export function useTaskDetailDataLoader({
 
     startTransition(async () => {
       try {
-        const { response, body } = await requestTaskDetailData(apiClient, selectedTaskId);
+        const result = await planningState.loadTaskDetail(selectedTaskId);
         if (!active) return;
-        if (!response.ok || !body?.taskDetail) throw new Error(body?.error || "Task-Details konnten nicht geladen werden.");
-
-        applyPlanningShellStateUpdate((current) => applyTaskDetailModel(current, body.taskDetail!));
+        if (!result.ok) return;
         setLoadedTaskIds((current) => {
           if (current.has(selectedTaskId)) return current;
           const next = new Set(current);
@@ -63,7 +58,7 @@ export function useTaskDetailDataLoader({
         setLoadState({
           taskId: selectedTaskId,
           loading: false,
-          error: taskDetailDegradationMessage(body.unavailable || []),
+          error: taskDetailDegradationMessage(result.unavailable || []),
         });
       } catch (caught) {
         if (!active) return;
@@ -78,7 +73,7 @@ export function useTaskDetailDataLoader({
     return () => {
       active = false;
     };
-  }, [apiClient, applyPlanningShellStateUpdate, attempt, loadedTaskIds, selectedTaskId, selectedTaskIsSummary, source, startTransition]);
+  }, [planningState, attempt, loadedTaskIds, selectedTaskId, selectedTaskIsSummary, source, startTransition]);
 
   const selectedStateMatches = loadState.taskId === selectedTaskId;
   const selectedTaskNeedsLoad = Boolean(

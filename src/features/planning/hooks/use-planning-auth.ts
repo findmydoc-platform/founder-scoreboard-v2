@@ -1,4 +1,3 @@
-import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import type { User } from "@supabase/supabase-js";
 import { flushSync } from "react-dom";
@@ -18,6 +17,7 @@ import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/mode
 
 type ProtectedPlanningShellStateCache = {
   authUserId: string;
+  workspace?: AppWorkspace;
   data: PlanningShellState;
   headerData: PlanningHeaderData;
   currentProfile: AuthenticatedProfile | null;
@@ -44,7 +44,8 @@ type UsePlanningAuthOptions = {
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
   initialAuthError?: string;
-  setData: (data: PlanningShellState) => void;
+  setData: (data: PlanningShellState, account: string) => void;
+  clearPlanningState: () => void;
   setHeaderData: (data: PlanningHeaderData) => void;
   normalizePlanningShellState: (data: PlanningShellState) => PlanningShellState;
   normalizePlanningHeaderData: (data?: Partial<PlanningHeaderData> | null) => PlanningHeaderData;
@@ -71,6 +72,7 @@ export function usePlanningAuth({
   initialProtectedDataLoaded = false,
   initialAuthError = "",
   setData,
+  clearPlanningState,
   setHeaderData,
   normalizePlanningShellState,
   normalizePlanningHeaderData,
@@ -132,10 +134,10 @@ export function usePlanningAuth({
     };
 
     const clearProtected = () => {
+      clearPlanningState();
       protectedDataUserIdRef.current = "";
       protectedPlanningShellStateCache = null;
       setServerCurrentProfile(null);
-      setData(emptyPlanningShellState);
       setHeaderData(emptyPlanningHeaderData);
       setProtectedDataLoaded(false);
       onSignedOut();
@@ -165,7 +167,7 @@ export function usePlanningAuth({
     });
     return () => { active = false; unsubscribe(); };
 
-  }, [apiClient, authRequired, initialAuthUser?.id, onSignedOut, setData, setHeaderData]);
+  }, [apiClient, authRequired, initialAuthUser?.id, onSignedOut, setData, clearPlanningState, setHeaderData]);
 
   useEffect(() => {
     if (!authRequired || source !== "supabase" || !authUser) return;
@@ -174,13 +176,13 @@ export function usePlanningAuth({
     let active = true;
     const authUserId = authUser.id;
 
-    if (protectedPlanningShellStateCache?.authUserId === authUserId) {
+    if (protectedPlanningShellStateCache?.authUserId === authUserId && protectedPlanningShellStateCache.workspace === workspace) {
       const cached = protectedPlanningShellStateCache;
       queueMicrotask(() => {
         if (!active) return;
         protectedDataUserIdRef.current = authUserId;
         setServerCurrentProfile(cached.currentProfile);
-        setData(cached.data);
+        setData(cached.data, authUserId);
         setHeaderData(cached.headerData);
         setProtectedDataLoaded(true);
         setAuthError("");
@@ -230,7 +232,7 @@ export function usePlanningAuth({
         if (!response.ok || !payloadData || !payload?.currentProfile) {
           protectedDataUserIdRef.current = "";
           setServerCurrentProfile(null);
-          setData(emptyPlanningShellState);
+          clearPlanningState();
           setHeaderData(emptyPlanningHeaderData);
           setProtectedDataLoaded(false);
           setAuthError(payload?.error || "Planungsdaten konnten nicht geladen werden.");
@@ -240,9 +242,9 @@ export function usePlanningAuth({
         protectedDataUserIdRef.current = authUserId;
         const nextData = normalizePlanningShellState(payloadData);
         const nextHeaderData = normalizePlanningHeaderData(payload.headerData);
-        protectedPlanningShellStateCache = { authUserId, data: nextData, headerData: nextHeaderData, currentProfile: payload.currentProfile };
+        protectedPlanningShellStateCache = { authUserId, workspace, data: nextData, headerData: nextHeaderData, currentProfile: payload.currentProfile };
         setServerCurrentProfile(payload.currentProfile);
-        setData(nextData);
+        setData(nextData, authUserId);
         setHeaderData(nextHeaderData);
         setProtectedDataLoaded(true);
         setAuthError("");
@@ -262,7 +264,7 @@ export function usePlanningAuth({
     return () => {
       active = false;
     };
-  }, [apiClient, authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, setData, setHeaderData, source, taskCount, workspace]);
+  }, [apiClient, authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, setData, clearPlanningState, setHeaderData, source, taskCount, workspace]);
 
   const signIn = useCallback(async (options: SignInOptions = {}) => {
     setAuthBusy(true);
@@ -315,7 +317,7 @@ export function usePlanningAuth({
     setGithubUserConnected(false);
     setWaitingGitHubCommentCount(0);
     setGithubConnectionState("unknown");
-    setData(emptyPlanningShellState);
+    clearPlanningState();
     setHeaderData(emptyPlanningHeaderData);
     setProtectedDataLoaded(false);
     onSignedOut();

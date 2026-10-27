@@ -26,7 +26,6 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
   });
   const { updateTask } = useTaskUpdateCommand({
     ...options,
-    serverUpdatedAtByTask,
     setStatusGuardNotice,
     setStatusGuardTaskId,
     syncTaskToGitHub,

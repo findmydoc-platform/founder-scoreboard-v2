@@ -2,6 +2,7 @@
 
 import type { User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { usePlanningStateOwner } from "./use-planning-state-owner";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { useCurrentWorkspaceModelRefresh } from "@/features/planning/hooks/use-workspace-model-refresh";
 import { usePlanningFocusMode } from "@/features/planning/hooks/use-planning-focus-mode";
@@ -45,8 +46,9 @@ export function usePlanningBootstrapState({
   const safeInitialData = useMemo(() => normalizePlanningShellState(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
-  const [data, setData] = useState(initialClientData);
   const [baseHeaderData, setBaseHeaderData] = useState(safeInitialHeaderData);
+  const stateOwner = usePlanningStateOwner({ initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, setHeaderData: setBaseHeaderData });
+  const { data, setData, planningState } = stateOwner;
   const { workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const viewState = usePlanningViewState({
     initialData: safeInitialData,
@@ -68,7 +70,8 @@ export function usePlanningBootstrapState({
     initialCurrentProfile,
     initialProtectedDataLoaded,
     initialAuthError,
-    setData,
+    setData: stateOwner.acceptProtectedData,
+    clearPlanningState: stateOwner.clearPlanningState,
     setHeaderData: setBaseHeaderData,
     normalizePlanningShellState,
     normalizePlanningHeaderData,
@@ -83,6 +86,9 @@ export function usePlanningBootstrapState({
     currentGithubLogin,
     currentProfileId: auth.serverCurrentProfile?.id || "",
   });
+  useEffect(() => {
+    stateOwner.configure(requestContext.apiClient, workspace, baseHeaderData, auth.serverCurrentProfile);
+  }, [stateOwner, requestContext.apiClient, workspace, baseHeaderData, auth.serverCurrentProfile]);
   const currentProfileId = requestContext.currentProfile?.id || "";
   const notificationsWorkspaceRefreshRef = useRef<() => Promise<void>>(async () => undefined);
   const refreshNotificationsWorkspace = useCallback(
@@ -112,6 +118,7 @@ export function usePlanningBootstrapState({
     && (canManageTaskMeta || canCorrectOperationally || taskBelongsToProfile(task, requestContext.currentProfile))
   ), [canCorrectOperationally, canManageFinalTaskStatus, canManageTaskMeta, requestContext.currentProfile]);
   const dataRefresh = useCurrentWorkspaceModelRefresh({
+    planningState,
     apiClient: requestContext.apiClient,
     authUser: auth.authUser,
     headerData,
@@ -140,6 +147,8 @@ export function usePlanningBootstrapState({
     ...remoteChanges,
     ...requestContext,
     ...viewState,
+    planningState,
+    apiClient: stateOwner.legacyApiClient,
     authAvailable,
     canChangeTaskStatus,
     canCorrectOperationally,

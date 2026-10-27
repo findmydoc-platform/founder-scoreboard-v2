@@ -36,6 +36,7 @@ export function usePlanningAppController({
   });
   const {
     actualProfile,
+    planningState,
     apiClient,
     applyPlanningShellStateUpdate,
     authAvailable,
@@ -115,6 +116,7 @@ export function usePlanningAppController({
   } = bootstrap;
 
   const commandContext = {
+    planningState,
     apiClient,
     applyPlanningShellStateUpdate,
     canChangeTaskStatus,
@@ -143,8 +145,7 @@ export function usePlanningAppController({
     selectedTask,
   } = taskSelection;
   const taskDetailDataLoader = useTaskDetailDataLoader({
-    apiClient,
-    applyPlanningShellStateUpdate,
+    planningState,
     selectedTask,
     source,
     startTransition,

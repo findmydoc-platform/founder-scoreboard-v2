@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useSyncExternalStore } from "react";
 import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-data-loader";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
+import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
-import type { PlanningShellState, Profile } from "@/lib/types";
+import type { Profile } from "@/lib/types";
 import { TaskDetailSurface } from "./task-detail-surface";
 
 const profiles: Profile[] = [
@@ -190,39 +190,40 @@ export const SummaryFailure: Story = {
 };
 
 function SummaryRefreshHarness({ failFirst = false, failSave = false, ...args }: React.ComponentProps<typeof TaskDetailSurface> & { failFirst?: boolean; failSave?: boolean }) {
-  const [data, setData] = useState<PlanningShellState>(() => ({ ...emptyPlanningShellState, tasks: [{ ...task, detailAvailability: "summary" as const }] }));
   const [requests, setRequests] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [, startTransition] = useTransition();
-  const [apiClient] = useState(() => {
+  const [owner] = useState(() => {
     let attempts = 0;
-    return {
-    requestBlob: async () => { throw new Error("Unexpected blob request"); },
-    requestForm: async () => { throw new Error("Unexpected form request"); },
-    requestJson: async <T,>() => {
-      attempts += 1;
-      setRequests((count) => count + 1);
-      if (failFirst && attempts === 1) return { response: new Response(null, { status: 503 }), body: { error: "Details vorübergehend nicht verfügbar." } as T };
-      return {
-        response: new Response(null, { status: 200 }),
-        body: { taskDetail: {
-          revision: "revision", project: emptyPlanningShellState.project, item: task,
-          ancestors: [], children: [], relatedItems: [], people: [], sprints: [],
-          discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
-        } } as T,
-      };
-    },
-  } satisfies BrowserApiClient;
+    return createPlanningState({
+      userId: "story-user",
+      initialData: { ...emptyPlanningShellState, tasks: [{ ...task, detailAvailability: "summary" }] },
+      adapter: {
+        saveTask: async () => { throw new Error("Unexpected save request"); },
+        readWorkspace: async () => ({ data: { ...emptyPlanningShellState, tasks: [{ ...task, detailAvailability: "summary" }] } }),
+        async readTaskDetail() {
+          attempts += 1;
+          setRequests(count => count + 1);
+          if (failFirst && attempts === 1) throw new Error("Details vorübergehend nicht verfügbar.");
+          return { model: {
+            revision: "revision", project: emptyPlanningShellState.project, item: task,
+            ancestors: [], children: [], relatedItems: [], people: [], sprints: [],
+            discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+          } };
+        },
+      },
+    });
   });
+  const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
   const selectedTask = data.tasks[0];
-  const loader = useTaskDetailDataLoader({ apiClient, applyPlanningShellStateUpdate: setData, selectedTask, source: "supabase", startTransition });
+  const loader = useTaskDetailDataLoader({ planningState: owner.planning, selectedTask, source: "supabase", startTransition });
   return (
     <>
-      <button onClick={() => setData((current) => ({ ...current, tasks: [{ ...task, detailAvailability: "summary" }] }))}>Refresh workspace summary</button>
+      <button onClick={() => void owner.planning.refreshWorkspace("planning")}>Refresh workspace summary</button>
       <output aria-label="Detail requests">{requests}</output>
       <output aria-label="Unsaved draft">{String(dirty)}</output>
       <TaskDetailSurface {...args} task={selectedTask} detailDataLoading={loader.selectedTaskDetailLoading} detailDataError={loader.selectedTaskDetailError} onRetryDetailData={loader.retrySelectedTaskDetail} onOverviewDirtyChange={setDirty} onUpdate={failSave ? async () => {
-        setData((current) => ({ ...current, tasks: [{ ...task, detailAvailability: "summary" }] }));
+        void owner.planning.refreshWorkspace("planning");
         return { ok: false, status: 409, error: "Aufgabe wurde zwischenzeitlich geändert." };
       } : args.onUpdate} />
     </>
