@@ -193,9 +193,9 @@ it("authority loss after credential read blocks refresh dispatch", () => withSta
   expect(f.attempts.filter(entry => entry.path === "/login/oauth/access_token" || entry.path === "/rest/v1/rpc/claim_github_user_refresh")).toHaveLength(0);
 }), 30_000);
 
-it("pending-count failure keeps its zero fallback while a final live authority change still blocks the result", () => withStatus(async f => {
+it("pending-count failure remains unknown while a final live authority change still blocks the result", () => withStatus(async f => {
   f.beforeLocal(async request => new URL(request.url).pathname === "/rest/v1/task_comment_github_deliveries" ? Response.json({ message: "Synthetic count failure" }, { status: 500 }) : undefined);
-  expect(await (await f.get()).json()).toMatchObject({ waitingCommentCount: 0, user: { connected: true } });
+  expect(await (await f.get()).json()).toMatchObject({ waitingCommentCount: null, user: { connected: true } });
   const held = await f.authorize();
   if (!held.ok) throw new Error("Expected admitted status resource");
   f.beforeLocal(async request => {

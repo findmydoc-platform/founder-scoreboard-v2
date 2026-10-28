@@ -14,6 +14,6 @@ test("a GitHub status network failure degrades to an unavailable browser snapsho
   assert.deepEqual(snapshot, {
     githubInstallationAvailable: false,
     githubUserConnected: false,
-    waitingGitHubCommentCount: 0,
+    waitingGitHubCommentCount: null,
   });
 });
