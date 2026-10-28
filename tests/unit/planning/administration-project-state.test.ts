@@ -163,3 +163,14 @@ test("an unknown Project save leaves an independent person eligibility save usab
     expect(personWrites).toBe(1);
     expect(editor.view().phase).toBe("unconfirmed");
 });
+
+
+test.each([["administration_project_conflict","versionConflict","conflict"],["session_superseded","sessionSuperseded","unconfirmed"]] as const)("Project 409 %s retains its actual meaning",async(code,kind,phase)=>{
+ vi.useFakeTimers();vi.setSystemTime(now);let writes=0;
+ const owner=createPlanningState({userId:"user",initialData:data,initialAdministrationAuthority:authority,adapter:{saveTask:async()=>({task:{}}),readWorkspace:async()=>null,readAdministration:async()=>model,saveAdministrationProject:async()=>{writes++;throw Object.assign(new Error("Rejected request"),{status:409,code});}}});await owner.planning.loadAdministration();const editor=owner.planning.beginAdministrationProjectEdit(project);await expect(editor.save({...project,number:8})).resolves.toMatchObject({kind});expect(editor.view().phase).toBe(phase);expect(writes).toBe(1);
+});
+
+test("an older own Project receipt confirms its operation without replacing a later foreign complete Project tuple",async()=>{
+ vi.useFakeTimers();vi.setSystemTime(now);let reads=0;const write=deferred<{project:typeof project}>(),foreign={...project,number:9,mentionTeamSlug:"foreign-team"};
+ const owner=createPlanningState({userId:"user",initialData:data,initialAdministrationAuthority:authority,adapter:{saveTask:async()=>({task:{}}),readWorkspace:async()=>null,readAdministration:async()=>{reads++;if(reads===1)return model;if(reads===2)return{...model,githubProject:foreign};throw Object.assign(new Error("Reload unavailable"),{status:503});},saveAdministrationProject:()=>write.promise}});await owner.planning.loadAdministration();const editor=owner.planning.beginAdministrationProjectEdit(project),saving=editor.save({...project,number:8});await owner.planning.loadAdministration();write.resolve({project:{...project,number:8}});await expect(saving).resolves.toEqual({ok:true});expect(editor.view().phase).toBe("saved");expect(owner.planning.administration().model?.githubProject).toEqual(foreign);expect(owner.planning.sprintWorkspace().model.project.githubProjectNumber).toBe(9);await expect(editor.save({...project,number:10})).resolves.toMatchObject({kind:"versionConflict"});
+});
