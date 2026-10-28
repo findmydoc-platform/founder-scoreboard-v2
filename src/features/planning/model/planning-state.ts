@@ -1,3 +1,4 @@
+import type { PlanningTaskBlockerReports } from "@/features/tasks/model/task-blocker-report";
 import type { PrivateWorkweekPlanningState } from "@/features/team-workweek/model/private-workweek-planning-state";
 import type { PublishedWorkweekCalendars } from "@/features/team-workweek/model/published-workweek-calendar-state";
 import type { Task, TaskComment, TaskExternalComment, TaskBlocker, TaskRelation, TaskActivity, TaskReview } from "@/lib/types";
@@ -58,7 +59,10 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 import type { AdministrationPeopleState } from "@/features/administration/model/administration-state";
-export interface PlanningState extends AdministrationPeopleState, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+export interface PlanningState extends AdministrationPeopleState, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+  beginBacklogOrder(tasks: readonly Task[]): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
+  backlogOrders(): readonly import("@/features/backlog/model/backlog-ordering").BacklogOrderView[];
+  resumeBacklogOrder(id: string): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor | null;
   beginBacklogAssignment(tasks: readonly Task[], sprints: readonly import("@/lib/types").Sprint[], bulk: boolean): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor;
   backlogAssignments(): readonly import("@/features/backlog/model/backlog-assignment").BacklogAssignmentView[];
   resumeBacklogAssignment(id: string): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor | null;

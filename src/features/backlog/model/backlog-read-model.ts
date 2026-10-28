@@ -24,20 +24,3 @@ export type BacklogLoadResult =
 export interface BacklogReadModel {
   load(context: BacklogReadContext): Promise<BacklogLoadResult>;
 }
-
-export type BacklogAction =
-  | { type: "modelLoaded"; model: BacklogModel }
-  | { type: "itemsPatched"; patches: readonly (Partial<Task> & Pick<Task, "id">)[] };
-
-export function backlogModelReducer(model: BacklogModel, action: BacklogAction): BacklogModel {
-  if (action.type === "modelLoaded") return action.model;
-  const patchById = new Map(action.patches.map((patch) => [patch.id, patch]));
-  if (!patchById.size) return model;
-  return {
-    ...model,
-    items: model.items.map((item) => {
-      const patch = patchById.get(item.id);
-      return patch ? { ...item, ...patch } : item;
-    }),
-  };
-}

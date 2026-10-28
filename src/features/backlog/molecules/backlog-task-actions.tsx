@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, GripVertical } from "lucide-react";
 import { useState, type DragEvent } from "react";
-import type { BacklogMoveAction, BacklogMoveResult } from "@/features/backlog/hooks/use-backlog-ordering";
+import type { BacklogMoveAction, BacklogMoveResult } from "@/features/backlog/model/backlog-ordering";
 import type { BacklogItem, BacklogSprintBucket } from "@/features/backlog/model/backlog-view-model";
 import { buildBacklogSprintActionGroup } from "@/features/backlog/molecules/backlog-sprint-actions";
 import type { Sprint, Task } from "@/lib/types";
@@ -10,13 +10,14 @@ type BacklogTaskActionsProps = {
   buckets: BacklogSprintBucket[];
   canManageBacklog: boolean;
   canReorder: boolean;
+  orderedTasks: Task[];
   index: number;
   isReordering: boolean;
   item: BacklogItem;
   onAssignTaskToSprint: (task: Task, sprint: Sprint | null) => void;
   onDragEnd: () => void;
   onDragStart: (event: DragEvent<HTMLButtonElement>, taskId: string) => void;
-  onMoveTask: (taskId: string, action: BacklogMoveAction) => BacklogMoveResult;
+  onMoveTask: (taskId: string, action: BacklogMoveAction, shown?: readonly Task[]) => BacklogMoveResult;
   total: number;
   sprintById: ReadonlyMap<string, Sprint>;
 };
@@ -32,6 +33,7 @@ export function BacklogTaskActions({
   buckets,
   canManageBacklog,
   canReorder,
+  orderedTasks,
   index,
   isReordering,
   item,
@@ -42,11 +44,11 @@ export function BacklogTaskActions({
   total,
   sprintById,
 }: BacklogTaskActionsProps) {
-  const [basis, setBasis] = useState<{ task: Task; buckets: BacklogSprintBucket[]; sprints: ReadonlyMap<string, Sprint>; assign: typeof onAssignTaskToSprint } | null>(null);
+  const [basis, setBasis] = useState<{ task: Task; buckets: BacklogSprintBucket[]; sprints: ReadonlyMap<string, Sprint>; assign: typeof onAssignTaskToSprint; orderedTasks: Task[]; index: number; total: number } | null>(null);
   const rankReason = rankDisabledReason({ canManageBacklog, canReorder, isReordering });
   const rankDisabled = Boolean(rankReason);
-  const topDisabled = rankDisabled || index === 0;
-  const bottomDisabled = rankDisabled || index === total - 1;
+  const topDisabled = rankDisabled || (basis?.index ?? index) === 0;
+  const bottomDisabled = rankDisabled || (basis?.index ?? index) === (basis?.total ?? total) - 1;
   const sprintGroups: CustomActionMenuGroup[] = [
     {
       id: "rank",
@@ -58,7 +60,7 @@ export function BacklogTaskActions({
           icon: <ChevronsUp size={15} />,
           disabled: topDisabled,
           disabledReason: topDisabled ? rankReason || "Die Aufgabe steht bereits an erster Stelle." : undefined,
-          onSelect: () => onMoveTask(item.task.id, "top"),
+          onSelect: () => onMoveTask(item.task.id, "top", basis?.orderedTasks || orderedTasks),
         },
         {
           id: "up",
@@ -66,7 +68,7 @@ export function BacklogTaskActions({
           icon: <ArrowUp size={15} />,
           disabled: topDisabled,
           disabledReason: topDisabled ? rankReason || "Die Aufgabe steht bereits an erster Stelle." : undefined,
-          onSelect: () => onMoveTask(item.task.id, "up"),
+          onSelect: () => onMoveTask(item.task.id, "up", basis?.orderedTasks || orderedTasks),
         },
         {
           id: "down",
@@ -74,7 +76,7 @@ export function BacklogTaskActions({
           icon: <ArrowDown size={15} />,
           disabled: bottomDisabled,
           disabledReason: bottomDisabled ? rankReason || "Die Aufgabe steht bereits an letzter Stelle." : undefined,
-          onSelect: () => onMoveTask(item.task.id, "down"),
+          onSelect: () => onMoveTask(item.task.id, "down", basis?.orderedTasks || orderedTasks),
         },
         {
           id: "bottom",
@@ -82,7 +84,7 @@ export function BacklogTaskActions({
           icon: <ChevronsDown size={15} />,
           disabled: bottomDisabled,
           disabledReason: bottomDisabled ? rankReason || "Die Aufgabe steht bereits an letzter Stelle." : undefined,
-          onSelect: () => onMoveTask(item.task.id, "bottom"),
+          onSelect: () => onMoveTask(item.task.id, "bottom", basis?.orderedTasks || orderedTasks),
         },
       ],
     },
@@ -107,7 +109,7 @@ export function BacklogTaskActions({
         onDragStart: (event) => onDragStart(event, item.task.id),
         title: canReorder ? "Ziehen oder Aktionsmenü öffnen" : "Aktionsmenü öffnen",
       }}
-      onOpenChange={open => setBasis(open ? { task: structuredClone(item.task), buckets: structuredClone(buckets), sprints: new Map(sprintById), assign: onAssignTaskToSprint } : null)}
+      onOpenChange={open => setBasis(open ? { task: structuredClone(item.task), buckets: structuredClone(buckets), sprints: new Map(sprintById), assign: onAssignTaskToSprint, orderedTasks: structuredClone(orderedTasks), index, total } : null)}
       groups={sprintGroups}
     />
   );

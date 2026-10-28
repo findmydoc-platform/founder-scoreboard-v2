@@ -312,11 +312,11 @@ export function backlogMoveUpdatesFromChanges(changes: readonly { field: string;
   return backlogUpdates(updates) || [];
 }
 
-export function backlogMoveError(error: PlanningError): Readonly<{ message: string; status: number }> {
+export function backlogMoveError(error: PlanningError): Readonly<{ message: string; status: number; code?: string }> {
   if (error.code === "invalidCommand") return { message: "Backlog-Verschiebung ist ungültig.", status: 400 };
   if (error.code === "forbidden") return { message: "Nur CEO oder Deputy können die Backlog-Reihenfolge ändern.", status: 403 };
   if (error.code === "notFound") return { message: "Mindestens eine Aufgabe wurde nicht gefunden.", status: 404 };
-  if (error.code === "conflict" && error.reason === "revision") return { message: "Backlog wurde parallel geändert. Bitte neu laden.", status: 409 };
+  if (error.code === "conflict" && error.reason === "revision") return { message: "Backlog wurde parallel geändert. Bitte neu laden.", status: 409, code: "backlog_order_revision_conflict" };
   if (error.code === "conflict") return { message: "Backlog hat sich geändert. Bitte neu laden.", status: 409 };
   return { message: "Backlog-Reihenfolge konnte nicht dauerhaft gespeichert werden.", status: 500 };
 }

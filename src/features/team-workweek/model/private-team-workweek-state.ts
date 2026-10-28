@@ -1,6 +1,6 @@
 "use client";
 
-import type { PrivateWorkweekContext } from "./private-workweek-planning-state";
+import type { PrivateWorkweekContext, PrivateWorkweekView } from "./private-workweek-planning-state";
 import type { PlanningState } from "@/features/planning/model/planning-state";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -28,15 +28,38 @@ import { formatDate } from "@/lib/display";
 import { berlinCivilInstant } from "./team-workweek-calendar";
 import { selectedWorkweek, workweekStart } from "./team-workweek-week";
 
-export type WorkweekOperation = "load" | "save" | "loadConflict" | "resolveConflict" | "publish" | "restart" | "reconcile";
+export type WorkweekOperation = "load" | "save" | "loadConflict" | "publish" | "restart" | "reconcile";
 export type WorkweekTransport = {
   request<T>(operation: WorkweekOperation, input?: { week?: string; json?: unknown }): Promise<BrowserApiJsonResult<T>>;
-  published(): void;
 };
 
 function confirmedActivation(effectiveAt?: string | null, effectiveUntil?: string | null) {
   if (!effectiveAt) return "";
   return ` Gültig ab ${formatTeamWorkweekActivation(effectiveAt)}.${effectiveUntil ? ` Die geplante Änderung am ${new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", dateStyle: "medium" }).format(new Date(effectiveUntil))} bleibt erhalten.` : ""}`;
+}
+
+function reconciliationNotice(state: PrivateWorkweekView, refreshRequired: boolean) {
+  return state.reconciliation.phase === "unconfirmed"
+    ? "Die Abgleichsbestätigung ist ausstehend. Der zuletzt bestätigte Teamstand bleibt sichtbar. Lade den aktuellen Stand; die Prüfung wiederholt keinen Google-Abgleich."
+    : state.reconciliation.phase === "reconciling" ? "Google-Abgleich läuft. Der zuletzt bestätigte Teamstand bleibt sichtbar."
+    : state.reconciliation.phase === "confirmed" && refreshRequired ? "Der Google-Abgleich ist bestätigt. Lade den aktuellen Stand vor weiteren Änderungen."
+    : state.reconciliation.phase === "delayed" || state.reconciliation.phase === "conflict"
+      ? state.reconciliation.result?.recovery === "reconnect" ? "Der Google-Abgleich ist verzögert. Verbinde Google erneut; der bestätigte Teamstand bleibt sichtbar."
+        : state.reconciliation.result?.recovery === "restart" ? "Die Ausgangsversion wurde geändert. Beginne mit dem aktuellen Stand neu; deine Eingaben bleiben erhalten."
+        : state.reconciliation.result?.recovery === "resolve_conflict" ? "Der Google-Abgleich hat einen Konflikt festgestellt. Prüfe die Varianten; der bestätigte Teamstand bleibt sichtbar."
+        : "Der Google-Abgleich ist verzögert. Der bestätigte Teamstand bleibt sichtbar; du kannst den Abgleich bewusst erneut starten."
+      : "";
+}
+
+function conflictDecisionNotice(state: PrivateWorkweekView, refreshRequired: boolean) {
+  const decision = state.conflictDecision;
+  if (decision.phase === "unconfirmed") return "Die Konfliktentscheidung ist noch nicht bestätigt. Prüfe den aktuellen Stand; die Entscheidung wird dabei nicht wiederholt.";
+  if (decision.phase === "preparing") return decision.result?.recovery === "reconnect"
+    ? "Die gewählte Konfliktvariante bleibt in Vorbereitung. Verbinde Google erneut; der letzte bestätigte Teamstand bleibt aktiv."
+    : "Die gewählte Konfliktvariante bleibt in Vorbereitung. Der letzte bestätigte Teamstand bleibt aktiv; du kannst dieselbe Variante bewusst fortsetzen.";
+  if (decision.phase === "published" && refreshRequired) return "Die Konfliktveröffentlichung ist bestätigt. Lade den aktuellen Stand vor weiteren Änderungen.";
+  if (decision.phase === "stale") return decision.error;
+  return "";
 }
 
 function initialDraft(effectiveFrom = nextMondayIso()): PrivateTeamWorkweekDraft {
@@ -59,7 +82,11 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
   const [currentEditBase, setCurrentEditBase] = useState<TeamWorkweekEditBase | null>(context?.editBase || null);
   const [elapsedSuccessorId, setElapsedSuccessorId] = useState<string | null>(null);
   const preparedSuccessor = context?.preparedSuccessor?.id === elapsedSuccessorId ? null : context?.preparedSuccessor || null;
-  const [conflict, setConflict] = useState<TeamWorkweekConflict | null>(null);
+  const [displayedConflict, setConflict] = useState<TeamWorkweekConflict | null>(shared.conflict);
+  const conflictResolved = shared.conflictDecision.phase === "published" && shared.conflictDecision.submitted?.conflictId === displayedConflict?.id && shared.conflictDecision.submitted?.conflictRevision === displayedConflict?.conflictRevision;
+  const conflictWithheld = ["not-loaded", "forbidden"].includes(shared.readStatus) || ["not-loaded", "forbidden"].includes(shared.conflictReadStatus);
+  const conflict = conflictWithheld || conflictResolved ? null : displayedConflict;
+  const conflictChanged = Boolean(conflict && shared.conflictReadStatus === "current" && (shared.conflict?.id !== conflict.id || shared.conflict?.conflictRevision !== conflict.conflictRevision));
   const restartAvailable = context?.restartAvailable || false;
   const [localContextRefreshRequired, setContextRefreshRequired] = useState(false);
   const contextRefreshRequired = localContextRefreshRequired || shared.contextRefreshRequired;
@@ -74,7 +101,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
   const [draft, setDraft] = useState<PrivateTeamWorkweekDraft>(() => retainedSubmission() || loadedDraft());
   const [baseline, setBaseline] = useState<PrivateTeamWorkweekDraft>(loadedDraft);
   const [localPending, setPending] = useState(true);
-  const sharedOperating = shared.save.phase === "saving" || shared.publication.phase === "publishing";
+  const sharedOperating = shared.save.phase === "saving" || shared.publication.phase === "publishing" || shared.reconciliation.phase === "reconciling" || shared.conflictDecision.phase === "resolving";
   const pending = localPending || sharedOperating;
   const [operating, setOperating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -124,7 +151,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
   }, []);
 
   const load = useCallback(async (preservedDraft?: PrivateTeamWorkweekDraft, requestedWeek?: string, duringOperation = false) => {
-    if ((mutationPending.current || planningState.privateWorkweek().save.phase === "saving" || planningState.privateWorkweek().publication.phase === "publishing") && !duringOperation) return false;
+    if ((mutationPending.current || planningState.privateWorkweek().save.phase === "saving" || planningState.privateWorkweek().publication.phase === "publishing" || planningState.privateWorkweek().reconciliation.phase === "reconciling" || planningState.privateWorkweek().conflictDecision.phase === "resolving") && !duringOperation) return false;
     const sequence = ++loadSequence.current;
     setPending(true);
     setMessage("");
@@ -181,7 +208,9 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
       if (mounted.current && sequence === loadSequence.current) {
         setContextRefreshRequired(true);
         setMessageTone("warning");
-        setMessage(error instanceof Error ? error.message : "Private Grundwoche konnte nicht geladen werden.");
+        const failure = error instanceof Error ? error.message : "Private Grundwoche konnte nicht geladen werden.";
+        const retained = conflictDecisionNotice(planningState.privateWorkweek(), true) || reconciliationNotice(planningState.privateWorkweek(), true);
+        setMessage(retained ? `${retained} ${failure}` : failure);
       }
       return false;
     } finally {
@@ -191,7 +220,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
 
   const awaitingOperationLoad = useRef(false);
   useEffect(() => {
-    if (planningState.privateWorkweek().save.phase === "saving" || planningState.privateWorkweek().publication.phase === "publishing") {
+    if (planningState.privateWorkweek().save.phase === "saving" || planningState.privateWorkweek().publication.phase === "publishing" || planningState.privateWorkweek().reconciliation.phase === "reconciling" || planningState.privateWorkweek().conflictDecision.phase === "resolving") {
       awaitingOperationLoad.current = true;
       return;
     }
@@ -353,18 +382,17 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
 
   // A confirmed server outcome is separate from a usable editing context.
   // All operations discharge the same refresh obligation before allowing another write.
-  const completeOperation = async ({ preservedDraft, week, success, refreshFailure, published = false }: {
+  const completeOperation = async ({ preservedDraft, week, success, refreshFailure }: {
     preservedDraft?: PrivateTeamWorkweekDraft;
     week?: string;
     success: string;
     refreshFailure?: string;
-    published?: boolean;
   }) => {
-    if (published) transport.published();
     const refreshed = await refreshContext(preservedDraft, week);
     if (!mounted.current) return false;
-    setMessageTone(refreshed ? "success" : "warning");
-    setMessage(refreshed && (planningState.privateWorkweek().save.phase === "unconfirmed" || planningState.privateWorkweek().publication.phase === "unconfirmed") ? "Der aktuelle Stand ist geladen. Die Bestätigung bleibt ausstehend; deine gesendeten Eingaben bleiben erhalten. Eine Prüfung wiederholt keine Veröffentlichung." : refreshed ? success : refreshFailure || "Die Änderung ist bestätigt. Lade den aktuellen Stand vor dem Speichern erneut; deine Eingaben bleiben erhalten.");
+    const unknown = planningState.privateWorkweek().reconciliation.phase === "unconfirmed";
+    setMessageTone(refreshed && !unknown ? "success" : "warning");
+    setMessage(refreshed && unknown ? "Der aktuelle Stand ist geladen. Die Abgleichsbestätigung bleibt ausstehend. Die Prüfung wiederholt keinen Google-Abgleich." : refreshed && (planningState.privateWorkweek().save.phase === "unconfirmed" || planningState.privateWorkweek().publication.phase === "unconfirmed") ? "Der aktuelle Stand ist geladen. Die Bestätigung bleibt ausstehend; deine gesendeten Eingaben bleiben erhalten. Eine Prüfung wiederholt keine Veröffentlichung." : refreshed ? success : refreshFailure || "Die Änderung ist bestätigt. Lade den aktuellen Stand vor dem Speichern erneut; deine Eingaben bleiben erhalten.");
     return refreshed;
   };
 
@@ -534,26 +562,24 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
   };
 
   const resolveConflict = async (decision: "founderops" | "google") => {
-    if (!conflict || conflict[decision].supported === false || contextRefreshRequired || mutationPending.current || pending) return false;
+    if (!conflict || conflict[decision].supported === false || mutationPending.current || pending) return false;
     if (!beginOperation()) return false;
     setMessage("");
     try {
-      const { response, body } = await transport.request<{
-        publication?: { status: "preparing" | "published"; recovery: string | null; effectiveAt?: string | null; effectiveUntil?: string | null };
-        error?: string;
-      }>("resolveConflict", {
-        json: { conflictId: conflict.id, conflictRevision: conflict.conflictRevision, decision },
-      });
+      const result = await planningState.resolveWorkweekConflict(conflict, decision);
+      const body = result.value;
+      const response = { ok: result.status >= 200 && result.status < 300, status: result.status };
       if ((!response.ok && response.status !== 202) || !body?.publication) {
+        if (response.status === 409) setContextRefreshRequired(true);
         throw new Error(body?.error || "Konfliktentscheidung konnte nicht bestätigt werden.");
       }
       if (body.publication.status !== "published") {
-        if (!await refreshContext()) return false;
+        if (!await refreshContext(dirty ? draft : undefined, dirty ? selectedWeekStart : undefined)) return false;
         setMessageTone("warning");
-        setMessage("Die gewählte Variante bleibt in Vorbereitung. Der letzte bestätigte Teamstand bleibt aktiv; du kannst sicher erneut versuchen.");
+        setMessage(conflictDecisionNotice(planningState.privateWorkweek(), false));
         return false;
       }
-      return await completeOperation({ published: true,
+      return await completeOperation({ preservedDraft: dirty ? draft : undefined, week: dirty ? selectedWeekStart : undefined,
         success: `${decision === "founderops" ? "Deine FounderOps-Variante" : "Die Google-Variante"} wurde erneut geprüft und auf beiden Seiten bestätigt.${confirmedActivation(body.publication.effectiveAt, body.publication.effectiveUntil)}`,
       });
     } catch (error) {
@@ -576,6 +602,8 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
     }
     if (!beginOperation()) return false;
     setMessage("");
+    const preservedDraft = dirty ? draft : undefined;
+    const retainedWeek = dirty ? selectedWeekStart : undefined;
     try {
       const { response, body } = await transport.request<{
         reconciliation?: {
@@ -593,13 +621,13 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
         throw new Error(body?.error || "Google-Abgleich konnte nicht abgeschlossen werden.");
       }
       if (body.reconciliation.state === "updated" || body.reconciliation.state === "unchanged") {
-        return await completeOperation({ published: body.reconciliation.state === "updated",
+        return await completeOperation({ preservedDraft, week: retainedWeek,
           success: body.reconciliation.state === "updated"
             ? `Google-Änderung bestätigt.${confirmedActivation(body.reconciliation.effectiveAt, body.reconciliation.effectiveUntil)}`
             : "Die von FounderOps angelegten Google-Serien sind unverändert. Selbst angelegte Google-Termine wurden nicht übernommen.",
         });
       }
-      if (!await refreshContext()) return false;
+      if (!await refreshContext(preservedDraft, retainedWeek)) return false;
       const lastSuccessfulSync = body.reconciliation.lastSuccessfulSyncAt
         ? ` Letzter erfolgreicher Sync: ${new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(body.reconciliation.lastSuccessfulSyncAt))}.`
         : "";
@@ -637,7 +665,11 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
   const reconciliationState = latestPublished?.googleReconciliationState;
   const showConfirmedTeamBaseline = Boolean(conflict || syncDelayed || reconciliationState === "conflict" || reconciliationState === "delayed");
   const latestIsPrepared = Boolean(latestPublished && (latestPublished.effectiveAt ? new Date(latestPublished.effectiveAt) > new Date() : latestPublished.effectiveFrom > berlinTodayIso()));
-  const badge = shared.save.phase === "unconfirmed" || shared.publication.phase === "unconfirmed"
+  const badge = shared.conflictDecision.phase === "unconfirmed"
+    ? { tone: "amber" as const, label: "Konfliktbestätigung ausstehend" }
+    : shared.reconciliation.phase === "unconfirmed"
+    ? { tone: "amber" as const, label: "Abgleichsbestätigung ausstehend" }
+    : shared.save.phase === "unconfirmed" || shared.publication.phase === "unconfirmed"
     ? { tone: "amber" as const, label: "Bestätigung ausstehend" }
     : contextRefreshRequired
     ? { tone: "amber" as const, label: "Stand nicht aktuell" }
@@ -654,6 +686,8 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
             : latestPublished
               ? { tone: "emerald" as const, label: "Veröffentlicht" }
               : { tone: "slate" as const, label: "Noch nicht eingerichtet" };
+  const conflictContextReady = shared.readStatus === "current"
+    && [shared.save, shared.publication, shared.reconciliation].every(operation => operation.phase !== "unconfirmed" || operation.checked);
   const card = {
     badge,
     description: contextRefreshRequired ? "Lade den aktuellen Stand vor weiteren Änderungen." : version ? "Entwurf gespeichert. Noch nicht im Team sichtbar." : latestPublished ? showConfirmedTeamBaseline ? "Letzter bestätigter Teamstand bleibt sichtbar." : latestIsPrepared ? "Die geplante Woche ist bereits im Kalender sichtbar." : "Deine Arbeitszeiten sind in Team und Google bestätigt." : "Deine Arbeitszeiten fehlen noch.",
@@ -666,9 +700,10 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
       ? "Eine Google-Serienänderung ist nicht eindeutig. Der bestätigte Teamstand bleibt aktiv."
       : !version && reconciliationState === "delayed"
         ? "Der Google-Abgleich ist verzögert. Der bestätigte Teamstand bleibt aktiv." : null,
+    showConflictCheck: (shared.conflictDecision.phase === "published" && contextRefreshRequired) || conflictChanged || ["stale", "unconfirmed"].includes(shared.conflictDecision.phase) || (Boolean(conflict) && ["stale", "unavailable"].includes(shared.conflictReadStatus)),
     canResolveConflict: {
-      founderops: Boolean(conflict && !pending && !contextRefreshRequired && conflict.founderops.supported !== false && (conflict.state !== "resolving" || conflict.decision === "founderops")),
-      google: Boolean(conflict && !pending && !contextRefreshRequired && conflict.google.supported !== false && (conflict.state !== "resolving" || conflict.decision === "google")),
+      founderops: Boolean(conflict && conflictContextReady && !pending && !conflictChanged && shared.conflictReadStatus === "current" && shared.conflictDecision.phase !== "unconfirmed" && (shared.conflictDecision.phase !== "preparing" || shared.conflictDecision.submitted?.decision === "founderops") && shared.conflict?.founderops.supported !== false && conflict.founderops.supported !== false && (conflict.state !== "resolving" || conflict.decision === "founderops")),
+      google: Boolean(conflict && conflictContextReady && !pending && !conflictChanged && shared.conflictReadStatus === "current" && shared.conflictDecision.phase !== "unconfirmed" && (shared.conflictDecision.phase !== "preparing" || shared.conflictDecision.submitted?.decision === "google") && shared.conflict?.google.supported !== false && conflict.google.supported !== false && (conflict.state !== "resolving" || conflict.decision === "google")),
     },
   };
   const editor = {
@@ -689,6 +724,9 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
     pendingRecoveryLabel: pendingPublication?.resumeAllowed ? "Offene Veröffentlichung fortsetzen" : "Offene Veröffentlichung sicher neu beginnen",
   };
 
+  const retainedReconciliationMessage = conflictChanged ? "Der Konfliktstand wurde während deiner Prüfung geändert. Lade die Varianten neu und entscheide bewusst."
+    : conflictDecisionNotice(shared, contextRefreshRequired) || reconciliationNotice(shared, contextRefreshRequired);
+
   return {
     card,
     editor,
@@ -697,8 +735,8 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
     dirty,
     draft,
     errors,
-    message,
-    messageTone,
+    message: message || retainedReconciliationMessage,
+    messageTone: !message && retainedReconciliationMessage ? "warning" as const : messageTone,
     pending,
     publication,
     pendingPublication,
@@ -706,6 +744,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planni
     publishing,
     reconcile,
     resolveConflict,
+    refreshConflict: () => load(dirty ? draft : undefined, dirty ? selectedWeekStart : undefined),
     removeWindow,
     reset,
     restart,

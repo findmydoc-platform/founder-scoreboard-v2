@@ -62,6 +62,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!response.ok)throw Object.assign(new Error(body?.error||"Adminberechtigung konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
         if(!body?.administratorAccess)throw new Error("Die Adminberechtigung ist noch nicht bestätigt.");return body.administratorAccess;
       },
+      async reportBlocker(taskId, submitted) {
+        const { response, body } = await taskApi.reportTaskBlockerRequest(runtime.apiClient, taskId, submitted);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Blocker konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        if (!body?.blocker) throw new Error("Die Blocker-Meldung ist noch nicht bestätigt.");
+        return { blocker: body.blocker };
+      },
       async lockSprint(basis) {
         const {response,body}=await planningApi.lockSprintRequest(runtime.apiClient,basis.sprint.id,{expectedUpdatedAt:basis.sprint.updatedAt,expectedTasks:basis.tasks.map(task=>({id:task.id,updatedAt:task.updatedAt}))});
         if(!response.ok)throw Object.assign(new Error(body?.error||"Sprint-Abschluss fehlgeschlagen."),{status:response.status,code:body?.code});
@@ -74,9 +80,18 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!body?.basis?.sprint?.updatedAt||!Array.isArray(body.basis.tasks)||typeof body.tasksComplete!=="boolean")throw new Error("Abschlussstand ist unvollständig.");
         return {basis:body.basis,tasksComplete:body.tasksComplete,receipt:body.receipt||null};
       },
+      readWorkweekConflict: () => privateWorkweekApi(runtime.apiClient).readWorkweekConflict(),
+      resolveWorkweekConflict: input => privateWorkweekApi(runtime.apiClient).resolveWorkweekConflict(input),
+      reconcilePrivateWorkweek: () => privateWorkweekApi(runtime.apiClient).reconcilePrivateWorkweek(),
       readPrivateWorkweek: week => privateWorkweekApi(runtime.apiClient).readPrivateWorkweek(week),
       savePrivateWorkweek: input => privateWorkweekApi(runtime.apiClient).savePrivateWorkweek(input),
       publishPrivateWorkweek: versionId => privateWorkweekApi(runtime.apiClient).publishPrivateWorkweek(versionId),
+      async moveBacklog(source, target, placement) {
+        const { response, body } = await taskApi.moveBacklogTaskRequest(runtime.apiClient, { taskId: source.id, targetTaskId: target.id, placement, expectedTaskUpdatedAt: source.updatedAt!, expectedTargetUpdatedAt: target.updatedAt! });
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Die Rangfolge ist nicht bestätigt."), { status: response.status, code: body?.code });
+        if (!Array.isArray(body?.updates)) throw new Error("Das Rangergebnis ist nicht bestätigt.");
+        return { updates: body.updates, completeness: body.completeness === "complete" ? "complete" : "partial" };
+      },
       async assignBacklog(tasks, target, bulk) {
         if (bulk && target) {
           const { response, body } = await taskApi.assignBacklogTasksToSprintRequest(runtime.apiClient, { assignments: tasks.map(task => ({ taskId: task.id, expectedUpdatedAt: task.updatedAt! })), sprintId: target.id, expectedSprintUpdatedAt: target.updatedAt });

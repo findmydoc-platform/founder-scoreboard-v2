@@ -158,6 +158,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onClose={closeTaskPanel}
           onOpenTask={(taskId) => openTaskPanel(taskId, "push")}
           taskSaves={controller.planningState.taskSaves(selectedTask.id)}
+          blockerReports={controller.planningState.taskBlockerReports(selectedTask.id)}
+          onCheckBlockerReport={id => { void controller.planningState.checkTaskBlockerReport(id); }}
           onCheckTaskSave={() => controller.planningState.checkTaskSave(selectedTask.id)}
           onBeginEdit={() => controller.beginTaskEdit(selectedTask)}
           onUpdate={(patch, options) => updateTask(selectedTask, patch, options)}

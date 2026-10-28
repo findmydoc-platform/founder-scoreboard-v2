@@ -40,7 +40,7 @@ export type BacklogMoveUpdate = {
 };
 
 export function moveBacklogTaskRequest(apiClient: BrowserApiClient, move: BacklogMoveRequest) {
-  return apiClient.requestJson<{ error?: string; updates?: BacklogMoveUpdate[] }>("/api/tasks/backlog-order", {
+  return apiClient.requestJson<{ error?: string; code?: string; completeness?: "complete" | "partial"; updates?: BacklogMoveUpdate[] }>("/api/tasks/backlog-order", {
     method: "PATCH",
     json: move,
   });
@@ -178,7 +178,7 @@ export function removeTaskRelationshipRequest(apiClient: BrowserApiClient, taskI
 }
 
 export function reportTaskBlockerRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; blocker?: PlanningShellState["taskBlockers"][number] }>(`/api/tasks/${taskId}/blockers`, {
+  return apiClient.requestJson<{ error?: string; code?: string; blocker?: PlanningShellState["taskBlockers"][number] }>(`/api/tasks/${taskId}/blockers`, {
     method: "POST",
     json: payload,
   });
