@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, within } from "storybook/test";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { DEFAULT_PLANNING_FILTERS } from "@/features/planning/hooks/use-planning-view-state";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { ViewMode } from "@/lib/types";
+import { createPlanningState } from "../model/internal/planning-state-owner";
+import { emptyPlanningShellState } from "../model/planning-shell-state";
 import { PlanningTaskViewRenderer } from "./planning-task-view-renderer";
 
 const initiative = taskDetailStoryTask({ id: "initiative-1", title: "Lazy view initiative", taskType: "initiative" });
@@ -12,12 +14,15 @@ const deliverable = taskDetailStoryTask({ id: "deliverable-1", title: "Lazy view
 const tasks = [initiative, deliverable];
 
 function StoryRenderer() {
+  const [owner] = useState(() => createPlanningState({ userId: "deferred-views", initialData: { ...emptyPlanningShellState, tasks }, adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null } }));
+  const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
   const [view, setView] = useState<ViewMode>("board");
   const controller = {
     canChangeTaskStatus: () => false,
     canManageFinalTaskStatus: false,
     canManageTaskMeta: false,
-    data: { tasks, profiles: [], sprints: [], taskRelations: [], taskBlockers: [] },
+    planningState: owner.planning,
+    data,
     dragOverStatus: null,
     draggedTaskId: null,
     expandedInitiatives: {},

@@ -281,7 +281,7 @@ export function HeaderCalendarDialog({
                         onKeyDown={(event) => handleCalendarKeyDown(event, dateKey)}
                         className={classNames(
                           "group grid min-h-11 min-w-0 place-items-center rounded-lg px-0.5 py-1 text-sm outline-none transition focus-visible:relative focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-blue-500",
-                          selected ? "bg-blue-600 font-semibold text-white" : today ? "bg-blue-50 font-semibold text-blue-700" : currentMonth ? "text-slate-800 hover:bg-slate-50" : "text-slate-400 hover:bg-slate-50",
+                          selected ? "bg-blue-600 font-semibold text-white" : today ? "bg-blue-50 font-semibold text-blue-700" : currentMonth ? "text-slate-800 hover:bg-slate-50" : "text-slate-500 hover:bg-slate-50",
                         )}
                       >
                         <span>{Number(dateKey.slice(-2))}</span>

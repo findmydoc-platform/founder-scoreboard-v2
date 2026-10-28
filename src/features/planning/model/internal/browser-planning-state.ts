@@ -67,6 +67,22 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok) throw Object.assign(new Error(body?.error || "Release konnte nicht bestätigt werden."), { status: response.status });
         if (!body?.ok) throw new Error("Bestätigung unvollständig.");
       },
+      async readEvents(range) {
+        const query = range ? `?${new URLSearchParams(range)}` : "";
+        const { response, body } = await runtime.apiClient.requestJson<{ model?: import("@/features/events/model/events-read-model").EventsWorkspaceModel; headerData?: PlanningHeaderData; error?: string }>(`/api/events-data${query}`);
+        if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Events konnten nicht geladen werden."), { status: response.status });
+        return { events: body.model.events, coverage: body.model.coverage || { range, completeness: "partial" }, headerData: body.headerData ? normalizePlanningHeaderData(body.headerData) : undefined };
+      },
+      async createEvent(draft) {
+        const { response, body } = await planningApi.createFounderEventRequest(runtime.apiClient, draft);
+        if (!response.ok || !body?.event) throw Object.assign(new Error(body?.error || "Event konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        return { event: body.event, warning: body.warning };
+      },
+      async updateEvent(basis, draft) {
+        const { response, body } = await planningApi.updateFounderEventRequest(runtime.apiClient, basis.id, { ...draft, expectedUpdatedAt: basis.updatedAt });
+        if (!response.ok || !body?.event) throw Object.assign(new Error(body?.error || "Event konnte nicht aktualisiert werden."), { status: response.status, code: body?.code });
+        return { event: body.event, warning: body.warning };
+      },
       async createTask(input) {
         const { response, body } = await taskApi.createTaskRequest(runtime.apiClient, input);
         if (!response.ok && !(body?.code === "task_created_approval_failed" && body.task?.updatedAt)) throw Object.assign(new Error(body?.error || "Aufgabe konnte nicht erstellt werden."), { status: response.status, code: body?.code });
@@ -132,7 +148,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (isSupportingWorkspace(workspace)) {
           const { response, body } = await planningApi.requestSupportingWorkspaceData(runtime.apiClient, workspace);
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status });
-          return body?.model ? { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState(workspace, body.model)), notificationCoverage: workspace === "notifications" ? (body.model as import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel).coverage : undefined, taskCoverage: (workspace === "team" || workspace === "profile" || workspace === "notifications" ? "partial" : "none") as "partial" | "none", headerData: body.headerData, currentProfile: body.currentProfile } : null;
+          return body?.model ? { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState(workspace, body.model)), eventCoverage: workspace === "events" ? (body.model as import("@/features/events/model/events-read-model").EventsWorkspaceModel).coverage : undefined, notificationCoverage: workspace === "notifications" ? (body.model as import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel).coverage : undefined, taskCoverage: (workspace === "team" || workspace === "profile" || workspace === "notifications" ? "partial" : "none") as "partial" | "none", headerData: body.headerData, currentProfile: body.currentProfile } : null;
         }
         if (workspace === "sprint") {
           const { response, body } = await planningApi.requestSprintWorkspaceData(runtime.apiClient);

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const contract = await importTestModule("src/lib/github-sync/contract.ts");
@@ -96,9 +98,9 @@ const { useTaskGitHubSyncCommand } = await importTestModule(
   },
 );
 
-function useCommandFixture() {
+function useCommandFixture(initialTasks = [task()]) {
   let data = {
-    tasks: [task()],
+    tasks: initialTasks,
     taskComments: [],
   };
   const errors = [];
@@ -197,20 +199,20 @@ const { useTaskCreateCommand } = await importTestModule(
 );
 
 function useCreateFixture() {
-  let data = {
-    tasks: [],
-    profiles: [],
-    taskRelations: [],
-  };
-  const errors = [];
+  commandSyncResponse = createSyncResponse;
+  const syncFixture = useCommandFixture([createdTask]);
+  const owner = createPlanningState({ userId: "create-fixture", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async () => ({ task: {} }),
+    readWorkspace: async () => null,
+    createTask: async () => ({ task: createdTask }),
+  } });
+  const errors = syncFixture.errors;
   createTransitions.length = 0;
   const command = useTaskCreateCommand({
-    apiClient: {},
-    applyPlanningShellStateUpdate: (update) => {
-      data = typeof update === "function" ? update(data) : update;
-    },
+    planningState: owner.planning,
+    syncTaskToGitHub: syncFixture.command.syncTaskToGitHub,
     currentProfile: null,
-    data,
+    data: emptyPlanningShellState,
     setSaveError: (value) => errors.push(value),
     setTaskDialogDefaults: () => undefined,
     startTransition: (callback) => {
@@ -219,10 +221,10 @@ function useCreateFixture() {
     },
   });
   return {
-    command,
-    errors,
-    getTask: () => data.tasks[0],
-    wait: async () => Promise.all(createTransitions),
+    command, errors,
+    getTask: () => syncFixture.getTask(),
+    getCreated: () => owner.planning.board().tasks[0],
+    wait: async () => { await Promise.all(createTransitions); await syncFixture.wait(); },
   };
 }
 
@@ -240,7 +242,7 @@ for (const [name, result, expectedStatus, expectsError] of [
   [
     "terminal failure",
     contract.taskGitHubSyncFailure("github_sync_invalid_target", "invalid"),
-    "not_synced",
+    "failed",
     true,
   ],
 ]) {
@@ -248,12 +250,14 @@ for (const [name, result, expectedStatus, expectsError] of [
     createSyncResponse = responseFor(result);
     const fixture = useCreateFixture();
     fixture.command.createTask({
+      creationRequestId: "create-client-flow",
       title: "Client flow task",
       taskType: "deliverable",
       createGitHubIssue: true,
       assignee: "",
     });
     await fixture.wait();
+    assert.equal(fixture.getCreated().id, createdTask.id);
     assert.equal(fixture.getTask().githubIssueSyncStatus, expectedStatus);
     assert.equal(Boolean(fixture.errors.at(-1)), expectsError);
   });

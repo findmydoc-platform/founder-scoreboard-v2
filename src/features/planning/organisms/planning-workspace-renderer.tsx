@@ -161,6 +161,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "events" && (
         <EventsOverview
+          planningState={planningState}
           events={data.events}
           profiles={data.profiles}
           canManageEvents={canManageTaskMeta || controller.canCorrectOperationally}

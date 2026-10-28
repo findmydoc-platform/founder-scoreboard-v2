@@ -9,31 +9,21 @@ import type { FounderEvent, Profile } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState, UiNotice, UiPanel, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterSegmentedControl, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 
-export type FounderEventDraft = {
-  id?: number;
-  title: string;
-  category: FounderEvent["category"];
-  startsAt: string;
-  endsAt: string;
-  location: string;
-  description: string;
-  audienceMode: FounderEvent["audienceMode"];
-  participantProfileIds: string[];
-  reminderDaysBefore: number;
-  status: FounderEvent["status"];
-};
+import type { FounderEventDraft } from "../model/event-state";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 
 type EventFilter = "upcoming" | "past" | "cancelled" | "all";
 type EventCategoryFilter = FounderEvent["category"] | "all";
 
 type Props = {
+  planningState: PlanningState;
   events: FounderEvent[];
   profiles: Profile[];
   canManageEvents: boolean;
   pending: boolean;
   message: string;
-  onCreateEvent: (draft: FounderEventDraft) => Promise<void> | void;
-  onUpdateEvent: (event: FounderEvent, draft: FounderEventDraft) => Promise<void> | void;
+  onCreateEvent: (draft: FounderEventDraft, submissionId: string) => Promise<void> | void;
+  onUpdateEvent: (event: FounderEvent, draft: FounderEventDraft, submissionId: string) => Promise<void> | void;
 };
 
 function defaultStart() {
@@ -75,6 +65,7 @@ function sortEvents(events: FounderEvent[]) {
 }
 
 export function EventsOverview({
+  planningState,
   events,
   profiles,
   canManageEvents,
@@ -88,7 +79,10 @@ export function EventsOverview({
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
-  const [editingEventId, setEditingEventId] = useState<number | null>(null);
+  const [editingEvent, setEditingEvent] = useState<FounderEvent | null>(null);
+  const [submissionId, setSubmissionId] = useState("");
+  const [conflictBasis, setConflictBasis] = useState<FounderEvent | null>(null);
+  const [conflictAdopted, setConflictAdopted] = useState(false);
   const [draft, setDraft] = useState<FounderEventDraft>(() => draftFromEvent());
   const [formPending, setFormPending] = useState(false);
   const [now] = useState(() => Date.now());
@@ -100,7 +94,14 @@ export function EventsOverview({
       && (!normalizedQuery || [event.title, event.description, event.location, founderEventCategoryLabel(event.category)].join(" ").toLocaleLowerCase("de").includes(normalizedQuery))
     )));
   }, [categoryFilter, events, filter, now, query]);
-  const editingEvent = editingEventId ? events.find((event) => event.id === editingEventId) || null : null;
+  const eventView = planningState.events();
+  const operation = eventView.operations.find(item => item.id === submissionId);
+  const unresolved = eventView.operations.filter(item => item.phase === "unconfirmed");
+  const saveBlocked = operation?.phase === "unconfirmed" || operation?.phase === "saving" || (operation?.phase === "conflict" && !conflictAdopted);
+  const feedback = <div className="space-y-2" aria-live="polite">{eventView.readStatus === "stale" ? <UiNotice>Die Eventdaten müssen erneut geprüft werden. <UiButton className="min-h-11" onClick={() => void planningState.refreshEvents()}>Events aktualisieren</UiButton></UiNotice> : null}{unresolved.map(item => <UiNotice key={item.id}>
+    <p>Bestätigung steht aus: {item.draft.title}. Die abgesendeten Eingaben bleiben erhalten. Ein erneutes Speichern ist gesperrt, solange das Ergebnis unklar ist.</p>
+    <UiButton className="mt-2 min-h-11" disabled={item.checking} onClick={() => void planningState.checkEventOutcome(item.id)}>{item.checking ? "Serverstand wird geprüft" : "Serverstand prüfen"}</UiButton>
+  </UiNotice>)}</div>;
   const metrics = {
     upcoming: events.filter((event) => filterEvent(event, "upcoming", now)).length,
     past: events.filter((event) => filterEvent(event, "past", now)).length,
@@ -113,20 +114,24 @@ export function EventsOverview({
   }] : [];
 
   const openCreate = () => {
-    setEditingEventId(null);
+    setEditingEvent(null);
     setDraft(draftFromEvent());
+    setSubmissionId(crypto.randomUUID());
+    setConflictBasis(null); setConflictAdopted(false);
     setFormOpen(true);
   };
 
   const openEdit = (event: FounderEvent) => {
-    setEditingEventId(event.id);
+    setEditingEvent(structuredClone(event));
     setDraft(draftFromEvent(event));
+    setSubmissionId(crypto.randomUUID());
+    setConflictBasis(null); setConflictAdopted(false);
     setFormOpen(true);
   };
 
   const closeForm = () => {
     setFormOpen(false);
-    setEditingEventId(null);
+    setEditingEvent(null);
     setDraft(draftFromEvent());
   };
 
@@ -140,12 +145,14 @@ export function EventsOverview({
   };
 
   const submit = async () => {
+    if (saveBlocked) return;
     setFormPending(true);
+    setConflictAdopted(false);
     try {
       if (editingEvent) {
-        await onUpdateEvent(editingEvent, draft);
+        await onUpdateEvent(editingEvent, draft, submissionId);
       } else {
-        await onCreateEvent(draft);
+        await onCreateEvent(draft, submissionId);
       }
       closeForm();
     } catch {
@@ -260,16 +267,22 @@ export function EventsOverview({
           </label>
         )}
       </div>
+      {operation?.phase === "conflict" && !conflictAdopted ? <UiNotice className="mt-4">
+        <p>Das Event wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten. Prüfe den Serverstand und übernimm ihn bewusst als Grundlage für dein erneutes Speichern.</p>
+        {conflictBasis ? <><p className="mt-2">Serverstand: {conflictBasis.title} · {eventDateRangeLabel(conflictBasis)} · {founderEventStatusLabel(conflictBasis.status)}</p><UiButton className="mt-2 min-h-11" onClick={() => { setEditingEvent(conflictBasis); setConflictAdopted(true); }}>Als Grundlage übernehmen</UiButton></> : <UiButton className="mt-2 min-h-11" onClick={async () => { if (await planningState.refreshEvents()) setConflictBasis(planningState.events().events.find(item => item.id === editingEvent?.id) || null); }}>Aktuellen Serverstand laden</UiButton>}
+      </UiNotice> : null}
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <UiButton onClick={closeForm} disabled={formPending} className="text-slate-600">
           Abbrechen
         </UiButton>
-        <UiButton onClick={() => void submit()} disabled={pending || formPending || !draft.title.trim() || !draft.startsAt || (draft.audienceMode === "selected" && !draft.participantProfileIds.length)} variant="primary">
+        <UiButton onClick={() => void submit()} disabled={saveBlocked || pending || formPending || !draft.title.trim() || !draft.startsAt || (draft.audienceMode === "selected" && !draft.participantProfileIds.length)} variant="primary">
           {formPending ? "Speichert..." : editingEvent ? "Event speichern" : "Event erstellen"}
         </UiButton>
       </div>
     </UiPanel>
   ) : null;
+
+  if (eventView.readStatus === "not-loaded" || eventView.readStatus === "forbidden") return <UiNotice>Events sind in dieser Sitzung nicht verfügbar.</UiNotice>;
 
   if (!events.length) {
     return (
@@ -291,6 +304,7 @@ export function EventsOverview({
             {message && <UiNotice className="mx-auto max-w-2xl font-medium leading-normal">{message}</UiNotice>}
           </div>
         </UiPanel>
+        {feedback}
         {eventForm}
       </div>
     );
@@ -323,6 +337,7 @@ export function EventsOverview({
         {message && <UiNotice className="mt-3 font-medium leading-normal">{message}</UiNotice>}
       </UiPanel>
 
+      {feedback}
       <FilterToolbar
         searchLabel="Events durchsuchen"
         searchPlaceholder="Event, Ort oder Beschreibung suchen"

@@ -14,6 +14,7 @@ export type BrowserSessionPort = {
 let known: BrowserSessionSnapshot | null | undefined;
 let epoch = 0;
 let reading: Promise<BrowserSessionSnapshot | null> | undefined;
+let logoutPending: Promise<boolean> | undefined;
 const recoveries = new Map<string, Promise<BrowserSessionRecovery>>();
 const listeners = new Set<(session: BrowserSessionSnapshot | null) => void>();
 let channel: BroadcastChannel | undefined;
@@ -27,20 +28,26 @@ async function post(path: string, expected: BrowserSessionSnapshot) {
     headers: { "content-type": "application/json" }, body: JSON.stringify({ expected: { userId: expected.userId, revision: expected.revision } }) });
   return { response, body: await response.json() };
 }
+async function readSession(): Promise<BrowserSessionSnapshot | null> {
+  const response = await fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" });
+  if (response.status >= 500) throw new Error("Sitzung konnte vorübergehend nicht geprüft werden.");
+  const body = await response.json();
+  return body.session || null;
+}
 async function refresh() {
+  if (logoutPending) return null;
   if (reading) return reading;
   const started = epoch;
   const operation = (async () => {
-    const response = await fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" });
-    if (response.status >= 500) throw new Error("Sitzung konnte vorübergehend nicht geprüft werden.");
-    const body = await response.json();
-    if (started === epoch) publish(body.session || null);
+    const session = await readSession();
+    if (started === epoch && !logoutPending) publish(session);
     return known || null;
   })();
   reading = operation;
   try { return await operation; } finally { if (reading === operation) reading = undefined; }
 }
 async function recover(expected: BrowserSessionSnapshot): Promise<BrowserSessionRecovery> {
+  if (logoutPending) return { kind: "superseded" };
   if (known && known.userId !== expected.userId) return { kind: "superseded" };
   if (known && !same(known, expected)) return { kind: "refreshed", session: known };
   const key = `${epoch}:${expected.userId}:${expected.revision}`;
@@ -62,6 +69,7 @@ async function recover(expected: BrowserSessionSnapshot): Promise<BrowserSession
   try { return await operation; } finally { recoveries.delete(key); }
 }
 async function clearIfCurrent(expected: BrowserSessionSnapshot) {
+  if (logoutPending) return;
   if (known && !same(known, expected)) return;
   const started = epoch;
   try {
@@ -74,7 +82,7 @@ async function clearIfCurrent(expected: BrowserSessionSnapshot) {
 function ensureChannel() {
   if (typeof window !== "undefined" && !focusInstalled) {
     focusInstalled = true;
-    window.addEventListener("focus", () => { epoch++; reading = undefined; refresh().catch(() => undefined); });
+    window.addEventListener("focus", () => { if (logoutPending) return; epoch++; reading = undefined; refresh().catch(() => undefined); });
   }
   if (typeof window !== "undefined" && !channel && typeof BroadcastChannel !== "undefined") {
     channel = new BroadcastChannel("founderops-session");
@@ -86,18 +94,25 @@ function subscribe(listener: (session: BrowserSessionSnapshot | null) => void) {
   ensureChannel();
   return () => { listeners.delete(listener); };
 }
-async function logout() {
-  let expected: BrowserSessionSnapshot | null;
-  try { expected = await adapter.current(); } catch { invalidate(); return false; }
+function logout() {
+  if (logoutPending) return logoutPending;
+  const observed = known, started = epoch + 1;
+  // Install the read barrier before invalidation notifies subscribers that can request a fresh view.
+  const operation = Promise.resolve().then(async () => {
+    try {
+      const expected = observed === undefined ? await readSession() : observed;
+      if (started !== epoch) return false;
+      if (!expected) return true;
+      const { response, body } = await post("logout", expected);
+      if (started !== epoch) return false;
+      if (response.ok && body.outcome === "cleared") { changed(); return true; }
+      return false;
+    } catch { return false; }
+  });
+  logoutPending = operation;
   invalidate(); changed("changing");
-  if (!expected) return true;
-  const started = epoch;
-  try {
-    const { response, body } = await post("logout", expected);
-    if (started !== epoch) return false;
-    if (response.ok && body.outcome === "cleared") { changed(); return true; }
-    return false;
-  } catch { return false; }
+  void operation.finally(() => { if (logoutPending === operation) logoutPending = undefined; });
+  return operation;
 }
 async function performLogin(query: string, local: boolean) {
   if (typeof navigator === "undefined" || !navigator.locks) return "unsupported" as const;
