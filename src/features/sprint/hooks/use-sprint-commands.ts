@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import { futureSprintDrafts, mapScoreObjectionResponse } from "@/features/planning/model/planning-app-model";
+import { mapScoreObjectionResponse } from "@/features/planning/model/planning-app-model";
 import { mapFounderSprintScore } from "@/lib/planning-sprint-mappers";
 import type { ScoreObjection, ScoreObjectionResolutionInput, Sprint, SprintCommitment } from "@/lib/types";
 
@@ -23,64 +23,9 @@ export function useSprintCommands({
   source,
   sprintPlanningOptions,
   startTransition,
+  planningState,
 }: UseSprintCommandsOptions) {
   const [sprintLockMessage, setSprintLockMessage] = useState("");
-
-  const createSprintPlanAsync = async (options: SprintPlanningOptions, silent = false) => {
-    const protectedSprintIds = new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId));
-    const drafts = futureSprintDrafts(data.sprints, options, protectedSprintIds, data.project.reviewObjectionWindowHours);
-    if (!drafts.length) {
-      if (!silent) setSprintLockMessage("Die Sprint-Zeiträume entsprechen bereits der aktuellen Logik. Sprints mit Aufgabenbezug werden nicht automatisch umgeplant.");
-      return 0;
-    }
-
-    const draftIds = new Set(drafts.map((sprint) => sprint.id));
-    setData((current) => ({
-      ...current,
-      sprints: [
-        ...current.sprints.filter((sprint) => !draftIds.has(sprint.id)),
-        ...drafts,
-      ].sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "")),
-    }));
-
-    if (source !== "supabase") {
-      if (!silent) setSprintLockMessage(`${drafts.length} Sprint${drafts.length === 1 ? "" : "s"} lokal aktualisiert.`);
-      return drafts.length;
-    }
-
-    try {
-      const { response, body } = await planningApi.createSprintPlanRequest(apiClient, options);
-      if (!response.ok) throw new Error(body?.error || "Sprints konnten nicht angelegt werden.");
-
-      if (body?.sprints) {
-        setData((current) => ({
-          ...current,
-          sprints: [
-            ...current.sprints.filter((sprint) => !draftIds.has(sprint.id)),
-            ...body.sprints!,
-          ].sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "")),
-        }));
-      }
-
-      if (!silent) setSprintLockMessage(`${body?.sprints?.length || drafts.length} Sprint${(body?.sprints?.length || drafts.length) === 1 ? "" : "s"} aktualisiert. Sprints mit Aufgabenbezug bleiben geschützt.`);
-      return body?.sprints?.length || drafts.length;
-    } catch (error) {
-      setData((current) => ({
-        ...current,
-        sprints: current.sprints.filter((sprint) => !draftIds.has(sprint.id)),
-      }));
-      setSaveError(error instanceof Error ? error.message : "Sprints konnten nicht angelegt werden.");
-      return 0;
-    }
-  };
-
-  const createSprintPlan = (options: SprintPlanningOptions) => {
-    setSaveError("");
-    setSprintLockMessage("");
-    startTransition(async () => {
-      await createSprintPlanAsync(options);
-    });
-  };
 
   const updateSprintCommitment = (commitment: SprintCommitment) => {
     setSaveError("");
@@ -271,7 +216,8 @@ export function useSprintCommands({
           setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt. ${body.scoring?.scores || 0} FounderOps-Scores finalisiert, ${body.scoring?.strikeEvents || 0} Strike-Ereignisse geschrieben${body.scoring?.governanceReviews ? `, ${body.scoring.governanceReviews} Governance Review nötig` : ""}.`);
         }
         await refreshCurrentWorkspaceModel();
-        await createSprintPlanAsync(sprintPlanningOptions, true);
+        const plan = await planningState.beginSprintPlan().create(sprintPlanningOptions);
+        if (!plan.ok) setSaveError(plan.error);
       } catch (error) {
         setData(previousData);
         setSaveError(error instanceof Error ? error.message : "Sprint konnte nicht gelockt werden.");
@@ -281,7 +227,6 @@ export function useSprintCommands({
 
   return {
     createScoreObjection,
-    createSprintPlan,
     lockSprint,
     reviewScoreObjection,
     sprintLockMessage,

@@ -44,6 +44,8 @@ export function SprintControlsSummary({
   onSelectedSprintChange: (sprintId: string) => void;
   onLockSprint: (sprintId: string) => void;
 }) {
+  const provisionalIds = planningState.sprintPlan().provisionalSprintIds;
+  const provisional = provisionalIds.includes(sprint.id);
   const [editor, setEditor] = useState<import("../model/sprint-editing").SprintEditor | null>(null);
   useEffect(() => () => editor?.close(), [editor]);
   const currentEdit = editor?.view() || planningState.sprintEdits(sprint.id).findLast(edit => ["unconfirmed", "blocked", "conflict"].includes(edit.phase));
@@ -54,7 +56,7 @@ export function SprintControlsSummary({
     ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(sprint.reviewDueAt))
     : "ohne Datum";
   const reviewWindowOpen = Boolean(sprint.reviewDueAt && new Date(sprint.reviewDueAt).getTime() > renderedAt);
-  const lockBlocked = sprintControlsDisabled || !canFinalizeSprintScore || sprint.scoreLocked || reviewWindowOpen || openObjectionsCount > 0;
+  const lockBlocked = provisional || sprintControlsDisabled || !canFinalizeSprintScore || sprint.scoreLocked || reviewWindowOpen || openObjectionsCount > 0;
   const lockTitle = !canFinalizeSprintScore
     ? "Nur der CEO kann Sprint-Scores finalisieren."
     : reviewWindowOpen
@@ -82,7 +84,7 @@ export function SprintControlsSummary({
               className="h-9 text-sm"
               options={data.sprints.map((item) => ({
                 value: item.id,
-                label: item.name,
+                label: `${item.name}${provisionalIds.includes(item.id) ? " (unbestätigt)" : ""}`,
                 current: currentSprint?.id === item.id,
                 locked: data.tasks.some((task) => task.sprintId === item.id),
               }))}
@@ -120,7 +122,7 @@ export function SprintControlsSummary({
             Status
             <CustomSelect
               value={currentEdit?.submitted?.status && editBlocked ? currentEdit.submitted.status : sprint.status}
-              disabled={sprintControlsDisabled || sprint.scoreLocked || Boolean(editBlocked)}
+              disabled={provisional || sprintControlsDisabled || sprint.scoreLocked || Boolean(editBlocked)}
               onOpen={() => { editor?.close(); setEditor(planningState.beginSprintEdit(sprint)); }}
               onChange={(value) => { const active = editor || planningState.beginSprintEdit(sprint); setEditor(active); void active.save({ status: value as Sprint["status"] }); }}
               className="h-9 text-sm"

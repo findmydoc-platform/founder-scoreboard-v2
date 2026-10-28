@@ -35,7 +35,7 @@ export function SprintScoreTableOverview({
   sprintPlanningOptions,
   plannedSprintCount,
   onUpdateSprintPlanning,
-  onCreateSprintPlan,
+
   currentProfile,
   canManageSprint,
   sprintLockMessage,
@@ -55,7 +55,6 @@ export function SprintScoreTableOverview({
   sprintPlanningOptions: SprintPlanningOptions;
   plannedSprintCount: number;
   onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
-  onCreateSprintPlan: (options: SprintPlanningOptions) => void;
   currentProfile: Profile | null;
   canManageSprint: boolean;
   sprintLockMessage: string;
@@ -109,9 +108,9 @@ export function SprintScoreTableOverview({
       : sprintView.model.coverage.sprints !== "complete" ? "Die Sprint-Liste ist noch nicht vollständig geladen."
       : "Noch kein Sprint angelegt.";
     return (
-      <section className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+      <div className="grid min-w-0 gap-4"><section className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
         {message}
-      </section>
+      </section>{sprintView.readStatus !== "forbidden" && canManageSprint && <SprintPlanningSection disabled={!canManageSprint} pending={pending} sprintPlanningOptions={sprintPlanningOptions} plannedSprintCount={plannedSprintCount} onUpdateSprintPlanning={onUpdateSprintPlanning} planningState={planningState} />}</div>
     );
   }
 
@@ -154,7 +153,7 @@ export function SprintScoreTableOverview({
         sprintPlanningOptions={sprintPlanningOptions}
         plannedSprintCount={plannedSprintCount}
         onUpdateSprintPlanning={onUpdateSprintPlanning}
-        onCreateSprintPlan={onCreateSprintPlan}
+        planningState={planningState}
       />
 
       <SprintFounderScoreTable

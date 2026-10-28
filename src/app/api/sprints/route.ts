@@ -22,6 +22,7 @@ type CreateSprintPlanPayload = {
   rhythmWeeks?: number;
   horizonWeeks?: number;
   targetSprintNumber?: number;
+  expectedSprints?: { id: string; number?: number; updatedAt?: string }[];
 };
 
 const projectId = "findmydoc-founder-execution";
@@ -35,6 +36,7 @@ function mapSprint(row: SprintRow) {
     endDate: row.end_date || "",
     reviewDueAt: row.review_due_at || "",
     scoreLocked: row.score_locked,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -43,6 +45,9 @@ export async function POST(request: NextRequest) {
   if (!context.ok) return context.response;
 
   const { payload, planning } = context;
+  if (!Array.isArray(payload.expectedSprints) || payload.expectedSprints.some(row => !row || typeof row.id !== "string" || !row.id || (row.number !== undefined && (!Number.isInteger(row.number) || row.number < 0)) || (row.updatedAt !== undefined && (typeof row.updatedAt !== "string" || !row.updatedAt)))) return apiError("Die ursprüngliche Sprint-Basis fehlt. Bitte neu laden.", 400);
+  const expected = new Map(payload.expectedSprints.map(row => [row.id, row.updatedAt]));
+  const displayedByNumber = new Map(payload.expectedSprints.map(row => [row.number ?? sprintNumber(row.id), row]));
   const firstSprintNumber = Math.max(Number(payload.firstSprintNumber) || 1, 1);
   const anchorStartDate = payload.anchorStartDate?.trim() || new Date().toISOString().slice(0, 10);
   const rhythmWeeks = Math.min(Math.max(Number(payload.rhythmWeeks) || 2, 1), 12);
@@ -82,6 +87,8 @@ export async function POST(request: NextRequest) {
   while (nextStart <= horizonEnd || (targetSprintNumber > 0 && nextNumber <= targetSprintNumber)) {
     const endDate = addDaysIso(nextStart, rhythmWeeks * 7 - 1);
     const existingSprint = sprintByNumber.get(nextNumber);
+    const displayedSprint = displayedByNumber.get(nextNumber);
+    if (displayedSprint && (!existingSprint || displayedSprint.id !== existingSprint.id)) return NextResponse.json({ error: "Die Sprint-Zuordnung wurde zwischenzeitlich geändert. Bitte den Serverstand vergleichen.", code: "sprint_plan_conflict" }, { status: 409 });
     const baseId = `sprint-${nextNumber}`;
     const id = existingSprint?.id || (existingIds.has(baseId) ? `${baseId}-${nextStart.replaceAll("-", "")}` : baseId);
     existingIds.add(id);
@@ -94,7 +101,7 @@ export async function POST(request: NextRequest) {
       end_date: endDate,
       review_due_at: sprintReviewDueAt(endDate, reviewObjectionWindowHours),
       score_locked: existingSprint?.score_locked || false,
-      expected_updated_at: existingSprint?.updated_at || null,
+      expected_updated_at: expected.get(id) || null,
     };
     const changed = existingSprint && (
       existingSprint.name !== row.name
@@ -103,6 +110,9 @@ export async function POST(request: NextRequest) {
       || (existingSprint.review_due_at || "").slice(0, 16) !== row.review_due_at.slice(0, 16)
     );
     if (!existingSprint || (!existingSprint.score_locked && !protectedSprintIds.has(existingSprint.id) && changed)) {
+      if (existingSprint && !expected.has(id)) return NextResponse.json({ error: "Der Sprint war nicht Teil der angezeigten Planungsbasis. Bitte den Serverstand vergleichen.", code: "sprint_plan_conflict" }, { status: 409 });
+      if (existingSprint && !expected.get(id)) return apiError("Die ursprüngliche Sprint-Version fehlt. Bitte neu laden.", 400);
+      if (existingSprint && expected.get(id) !== existingSprint.updated_at) return NextResponse.json({ error: "Der Sprint-Plan wurde zwischenzeitlich geändert. Bitte den Serverstand vergleichen.", code: "sprint_plan_conflict" }, { status: 409 });
       upserts.push(row);
     }
     nextNumber += 1;
@@ -150,7 +160,7 @@ export async function POST(request: NextRequest) {
   }, metadata);
   if (transactionError) {
     if (transactionError.code === "P0001") {
-      return apiError("Sprint-Plan wurde parallel geändert oder enthält inzwischen geschützte Sprints. Bitte neu laden.", 409);
+      return NextResponse.json({ error: "Sprint-Plan wurde parallel geändert oder enthält inzwischen geschützte Sprints. Bitte den Serverstand vergleichen.", code: "sprint_plan_changed_or_protected" }, { status: 409 });
     }
     if (transactionError.code === "22023") return apiError("Sprint-Plan ist ungültig.", 400);
     return apiError(transactionError.message, 500);

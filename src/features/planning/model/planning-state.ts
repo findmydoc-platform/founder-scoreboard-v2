@@ -54,6 +54,10 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 export interface PlanningState extends PlanningNotificationsState {
+  sprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanView;
+  checkSprintPlan(): Promise<PlanningTaskSaveCheck>;
+  resumeSprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanEditor | null;
+  beginSprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanEditor;
   checkReviewWindowSave(): Promise<PlanningTaskSaveCheck>;
   reviewWindow(): import("@/features/sprint/model/review-window-editing").ReviewWindowView;
   resumeReviewWindowEdit(): import("@/features/sprint/model/review-window-editing").ReviewWindowEditor | null;

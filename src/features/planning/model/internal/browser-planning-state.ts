@@ -9,6 +9,7 @@ import * as profileTokenApi from "@/features/profile/model/profile-planning-item
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
 import { createPlanningState } from "./planning-state-owner";
+import { sprintNumber } from "@/lib/planning-schedule";
 import { normalizePlanningShellState } from "../planning-app-model";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { isSupportingWorkspace, supportingWorkspaceModelToPlanningShellState } from "../supporting-planning-shell-projection";
@@ -34,6 +35,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialWorkspace: options.initialWorkspace,
     initialHeaderData: options.initialHeaderData,
     adapter: {
+      async createSprintPlan(input, basis) {
+        const { response, body } = await planningApi.createSprintPlanRequest(runtime.apiClient, { ...input, expectedSprints: basis.sprints.map(sprint => ({ id: sprint.id, number: Math.max(sprintNumber(sprint.name), sprintNumber(sprint.id)), updatedAt: sprint.updatedAt })) });
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Sprint-Plan konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        if (!Array.isArray(body?.sprints)) throw new Error("Die Planung ist noch nicht bestätigt.");
+        return { sprints: body.sprints };
+      },
       async saveReviewWindow(expectedHours, hours) {
         const { response, body } = await planningApi.updateSprintReviewWindowRequest(runtime.apiClient, expectedHours, hours);
         if (!response.ok) throw Object.assign(new Error(body?.error || "Prozesseinstellung konnte nicht gespeichert werden."), { status: response.status, code: body?.code });

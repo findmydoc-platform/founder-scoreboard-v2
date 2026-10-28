@@ -183,7 +183,7 @@ export function updateSprintRequest(apiClient: BrowserApiClient, sprintId: strin
 }
 
 export function createSprintPlanRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; sprints?: Sprint[] }>("/api/sprints", {
+  return apiClient.requestJson<{ error?: string; code?: string; sprints?: Sprint[] }>("/api/sprints", {
     method: "POST",
     json: payload,
   });

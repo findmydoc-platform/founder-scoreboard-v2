@@ -6,6 +6,7 @@ import type { PlanningReadCoverage } from "./planning-read-scopes";
 export function createSprintState(options: {
   current(): PlanningShellState; update(data: PlanningShellState): void; changed(): void; active(): boolean; generation(): number; nextSequence(): number;
   save?: (sprint: Sprint, patch: SprintEditPatch) => Promise<{ sprint: Sprint }>;
+  planPending?: (id: string) => boolean; checkPlan?: () => Promise<PlanningTaskSaveCheck>;
   reviewWindowPending?: () => boolean; checkReviewWindow?: () => Promise<PlanningTaskSaveCheck>;
   refresh(): Promise<boolean>; readStatus(): PlanningReadStatus;
 }) {
@@ -28,6 +29,7 @@ export function createSprintState(options: {
   }
   async function check(id: string): Promise<PlanningTaskSaveCheck> {
     if (!options.active()) return { outcome: "session-ended", readStatus: "not-needed" };
+    if (options.planPending?.(id) && options.checkPlan) return options.checkPlan();
     if (options.reviewWindowPending?.() && options.checkReviewWindow) return options.checkReviewWindow();
     if (!uncertain.has(id)) return { outcome: "not-pending", readStatus: "not-needed" };
     const existing = checks.get(id); if (existing) return existing;
@@ -43,6 +45,18 @@ export function createSprintState(options: {
   }
   return {
     check,
+    acceptPlan(rows: import("@/lib/types").Sprint[], started: number, basis: import("@/features/sprint/model/sprint-plan").SprintPlanBasis) {
+      const current = options.current();
+      const next = new Map(current.sprints.map(sprint => [sprint.id, sprint]));
+      for (const sprint of rows) {
+        const before = next.get(sprint.id);
+        const shown = basis.sprints.find(item => item.id === sprint.id);
+        if (!before && (completeReads.get("sprints") || 0) > started) continue;
+        if ((stamps.get(sprint.id) || 0) > started && before?.updatedAt !== shown?.updatedAt && before?.updatedAt !== sprint.updatedAt) continue;
+        next.set(sprint.id, sprint); stamps.set(sprint.id, options.nextSequence());
+      }
+      options.update({ ...current, sprints: [...next.values()] });
+    },
     schedulesPending: () => pending.size > 0 || uncertain.size > 0,
     async checkPendingSchedules(): Promise<PlanningTaskSaveCheck> {
       if (!options.active()) return { outcome: "session-ended", readStatus: "not-needed" };
@@ -110,7 +124,7 @@ export function createSprintState(options: {
       editors.set(context, { id: shown.id, view: () => checkedView(view) });
       function save(patch: SprintEditPatch): Promise<SprintEditResult> {
         if (closed || !options.active() || generation !== options.generation()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Bearbeitung wurde beendet." });
-        if (uncertain.has(basis.id) || options.reviewWindowPending?.()) { view = { ...view, phase: "blocked", submitted: structuredClone(patch), error: "Eine vorherige Sprint-Änderung ist noch nicht bestätigt. Diese Eingabe wurde noch nicht gesendet." }; options.changed(); return Promise.resolve({ ok: false, kind: "unconfirmed", error: view.error }); }
+        if (uncertain.has(basis.id) || options.reviewWindowPending?.() || options.planPending?.(basis.id)) { view = { ...view, phase: "blocked", submitted: structuredClone(patch), error: "Eine vorherige Sprint-Änderung ist noch nicht bestätigt. Diese Eingabe wurde noch nicht gesendet." }; options.changed(); return Promise.resolve({ ok: false, kind: "unconfirmed", error: view.error }); }
         const operation = Symbol(basis.id);
         let originalBasis = structuredClone(basis);
         const submitted = structuredClone(patch);

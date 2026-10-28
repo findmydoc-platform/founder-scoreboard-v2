@@ -48,7 +48,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     canManageTaskMeta,
     createFounderEvent,
     createScoreObjection,
-    createSprintPlan,
     planningState,
     currentProfile,
     data,
@@ -234,7 +233,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
             data.project.reviewObjectionWindowHours,
           ).length}
           onUpdateSprintPlanning={setSprintPlanningOptions}
-          onCreateSprintPlan={createSprintPlan}
           currentProfile={currentProfile}
           canManageSprint={canManageSprint}
           sprintLockMessage={sprintLockMessage}
