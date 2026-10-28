@@ -81,15 +81,17 @@ export function mapPlanningSummaryRows(...args: Parameters<typeof mapPlanningIte
 
 export async function loadPlanningItemsForReadModel(supabase: SupabaseClient) {
   const [profileResult, itemResult, strategyResult, raciResult, linkResult] = await Promise.all([
-    supabase.from("profiles").select(planningProfileSelect).order("name"),
-    supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", planningProjectId).order("sort_order").order("id"),
-    supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"),
-    supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order"),
-    supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"),
+    supabase.from("profiles").select(planningProfileSelect, { count: "exact" }).order("name"),
+    supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect, { count: "exact" }).eq("project_id", planningProjectId).order("sort_order").order("id"),
+    supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints", { count: "exact" }),
+    supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order", { count: "exact" }).order("task_id").order("sort_order"),
+    supabase.from("task_links").select("id,task_id,type,label,url,position,metadata", { count: "exact" }).order("position").order("id"),
   ]);
   if (profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error) return null;
   const people = ((profileResult.data || []) as DbProfile[]).map(mapProfile);
+  const complete = (result: { data: unknown[] | null; count: number | null }) => typeof result.count === "number" && (result.data?.length || 0) >= result.count ? "complete" as const : "partial" as const;
   return {
+    readCoverage: { people: complete(profileResult), items: complete(itemResult), strategies: complete(strategyResult), raci: complete(raciResult), links: complete(linkResult) },
     people,
     items: mapPlanningItemRows(
       (itemResult.data || []) as unknown as DbTask[],

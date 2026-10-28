@@ -2,6 +2,7 @@ import type { NotificationPreference, Profile, ProfileUiPreference, Project, Tas
 
 export type ProfileWorkspaceModel = Readonly<{
   revision: string;
+  readCoverage?: Readonly<Partial<Record<"project" | "people" | "initiatives" | "strategies" | "raci" | "links" | "notificationPreferences" | "preferences", "complete" | "partial">>>;
   project: Project;
   people: readonly Profile[];
   initiatives: readonly Task[];

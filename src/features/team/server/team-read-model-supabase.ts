@@ -14,6 +14,7 @@ export function createSupabaseTeamReadModel(supabase: SupabaseClient): TeamReadM
         status: "ready",
         model: {
           revision: state.items.reduce<string>((latest, item) => item.updatedAt && item.updatedAt > latest ? item.updatedAt : latest, ""),
+          readCoverage: state.readCoverage,
           people: state.people,
           items: state.items,
         },

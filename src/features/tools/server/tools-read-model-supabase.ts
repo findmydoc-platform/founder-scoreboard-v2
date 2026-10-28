@@ -12,7 +12,7 @@ export function createSupabaseToolsReadModel(supabase: SupabaseClient): ToolsRea
     async load(context) {
       if (!context.authorized) return { status: "forbidden" };
       const [profileResult, toolResult] = await Promise.all([
-        supabase.from("profiles").select(planningProfileSelect).order("name"),
+        supabase.from("profiles").select(planningProfileSelect, { count: "exact" }).order("name"),
         supabase.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order,updated_at", { count: "exact" }).order("sort_order").limit(1000),
       ]);
       if (profileResult.error || toolResult.error) return { status: "unavailable" };
@@ -23,6 +23,7 @@ export function createSupabaseToolsReadModel(supabase: SupabaseClient): ToolsRea
           revision: tools.map((tool) => `${tool.sortOrder}:${tool.id}`).join("|"),
           tools,
           coverage: typeof toolResult.count === "number" && tools.length >= toolResult.count ? "complete" : "partial",
+          readCoverage: { people: typeof profileResult.count === "number" && (profileResult.data?.length || 0) >= profileResult.count ? "complete" : "partial" },
           people: ((profileResult.data || []) as DbProfile[]).map(mapProfile),
         },
       };
