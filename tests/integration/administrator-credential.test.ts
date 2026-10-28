@@ -69,7 +69,15 @@ it("administrator application and database boundaries retain activation, ending,
     expect(held.ok).toBe(true);
     const changed = await technical.PATCH(request(founder, "PATCH", { githubLogin: "synthetic-login" }), target);
     expect(changed.status).toBe(200);
-    expect(await changed.json()).toEqual({ ok: true });
+    expect(await changed.json()).toEqual({
+      ok: true,
+      profile: {
+        id: viewer.profileId,
+        githubLogin: "synthetic-login",
+        googleChatUserId: null,
+        googleChatDmSpace: null,
+      },
+    });
     expect((await database.query("select github_login from public.profiles where id=$1", [viewer.profileId])).rows[0].github_login).toBe("synthetic-login");
     const activeView = await directory.GET(request(founder));
     expect(activeView.status).toBe(200);
