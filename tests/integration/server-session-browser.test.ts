@@ -293,10 +293,13 @@ test.each(["/planning", "/team/platform-releases"])("%s consumes server session 
   context.on("request", request => requests.push({ path: new URL(request.url()).pathname, authorization: request.headers().authorization }));
   try {
     const page = await context.newPage();
-    const sessionRead = page.waitForResponse(response => new URL(response.url()).pathname === "/api/auth/session");
+    // The root provider can read the anonymous session while the login page is mounted.
+    const sessionRead = page.waitForResponse(response => response.request().method() === "GET" && new URL(response.url()).pathname === "/api/auth/session" && response.status() === 200);
     await page.goto(`${appOrigin}/auth/login?next=${encodeURIComponent(workspace)}`);
     await page.waitForURL(`${appOrigin}${workspace}`);
-    expect((await sessionRead).status()).toBe(200);
+    const authorizedSession = await sessionRead;
+    expect(authorizedSession.status()).toBe(200);
+    expect(await authorizedSession.json()).toMatchObject({ session: { userId: userB, revision: expect.any(String) } });
     const updates = page.getByRole("button", { name: "Was ist neu schließen" });
     await page.addLocatorHandler(updates, async () => { await updates.click(); });
     await page.getByRole("button", { name: /Account-Menü öffnen/ }).click();
