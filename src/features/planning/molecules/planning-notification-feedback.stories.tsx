@@ -14,6 +14,7 @@ import type { PlanningCommandContext } from "../hooks/planning-command-context";
 const event = { id: 1, title: "Meine Benachrichtigung", status: "pending", seenAt: "", dismissedAt: "", resolvedAt: "", resolutionReason: "", recipientProfileId: "profile", actorProfileId: "", entityId: "task", entityType: "task", type: "task_changed", body: "", createdAt: "2026-10-28T00:00:00Z" } satisfies NotificationEvent;
 const second = { ...event, id: 2, title: "Unabhängiger Hinweis" };
 function NotificationFeedbackStory() {
+  const [open, setOpen] = useState(true);
   const [server] = useState(() => {
     let reject!: (error: Error) => void;
     const fixture = { writes: 0, reads: 0, lose: () => reject(new Error("Verbindung unterbrochen")), reject: () => reject(Object.assign(new Error("Aktion abgelehnt"), { status: 422 })), write: (id: number, action: "seen" | "dismiss") => { fixture.writes++; if (id === 2) return Promise.resolve({ action, status: "dismissed" as const }); return new Promise<{ action: "seen" | "dismiss"; status: "dismissed" }>((_resolve, fail) => { reject = fail; }); } };
@@ -29,7 +30,7 @@ function NotificationFeedbackStory() {
   return <PlanningBusinessStateContext.Provider value={owner.planning}><main className="min-h-96 p-4">
     <h1>Benachrichtigungen</h1><p>Writes: {server.writes}</p><p>Checks: {server.reads}</p>
     <button onClick={server.lose}>Lose response</button><button onClick={server.reject}>Reject action</button>
-    <NotificationInbox notifications={owner.planning.header().data.notifications} open onToggle={() => {}} onDismiss={commands.dismissNotification} />
+    <NotificationInbox notifications={owner.planning.header().data.notifications} open={open} onToggle={() => setOpen(value => !value)} onDismiss={commands.dismissNotification} />
     <PlanningNotificationFeedback />
   </main></PlanningBusinessStateContext.Provider>;
 }
@@ -46,6 +47,7 @@ export const UnknownOutcomeChecksWithoutReplayAndIndependentActionContinues: Sto
   await waitFor(() => expect(canvas.getByText("Checks: 1")).toBeVisible());
   await expect(canvas.getByText("Writes: 1")).toBeVisible();
   await expect(canvas.getByRole("status")).toHaveTextContent("Bestätigung steht aus");
+  await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
   await userEvent.click(canvas.getByRole("button", { name: "Notification schließen" }));
   await waitFor(() => expect(canvas.getByText("Writes: 2")).toBeVisible());
 } };
@@ -54,6 +56,7 @@ export const KnownFailureRestoresOnlyTheRejectedNotification: Story = { play: as
   await userEvent.click(canvas.getAllByRole("button", { name: "Notification schließen" })[0]);
   await userEvent.click(canvas.getByRole("button", { name: "Reject action" }));
   await expect(await canvas.findByRole("status")).toHaveTextContent("Aktion abgelehnt");
+  await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
   await expect(canvas.getByText("Meine Benachrichtigung")).toBeVisible();
   await expect(canvas.getByText("Unabhängiger Hinweis")).toBeVisible();
 } };

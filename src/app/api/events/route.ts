@@ -19,5 +19,5 @@ export async function POST(request: NextRequest) {
   const { data: event, error } = result;
   if (error || !event) return apiError(error?.message || "Event konnte nicht angelegt werden.", 500);
   invalidateSharedPlanningHeaderCache("calendarEvents");
-  return NextResponse.json({ event: mapFounderEvent(event) });
+  return NextResponse.json({ event: mapFounderEvent(event), ...("auditUnconfirmed" in result && result.auditUnconfirmed ? { code: "event_saved_audit_unconfirmed", warning: "Event gespeichert. Die Protokollierung konnte nicht bestätigt werden." } : {}) });
 }

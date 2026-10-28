@@ -56,8 +56,8 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       if (action !== "strategic.read") return Promise.resolve({ status: "forbidden" as const });
       return load(createSupabaseStrategicPlanningReadModel(service));
     },
-    loadWorkspace() {
-      if (action === "events.read") return load(createSupabaseEventsReadModel(service));
+    loadWorkspace(options?: { eventsRange?: import("@/features/events/model/event-state").EventRange | null }) {
+      if (action === "events.read") return load(createSupabaseEventsReadModel(service, options?.eventsRange));
       if (action === "tools.read") return load(createSupabaseToolsReadModel(service));
       if (action === "strategic.read") return load(createSupabaseStrategicPlanningReadModel(service));
       if (action === "team.read") return load(createSupabaseTeamReadModel(service));
@@ -152,7 +152,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       if (result.data) observedEvent = structuredClone(result.data);
       return result;
     },
-    async saveEvent(supplied: EventWrite, suppliedMetadata: ResourceAuditMetadata) {
+    async saveEvent(supplied: EventWrite, suppliedMetadata: ResourceAuditMetadata, expectedUpdatedAt?: string) {
       const row = structuredClone(Object.fromEntries(eventFields.map(field => [field, supplied[field]]))) as EventWrite;
       const metadata = { request_ip: suppliedMetadata.request_ip || null, user_agent: suppliedMetadata.user_agent || null };
       if ((action !== "events.create" && action !== "events.update") || !profile || (action === "events.update" && !observedEvent)) return denied();
@@ -168,12 +168,20 @@ export async function authorizeResource(input: ResourceCredentialInput) {
         catch { return denied(); }
       }
       const values = action === "events.create" ? { ...row, created_by: profile.id } : row;
-      const result = action === "events.create"
-        ? await write.from("founder_events").insert(values).select(founderEventSelect).single<DbFounderEvent>()
-        : await write.from("founder_events").update(values).eq("id", Number(target)).select(founderEventSelect).single<DbFounderEvent>();
+      let result;
+      if (action === "events.create") result = await write.from("founder_events").insert(values).select(founderEventSelect).single<DbFounderEvent>();
+      else {
+        let query = write.from("founder_events").update(values).eq("id", Number(target));
+        if (expectedUpdatedAt !== undefined) query = query.eq("updated_at", expectedUpdatedAt);
+        result = await query.select(founderEventSelect).maybeSingle<DbFounderEvent>();
+        if (!result.error && !result.data) return { data: null, error: { code: "event_version_conflict", message: "Event wurde zwischenzeitlich geändert. Bitte den aktuellen Stand prüfen." } };
+      }
       if (!result.error && result.data) {
-        await followup.from("audit_log").insert({ actor_profile_id: profile.id, action: action === "events.create" ? "founder_event.create" : "founder_event.update",
-          entity_type: "founder_event", entity_id: String(result.data.id), ...(action === "events.update" ? { before_data: observedEvent } : {}), after_data: values, ...metadata });
+        try {
+          const audit = await followup.from("audit_log").insert({ actor_profile_id: profile.id, action: action === "events.create" ? "founder_event.create" : "founder_event.update",
+            entity_type: "founder_event", entity_id: String(result.data.id), ...(action === "events.update" ? { before_data: observedEvent } : {}), after_data: values, ...metadata });
+          if (audit.error) return { ...result, auditUnconfirmed: true };
+        } catch { return { ...result, auditUnconfirmed: true }; }
       }
       return result;
     },

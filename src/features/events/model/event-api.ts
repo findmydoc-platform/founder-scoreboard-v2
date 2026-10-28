@@ -3,6 +3,7 @@ import { cleanText } from "@/lib/api-input";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type EventPayload = {
+  expectedUpdatedAt?: string;
   title?: string;
   category?: FounderEvent["category"];
   startsAt?: string;
