@@ -339,5 +339,5 @@ export async function countWaitingGitHubCommentsForAuthor(supabase: SupabaseClie
     .eq("author_profile_id", profileId)
     .eq("status", "waiting_for_author_connection");
   if (error) throw new Error(`Wartende GitHub-Kommentare konnten nicht gelesen werden: ${error.message}`);
-  return count || 0;
+  return Number.isSafeInteger(count) && count! >= 0 ? count : null;
 }

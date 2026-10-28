@@ -18,3 +18,9 @@ test("GitHub App status route preserves its browser contract through the shared 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { installation: { available: false }, user: { connected: true, needsReconnect: false, expiresAt: null }, waitingCommentCount: 2 });
 });
+
+for(const mode of ["failed-count","missing-count"])test(`GitHub status preserves connection admission and reports an unavailable ${mode} as unknown`,async()=>{
+ const protocol=administratorProtocol(),authFetch=globalThis.fetch;
+ vi.stubGlobal("fetch",async(input,init)=>{const request=new Request(input,init),url=new URL(request.url);if(url.pathname==="/rest/v1/profiles")return Response.json({github_login:"synthetic-author"});if(url.pathname==="/rest/v1/github_app_user_tokens")return Response.json({github_login:"synthetic-author",revoked_at:null,access_token_expires_at:null});if(url.pathname==="/rest/v1/task_comment_github_deliveries")return mode==="failed-count"?Response.json({message:"Count unavailable"},{status:503}):new Response(null);return authFetch(request);});
+ const {GET}=await importTestModule("src/app/api/github-app/status/route.ts",{"server-only":{}});const response=await GET(protocol.request("/api/github-app/status"));assert.equal(response.status,200);assert.deepEqual(await response.json(),{installation:{available:false},user:{connected:true,needsReconnect:false,expiresAt:null},waitingCommentCount:null});
+});

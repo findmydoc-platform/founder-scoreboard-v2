@@ -84,7 +84,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
     async readGitHubConnection() {
       if (action !== "connection.github.read" || !profile) throw new Error("Keine Berechtigung für diese Aktion.");
       const user = await getGitHubUserConnectionStatus(service, profile);
-      const waitingCommentCount = await countWaitingGitHubCommentsForAuthor(service, profile.id).catch(() => 0);
+      const waitingCommentCount = await countWaitingGitHubCommentsForAuthor(service, profile.id).catch(() => null);
       await context.current(); context.assertCurrent();
       return { user, waitingCommentCount };
     },
