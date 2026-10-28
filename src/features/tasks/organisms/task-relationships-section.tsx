@@ -173,7 +173,7 @@ export function TaskRelationshipsSection({
         </div>
       ) : null}
 
-      <TaskRelationshipChangeNotices changes={relationshipChanges} onCheck={onCheckRelationshipChange} />
+      <TaskRelationshipChangeNotices changes={relationshipChanges} targetOptions={relationTargetOptions} onCheck={onCheckRelationshipChange} />
       {relationshipDataReady ? (
         <div className="mt-4 grid gap-4">
           {waitsOn.length ? <RelationshipList title="Wartet auf" currentTask={task} rows={waitsOn} empty="" canRemove={relation => !relationshipBlocked(relation.taskId) && !relationshipBlocked(relation.relatedTaskId) && canRemoveRelation(relation)} onRemove={onRemoveRelation} onOpenTask={onOpenTask} /> : null}
