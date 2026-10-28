@@ -86,8 +86,12 @@ export function NotificationsOverview({
   const personalNewCount = personalNotifications.filter((event) => event.status === "pending" && !event.seenAt).length;
   const personalDoneCount = personalNotifications.filter((event) => isPersonalNotificationDone(event)).length;
   const personalTodayCount = personalNotifications.filter((event) => isToday(event.createdAt)).length;
+  if (readStatus === "forbidden") return <p role="status" className="p-4 text-sm text-slate-700">Kein Zugriff auf Benachrichtigungen.</p>;
+  if (readStatus === "not-loaded" || readStatus === "loading" && !personalNotifications.length) return <p role="status" className="p-4 text-sm text-slate-700">Benachrichtigungen werden geladen.</p>;
+  if (readStatus === "unavailable" && !personalNotifications.length) return <p role="status" className="p-4 text-sm text-slate-700">Benachrichtigungen konnten nicht geladen werden.</p>;
   return (
     <div className="grid min-w-0 gap-4">
+      {readStatus === "unavailable" ? <p role="status" className="text-sm text-slate-600">Benachrichtigungen konnten nicht aktualisiert werden. Der letzte verfügbare Stand bleibt sichtbar.</p> : null}
       {readStatus === "stale" || readStatus === "loading" ? <p role="status" className="text-sm text-slate-600">Der Stand der Benachrichtigungen wird geprüft.</p> : null}
       {completeness === "partial" ? <p className="text-sm text-slate-600">Die Angaben beziehen sich auf den geladenen Ausschnitt.</p> : null}
       <section className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
