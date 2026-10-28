@@ -115,6 +115,7 @@ export function syncTaskToGitHubRequest(
 export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: string, comment: string) {
   return apiClient.requestJson<{
     error?: string;
+    code?: string;
     notice?: { code: string; level: "info"; message: string } | null;
     comment?: PlanningShellState["taskComments"][number];
   }>(`/api/tasks/${taskId}/comments`, {
