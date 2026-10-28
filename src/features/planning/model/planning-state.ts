@@ -1,3 +1,4 @@
+import type { PlanningHierarchy } from "@/features/projects/model/hierarchy-state";
 import type { PlanningMeetingAttendance } from "@/features/sprint/model/meeting-attendance-state";
 import type { PlanningTaskRelationships } from "@/features/tasks/model/task-relationship-change";
 import type { PlanningTaskGitHubSync } from "@/features/tasks/model/task-github-sync-state";
@@ -67,7 +68,7 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 import type { AdministrationPeopleState } from "@/features/administration/model/administration-state";
-export interface PlanningState extends PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   beginBacklogOrder(tasks: readonly Task[]): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
   backlogOrders(): readonly import("@/features/backlog/model/backlog-ordering").BacklogOrderView[];
   resumeBacklogOrder(id: string): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor | null;

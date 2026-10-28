@@ -61,3 +61,14 @@ test("a disallowed repository is rejected before creation", async () => {
   assert.equal(response.status, 400);
   assert.equal(protocol.calls.some(call => call.name === "create_planning_task_transaction"), false);
 });
+
+test("strategic Initiative creation preserves its actual proposal receipt when the later direct approval fails", async () => {
+ const strategic={...created,id:"synthetic-profile-new-proposal-111111111111",task_type:"initiative",parent_task_id:"epic"};
+ const protocol=planningRouteProtocol({role:"ceo",snapshot:{eligible:false,active:false,expiresAt:null},tables:{tasks:{id:"epic",task_type:"epic"},active_tasks:{id:"epic",task_type:"epic"},profiles:[]},responses:{
+  create_browser_planning_item_transaction_v2:{task:strategic},
+  prepare_planning_approval_command:{task:strategic,parent:{id:"epic",task_type:"epic"},actorRole:"ceo",profiles:[]},
+  mutate_planning_approval_command_transaction:()=>Response.json({code:"P0001",message:"Approval unavailable"},{status:400}),
+ }});
+ const response=await handleBrowserTaskCreate(protocol.request("/api/tasks","POST",{...payload,taskType:"initiative",parentTaskId:"epic",approveNow:true}));
+ const body=await response.json();assert.equal(response.status,400);assert.equal(body.code,"task_created_approval_failed");assert.equal(body.task.id,strategic.id);assert.equal(body.task.approvalStatus,"proposed");assert.equal(body.task.updatedAt,"opaque/created");
+});

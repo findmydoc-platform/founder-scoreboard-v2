@@ -85,9 +85,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     reviewTask,
     removeTaskRelation,
     reportTaskBlocker,
-    saveInitiative,
-    saveEpic,
-    deleteEpic,
     selectedInitiative,
     selectedTask,
     selectedTaskActivity,
@@ -217,21 +214,21 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           canApproveNow={currentProfile?.platformRole === "ceo"}
           pending={isPending}
           onClose={() => setInitiativeDialogDefaults(null)}
-          onSave={saveInitiative}
+          planningState={controller.planningState}
         />
       )}
       {epicDialogDefaults && (
         <EpicDialog
           defaults={epicDialogDefaults}
           onClose={() => setEpicDialogDefaults(null)}
-          onSave={saveEpic}
+          planningState={controller.planningState}
         />
       )}
       {epicDeleteTarget && (
         <EpicDeleteDialog
           target={epicDeleteTarget}
           onClose={() => setEpicDeleteTarget(null)}
-          onConfirm={deleteEpic}
+          planningState={controller.planningState}
         />
       )}
     </>

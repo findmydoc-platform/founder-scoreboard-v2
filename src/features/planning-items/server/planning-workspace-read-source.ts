@@ -118,7 +118,7 @@ export async function loadPlanningWorkspaceModel(
     },
   );
   const projectRead = trackRead(observeRuntimePhase("board.project", () => supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<ProjectRow>()), (result) => !result.data);
-  const profileRead = trackRead(observeRuntimePhase("board.profiles", () => supabase.from("profiles").select(planningProfileSelect).order("name")));
+  const profileRead = trackRead(observeRuntimePhase("board.profiles", () => supabase.from("profiles").select(planningProfileSelect, { count: "exact" }).order("name")));
   type AvatarOutcome = { people: Profile[] } | { error: unknown };
   let avatarWork: Promise<AvatarOutcome> | undefined;
   const avatarStart = profileRead.then((result) => {
@@ -131,13 +131,13 @@ export async function loadPlanningWorkspaceModel(
   const baseReads = Promise.all([
     projectRead,
     profileRead,
-    trackRead(observeRuntimePhase("board.items", () => supabase.from(ACTIVE_TASKS_TABLE).select(planningSummarySelect).eq("project_id", planningProjectId).order("sort_order").order("id"))),
-    trackRead(observeRuntimePhase("board.strategy", () => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"))),
-    trackRead(observeRuntimePhase("board.raci", () => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order"))),
-    trackRead(observeRuntimePhase("board.links", () => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"))),
-    trackRead(observeRuntimePhase("board.sprints", () => supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked,updated_at").order("start_date").order("id"))),
-    trackRead(observeRuntimePhase("board.relationships", () => supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).order("id").limit(500))),
-    trackRead(observeRuntimePhase("board.preferences", () => supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").order("profile_id"))),
+    trackRead(observeRuntimePhase("board.items", () => supabase.from(ACTIVE_TASKS_TABLE).select(planningSummarySelect, { count: "exact" }).eq("project_id", planningProjectId).order("sort_order").order("id"))),
+    trackRead(observeRuntimePhase("board.strategy", () => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints", { count: "exact" }))),
+    trackRead(observeRuntimePhase("board.raci", () => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order", { count: "exact" }).order("task_id").order("sort_order"))),
+    trackRead(observeRuntimePhase("board.links", () => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata", { count: "exact" }).order("position").order("id"))),
+    trackRead(observeRuntimePhase("board.sprints", () => supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked,updated_at", { count: "exact" }).order("start_date").order("id"))),
+    trackRead(observeRuntimePhase("board.relationships", () => supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at", { count: "exact" }).order("created_at", { ascending: false }).order("id").limit(500))),
+    trackRead(observeRuntimePhase("board.preferences", () => supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at", { count: "exact" }).order("profile_id"))),
   ]);
   const [projectResult, profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult] = await baseReads.catch(async (error: unknown) => {
     // A failed base read owns the result, but started avatar dispatch must finish cleanup.
@@ -151,6 +151,7 @@ export async function loadPlanningWorkspaceModel(
   }
   if ("error" in avatars) throw avatars.error;
   const people = avatars.people;
+  const complete = (result: { data: unknown[] | null; count: number | null }) => typeof result.count === "number" && (result.data?.length || 0) >= result.count ? "complete" as const : "partial" as const;
   return observeRuntimePreparation(() => {
     const items = mapPlanningSummaryRows(
       (itemResult.data || []) as unknown as DbTask[],
@@ -164,6 +165,7 @@ export async function loadPlanningWorkspaceModel(
       status: "ready",
       model: {
         revision: items.reduce((latest, item) => item.updatedAt && item.updatedAt > latest ? item.updatedAt : latest, ""),
+        coverage: { items: complete(itemResult), people: complete(profileResult), strategies: complete(strategyResult), raci: complete(raciResult), links: complete(linkResult), sprints: complete(sprintResult), relationships: complete(itemResult) === "complete" ? complete(relationResult) : "partial", preferences: complete(preferenceResult) },
         project: mapPlanningProject(projectResult.data),
         items,
         relationships: ((relationResult.data || []) as DbTaskRelation[])

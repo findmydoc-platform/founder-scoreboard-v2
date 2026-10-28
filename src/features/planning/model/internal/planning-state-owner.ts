@@ -1,3 +1,4 @@
+import { createHierarchyCommands } from "./hierarchy-commands";
 import { createMeetingAttendanceState } from "./meeting-attendance-state";
 import { createTaskRelationshipChanges } from "./task-relationship-changes";
 import { createTaskGitHubSyncState } from "./task-github-sync-state";
@@ -37,7 +38,7 @@ import { createProfileApiTokensState } from "./profile-api-tokens-state";
 import { createProfileSettingsState } from "./profile-settings-state";
 import type { OwnProfileSettingsConfirmation, OwnProfileSettingsPatch } from "@/features/profile/model/profile-settings-contract";
 import { createTaskEditing } from "./task-editing";
-import { applyDeliverableApprovalPatch } from "../approval-domain";
+import { applyPlanningItemApprovalPatch } from "../approval-domain";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
@@ -53,7 +54,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   saveSprint?: (sprint: import("@/lib/types").Sprint, patch: import("@/features/sprint/model/sprint-editing").SprintEditPatch) => Promise<{ sprint: import("@/lib/types").Sprint }>;
   readWorkweekCalendar?: (scope: import("@/features/team-workweek/model/published-workweek-calendar-state").WorkweekCalendarScope) => Promise<import("@/features/team-workweek/model/published-workweek-calendar-state").WorkweekCalendarResponse>;
   now?: () => number;
-  removeTask?: (task: Task, action: "withdraw" | "reject", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
+  removeTask?: (task: Task, action: "withdraw" | "reject" | "delete_epic", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
   createTask?: (input: PlanningTaskCreationInput) => Promise<PlanningTaskCreationConfirmation>;
   acknowledgeFeatureTour?: (tourId: string) => Promise<import("@/lib/types").ProfileFeatureTourAcknowledgement>;
   saveTeamProfile?: (profileId: string, patch: import("../planning-team-state").TeamProfilePatch, expected: Record<string, unknown>) => Promise<Partial<import("@/lib/types").Profile> & { id: string }>;
@@ -158,8 +159,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const taskReviews = createTaskReviewOperations({ adapter, current: () => confirmed, active:isActive, generation:()=>sessionGeneration, changed:publish,nextSequence:()=>++sequence,canRead:id=>!deniedTaskReads.has(id)&&confirmed.tasks.some(task=>task.id===id&&!lifecycle.isRemoved(task)),dependencyPending:task=>githubSync.blocksTask(task.id)||relationshipChanges.blocksTask(task.id)||attachmentUploads.blocksTask(task.id)||lifecycle.isRemoving(task)||githubImports.blocksTask(task.id)||blockerReports.blocksTask(task.id)||backlogAssignments.blocksTask(task.id)||backlogOrdering.blocksTask(task.id)||sprintLock.blocksTask(task)||taskSchedulePending(task.id)||[...pending.values()].some(op=>op.taskId===task.id),refresh:reloadBlockerTask,invalidate:()=>notifications.invalidateHeader(["notifications"]),accept(receipt,task,started,command){
     const current=confirmed.tasks.find(row=>row.id===task.id);
     const newer=Math.max(taskConfirmedAt.get(task.id)||0,taskReadAt.get(task.id)||0)>started&&current?.updatedAt!==task.updatedAt&&current?.updatedAt!==receipt.task.updatedAt;
-    if(!newer) { const patch={...receipt.task,id:task.id}; confirmed=patch.approvalStatus!==undefined?applyDeliverableApprovalPatch(confirmed,{...patch,approvalStatus:patch.approvalStatus}):{...confirmed,tasks:confirmed.tasks.map(row=>row.id===task.id?{...row,...patch}:row)};taskConfirmedAt.set(task.id,++sequence);
-      if(receipt.task.approvalStatus!==undefined)for(const child of confirmed.tasks)if(child.taskType==="sub_issue"&&child.parentTaskId===task.id)taskConfirmedAt.set(child.id,++sequence);
+    if(!newer) { const patch={...receipt.task,id:task.id}; confirmed=patch.approvalStatus!==undefined?applyPlanningItemApprovalPatch(confirmed,{...patch,approvalStatus:patch.approvalStatus}):{...confirmed,tasks:confirmed.tasks.map(row=>row.id===task.id?{...row,...patch}:row)};taskConfirmedAt.set(task.id,++sequence);
+      if(receipt.task.approvalStatus!==undefined)for(const child of confirmed.tasks)if(child.taskType===(task.taskType==="initiative"?"deliverable":"sub_issue")&&child.parentTaskId===task.id)taskConfirmedAt.set(child.id,++sequence);
     }
     if(receipt.review)confirmed={...confirmed,taskReviews:[receipt.review,...confirmed.taskReviews.filter(review=>review.id!==receipt.review!.id)]};
     if(receipt.activities?.length){const byId=new Map(confirmed.taskActivity.map(activity=>[activity.id,activity]));for(const activity of receipt.activities)byId.set(activity.id,activity);confirmed={...confirmed,taskActivity:[...byId.values()]};}
@@ -350,9 +351,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         const currentAfterWrite = confirmed.tasks.find(item => item.id === task.id);
         const foreignConfirmed = currentAfterWrite?.updatedAt !== task.updatedAt && currentAfterWrite?.updatedAt !== result.task.updatedAt;
         const saved = foreignConfirmed ? currentAfterWrite! : { ...result.task, id: task.id };
-        confirmed = task.taskType === "deliverable" && saved.approvalStatus !== undefined
-          ? applyDeliverableApprovalPatch(confirmed, { ...saved, approvalStatus: saved.approvalStatus })
+        confirmed = (task.taskType === "deliverable" || task.taskType === "initiative") && saved.approvalStatus !== undefined
+          ? applyPlanningItemApprovalPatch(confirmed, { ...saved, approvalStatus: saved.approvalStatus })
           : { ...confirmed, tasks: confirmed.tasks.map(item => item.id === task.id ? { ...item, ...saved } : item) };
+        if (saved.approvalStatus !== undefined && (task.taskType === "initiative" || task.taskType === "deliverable")) {
+          for (const child of confirmed.tasks) if (child.parentTaskId === task.id && child.taskType === (task.taskType === "initiative" ? "deliverable" : "sub_issue")) taskConfirmedAt.set(child.id, ++sequence);
+        }
         if (result.activities?.length) confirmed = { ...confirmed, taskActivity: [...result.activities, ...confirmed.taskActivity] };
         pending.delete(operation);
         status.set(task.id, [...pending.values()].some(item => item.taskId === task.id) ? "saving" : "saved");
@@ -406,14 +410,18 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     current: () => confirmed,
     capture: () => ++sequence,
     acceptCreation(result, started, relatedBasis) {
-      const incoming = [result.task, ...(result.relatedTask?.updatedAt ? [result.relatedTask] : [])];
+      const parent = confirmed.tasks.find(task => task.id === result.task.parentTaskId);
+      const childType = parent?.taskType === "initiative" ? "deliverable" : parent?.taskType === "deliverable" ? "sub_issue" : null;
+      const created = parent && result.task.taskType === childType && (taskConfirmedAt.get(parent.id) || 0) > started
+        ? { ...result.task, parentApprovalStatus: parent.approvalStatus } : result.task;
+      const incoming = [created, ...(result.relatedTask?.updatedAt ? [result.relatedTask] : [])];
       for (const task of incoming) {
         const current = confirmed.tasks.find(item => item.id === task.id);
         const unchangedRelatedBasis = relatedBasis?.id === task.id && current?.updatedAt === relatedBasis.updatedAt;
         if (((taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started) && !unchangedRelatedBasis) { freshness = "stale"; continue; }
         const known = confirmed.tasks.some(item => item.id === task.id);
         if (known) confirmed = { ...confirmed, tasks: confirmed.tasks.map(item => item.id === task.id ? { ...item, ...task } : item) };
-        else if (task.id === result.task.id) confirmed = { ...confirmed, tasks: [...confirmed.tasks, result.task] };
+        else if (task.id === result.task.id) confirmed = { ...confirmed, tasks: [...confirmed.tasks, created] };
         else { void planning.loadTaskDetail(task.id); continue; }
         taskConfirmedAt.set(task.id, ++sequence);
       }
@@ -436,7 +444,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     canReadTask: taskId => !deniedTaskReads.has(taskId),
     changed: publish,
   });
+  const hierarchy = createHierarchyCommands({planning:()=>planning,currentTask:id=>confirmed.tasks.find(task=>task.id===id),active:isActive,generation:()=>sessionGeneration,changed:publish});
   const planning: PlanningState = {
+    hierarchy: () => planning.workspace("projects"),
+    hierarchyEdits: hierarchy.views,
+    checkHierarchyEdit: hierarchy.check,
+    beginEpicEdit: hierarchy.beginEpic,
+    beginInitiativeEdit: hierarchy.beginInitiative,
+    deleteEmptyEpic: task => lifecycle.removeTask(task,"delete_epic",""),
+    decideInitiativeApproval: (task,action,note="") => action === "reject" ? lifecycle.removeTask(task,"reject",note).then(result=>result.ok?{ok:true as const,task:{id:task.id}}:result) : taskReviews.publicState.decideTaskApproval(task,action,note),
     syncTaskToGitHub:githubSync.sync,
     syncGitHubTasks:githubSync.syncBatch,
     taskGitHubSync:githubSync.view,
@@ -781,6 +797,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     outcomeChecks.clear();
     outcomeCheckStatus.clear();
     editing.clear();
+    hierarchy.clear();
     attendanceState.clear();
     relationshipChanges.clear();
     attachmentUploads.clear();

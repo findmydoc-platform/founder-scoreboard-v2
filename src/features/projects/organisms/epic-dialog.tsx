@@ -5,21 +5,15 @@ import { codepointLength } from "@/lib/github-issue-content";
 
 import { X } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import { HierarchyEditNotice } from "../molecules/hierarchy-edit-notice";
 import type { EpicStatus } from "@/features/projects/model/epic-contract";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
-export type EpicDraft = {
-  id?: string;
-  creationRequestId: string;
-  title: string;
-  description: string;
-  targetDate: string;
-  status: EpicStatus;
-  expectedUpdatedAt?: string;
-};
+import type { EpicDraft } from "@/features/projects/model/hierarchy-state";
 
 const statusOptions = [
   { value: "planned", label: "Geplant" },
@@ -31,10 +25,12 @@ export function EpicDialog({
   defaults,
   onClose,
   onSave,
+  planningState,
 }: {
   defaults: Partial<EpicDraft>;
   onClose: () => void;
-  onSave: (draft: EpicDraft) => Promise<void>;
+  onSave?: (draft: EpicDraft) => Promise<void>;
+  planningState?: PlanningState;
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -51,6 +47,10 @@ export function EpicDialog({
     status: defaults.status || "planned",
     expectedUpdatedAt: defaults.expectedUpdatedAt,
   });
+  const [editor] = useState(() => planningState?.beginEpicEdit(draft));
+  const [, render] = useState(0);
+  const editorView = editor?.view();
+  const saveBlocked = Boolean(editorView && ["saving", "unconfirmed", "blocked", "conflict", "partiallyConfirmed", "ended"].includes(editorView.phase));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
@@ -65,8 +65,8 @@ export function EpicDialog({
       : "Der Titel benötigt mindestens 3 Zeichen."
     : "";
 
-  const submit = async () => {
-    if (!canSave || pending) {
+  const submit = async (resave = false) => {
+    if (!canSave || pending || saveBlocked && !resave) {
       if (!canSave) {
         setTitleTouched(true);
         dialogRef.current?.querySelector<HTMLInputElement>("[data-autofocus]")?.focus();
@@ -78,7 +78,12 @@ export function EpicDialog({
     setPending(true);
     setError("");
     try {
-      await onSave(draft);
+      if (editor) {
+        const result = await (resave ? editor.resave(draft) : editor.save(draft));
+        if (result.ok) { editor.close(); onClose(); }
+        else setError(result.error);
+        setPending(false); render(value => value + 1);
+      } else await onSave?.(draft);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Der Meilenstein konnte nicht gespeichert werden.");
       setPending(false);
@@ -131,6 +136,7 @@ export function EpicDialog({
           }}
         >
           <div className="grid min-h-0 flex-1 content-start gap-5 overflow-y-auto overscroll-contain px-5 py-5 [scrollbar-gutter:stable] sm:px-6">
+            {editor && editorView ? <HierarchyEditNotice view={editorView} onCheck={() => { void editor.checkOutcome().then(() => render(value => value + 1)); }} onRefresh={() => { void editor.refreshConflict().then(() => render(value => value + 1)); }} onResave={() => { void submit(true); }} /> : null}
             {error && (
               <div
                 ref={errorRef}
@@ -206,7 +212,7 @@ export function EpicDialog({
 
           <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
             <UiButton className="w-full sm:w-auto" size="lg" disabled={pending} onClick={onClose}>Abbrechen</UiButton>
-            <UiButton className="w-full sm:w-auto" size="lg" type="submit" variant="primary" disabled={pending || !canSave}>
+            <UiButton className="w-full sm:w-auto" size="lg" type="submit" variant="primary" disabled={pending || saveBlocked || !canSave}>
               {pending ? (editing ? "Speichert …" : "Erstellt …") : (editing ? "Speichern" : "Meilenstein erstellen")}
             </UiButton>
           </footer>

@@ -292,7 +292,10 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
           note: "Bei Erstellung durch CEO freigegeben.",
         }),
       });
-      if (!approval.ok) return apiError("Initiative konnte nicht freigegeben werden.", 400);
+      if (!approval.ok) return NextResponse.json({
+        ok: false, error: "Initiative konnte nicht freigegeben werden.", code: "task_created_approval_failed",
+        task: responseTask, relation: null, relatedTask: null,
+      }, { status: 400 });
       responseTask = planningApprovalTaskFromResult(approval) || responseTask;
     }
     return NextResponse.json({

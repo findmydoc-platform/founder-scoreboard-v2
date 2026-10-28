@@ -27,16 +27,18 @@ export function applyOptimisticDeliverableApprovalDecision(task: Task, action: A
     : { ...updated, sprintId: "", scoreRelevant: false };
 }
 
-export function applyDeliverableApprovalPatch(
+export function applyPlanningItemApprovalPatch(
   data: PlanningShellState,
-  deliverablePatch: Partial<Task> & Pick<Task, "id" | "approvalStatus">,
+  itemPatch: Partial<Task> & Pick<Task, "id" | "approvalStatus">,
 ): PlanningShellState {
+  const parentType = itemPatch.taskType || data.tasks.find(task => task.id === itemPatch.id)?.taskType;
+  const childType = parentType === "initiative" ? "deliverable" : parentType === "deliverable" ? "sub_issue" : null;
   return {
     ...data,
     tasks: data.tasks.map((task) => {
-      if (task.id === deliverablePatch.id) return { ...task, ...deliverablePatch };
-      if (task.taskType === "sub_issue" && task.parentTaskId === deliverablePatch.id) {
-        return { ...task, parentApprovalStatus: deliverablePatch.approvalStatus };
+      if (task.id === itemPatch.id) return { ...task, ...itemPatch };
+      if (task.taskType === childType && task.parentTaskId === itemPatch.id) {
+        return { ...task, parentApprovalStatus: itemPatch.approvalStatus };
       }
       return task;
     }),

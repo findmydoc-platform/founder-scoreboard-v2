@@ -1,5 +1,9 @@
 "use client";
 
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import { HierarchyEditNotice } from "../molecules/hierarchy-edit-notice";
+import { TaskLifecycleNotice } from "@/features/tasks/molecules/task-lifecycle-notice";
+import { TaskReviewOperationNotice } from "@/features/reviews/molecules/task-review-operation-notice";
 import { ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
@@ -47,6 +51,7 @@ function epicStatusMeta(status: string) {
 
 export function ProjectsOverview({
   data,
+  planningState,
   tasks,
   currentProfile,
   canManageInitiatives,
@@ -61,6 +66,7 @@ export function ProjectsOverview({
   onWithdrawInitiative,
 }: {
   data: PlanningShellState;
+  planningState?: PlanningState;
   tasks: Task[];
   currentProfile?: Profile | null;
   canManageInitiatives: boolean;
@@ -125,6 +131,10 @@ export function ProjectsOverview({
 
   return (
     <div className="grid gap-4">
+      {planningState?.hierarchy().completeness === "partial" ? <p role="status" className="text-sm text-slate-600">Die Hierarchie ist teilweise geladen. Fehlende Einträge sind nicht als gelöscht bestätigt.</p> : null}
+      {planningState?.hierarchyEdits().map(view => <HierarchyEditNotice key={view.id} view={view} onCheck={() => { void planningState.checkHierarchyEdit(view.id); }} />)}
+      {planningState?.taskLifecycle().filter(operation => operation.kind === "create" ? operation.submitted?.taskType === "initiative" || operation.submitted?.taskType === "epic" : operation.submitted?.task.taskType === "initiative" || operation.kind === "delete_epic").map(operation => <TaskLifecycleNotice key={operation.id} operation={operation} onCheck={id => planningState.checkTaskLifecycle(id)} />)}
+      {planningState?.taskReviewOperations().filter(operation => operation.submitted?.task.taskType === "initiative").map(operation => <TaskReviewOperationNotice key={operation.id} operation={operation} onCheck={id => { void planningState.checkTaskReview(id); }} />)}
       <FilterToolbar
         searchLabel="Epics und Deliverables durchsuchen"
         searchPlaceholder="Initiative, Deliverable oder Bereich suchen"

@@ -9,7 +9,6 @@ import type { usePlanningViewState } from "@/features/planning/hooks/use-plannin
 import { useProfileUiPreferenceSync } from "@/features/profile/hooks/use-profile-ui-preference-sync";
 import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-commands";
-import { useEpicCommands } from "@/features/projects/hooks/use-epic-commands";
 import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
 import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
 import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
@@ -33,8 +32,6 @@ type UsePlanningCommandRegistryOptions = {
   selectedTask: Task | null;
   setFilters: PlanningViewState["setFilters"];
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
-  setEpicDeleteTarget: PlanningViewState["setEpicDeleteTarget"];
-  setEpicDialogDefaults: PlanningViewState["setEpicDialogDefaults"];
   setShowNotifications: PlanningViewState["setShowNotifications"];
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
@@ -56,8 +53,6 @@ export function usePlanningCommandRegistry({
   selectedTask,
   setFilters,
   setInitiativeDialogDefaults,
-  setEpicDeleteTarget,
-  setEpicDialogDefaults,
   setShowNotifications,
   setStatusGuardNotice,
   setStatusGuardTaskId,
@@ -79,15 +74,7 @@ export function usePlanningCommandRegistry({
     ...commandContext,
     selectedTask,
   });
-  const initiativeCommands = useInitiativeCommands({
-    ...commandContext,
-    setInitiativeDialogDefaults,
-  });
-  const epicCommands = useEpicCommands({
-    ...commandContext,
-    setEpicDeleteTarget,
-    setEpicDialogDefaults,
-  });
+  const initiativeCommands = useInitiativeCommands({ ...commandContext, setInitiativeDialogDefaults });
   const boardState = usePlanningBoardState({
     planningState: commandContext.planningState,
     canChangeTaskStatus: commandContext.canChangeTaskStatus,
@@ -127,7 +114,6 @@ export function usePlanningCommandRegistry({
     eventCommands,
     fmdToolCommands,
     initiativeCommands,
-    epicCommands,
     notificationCommands,
     ownProfileSettingsCommands,
     profileSettingsCommands,
