@@ -1,5 +1,5 @@
-import type { SprintReadCoverage, SprintWorkspaceModel } from "./sprint-read-model";
-import type { PlanningReadCoverage } from "@/features/planning/model/internal/planning-read-scopes";
+import type { SprintReadCoverage, SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
+import type { PlanningReadCoverage } from "./planning-read-scopes";
 export const sprintScopeKeys = { project: "project", people: "profiles", items: "tasks", sprints: "sprints", commitments: "sprintCommitments", scores: "founderSprintScores", strikeStates: "founderStrikeStates", strikeEvents: "strikeEvents", objections: "scoreObjections", meetings: "meetings", attendance: "meetingAttendance" } as const;
 export function sprintModelCoverage(model: SprintWorkspaceModel): PlanningReadCoverage {
   const coverage: PlanningReadCoverage = {};

@@ -12,7 +12,7 @@ import { createPlanningState } from "./planning-state-owner";
 import { normalizePlanningShellState } from "../planning-app-model";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { isSupportingWorkspace, supportingWorkspaceModelToPlanningShellState } from "../supporting-planning-shell-projection";
-import { sprintModelCoverage } from "@/features/sprint/model/sprint-read-coverage";
+import { sprintModelCoverage } from "./sprint-read-coverage";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 import { normalizePlanningHeaderData } from "@/lib/planning-header-data";
 import { setProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";

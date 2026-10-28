@@ -7,7 +7,7 @@ import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-comm
 import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
 import { applyTaskDetailModel } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { emptyPlanningShellState } from "../planning-shell-state";
-import { sprintViewCoverage } from "@/features/sprint/model/sprint-read-coverage";
+import { sprintViewCoverage } from "./sprint-read-coverage";
 import { createSprintState } from "./sprint-state";
 import { createTaskLifecycle } from "./task-lifecycle";
 import type { PlanningTaskCreationInput, PlanningTaskCreationConfirmation, PlanningTaskRemovalConfirmation } from "../planning-task-lifecycle";
