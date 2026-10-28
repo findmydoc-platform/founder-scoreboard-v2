@@ -49,7 +49,9 @@ export type PlanningWorkspaceView = {
   readStatus: PlanningReadStatus;
   completeness: "complete" | "partial" | "none";
 };
-export interface PlanningState {
+import type { PlanningNotificationsState } from "./planning-notifications-state";
+
+export interface PlanningState extends PlanningNotificationsState {
   board(): PlanningBoardView;
   workspace(workspace: AppWorkspace): PlanningWorkspaceView;
   taskDetail(taskId: string): PlanningTaskDetailView;

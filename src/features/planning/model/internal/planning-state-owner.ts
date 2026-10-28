@@ -1,3 +1,4 @@
+import { createHeaderNotificationsState, type HeaderNotificationsAdapter } from "./header-notifications-state";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState, Task, TaskActivity } from "@/lib/types";
 import type { PlanningState, PlanningTaskSaveStatus, PlanningReadStatus, PlanningWorkspaceView, PlanningTaskSaveView } from "../planning-state";
@@ -11,9 +12,9 @@ import { applyDeliverableApprovalPatch } from "../approval-domain";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
-export type PlanningWorkspaceRead = { data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
-export type PlanningStateAdapter = {
+export type PlanningStateAdapter = HeaderNotificationsAdapter & {
   now?: () => number;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
   readWorkspace(workspace: AppWorkspace): Promise<PlanningWorkspaceRead | null>;
@@ -21,11 +22,12 @@ export type PlanningStateAdapter = {
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialSession, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialSession, initialHeaderData, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
   initialSession?: BrowserSessionSnapshot;
+  initialHeaderData?: PlanningHeaderData;
   adapter: PlanningStateAdapter;
   publishCache?: (data: PlanningShellState | null, workspace?: AppWorkspace) => void;
   acceptWorkspaceContext?: (result: PlanningWorkspaceRead) => void;
@@ -62,7 +64,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function readErrorStatus(error: unknown): "forbidden" | "unavailable" {
     return typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" : "unavailable";
   }
+  const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
   function publish() {
+    confirmed = notifications.projectConfirmed(confirmed);
     visible = { ...confirmed, tasks: confirmed.tasks.map(task => {
       let result = task;
       for (const operation of pending.values()) {
@@ -70,6 +74,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       return result;
     }) };
+    visible = notifications.projectVisible(visible);
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
       if (workspaceStatuses.get(workspace) === "forbidden") publishCache?.(null, workspace);
@@ -113,6 +118,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (!result.task.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
         if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
         taskConfirmedAt.set(task.id, ++sequence);
+        notifications.invalidateHeader(["notifications"]);
         const currentAfterWrite = confirmed.tasks.find(item => item.id === task.id);
         const foreignConfirmed = currentAfterWrite?.updatedAt !== task.updatedAt && currentAfterWrite?.updatedAt !== result.task.updatedAt;
         const saved = foreignConfirmed ? currentAfterWrite! : { ...result.task, id: task.id };
@@ -159,6 +165,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const planning: PlanningState = {
+    ...notifications.publicState,
     board: () => ({ tasks: planning.workspace("planning").tasks, freshness }),
     workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id)), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
     taskDetail: taskId => { isActive(); return ({
@@ -258,6 +265,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (!isActive()) return false;
       const generation = sessionGeneration;
       const started = ++sequence;
+      const notificationRead = notifications.beginWorkspaceRead(workspace);
       acceptedRead.set(workspace, started);
       workspaceStatuses.set(workspace, "loading");
       publish();
@@ -265,6 +273,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       try { result = await adapter.readWorkspace(workspace); }
       catch (error) {
         if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
+        notifications.workspaceFailed(workspace, error);
         workspaceStatuses.set(workspace, readErrorStatus(error));
         publish();
         return false;
@@ -296,6 +305,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       completeness.set(workspace, taskCoverage || "none");
       const stale = incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
       workspaceStatuses.set(workspace, stale ? "stale" : "current");
+      notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
       acceptWorkspaceContext?.(result);
       freshness = stale ? "stale" : "current";
       publish();
@@ -319,6 +329,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     detailStatuses.clear();
     deniedTaskReads.clear();
     confirmed = emptyPlanningShellState;
+    notifications.clear();
     publish();
   }
   function endSession() {
@@ -372,6 +383,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   return { planning, internal: {
     getSnapshot: () => visible,
+    confirmedHeader: notifications.confirmedHeader,
+    acceptHeaderHydration: notifications.hydrateHeader,
+    invalidateHeader: notifications.invalidateHeader,
     applyLegacyProjection,
     acceptHydration,
     invalidateTaskViews,

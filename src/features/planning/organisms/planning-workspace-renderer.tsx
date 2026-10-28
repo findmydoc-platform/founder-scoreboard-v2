@@ -49,6 +49,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     createFounderEvent,
     createScoreObjection,
     createSprintPlan,
+    planningState,
     currentProfile,
     data,
     decideInitiativeApproval,
@@ -247,6 +248,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "notifications" && (
         <NotificationsOverview
+          completeness={planningState.notifications().completeness}
           currentProfile={currentProfile}
           data={data}
           onOpenNotification={openNotification}

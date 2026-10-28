@@ -1,7 +1,7 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { usePlanningStateOwner } from "./use-planning-state-owner";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { useCurrentWorkspaceModelRefresh } from "@/features/planning/hooks/use-workspace-model-refresh";
@@ -90,24 +90,7 @@ export function usePlanningBootstrapState({
     stateOwner.configure(requestContext.apiClient, workspace, baseHeaderData, auth.serverCurrentProfile);
   }, [stateOwner, requestContext.apiClient, workspace, baseHeaderData, auth.serverCurrentProfile]);
   const currentProfileId = requestContext.currentProfile?.id || "";
-  const notificationsWorkspaceRefreshRef = useRef<() => Promise<void>>(async () => undefined);
-  const refreshNotificationsWorkspace = useCallback(
-    () => notificationsWorkspaceRefreshRef.current(),
-    [],
-  );
-  const headerData = usePlanningHeaderData({
-    apiClient: requestContext.apiClient,
-    authRequired,
-    authUser: auth.authUser,
-    baseHeaderData,
-    currentProfileId,
-    data,
-    protectedDataLoaded: auth.protectedDataLoaded,
-    refreshNotificationsWorkspace,
-    serverCurrentProfile: auth.serverCurrentProfile,
-    setHeaderData: setBaseHeaderData,
-    workspace,
-  });
+  const headerData = usePlanningHeaderData({ planningState, enabled: Boolean(auth.authUser) && (!authRequired || auth.protectedDataLoaded), notificationsWorkspace: workspace === "notifications" });
   const canManageTaskMeta = requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
   const canCorrectOperationally = operationalCorrection;
   const canManageFinalTaskStatus = requestContext.currentProfile?.platformRole === "ceo";
@@ -129,9 +112,6 @@ export function usePlanningBootstrapState({
     source,
     workspace,
   });
-  useEffect(() => {
-    notificationsWorkspaceRefreshRef.current = dataRefresh.refreshCurrentWorkspaceModel;
-  }, [dataRefresh.refreshCurrentWorkspaceModel]);
   const focusMode = usePlanningFocusMode();
   const remoteChanges = usePlanningRemoteChanges({
     apiClient: requestContext.apiClient,

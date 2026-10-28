@@ -23,7 +23,10 @@ export function usePlanningStateOwner(options: PlanningPageState & { setHeaderDa
   useEffect(() => {
     if (hydratedBundle.current === bundle) return;
     hydratedBundle.current = bundle;
-    if (bundle.initialPage !== initialPage) bundle.acceptProtectedData(initialPage.initialData, initialPage.initialUserId, initialPage.initialWorkspace);
+    if (bundle.initialPage !== initialPage) {
+      bundle.acceptProtectedData(initialPage.initialData, initialPage.initialUserId, initialPage.initialWorkspace);
+      bundle.acceptHeaderHydration(initialPage.initialHeaderData);
+    }
   }, [bundle, initialPage]);
   return useMemo(() => ({
     data,

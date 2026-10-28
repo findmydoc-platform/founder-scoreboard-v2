@@ -55,7 +55,9 @@ export function NotificationsOverview({
   data,
   onOpenNotification,
   onDismissNotification,
+  completeness = "partial",
 }: {
+  completeness?: "complete" | "partial";
   currentProfile: Profile | null;
   data: PlanningShellState;
   onOpenNotification: (event: NotificationEvent) => void;
@@ -82,6 +84,7 @@ export function NotificationsOverview({
   const personalTodayCount = personalNotifications.filter((event) => isToday(event.createdAt)).length;
   return (
     <div className="grid min-w-0 gap-4">
+      {completeness === "partial" ? <p className="text-sm text-slate-600">Die Angaben beziehen sich auf den geladenen Ausschnitt.</p> : null}
       <section className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
         <span><strong className="text-slate-900">{personalNewCount}</strong> neu</span>
         <span><strong className="text-slate-900">{personalOpenCount}</strong> offen</span>

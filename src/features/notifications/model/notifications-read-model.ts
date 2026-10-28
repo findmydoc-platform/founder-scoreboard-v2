@@ -2,6 +2,7 @@ import type { NotificationDelivery, NotificationEvent, Profile, Task } from "@/l
 
 export type NotificationsWorkspaceModel = Readonly<{
   revision: string;
+  coverage?: { events: "complete" | "partial"; deliveries: "complete" | "partial" | "forbidden" };
   people: readonly Profile[];
   items: readonly Task[];
   events: readonly NotificationEvent[];

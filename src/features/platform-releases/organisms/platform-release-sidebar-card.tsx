@@ -2,11 +2,9 @@
 
 import { ChevronRight, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
-import { platformReleaseRequest } from "../model/platform-release-api";
+import { useEffect, useSyncExternalStore } from "react";
+import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
 import { formatReleaseDate, releaseTitle, type PlatformReleaseRecord } from "../model/platform-release-model";
-import { platformReleaseSeed } from "../model/platform-release-seed";
 
 type Props = {
   compact?: boolean;
@@ -15,19 +13,10 @@ type Props = {
 };
 
 export function PlatformReleaseSidebarCard({ compact = false, mobile = false, onNavigate }: Props) {
-  const [release, setRelease] = useState<PlatformReleaseRecord | null>(() => process.env.NODE_ENV === "development" ? platformReleaseSeed[0] : null);
-
-  useEffect(() => {
-    let active = true;
-    const unsubscribe = createBrowserSessionAdapter().subscribe(session => { if (!session) setRelease(null); });
-    void platformReleaseRequest<{ releases?: PlatformReleaseRecord[] }>("/api/team/platform-releases/v1/releases")
-      .then(({ response, body }) => response.ok ? body : null)
-      .then((payload) => {
-        if (active && payload?.releases?.[0]) setRelease(payload.releases[0]);
-      })
-      .catch(() => undefined);
-    return () => { active = false; unsubscribe(); };
-  }, []);
+  const planning = usePlanningBusinessState();
+  useSyncExternalStore(planning?.subscribe || (() => () => {}), () => planning?.platformReleases().releases || null, () => null);
+  const release = planning?.platformReleases().releases[0];
+  useEffect(() => { if (planning && planning.platformReleases().readStatus === "not-loaded") void planning.loadPlatformReleases(); }, [planning]);
 
   if (!release) return null;
   return <PlatformReleaseSidebarCardView release={release} compact={compact} mobile={mobile} onNavigate={onNavigate} />;
