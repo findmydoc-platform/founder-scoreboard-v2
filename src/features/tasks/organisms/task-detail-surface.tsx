@@ -70,6 +70,9 @@ type TaskDetailSurfaceProps = {
   operationalCorrection?: boolean;
   pending: boolean;
   taskSaves?: readonly PlanningTaskSaveView[];
+  githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
+  externalCommentCompleteness?: "complete" | "partial";
+  onCheckGitHubImport?: () => void;
   commentCreations?: readonly import("@/features/tasks/model/task-comment-creation").TaskCommentCreationView[];
   commentCompleteness?: "complete" | "partial";
   onCheckCommentCreation?: (id: string) => void;
@@ -155,6 +158,9 @@ function HydratedTaskDetailSurface({
   operationalCorrection = false,
   pending: requestPending,
   taskSaves = [],
+  githubImport,
+  externalCommentCompleteness,
+  onCheckGitHubImport,
   commentCreations = [],
   commentCompleteness = "complete",
   onCheckCommentCreation,
@@ -527,6 +533,9 @@ function HydratedTaskDetailSurface({
     activity: (
       <TaskCommentThread
         comments={comments}
+        githubImport={githubImport}
+        externalCommentCompleteness={externalCommentCompleteness}
+        onCheckGitHubImport={onCheckGitHubImport}
         commentCreations={commentCreations}
         commentCompleteness={commentCompleteness}
         onCheckCommentCreation={onCheckCommentCreation}

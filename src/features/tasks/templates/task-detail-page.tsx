@@ -142,6 +142,9 @@ export function TaskDetailPage({
           commentImportPending={controller.commentImportPendingTaskIds.has(task.id)}
           githubInstallationAvailable={controller.githubInstallationAvailable}
           taskSaves={controller.planningState.taskSaves(task.id)}
+          githubImport={controller.planningState.taskGitHubImport(task.id)}
+          externalCommentCompleteness={controller.planningState.taskGitHubComments(task.id).completeness}
+          onCheckGitHubImport={() => { void controller.planningState.checkTaskGitHubImport(task.id); }}
           commentCreations={controller.planningState.taskCommentCreations(task.id)}
           commentCompleteness={controller.planningState.taskComments(task.id).completeness}
           onCheckCommentCreation={id => { void controller.planningState.checkTaskCommentCreation(id); }}
