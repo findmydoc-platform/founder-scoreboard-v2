@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
-import { PlanningStateProvider } from "./planning-state-provider";
 import { PlanningStateLifetimeContext } from "../model/internal/planning-state-lifetime-context";
 import { createBrowserPlanningLifetime } from "../model/internal/browser-planning-lifetime";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
@@ -48,7 +47,10 @@ function Page({ workspace, network, account = "navigation-user" }: { workspace: 
 function NavigationStory() {
   const [workspace, setWorkspace] = useState<"planning" | "team" | "releases">("planning");
   const [network] = useState(networkFixture);
-  return <PlanningStateProvider>
+  const [sessions] = useState(sessionFixture);
+  const [lifetime] = useState(() => createBrowserPlanningLifetime(sessions.source));
+  useEffect(() => lifetime.connect(), [lifetime]);
+  return <PlanningStateLifetimeContext.Provider value={lifetime}>
     <main>
       <button onClick={() => setWorkspace("team")}>Navigate Team</button>
       <button onClick={() => setWorkspace("releases")}>Navigate Releases</button>
@@ -59,7 +61,7 @@ function NavigationStory() {
       <button onClick={network.lose}>Lose response</button>
       {workspace === "releases" ? <p>Release archive</p> : <Page key={workspace} workspace={workspace} network={network} />}
     </main>
-  </PlanningStateProvider>;
+  </PlanningStateLifetimeContext.Provider>;
 }
 const meta = { component: NavigationStory, title: "Planning/Lifetime/Navigation" } satisfies Meta<typeof NavigationStory>;
 export default meta;
