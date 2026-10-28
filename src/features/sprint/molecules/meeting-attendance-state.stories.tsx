@@ -14,7 +14,7 @@ const note="Original weekly update";
 const controls=new Map<string,{writes():number;reads():number;finish():void;end():void}>();
 function Fixture({scenario="success"}:{scenario?:string}) {
  const [network]=useState(()=>{let writes=0,reads=0,record:MeetingAttendance|null=scenario==="absent"?null:row,finish=()=>{};
-  const client:BrowserApiClient={async requestJson<T>(url,options){
+  const client:BrowserApiClient={async requestJson<T>(url: Parameters<BrowserApiClient["requestJson"]>[0], options?: Parameters<BrowserApiClient["requestJson"]>[1]){
    if(options?.method){writes++;const input=options.json as MeetingAttendance&{expectedUpdatedAt:string|null};expect(input.profileId).toBe(profile.id);expect(input.writtenUpdate).toBe(note);expect(input.expectedUpdatedAt).toBe(scenario==="absent"?null:scenario==="conflict"&&writes===2?"2026-10-28T02:00:00Z":row.updatedAt);
     const conflict=(scenario==="conflict"||scenario==="stale")&&writes===1,rejected=scenario==="rejected",unknown=scenario==="unknown";
     if(conflict)record={...row,writtenUpdate:"Foreign update",updatedAt:"2026-10-28T02:00:00Z"};else if(!rejected)record={...row,...input,updatedAt:"2026-10-28T03:00:00Z"};
