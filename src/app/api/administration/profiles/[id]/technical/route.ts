@@ -22,7 +22,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const expected = payload.expected as import("@/features/administration/model/administration-read-model").TechnicalIdentityBasis | undefined;
-  if (expected !== undefined && (!expected || typeof expected !== "object" || Array.isArray(expected) || Object.keys(expected).length !== 3 || (["githubLogin", "googleChatUserId", "googleChatDmSpace"] as const).some(field => !(field in expected) || expected[field] !== null && typeof expected[field] !== "string"))) return apiError("Die ursprüngliche technische Basis ist ungültig.", 400);
+  if (expected !== undefined && (!expected || typeof expected !== "object" || Array.isArray(expected) || Object.keys(expected).length !== 3 || (["githubLogin", "googleChatUserId", "googleChatDmSpace"] as const).some(field => !(field in expected) || expected[field] !== null && typeof expected[field] !== "string"))) return apiError("Lade die Kontozuordnungen neu, bevor du speicherst.", 400);
   const githubLogin = payload.githubLogin === undefined ? undefined : cleanOptionalText(payload.githubLogin, 80);
   if (githubLogin && !isGitHubLogin(githubLogin)) return apiError("GitHub-Login ist ungültig.", 400);
   const patch = {
@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (error?.code === "42501") {
     return authzError(await permission.administrator.failure());
   }
-  if (error?.code === "P0019") return NextResponse.json({ error: "Die technische Identität wurde zwischenzeitlich geändert. Bitte vergleichen.", code: "administration_technical_conflict" }, { status: 409 });
+  if (error?.code === "P0019") return NextResponse.json({ error: "Die Kontozuordnungen wurden inzwischen geändert. Prüfe die aktuellen Angaben.", code: "administration_technical_conflict" }, { status: 409 });
   if (error?.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
   if (error?.code === "22023") return apiError("Technische Identität ist ungültig.", 400);
   if (error) return apiError("Technische Identität konnte nicht gespeichert werden.", 500);

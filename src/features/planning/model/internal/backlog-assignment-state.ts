@@ -28,7 +28,7 @@ export function createBacklogAssignments(options: {
      view = { ...view, tasks, targetSprint: target || null, canResave: false, confirmedTaskIds: [] };
      retained.set(id, { editor, view, sprints, generation, authority: scope });
      function finish(phase: BacklogAssignmentResult["phase"], error = "") { view = { ...view, phase, error }; retained.get(id)!.view = view; if (phase === "saved" || phase === "rejected") retained.delete(id); if (phase === "saved" || phase === "unconfirmed") options.invalidateDependencies(phase === "unconfirmed"); options.changed(); return result(phase); }
-     if (!tasks.length || tasks.length > (bulk ? 100 : 1) || tasks.some(task => !task.updatedAt) || new Set(tasks.map(task => task.id)).size !== tasks.length || (sprintId && (!target || !target.updatedAt)) || (bulk && !target)) return finish("rejected", "Die angezeigte Aufgaben- oder Sprint-Version fehlt. Bitte neu laden.");
+     if (!tasks.length || tasks.length > (bulk ? 100 : 1) || tasks.some(task => !task.updatedAt) || new Set(tasks.map(task => task.id)).size !== tasks.length || (sprintId && (!target || !target.updatedAt)) || (bulk && !target)) return finish("rejected", "Lade Aufgaben und Sprint neu, bevor du die Zuordnung änderst.");
      const related = [...new Set([target?.id, ...tasks.map(task => task.sprintId)].filter((value): value is string => Boolean(value)))];
      if (tasks.some(task => blocksTask(task.id) || options.pendingTask(task.id)) || related.some(sprint => blocksSprint(sprint) || options.pendingSprint(sprint))) return finish("blocked", "Eine Änderung derselben Aufgabe oder desselben Sprints ist noch nicht bestätigt. Diese Zuordnung wurde nicht gesendet.");
      for (const task of tasks) {
@@ -39,7 +39,7 @@ export function createBacklogAssignments(options: {
      }
      for (const sprintId of related) {
        const before = sprints.find(sprint => sprint.id === sprintId), current = options.current().sprints.find(sprint => sprint.id === sprintId);
-       if (!before || !current || before.updatedAt !== current.updatedAt) return finish("conflict", "Ein angezeigter Sprint wurde geändert. Bitte den aktuellen Serverstand prüfen.");
+       if (!before || !current || before.updatedAt !== current.updatedAt) return finish("conflict", "Ein Sprint wurde inzwischen geändert. Prüfe den aktuellen Stand.");
      }
      if (!options.adapter.assignBacklog) return finish("rejected", "Sprint-Zuordnung ist nicht verfügbar.");
      view = { ...view, phase: "saving", error: "" }; retained.get(id)!.view = view; const started = options.nextSequence(); options.changed();
@@ -53,7 +53,7 @@ export function createBacklogAssignments(options: {
        });
        if (updates.length) options.accept(updates, started, tasks, receipt.activities);
        view = { ...view, confirmedTaskIds: updates.filter(update => update.sprintId === (target?.id || "")).map(update => update.id!) }; retained.get(id)!.view = view;
-       if (updates.length !== tasks.length || receipt.updates.length !== tasks.length || view.confirmedTaskIds.length !== tasks.length) return finish("unconfirmed", "Nur ein Teil der Zuordnung ist bestätigt. Bitte den Serverstand prüfen; nicht erneut zuordnen.");
+       if (updates.length !== tasks.length || receipt.updates.length !== tasks.length || view.confirmedTaskIds.length !== tasks.length) return finish("unconfirmed", view.confirmedTaskIds.length ? "Ein Teil der Zuordnungen ist gespeichert. Für den Rest ist das noch unklar. Bitte prüfen und nicht erneut zuordnen." : "Ob die Zuordnungen gespeichert wurden, ist noch unklar. Bitte prüfen und nicht erneut zuordnen.");
        return finish("saved");
      } catch (error) {
        if (!valid()) return result("ended");
@@ -83,7 +83,7 @@ export function createBacklogAssignments(options: {
        compared = { tasks: structuredClone(serverTasks as Task[]), sprints: structuredClone(current.sprints) };
        view = { ...view, canResave: true }; retained.get(id)!.view = view; options.changed(); return true;
      },
-     resave() { if (!valid() || !view.canResave || !compared) return Promise.resolve(result("rejected", "Bitte zuerst den aktuellen Serverstand prüfen.")); tasks = compared.tasks; sprints = compared.sprints; const targetId = view.targetSprint?.id || null; view = { ...view, phase: "editing", canResave: false }; return assign(targetId); },
+     resave() { if (!valid() || !view.canResave || !compared) return Promise.resolve(result("rejected", "Prüfe zuerst den aktuellen Stand.")); tasks = compared.tasks; sprints = compared.sprints; const targetId = view.targetSprint?.id || null; view = { ...view, phase: "editing", canResave: false }; return assign(targetId); },
    }; return editor;
  }
  return { begin, blocksTask, blocksSprint,

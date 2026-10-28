@@ -89,7 +89,7 @@ export function createReviewWindowState(options: {
           view = { ...view, serverHours: accepted ? options.current().project.reviewObjectionWindowHours : null, canResave: accepted }; options.changed();
           return accepted;
         },
-        resave(hours) { if (!view.canResave || view.serverHours === null) return Promise.resolve({ ok: false, kind: "rejected", error: "Bitte zuerst den Serverstand vergleichen." }); basis = view.serverHours; return save(hours); },
+        resave(hours) { if (!view.canResave || view.serverHours === null) return Promise.resolve({ ok: false, kind: "rejected", error: "Vergleiche zuerst die Änderungen." }); basis = view.serverHours; return save(hours); },
         checkOutcome: check,
         close() { if (view.submittedHours === null) { closed = true; editors.delete(key); } },
       };

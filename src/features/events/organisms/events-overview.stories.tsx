@@ -54,15 +54,15 @@ export const FailedSaveKeepsDraftAndRemovesOnlyItsEventEffect: Story = { play: a
 } };
 export const UnknownOutcomeRetainsSubmissionAndChecksWithoutReplay: Story = { play: async ({ canvasElement }) => {
   const canvas = within(canvasElement); await edit(canvas); await userEvent.click(canvas.getByRole("button", { name: "Lose response" }));
-  await expect(canvas.getByText(/Bestätigung steht aus:/)).toBeVisible(); await expect(canvas.getByRole("button", { name: "Event speichern" })).toBeDisabled();
-  await userEvent.click(canvas.getByRole("button", { name: "Serverstand prüfen" })); await waitFor(() => expect(canvas.getByText("Checks: 1")).toBeVisible()); await expect(canvas.getByText("Writes: 1")).toBeVisible();
-  await userEvent.click(canvas.getByRole("button", { name: "Bereich wechseln" })); await userEvent.click(canvas.getByRole("button", { name: "Bereich wechseln" })); await expect(canvas.getByText(/Bestätigung steht aus:/)).toBeVisible();
+  await expect(canvas.getByText(/Ob das Event gespeichert wurde, ist noch unklar/)).toBeVisible(); await expect(canvas.getByRole("button", { name: "Event speichern" })).toBeDisabled();
+  await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand prüfen" })); await waitFor(() => expect(canvas.getByText("Checks: 1")).toBeVisible()); await expect(canvas.getByText("Writes: 1")).toBeVisible();
+  await userEvent.click(canvas.getByRole("button", { name: "Bereich wechseln" })); await userEvent.click(canvas.getByRole("button", { name: "Bereich wechseln" })); await expect(canvas.getByText(/Ob das Event gespeichert wurde, ist noch unklar/)).toBeVisible();
 } };
 export const OriginalEditBasisSurvivesBackgroundRefresh: Story = { play: async ({ canvasElement }) => {
   const canvas = within(canvasElement); await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
   const title = canvas.getByRole("textbox", { name: "Titel" }); await userEvent.clear(title); await userEvent.type(title, "Mein Evententwurf"); await userEvent.click(canvas.getByRole("button", { name: "Background refresh" }));
-  await userEvent.click(canvas.getByRole("button", { name: "Event speichern" })); await expect(canvas.getByText(/Das Event wurde zwischenzeitlich geändert/)).toBeVisible(); await expect(canvas.getByText("Writes: 0")).toBeVisible();
-  await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Serverstand laden" })); await userEvent.click(await canvas.findByRole("button", { name: "Als Grundlage übernehmen" }));
+  await userEvent.click(canvas.getByRole("button", { name: "Event speichern" })); await expect(canvas.getByText(/Das Event wurde inzwischen geändert/)).toBeVisible(); await expect(canvas.getByText("Writes: 0")).toBeVisible();
+  await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand laden" })); await userEvent.click(await canvas.findByRole("button", { name: "Aktuellen Stand übernehmen" }));
   await expect(title).toHaveValue("Mein Evententwurf"); await userEvent.click(canvas.getByRole("button", { name: "Event speichern" })); await expect(canvas.getByText("Writes: 1")).toBeVisible();
 } };
 export const AccountChangeWithholdsLateConfirmation: Story = { play: async ({ canvasElement }) => {

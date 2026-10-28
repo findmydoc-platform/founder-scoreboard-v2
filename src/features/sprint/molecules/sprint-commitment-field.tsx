@@ -56,23 +56,23 @@ export function SprintCommitmentField({ planningState, shown, field, disabled = 
       {view.phase === "saving" && <p>Commitment wird gespeichert</p>}
       {view.phase === "saved" && view.error && <p>{view.error}</p>}
       {view.phase === "unconfirmed" && <>
-        <p>Commitment noch nicht bestätigt</p><p>{view.error}</p>
-        {view.checkStatus === "checking" && <p>Serverstand wird geprüft</p>}
-        {view.checkStatus === "checked" && <p>Stand geprüft. Die vollständige Speicherung bleibt unbestätigt.</p>}
-        {view.checkStatus === "unavailable" && <p>Serverstand derzeit nicht verfügbar.</p>}
-        {view.checkStatus === "forbidden" && <p>Keine Berechtigung für den Serverstand.</p>}
-        {view.serverCommitment && <p>Server: {view.serverCommitment.commitmentLevel}, {view.serverCommitment.weeklyHours} Stunden</p>}
-        <UiButton className="min-h-11 whitespace-normal" disabled={view.checkStatus === "checking"} onClick={() => { void retainedEditor()?.checkOutcome(); }}>Serverstand prüfen</UiButton>
+        <p>Speicherung des Commitments unklar</p><p>{view.error}</p>
+        {view.checkStatus === "checking" && <p>Aktueller Stand wird geprüft</p>}
+        {view.checkStatus === "checked" && <p>Stand geprüft. Ob die Änderung vollständig gespeichert wurde, bleibt unklar.</p>}
+        {view.checkStatus === "unavailable" && <p>Aktuelle Daten derzeit nicht verfügbar.</p>}
+        {view.checkStatus === "forbidden" && <p>Kein Zugriff auf die aktuellen Daten.</p>}
+        {view.serverCommitment && <p>Aktuell: {view.serverCommitment.commitmentLevel}, {view.serverCommitment.weeklyHours} Stunden</p>}
+        <UiButton className="min-h-11 whitespace-normal" disabled={view.checkStatus === "checking"} onClick={() => { void retainedEditor()?.checkOutcome(); }}>Aktuellen Stand prüfen</UiButton>
       </>}
       {view.phase === "conflict" && <>
         <p>Commitment wurde zwischenzeitlich geändert</p>
         <p>Eingabe: {view.submitted?.commitmentLevel || shown.commitmentLevel}, {view.submitted?.weeklyHours ?? shown.weeklyHours} Stunden</p>
-        {view.serverCommitment && <p>Server: {view.serverCommitment.commitmentLevel}, {view.serverCommitment.weeklyHours} Stunden</p>}
-        <UiButton className="min-h-11 whitespace-normal" onClick={() => { void retainedEditor()?.refreshConflict(); }}>Serverstand vergleichen</UiButton>
-        <UiButton className="min-h-11 whitespace-normal" disabled={!view.canResave} onClick={() => { void retainedEditor()?.resave(view.submitted || {}); }}>Bewusst erneut speichern</UiButton>
+        {view.serverCommitment && <p>Aktuell: {view.serverCommitment.commitmentLevel}, {view.serverCommitment.weeklyHours} Stunden</p>}
+        <UiButton className="min-h-11 whitespace-normal" onClick={() => { void retainedEditor()?.refreshConflict(); }}>Änderungen vergleichen</UiButton>
+        <UiButton className="min-h-11 whitespace-normal" disabled={!view.canResave} onClick={() => { void retainedEditor()?.resave(view.submitted || {}); }}>Erneut speichern</UiButton>
       </>}
       {(view.phase === "rejected" || view.phase === "blocked") && <p>{view.error}</p>}
-      {view.phase === "blocked" && <UiButton className="min-h-11 whitespace-normal" onClick={() => { void retainedEditor()?.checkOutcome(); }}>Vorherigen Vorgang prüfen</UiButton>}
+      {view.phase === "blocked" && <UiButton className="min-h-11 whitespace-normal" onClick={() => { void retainedEditor()?.checkOutcome(); }}>Vorherige Änderung prüfen</UiButton>}
     </div>}
   </div>;
 }

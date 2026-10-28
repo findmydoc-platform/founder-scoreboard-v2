@@ -36,7 +36,7 @@ export function createTaskCommentCreations(options: {
   const valid=()=>current(task.id)&&generation===options.generation()&&authority===(authorities.get(task.id)||0);
   try {
    const receipt=await options.adapter.createTaskComment(task.id,submitted); if(!valid())return{ok:false,kind:"ended",error:"Die Sitzung oder der Zugriff wurde beendet."}; const row=receipt.comment;
-   if(!row||row.taskId!==task.id||!Number.isSafeInteger(row.id)||row.id<=0||![row.profileId,row.comment,row.createdAt,row.githubCommentUrl].every(value=>typeof value==="string")||!deliveryStates.includes(row.githubDeliveryStatus))throw new Error("Die Kommentarbestätigung ist unvollständig.");
+   if(!row||row.taskId!==task.id||!Number.isSafeInteger(row.id)||row.id<=0||![row.profileId,row.comment,row.createdAt,row.githubCommentUrl].every(value=>typeof value==="string")||!deliveryStates.includes(row.githubDeliveryStatus))throw new Error("Ob der Kommentar gespeichert wurde, ist noch unklar.");
    const stamp=options.nextSequence(); receipts.set(row.id,{taskId:task.id,comment:structuredClone(row),stamp});
    const notice=receipt.notice&&typeof receipt.notice.message==="string"&&typeof receipt.notice.code==="string"&&receipt.notice.level==="info"?structuredClone(receipt.notice):null;
    operation.view={...operation.view,phase:"confirmed",comment:structuredClone(row),notice}; const scope=scopes.get(task.id); if(!scope||scope.readStatus!=="loading")scopes.set(task.id,{completeness:scope?.completeness||"partial",readStatus:"current",stamp:scope?.stamp||0});

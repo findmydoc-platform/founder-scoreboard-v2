@@ -55,8 +55,8 @@ async function openPreview(canvas: ReturnType<typeof within>) { await userEvent.
 export const RetainsOriginalPreviewDuringBackgroundRefresh: Story = {
   args: { value: fixture("preview") },
   play: async ({ canvasElement, args }) => { const canvas = within(canvasElement); const dialog = await openPreview(canvas);
-    await expect(dialog.getByText(/2 zukünftige eindeutig markierte/)).toBeVisible(); args.value.advance(); await args.value.planning.loadGoogleDisconnectPreview();
-    await expect(dialog.getByText(/2 zukünftige eindeutig markierte/)).toBeVisible(); await expect(dialog.queryByText(/4 zukünftige eindeutig markierte/)).not.toBeInTheDocument();
+    await expect(dialog.getByText(/2 FounderOps-Terminserien/)).toBeVisible(); args.value.advance(); await args.value.planning.loadGoogleDisconnectPreview();
+    await expect(dialog.getByText(/2 FounderOps-Terminserien/)).toBeVisible(); await expect(dialog.queryByText(/4 FounderOps-Terminserien/)).not.toBeInTheDocument();
     await expect(dialog.getByRole("button", { name: "Verbindung trennen" })).toBeDisabled(); await expect(args.value.calls.disconnect).toBe(0);
   },
 };
@@ -74,7 +74,7 @@ export const KeepsCompletedDisconnectAcrossNavigationAndFailedStatus: Story = {
 export const ChecksUnknownDisconnectWithoutProviderReplay: Story = {
   args: { value: fixture("unknown") },
   play: async ({ canvasElement, args }) => { const canvas = within(canvasElement); const dialog = await openPreview(canvas); await userEvent.click(dialog.getByRole("button", { name: "Verbindung trennen" }));
-    await expect(await canvas.findByText(/Die Trennungsbestätigung ist ausstehend/)).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "Erneut prüfen" }));
+    await expect(await canvas.findByText(/Ob Google getrennt wurde, ist noch unklar/)).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "Erneut prüfen" }));
     await expect(await canvas.findByText("Nicht verbunden")).toBeVisible(); await expect(args.value.planning.googleWorkspace()).toMatchObject({ operation: { phase: "unconfirmed", checked: true }, canContinue: false });
     await expect(canvas.queryByText(/Google-Verbindung getrennt/)).not.toBeInTheDocument(); await waitFor(() => expect(args.value.calls.calendar).toBe(2));
     await expect(args.value.calls).toEqual({ status: 2, preview: 1, disconnect: 1, calendar: 2, private: 0, conflict: 0, publish: 0 });
@@ -84,7 +84,7 @@ export const RetainsPrivateDraftWhileConnectionRemovalIsPending: Story = {
   args: { value: fixture("partial") },
   play: async ({ canvasElement, args }) => { const canvas = within(canvasElement); const end = await canvas.findByLabelText("Montag, Fenster 1, Ende"); await fireEvent.change(end, { target: { value: "18:00" } });
     const dialog = await openPreview(canvas); await userEvent.click(dialog.getByRole("button", { name: "Verbindung trennen" }));
-    await expect(await canvas.findByRole("button", { name: "Bereinigung fortsetzen" })).toBeEnabled(); await expect(end).toHaveValue("18:00");
+    await expect(await canvas.findByRole("button", { name: "Trennung fortsetzen" })).toBeEnabled(); await expect(end).toHaveValue("18:00");
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
     await expect(args.value.planning.googleWorkspace()).toMatchObject({ operation: { phase: "partial", result: { state: "remove_pending" } }, connection: { state: "not_connected" } });
     await expect(args.value.planning.privateWorkweek().context?.version?.id).toBe("private-version");
@@ -97,8 +97,8 @@ export const RetainsPrivateDraftWhileConnectionRemovalIsPending: Story = {
 export const WithholdsDisplayedPreviewOnAccountReplacement: Story = {
   args: { value: fixture("preview") },
   play: async ({ canvasElement, args }) => { const canvas = within(canvasElement); const dialog = await openPreview(canvas);
-    await expect(dialog.getByText(/2 zukünftige eindeutig markierte/)).toBeVisible(); args.value.replaceSession();
-    await waitFor(() => expect(dialog.queryByText(/2 zukünftige eindeutig markierte/)).not.toBeInTheDocument());
+    await expect(dialog.getByText(/2 FounderOps-Terminserien/)).toBeVisible(); args.value.replaceSession();
+    await waitFor(() => expect(dialog.queryByText(/2 FounderOps-Terminserien/)).not.toBeInTheDocument());
     await expect(dialog.getByRole("button", { name: /Verbindung trennen|Trennung läuft/ })).toBeDisabled();
   },
 };

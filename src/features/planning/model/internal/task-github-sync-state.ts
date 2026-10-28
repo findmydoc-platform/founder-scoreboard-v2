@@ -167,8 +167,8 @@ export function createTaskGitHubSyncState(options: {
         }
     }
     function summary(delivery: GitHubCommentDeliverySummary) {
-        const parts = [delivery.delivered ? `${delivery.delivered} zugestellt` : "", delivery.waitingForAuthorConnection ? `${delivery.waitingForAuthorConnection} warten auf die Verbindung ihrer Autoren` : "", delivery.waitingForIssue ? `${delivery.waitingForIssue} warten auf ein Issue` : "", delivery.retryScheduled ? `${delivery.retryScheduled} für erneuten Versuch eingeplant` : "", delivery.failed ? `${delivery.failed} technisch fehlgeschlagen` : ""].filter(Boolean);
-        return parts.length ? `Bestätigte Kommentarzustellung dieses Laufs: ${parts.join(" · ")}.` : "";
+        const parts = [delivery.delivered ? `${delivery.delivered} zugestellt` : "", delivery.waitingForAuthorConnection ? `${delivery.waitingForAuthorConnection} warten auf die Verbindung ihrer Autoren` : "", delivery.waitingForIssue ? `${delivery.waitingForIssue} warten auf ein Issue` : "", delivery.retryScheduled ? `${delivery.retryScheduled} für erneuten Versuch eingeplant` : "", delivery.failed ? `${delivery.failed} fehlgeschlagen` : ""].filter(Boolean);
+        return parts.length ? `Kommentarzustellung: ${parts.join(" · ")}.` : "";
     }
     function syncBatch(input: {
         onlyFailed?: boolean;
@@ -194,7 +194,7 @@ export function createTaskGitHubSyncState(options: {
                     break;
                 if (task.taskType === "sub_issue" && failedParents.has(task.parentTaskId)) {
                     batch = { ...batch, skippedTaskIds: [...batch.skippedTaskIds, task.id] };
-                    operations.get(task.id)!.view = blocked(task, { createIfMissing: !hasGitHubIssue(task) }, "Der Parent-Sync ist nicht bestätigt. Dieses Sub-Issue wurde nicht gesendet.");
+                    operations.get(task.id)!.view = blocked(task, { createIfMissing: !hasGitHubIssue(task) }, "Der GitHub-Abgleich der übergeordneten Aufgabe ist noch unklar. Dieses Sub-Issue wurde noch nicht übertragen.");
                     options.changed();
                     continue;
                 }

@@ -5,6 +5,7 @@ import { Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
+import { sprintStatusLabels } from "../model/sprint-editing";
 import { formatDate } from "@/lib/display";
 import type { PlanningShellState, Sprint, Task } from "@/lib/types";
 
@@ -147,20 +148,20 @@ export function SprintControlsSummary({
         ))}
       </div>
       {currentEdit && ["conflict", "unconfirmed", "blocked", "rejected"].includes(currentEdit.phase) && <UiNotice tone="warning" className="m-3" role="status">
-        <p className="font-semibold">{currentEdit.phase === "conflict" ? "Sprint wurde zwischenzeitlich geändert" : currentEdit.phase === "rejected" ? "Sprint-Änderung abgelehnt" : "Sprint-Änderung noch nicht bestätigt"}</p>
+        <p className="font-semibold">{currentEdit.phase === "conflict" ? "Sprint wurde zwischenzeitlich geändert" : currentEdit.phase === "rejected" ? "Sprint-Änderung abgelehnt" : "Speicherung der Sprint-Änderung unklar"}</p>
         <p>{currentEdit.error}</p>
-        {currentEdit.submitted && <p>Eingabe: {Object.entries(currentEdit.submitted).map(([key, value]) => `${key}: ${value}`).join(", ")}</p>}
-        {currentEdit.serverSprint && <p>Serverstatus: {currentEdit.serverSprint.status}</p>}
+        {currentEdit.submitted && <p>Eingabe: {[currentEdit.submitted.name !== undefined ? `Name: ${currentEdit.submitted.name}` : null, currentEdit.submitted.status ? `Status: ${sprintStatusLabels[currentEdit.submitted.status]}` : null, currentEdit.submitted.startDate !== undefined ? `Beginn: ${formatDate(currentEdit.submitted.startDate, { includeYear: true })}` : null, currentEdit.submitted.endDate !== undefined ? `Ende: ${formatDate(currentEdit.submitted.endDate, { includeYear: true })}` : null].filter(Boolean).join(", ")}</p>}
+        {currentEdit.serverSprint && <p>Aktueller Status: {sprintStatusLabels[currentEdit.serverSprint.status]}</p>}
         {currentEdit.phase === "conflict" && <div className="mt-2 flex flex-wrap gap-2">
-          <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }}>Serverstand vergleichen</UiButton>
-          <UiButton className="min-h-11" disabled={!currentEdit.canResave || !currentEdit.submitted} onClick={() => { if (currentEdit.submitted) void editor?.resave(currentEdit.submitted); }}>Bewusst erneut speichern</UiButton>
+          <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }}>Änderungen vergleichen</UiButton>
+          <UiButton className="min-h-11" disabled={!currentEdit.canResave || !currentEdit.submitted} onClick={() => { if (currentEdit.submitted) void editor?.resave(currentEdit.submitted); }}>Erneut speichern</UiButton>
         </div>}
-        {["unconfirmed", "blocked"].includes(currentEdit.phase) && <UiButton className="mt-2 min-h-11" onClick={async () => { const result = await planningState.checkSprintSave(sprint.id); setCheckMessage(result.readStatus === "forbidden" ? "Kein Zugriff auf diesen Sprint-Bereich." : result.outcome === "not-pending" ? "Der Entwurf wurde noch nicht gesendet. Du kannst den Status jetzt bewusst wählen." : "Serverstand geprüft. Die Speicherung bleibt unbestätigt; sie wurde nicht erneut gesendet."); }}>Serverstand prüfen</UiButton>}
+        {["unconfirmed", "blocked"].includes(currentEdit.phase) && <UiButton className="mt-2 min-h-11" onClick={async () => { const result = await planningState.checkSprintSave(sprint.id); setCheckMessage(result.readStatus === "forbidden" ? "Kein Zugriff auf diesen Sprint-Bereich." : result.outcome === "not-pending" ? "Der Entwurf wurde noch nicht gesendet. Du kannst den Status jetzt wählen." : "Sprint geprüft. Ob die Änderungen gespeichert wurden, bleibt unklar. Es wurde nichts erneut gesendet."); }}>Aktuellen Stand prüfen</UiButton>}
         {checkMessage && <p>{checkMessage}</p>}
       </UiNotice>}
       {openObjectionsCount > 0 && (
         <UiNotice tone="warning" radius="none" className="!border-x-0 !border-b-0 border-t-amber-100 px-4 py-3 font-medium">
-          {objectionsComplete?"":"Mindestens "}{openObjectionsCount} {openObjectionsCount===1?"offener Score-Einwand blockiert":"offene Score-Einwände blockieren"} den Sprint-Lock bis zur Prüfung.
+          {objectionsComplete?"":"Mindestens "}{openObjectionsCount} {openObjectionsCount===1?"offener Score-Einwand blockiert":"offene Score-Einwände blockieren"} den Sprint-Abschluss.
         </UiNotice>
       )}
       {!sprint.scoreLocked && reviewWindowOpen && (

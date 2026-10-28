@@ -84,7 +84,7 @@ export async function GET(request:NextRequest,context:{params:Promise<{id:string
  const sprint=observed.data;const stored=sprint.lock_result as StoredSprintLockResult|null;
  const receipt=sprint.score_locked&&stored?.sprint?.id===id&&stored.sprint.scoreLocked&&stored.sprint.status==="closed"?stored:null;
  if(receipt)return NextResponse.json({basis:{sprint:mapSprint(sprint),tasks:[]},tasksComplete:false,receipt});
- const tasks=await planning.readSprintTaskRows();if(tasks.error)return apiError("Sprint-Aufgaben können nicht geladen werden.",503);if(!complete(tasks))return conflict("Die Aufgabenbasis ist unvollständig. Der Abschluss wurde nicht ausgeführt.","sprint_lock_incomplete");
+ const tasks=await planning.readSprintTaskRows();if(tasks.error)return apiError("Sprint-Aufgaben können nicht geladen werden.",503);if(!complete(tasks))return conflict("Die Aufgaben sind nicht vollständig geladen. Der Sprint wurde nicht abgeschlossen.","sprint_lock_incomplete");
  return NextResponse.json({basis:{sprint:mapSprint(sprint),tasks:(tasks.data||[]).map(task=>({id:task.id,title:task.title,updatedAt:task.updated_at}))},tasksComplete:true,receipt:null});
 }
 
@@ -101,29 +101,29 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (sprint.score_locked) {
     const storedResult = sprint.lock_result as StoredSprintLockResult | null;
     if (storedResult?.sprint) return NextResponse.json({ ok: true, ...storedResult, replayed: true });
-    return apiError("Sprint ist bereits gelockt.", 409);
+    return apiError("Der Sprint ist bereits abgeschlossen.", 409);
   }
 
-  if(typeof payload.expectedUpdatedAt!=="string"||!payload.expectedUpdatedAt||!Array.isArray(payload.expectedTasks)||payload.expectedTasks.some(task=>!task||typeof task.id!=="string"||!task.id||typeof task.updatedAt!=="string"||!task.updatedAt)||new Set(payload.expectedTasks.map(task=>task.id)).size!==payload.expectedTasks.length)return conflict("Die ursprüngliche Sprint- und Aufgabenbasis fehlt.","sprint_lock_basis_missing",400);
-  if(payload.expectedUpdatedAt!==sprint.updated_at)return conflict("Der Sprint wurde zwischenzeitlich geändert. Bitte den Serverstand vergleichen.","sprint_lock_conflict");
+  if(typeof payload.expectedUpdatedAt!=="string"||!payload.expectedUpdatedAt||!Array.isArray(payload.expectedTasks)||payload.expectedTasks.some(task=>!task||typeof task.id!=="string"||!task.id||typeof task.updatedAt!=="string"||!task.updatedAt)||new Set(payload.expectedTasks.map(task=>task.id)).size!==payload.expectedTasks.length)return conflict("Lade Sprint und Aufgaben neu, bevor du den Sprint abschließt.","sprint_lock_basis_missing",400);
+  if(payload.expectedUpdatedAt!==sprint.updated_at)return conflict("Der Sprint wurde zwischenzeitlich geändert. Vergleiche die Änderungen.","sprint_lock_conflict");
 
   const objectionResult=await planning.readSprintBlockingObjections();
   const { data: blockingObjections, error: objectionError } = objectionResult;
 
   if (objectionError) return apiError(objectionError.message, 500);
-  if(!complete(objectionResult))return conflict("Die Einwandbasis ist unvollständig.","sprint_lock_incomplete");
+  if(!complete(objectionResult))return conflict("Die Score-Einwände sind nicht vollständig geladen.","sprint_lock_incomplete");
   const unresolvedObjection = (blockingObjections || []).find((objection) =>
     objection.status === "open" || Boolean(objection.second_reviewer_profile_id && !objection.second_reviewed_at)
   );
   if (unresolvedObjection) {
-    return conflict("Offene oder ausstehende Score-Einwände müssen vor dem Sprint-Lock abgeschlossen werden.","sprint_lock_objections");
+    return conflict("Klärt zuerst alle offenen Score-Einwände, bevor ihr den Sprint abschließt.","sprint_lock_objections");
   }
 
   const adjustmentResult=await planning.readSprintAcceptedAdjustments();
   const { data: acceptedAdjustments, error: acceptedAdjustmentError } = adjustmentResult;
 
   if (acceptedAdjustmentError) return apiError(acceptedAdjustmentError.message, 500);
-  if(!complete(adjustmentResult))return conflict("Die Bewertungsbasis ist unvollständig.","sprint_lock_incomplete");
+  if(!complete(adjustmentResult))return conflict("Die Bewertungen sind nicht vollständig geladen.","sprint_lock_incomplete");
 
   const acceptedAdjustmentByProfile = new Map<string, {
     resolved_delivery_points: number;
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
   if (!reviewDueAt) return apiError("Reviewfrist konnte nicht aus dem Sprint-Ende abgeleitet werden.", 409);
   if (new Date(reviewDueAt).getTime() > Date.now()) {
-    return conflict("Die Review- und Einwandfrist läuft noch. Der Sprint kann erst danach finalisiert werden.","sprint_lock_window");
+    return conflict("Die Review- und Einwandfrist läuft noch. Danach kannst du den Sprint abschließen.","sprint_lock_window");
   }
 
   const { data: nextSprint, error: nextSprintError } = await planning.readNextSprint();
@@ -163,9 +163,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { data: tasks, error: tasksError } = taskResult;
 
   if (tasksError) return apiError(tasksError.message, 500);
-  if(!complete(taskResult))return conflict("Die Aufgabenbasis ist unvollständig.","sprint_lock_incomplete");
+  if(!complete(taskResult))return conflict("Die Aufgaben sind nicht vollständig geladen.","sprint_lock_incomplete");
   const expectedTasks=new Map(payload.expectedTasks.map(task=>[task.id,task.updatedAt]));
-  if(expectedTasks.size!==(tasks||[]).length||(tasks||[]).some(task=>expectedTasks.get(task.id)!==task.updated_at))return conflict("Die angezeigten Sprint-Aufgaben wurden zwischenzeitlich geändert. Bitte den Serverstand vergleichen.","sprint_lock_tasks_conflict");
+  if(expectedTasks.size!==(tasks||[]).length||(tasks||[]).some(task=>expectedTasks.get(task.id)!==task.updated_at))return conflict("Die angezeigten Sprint-Aufgaben wurden zwischenzeitlich geändert. Vergleiche die Änderungen.","sprint_lock_tasks_conflict");
 
   const sprintTasks = (tasks || []) as TaskRow[];
   const carryoverTasks = sprintTasks.filter((task) =>
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     ? await planning.readSprintBlockers(taskIds)
     : { data: [], count: 0 };
   if ("error" in blockerResult && blockerResult.error) return apiError(blockerResult.error.message, 500);
-  if(!complete(blockerResult))return conflict("Die Blockerbasis ist unvollständig.","sprint_lock_incomplete");
+  if(!complete(blockerResult))return conflict("Die Blocker sind nicht vollständig geladen.","sprint_lock_incomplete");
   const openBlockerTaskIds = new Set((blockerResult.data || []).map((blocker: { task_id: string }) => blocker.task_id));
 
   const carryoverInserts = [];
@@ -415,12 +415,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }, metadata);
 
   if (transactionError) {
-    if (transactionError.code === "P0001") return conflict("Sprint wurde parallel geändert. Bitte den Serverstand vergleichen.","sprint_lock_conflict");
-    if (transactionError.code === "P0007") return conflict("Sprint-Aufgaben wurden parallel geändert. Bitte den Serverstand vergleichen.","sprint_lock_tasks_conflict");
+    if (transactionError.code === "P0001") return conflict("Sprint wurde parallel geändert. Vergleiche die Änderungen.","sprint_lock_conflict");
+    if (transactionError.code === "P0007") return conflict("Sprint-Aufgaben wurden parallel geändert. Vergleiche die Änderungen.","sprint_lock_tasks_conflict");
     if (transactionError.code === "P0002") return apiError("Sprint wurde nicht gefunden.", 404);
-    if (transactionError.code === "P0004") return conflict("Offene Score-Einwände müssen vor dem Lock abgeschlossen werden.","sprint_lock_objections");
-    if (transactionError.code === "P0006") return conflict("Die Review- und Einspruchsfrist ist noch offen.","sprint_lock_window");
-    if (transactionError.code === "22023") return apiError("Sprint-Finalisierung ist ungültig.", 400);
+    if (transactionError.code === "P0004") return conflict("Klärt zuerst alle offenen Score-Einwände, bevor ihr den Sprint abschließt.","sprint_lock_objections");
+    if (transactionError.code === "P0006") return conflict("Die Review- und Einwandfrist läuft noch.","sprint_lock_window");
+    if (transactionError.code === "22023") return apiError("Der Sprint-Abschluss ist ungültig.", 400);
     if (transactionError.code === "23505") return apiError("Carry-over wurde bereits angelegt. Bitte neu laden.", 409);
     return apiError(transactionError.message, 500);
   }

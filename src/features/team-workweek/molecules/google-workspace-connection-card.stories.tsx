@@ -51,7 +51,7 @@ export const CanResumeCleanupWhenItsPreviewFails: Story = {
   } as unknown as BrowserApiClient },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByRole("button", { name: "Bereinigung fortsetzen" })).toBeEnabled();
-    await expect(canvas.getByText("Die Trennung ist noch nicht vollständig bestätigt. Setze die Bereinigung fort.")).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: "Trennung fortsetzen" })).toBeEnabled();
+    await expect(canvas.getByText("Google ist noch nicht vollständig getrennt. Setze die Trennung fort.")).toBeVisible();
   },
 };

@@ -86,7 +86,7 @@ export function GoogleWorkspaceConnectionCard({
             )}
             {cleanupPending && canContinue && (
               <UiButton variant="primary" size={compact ? "sm" : "lg"} disabled={pending} onClick={() => void disconnectConnection()}>
-                Bereinigung fortsetzen
+                Trennung fortsetzen
               </UiButton>
             )}
             {connected && !cleanupPending && (
@@ -109,8 +109,8 @@ export function GoogleWorkspaceConnectionCard({
           ) : cleanupPending ? (
             <UiNotice size={compact ? "compact" : "sm"} tone="warning">
               {disconnectView.pendingSeriesCount > 0
-                ? `${disconnectView.pendingSeriesCount} markierte Google-Serie${disconnectView.pendingSeriesCount === 1 ? " wartet" : "n warten"} noch auf bestätigte Bereinigung.`
-                : "Die Trennung ist noch nicht vollständig bestätigt. Setze die Bereinigung fort."}
+                ? `Bei ${disconnectView.pendingSeriesCount} FounderOps-Terminserie${disconnectView.pendingSeriesCount === 1 ? "" : "n"} ist noch unklar, ob zukünftige Termine entfernt wurden.`
+                : "Google ist noch nicht vollständig getrennt. Setze die Trennung fort."}
             </UiNotice>
           ) : reconnect ? (
             <UiNotice size={compact ? "compact" : "sm"} tone="warning">
@@ -134,7 +134,7 @@ export function GoogleWorkspaceConnectionCard({
         previewPending={previewPending}
         previewReady={Boolean(displayedBasis) && basisOwner === planningState && !previewWithheld}
         confirmationCurrent={previewReady && !previewChanged}
-        previewError={previewChanged ? "Die Vorschau wurde geändert. Prüfe sie vor einer neuen Bestätigung erneut." : previewError}
+        previewError={previewChanged ? "Die Vorschau hat sich geändert. Prüfe sie, bevor du die Verbindung trennst." : previewError}
         onCancel={() => setDisconnectOpen(false)}
         onConfirm={() => void confirmDisconnect()}
       />

@@ -684,7 +684,7 @@ async function commitBrowserRevision(
     if (operationalCorrection && reviseResult.error.code === "forbidden" && reviseResult.error.reason === "administratorAccessRequired") {
       return administratorFailure(await administratorFailureForSession!());
     }
-    if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision" && reviseResult.error.details?.reviseState === "sprintRevision") return browserFailure("Der gewählte Sprint wurde zwischenzeitlich geändert. Bitte den aktuellen Serverstand prüfen.", 409, { code: "sprint_revision_conflict" });
+    if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision" && reviseResult.error.details?.reviseState === "sprintRevision") return browserFailure("Der gewählte Sprint wurde zwischenzeitlich geändert. Bitte den aktuellen Aktuellen Stand prüfen.", 409, { code: "sprint_revision_conflict" });
     if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision") {
       return browserFailure("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409, { conflictReason: "revision" });
     }

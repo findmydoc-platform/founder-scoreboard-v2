@@ -67,7 +67,7 @@ export function PrivateTeamWorkweekCard({ planningState, profile, editorRequeste
         {state.conflict && !open && (
           <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-labelledby="team-workweek-conflict-title">
             <h3 id="team-workweek-conflict-title" className="text-sm font-semibold text-amber-950">FounderOps und Google wurden parallel geändert</h3>
-            <p className="mt-1 text-sm leading-6 text-amber-900">Der letzte bestätigte Teamstand bleibt aktiv. Prüfe beide Varianten und entscheide bewusst.</p>
+            <p className="mt-1 text-sm leading-6 text-amber-900">Die bisherigen Arbeitszeiten bleiben aktiv. Vergleiche beide Varianten und wähle eine aus.</p>
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <div className="rounded-lg border border-white/80 bg-white p-3">
                 <div className="text-sm font-semibold text-slate-950">Meine FounderOps-Variante</div>

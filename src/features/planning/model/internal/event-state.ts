@@ -90,7 +90,7 @@ export function createEventsState(options: { initial: readonly FounderEvent[]; l
   }
   async function save(id: string, draft: FounderEventDraft, basis?: FounderEvent): Promise<EventResult> {
     if (!options.active()) return { phase: "session-ended", error: "Die Sitzung wurde ersetzt." };
-    if (denied) return { phase: "rejected", error: "Events sind in dieser Sitzung nicht verfügbar. Bitte zuerst den Serverstand laden." };
+    if (denied) return { phase: "rejected", error: "Events sind in dieser Sitzung nicht verfügbar. Lade zuerst den aktuellen Stand." };
     const predecessor = operations.get(id) || [...operations.values()].find(operation => basis && operation.eventId === basis.id && (operation.phase === "unconfirmed" || operation.phase === "saving"));
     if (predecessor && ["saving", "saved", "unconfirmed"].includes(predecessor.phase)) return { phase: predecessor.phase === "saved" ? "saved" : "unconfirmed", error: predecessor.error, warning: predecessor.warning };
     let normalized: FounderEventDraft;
@@ -106,7 +106,7 @@ export function createEventsState(options: { initial: readonly FounderEvent[]; l
     try {
       const result: EventConfirmation = await writer();
       if (!options.active() || generation !== options.generation() || authority !== authorityGeneration) return { phase: "session-ended" };
-      if (!result.event.updatedAt || !Number.isFinite(result.event.id) || result.event.id <= 0 || (basis && result.event.id !== basis.id)) throw new Error("Event-Speicherung ist noch nicht bestätigt.");
+      if (!result.event.updatedAt || !Number.isFinite(result.event.id) || result.event.id <= 0 || (basis && result.event.id !== basis.id)) throw new Error("Ob das Event gespeichert wurde, ist noch unklar.");
       const latest = records.find(event => event.id === result.event.id);
       const protectedResult = (accepted.get(result.event.id) || 0) > started || barriers.some(barrier => barrier.at > started && contains(barrier.range, result.event));
       if (protectedResult && latest?.updatedAt !== result.event.updatedAt && (basis ? latest?.updatedAt !== basis.updatedAt : Boolean(latest))) readStatus = "stale";
@@ -120,7 +120,7 @@ export function createEventsState(options: { initial: readonly FounderEvent[]; l
       const failure = error as { status?: number; code?: string; message?: string };
       if (failure.code === "session_superseded") { options.endSession(); return { phase: "session-ended", error: "Die Sitzung wurde ersetzt." }; }
       operation.phase = failure.code === "event_version_conflict" ? "conflict" : failure.status && failure.status < 500 ? "rejected" : "unconfirmed";
-      operation.error = failure.message || "Event-Speicherung ist noch nicht bestätigt.";
+      operation.error = failure.message || "Ob das Event gespeichert wurde, ist noch unklar.";
       if (operation.phase === "unconfirmed") { mutationBoundary = ++sequence; readStatus = "stale"; if (!basis || calendarChanged(basis, { ...basis, ...normalized, id: basis.id })) options.invalidateCalendar(); }
       options.changed(); return { phase: operation.phase, error: operation.error };
     }

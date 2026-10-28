@@ -17,6 +17,7 @@ import {
   type ProfileSettingsDraft,
   type ProfileSettingsSectionId,
 } from "@/features/profile/model/profile-settings-view-model";
+import { ownProfileSettingsValues } from "../model/profile-settings-values";
 import { ProfileColorConflictError } from "@/features/profile/model/profile-color-api";
 import {
   buildProfileColorPickerModel,
@@ -250,23 +251,23 @@ function ProfileSettingsForm({
       {settings.save.phase === "conflict" && (
         <div className="mt-4 space-y-2" role="status">
           <UiNotice tone="warning">Das Profil wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten. Prüfe den aktuellen Stand vor dem erneuten Speichern.</UiNotice>
-          {editing.current && <p className="break-words text-sm text-slate-700">Aktueller Serverstand: Fokus: {editing.current.profile.focus || "leer"}; Farbe: {editing.current.profile.color || "Standard"}; Benachrichtigungen: {editing.current.profile.notificationsEnabled === false ? "aus" : "an"}; Startbereich: {editing.current.uiPreference?.defaultWorkspace || "planning"}; Aufgabenansicht: {editing.current.uiPreference?.defaultTaskView || "board"}.</p>}
-          <UiButton className="min-h-11" onClick={() => { void editor.refreshConflict(); }} disabled={settings.save.checkStatus === "checking"}>Aktuellen Serverstand laden</UiButton>
+          {editing.current && <div className="break-words text-sm text-slate-700"><p className="font-semibold">Aktueller Stand</p><dl className="mt-2 grid gap-2">{ownProfileSettingsValues({ profilePatch: editing.current.profile, uiPreferences: editing.current.uiPreference || undefined, notificationEvents: Object.fromEntries(editing.current.notificationPreferences.map(preference => [preference.eventType, preference.enabled])) }, data).map(([label, value]) => <div key={label}><dt className="font-semibold">{label}</dt><dd>{value}</dd></div>)}</dl></div>}
+          <UiButton className="min-h-11" onClick={() => { void editor.refreshConflict(); }} disabled={settings.save.checkStatus === "checking"}>Aktuellen Stand laden</UiButton>
           {editing.phase === "conflict" && <UiButton className="min-h-11" onClick={() => { void save(true); }} disabled={!editing.canResave || pending} variant="primary">Erneut speichern</UiButton>}
         </div>
       )}
       {settings.save.phase === "unconfirmed" && (
         <div className="mt-4" role="status">
-          <UiNotice tone="warning">Die Speicherung ist noch nicht bestätigt. Deine abgesendeten Angaben bleiben erhalten. Der aktuelle Serverstand bestätigt diesen Speicherversuch nicht.</UiNotice>
-          <UiButton className="mt-2 min-h-11" onClick={() => { void planningState.checkOwnProfileSettings(currentProfile.id); }} disabled={settings.save.checkStatus === "checking"}>Serverstand prüfen</UiButton>
-          {settings.save.checkStatus === "checked" && <p className="mt-2 text-sm text-slate-700">Serverstand geprüft. Die Bestätigung bleibt offen.</p>}
-          {settings.save.submitted && <details className="mt-2 text-sm text-slate-700"><summary>Abgesendete Angaben</summary><pre className="overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(settings.save.submitted, null, 2)}</pre></details>}
+          <UiNotice tone="warning">Ob deine Änderungen gespeichert wurden, ist noch unklar. Deine Eingaben bleiben erhalten.</UiNotice>
+          <UiButton className="mt-2 min-h-11" onClick={() => { void planningState.checkOwnProfileSettings(currentProfile.id); }} disabled={settings.save.checkStatus === "checking"}>Aktuellen Stand prüfen</UiButton>
+          {settings.save.checkStatus === "checked" && <p className="mt-2 text-sm text-slate-700">Profil geprüft. Ob die Änderungen gespeichert wurden, bleibt unklar.</p>}
+          {settings.save.submitted && <details className="mt-2 text-sm text-slate-700"><summary>Abgesendete Angaben</summary><dl className="grid gap-2 whitespace-pre-wrap break-words">{ownProfileSettingsValues(settings.save.submitted, data).map(([label, value]) => <div key={label}><dt className="font-semibold">{label}</dt><dd>{value}</dd></div>)}</dl></details>}
         </div>
       )}
       {(isDirty || message) && (
         <div className="sticky bottom-4 z-10 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur" data-profile-save-bar>
           <div className="text-sm font-semibold text-slate-700">
-            {settings.save.phase === "unconfirmed" ? "Speicherbestätigung ausstehend" : isDirty ? "Ungespeicherte Änderungen" : message}
+            {settings.save.phase === "unconfirmed" ? "Speicherung unklar" : isDirty ? "Ungespeicherte Änderungen" : message}
           </div>
           <div className="flex items-center gap-2">
             {isDirty && message && <UiNotice tone="success" size="compact">{message}</UiNotice>}

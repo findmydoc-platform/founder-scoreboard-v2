@@ -39,7 +39,7 @@ export function createPrivateWorkweekState({ adapter, active, generation, change
         else update({ conflictReadStatus: state.conflictReadStatus === "forbidden" ? "forbidden" : "unavailable", contextRefreshRequired: true });
       } else if (result.value.conflict && state.conflict?.id === result.value.conflict.id && state.conflict.conflictRevision > result.value.conflict.conflictRevision) {
         update({ conflictReadStatus: "stale", contextRefreshRequired: true });
-        return { status: 409, value: { code: "superseded", error: "Eine neuere Konfliktrevision ist bereits bekannt." } };
+        return { status: 409, value: { code: "superseded", error: "Die Varianten wurden inzwischen geändert." } };
       } else {
         if (result.value.conflict && (resolvedConflicts.get(result.value.conflict.id) ?? 0) >= result.value.conflict.conflictRevision) {
           update({ conflictReadStatus: "stale", contextRefreshRequired: true });
@@ -96,7 +96,7 @@ export function createPrivateWorkweekState({ adapter, active, generation, change
       }
       if (conflictResult && (conflictResult.status < 200 || conflictResult.status >= 300 || conflictResult.value?.conflict === undefined)) {
         update({ readStatus: "unavailable", contextRefreshRequired: true });
-        return { status: conflictResult.status || 503, value: { error: conflictResult.value?.error || "Der Konfliktkontext konnte nicht geladen werden." } };
+        return { status: conflictResult.status || 503, value: { error: conflictResult.value?.error || "Die Varianten konnten nicht geladen werden." } };
       }
       const incoming = [result.value.latestPublished, result.value.publication, result.value.preparedSuccessor];
       const known = [state.context?.latestPublished, state.context?.publication, state.context?.preparedSuccessor, state.confirmedPublication];

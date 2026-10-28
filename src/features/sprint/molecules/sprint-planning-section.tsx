@@ -1,4 +1,5 @@
 "use client";
+import { formatDate } from "@/lib/display";
 
 import { useEffect, useState } from "react";
 import type { PlanningState } from "@/features/planning/model/planning-state";
@@ -120,14 +121,14 @@ export function SprintPlanningSection({
         </UiField>
       </div>
       {edit && ["saving", "unconfirmed", "blocked", "conflict"].includes(edit.phase) && <UiNotice tone="warning" className="mt-4" role="status">
-        <p className="font-semibold">{conflict ? "Sprint-Plan wurde geändert oder geschützt" : edit.phase === "saving" ? "Sprint-Vorschau wird gespeichert" : "Sprint-Plan noch nicht bestätigt"}</p>
-        <p>Unbestätigte Sprint-Zeiträume sind eine Vorschau. Der Server bestätigt auch die zugehörigen Weeklys.</p>
-        {edit.submitted && <p>Eingabe: ab {edit.submitted.anchorStartDate}, Rhythmus {edit.submitted.rhythmWeeks} Wochen, bis Sprint {edit.submitted.targetSprintNumber || "Horizont"}</p>}
-        {edit.serverSprints && <div className="mt-2"><p className="font-semibold">Geladener Serverstand (kann unvollständig sein)</p>{edit.serverSprints.map(sprint => <p key={sprint.id}>{sprint.name}: {sprint.startDate} bis {sprint.endDate}{sprint.scoreLocked ? " · geschützt" : ""}</p>)}</div>}
+        <p className="font-semibold">{conflict ? "Sprint-Plan geändert oder Zeitraum geschützt" : edit.phase === "saving" ? "Sprint-Plan wird gespeichert" : "Speicherung des Sprint-Plans unklar"}</p>
+        <p>Sprint- und Weekly-Termine sind vorläufig.{edit.phase === "unconfirmed" ? " Ob sie gespeichert wurden, ist noch unklar." : ""}</p>
+        {edit.submitted && <p>Eingabe: ab {formatDate(edit.submitted.anchorStartDate, { includeYear: true })}, Rhythmus {edit.submitted.rhythmWeeks} Wochen, bis Sprint {edit.submitted.targetSprintNumber || "Planungsende"}</p>}
+        {edit.serverSprints && <div className="mt-2"><p className="font-semibold">Aktueller Stand (kann unvollständig sein)</p>{edit.serverSprints.map(sprint => <p key={sprint.id}>{sprint.name}: {formatDate(sprint.startDate, { includeYear: true })} bis {formatDate(sprint.endDate, { includeYear: true })}{sprint.scoreLocked ? " · geschützt" : ""}</p>)}</div>}
         <div className="mt-2 flex flex-wrap gap-2">{conflict ? <>
-          <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }}>Serverstand vergleichen</UiButton>
-          <UiButton className="min-h-11" disabled={disabled || pending || !edit.canRecreate} onClick={() => { void create(true); }}>Bewusst erneut planen</UiButton>
-        </> : edit.phase !== "saving" && <UiButton className="min-h-11" onClick={async () => { const checked = await planningState.checkSprintPlan(); setMessage(checked.readStatus === "forbidden" ? "Kein Zugriff auf diesen Sprint-Bereich." : checked.outcome === "not-pending" ? "Der Entwurf wurde noch nicht gesendet. Du kannst jetzt bewusst planen." : "Die Planung bleibt unbestätigt und wurde nicht erneut gesendet."); }}>Serverstand prüfen</UiButton>}</div>
+          <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }}>Änderungen vergleichen</UiButton>
+          <UiButton className="min-h-11" disabled={disabled || pending || !edit.canRecreate} onClick={() => { void create(true); }}>Erneut planen</UiButton>
+        </> : edit.phase !== "saving" && <UiButton className="min-h-11" onClick={async () => { const checked = await planningState.checkSprintPlan(); setMessage(checked.readStatus === "forbidden" ? "Kein Zugriff auf diesen Sprint-Bereich." : checked.outcome === "not-pending" ? "Der Entwurf wurde noch nicht gesendet. Du kannst jetzt planen." : "Ob der Sprint-Plan gespeichert wurde, bleibt unklar. Es wurde nichts erneut gesendet."); }}>Aktuellen Stand prüfen</UiButton>}</div>
       </UiNotice>}
       {message && <UiNotice className="mt-4" tone={edit?.phase === "saved" ? "success" : "danger"}>{message}</UiNotice>}
     </UiPanel>

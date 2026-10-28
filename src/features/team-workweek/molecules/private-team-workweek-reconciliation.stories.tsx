@@ -73,10 +73,10 @@ export const ChecksUnknownReconciliationWithoutProviderReplay: Story = {
     const canvas = within(canvasElement);
     await canvas.findAllByText("09:00–17:00");
     await userEvent.click(await canvas.findByRole("button", { name: "App-Termine in Google prüfen" }));
-    await expect(await canvas.findByText("Abgleichsbestätigung ausstehend")).toBeVisible();
+    await expect(await canvas.findByText("Google-Abgleich noch unklar")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Arbeitswoche bearbeiten" }));
     await userEvent.click(await canvas.findByRole("button", { name: "Aktuellen Stand laden" }));
-    await expect(await canvas.findByText(/Die Abgleichsbestätigung bleibt ausstehend/)).toBeVisible();
+    await expect(await canvas.findByText(/Ob der Google-Abgleich abgeschlossen ist, bleibt unklar/)).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
     await expect(args.value.planning.privateWorkweek().currentContextReady).toBe(true);
     await expect(args.value.posts()).toBe(1);

@@ -26,5 +26,5 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { data: event, error } = result;
   if (error || !event) return apiError(error?.message || "Event konnte nicht aktualisiert werden.", 500);
   invalidateSharedPlanningHeaderCache("calendarEvents");
-  return NextResponse.json({ event: mapFounderEvent(event), ...("auditUnconfirmed" in result && result.auditUnconfirmed ? { code: "event_saved_audit_unconfirmed", warning: "Event gespeichert. Die Protokollierung konnte nicht bestätigt werden." } : {}) });
+  return NextResponse.json({ event: mapFounderEvent(event), ...("auditUnconfirmed" in result && result.auditUnconfirmed ? { code: "event_saved_audit_unconfirmed", warning: "Event gespeichert. Ob die Änderung protokolliert wurde, ist noch unklar." } : {}) });
 }

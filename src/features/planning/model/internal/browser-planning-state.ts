@@ -141,7 +141,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
       async saveAdministrationProject(project,expected) {
         const {response,body}=await ownedApiClient.requestJson<{ok?:boolean;project?:{id:string;githubProjectOwner:string;githubProjectNumber:number;githubMentionTeamSlug:string};error?:string;code?:string}>("/api/founderops-settings/github-project",{method:"PATCH",json:{expectedGithubProjectOwner:expected.owner,expectedGithubProjectNumber:expected.number,expectedGithubMentionTeamSlug:expected.mentionTeamSlug,githubProjectOwner:project.owner,githubProjectNumber:project.number,githubMentionTeamSlug:project.mentionTeamSlug},useDevProfileOverride:false,expectedSession:await administrationBinding()});
         if(!response.ok)throw Object.assign(new Error(body?.error||"GitHub Project konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
-        if(!body?.ok||!body.project)throw new Error("Die GitHub-Project-Speicherung ist noch nicht bestätigt.");
+        if(!body?.ok||!body.project)throw new Error("Ob die GitHub-Projekteinstellungen gespeichert wurden, ist noch unklar.");
         return {project:{id:body.project.id,owner:body.project.githubProjectOwner,number:body.project.githubProjectNumber,mentionTeamSlug:body.project.githubMentionTeamSlug}};
       },
       async readAdministration() {
@@ -152,7 +152,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
       async saveAdministrationTechnical(profileId,patch,expected) {
         const {response,body}=await ownedApiClient.requestJson<{ok?:boolean;profile?:{id:string}&import("@/features/administration/model/administration-read-model").TechnicalIdentityBasis;error?:string;code?:string}>(`/api/administration/profiles/${encodeURIComponent(profileId)}/technical`,{method:"PATCH",json:{...patch,expected},useDevProfileOverride:false,expectedSession:await administrationBinding()});
         if(!response.ok)throw Object.assign(new Error(body?.error||"Technische Identität konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
-        if(!body?.ok)throw new Error("Die technische Speicherung ist noch nicht bestätigt.");return{profile:body.profile};
+        if(!body?.ok)throw new Error("Ob die Kontozuordnungen gespeichert wurden, ist noch unklar.");return{profile:body.profile};
       },
       async saveAdministrationEligibility(profileId,eligible,expectedEligible) {
         const {response,body}=await ownedApiClient.requestJson<{administratorAccess?:import("@/features/administrator-access/model/administrator-access").AdministratorAccessSnapshot&{profileId:string};error?:string;code?:string}>(`/api/administrator-access/profiles/${encodeURIComponent(profileId)}`,{method:"PATCH",json:{eligible,expectedEligible},useDevProfileOverride:false,expectedSession:await administrationBinding()});
@@ -228,7 +228,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         return {objection:mapScoreObjection(body.objection)};
       },
       async processScoreObjection(objection,score,input) {
-        if(!objection.persistenceBasis || input.action==="resolve"&&input.status==="accepted"&&score&&!score.persistenceBasis)throw Object.assign(new Error("Die ursprüngliche Entscheidungsgrundlage fehlt. Bitte neu laden."),{status:400});
+        if(!objection.persistenceBasis || input.action==="resolve"&&input.status==="accepted"&&score&&!score.persistenceBasis)throw Object.assign(new Error("Lade Einwand und Score neu, bevor du entscheidest."),{status:400});
         const {response,body}=await ownedApiClient.requestJson<{objection?:DbScoreObjection;score?:DbFounderSprintScore|null;error?:string;code?:string}>(`/api/sprints/${objection.sprintId}/score-objections`,{method:"PATCH",json:{...input,objectionId:objection.id,expectedObjection:objection.persistenceBasis,expectedScore:score?.persistenceBasis||null},useDevProfileOverride:false});
         if(!response.ok)throw Object.assign(new Error(body?.error||"Einwand konnte nicht geprüft werden."),{status:response.status,code:body?.code});
         if(!body?.objection)throw new Error("Die Entscheidung ist noch nicht bestätigt.");
@@ -259,7 +259,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
       async moveBacklog(source, target, placement) {
         const { response, body } = await taskApi.moveBacklogTaskRequest(ownedApiClient, { taskId: source.id, targetTaskId: target.id, placement, expectedTaskUpdatedAt: source.updatedAt!, expectedTargetUpdatedAt: target.updatedAt! });
         if (!response.ok) throw Object.assign(new Error(body?.error || "Die Rangfolge ist nicht bestätigt."), { status: response.status, code: body?.code });
-        if (!Array.isArray(body?.updates)) throw new Error("Das Rangergebnis ist nicht bestätigt.");
+        if (!Array.isArray(body?.updates)) throw new Error("Ob die Reihenfolge gespeichert wurde, ist noch unklar.");
         return { updates: body.updates, completeness: body.completeness === "complete" ? "complete" : "partial" };
       },
       async assignBacklog(tasks, target, bulk) {
@@ -297,7 +297,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
       },
       async readHeader(slots) {
         const { response, body } = await planningApi.requestPlanningHeaderData(ownedApiClient, slots);
-        if (!response.ok || !body?.headerData) throw Object.assign(new Error(body?.error || "Headerdaten konnten nicht geladen werden."), { status: response.status });
+        if (!response.ok || !body?.headerData) throw Object.assign(new Error(body?.error || "Kalender und Benachrichtigungen konnten nicht geladen werden."), { status: response.status });
         return normalizePlanningHeaderData(body.headerData);
       },
       async updateNotification(eventId, action) {
@@ -424,7 +424,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
       },
       async readTaskDetail(taskId) {
         const { response, body } = await taskApi.requestTaskDetailData(ownedApiClient, taskId);
-        if (!response.ok || !body?.taskDetail) throw Object.assign(new Error(body?.error || "Task-Details konnten nicht geladen werden."), { status: response.status });
+        if (!response.ok || !body?.taskDetail) throw Object.assign(new Error(body?.error || "Aufgabendetails konnten nicht geladen werden."), { status: response.status });
         return { model: body.taskDetail, unavailable: body.unavailable };
       },
       async readWorkspace(workspace) {

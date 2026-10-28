@@ -36,7 +36,7 @@ export async function PUT(request: NextRequest) {
     return apiError("Founder können nur ihr eigenes Commitment ändern.", 403);
   }
 
-  if (payload.expectedUpdatedAt !== null && !isValidCommitmentVersion(payload.expectedUpdatedAt)) return apiError("Die ursprüngliche Bearbeitungsbasis ist erforderlich.", 400);
+  if (payload.expectedUpdatedAt !== null && !isValidCommitmentVersion(payload.expectedUpdatedAt)) return apiError("Lade das Commitment neu, bevor du speicherst.", 400);
 
   const { data, error } = await planning.writeCommitment({ profileId, commitmentLevel, weeklyHours, note, expectedUpdatedAt: payload.expectedUpdatedAt });
 
@@ -46,7 +46,7 @@ export async function PUT(request: NextRequest) {
   if (error || !data) return apiError(error?.message || "Commitment konnte nicht gespeichert werden.", 500);
 
   let auditError = "";
-  try { const audit = await planning.auditCommitment(auditRequestMetadata(request)); if (audit.error) auditError = "Commitment gespeichert; Audit-Eintrag konnte nicht bestätigt werden."; } catch { auditError = "Commitment gespeichert; Audit-Eintrag konnte nicht bestätigt werden."; }
+  try { const audit = await planning.auditCommitment(auditRequestMetadata(request)); if (audit.error) auditError = "Commitment gespeichert. Ob die Änderung protokolliert wurde, ist noch unklar."; } catch { auditError = "Commitment gespeichert. Ob die Änderung protokolliert wurde, ist noch unklar."; }
 
   return NextResponse.json({
     ok: true,

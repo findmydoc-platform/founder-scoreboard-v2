@@ -105,7 +105,7 @@ export const ChecksUnknownRestartThenSavesNewBoundInputWithoutReplay: Story = {
     const end = await canvas.findByLabelText("Montag, Fenster 1, Ende"); await fireEvent.change(end, { target: { value: "18:00" } });
     await expect(end).toHaveValue("18:00");
     await userEvent.click(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" }));
-    await expect(await canvas.findByText("Neustartbestätigung ausstehend")).toBeVisible();
+    await expect(await canvas.findByText("Neustart noch unklar")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand laden" }));
     await expect(end).toHaveValue("18:00");
     await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toHaveAttribute("title", workweekLabel(viewedWeek()));

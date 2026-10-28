@@ -37,8 +37,8 @@ export function createBacklogOrdering(options: {
         publish(); return result(phase);
       }
       if (!source || !target || source.id === target.id || !source.updatedAt || !target.updatedAt || !eligible(source) || !eligible(target) || !["before","after"].includes(placement)) return finish("rejected", "Die angezeigte Backlog-Verschiebung ist nicht gültig. Bitte neu laden.");
-      if ([...retained.values()].some(item => item.view.id !== id && unresolved(item.view)) || options.current().tasks.some(task => eligible(task) && options.pendingTask(task.id))) return finish("blocked", "Eine Änderung im betroffenen Backlog ist noch nicht bestätigt. Diese Bewegung wurde nicht gesendet.");
-      for (const task of [source,target]) if (options.current().tasks.find(current => current.id === task.id)?.updatedAt !== task.updatedAt) return finish("conflict", "Quelle oder Ziel wurde zwischenzeitlich geändert. Die Bewegung bleibt erhalten.");
+      if ([...retained.values()].some(item => item.view.id !== id && unresolved(item.view)) || options.current().tasks.some(task => eligible(task) && options.pendingTask(task.id))) return finish("blocked", "Eine Änderung im betroffenen Backlog ist noch nicht bestätigt. Diese Verschiebung wurde noch nicht ausgeführt.");
+      for (const task of [source,target]) if (options.current().tasks.find(current => current.id === task.id)?.updatedAt !== task.updatedAt) return finish("conflict", "Quelle oder Ziel wurde zwischenzeitlich geändert. Deine gewünschte Reihenfolge bleibt erhalten.");
       if (!options.adapter.moveBacklog) return finish("rejected", "Backlog-Verschiebung ist nicht verfügbar.");
       const rows = basis.filter(eligible).sort((a,b) => a.order - b.order || a.id.localeCompare(b.id));
       const remaining = rows.filter(task => task.id !== source.id), targetIndex = remaining.findIndex(task => task.id === target.id), insert = targetIndex + (placement === "after" ? 1 : 0);
@@ -56,7 +56,7 @@ export function createBacklogOrdering(options: {
         const unresolvedMembership = updates.length ? options.accept(updates,started,basis) : false;
         view = { ...view, confirmedIds: updates.map(update => update.id) }; retained.get(id)!.view = view; boundary++;
         if (unresolvedMembership) { options.invalidate(false); void refresh(); }
-        return malformed || receipt.completeness !== "complete" ? finish("unconfirmed", "Nur ein Teil des Rangergebnisses ist bestätigt. Bitte den Serverstand prüfen; nicht erneut verschieben.") : finish("saved");
+        return malformed || receipt.completeness !== "complete" ? finish("unconfirmed", view.confirmedIds.length ? "Ein Teil der Reihenfolge ist gespeichert. Für den Rest ist das noch unklar. Bitte prüfen und nicht erneut verschieben." : "Ob die Reihenfolge gespeichert wurde, ist noch unklar. Bitte prüfen und nicht erneut verschieben.") : finish("saved");
       } catch (error) {
         if (!valid()) return result("ended");
         const failure = error as { status?: number; code?: string; message?: string };
@@ -75,7 +75,7 @@ export function createBacklogOrdering(options: {
         if (!valid() || view.phase !== "conflict" || !(await editor.checkOutcome()) || view.serverTasks.length !== 2) return false;
         compared = structuredClone(options.current().tasks); view = { ...view, canResave: true }; publish(); return true;
       },
-      resave() { if (!valid() || !view.canResave || !compared || !view.source || !view.target) return Promise.resolve(result("rejected", "Bitte zuerst Quelle und Ziel auf dem Server prüfen.")); basis = compared; const source = view.source.id, target = view.target.id; view = { ...view, phase: "editing", canResave: false }; return move(source,target,view.placement); },
+      resave() { if (!valid() || !view.canResave || !compared || !view.source || !view.target) return Promise.resolve(result("rejected", "Prüfe zuerst die betroffenen Aufgaben.")); basis = compared; const source = view.source.id, target = view.target.id; view = { ...view, phase: "editing", canResave: false }; return move(source,target,view.placement); },
     }; return editor;
   }
   return { begin, pending, blocksTask, views: () => [...retained.values()].map(item => item.editor.view()).filter(view => view.phase !== "ended"), resume: (id: string) => retained.get(id)?.editor || null,

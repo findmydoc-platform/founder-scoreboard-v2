@@ -76,7 +76,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     ? Math.max(0, Math.min(2, Math.round(Number(payload.points))))
     : isLead ? defaultPoints(status, reasonAccepted, writtenUpdate) : 0;
 
-  if (payload.expectedUpdatedAt !== null && (typeof payload.expectedUpdatedAt !== "string" || !Number.isFinite(Date.parse(payload.expectedUpdatedAt)))) return apiError("Die angezeigte Weekly-Version ist erforderlich.", 400);
+  if (payload.expectedUpdatedAt !== null && (typeof payload.expectedUpdatedAt !== "string" || !Number.isFinite(Date.parse(payload.expectedUpdatedAt)))) return apiError("Lade die Weekly-Rückmeldung neu, bevor du speicherst.", 400);
 
   const { data: meeting, error: meetingError } = await planning.readAttendanceMeeting();
   if (meetingError || !meeting) return apiError("Meeting wurde nicht gefunden.", 404);
@@ -120,5 +120,5 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (audit.error) effects = "unconfirmed";
   } catch { effects = "unconfirmed"; }
   return NextResponse.json({ ok: true, attendance: mapMeetingAttendance(attendance), effects,
-    ...(effects === "unconfirmed" ? { code: "attendance_saved_effects_unconfirmed", warning: "Rückmeldung gespeichert. Benachrichtigung oder Protokoll noch nicht bestätigt." } : {}) });
+    ...(effects === "unconfirmed" ? { code: "attendance_saved_effects_unconfirmed", warning: "Rückmeldung gespeichert. Ob Benachrichtigung und Protokoll erstellt wurden, ist noch unklar." } : {}) });
 }

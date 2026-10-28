@@ -105,7 +105,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   return NextResponse.json({
     ok: true,
     effects,
-    ...(effects === "unconfirmed" ? { code: "attachment_uploaded_effects_unconfirmed", warning: "Anhang hochgeladen. Aktivität oder GitHub-Synchronisationsstatus sind noch nicht vollständig bestätigt." } : {}),
+    ...(effects === "unconfirmed" ? { code: "attachment_uploaded_effects_unconfirmed", warning: "Anhang hochgeladen. Ob der Upload protokolliert und für GitHub vorgemerkt wurde, ist noch unklar." } : {}),
     filename: file.name,
     contentType: file.type,
     size: file.size,

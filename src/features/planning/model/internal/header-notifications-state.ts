@@ -88,14 +88,14 @@ export function createHeaderNotificationsState(options: {
         const selected = { ...emptyPlanningHeaderData };
         accepted.forEach(key => Object.assign(selected, { [key]: incoming[key] }));
         acceptHeader(selected, started);
-        accepted.filter(key => incoming[key].state === "idle").forEach(key => { slots[key] = { readStatus: "unavailable", error: "Headerdaten konnten nicht geladen werden." }; });
+        accepted.filter(key => incoming[key].state === "idle").forEach(key => { slots[key] = { readStatus: "unavailable", error: "Kalender und Benachrichtigungen konnten nicht geladen werden." }; });
         options.changed();
         return accepted.length === pending.length;
       } catch (error) {
         if (!current(generation)) return false;
         for (const key of pending) if (headerReads.get(key)?.started === started && started >= (acceptedHeaderAt.get(key) || 0) && !(key === "notifications" && started < affectedAt)) {
           const forbidden = denied(error);
-          slots[key] = { readStatus: forbidden ? "forbidden" : "unavailable", error: error instanceof Error ? error.message : "Headerdaten konnten nicht geladen werden." };
+          slots[key] = { readStatus: forbidden ? "forbidden" : "unavailable", error: error instanceof Error ? error.message : "Kalender und Benachrichtigungen konnten nicht geladen werden." };
           if (forbidden) Object.assign(header, { [key]: emptyPlanningHeaderData[key] });
         }
         options.changed(); return false;
@@ -110,7 +110,7 @@ export function createHeaderNotificationsState(options: {
   function action(key: string, operation: NotificationOperationView, execute: () => Promise<{ status?: NotificationEvent["status"] }>): Promise<NotificationActionResult> {
     if (!options.isActive()) return Promise.resolve({ ok: false, phase: "session-ended" });
     if (operation.eventId && notificationsDenied || operation.releaseVersion && releasesDenied) return Promise.resolve({ ok: false, phase: "rejected", error: "Kein Zugriff auf diesen Bereich." });
-    if (operations.get(key)?.phase === "unconfirmed") return Promise.resolve({ ok: false, phase: "unconfirmed", error: "Bestätigung steht noch aus." });
+    if (operations.get(key)?.phase === "unconfirmed") return Promise.resolve({ ok: false, phase: "unconfirmed", error: "Das Ergebnis ist noch unklar." });
     const pending = requests.get(key); if (pending) return pending;
     const generation = options.generation();
     const authority = notificationAuthorityGeneration;
@@ -168,9 +168,9 @@ export function createHeaderNotificationsState(options: {
     notifications: () => { options.isActive(); return { completeness: notificationCompleteness, events: projectedEvents(), deliveries, readStatus: notificationStatus, operations: [...operations.values()].filter(value => value.releaseVersion ? !releasesDenied : !notificationsDenied && (!audienceRestricted || events.some(event => event.id === value.eventId) || header.notifications.data.items.some(event => event.id === value.eventId))).map(value => ({ ...value })) }; },
     refreshNotifications: () => options.isActive() ? options.refreshNotifications() : Promise.resolve(false),
     updateNotificationStatus: (eventId, actionValue) => action(`notification:${eventId}`, { eventId, action: actionValue, phase: "saving", error: "", checking: false }, async () => {
-      if (!options.adapter.updateNotification) throw Object.assign(new Error("Notification-Aktion nicht verfügbar."), { status: 400 });
+      if (!options.adapter.updateNotification) throw Object.assign(new Error("Benachrichtigung kann gerade nicht geändert werden."), { status: 400 });
       const result = await options.adapter.updateNotification(eventId, actionValue);
-      if (result.action !== actionValue || !["pending","dismissed","resolved","sent","failed"].includes(result.status)) throw new Error("Bestätigung unvollständig.");
+      if (result.action !== actionValue || !["pending","dismissed","resolved","sent","failed"].includes(result.status)) throw new Error("Ob die Änderung übernommen wurde, ist noch unklar.");
       return result;
     }),
     checkNotificationStatus: eventId => check(`notification:${eventId}`),
@@ -178,7 +178,7 @@ export function createHeaderNotificationsState(options: {
     markPlatformReleaseSeen: version => {
       const previous = operations.get(`release:${version}`);
       if (previous?.phase === "saved") return Promise.resolve({ ok: true, phase: "saved" });
-      return action(`release:${version}`, { releaseVersion: version, action: "seen", phase: "saving", error: "", checking: false }, async () => { if (!options.adapter.markPlatformReleaseSeen) throw Object.assign(new Error("Release-Aktion nicht verfügbar."), { status: 400 }); await options.adapter.markPlatformReleaseSeen(version); return {}; });
+      return action(`release:${version}`, { releaseVersion: version, action: "seen", phase: "saving", error: "", checking: false }, async () => { if (!options.adapter.markPlatformReleaseSeen) throw Object.assign(new Error("Produktaktualisierung kann gerade nicht als gesehen markiert werden."), { status: 400 }); await options.adapter.markPlatformReleaseSeen(version); return {}; });
     },
     checkPlatformReleaseSeen: version => check(`release:${version}`),
   };
@@ -212,7 +212,7 @@ export function createHeaderNotificationsState(options: {
       const loaded = slots.notifications.readStatus !== "not-loaded" || notificationStatus !== "not-loaded" || [...operations.values()].some(operation => operation.eventId);
       affectedAt = ++clock;
       notificationAuthorityGeneration++;
-      for (const operation of operations.values()) if (operation.eventId && operation.phase === "saving") { operation.phase = "unconfirmed"; operation.error = "Der Geltungsbereich wurde geändert. Die Speicherung ist noch nicht bestätigt."; }
+      for (const operation of operations.values()) if (operation.eventId && operation.phase === "saving") { operation.phase = "unconfirmed"; operation.error = "Der Zugriff hat sich geändert. Ob die Änderung übernommen wurde, ist noch unklar."; }
       acceptedHeaderAt.set("notifications", affectedAt);
       headerReads.delete("notifications");
       audienceRestricted = true;

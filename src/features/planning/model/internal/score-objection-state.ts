@@ -155,7 +155,7 @@ export function createScoreObjectionState(options: {
               const current = options.current().scoreObjections.find(row => row.id === original.id);
               const accepted = input.action === "resolve" && input.status === "accepted";
               if (!same(basisOf(current), basisOf(original)) || accepted && (!same(basisOf(currentScore(original)), basisOf(originalScore)) || invalidScores.has(pair(original)))) {
-                throw Object.assign(new Error("Die ursprüngliche Entscheidungsgrundlage wurde geändert. Eingaben bleiben erhalten."), { status: 409, code: "score_objection_basis_conflict" });
+                throw Object.assign(new Error("Einwand oder Score inzwischen geändert. Deine Eingaben bleiben erhalten."), { status: 409, code: "score_objection_basis_conflict" });
               }
               if (!options.process) throw Object.assign(new Error("Die Einwand-Aktion ist nicht verfügbar."), { status: 400 });
               const result = await options.process(original, originalScore, input);
@@ -201,7 +201,7 @@ export function createScoreObjectionState(options: {
         },
         resubmit(input) {
           if (!active()) return Promise.resolve(ended());
-          if (!view.canResave || !view.serverObjection) return Promise.resolve({ ok: false, kind: "rejected", error: "Bitte zuerst die Entscheidungsgrundlage vergleichen." });
+          if (!view.canResave || !view.serverObjection) return Promise.resolve({ ok: false, kind: "rejected", error: "Vergleiche zuerst den aktuellen Einwand und Score." });
           basis = structuredClone(view.serverObjection); basisScore = structuredClone(view.serverScore); view = { ...view, phase: "editing", canResave: false };
           return editor.submit(input);
         },

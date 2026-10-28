@@ -57,7 +57,7 @@ export function createTaskBlockerReports(options: {
     try {
       const { blocker } = await options.adapter.reportBlocker(task.id, submitted);
       if (!valid()) return { ok: false, kind: "ended", error: "Die Sitzung oder der Zugriff wurde beendet." };
-      if (!blocker || blocker.taskId !== task.id || !Number.isSafeInteger(blocker.id) || blocker.id <= 0 || ![blocker.profileId, blocker.reason, blocker.impact, blocker.needsHelpFrom, blocker.createdAt, blocker.resolvedAt].every(value => typeof value === "string") || !["open", "resolved"].includes(blocker.status)) throw new Error("Die Blocker-Bestätigung ist unvollständig.");
+      if (!blocker || blocker.taskId !== task.id || !Number.isSafeInteger(blocker.id) || blocker.id <= 0 || ![blocker.profileId, blocker.reason, blocker.impact, blocker.needsHelpFrom, blocker.createdAt, blocker.resolvedAt].every(value => typeof value === "string") || !["open", "resolved"].includes(blocker.status)) throw new Error("Ob der Blocker gespeichert wurde, ist noch unklar.");
       operation.after = options.nextSequence(); receipts.set(blocker.id, { blocker: structuredClone(blocker), stamp: operation.after });
       operation.view = { ...operation.view, phase: "confirmed", blocker: structuredClone(blocker) };
       options.invalidateTask(task.id); options.invalidateNotifications(); options.changed(); void check(id);

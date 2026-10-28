@@ -72,8 +72,8 @@ function TeamOverviewContent({
   return (
     <div className="grid gap-4">
       {team.readStatus === "unavailable" && <UiNotice tone="warning">Der aktuelle Teamstand konnte nicht geladen werden. Bereits bekannte Daten bleiben sichtbar.</UiNotice>}
-      {team.completeness === "partial" && <UiNotice tone="info">Die Teamansicht enthält einen Teil der bekannten Profile.</UiNotice>}
-      {team.saves.filter(save => save.phase === "unconfirmed" || save.phase === "saved" && save.followup !== "current" && save.followup !== "not-needed").map(save => <TeamProfileSaveNotice key={save.profileId} save={save} onCheck={() => planningState.checkTeamProfile(save.profileId)} />)}
+      {team.completeness === "partial" && <UiNotice tone="info">Du siehst nur einen Teil der Teamprofile.</UiNotice>}
+      {team.saves.filter(save => save.phase === "unconfirmed" || save.phase === "saved" && save.followup !== "current" && save.followup !== "not-needed").map(save => <TeamProfileSaveNotice profiles={profiles} key={save.profileId} save={save} onCheck={() => planningState.checkTeamProfile(save.profileId)} />)}
       <TeamRoleSummary profiles={profiles} today={today} />
 
       {actualProfile && (

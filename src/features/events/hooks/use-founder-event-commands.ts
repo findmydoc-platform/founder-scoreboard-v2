@@ -9,7 +9,7 @@ export function useFounderEventCommands({ planningState, setSaveError }: Pick<Pl
   const [eventMessage, setEventMessage] = useState("");
   function finish(result: EventResult, title: string) {
     if (result.phase !== "saved") {
-      const error = result.error || "Die Bestätigung steht aus. Eingaben bleiben erhalten. Bitte zuerst den Serverstand prüfen.";
+      const error = result.error || "Ob das Event gespeichert wurde, ist noch unklar. Deine Eingaben bleiben erhalten. Prüfe den aktuellen Stand.";
       setEventMessage(""); setSaveError(error); throw new Error(error);
     }
     setEventMessage(result.warning || `Event gespeichert: ${title}`);

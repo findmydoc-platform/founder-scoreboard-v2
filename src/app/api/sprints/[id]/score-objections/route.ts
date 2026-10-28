@@ -76,7 +76,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const expected = payload.expectedObjection;
   if (!expected || typeof expected !== "object" || Array.isArray(expected) || expected.id !== objectionId || expected.sprint_id !== id
-    || (action === "resolve" && status === "accepted" && !("expectedScore" in payload))) return apiError("Die ursprüngliche Entscheidungsgrundlage fehlt oder passt nicht zum Einwand.", 400);
+    || (action === "resolve" && status === "accepted" && !("expectedScore" in payload))) return apiError("Lade Einwand und Score neu, bevor du entscheidest.", 400);
 
   const metadata = auditRequestMetadata(request);
   const { data: transactionData, error } = await planning.processScoreObjection({ objectionId, action, status: status || null,
@@ -87,7 +87,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (error) {
     if(error.code==="42501")return apiError("Keine Berechtigung für diese Einwand-Entscheidung.",403);
     if(error.code==="session_superseded")return NextResponse.json({error:"Die Sitzung wurde ersetzt.",code:"session_superseded"},{status:409});
-    if (error.code === "P0007") return NextResponse.json({error:"Die ursprüngliche Entscheidungsgrundlage wurde geändert. Eingaben bleiben erhalten.",code:"score_objection_basis_conflict"},{status:409});
+    if (error.code === "P0007") return NextResponse.json({error:"Einwand oder Score wurden inzwischen geändert. Deine Eingaben bleiben erhalten.",code:"score_objection_basis_conflict"},{status:409});
     if (error.code === "P0002") return apiError("Sprint oder Score-Einwand wurde nicht gefunden.", 404);
     if (error.code === "P0003") return apiError("Sprint-Score ist bereits gelockt.", 409);
     if (error.code === "P0004") return apiError("Score-Einwand ist bereits abgeschlossen oder der Zweitreview steht noch aus.", 409);

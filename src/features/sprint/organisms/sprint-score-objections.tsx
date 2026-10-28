@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { PlanningState } from "@/features/planning/model/planning-state";
+import { scoreObjectionStatusLabels } from "../model/score-objection-state";
 import type { ScoreObjectionCreationEditor } from "../model/score-objection-state";
 import { ScoreObjectionOperationStatus } from "../molecules/score-objection-operation-status";
 import { ScoreObjectionReviewControls } from "@/features/sprint/molecules/score-objection-review-controls";
@@ -29,9 +30,9 @@ export function SprintScoreObjections({data,sprint,currentProfile,pending,planni
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-950">Score-Einwände</h2>
-          <p className="text-xs text-slate-500">Einwände müssen vor dem Sprint-Lock geprüft sein. Es gibt maximal einen Zweitreview.</p>
+          <p className="text-xs text-slate-500">Einwände müssen vor dem Sprint-Abschluss geprüft sein. Es gibt maximal einen Zweitreview.</p>
         </div>
-        <UiBadge tone="white" size="md">{openObjectionsCount} {complete?"offen":"offen geladen"}</UiBadge>
+        <UiBadge tone="white" size="md">{openObjectionsCount} {complete?"offen":"offen in dieser Ansicht"}</UiBadge>
       </div>
       <div className="mt-3 grid gap-2">
         {shownObjections.filter((item) => item.sprintId === sprint.id).map((objection) => {
@@ -42,11 +43,11 @@ export function SprintScoreObjections({data,sprint,currentProfile,pending,planni
           return (
             <div key={objection.id} className="grid gap-2 rounded-md border border-slate-100 bg-slate-50 p-3 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-semibold text-slate-900">{profile?.name || objection.profileId} · {objection.status}</span>
+                <span className="font-semibold text-slate-900">{profile?.name || "Person nicht verfügbar"} · {scoreObjectionStatusLabels[objection.status]}</span>
               </div>
               <p className="text-slate-700">{objection.comment}</p>
               {objection.resolutionComment && (
-                <p className="text-xs text-slate-600">Entscheidung {reviewer?.name || objection.reviewedBy}: {objection.resolutionComment}</p>
+                <p className="text-xs text-slate-600">Entscheidung {reviewer?.name || "Person nicht verfügbar"}: {objection.resolutionComment}</p>
               )}
               {objection.status === "accepted" && objection.resolvedDeliveryPoints !== null && (
                 <p className="text-xs font-medium text-emerald-700">
@@ -56,7 +57,7 @@ export function SprintScoreObjections({data,sprint,currentProfile,pending,planni
               )}
               {objection.secondReviewerProfileId && (
                 <p className="text-xs text-slate-500">
-                  Zweitreview {secondReviewer?.name || objection.secondReviewerProfileId}: {objection.secondReviewedAt ? objection.secondReviewDecision : "ausstehend"}
+                  Zweitreview {secondReviewer?.name || "Person nicht verfügbar"}: {objection.secondReviewedAt ? objection.secondReviewDecision : "ausstehend"}
                 </p>
               )}
               {currentProfile && (
@@ -75,7 +76,7 @@ export function SprintScoreObjections({data,sprint,currentProfile,pending,planni
         })}
         {!shownObjections.some((item) => item.sprintId === sprint.id) && <UiEmptyState>Noch keine Score-Einwände.</UiEmptyState>}
       </div>
-      {view&&<ScoreObjectionOperationStatus view={view} check={()=>{void editor?.checkOutcome();}}/>}
+      {view&&<ScoreObjectionOperationStatus profiles={data.profiles} view={view} check={()=>{void editor?.checkOutcome();}}/>}
       {!sprint.scoreLocked && currentProfile && (objectionWindow.open||Boolean(retained)) && (
         <form
           className="mt-3 flex flex-col gap-2 sm:flex-row"

@@ -77,14 +77,14 @@ export function createToolsState(options: { initial: readonly FmdTool[]; loaded:
   }
   async function save(id: string, draft: FmdToolDraft, basis?: FmdTool): Promise<ToolResult> {
     if (!options.active()) return { phase: "session-ended" };
-    if (denied) return { phase: "rejected", error: "Links sind in dieser Sitzung nicht verfügbar. Bitte zuerst den Serverstand laden." };
+    if (denied) return { phase: "rejected", error: "Links sind in dieser Sitzung nicht verfügbar. Lade zuerst den aktuellen Stand." };
     const previous = operations.get(id) || [...operations.values()].find(operation => basis && operation.toolId === basis.id && ["saving", "unconfirmed"].includes(operation.phase));
     if (previous && ["saving", "unconfirmed", "saved"].includes(previous.phase)) return { phase: previous.phase === "saved" ? "saved" : "unconfirmed", error: previous.error, warning: previous.warning };
     let prepared: ReturnType<typeof normalize>;
     try { prepared = normalize(draft); } catch (error) { return { phase: "rejected", error: (error as Error).message }; }
     const current = basis && records.find(tool => tool.id === basis.id);
     if (basis && (!basis.updatedAt || (current?.updatedAt && current.updatedAt !== basis.updatedAt))) {
-      const error = "Der Link wurde geändert oder seine Ausgangsversion fehlt. Bitte den aktuellen Serverstand prüfen.";
+      const error = "Der Link wurde geändert oder seine Ausgangsversion fehlt. Bitte den aktuellen Aktuellen Stand prüfen.";
       operations.set(id, { id, toolId: basis.id, draft: prepared, phase: "conflict", error, checking: false }); options.changed(); return { phase: "conflict", error };
     }
     const writer = basis ? options.adapter.updateTool && (() => options.adapter.updateTool!(basis, prepared)) : options.adapter.createTool && (() => options.adapter.createTool!(prepared));
@@ -94,7 +94,7 @@ export function createToolsState(options: { initial: readonly FmdTool[]; loaded:
     try {
       const result: ToolConfirmation = await writer();
       if (!options.active() || generation !== options.generation() || scope !== authority) return { phase: "session-ended" };
-      if (!result.tool.id || !result.tool.updatedAt || (basis && result.tool.id !== basis.id)) throw new Error("Link-Speicherung ist noch nicht bestätigt.");
+      if (!result.tool.id || !result.tool.updatedAt || (basis && result.tool.id !== basis.id)) throw new Error("Ob der Link gespeichert wurde, ist noch unklar.");
       const current = records.find(tool => tool.id === result.tool.id);
       if (((accepted.get(result.tool.id) || 0) > started || completeReadAt > started) && current?.updatedAt !== result.tool.updatedAt && (basis ? current?.updatedAt !== basis.updatedAt : Boolean(current))) readStatus = "stale";
       else { const acceptedAt = ++sequence; records = [...records.filter(tool => tool.id !== result.tool.id), result.tool]; accepted.set(result.tool.id, acceptedAt); receipts.set(result.tool.id, { started, acceptedAt, basisVersion: basis?.updatedAt }); }
@@ -105,7 +105,7 @@ export function createToolsState(options: { initial: readonly FmdTool[]; loaded:
       const failure = error as { status?: number; code?: string; message?: string };
       if (failure.code === "session_superseded") { options.endSession(); return { phase: "session-ended" }; }
       operation.phase = failure.code === "tool_version_conflict" ? "conflict" : failure.status && failure.status < 500 ? "rejected" : "unconfirmed";
-      operation.error = failure.message || "Link-Speicherung ist noch nicht bestätigt.";
+      operation.error = failure.message || "Ob der Link gespeichert wurde, ist noch unklar.";
       if (operation.phase === "unconfirmed") { mutationBoundary = ++sequence; readStatus = "stale"; if (!basis || affectsQuickLinks(basis, { ...basis, ...prepared })) options.invalidateQuickLinks(); }
       options.changed(); return { phase: operation.phase, error: operation.error };
     }
@@ -124,13 +124,13 @@ export function createToolsState(options: { initial: readonly FmdTool[]; loaded:
       try {
         const image = await options.adapter.uploadToolPreview(file);
         if (!options.active() || generation !== options.generation() || scope !== authority) return { phase: "session-ended" };
-        if (!isProtectedToolPreviewUrl(image.imageUrl) || image.source !== "manual") throw new Error("Bild-Upload ist noch nicht bestätigt.");
+        if (!isProtectedToolPreviewUrl(image.imageUrl) || image.source !== "manual") throw new Error("Ob das Bild hochgeladen wurde, ist noch unklar.");
         preview.phase = "uploaded"; preview.image = image; options.changed(); return { phase: "uploaded", image };
       } catch (error) {
         if (!options.active() || generation !== options.generation() || scope !== authority) return { phase: "session-ended" };
         const failure = error as { status?: number; code?: string; message?: string };
         if (failure.code === "session_superseded") { options.endSession(); return { phase: "session-ended" }; }
-        preview.phase = failure.status && failure.status < 500 ? "rejected" : "unconfirmed"; preview.error = failure.message || "Bild-Upload ist noch nicht bestätigt."; options.changed(); return { phase: preview.phase, error: preview.error };
+        preview.phase = failure.status && failure.status < 500 ? "rejected" : "unconfirmed"; preview.error = failure.message || "Ob das Bild hochgeladen wurde, ist noch unklar."; options.changed(); return { phase: preview.phase, error: preview.error };
       }
     },
     async checkToolPreview(id) {

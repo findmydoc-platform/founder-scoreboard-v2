@@ -181,10 +181,10 @@ export const SummaryLoading: Story = {
 };
 
 export const SummaryFailure: Story = {
-  args: { task: { ...task, detailAvailability: "summary" }, detailDataError: "Task-Details konnten nicht geladen werden.", onRetryDetailData: fn() },
+  args: { task: { ...task, detailAvailability: "summary" }, detailDataError: "Aufgabendetails konnten nicht geladen werden.", onRetryDetailData: fn() },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole("status")).toHaveTextContent("Task-Details konnten nicht geladen werden.");
+    await expect(canvas.getByRole("status")).toHaveTextContent("Aufgabendetails konnten nicht geladen werden.");
     await expect(canvas.queryByRole("button", { name: /bearbeiten/i })).not.toBeInTheDocument();
   },
 };
@@ -427,13 +427,13 @@ export const RetainsOriginalBasisAndResavesDeliberately: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
     await expect(await canvas.findByRole("button", { name: "Erneut speichern" })).toBeEnabled();
     await expect(canvas.getByLabelText("Write attempts")).toHaveTextContent("0");
-    await userEvent.click(canvas.getByText("Aktuellen Serverstand anzeigen"));
+    await userEvent.click(canvas.getByText("Aktuellen Stand anzeigen"));
     await expect(canvas.getByText("Fremder Serverstand", { selector: "dd" })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Another unseen update" }));
     await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
     await waitFor(() => expect(canvas.getByLabelText("Write attempts")).toHaveTextContent("1"));
     await expect(title).toHaveValue("Mein erhaltener Entwurf");
-    await userEvent.click(canvas.getByText("Aktuellen Serverstand anzeigen"));
+    await userEvent.click(canvas.getByText("Aktuellen Stand anzeigen"));
     await expect(canvas.getByText("Noch neuerer Serverstand", { selector: "dd" })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
     await waitFor(() => expect(canvas.getByLabelText("Write attempts")).toHaveTextContent("2"));
@@ -480,20 +480,20 @@ export const LostResponseKeepsInputAndChecksWithoutReplay: Story = {
     await userEvent.clear(title);
     await userEvent.type(title, "Mein abgesendeter Entwurf");
     await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
-    await expect(await canvas.findByText("Speicherbestätigung ausstehend")).toBeVisible();
+    await expect(await canvas.findByText("Speicherung unklar")).toBeVisible();
     await expect(title).toHaveValue("Mein abgesendeter Entwurf");
     await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
-    await userEvent.click(canvas.getByRole("button", { name: "Speicherstand prüfen" }));
-    await expect(await canvas.findByText(/Serverstand geladen.*Speicherung bleibt unbestätigt/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Speicherung prüfen" }));
+    await expect(await canvas.findByText(/Aufgabe geladen.*Ob die Änderung vollständig gespeichert wurde, bleibt unklar/)).toBeVisible();
     await expect(canvas.getByLabelText("Write count")).toHaveTextContent("1");
     await expect(canvas.getByLabelText("Read count")).toHaveTextContent("1");
-    const serverValues = canvas.getByText("Aktuellen Serverstand anzeigen");
+    const serverValues = canvas.getByText("Aktuellen Stand anzeigen");
     await userEvent.click(serverValues);
     await expect(within(serverValues.closest("details")!).getByText("Mein abgesendeter Entwurf", { selector: "dd" })).toBeVisible();
     await expect(canvas.queryByRole("button", { name: "Erneut speichern" })).not.toBeInTheDocument();
     await expect(title).toHaveValue("Mein abgesendeter Entwurf");
     await userEvent.click(canvas.getByRole("button", { name: "Abbrechen" }));
-    await expect(canvas.getByText("Speicherbestätigung ausstehend")).toBeVisible();
+    await expect(canvas.getByText("Speicherung unklar")).toBeVisible();
     const submitted = canvas.getByText("Abgesendete Eingaben anzeigen");
     await userEvent.click(submitted);
     await expect(within(submitted.closest("details")!).getByText("Mein abgesendeter Entwurf", { selector: "dd" })).toBeVisible();

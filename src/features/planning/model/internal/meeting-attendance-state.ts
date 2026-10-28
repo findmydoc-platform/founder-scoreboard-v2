@@ -26,7 +26,7 @@ export function createMeetingAttendanceState(options: { initial: readonly Meetin
    try {
     const result = await options.adapter.readMeetingAttendance!(meetingId, profileId);
     if (!options.active() || generation !== options.generation() || heldAuthority !== authority || pairAuthority !== (pairAuthorities.get(key) || 0)) throw Object.assign(new Error("Die Sitzung wurde beendet."), { code: "session_superseded" });
-    if (!valid(result.attendance, meetingId, profileId)) throw new Error("Die Weekly-Bestätigung ist unvollständig.");
+    if (!valid(result.attendance, meetingId, profileId)) throw new Error("Ob deine Weekly-Rückmeldung vollständig gespeichert wurde, ist noch unklar.");
     denied.delete(key);
     if ((records.has(key) || started >= completeThrough) && canAcceptRead(key, result.attendance, started)) { records.set(key, { row: structuredClone(result.attendance), stamp: started }); ownReceipts.delete(key); }
     options.changed(); return { attendance: structuredClone(records.get(key)?.row || null), started };
@@ -50,7 +50,7 @@ export function createMeetingAttendanceState(options: { initial: readonly Meetin
   }
   async function save(patch: MeetingAttendancePatch): Promise<MeetingAttendanceResult> {
    if (!available()) return { ok: false, kind: "ended", error: "Die Weekly-Bearbeitung wurde beendet." };
-   if (["saving", "unconfirmed"].includes(context.view.phase)) return { ok: false, kind: "blocked", error: "Die ursprüngliche Rückmeldung ist noch nicht bestätigt. Nicht erneut senden." };
+   if (["saving", "unconfirmed"].includes(context.view.phase)) return { ok: false, kind: "blocked", error: "Ob deine Rückmeldung gespeichert wurde, ist noch unklar. Nicht erneut senden." };
    if (!prepared || blocks(key) || options.dependencyPending(meeting)) { context.view = { ...context.view, phase: "blocked", submitted: structuredClone(patch), error: "Eine betroffene Änderung muss zuerst geprüft werden. Diese Rückmeldung wurde nicht gesendet." }; options.changed(); return { ok: false, kind: "blocked", error: context.view.error }; }
    if (context.view.phase === "conflict") return { ok: false, kind: "conflict", error: context.view.error };
    if (!options.adapter.saveMeetingAttendance) return { ok: false, kind: "rejected", error: "Weekly kann gerade nicht gespeichert werden." };
@@ -60,7 +60,7 @@ export function createMeetingAttendanceState(options: { initial: readonly Meetin
    try {
     const receipt = await options.adapter.saveMeetingAttendance(structuredClone(meeting), structuredClone(basis), record);
     if (!available()) return { ok: false, kind: "ended", error: "Die Sitzung oder der Zugriff wurde beendet." };
-    if (!receipt.attendance || !valid(receipt.attendance, meeting.id, profileId)) throw new Error("Die gespeicherte Weekly-Rückmeldung ist noch nicht bestätigt.");
+    if (!receipt.attendance || !valid(receipt.attendance, meeting.id, profileId)) throw new Error("Ob deine Weekly-Rückmeldung gespeichert wurde, ist noch unklar.");
     // The editor advances only to its own receipt, even when shared data has a foreign successor.
     basis = structuredClone(receipt.attendance);
     const current = records.get(key);
@@ -69,7 +69,7 @@ export function createMeetingAttendanceState(options: { initial: readonly Meetin
      const acceptedAt = options.nextSequence(); records.set(key, { row: basis, stamp: acceptedAt }); ownReceipts.set(key, { started, acceptedAt, readThrough: current?.stamp || 0, basisVersion });
     }
     context.pending = null;
-    context.view = { ...context.view, phase: "confirmed", warning: receipt.warning || (receipt.effects === "unconfirmed" ? "Rückmeldung gespeichert. Benachrichtigung oder Protokoll noch nicht bestätigt." : ""), readStatus: "current" };
+    context.view = { ...context.view, phase: "confirmed", warning: receipt.warning || (receipt.effects === "unconfirmed" ? "Rückmeldung gespeichert. Ob Benachrichtigung und Protokoll erstellt wurden, ist noch unklar." : ""), readStatus: "current" };
     options.invalidateNotifications(); options.changed(); return { ok: true };
    } catch (error) {
     if (!available()) return { ok: false, kind: "ended", error: "Die Sitzung oder der Zugriff wurde beendet." };
@@ -87,7 +87,7 @@ export function createMeetingAttendanceState(options: { initial: readonly Meetin
    try { let result = await read(meeting.id, profileId); if (result.started <= context.after) result = await read(meeting.id, profileId); if (!available()) return { outcome: "session-ended", readStatus: "not-needed" }; context.view = { ...context.view, checking: false, serverRecord: structuredClone(result.attendance), readStatus: "current" }; options.changed(); return { outcome: context.view.phase === "unconfirmed" ? "unconfirmed" : "not-pending", readStatus: "current" }; }
    catch (error) { if (!available()) return { outcome: "session-ended", readStatus: "not-needed" }; context.view = { ...context.view, checking: false, readStatus: "unavailable", error: error instanceof Error ? error.message : "Prüfung fehlgeschlagen." }; options.changed(); return { outcome: "unconfirmed", readStatus: "unavailable" }; }
   }
-  const editor: MeetingAttendanceEditor = { view, prepare, save, checkOutcome, async refreshConflict() { if (context.view.phase !== "conflict") return; const checked = await checkOutcome(); if (checked.readStatus === "current" && available()) { context.view.compared = true; options.changed(); } }, async resave(patch) { if (!available() || context.view.phase !== "conflict" || !context.view.compared) return { ok: false, kind: "blocked", error: "Bitte zuerst den aktuellen Serverstand vergleichen." }; basis = structuredClone(context.view.serverRecord); prepared = true; context.view.phase = "editing"; return save(patch); }, close() { if (["editing", "rejected", "blocked"].includes(context.view.phase)) { closed = true; editors.delete(id); } } };
+  const editor: MeetingAttendanceEditor = { view, prepare, save, checkOutcome, async refreshConflict() { if (context.view.phase !== "conflict") return; const checked = await checkOutcome(); if (checked.readStatus === "current" && available()) { context.view.compared = true; options.changed(); } }, async resave(patch) { if (!available() || context.view.phase !== "conflict" || !context.view.compared) return { ok: false, kind: "blocked", error: "Vergleiche zuerst die Änderungen." }; basis = structuredClone(context.view.serverRecord); prepared = true; context.view.phase = "editing"; return save(patch); }, close() { if (["editing", "rejected", "blocked"].includes(context.view.phase)) { closed = true; editors.delete(id); } } };
   context.editor = editor; editors.set(id, context); return editor;
  }
  return { begin,

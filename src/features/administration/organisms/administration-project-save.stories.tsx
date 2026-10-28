@@ -53,7 +53,7 @@ export const ConfirmedSettingsSurviveProviderRefreshFailure: Story = { play: asy
         await userEvent.clear(number);
         await userEvent.type(number, "8");
         await userEvent.click(canvas.getByRole("button", { name: "Speichern und prüfen" }));
-        await expect(await canvas.findByText("GitHub-Project-Einstellung gespeichert")).toBeVisible();
+        await expect(await canvas.findByText("GitHub-Projekteinstellungen gespeichert")).toBeVisible();
         await expect(canvas.getByText("Die Statusdaten konnten nicht nachgeladen werden.")).toBeVisible();
         await expect(number).toHaveValue(8);
         await expect(canvas.getByLabelText("Project writes")).toHaveTextContent("1");
@@ -67,13 +67,13 @@ export const OriginalTupleRequiresConsciousConflictResave: Story = { args: { mod
         await userEvent.click(canvas.getByRole("button", { name: "Background Project change" }));
         await expect(number).toHaveValue(8);
         await userEvent.click(canvas.getByRole("button", { name: "Speichern und prüfen" }));
-        await expect(await canvas.findByText("GitHub-Project-Einstellung zwischenzeitlich geändert")).toBeVisible();
+        await expect(await canvas.findByText("GitHub-Projekteinstellungen inzwischen geändert")).toBeVisible();
         await expect(canvas.getByLabelText("Project writes")).toHaveTextContent("0");
-        await expect(canvas.getByRole("button", { name: "Bewusst erneut speichern" })).toBeDisabled();
-        await userEvent.click(canvas.getByRole("button", { name: "Serverstand vergleichen" }));
+        await expect(canvas.getByRole("button", { name: "Erneut speichern" })).toBeDisabled();
+        await userEvent.click(canvas.getByRole("button", { name: "Änderungen vergleichen" }));
         await expect(await canvas.findByText("foreign-team", { selector: "dd" })).toBeVisible();
-        await userEvent.click(canvas.getByRole("button", { name: "Bewusst erneut speichern" }));
-        await expect(await canvas.findByText("GitHub-Project-Einstellung gespeichert")).toBeVisible();
+        await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
+        await expect(await canvas.findByText("GitHub-Projekteinstellungen gespeichert")).toBeVisible();
         await expect(canvas.getByLabelText("Expected Project tuple")).toHaveTextContent('["foreign-org",9,"foreign-team"]');
     } };
 export const UnknownSettingsRemainPendingAfterNavigationAndReadonlyCheck: Story = { args: { mode: "unknown" }, play: async ({ canvasElement }) => {
@@ -83,13 +83,13 @@ export const UnknownSettingsRemainPendingAfterNavigationAndReadonlyCheck: Story 
         await userEvent.clear(number);
         await userEvent.type(number, "8");
         await userEvent.click(canvas.getByRole("button", { name: "Speichern und prüfen" }));
-        await expect(await canvas.findByText("GitHub-Project-Speicherung noch nicht bestätigt")).toBeVisible();
+        await expect(await canvas.findByText("Speicherung der GitHub-Einstellungen unklar")).toBeVisible();
         await userEvent.click(canvas.getByRole("button", { name: "Ansicht wechseln" }));
         await userEvent.click(canvas.getByRole("button", { name: "Ansicht wechseln" }));
         await userEvent.click(await canvas.findByRole("tab", { name: "Integrationen & Zustellung" }));
         await expect(canvas.getByLabelText("Project-Nummer")).toHaveValue(8);
-        await userEvent.click(canvas.getByRole("button", { name: "Serverstand prüfen" }));
+        await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand prüfen" }));
         await waitFor(() => expect(canvas.getByLabelText("Project writes")).toHaveTextContent("1"));
-        await expect(canvas.getByText("GitHub-Project-Speicherung noch nicht bestätigt")).toBeVisible();
+        await expect(canvas.getByText("Speicherung der GitHub-Einstellungen unklar")).toBeVisible();
         await expect(canvas.getByRole("button", { name: "Speichern und prüfen" })).toBeDisabled();
     } };

@@ -138,12 +138,12 @@ export function TaskDetailPanelBlockerSection({
       </div>
       {activeReports.map(report => (
         <div key={report.id} role="status" className="mt-3 grid gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
-          <p className="font-semibold">{report.phase === "saving" ? "Blocker-Meldung wird gespeichert …" : report.phase === "unconfirmed" ? "Bestätigung der Blocker-Meldung fehlt. Nicht erneut melden." : report.checking ? "Blocker bestätigt. Aufgabenstand wird geprüft …" : "Blocker bestätigt; aktueller Aufgabenstand ist noch offen."}</p>
+          <p className="font-semibold">{report.phase === "saving" ? "Blocker-Meldung wird gespeichert …" : report.phase === "unconfirmed" ? "Ob der Blocker gespeichert wurde, ist noch unklar. Nicht erneut melden." : report.checking ? "Blocker gespeichert. Aufgabe wird geprüft …" : "Blocker gespeichert. Aufgabe noch nicht aktualisiert."}</p>
           <p className="[overflow-wrap:anywhere]">Grund: {report.submitted.reason}</p>
           {report.submitted.impact ? <p className="[overflow-wrap:anywhere]">Auswirkung: {report.submitted.impact}</p> : null}
           {report.submitted.needsHelpFrom ? <p className="[overflow-wrap:anywhere]">Benötigte Hilfe: {report.submitted.needsHelpFrom}</p> : null}
           {report.error ? <p>{report.error}</p> : null}
-          {report.serverTask ? <p>Geprüfter Aufgabenstand: {report.serverTask.status}. Das bestätigt keine verlorene Meldung.</p> : null}
+          {report.serverTask ? <p>Aufgabe geladen: {report.serverTask.status}. {report.phase === "unconfirmed" ? "Ob der Blocker gespeichert wurde, bleibt unklar." : ""}</p> : null}
           {report.phase !== "saving" && onCheckReport ? <UiButton className="min-h-11 justify-self-start" disabled={report.checking} onClick={() => onCheckReport(report.id)}>Aufgabenstand prüfen</UiButton> : null}
         </div>
       ))}

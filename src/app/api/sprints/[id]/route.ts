@@ -25,8 +25,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { data: current, error: currentError } = await planning.readSprintSchedule();
 
   if (currentError || !current) return apiError("Sprint wurde nicht gefunden.", 404);
-  if (current.score_locked) return NextResponse.json({ error: "Gelockte Sprints können nicht mehr geändert werden.", code: "sprint_locked" }, { status: 409 });
-  if (typeof payload.expectedUpdatedAt !== "string" || !payload.expectedUpdatedAt.trim()) return apiError("Die ursprüngliche Bearbeitungsbasis fehlt. Bitte den Sprint neu laden.", 400);
+  if (current.score_locked) return NextResponse.json({ error: "Abgeschlossene Sprints können nicht mehr geändert werden.", code: "sprint_locked" }, { status: 409 });
+  if (typeof payload.expectedUpdatedAt !== "string" || !payload.expectedUpdatedAt.trim()) return apiError("Lade den Sprint neu, bevor du speicherst.", 400);
 
   const update: Record<string, string | null> = {};
 
@@ -98,7 +98,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (updateError) {
     if (updateError.code === "P0001") return NextResponse.json({ error: "Sprint wurde parallel geändert. Bitte neu laden.", code: "sprint_revision_conflict" }, { status: 409 });
     if (updateError.code === "P0002") return apiError("Sprint oder FounderOps-Prozesseinstellung wurde nicht gefunden.", 404);
-    if (updateError.code === "P0003") return NextResponse.json({ error: "Gelockte Sprints können nicht mehr geändert werden.", code: "sprint_locked" }, { status: 409 });
+    if (updateError.code === "P0003") return NextResponse.json({ error: "Abgeschlossene Sprints können nicht mehr geändert werden.", code: "sprint_locked" }, { status: 409 });
     if (updateError.code === "P0004") return NextResponse.json({ error: "Dieser Sprint ist durch zugeordnete Aufgaben geschützt.", code: "sprint_protected" }, { status: 409 });
     if (updateError.code === "22023") return apiError("Sprint-Daten sind ungültig.", 400);
     return apiError("Sprint konnte nicht gespeichert werden.", 500);

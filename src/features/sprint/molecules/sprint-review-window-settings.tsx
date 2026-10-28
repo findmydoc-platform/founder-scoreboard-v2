@@ -47,14 +47,14 @@ export function SprintReviewWindowSettings({
         <UiButton variant="primary" className="min-h-11" disabled={disabled || pending || blocked || !valid || parsed === reviewObjectionWindowHours} onClick={() => { void save(); }}>Frist speichern</UiButton>
       </div>
       {edit && ["conflict", "unconfirmed", "blocked"].includes(edit.phase) && <UiNotice tone="warning" className="lg:col-span-2" role="status">
-        <p className="font-semibold">{edit.phase === "conflict" ? "Frist wurde zwischenzeitlich geändert" : "Frist noch nicht bestätigt"}</p>
+        <p className="font-semibold">{edit.phase === "conflict" ? "Frist wurde zwischenzeitlich geändert" : "Speicherung der Frist unklar"}</p>
         {edit.submittedHours !== null && <p>Eingabe: {edit.submittedHours} Stunden</p>}
-        {edit.serverHours !== null && <p>Serverstand: {edit.serverHours} Stunden</p>}
+        {edit.serverHours !== null && <p>Aktueller Stand: {edit.serverHours} Stunden</p>}
         <div className="mt-2 flex flex-wrap gap-2">
           {edit.phase === "conflict" ? <>
-            <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }}>Serverstand vergleichen</UiButton>
-            <UiButton className="min-h-11" disabled={disabled || !edit.canResave || !valid} onClick={() => { void save(true); }}>Bewusst erneut speichern</UiButton>
-          </> : <UiButton className="min-h-11" onClick={async () => { const checked = await planningState.checkReviewWindowSave(); setMessage(checked.readStatus === "forbidden" ? "Kein Zugriff auf die Prozesseinstellung." : checked.outcome === "not-pending" ? "Der Entwurf wurde noch nicht gesendet. Du kannst ihn jetzt bewusst speichern." : "Die Speicherung bleibt unbestätigt und wurde nicht erneut gesendet."); }}>Serverstand prüfen</UiButton>}
+            <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }}>Änderungen vergleichen</UiButton>
+            <UiButton className="min-h-11" disabled={disabled || !edit.canResave || !valid} onClick={() => { void save(true); }}>Erneut speichern</UiButton>
+          </> : <UiButton className="min-h-11" onClick={async () => { const checked = await planningState.checkReviewWindowSave(); setMessage(checked.readStatus === "forbidden" ? "Kein Zugriff auf die Prozesseinstellung." : checked.outcome === "not-pending" ? "Der Entwurf wurde noch nicht gesendet. Du kannst ihn jetzt speichern." : "Ob die Änderung gespeichert wurde, bleibt unklar. Es wurde nichts erneut gesendet."); }}>Aktuellen Stand prüfen</UiButton>}
         </div>
       </UiNotice>}
       {message && <UiNotice className="lg:col-span-2" tone={message === "Frist gespeichert." ? "success" : "danger"}>{message}</UiNotice>}

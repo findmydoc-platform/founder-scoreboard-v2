@@ -38,7 +38,7 @@ function Fixture({ scenario = "epic-success" }: { scenario?: string }) {
               return { response: new Response(null), body: { task: serverTask } as T };
             }
             expect(patch.expectedUpdatedAt).toBe("actual/reparent");
-            return { response: new Response(null, { status: scenario === "parent-content-unknown" ? 503 : 400 }), body: { error: "Inhalt konnte nicht bestätigt werden." } as T };
+            return { response: new Response(null, { status: scenario === "parent-content-unknown" ? 503 : 400 }), body: { error: scenario === "parent-content-unknown" ? "Ob die übrigen Änderungen gespeichert sind, ist noch unklar." : "Die weiteren Änderungen wurden abgelehnt." } as T };
           }
           serverTask = { ...serverTask, ...patch, updatedAt: "accepted/epic" };
           return { response: new Response(null), body: { task: serverTask } as T };
@@ -83,10 +83,10 @@ export const OriginalEpicBasisNeedsConsciousResave: Story = { args: { scenario: 
   await userEvent.clear(canvas.getByRole("textbox", { name: /Titel/ })); await userEvent.type(canvas.getByRole("textbox", { name: /Titel/ }), "My retained title");
   await controls.get("epic-conflict")!.refresh();
   await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
-  await waitFor(() => expect(canvas.getByRole("button", { name: "Bewusst erneut speichern" })).toBeEnabled());
+  await waitFor(() => expect(canvas.getByRole("button", { name: "Erneut speichern" })).toBeEnabled());
   await expect(canvas.getByRole("textbox", { name: /Titel/ })).toHaveValue("My retained title");
   expect(controls.get("epic-conflict")!.writes()).toHaveLength(0);
-  await userEvent.click(canvas.getByRole("button", { name: "Bewusst erneut speichern" }));
+  await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
   await waitFor(() => expect(canvas.queryByRole("dialog")).not.toBeInTheDocument());
   expect(controls.get("epic-conflict")!.writes()[0].payload).toMatchObject({ expectedUpdatedAt: "server/newer", title: "My retained title" });
 } };
@@ -99,7 +99,7 @@ async function changeParent(canvasElement: HTMLElement) {
 }
 export const ConfirmedParentSurvivesRejectedContent: Story = { args: { scenario: "parent-content-rejected" }, play: async ({ canvasElement }) => {
   const canvas = await changeParent(canvasElement);
-  await waitFor(() => expect(canvas.getByRole("alert")).toHaveTextContent("Inhalt konnte nicht bestätigt werden."));
+  await waitFor(() => expect(canvas.getByRole("alert")).toHaveTextContent("Die weiteren Änderungen wurden abgelehnt."));
   await expect(canvas.getByRole("textbox", { name: "Zielbild *" })).toHaveValue("Original goal");
   expect(controls.get("parent-content-rejected")!.writes()).toHaveLength(2);
   await userEvent.click(canvas.getByRole("button", { name: "Initiative schließen" }));
@@ -107,25 +107,27 @@ export const ConfirmedParentSurvivesRejectedContent: Story = { args: { scenario:
 } };
 export const UnknownContentRetainsConfirmedParentAcrossNavigation: Story = { args: { scenario: "parent-content-unknown" }, play: async ({ canvasElement }) => {
   const canvas = await changeParent(canvasElement);
-  await waitFor(() => expect(canvas.getByText(/Die Zuordnung wurde gespeichert/)).toBeVisible());
+  await waitFor(() => expect(canvas.getByRole("heading", { name: "Speicherstatus unklar" })).toBeVisible());
+  await expect(canvas.getByText(/Die Zuordnung ist gespeichert/)).toBeVisible();
+  await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
   await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
   await userEvent.click(canvas.getByRole("button", { name: "Initiative schließen" }));
-  await expect(canvas.getByText(/Die Zuordnung wurde gespeichert/)).toBeVisible();
-  await userEvent.click(canvas.getByText("Behaltene Eingaben anzeigen"));
+  await expect(canvas.getByText(/Die Zuordnung ist gespeichert/)).toBeVisible();
+  await userEvent.click(canvas.getByText("Eingaben anzeigen"));
   const retained=canvasElement.querySelector("details dl")!;
   await expect(retained).toHaveTextContent("Other milestone");
   await expect(retained).toHaveTextContent(profile.name);
   await expect(retained).not.toHaveTextContent("new-epic");
   await expect(retained).not.toHaveTextContent("ceo:");
-  await userEvent.click(canvas.getByRole("button", { name: "Vorgang prüfen" }));
+  await userEvent.click(canvas.getByRole("button", { name: "Speicherung prüfen" }));
   expect(controls.get("parent-content-unknown")!.writes()).toHaveLength(2); expect(controls.get("parent-content-unknown")!.reads()).toBe(1);
 } };
 export const UnknownParentNeverStartsContent: Story = { args: { scenario: "parent-first-unknown" }, play: async ({ canvasElement }) => {
   const canvas = await changeParent(canvasElement);
   await waitFor(() => expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled());
-  await userEvent.click(canvas.getByRole("button", { name: "Vorgang prüfen" }));
+  await userEvent.click(canvas.getByRole("button", { name: "Speicherung prüfen" }));
   await userEvent.click(canvas.getByRole("button", { name: "Initiative schließen" }));
-  await userEvent.click(canvas.getByText("Behaltene Eingaben anzeigen"));
+  await userEvent.click(canvas.getByText("Eingaben anzeigen"));
   await expect(canvas.getByText("Observable result", { exact: false })).toBeVisible();
   expect(controls.get("parent-first-unknown")!.writes()).toHaveLength(1);
 } };
@@ -141,6 +143,6 @@ export const UnknownEmptyEpicDeletionChecksWithoutReplay: Story = { args: { scen
   const canvas = within(canvasElement);
   await userEvent.click(canvas.getByRole("button", { name: "Meilenstein löschen" }));
   await waitFor(() => expect(canvas.getByRole("button", { name: "Meilenstein löschen" })).toBeDisabled());
-  await userEvent.click(canvas.getByRole("button", { name: "Vorgang prüfen" }));
+  await userEvent.click(canvas.getByRole("button", { name: "Ergebnis prüfen" }));
   expect(controls.get("delete-unknown")!.writes()).toHaveLength(1); expect(controls.get("delete-unknown")!.reads()).toBe(1);
 } };

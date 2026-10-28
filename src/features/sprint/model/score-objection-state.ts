@@ -1,6 +1,8 @@
 import type { FounderSprintScore, ScoreObjection, ScoreObjectionResolutionInput } from "@/lib/types";
 import type { PlanningReadStatus, PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
 
+export const scoreObjectionStatusLabels: Record<ScoreObjection["status"], string> = { open: "Offen", reviewed: "Geprüft", dismissed: "Abgelehnt", accepted: "Angenommen" };
+
 export type ScoreObjectionConfirmation = { objection: ScoreObjection; score?: FounderSprintScore | null };
 export type ScoreObjectionOutcome = ({ ok: true } & ScoreObjectionConfirmation) | {
   ok: false;

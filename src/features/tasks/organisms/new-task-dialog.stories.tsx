@@ -49,11 +49,11 @@ export const LostCreationResponseRetainsDraftWithoutReplay: Story = {
   play: async () => {
     const canvas = within(document.body);
     await userEvent.click(canvas.getByRole("button", { name: "Deliverable vorschlagen" }));
-    await expect(await canvas.findByText("Erstellung noch nicht bestätigt")).toBeVisible();
+    await expect(await canvas.findByText("Erstellung unklar")).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Deliverable vorschlagen" })).toBeDisabled();
     await expect(canvas.getByRole("textbox", { name: /Titel/ })).toHaveValue("Mein neuer Vorschlag");
-    await userEvent.click(canvas.getByRole("button", { name: "Vorgang prüfen" }));
-    await expect(canvas.getByText(/Die Prüfung hat den Vorgang nicht bestätigt/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Ergebnis prüfen" }));
+    await expect(canvas.getByText(/Ob die Änderung vollständig ausgeführt wurde, bleibt unklar/)).toBeVisible();
     await expect(canvas.getByLabelText("Create requests")).toHaveTextContent("1");
     await expect(canvas.getByLabelText("Check reads")).toHaveTextContent("1");
     await expect(canvas.getByLabelText("Confirmed task count")).toHaveTextContent("1");

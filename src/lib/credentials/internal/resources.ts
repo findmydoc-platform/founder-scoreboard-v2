@@ -145,7 +145,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
           let query = service.from("fmd_tools").update(row).eq("id", target);
           if (expectedUpdatedAt !== undefined) query = query.eq("updated_at", expectedUpdatedAt);
           const result = await query.select(select).maybeSingle<DbFmdTool>();
-          if (!result.error && !result.data && expectedUpdatedAt !== undefined) return { data: null, error: { code: "tool_version_conflict", message: "Der Link wurde zwischenzeitlich geändert. Bitte den aktuellen Serverstand prüfen." } };
+          if (!result.error && !result.data && expectedUpdatedAt !== undefined) return { data: null, error: { code: "tool_version_conflict", message: "Der Link wurde zwischenzeitlich geändert. Bitte den aktuellen Aktuellen Stand prüfen." } };
           return result;
         },
         audit: (row, saved) => followup.from("audit_log").insert({ actor_profile_id: profile?.id || null, action: operation === "create" ? "fmd_tool.create" : "fmd_tool.update",

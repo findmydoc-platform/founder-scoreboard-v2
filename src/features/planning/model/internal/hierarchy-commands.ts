@@ -35,7 +35,7 @@ export function createHierarchyCommands(options: { planning(): PlanningState; cu
         : editor ? editor.view() : (() => { const operation = options.planning().taskLifecycle().find(op => op.id === creationId && op.kind === "create"); return { phase: operation?.phase || "editing", submitted: null, serverTask: null, error: operation?.error || "", canResave: false }; })();
       return { ...value, id, taskId: taskId || "", kind, parentConfirmed, stage,
         submitted: value.phase === "ended" || editor && !value.serverTask ? null : submitted,
-        error: parentConfirmed && value.error ? `Die Zuordnung wurde gespeichert. ${value.error}` : value.error };
+        error: value.error };
     };
     async function save(draft: Draft, resave = false): Promise<HierarchySaveResult> {
       if (unavailable() || closed) return { ok: false, error: "Die Sitzung oder der Dialog wurde beendet.", kind: "sessionSuperseded" };

@@ -100,7 +100,7 @@ export function createSprintCommitmentState(options: {
             if (!active()) return ended();
             const started = options.nextSequence();
             try {
-              if (!options.save || (originalBasis.id !== 0 && !originalBasis.updatedAt)) throw Object.assign(new Error("Die Bearbeitungsbasis fehlt. Bitte das Commitment neu laden."), { status: 400 });
+              if (!options.save || (originalBasis.id !== 0 && !originalBasis.updatedAt)) throw Object.assign(new Error("Lade das Commitment neu, bevor du speicherst."), { status: 400 });
               const current = options.current().sprintCommitments.find(row => identity(row) === key);
               if (current?.updatedAt !== originalBasis.updatedAt && (current || originalBasis.id !== 0)) {
                 throw Object.assign(new Error("Das Commitment wurde zwischenzeitlich geändert. Eingaben bleiben erhalten."), { status: 409, code: "commitment_revision_conflict" });

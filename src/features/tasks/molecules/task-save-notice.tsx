@@ -1,7 +1,10 @@
 "use client";
 
 import type { PlanningTaskSaveCheck, PlanningTaskSaveView } from "@/features/planning/model/planning-state";
-import type { Task } from "@/lib/types";
+import type { Profile, Sprint, Task, TaskRelationType } from "@/lib/types";
+import { relationTypeLabel } from "@/lib/display";
+import { reviewLabel } from "@/lib/platform";
+import { normalizeStatus } from "@/lib/status";
 import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 const inputLabels: Partial<Record<keyof Task, string>> = {
@@ -17,12 +20,30 @@ const inputLabels: Partial<Record<keyof Task, string>> = {
   selfDodChecked: "Qualitätsstandard geprüft", selfEvidenceChecked: "Nachweis geprüft",
   selfDocumentedChecked: "Dokumentation geprüft", selfBlockersChecked: "Blocker geprüft",
 };
-export function taskSubmittedValues(patch: Readonly<Partial<Task>> & { approveNow?: boolean; relationType?: string; relatedTaskId?: string; relationNote?: string }, labels?: { profiles: readonly import("@/lib/types").Profile[]; tasks: readonly Task[] }) {
-  const values: [string, unknown][] = Object.entries(inputLabels).filter(([key]) => Object.hasOwn(patch, key)).map(([key, label]) => [label!, labels && ["assignee", "assigneeId", "owner", "ownerId", "reviewOwnerProfileId"].includes(key) ? labels.profiles.find(profile => profile.id === patch[key as keyof Task] || profile.name === patch[key as keyof Task])?.name || (patch[key as keyof Task] ? "Person nicht verfügbar" : "Nicht gesetzt") : labels && ["parentTaskId", "dependsOn"].includes(key) ? labels.tasks.find(task => task.id === patch[key as keyof Task])?.title || (patch[key as keyof Task] ? "Planungselement nicht verfügbar" : "Nicht gesetzt") : patch[key as keyof Task]]);
+export type TaskInputLabels = {
+  profiles: readonly Pick<Profile, "id" | "name">[];
+  tasks: readonly Pick<Task, "id" | "title">[];
+  sprints?: readonly Pick<Sprint, "id" | "name">[];
+};
+
+export function taskSubmittedValues(patch: Readonly<Partial<Task>> & { approveNow?: boolean; relationType?: string; relatedTaskId?: string; relationNote?: string }, labels?: TaskInputLabels) {
+  const personName = (id?: string) => id ? labels?.profiles.find(profile => profile.id === id || profile.name === id)?.name || "Person nicht verfügbar" : "Nicht gesetzt";
+  const taskTitle = (id?: string) => id ? labels?.tasks.find(task => task.id === id)?.title || "Aufgabe nicht verfügbar" : "Nicht gesetzt";
+  const displayField = (key: keyof Task): unknown => {
+    const value = patch[key];
+    if (["assigneeId", "ownerId", "reviewOwnerProfileId"].includes(key)) return personName(value as string);
+    if (key === "assignee" || key === "owner") return value || "Nicht gesetzt";
+    if (key === "parentTaskId" || key === "dependsOn") return taskTitle(value as string);
+    if (key === "sprintId") return value ? labels?.sprints?.find(sprint => sprint.id === value)?.name || "Sprint nicht verfügbar" : "Ohne Sprint";
+    if (key === "reviewStatus" && value) return reviewLabel(value as Task["reviewStatus"]);
+    if (key === "status" && value) return normalizeStatus(value as string);
+    return value;
+  };
+  const values: [string, unknown][] = Object.entries(inputLabels).filter(([key]) => Object.hasOwn(patch, key)).map(([key, label]) => [label!, displayField(key as keyof Task)]);
   if (patch.strategy) values.push(["Strategisches Ziel", patch.strategy.goal], ["Erfolgskriterien", patch.strategy.successCriteria], ["Strategischer Umfang", patch.strategy.scopeConstraints]);
-  if (patch.raciAssignments) values.push(["Beteiligung", patch.raciAssignments.map(item => `${labels ? labels.profiles.find(profile => profile.id === item.profileId)?.name || "Person nicht verfügbar" : item.profileId}: ${{accountable:"Verantwortlich",responsible:"Umsetzung",consulted:"Beratung",informed:"Information"}[item.role] || item.role}`).join("\n")]);
+  if (patch.raciAssignments) values.push(["Beteiligung", patch.raciAssignments.map(item => `${personName(item.profileId)}: ${{accountable:"Verantwortlich",responsible:"Umsetzung",consulted:"Beratung",informed:"Information"}[item.role] || item.role}`).join("\n")]);
   if (patch.approveNow !== undefined) values.push(["Direkte Freigabe angefragt", patch.approveNow]);
-  if (patch.relatedTaskId) values.push(["Verknüpfte Aufgabe", patch.relatedTaskId], ["Beziehungstyp", patch.relationType], ["Beziehungsnotiz", patch.relationNote]);
+  if (patch.relatedTaskId) values.push(["Verknüpfte Aufgabe", taskTitle(patch.relatedTaskId)], ["Verknüpfung", relationTypeLabel(patch.relationType as TaskRelationType)], ["Notiz", patch.relationNote]);
   return values;
 }
 export function displaySubmittedValue(value: unknown) {
@@ -32,28 +53,29 @@ export function displaySubmittedValue(value: unknown) {
   return value === null || value === undefined || value === "" ? "Leer" : String(value);
 }
 
-export function TaskSaveNotice({ taskTitle, saves, onCheck }: {
+export function TaskSaveNotice({ taskTitle, saves, onCheck, labels }: {
   taskTitle: string;
   saves: readonly PlanningTaskSaveView[];
   onCheck?: () => Promise<PlanningTaskSaveCheck>;
+  labels?: TaskInputLabels;
 }) {
   if (!saves.some(save => save.phase === "unconfirmed")) return null;
   const checkStatus = saves[0].checkStatus;
   return <UiNotice tone="info" role="status" className="my-4 min-w-0 [overflow-wrap:anywhere]">
-    <h2 className="font-semibold text-slate-950">Speicherbestätigung ausstehend</h2>
-    <p className="mt-1">{taskTitle}: Die Antwort auf deine Speicherung fehlt. Deine abgesendeten Eingaben bleiben erhalten. Weitere Änderungen an dieser Aufgabe warten.</p>
-    {checkStatus === "checked" ? <p className="mt-2">Serverstand geladen. Auch passende Feldwerte bestätigen nicht alle Auswirkungen. Die Speicherung bleibt unbestätigt.</p> : null}
-    {checkStatus === "unavailable" ? <p className="mt-2">Der Serverstand konnte nicht geladen werden. Die Speicherung bleibt unbestätigt.</p> : null}
-    {checkStatus === "forbidden" ? <p className="mt-2">Kein Zugriff auf die Aufgabe. Eingaben und Serverstand werden ausgeblendet. Die Speicherung bleibt unbestätigt.</p> : null}
+    <h2 className="font-semibold text-slate-950">Speicherung unklar</h2>
+    <p className="mt-1">{taskTitle}: Ob deine Änderungen gespeichert wurden, ist noch unklar. Deine Eingaben bleiben erhalten. Weitere Änderungen an dieser Aufgabe warten.</p>
+    {checkStatus === "checked" ? <p className="mt-2">Aufgabe geladen. Ob die Änderung vollständig gespeichert wurde, bleibt unklar.</p> : null}
+    {checkStatus === "unavailable" ? <p className="mt-2">Die aktuellen Daten konnten nicht geladen werden. Das Ergebnis bleibt unklar.</p> : null}
+    {checkStatus === "forbidden" ? <p className="mt-2">Kein Zugriff auf die Aufgabe. Die Angaben werden ausgeblendet. Ob die Änderung gespeichert wurde, bleibt unklar.</p> : null}
     {saves.map((save, index) => save.submitted ? <details className="mt-3" key={index}>
       <summary className="cursor-pointer py-2 font-semibold">{save.phase === "blocked" ? "Wartende Eingaben anzeigen" : "Abgesendete Eingaben anzeigen"}</summary>
       {save.phase === "blocked" ? <p>Diese Änderung wurde noch nicht gesendet.</p> : null}
-      <dl className="mt-2 grid gap-3 whitespace-pre-wrap">{taskSubmittedValues(save.submitted).map(([label, value], field) => <div key={field}><dt className="font-semibold">{label}</dt><dd>{displaySubmittedValue(value)}</dd></div>)}</dl>
+      <dl className="mt-2 grid gap-3 whitespace-pre-wrap">{taskSubmittedValues(save.submitted, labels).map(([label, value], field) => <div key={field}><dt className="font-semibold">{label}</dt><dd>{displaySubmittedValue(value)}</dd></div>)}</dl>
     </details> : null)}
     {saves[0].serverTask && saves[0].submitted ? <details className="mt-3">
-      <summary className="cursor-pointer py-2 font-semibold">Aktuellen Serverstand anzeigen</summary>
-      <dl className="mt-2 grid gap-3 whitespace-pre-wrap">{taskSubmittedValues(Object.fromEntries(Object.keys(saves[0].submitted).map(key => [key, saves[0].serverTask![key as keyof Task]]))).map(([label, value], field) => <div key={field}><dt className="font-semibold">{label}</dt><dd>{displaySubmittedValue(value)}</dd></div>)}</dl>
+      <summary className="cursor-pointer py-2 font-semibold">Aktuellen Stand anzeigen</summary>
+      <dl className="mt-2 grid gap-3 whitespace-pre-wrap">{taskSubmittedValues(Object.fromEntries(Object.keys(saves[0].submitted).map(key => [key, saves[0].serverTask![key as keyof Task]])), labels).map(([label, value], field) => <div key={field}><dt className="font-semibold">{label}</dt><dd>{displaySubmittedValue(value)}</dd></div>)}</dl>
     </details> : null}
-    <UiButton type="button" size="lg" className="mt-3" disabled={!onCheck || checkStatus === "checking"} onClick={() => { void onCheck?.(); }}>{checkStatus === "checking" ? "Speicherstand wird geprüft …" : "Speicherstand prüfen"}</UiButton>
+    <UiButton type="button" size="lg" className="mt-3" disabled={!onCheck || checkStatus === "checking"} onClick={() => { void onCheck?.(); }}>{checkStatus === "checking" ? "Speicherung wird geprüft …" : "Speicherung prüfen"}</UiButton>
   </UiNotice>;
 }

@@ -40,13 +40,13 @@ type Story = StoryObj<typeof meta>;
 export const UnknownOutcomeChecksWithoutReplayAndIndependentActionContinues: Story = { play: async ({ canvasElement }) => {
   const canvas = within(canvasElement);
   await userEvent.click(canvas.getAllByRole("button", { name: "Notification schließen" })[0]);
-  await expect(canvas.getByRole("status")).toHaveTextContent("wird gespeichert");
+  await expect(canvas.getByRole("status")).toHaveTextContent("wird geschlossen");
   await userEvent.click(canvas.getByRole("button", { name: "Lose response" }));
-  await expect(await canvas.findByRole("status")).toHaveTextContent("Bestätigung steht aus");
-  await userEvent.click(canvas.getByRole("button", { name: "Serverstand prüfen" }));
+  await expect(await canvas.findByRole("status")).toHaveTextContent("Ob die Benachrichtigung geschlossen wurde, ist noch unklar");
+  await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand prüfen" }));
   await waitFor(() => expect(canvas.getByText("Checks: 1")).toBeVisible());
   await expect(canvas.getByText("Writes: 1")).toBeVisible();
-  await expect(canvas.getByRole("status")).toHaveTextContent("Bestätigung steht aus");
+  await expect(canvas.getByRole("status")).toHaveTextContent("Ob die Benachrichtigung geschlossen wurde, ist noch unklar");
   await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
   await userEvent.click(canvas.getByRole("button", { name: "Notification schließen" }));
   await waitFor(() => expect(canvas.getByText("Writes: 2")).toBeVisible());

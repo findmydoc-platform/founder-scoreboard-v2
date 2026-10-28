@@ -193,8 +193,8 @@ export function TaskCommentThread({
         </div>
       )}
 
-      {commentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">Die Diskussion ist als Ausschnitt geladen.</p> : null}
-      {externalCommentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">GitHub-Kommentare sind als Ausschnitt geladen.</p> : null}
+      {commentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">Du siehst nur einen Teil der Diskussion.</p> : null}
+      {externalCommentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">Du siehst nur einen Teil der GitHub-Kommentare.</p> : null}
       <TaskAttachmentUploadNotices uploads={attachmentUploads} onCheck={onCheckAttachmentUpload} />
       <TaskGitHubImportNotice view={githubImport} onCheck={onCheckGitHubImport} />
       <TaskCommentCreationNotices creations={commentCreations} onCheck={onCheckCommentCreation} />

@@ -56,13 +56,13 @@ export function createTaskAttachmentUploads(options: {
   try {
    const receipt = await options.adapter.uploadTaskAttachment(task.id, file);
    if (!valid()) return { ok: false, kind: "ended", error: "Die Sitzung oder der Zugriff wurde beendet." };
-   if (!receipt.markdown || !receipt.path.startsWith(`.fmd-attachments/tasks/${task.id}/`) || receipt.filename !== file.name || receipt.size !== file.size || receipt.contentType !== file.type || ![receipt.markdown, receipt.url, receipt.htmlUrl].every(value => typeof value === "string") || !["confirmed", "unconfirmed"].includes(receipt.effects)) throw new Error("Die Upload-Bestätigung ist unvollständig.");
+   if (!receipt.markdown || !receipt.path.startsWith(`.fmd-attachments/tasks/${task.id}/`) || receipt.filename !== file.name || receipt.size !== file.size || receipt.contentType !== file.type || ![receipt.markdown, receipt.url, receipt.htmlUrl].every(value => typeof value === "string") || !["confirmed", "unconfirmed"].includes(receipt.effects)) throw new Error("Ob der Anhang hochgeladen wurde, ist noch unklar.");
    const returnedActivity = receipt.activity;
    const activity = returnedActivity && returnedActivity.taskId === task.id && attachmentActivity(returnedActivity) && Number.isSafeInteger(returnedActivity.id) && returnedActivity.id > 0 && typeof returnedActivity.createdAt === "string" ? returnedActivity : null;
    const effects = receipt.effects === "confirmed" && activity ? "confirmed" : "unconfirmed";
    operation.after = options.nextSequence();
    if (activity) receipts.set(activity.id, { taskId: task.id, row: structuredClone(activity), stamp: operation.after });
-   operation.view = { ...operation.view, phase: "uploaded", markdown: receipt.markdown, url: receipt.url, effects, warning: receipt.warning || (effects === "unconfirmed" ? "Anhang hochgeladen. Die Folgewirkungen sind noch nicht vollständig bestätigt." : ""), taskReadStatus: "stale" };
+   operation.view = { ...operation.view, phase: "uploaded", markdown: receipt.markdown, url: receipt.url, effects, warning: receipt.warning || (effects === "unconfirmed" ? "Anhang hochgeladen. Ob er protokolliert und für GitHub vorgemerkt wurde, ist noch unklar." : ""), taskReadStatus: "stale" };
    options.invalidateTask(task.id); options.changed(); void check(id);
    return { ok: true, markdown: receipt.markdown };
   } catch (error) {

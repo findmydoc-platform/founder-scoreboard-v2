@@ -244,7 +244,7 @@ export function createAdministrationPersonState(options: {
             const repeatsAcknowledged = Boolean(acknowledgedTechnical && JSON.stringify(acknowledgedTechnical) === JSON.stringify(input.technicalIdentity));
             const technicalChanged = requestedTechnicalChanged && !repeatsAcknowledged;
             if (technicalChanged && technicalBasisPending) {
-                view = { ...view, phase: "conflict", submitted: structuredClone(input), error: "Die erste technische Speicherung ist bestätigt. Vor einer weiteren technischen Änderung muss der aktuelle Stand verglichen werden." };
+                view = { ...view, phase: "conflict", submitted: structuredClone(input), error: "Kontozuordnungen gespeichert. Vergleiche den aktuellen Stand vor weiteren Änderungen." };
                 changed();
                 return { ok: false, kind: "versionConflict", error: view.error };
             }
@@ -252,7 +252,7 @@ export function createAdministrationPersonState(options: {
             if (technicalChanged && !technical())
                 return { ok: false, kind: "rejected", error: "Ein aktiver Adminzugang ist erforderlich." };
             if (technicalChanged && !basis.technicalBasis) {
-                view = { ...view, phase: "conflict", submitted: structuredClone(input), error: "Die vollständige technische Bearbeitungsbasis muss zuerst verglichen werden." };
+                view = { ...view, phase: "conflict", submitted: structuredClone(input), error: "Lade die Kontozuordnungen neu und vergleiche deine Änderungen." };
                 changed();
                 return { ok: false, kind: "versionConflict", error: view.error };
             }
@@ -274,7 +274,7 @@ export function createAdministrationPersonState(options: {
             try {
                 if (technicalChanged) {
                     if (!basis.technicalBasis)
-                        throw Object.assign(new Error("Die ursprüngliche technische Basis fehlt. Bitte vergleichen."), { status: 400 });
+                        throw Object.assign(new Error("Lade die Kontozuordnungen neu und vergleiche deine Änderungen."), { status: 400 });
                     if (!options.adapter.saveAdministrationTechnical)
                         throw Object.assign(new Error("Technische Identität ist nicht verfügbar."), { status: 400 });
                     const result = await options.adapter.saveAdministrationTechnical(shown.id, input.technicalIdentity, basis.technicalBasis);
@@ -282,7 +282,7 @@ export function createAdministrationPersonState(options: {
                         return { ok: false, kind: "sessionSuperseded", error: "Der technische Adminzugang wurde beendet." };
                     if (result.profile) {
                         if (result.profile.id !== shown.id)
-                            throw new Error("Technische Identität noch nicht bestätigt.");
+                            throw new Error("Speicherung der Kontozuordnungen unklar.");
                         const { id, ...actual } = result.profile;
                         const patch = { githubLogin: actual.githubLogin || "", googleChatUserId: actual.googleChatUserId || "", googleChatDmSpace: actual.googleChatDmSpace || "", technicalBasis: actual };
                         const currentBasis = current(id)?.technicalBasis;
@@ -311,7 +311,7 @@ export function createAdministrationPersonState(options: {
                     if (!active() || eligibilityScope !== eligibilityAudience())
                         return { ok: false, kind: "sessionSuperseded", error: "Der Administrationszugang wurde beendet." };
                     if (saved.profileId !== shown.id || typeof saved.eligible !== "boolean")
-                        throw new Error("Adminberechtigung noch nicht bestätigt.");
+                        throw new Error("Speicherung der Adminberechtigung unklar.");
                     const { profileId, ...access } = saved;
                     updatePerson({ administratorAccess: access });
                     basis = { ...basis, administratorAccess: access };
@@ -395,7 +395,7 @@ export function createAdministrationPersonState(options: {
                 return view.canResave;
             }, resave(patch) {
                 if (!view.canResave || !view.serverPerson)
-                    return Promise.resolve({ ok: false, kind: "rejected", error: "Bitte zuerst den aktuellen Serverstand vergleichen." });
+                    return Promise.resolve({ ok: false, kind: "rejected", error: "Vergleiche zuerst die Änderungen." });
                 basis = structuredClone(view.serverPerson);
                 technicalBasisPending = false;
                 acknowledgedTechnical = null;
@@ -431,12 +431,12 @@ export function createAdministrationPersonState(options: {
             if (["saving", "unconfirmed", "conflict"].includes(state.phase))
                 return { ok: false, kind: state.phase === "conflict" ? "versionConflict" : "unconfirmed", error: state.error };
             if ([...projectEditors.values()].some(other => other !== editor && ["saving", "unconfirmed", "conflict"].includes(other.view().phase))) {
-                state = { ...state, phase: "blocked", submitted: structuredClone(proposed), error: "Eine vorherige GitHub-Project-Speicherung ist offen." };
+                state = { ...state, phase: "blocked", submitted: structuredClone(proposed), error: "Ob die vorherigen GitHub-Einstellungen gespeichert wurden, ist noch unklar." };
                 options.changed();
                 return { ok: false, kind: "unconfirmed", error: state.error };
             }
             if (!projectBasisComplete || !sameProject(model?.githubProject, basis)) {
-                state = { ...state, phase: "conflict", submitted: structuredClone(proposed), error: "Die GitHub-Project-Einstellung wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.", canResave: false };
+                state = { ...state, phase: "conflict", submitted: structuredClone(proposed), error: "Die GitHub-Einstellungen wurden inzwischen geändert. Deine Eingaben bleiben erhalten.", canResave: false };
                 options.changed();
                 return { ok: false, kind: "versionConflict", error: state.error };
             }
@@ -449,7 +449,7 @@ export function createAdministrationPersonState(options: {
                 if (!active())
                     return { ok: false, kind: "sessionSuperseded", error: "Der technische Adminzugang wurde beendet." };
                 if (!result.project || result.project.id !== basis.id || typeof result.project.owner !== "string" || !Number.isInteger(result.project.number) || typeof result.project.mentionTeamSlug !== "string")
-                    throw new Error("Die GitHub-Project-Speicherung ist noch nicht bestätigt.");
+                    throw new Error("Ob die GitHub-Einstellungen gespeichert wurden, ist noch unklar.");
                 if (sameProject(model?.githubProject, basis) || sameProject(model?.githubProject, result.project)) {
                     projectConfirmedAt = options.nextSequence();
                     commonProjectAt = projectConfirmedAt;

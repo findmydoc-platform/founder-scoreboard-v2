@@ -45,9 +45,9 @@ function queueState(task: Task, parent: Task | undefined, hasIssue: boolean, has
 }
 
 function stateDescription(row: QueueRow) {
-  if (row.state === "unconfirmed") return "Bestätigung ausstehend; zuerst den Stand prüfen";
-  if (row.state === "partial") return "GitHub-Sync teilweise bestätigt";
-  if (row.state === "parent_unconfirmed") return "Sub-Issue wartet auf die Bestätigung des Parent-Syncs";
+  if (row.state === "unconfirmed") return "GitHub-Abgleich unklar. Prüfe den aktuellen Stand.";
+  if (row.state === "partial") return "GitHub-Abgleich teilweise bestätigt";
+  if (row.state === "parent_unconfirmed") return "GitHub-Abgleich der übergeordneten Aufgabe unklar";
   if (row.state === "locked") return "Sync läuft bereits";
   if (row.state === "failed") return row.task.githubIssueSyncError || "GitHub-Sync fehlgeschlagen";
   if (row.state === "parent_failed") return "Parent-Sync fehlgeschlagen; Sub-Issue wird übersprungen";
@@ -187,7 +187,7 @@ export function TaskGitHubSyncQueue({
         <div className="min-h-0 flex-1 overflow-y-auto px-5">
           {syncOperations.map(view=><TaskGitHubSyncNotice key={view.taskId} view={view} onCheck={()=>onCheckSync?.(view.taskId)} onRetry={tasks.find(task=>task.id===view.taskId)?()=>{const task=tasks.find(task=>task.id===view.taskId)!;onSyncTaskToGitHub(task,{createIfMissing:!hasGitHubIssue(task)});}:undefined}/>)}
           <h3 className="border-b border-slate-100 py-4 text-base font-semibold text-slate-950">
-            {rows.length > 0 ? `${rows.length} geladene ${rows.length === 1 ? "Aktion" : "Aktionen"} erforderlich` : "GitHub ist aktuell"}
+            {rows.length > 0 ? `${rows.length} ${rows.length === 1 ? "Aufgabe benötigt" : "Aufgaben benötigen"} einen GitHub-Abgleich` : "GitHub ist aktuell"}
           </h3>
           <div>
             {rows.map((row) => {

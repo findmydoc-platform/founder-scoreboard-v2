@@ -137,7 +137,7 @@ export function EpicDialog({
         >
           <div className="grid min-h-0 flex-1 content-start gap-5 overflow-y-auto overscroll-contain px-5 py-5 [scrollbar-gutter:stable] sm:px-6">
             {editor && editorView ? <HierarchyEditNotice view={editorView} onCheck={() => { void editor.checkOutcome().then(() => render(value => value + 1)); }} onRefresh={() => { void editor.refreshConflict().then(() => render(value => value + 1)); }} onResave={() => { void submit(true); }} /> : null}
-            {error && (
+            {error && !["unconfirmed", "blocked"].includes(editorView?.phase || "") && (
               <div
                 ref={errorRef}
                 role="alert"

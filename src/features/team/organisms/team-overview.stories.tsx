@@ -94,9 +94,12 @@ export const KeepsUnknownTeamDraftOpenAndChecksWithoutReplay: Story = {
     await userEvent.click(dialog.getByRole("button", { name: "Speichern" }));
     await expect(canvas.getByRole("dialog", { name: "Bea bearbeiten" })).toBeVisible();
     await expect(dialog.getByRole("spinbutton", { name: "Kapazität" })).toHaveValue(30);
+    await userEvent.click(dialog.getByText("Abgesendete Angaben"));
+    await expect(dialog.getByText("30 Stunden")).toBeVisible();
+    await expect(dialog.queryByText("weeklyCapacity")).not.toBeInTheDocument();
     await expect(dialog.getByRole("button", { name: "Speichern" })).toBeDisabled();
-    await userEvent.click(dialog.getByRole("button", { name: "Serverstand prüfen" }));
-    await expect(dialog.getByText("Serverstand geprüft. Die Speicherbestätigung bleibt offen.")).toBeVisible();
+    await userEvent.click(dialog.getByRole("button", { name: "Aktuellen Stand prüfen" }));
+    await expect(dialog.getByText("Profil geprüft. Ob die Änderungen gespeichert wurden, bleibt unklar.")).toBeVisible();
     await expect(canvas.getByText("Writes: 1; reads: 1")).toBeVisible();
   },
 };
@@ -126,7 +129,7 @@ export const KeepsConflictingTeamDraftUntilConsciousSave: Story = {
     await userEvent.clear(dialog.getByRole("spinbutton", { name: "Kapazität" }));
     await userEvent.type(dialog.getByRole("spinbutton", { name: "Kapazität" }), "30");
     await userEvent.click(dialog.getByRole("button", { name: "Speichern" }));
-    await expect(dialog.getByText(/Aktueller Serverstand:.*Kapazität: 28 Stunden/)).toBeVisible();
+    await expect(dialog.getByText("28 Stunden")).toBeVisible();
     await expect(dialog.getByRole("spinbutton", { name: "Kapazität" })).toHaveValue(30);
     await expect(dialog.getByRole("button", { name: "Speichern" })).toBeDisabled();
     await expect(canvas.getByText("Writes: 1; reads: 1")).toBeVisible();

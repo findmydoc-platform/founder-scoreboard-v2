@@ -385,9 +385,9 @@ export function TaskOverviewPanel({
           ) : null}
 
           {conflict ? <UiNotice tone="info" role="status">
-            <p>Deine Eingaben bleiben erhalten. Prüfe den aktuellen Serverstand, bevor du erneut speicherst.</p>
+            <p>Deine Eingaben bleiben erhalten. Vergleiche die Änderungen, bevor du erneut speicherst.</p>
             {conflictServerDraft && canResave ? <details className="mt-3">
-              <summary className="cursor-pointer font-semibold">Aktuellen Serverstand anzeigen</summary>
+              <summary className="cursor-pointer font-semibold">Aktuellen Stand anzeigen</summary>
               <dl className="mt-3 grid gap-3 whitespace-pre-wrap [overflow-wrap:anywhere]">
                 {draft.title !== baseline.title ? <div><dt className="font-semibold">Titel</dt><dd>{conflictServerDraft.title || "Leer"}</dd></div> : null}
                 {overviewFields.filter(({ key }) => draft[key] !== baseline[key]).map(({ key, label }) => <div key={key}><dt className="font-semibold">{label}</dt><dd>{conflictServerDraft[key] || "Leer"}</dd></div>)}

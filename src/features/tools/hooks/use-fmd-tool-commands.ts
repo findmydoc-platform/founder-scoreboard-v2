@@ -10,7 +10,7 @@ export function useFmdToolCommands({ apiClient, planningState, currentProfile, s
   const [fmdToolMessage, setFmdToolMessage] = useState("");
   function prepare(draft: FmdToolDraft) { return { ...draft, owner: draft.owner.trim() || currentProfile?.name || "Team" }; }
   function finish(result: ToolResult, name: string) {
-    if (result.phase !== "saved") { setSaveError(result.error || "Die Bestätigung steht aus. Eingaben bleiben erhalten; bitte zuerst den Serverstand prüfen."); return false; }
+    if (result.phase !== "saved") { setSaveError(result.error || "Ob der Link gespeichert wurde, ist noch unklar. Deine Eingaben bleiben erhalten. Prüfe den aktuellen Stand."); return false; }
     setFmdToolMessage(result.warning || `Link gespeichert: ${name}`); return true;
   }
   return {
@@ -33,7 +33,7 @@ export function useFmdToolCommands({ apiClient, planningState, currentProfile, s
     async uploadFmdToolPreviewImage(file: File, uploadId: string) {
       setSaveError(""); setFmdToolMessage("");
       const result = await planningState.uploadToolPreview(uploadId, file);
-      if (result.phase !== "uploaded" || !result.image) { setSaveError(result.error || "Bild-Upload ist noch nicht bestätigt. Bitte nicht erneut hochladen."); return null; }
+      if (result.phase !== "uploaded" || !result.image) { setSaveError(result.error || "Ob das Bild hochgeladen wurde, ist noch unklar. Nicht erneut hochladen."); return null; }
       setFmdToolMessage("Vorschaubild hochgeladen. Der Link ist damit noch nicht gespeichert."); return result.image;
     },
   };

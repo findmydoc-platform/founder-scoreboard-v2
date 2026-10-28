@@ -9,7 +9,7 @@ import type { Profile, ProfileUiPreference } from "@/lib/types";
 import { ProfileSettingsOverview } from "./profile-settings-overview";
 
 const profile = { id: "profile-a", name: "Ada", focus: "Gespeicherter Fokus", color: "#64748b", platformRole: "founder", notificationsEnabled: true } as Profile;
-const preference: ProfileUiPreference = { profileId: profile.id, defaultWorkspace: "planning", defaultTaskView: "board", planningFilters: defaultFilters(), expandedInitiativeIds: [], createdAt: "before", updatedAt: "before" };
+const preference: ProfileUiPreference = { profileId: profile.id, defaultWorkspace: "planning", defaultTaskView: "board", planningFilters: { ...defaultFilters(), review: "changes_requested", risk: "critical", sort: "sprint" }, expandedInitiativeIds: [], createdAt: "before", updatedAt: "before" };
 const initial = { ...emptyPlanningShellState, profiles: [profile], profileUiPreferences: [preference] };
 function Fixture({ lost = false, foreign = false }: { lost?: boolean; foreign?: boolean }) {
   const [counts] = useState(() => ({ writes: 0, reads: 0 }));
@@ -49,10 +49,13 @@ export const KeepsUnconfirmedInputAndChecksWithoutReplay: Story = {
     await userEvent.type(canvas.getByRole("textbox"), "Nicht bestätigter Entwurf");
     await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
     await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
-    await expect(canvas.getByText("Speicherbestätigung ausstehend")).toBeVisible();
+    await expect(canvas.getByText("Speicherung unklar")).toBeVisible();
     await expect(canvas.getByRole("textbox")).toHaveValue("Nicht bestätigter Entwurf");
-    await userEvent.click(canvas.getByRole("button", { name: "Serverstand prüfen" }));
-    await expect(canvas.getByText("Serverstand geprüft. Die Bestätigung bleibt offen.")).toBeVisible();
+    await userEvent.click(canvas.getByText("Abgesendete Angaben"));
+    await expect(canvas.getByText("Nicht bestätigter Entwurf", { selector: "dd" })).toBeVisible();
+    await expect(canvas.queryByText("profilePatch")).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand prüfen" }));
+    await expect(canvas.getByText("Profil geprüft. Ob die Änderungen gespeichert wurden, bleibt unklar.")).toBeVisible();
     await expect(canvas.getByText("Writes: 1; reads: 1")).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
   },
@@ -67,7 +70,13 @@ export const RequiresConsciousSaveAfterOverlappingRefresh: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Hintergrund laden" }));
     await expect(canvas.getByRole("textbox")).toHaveValue("Mein Entwurf");
     await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
-    await expect(canvas.getByText(/Aktueller Serverstand: Fokus: Fremder Fokus/)).toBeVisible();
+    await expect(canvas.getByText("Fremder Fokus")).toBeVisible();
+    await expect(canvas.getByText("Planung", { exact: true, selector: "dd" })).toBeVisible();
+    await expect(canvas.queryByText("planning", { exact: true })).not.toBeInTheDocument();
+    await expect(canvas.getByText("Grundlegend überarbeiten", { selector: "dd" })).toBeVisible();
+    await expect(canvas.getByText("Kritisch", { selector: "dd" })).toBeVisible();
+    await expect(canvas.getByText("Sprint", { exact: true, selector: "dd" })).toBeVisible();
+    await expect(canvas.queryByText("changes_requested", { exact: true })).not.toBeInTheDocument();
     await expect(canvas.getByText("Writes: 0; reads: 2")).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
     await expect(canvas.getByRole("textbox")).toHaveValue("Mein Entwurf");

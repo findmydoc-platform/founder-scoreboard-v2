@@ -109,7 +109,7 @@ export function createSprintPlanState(options: {
         view = { ...view, serverSprints: accepted ? structuredClone(options.current().sprints) : null, canRecreate: accepted };
         options.changed(); return accepted;
       }, recreate(input) {
-        if (!view.canRecreate || !view.serverSprints) return Promise.resolve({ ok: false, kind: "rejected", error: "Bitte zuerst den Serverstand vergleichen." });
+        if (!view.canRecreate || !view.serverSprints) return Promise.resolve({ ok: false, kind: "rejected", error: "Vergleiche zuerst die Änderungen." });
         basis = { sprints: structuredClone(view.serverSprints), reviewObjectionWindowHours: options.current().project.reviewObjectionWindowHours };
         return create(input);
       }, checkOutcome: check, close() { if (!view.submitted) { closed = true; editors.delete(key); } } };

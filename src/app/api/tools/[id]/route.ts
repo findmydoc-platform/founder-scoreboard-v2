@@ -86,5 +86,5 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   invalidateSharedPlanningHeaderCache("quickLinks");
 
-  return NextResponse.json({ ok: true, tool: mapFmdTool(result.tool as DbFmdTool), ...(result.auditUnconfirmed ? { code: "tool_saved_audit_unconfirmed", warning: "Link gespeichert. Die Protokollierung konnte nicht bestätigt werden." } : {}) });
+  return NextResponse.json({ ok: true, tool: mapFmdTool(result.tool as DbFmdTool), ...(result.auditUnconfirmed ? { code: "tool_saved_audit_unconfirmed", warning: "Link gespeichert. Ob die Änderung protokolliert wurde, ist noch unklar." } : {}) });
 }

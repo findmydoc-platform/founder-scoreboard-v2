@@ -50,7 +50,7 @@ export const MixedReceiptSurvivesFailedReload: Story = { play: async ({ canvasEl
         await userEvent.click(await canvas.findByRole("tab", { name: "Integrationen & Zustellung" }));
         await userEvent.click(canvas.getByRole("button", { name: /Technische Details/ }));
         await userEvent.click(canvas.getByRole("button", { name: "Ausstehende senden" }));
-        await expect(await canvas.findByText("Zustellergebnis teilweise bestätigt")).toBeVisible();
+        await expect(await canvas.findByText("Ergebnis nur teilweise bekannt")).toBeVisible();
         await expect(canvas.getByText("1 zugestellt, 1 fehlgeschlagen, 0 übersprungen")).toBeVisible();
         await expect(canvas.getByText("Die aktuellen Zustelldaten konnten nicht nachgeladen werden.")).toBeVisible();
         await expect(canvas.getByText("Ereignis 7: Zugestellt")).toBeVisible();
@@ -69,7 +69,7 @@ export const UnknownDeliverySurvivesNavigationAndMatchingSentRead: Story = { arg
         await userEvent.click(await canvas.findByRole("tab", { name: "Integrationen & Zustellung" }));
         await userEvent.click(canvas.getByRole("button", { name: "Zustellstand prüfen" }));
         await expect(canvas.getByText("Zustellung noch nicht bestätigt")).toBeVisible();
-        await expect(canvas.getByText("Der aktuelle Zustellstand bestätigt diesen Auftrag noch nicht.")).toBeVisible();
+        await expect(canvas.getByText("Ob die Nachrichten vollständig zugestellt wurden, bleibt unklar.")).toBeVisible();
         const currentArticle = canvas.getByRole("heading", { name: "Delivery event 7" }).closest("article")!;
         await expect(within(currentArticle).getByText("Zugestellt")).toBeVisible();
         await expect(within(currentArticle).queryByRole("button", { name: "Erneut senden" })).not.toBeInTheDocument();

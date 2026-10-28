@@ -39,7 +39,7 @@ test.each([false,true])("confirmed reparent survives later content failure (unkn
  const editor=planning.beginInitiativeEdit(initiativeDraft);
  expect(await editor.save({...initiativeDraft,parentTaskId:"other-epic"})).toMatchObject({ok:false,kind:unknown?"unconfirmed":"rejected"});
  expect(planning.taskDetail(initiative.id).task).toMatchObject({parentTaskId:"other-epic",updatedAt:"actual/reparent",title:unknown?"Changed initiative":initiative.title});
- expect(editor.view().error).toContain("Zuordnung wurde gespeichert");
+ expect(editor.view()).toMatchObject({ parentConfirmed: true, error: "Content failed" });
  expect(requests).toHaveLength(2);
  if(unknown){await editor.checkOutcome();expect(await editor.save(initiativeDraft)).toMatchObject({ok:false});expect(requests).toHaveLength(2);}
 });

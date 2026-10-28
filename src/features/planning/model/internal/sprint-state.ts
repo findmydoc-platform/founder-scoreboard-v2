@@ -173,7 +173,7 @@ export function createSprintState(options: {
           }
           if (!options.active() || generation !== options.generation()) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt." };
           try {
-            if (!originalBasis.updatedAt) throw Object.assign(new Error("Die Bearbeitungsbasis fehlt. Bitte den Sprint neu laden."), { status: 400, code: "sprint_basis_missing" });
+            if (!originalBasis.updatedAt) throw Object.assign(new Error("Lade den Sprint neu, bevor du speicherst."), { status: 400, code: "sprint_basis_missing" });
             const current = options.current().sprints.find(sprint => sprint.id === basis.id);
             if (current?.updatedAt && current.updatedAt !== originalBasis.updatedAt) throw Object.assign(new Error("Der Sprint wurde zwischenzeitlich geändert. Eingaben bleiben erhalten."), { status: 409, code: "sprint_revision_conflict" });
             if (!options.save) throw Object.assign(new Error("Sprint-Bearbeitung ist nicht verfügbar."), { status: 400 });
@@ -213,7 +213,7 @@ export function createSprintState(options: {
           return view.canResave;
         },
         resave(patch) {
-          if (!view.canResave || !view.serverSprint) return Promise.resolve({ ok: false, kind: "rejected", error: "Bitte zuerst den aktuellen Serverstand prüfen." });
+          if (!view.canResave || !view.serverSprint) return Promise.resolve({ ok: false, kind: "rejected", error: "Prüfe zuerst den aktuellen Stand." });
           basis = structuredClone(view.serverSprint); return save(patch);
         },
         checkOutcome: () => check(basis.id),

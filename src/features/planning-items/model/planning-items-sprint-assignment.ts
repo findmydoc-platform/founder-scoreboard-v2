@@ -321,7 +321,7 @@ export function sprintAssignmentError(error: PlanningError): Readonly<{ message:
       ? { message: "Sprint wurde nicht gefunden.", status: 404 }
       : { message: "Mindestens ein Deliverable wurde nicht gefunden.", status: 404 };
   }
-  if (error.code === "conflict" && error.reason === "revision" && error.details?.sprintAssignmentReason === "sprintRevision") return { message: "Der gewählte Sprint wurde zwischenzeitlich geändert. Bitte den aktuellen Serverstand prüfen.", status: 409, code: "sprint_revision_conflict" };
+  if (error.code === "conflict" && error.reason === "revision" && error.details?.sprintAssignmentReason === "sprintRevision") return { message: "Der gewählte Sprint wurde zwischenzeitlich geändert. Bitte den aktuellen Aktuellen Stand prüfen.", status: 409, code: "sprint_revision_conflict" };
   if (error.code === "conflict" && error.reason === "revision") {
     return { message: "Mindestens ein Deliverable wurde zwischenzeitlich geändert. Bitte neu laden.", status: 409, code: "task_revision_conflict" };
   }

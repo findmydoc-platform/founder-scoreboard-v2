@@ -808,7 +808,7 @@ export function NewTaskDialog({
         </header>
 
         <div className="min-h-0 overflow-y-auto overscroll-contain" data-task-creation-scroll-body>
-          {creation ? <div className="mx-5 sm:mx-6"><TaskLifecycleNotice operation={creation} onCheck={onCheckTaskLifecycle} /></div> : null}
+          {creation ? <div className="mx-5 sm:mx-6"><TaskLifecycleNotice labels={data} operation={creation} onCheck={onCheckTaskLifecycle} /></div> : null}
           {submitError ? (
             <div
               ref={errorSummaryRef}

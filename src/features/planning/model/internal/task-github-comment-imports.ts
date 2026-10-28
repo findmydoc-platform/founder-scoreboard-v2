@@ -68,7 +68,7 @@ export function createTaskGitHubImports(options: {
   try {
    const receipt = await options.adapter.importTaskGitHubComments(task.id);
    if (!valid()) return { ok: false, kind: "ended", error: "Die Sitzung oder der Zugriff wurde beendet." };
-   if (!Array.isArray(receipt.comments) || typeof receipt.evidenceLink !== "string" || !Number.isSafeInteger(receipt.imported) || receipt.imported < 0 || receipt.comments.some(row => row.taskId !== task.id || row.source !== "github" || !Number.isSafeInteger(row.id) || row.id <= 0 || ![row.externalId, row.body, row.authorLogin, row.authorAvatarUrl, row.htmlUrl, row.createdAt, row.importedAt].every(value => typeof value === "string"))) throw new Error("Die Importbestätigung ist unvollständig.");
+   if (!Array.isArray(receipt.comments) || typeof receipt.evidenceLink !== "string" || !Number.isSafeInteger(receipt.imported) || receipt.imported < 0 || receipt.comments.some(row => row.taskId !== task.id || row.source !== "github" || !Number.isSafeInteger(row.id) || row.id <= 0 || ![row.externalId, row.body, row.authorLogin, row.authorAvatarUrl, row.htmlUrl, row.createdAt, row.importedAt].every(value => typeof value === "string"))) throw new Error("Ob die Kommentare importiert wurden, ist noch unklar.");
    operation.after = options.nextSequence();
    // Respect reads accepted after this import began; fence earlier reads after accepting its receipt.
    acceptRead(receipt.comments, operation.after, receipt.commentsCoverage === "complete", task.id, started);

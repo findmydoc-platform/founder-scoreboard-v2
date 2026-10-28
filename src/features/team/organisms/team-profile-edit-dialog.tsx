@@ -3,7 +3,7 @@ import { TeamProfileSaveNotice } from "../molecules/team-profile-save-notice";
 import { X } from "lucide-react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { platformRoleOptions, roleOptionLabel } from "@/features/team/model/team-profile-view-model";
+import { platformRoleOptions, roleOptionLabel, teamProfileValues } from "@/features/team/model/team-profile-view-model";
 import type { PlatformRole, Profile } from "@/lib/types";
 import { UiButton, UiField, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
@@ -81,11 +81,11 @@ export function TeamProfileEditDialog({
         <div className="mt-5 grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 pb-4">
           {saveState?.phase === "conflict" && <div role="status" className="space-y-2">
             <p className="text-sm font-semibold text-amber-900">Das Profil wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.</p>
-            {editing?.current && <p className="break-words text-sm text-slate-700">Aktueller Serverstand: Plattformrolle: {roleOptionLabel(editing.current.platformRole)}; Org-Rolle: {editing.current.orgRole}; Kapazität: {editing.current.weeklyCapacity} Stunden; Vertreter für: {editing.current.deputyFor || "niemanden"}; Von: {editing.current.deputyActiveFrom || "offen"}; Bis: {editing.current.deputyActiveUntil || "offen"}.</p>}
-            <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }} disabled={saveState.checkStatus === "checking"}>Aktuellen Serverstand laden</UiButton>
+            {editing?.current && <div className="break-words text-sm text-slate-700"><p className="font-semibold">Aktueller Stand</p><dl className="grid gap-2">{teamProfileValues(editing.current, profiles).map(([label, value]) => <div key={label}><dt className="font-semibold">{label}</dt><dd>{value}</dd></div>)}</dl></div>}
+            <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }} disabled={saveState.checkStatus === "checking"}>Aktuellen Stand laden</UiButton>
             <UiButton className="min-h-11" onClick={() => { void onResave(); }} disabled={!editing?.canResave || controlDisabled} variant="primary">Erneut speichern</UiButton>
           </div>}
-          {saveState && <TeamProfileSaveNotice save={saveState} onCheck={onCheck} />}
+          {saveState && <TeamProfileSaveNotice profiles={profiles} save={saveState} onCheck={onCheck} />}
           <div className="grid gap-3 sm:grid-cols-2">
             <UiField as="div">
               Plattformrolle
@@ -99,7 +99,7 @@ export function TeamProfileEditDialog({
               />
             </UiField>
             <UiField>
-              Org-Rolle
+              Rolle im Team
               <UiTextInput
                 value={draftProfile.orgRole}
                 disabled={controlDisabled}
@@ -149,7 +149,7 @@ export function TeamProfileEditDialog({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-4">
-          <div className="w-full text-xs font-semibold text-slate-500 sm:w-auto">{confirmationPending ? "Speicherbestätigung ausstehend" : dirty ? "Ungespeicherte Änderungen" : "Keine Änderungen"}</div>
+          <div className="w-full text-xs font-semibold text-slate-500 sm:w-auto">{confirmationPending ? "Speicherung unklar" : dirty ? "Ungespeicherte Änderungen" : "Keine Änderungen"}</div>
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-nowrap">
             <UiButton type="button" onClick={onReset} disabled={!dirty || saving || confirmationPending} className="col-span-2 sm:col-span-1">
               Zurücksetzen

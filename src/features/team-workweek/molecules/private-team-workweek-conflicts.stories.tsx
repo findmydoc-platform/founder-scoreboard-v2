@@ -87,7 +87,7 @@ export const ChecksUnknownDecisionWithoutRepeatingIt: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole("button", { name: "Google übernehmen" }));
-    await expect(await canvas.findByText("Konfliktbestätigung ausstehend")).toBeVisible();
+    await expect(await canvas.findByText("Auswahl noch unklar")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Konfliktstand prüfen" }));
     await expect(canvas.getByRole("button", { name: "Google übernehmen" })).toBeDisabled();
     await expect(canvas.getByRole("button", { name: "FounderOps übernehmen" })).toBeDisabled();

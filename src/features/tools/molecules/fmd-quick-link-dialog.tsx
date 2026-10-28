@@ -425,7 +425,7 @@ export function FmdQuickLinkDialog({
         </div>
 
         {saveNotice ? <div className="mt-4">{saveNotice}</div> : null}
-        {uploadBlocked ? <UiNotice className="mt-4" tone="warning">Bild-Upload unbestätigt. Ohne bestätigten Dateipfad ist kein erneuter Upload möglich; der Link kann separat gespeichert werden.</UiNotice> : null}
+        {uploadBlocked ? <UiNotice className="mt-4" tone="warning">Ob das Bild hochgeladen wurde, ist noch unklar. Nicht erneut hochladen. Du kannst den Link ohne Bild speichern.</UiNotice> : null}
         <div className="sticky bottom-0 -mx-4 -mb-4 mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-white px-4 pb-4 pt-4 lg:-mx-5 lg:-mb-5 lg:px-5">
           <div className="min-h-8 min-w-0 flex-1">
             {dialogNotice && (

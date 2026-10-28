@@ -23,9 +23,10 @@ export const KeepsUnconfirmedStatusWithoutReplay: Story = { play: async ({ canva
   const canvas = within(canvasElement);
   await userEvent.click(canvas.getAllByRole("combobox")[1]);
   await userEvent.click(within(document.body).getByRole("option", { name: "Aktiv" }));
-  await expect(await canvas.findByText("Sprint-Änderung noch nicht bestätigt")).toBeVisible();
+  await expect(await canvas.findByText("Speicherung der Sprint-Änderung unklar")).toBeVisible();
   await expect(canvas.getAllByRole("combobox")[1]).toBeDisabled();
-  await userEvent.click(canvas.getByRole("button", { name: "Serverstand prüfen" }));
+  await expect(canvas.getByText("Eingabe: Status: Aktiv")).toBeVisible();
+  await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand prüfen" }));
   await expect(canvas.getByLabelText("Sprint writes")).toHaveTextContent("1");
   await expect(canvas.getByLabelText("Sprint reads")).toHaveTextContent("1");
 } };
@@ -34,9 +35,9 @@ export const KeepsConflictAndResavesConsciously: Story = { args: { conflict: tru
   await userEvent.click(canvas.getAllByRole("combobox")[1]);
   await userEvent.click(within(document.body).getByRole("option", { name: "Aktiv" }));
   await expect(await canvas.findByText("Sprint wurde zwischenzeitlich geändert")).toBeVisible();
-  await userEvent.click(canvas.getByRole("button", { name: "Serverstand vergleichen" }));
-  await expect(await canvas.findByText(/Serverstatus: review/)).toBeVisible();
-  await userEvent.click(canvas.getByRole("button", { name: "Bewusst erneut speichern" }));
+  await userEvent.click(canvas.getByRole("button", { name: "Änderungen vergleichen" }));
+  await expect(await canvas.findByText("Aktueller Status: Review")).toBeVisible();
+  await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
   await expect(canvas.getByLabelText("Sprint writes")).toHaveTextContent("2");
   await expect(canvas.getAllByRole("combobox")[1]).toHaveTextContent("Aktiv");
 } };

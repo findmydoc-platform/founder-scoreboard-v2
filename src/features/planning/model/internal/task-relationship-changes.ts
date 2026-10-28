@@ -70,7 +70,7 @@ export function createTaskRelationshipChanges(options: {
    if (kind === "add") {
     accepted = (await options.adapter.addTaskRelationship!(structuredClone(task), structuredClone(submitted))).relation;
     if (!valid()) return { ok: false, kind: "ended", error: "Die Sitzung oder der Zugriff wurde beendet." };
-    if (!accepted || !Number.isSafeInteger(accepted.id) || accepted.id <= 0 || accepted.taskId !== task.id || accepted.relatedTaskId !== submitted.relatedTaskId || accepted.relationType !== submitted.relationType || ![accepted.note, accepted.createdAt, accepted.createdBy].every(value => typeof value === "string")) throw new Error("Die Beziehungsbestätigung ist unvollständig.");
+    if (!accepted || !Number.isSafeInteger(accepted.id) || accepted.id <= 0 || accepted.taskId !== task.id || accepted.relatedTaskId !== submitted.relatedTaskId || accepted.relationType !== submitted.relationType || ![accepted.note, accepted.createdAt, accepted.createdBy].every(value => typeof value === "string")) throw new Error("Ob die Verknüpfung geändert wurde, ist noch unklar.");
    } else {
     const receipt = await options.adapter.removeTaskRelationship!(structuredClone(task), structuredClone(relation!));
     if (!valid()) return { ok: false, kind: "ended", error: "Die Sitzung oder der Zugriff wurde beendet." };

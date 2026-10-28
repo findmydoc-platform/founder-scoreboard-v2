@@ -93,10 +93,10 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
   return (
     <>
-      {data.tasks.map(task => <TaskSaveNotice key={task.id} taskTitle={controller.planningState.taskDetail(task.id).task ? task.title : "Aufgabe"} saves={controller.planningState.taskSaves(task.id)} onCheck={() => controller.planningState.checkTaskSave(task.id)} />)}
+      {data.tasks.map(task => <TaskSaveNotice key={task.id} taskTitle={controller.planningState.taskDetail(task.id).task ? task.title : "Aufgabe"} saves={controller.planningState.taskSaves(task.id)} labels={{ profiles: data.profiles, tasks: data.tasks, sprints: data.sprints }} onCheck={() => controller.planningState.checkTaskSave(task.id)} />)}
       {boardTaskEditConflict ? <UiNotice tone="info" role="alert" className="mb-4">
-        <p>Die Aufgabe wurde zwischenzeitlich geändert. Deine abgesendete Änderung bleibt erhalten.</p>
-        <p className="mt-2">Aktueller Serverstand: {boardTaskEditConflict.serverTask?.title || "Noch nicht verfügbar"}</p>
+        <p>Die Aufgabe wurde inzwischen geändert. Deine Eingaben bleiben erhalten.</p>
+        <p className="mt-2">Aktuell gespeichert: {boardTaskEditConflict.serverTask?.title || "Noch nicht verfügbar"}</p>
         <UiButton size="lg" type="button" disabled={!boardTaskEditConflict.canResave} onClick={() => { void resaveBoardTask(); }}>Änderung erneut speichern</UiButton>
         {!boardTaskEditConflict.canResave ? <UiButton size="lg" type="button" onClick={() => { void reloadBoardTaskConflict(); }}>Aktuellen Stand erneut laden</UiButton> : null}
       </UiNotice> : null}

@@ -99,8 +99,8 @@ export function EventsOverview({
   const unresolved = eventView.operations.filter(item => item.phase === "unconfirmed");
   const saveBlocked = operation?.phase === "unconfirmed" || operation?.phase === "saving" || (operation?.phase === "conflict" && !conflictAdopted);
   const feedback = <div className="space-y-2" aria-live="polite">{eventView.readStatus === "stale" ? <UiNotice>Die Eventdaten müssen erneut geprüft werden. <UiButton className="min-h-11" onClick={() => void planningState.refreshEvents()}>Events aktualisieren</UiButton></UiNotice> : null}{unresolved.map(item => <UiNotice key={item.id}>
-    <p>Bestätigung steht aus: {item.draft.title}. Die abgesendeten Eingaben bleiben erhalten. Ein erneutes Speichern ist gesperrt, solange das Ergebnis unklar ist.</p>
-    <UiButton className="mt-2 min-h-11" disabled={item.checking} onClick={() => void planningState.checkEventOutcome(item.id)}>{item.checking ? "Serverstand wird geprüft" : "Serverstand prüfen"}</UiButton>
+    <p>{item.draft.title}: Ob das Event gespeichert wurde, ist noch unklar. Deine Eingaben bleiben erhalten. Prüfe zuerst die Speicherung.</p>
+    <UiButton className="mt-2 min-h-11" disabled={item.checking} onClick={() => void planningState.checkEventOutcome(item.id)}>{item.checking ? "Aktueller Stand wird geprüft" : "Aktuellen Stand prüfen"}</UiButton>
   </UiNotice>)}</div>;
   const metrics = {
     upcoming: events.filter((event) => filterEvent(event, "upcoming", now)).length,
@@ -268,8 +268,8 @@ export function EventsOverview({
         )}
       </div>
       {operation?.phase === "conflict" && !conflictAdopted ? <UiNotice className="mt-4">
-        <p>Das Event wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten. Prüfe den Serverstand und übernimm ihn bewusst als Grundlage für dein erneutes Speichern.</p>
-        {conflictBasis ? <><p className="mt-2">Serverstand: {conflictBasis.title} · {eventDateRangeLabel(conflictBasis)} · {founderEventStatusLabel(conflictBasis.status)}</p><UiButton className="mt-2 min-h-11" onClick={() => { setEditingEvent(conflictBasis); setConflictAdopted(true); }}>Als Grundlage übernehmen</UiButton></> : <UiButton className="mt-2 min-h-11" onClick={async () => { if (await planningState.refreshEvents()) setConflictBasis(planningState.events().events.find(item => item.id === editingEvent?.id) || null); }}>Aktuellen Serverstand laden</UiButton>}
+        <p>Das Event wurde inzwischen geändert. Vergleiche die Änderungen und übernimm den aktuellen Stand, bevor du erneut speicherst. Deine Eingaben bleiben erhalten.</p>
+        {conflictBasis ? <><p className="mt-2">Aktuell gespeichert: {conflictBasis.title} · {eventDateRangeLabel(conflictBasis)} · {founderEventStatusLabel(conflictBasis.status)}</p><UiButton className="mt-2 min-h-11" onClick={() => { setEditingEvent(conflictBasis); setConflictAdopted(true); }}>Aktuellen Stand übernehmen</UiButton></> : <UiButton className="mt-2 min-h-11" onClick={async () => { if (await planningState.refreshEvents()) setConflictBasis(planningState.events().events.find(item => item.id === editingEvent?.id) || null); }}>Aktuellen Stand laden</UiButton>}
       </UiNotice> : null}
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <UiButton onClick={closeForm} disabled={formPending} className="text-slate-600">

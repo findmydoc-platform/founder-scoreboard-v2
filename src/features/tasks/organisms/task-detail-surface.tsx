@@ -685,10 +685,10 @@ function HydratedTaskDetailSurface({
         />
       ) : null}
 
-      <TaskSaveNotice taskTitle={taskSaves[0]?.checkStatus === "forbidden" ? "Aufgabe" : task.title} saves={taskSaves} onCheck={onCheckTaskSave} />
+      <TaskSaveNotice taskTitle={taskSaves[0]?.checkStatus === "forbidden" ? "Aufgabe" : task.title} saves={taskSaves} labels={{profiles:teamProfiles,tasks:allTasks,sprints}} onCheck={onCheckTaskSave} />
       {inlineConflict ? <UiNotice tone="info" role="alert" className="mt-4">
         <p>Die Aufgabe wurde zwischenzeitlich geändert. Deine abgesendete Änderung bleibt erhalten.</p>
-        <p className="mt-2">Aktueller Serverstand: {inlineConflict.serverTask?.title || "Noch nicht verfügbar"} · {inlineConflict.serverTask?.status}</p>
+        <p className="mt-2">Aktueller Stand: {inlineConflict.serverTask?.title || "Noch nicht verfügbar"} · {inlineConflict.serverTask?.status}</p>
         <UiButton type="button" size="lg" disabled={!inlineConflict.canResave} onClick={() => { if (inlineConflict.submitted && inlineEditor) void onUpdate(inlineConflict.submitted, { editor: inlineEditor.editor, resave: true }); }}>Änderung erneut speichern</UiButton>
         {!inlineConflict.canResave ? <UiButton type="button" size="lg" onClick={() => { void inlineEditor?.editor.refreshConflict(); }}>Aktuellen Stand erneut laden</UiButton> : null}
       </UiNotice> : null}
@@ -726,7 +726,7 @@ function HydratedTaskDetailSurface({
   );
 
   if (taskSaves.some(save => save.phase === "unconfirmed") && taskSaves.every(save => save.submitted === null)) {
-    return <TaskSaveNotice taskTitle="Aufgabe" saves={taskSaves} onCheck={onCheckTaskSave} />;
+    return <TaskSaveNotice taskTitle="Aufgabe" saves={taskSaves} labels={{profiles:teamProfiles,tasks:allTasks,sprints}} onCheck={onCheckTaskSave} />;
   }
 
   if (surface === "modal") {

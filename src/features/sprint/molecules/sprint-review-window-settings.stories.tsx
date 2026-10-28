@@ -23,10 +23,10 @@ export const KeepsUnknownInputAndChecksWithoutReplay: Story = { play: async ({ c
   await userEvent.clear(canvas.getByRole("spinbutton", { name: "Stunden" }));
   await userEvent.type(canvas.getByRole("spinbutton", { name: "Stunden" }), "96");
   await userEvent.click(canvas.getByRole("button", { name: "Frist speichern" }));
-  await expect(await canvas.findByText("Frist noch nicht bestätigt")).toBeVisible();
+  await expect(await canvas.findByText("Speicherung der Frist unklar")).toBeVisible();
   await expect(canvas.getByRole("spinbutton")).toHaveValue(96);
   await expect(canvas.getByRole("button", { name: "Frist speichern" })).toBeDisabled();
-  await userEvent.click(canvas.getByRole("button", { name: "Serverstand prüfen" }));
+  await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand prüfen" }));
   await expect(canvas.getByLabelText("Window writes")).toHaveTextContent("1");
   await expect(canvas.getByLabelText("Window reads")).toHaveTextContent("1");
 } };
@@ -37,9 +37,9 @@ export const ComparesConflictAndResavesConsciously: Story = { args: { conflict: 
   await userEvent.click(canvas.getByRole("button", { name: "Frist speichern" }));
   await expect(await canvas.findByText("Frist wurde zwischenzeitlich geändert")).toBeVisible();
   await expect(canvas.getByRole("spinbutton")).toHaveValue(96);
-  await userEvent.click(canvas.getByRole("button", { name: "Serverstand vergleichen" }));
-  await expect(await canvas.findByText("Serverstand: 72 Stunden")).toBeVisible();
-  await userEvent.click(canvas.getByRole("button", { name: "Bewusst erneut speichern" }));
+  await userEvent.click(canvas.getByRole("button", { name: "Änderungen vergleichen" }));
+  await expect(await canvas.findByText("Aktueller Stand: 72 Stunden")).toBeVisible();
+  await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
   await expect(await canvas.findByText("Frist gespeichert.")).toBeVisible();
   await expect(canvas.getByLabelText("Window writes")).toHaveTextContent("2");
 } };

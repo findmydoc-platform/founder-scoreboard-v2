@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { useState, useSyncExternalStore } from "react";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, fn, userEvent, within } from "storybook/test";
+import type { PlanningTaskLifecycleView } from "@/features/planning/model/planning-task-lifecycle";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { useTaskWithdrawCommand } from "../hooks/use-task-withdraw-command";
@@ -40,14 +41,33 @@ export const WithdrawalResponseLost: Story = {
     await expect(dialog.getByRole("button", { name: "Zurückziehen" })).toBeDisabled();
     await userEvent.type(dialog.getByRole("textbox", { name: "Begründung" }), "Nicht mehr benötigt");
     await userEvent.click(dialog.getByRole("button", { name: "Zurückziehen" }));
-    await expect(await canvas.findByText("Zurückziehen noch nicht bestätigt")).toBeVisible();
+    await expect(await canvas.findByText("Zurückziehen unklar")).toBeVisible();
     await expect(canvas.getByLabelText("Active tasks")).toHaveTextContent("Unabhängige Aufgabe");
     await expect(canvas.getByLabelText("Active tasks")).not.toHaveTextContent("Offener Vorschlag");
     await userEvent.click(canvas.getByText("Eingaben anzeigen"));
     await expect(canvas.getByText("Nicht mehr benötigt", { selector: "dd" })).toBeVisible();
-    await userEvent.click(canvas.getByRole("button", { name: "Vorgang prüfen" }));
-    await expect(canvas.getByText(/Der Vorgang bleibt unbestätigt/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Ergebnis prüfen" }));
+    await expect(canvas.getByText(/Das Ergebnis bleibt unklar/)).toBeVisible();
     await expect(canvas.getByLabelText("Removal writes")).toHaveTextContent("1");
     await expect(canvas.getByLabelText("Removal checks")).toHaveTextContent("1");
+  },
+};
+
+const blockedOperations: PlanningTaskLifecycleView[] = [
+  { id: "create", taskId: "new", kind: "create", phase: "blocked", submitted: { creationRequestId: "create", taskType: "deliverable", title: "Neue Aufgabe", description: "Kontext", parentTaskId: "", ownerId: "" }, error: "", checkStatus: "not-checked" },
+  ...(["delete_epic", "withdraw", "reject"] as const).map(kind => ({ id: kind, taskId: root.id, kind, phase: "blocked" as const, submitted: { task: root, reason: "Nicht mehr benötigt" }, error: "", checkStatus: "not-checked" as const })),
+];
+const checkBlocked = fn(async () => ({ outcome: "unconfirmed" as const, readStatus: "current" as const }));
+export const BlockedActionsNameTheirOperation: Story = {
+  render: () => <div>{blockedOperations.map(operation => <TaskLifecycleNotice key={operation.id} operation={operation} onCheck={checkBlocked} />)}</div>,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    for (const heading of ["Aufgabe noch nicht erstellt", "Noch nicht gelöscht", "Noch nicht zurückgezogen", "Noch nicht abgelehnt"]) {
+      const notice = within(canvas.getByRole("heading", { name: heading }).closest('[role="status"]') as HTMLElement);
+      await expect(notice.getByText("Zuerst muss eine frühere Änderung geprüft werden. Deine Eingaben bleiben erhalten.")).toBeVisible();
+      await userEvent.click(notice.getByRole("button", { name: "Ergebnis prüfen" }));
+    }
+    await expect(checkBlocked).toHaveBeenCalledTimes(4);
+    await expect(canvas.queryByText(/Die Erstellung wurde/)).not.toBeInTheDocument();
   },
 };

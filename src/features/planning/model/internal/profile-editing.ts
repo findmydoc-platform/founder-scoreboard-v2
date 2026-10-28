@@ -81,7 +81,7 @@ function editingSession<Input, Current>(options: {
   async function run(input: Input, resave: boolean): Promise<ProfileSettingsResult> {
     if (!alive()) return { ok: false, kind: "sessionSuperseded", error: "Die Bearbeitung wurde beendet." };
     if (busy || options.pending() || phase === "unconfirmed") return { ok: false, kind: "unconfirmed", error: "Die Speicherbestätigung steht noch aus." };
-    if (phase === "conflict" && (!resave || !reviewed)) return { ok: false, kind: "versionConflict", code: "profile_revision_conflict", error: "Bitte den aktuellen Serverstand prüfen und bewusst erneut speichern." };
+    if (phase === "conflict" && (!resave || !reviewed)) return { ok: false, kind: "versionConflict", code: "profile_revision_conflict", error: "Vergleiche die Änderungen, bevor du erneut speicherst." };
     if (resave && phase !== "conflict") return { ok: false, kind: "rejected", error: "Es liegt kein geprüfter Versionskonflikt vor." };
     const incoming = options.input(input);
     const originalValues = options.values(opening);

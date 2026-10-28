@@ -29,6 +29,17 @@ export function roleOptionLabel(role: PlatformRole) {
   return "Viewer";
 }
 
+export function teamProfileValues(patch: Partial<Profile>, profiles: readonly Profile[]): [string, string][] {
+  const values: [string, string][] = [];
+  if ("platformRole" in patch) values.push(["Plattformrolle", patch.platformRole ? roleOptionLabel(patch.platformRole) : "Nicht gesetzt"]);
+  if ("orgRole" in patch) values.push(["Rolle im Team", patch.orgRole || "Leer"]);
+  if ("weeklyCapacity" in patch) values.push(["Wochenkapazität", `${patch.weeklyCapacity ?? 0} Stunden`]);
+  if ("deputyFor" in patch) values.push(["Vertretung für", patch.deputyFor ? profiles.find(profile => profile.id === patch.deputyFor)?.name || "Person nicht verfügbar" : "Niemanden"]);
+  if ("deputyActiveFrom" in patch) values.push(["Vertretung von", patch.deputyActiveFrom ? formatDate(patch.deputyActiveFrom, { includeYear: true }) : "Offen"]);
+  if ("deputyActiveUntil" in patch) values.push(["Vertretung bis", patch.deputyActiveUntil ? formatDate(patch.deputyActiveUntil, { includeYear: true }) : "Offen"]);
+  return values;
+}
+
 export function sameProfileValue(left: unknown, right: unknown) {
   return (left ?? "") === (right ?? "");
 }

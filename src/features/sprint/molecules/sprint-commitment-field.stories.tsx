@@ -16,15 +16,15 @@ function Fixture({ conflict = false, succeeds = false }: { conflict?: boolean; s
 const meta = { title: "Features/Sprint/Commitment", component: Fixture } satisfies Meta<typeof Fixture>; export default meta; type Story = StoryObj<typeof meta>;
 export const RetainsUnknownAcrossNavigationWithoutReplay: Story = {  
 play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement); await userEvent.clear(canvas.getByRole("spinbutton")); await userEvent.type(canvas.getByRole("spinbutton"), "24"); await userEvent.tab(); await expect(await canvas.findByText("Commitment noch nicht bestätigt")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "Ansicht wechseln" })); await userEvent.click(canvas.getByRole("button", { name: "Ansicht wechseln" })); await expect(canvas.getByRole("spinbutton")).toBeDisabled(); await userEvent.click(canvas.getByRole("button", { name: "Serverstand prüfen" })); await expect(canvas.getByLabelText("Commitment writes")).toHaveTextContent("1"); await expect(canvas.getByLabelText("Commitment reads")).toHaveTextContent("1");
+    const canvas = within(canvasElement); await userEvent.clear(canvas.getByRole("spinbutton")); await userEvent.type(canvas.getByRole("spinbutton"), "24"); await userEvent.tab(); await expect(await canvas.findByText("Speicherung des Commitments unklar")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "Ansicht wechseln" })); await userEvent.click(canvas.getByRole("button", { name: "Ansicht wechseln" })); await expect(canvas.getByRole("spinbutton")).toBeDisabled(); await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand prüfen" })); await expect(canvas.getByLabelText("Commitment writes")).toHaveTextContent("1"); await expect(canvas.getByLabelText("Commitment reads")).toHaveTextContent("1");
   }
 };
 
 export const ComparesBeforeConsciousResave: Story = {  
 args: { conflict: true }, play: async ({ canvasElement }) => {
     const canvas = within(canvasElement); await userEvent.clear(canvas.getByRole("spinbutton")); await userEvent.type(canvas.getByRole("spinbutton"), "24"); await userEvent.tab();
-    await expect(await canvas.findByText("Commitment wurde zwischenzeitlich geändert")).toBeVisible(); await expect(canvas.getByRole("spinbutton")).toHaveValue(24); await expect(canvas.getByRole("button", { name: "Bewusst erneut speichern" })).toBeDisabled();
-    await userEvent.click(canvas.getByRole("button", { name: "Serverstand vergleichen" })); await expect(await canvas.findByText("Server: Standard, 16 Stunden")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "Bewusst erneut speichern" })); await expect(canvas.getByLabelText("Commitment writes")).toHaveTextContent("2"); await expect(canvas.getByRole("spinbutton")).toHaveValue(24);
+    await expect(await canvas.findByText("Commitment wurde zwischenzeitlich geändert")).toBeVisible(); await expect(canvas.getByRole("spinbutton")).toHaveValue(24); await expect(canvas.getByRole("button", { name: "Erneut speichern" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Änderungen vergleichen" })); await expect(await canvas.findByText("Aktuell: Standard, 16 Stunden")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" })); await expect(canvas.getByLabelText("Commitment writes")).toHaveTextContent("2"); await expect(canvas.getByRole("spinbutton")).toHaveValue(24);
   }
 };
 

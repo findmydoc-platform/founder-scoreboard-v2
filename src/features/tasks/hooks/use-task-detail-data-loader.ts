@@ -49,7 +49,7 @@ export function useTaskDetailDataLoader({
         const result = await planningState.loadTaskDetail(selectedTaskId);
         if (!active) return;
         if (!result.ok) {
-          setLoadState({ taskId: selectedTaskId, loading: false, error: result.error || "Task-Details konnten nicht geladen werden." });
+          setLoadState({ taskId: selectedTaskId, loading: false, error: result.error || "Aufgabendetails konnten nicht geladen werden." });
           return;
         }
         setLoadedTaskIds((current) => {
@@ -68,7 +68,7 @@ export function useTaskDetailDataLoader({
         setLoadState({
           taskId: selectedTaskId,
           loading: false,
-          error: caught instanceof Error ? caught.message : "Task-Details konnten nicht geladen werden.",
+          error: caught instanceof Error ? caught.message : "Aufgabendetails konnten nicht geladen werden.",
         });
       }
     });

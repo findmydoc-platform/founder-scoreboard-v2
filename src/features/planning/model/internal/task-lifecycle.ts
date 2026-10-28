@@ -146,7 +146,7 @@ export function createTaskLifecycle(adapter: LifecycleAdapter) {
       try {
         const result = await adapter.removeTask(task, action, reason);
         if (!adapter.isActive() || adapter.generation() !== generation) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
-        if (action === "withdraw" && !result.affectedTaskIds?.includes(task.id)) throw new Error("Der Umfang des Zurückziehens ist noch nicht bestätigt.");
+        if (action === "withdraw" && !result.affectedTaskIds?.includes(task.id)) throw new Error("Ob alle betroffenen Aufgaben zurückgezogen wurden, ist noch unklar.");
         const ids = result.affectedTaskIds ? new Set(result.affectedTaskIds) : subtreeIds(adapter.current(), new Set([task.id]));
         for (const taskId of ids) removed.add(taskId);
         removing.delete(id);

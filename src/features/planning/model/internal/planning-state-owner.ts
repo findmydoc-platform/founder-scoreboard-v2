@@ -721,7 +721,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           if (failedStatus === "forbidden") { deniedTaskReads.add(taskId); taskReviews.deny(taskId); githubSync.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId); }
           detailStatuses.set(taskId, failedStatus);
           publish();
-          return { ok: false, error: error instanceof Error ? error.message : "Task-Details konnten nicht geladen werden." };
+          return { ok: false, error: error instanceof Error ? error.message : "Aufgabendetails konnten nicht geladen werden." };
         }
         if (!isActive() || generation !== sessionGeneration) return { ok: false };
         const detailProjection = applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {});

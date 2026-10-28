@@ -31,33 +31,33 @@ function confirmedActivation(effectiveAt?: string | null, effectiveUntil?: strin
 
 function reconciliationNotice(state: PrivateWorkweekView, refreshRequired: boolean) {
   return state.reconciliation.phase === "unconfirmed"
-    ? "Die Abgleichsbestätigung ist ausstehend. Der zuletzt bestätigte Teamstand bleibt sichtbar. Lade den aktuellen Stand; die Prüfung wiederholt keinen Google-Abgleich."
+    ? "Ob der Google-Abgleich abgeschlossen ist, bleibt unklar. Die bisher bestätigten Arbeitszeiten bleiben sichtbar. Lade den aktuellen Stand. Dabei wird nichts erneut abgeglichen."
     : state.reconciliation.phase === "reconciling" ? "Google-Abgleich läuft. Der zuletzt bestätigte Teamstand bleibt sichtbar."
     : state.reconciliation.phase === "confirmed" && refreshRequired ? "Der Google-Abgleich ist bestätigt. Lade den aktuellen Stand vor weiteren Änderungen."
     : state.reconciliation.phase === "delayed" || state.reconciliation.phase === "conflict"
       ? state.reconciliation.result?.recovery === "reconnect" ? "Der Google-Abgleich ist verzögert. Verbinde Google erneut; der bestätigte Teamstand bleibt sichtbar."
-        : state.reconciliation.result?.recovery === "restart" ? "Die Ausgangsversion wurde geändert. Beginne mit dem aktuellen Stand neu; deine Eingaben bleiben erhalten."
+        : state.reconciliation.result?.recovery === "restart" ? "Die Arbeitswoche wurde inzwischen geändert. Beginne mit dem aktuellen Stand neu. Deine Eingaben bleiben erhalten."
         : state.reconciliation.result?.recovery === "resolve_conflict" ? "Der Google-Abgleich hat einen Konflikt festgestellt. Prüfe die Varianten; der bestätigte Teamstand bleibt sichtbar."
-        : "Der Google-Abgleich ist verzögert. Der bestätigte Teamstand bleibt sichtbar; du kannst den Abgleich bewusst erneut starten."
+        : "Der Google-Abgleich verzögert sich. Die bisher bestätigten Arbeitszeiten bleiben sichtbar. Du kannst den Abgleich erneut starten."
       : "";
 }
 
 function conflictDecisionNotice(state: PrivateWorkweekView, refreshRequired: boolean) {
   const decision = state.conflictDecision;
-  if (decision.phase === "unconfirmed") return "Die Konfliktentscheidung ist noch nicht bestätigt. Prüfe den aktuellen Stand; die Entscheidung wird dabei nicht wiederholt.";
+  if (decision.phase === "unconfirmed") return "Ob deine Auswahl übernommen wurde, ist noch unklar. Prüfe den aktuellen Stand. Deine Auswahl wird dabei nicht erneut gesendet.";
   if (decision.phase === "preparing") return decision.result?.recovery === "reconnect"
-    ? "Die gewählte Konfliktvariante bleibt in Vorbereitung. Verbinde Google erneut; der letzte bestätigte Teamstand bleibt aktiv."
-    : "Die gewählte Konfliktvariante bleibt in Vorbereitung. Der letzte bestätigte Teamstand bleibt aktiv; du kannst dieselbe Variante bewusst fortsetzen.";
-  if (decision.phase === "published" && refreshRequired) return "Die Konfliktveröffentlichung ist bestätigt. Lade den aktuellen Stand vor weiteren Änderungen.";
+    ? "Die gewählte Arbeitswoche wird noch vorbereitet. Verbinde Google erneut. Die bisher bestätigten Arbeitszeiten bleiben aktiv."
+    : "Die gewählte Arbeitswoche wird noch vorbereitet. Die bisher bestätigten Arbeitszeiten bleiben aktiv. Du kannst mit dieser Auswahl fortfahren.";
+  if (decision.phase === "published" && refreshRequired) return "Deine Auswahl wurde veröffentlicht. Lade den aktuellen Stand vor weiteren Änderungen.";
   if (decision.phase === "stale") return decision.error;
   return "";
 }
 
 function recoveryNotice(state: PrivateWorkweekView, refreshRequired: boolean) {
-  if (state.restart.phase === "unconfirmed" && state.currentContextReady) return "Die frühere Neustartbestätigung bleibt ausstehend. Der aktuelle Bearbeitungsstand ist geladen; neue Eingaben kannst du bewusst speichern.";
-  if (state.restart.phase === "unconfirmed") return "Die Neustartbestätigung ist ausstehend. Lade den aktuellen Stand; die Prüfung wiederholt keinen Neustart.";
-  if (state.resume.phase === "unconfirmed" && state.currentContextReady) return "Die Bestätigung der früheren Veröffentlichung bleibt ausstehend. Der aktuelle Bearbeitungsstand ist geladen; neue Eingaben bleiben davon getrennt.";
-  if (state.resume.phase === "unconfirmed") return "Die Bestätigung der früheren Veröffentlichung ist ausstehend. Lade den aktuellen Stand; die Prüfung wiederholt keine Veröffentlichung.";
+  if (state.restart.phase === "unconfirmed" && state.currentContextReady) return "Ob der frühere Neustart abgeschlossen ist, bleibt unklar. Die aktuellen Daten sind geladen. Neue Eingaben kannst du speichern.";
+  if (state.restart.phase === "unconfirmed") return "Ob der Neustart abgeschlossen ist, bleibt unklar. Lade den aktuellen Stand. Dabei wird kein weiterer Neustart ausgelöst.";
+  if (state.resume.phase === "unconfirmed" && state.currentContextReady) return "Ob die frühere Veröffentlichung abgeschlossen ist, bleibt unklar. Die aktuellen Daten sind geladen. Deine neuen Eingaben bleiben getrennt erhalten.";
+  if (state.resume.phase === "unconfirmed") return "Ob die frühere Veröffentlichung abgeschlossen ist, bleibt unklar. Lade den aktuellen Stand. Dabei wird nichts erneut veröffentlicht.";
   const restart = state.restart.result?.restart;
   if (state.restart.phase === "delayed") return restart?.reason === "legacy_untracked"
     ? "Dieser ältere Versuch kann noch nicht sicher abgebrochen werden. Deine neuen Eingaben bleiben hier im Editor erhalten; der gespeicherte Versuch wird nicht automatisch verworfen."
@@ -392,7 +392,7 @@ export function usePrivateTeamWorkweekState(planningState: PlanningState, initia
     const recoveryUnknown = current.restart.phase === "unconfirmed" || current.resume.phase === "unconfirmed";
     const unknown = current.reconciliation.phase === "unconfirmed" || recoveryUnknown;
     setMessageTone(refreshed && !unknown ? "success" : "warning");
-    setMessage(refreshed && recoveryUnknown ? recoveryNotice(current, current.contextRefreshRequired) : refreshed && unknown ? "Der aktuelle Stand ist geladen. Die Abgleichsbestätigung bleibt ausstehend. Die Prüfung wiederholt keinen Google-Abgleich." : refreshed && (planningState.privateWorkweek().save.phase === "unconfirmed" || planningState.privateWorkweek().publication.phase === "unconfirmed") ? "Der aktuelle Stand ist geladen. Die Bestätigung bleibt ausstehend; deine gesendeten Eingaben bleiben erhalten. Eine Prüfung wiederholt keine Veröffentlichung." : refreshed ? success : refreshFailure || "Die Änderung ist bestätigt. Lade den aktuellen Stand vor dem Speichern erneut; deine Eingaben bleiben erhalten.");
+    setMessage(refreshed && recoveryUnknown ? recoveryNotice(current, current.contextRefreshRequired) : refreshed && unknown ? "Aktueller Stand geladen. Ob der Google-Abgleich abgeschlossen ist, bleibt unklar. Es wurde kein neuer Abgleich gestartet." : refreshed && (planningState.privateWorkweek().save.phase === "unconfirmed" || planningState.privateWorkweek().publication.phase === "unconfirmed") ? "Aktueller Stand geladen. Ob deine Änderungen veröffentlicht wurden, bleibt unklar. Deine Eingaben bleiben erhalten. Es wurde nichts erneut veröffentlicht." : refreshed ? success : refreshFailure || "Die Änderung ist bestätigt. Lade den aktuellen Stand vor dem Speichern erneut; deine Eingaben bleiben erhalten.");
     return refreshed;
   };
 
@@ -492,7 +492,7 @@ export function usePrivateTeamWorkweekState(planningState: PlanningState, initia
         if (response.status === 409 && body?.conflict) {
           if (!await refreshContext()) return false;
           setMessageTone("warning");
-          setMessage("FounderOps und Google wurden parallel geändert. Wähle unten bewusst eine Variante.");
+          setMessage("FounderOps und Google wurden parallel geändert. Vergleiche die Varianten und wähle eine aus.");
           return "conflict" as const;
         }
         if (body?.code === "completion_pending" || body?.completionPending) {
@@ -628,15 +628,15 @@ export function usePrivateTeamWorkweekState(planningState: PlanningState, initia
   const showConfirmedTeamBaseline = Boolean(conflict || syncDelayed || reconciliationState === "conflict" || reconciliationState === "delayed");
   const latestIsPrepared = Boolean(latestPublished && (latestPublished.effectiveAt ? new Date(latestPublished.effectiveAt) > new Date() : latestPublished.effectiveFrom > berlinTodayIso()));
   const badge = shared.restart.phase === "unconfirmed"
-    ? { tone: "amber" as const, label: "Neustartbestätigung ausstehend" }
+    ? { tone: "amber" as const, label: "Neustart noch unklar" }
     : shared.resume.phase === "unconfirmed"
-    ? { tone: "amber" as const, label: "Fortsetzungsbestätigung ausstehend" }
+    ? { tone: "amber" as const, label: "Fortsetzung noch unklar" }
     : shared.conflictDecision.phase === "unconfirmed"
-    ? { tone: "amber" as const, label: "Konfliktbestätigung ausstehend" }
+    ? { tone: "amber" as const, label: "Auswahl noch unklar" }
     : shared.reconciliation.phase === "unconfirmed"
-    ? { tone: "amber" as const, label: "Abgleichsbestätigung ausstehend" }
+    ? { tone: "amber" as const, label: "Google-Abgleich noch unklar" }
     : shared.save.phase === "unconfirmed" || shared.publication.phase === "unconfirmed"
-    ? { tone: "amber" as const, label: "Bestätigung ausstehend" }
+    ? { tone: "amber" as const, label: "Speicherung unklar" }
     : contextRefreshRequired
     ? { tone: "amber" as const, label: "Stand nicht aktuell" }
     : syncDelayed
@@ -690,7 +690,7 @@ export function usePrivateTeamWorkweekState(planningState: PlanningState, initia
     pendingRecoveryLabel: pendingPublication?.resumeAllowed ? "Offene Veröffentlichung fortsetzen" : "Offene Veröffentlichung sicher neu beginnen",
   };
 
-  const retainedReconciliationMessage = conflictChanged ? "Der Konfliktstand wurde während deiner Prüfung geändert. Lade die Varianten neu und entscheide bewusst."
+  const retainedReconciliationMessage = conflictChanged ? "Die Varianten wurden inzwischen geändert. Lade sie neu und wähle erneut."
     : recoveryNotice(shared, contextRefreshRequired) || conflictDecisionNotice(shared, contextRefreshRequired) || reconciliationNotice(shared, contextRefreshRequired);
 
   return {

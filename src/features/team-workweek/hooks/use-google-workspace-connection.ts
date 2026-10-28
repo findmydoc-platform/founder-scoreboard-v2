@@ -47,9 +47,9 @@ export function useGoogleWorkspaceConnection(planningState: PlanningState) {
   };
   const operation = view.operation;
   const outcome = operation.phase === "completed" ? "Google-Verbindung getrennt. Die Grundwoche bleibt privat und inaktiv erhalten."
-    : operation.phase === "unconfirmed" ? "Die Trennungsbestätigung ist ausstehend. Erneut prüfen lädt nur den aktuellen Stand und wiederholt keine Trennung."
+    : operation.phase === "unconfirmed" ? "Ob Google getrennt wurde, ist noch unklar. Die Prüfung lädt nur den aktuellen Stand."
     : operation.phase === "partial" ? operation.result?.recovery === "reconnect" ? "Die Google-Verbindung muss erneuert werden, bevor die Trennung fortgesetzt werden kann."
-      : "Die Trennung ist noch nicht vollständig bestätigt. Bereits bestätigte Schritte werden beim nächsten Versuch nicht wiederholt."
+      : "Google ist noch nicht vollständig getrennt. Erledigte Schritte werden beim Fortsetzen nicht wiederholt."
     : operation.error;
   return { callbackError, connection: view.connection || EMPTY_CONNECTION, disconnectView: view.preview || { ...EMPTY_DISCONNECT, ...(view.disconnectPending ? { state: "cleanup_pending" as const } : {}) },
     disconnectConnection, load, loadDisconnectPreview: planningState.loadGoogleDisconnectPreview, startConnect,

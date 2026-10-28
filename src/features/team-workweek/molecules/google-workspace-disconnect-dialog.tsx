@@ -49,15 +49,15 @@ export function GoogleWorkspaceDisconnectDialog({
             {previewPending && <p role="status" className="mt-2 text-sm text-slate-600">Trennungsvorschau wird geladen …</p>}
             {previewError && <p role="alert" className="mt-2 text-sm text-amber-800">{previewError} Schließe die Vorschau und versuche es erneut.</p>}
             {previewReady && <><p id="google-disconnect-description" className="mt-2 text-sm leading-6 text-slate-600">
-              FounderOps führt diese Schritte kontrolliert und wiederaufnehmbar aus:
+              Beim Trennen:
             </p>
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
-              <li>{disconnect.futureSeriesCount} zukünftige eindeutig markierte Google-Serie{disconnect.futureSeriesCount === 1 ? "" : "n"} entfernen oder am letzten vergangenen Vorkommen beenden.</li>
-              <li>Deine Arbeitswoche aus der Teamansicht nehmen und nur für dich als inaktive private Konfiguration behalten.</li>
-              <li>Nach bestätigter Kalenderbereinigung die lokale Kalenderverbindung und ihre gespeicherten Tokens entfernen. Die Freigabe bei Google bleibt bestehen, bis du sie dort selbst widerrufst.</li>
+              <li>{disconnect.futureSeriesCount} FounderOps-Terminserie{disconnect.futureSeriesCount === 1 ? "" : "n"} für die Zukunft entfernen oder am letzten vergangenen Termin beenden.</li>
+              <li>Deine Arbeitswoche aus der Teamansicht entfernen. Sie bleibt privat gespeichert und inaktiv.</li>
+              <li>Danach die Verbindung und gespeicherten Zugangsdaten entfernen. Die Freigabe bei Google bleibt bestehen, bis du sie dort widerrufst.</li>
             </ul>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Vergangene FounderOps-Vorkommen und gewöhnliche Kalendertermine bleiben unverändert. Eine spätere Verbindung veröffentlicht die Woche nicht automatisch.
+              Vergangene FounderOps-Termine und andere Kalendertermine bleiben unverändert. Eine spätere Verbindung veröffentlicht die Woche nicht automatisch.
             </p></>}
           </div>
         </div>

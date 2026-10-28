@@ -103,7 +103,7 @@ export function planningCollaborationOperations({ action, targetId, profile, ser
       const compared = row.evidence_link === null ? update.is("evidence_link", null) : update.eq("evidence_link", row.evidence_link);
       const saved = await compared.select("id").maybeSingle();
       if (saved.error || saved.data) return saved;
-      return { data: null, error: { code: "import_evidence_stale", message: "Die Evidence wurde inzwischen geändert. Der Import wurde nicht angewendet." } };
+      return { data: null, error: { code: "import_evidence_stale", message: "Der Nachweis wurde inzwischen geändert. Die Kommentare wurden nicht importiert." } };
     },
     async uploadAttachment(input: { path: string; bytes: Uint8Array; filename: string; contentType: string }) {
       const path = input.path, bytes = Buffer.from(input.bytes), filename = input.filename, contentType = input.contentType;
@@ -121,7 +121,7 @@ export function planningCollaborationOperations({ action, targetId, profile, ser
         uploadedAttachment = { filename, contentType, size: bytes.length, url: uploaded.rawUrl };
         return { ok: true as const, uploaded };
       } catch {
-        return { ok: false as const, status: 502, error: "Der GitHub-Upload ist noch nicht bestätigt. Bitte zuerst den Aufgabenstand prüfen." };
+        return { ok: false as const, status: 502, error: "Ob der Anhang auf GitHub hochgeladen wurde, ist noch unklar. Prüfe zuerst die Aufgabe." };
       }
     },
     async recordAttachment(metadata: { request_ip?: string | null; user_agent?: string | null }) {

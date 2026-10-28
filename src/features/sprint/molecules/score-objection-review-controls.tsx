@@ -62,7 +62,7 @@ export function ScoreObjectionReviewControls({
 
   return (
     <div className="grid min-w-0 gap-3 border-t border-slate-200 pt-3" onFocusCapture={()=>{begin();}}>
-      {view&&<ScoreObjectionOperationStatus view={view} check={()=>{void editor?.checkOutcome();}} compare={()=>{void editor?.refreshConflict();}} resave={()=>{if(view.submitted&&"action" in view.submitted)void editor?.resubmit(view.submitted);}}/>}
+      {view&&<ScoreObjectionOperationStatus profiles={profiles} view={view} check={()=>{void editor?.checkOutcome();}} compare={()=>{void editor?.refreshConflict();}} resave={()=>{if(view.submitted&&"action" in view.submitted)void editor?.resubmit(view.submitted);}}/>}
       {isCeo && !objection.secondReviewedAt ? (
         <div className="grid gap-2 rounded-md border border-slate-200 bg-white p-3">
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
@@ -141,7 +141,7 @@ export function ScoreObjectionReviewControls({
               <UiTextInput disabled={disabled} className="min-w-0" type="number" min={0} max={4} value={weeklyPoints} onChange={(event) => change({weeklyPoints:Number(event.target.value)})} aria-label="Korrigierte Weekly-Punkte" />
             </label>
           </div>
-          {!scoreComplete&&<p className="text-xs text-slate-700">Der gespeicherte Score ist noch nicht vollständig geladen. Eine Score-Korrektur benötigt diesen Stand.</p>}
+          {!scoreComplete&&<p className="text-xs text-slate-700">Lade den vollständigen Score, bevor du ihn korrigierst.</p>}
           <div className="flex flex-wrap gap-2">
             <UiButton disabled={disabled || !resolutionComment.trim()} onClick={() => submitResolution("reviewed")} variant="blue" size="sm">Geprüft</UiButton>
             <UiButton disabled={disabled || !resolutionComment.trim()} onClick={() => submitResolution("dismissed")} variant="amber" size="sm">Ablehnen</UiButton>

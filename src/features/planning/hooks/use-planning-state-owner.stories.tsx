@@ -150,15 +150,15 @@ export const BoardChecksUnconfirmedTaskAndAllowsIndependentEdit: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Status für Board-Konflikt ändern" }));
     await userEvent.click(within(document.body).getByRole("menuitem", { name: "Blockiert" }));
-    await expect(await canvas.findByText("Speicherbestätigung ausstehend")).toBeVisible();
+    await expect(await canvas.findByText("Speicherung unklar")).toBeVisible();
     await expect(canvas.queryByRole("button", { name: "Status für Board-Konflikt ändern" })).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole("button", { name: "Speicherstand prüfen" }));
-    await expect(await canvas.findByText(/Serverstand geladen.*Speicherung bleibt unbestätigt/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Speicherung prüfen" }));
+    await expect(await canvas.findByText(/Aufgabe geladen.*Ob die Änderung vollständig gespeichert wurde, bleibt unklar/)).toBeVisible();
     await expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("1");
     await userEvent.click(canvas.getByRole("button", { name: "Status für Andere Aufgabe ändern" }));
     await userEvent.click(within(document.body).getByRole("menuitem", { name: "In Arbeit" }));
     await expect(canvas.getByRole("button", { name: "Status für Andere Aufgabe ändern" })).toHaveTextContent("In Arbeit");
     await expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("2");
-    await expect(canvas.getByText("Speicherbestätigung ausstehend")).toBeVisible();
+    await expect(canvas.getByText("Speicherung unklar")).toBeVisible();
   },
 };

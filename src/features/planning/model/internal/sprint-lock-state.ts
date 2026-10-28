@@ -80,14 +80,14 @@ export function createSprintLockState(options: {
                     if (basis.sprint.scoreLocked || options.current().sprints.find(sprint => sprint.id === basis.sprint.id)?.scoreLocked)
                         throw Object.assign(new Error("Dieser Sprint ist bereits abgeschlossen."), { status: 409, code: "sprint_already_locked" });
                     if (!basis.sprint.updatedAt || basis.tasks.some(task => !task.updatedAt))
-                        throw Object.assign(new Error("Die ursprüngliche Abschlussbasis fehlt. Bitte neu laden."), { status: 400, code: "sprint_lock_basis_missing" });
+                        throw Object.assign(new Error("Lade den Sprint und seine Aufgaben neu, bevor du ihn abschließt."), { status: 400, code: "sprint_lock_basis_missing" });
                     if (!options.lock)
                         throw Object.assign(new Error("Sprint-Abschluss ist nicht verfügbar."), { status: 400 });
                     const receipt = await options.lock(basis);
                     if (!active())
                         return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt." };
                     if (receipt.sprint.id !== shown.id || !receipt.sprint.scoreLocked || receipt.sprint.status !== "closed")
-                        throw new Error("Sprint-Abschluss noch nicht bestätigt.");
+                        throw new Error("Sprint-Abschluss unklar.");
                     options.accept(receipt, basis, started);
                     view = { ...view, phase: "locked", receipt, error: "" };
                     options.changed();
@@ -195,7 +195,7 @@ export function createSprintLockState(options: {
                         return false;
                     }
                 }, relock(input) { if (!view.canRelock || !view.serverBasis || !active())
-                    return Promise.resolve({ ok: false, kind: "rejected", error: "Bitte zuerst den aktuellen Serverstand vergleichen." }); basis = structuredClone(view.serverBasis); view = { ...view, phase: "ready", canRelock: false, serverBasis: null }; return lock(input); }, close() { if (!view.submitted) {
+                    return Promise.resolve({ ok: false, kind: "rejected", error: "Vergleiche zuerst die Änderungen." }); basis = structuredClone(view.serverBasis); view = { ...view, phase: "ready", canRelock: false, serverBasis: null }; return lock(input); }, close() { if (!view.submitted) {
                     closed = true;
                     entries.delete(key);
                 } } };

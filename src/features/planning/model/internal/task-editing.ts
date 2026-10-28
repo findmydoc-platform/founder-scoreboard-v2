@@ -34,7 +34,7 @@ export function createTaskEditing(adapter: EditingAdapter) {
       let saves = 0;
       const sameSession = () => adapter.isActive() && adapter.generation() === generation;
       const current = () => !closed && sameSession();
-      const blocked = (): TaskUpdateResult => ({ ok: false, kind: current() ? (phase === "unconfirmed" || phase === "blocked") ? "unconfirmed" : "versionConflict" : "sessionSuperseded", error: current() ? error || "Bitte den aktuellen Stand prüfen und bewusst erneut speichern." : "Die Sitzung wurde ersetzt.", status: 409 });
+      const blocked = (): TaskUpdateResult => ({ ok: false, kind: current() ? (phase === "unconfirmed" || phase === "blocked") ? "unconfirmed" : "versionConflict" : "sessionSuperseded", error: current() ? error || "Vergleiche die Änderungen, bevor du erneut speicherst." : "Die Sitzung wurde ersetzt.", status: 409 });
       async function save(patch: Partial<Task>): Promise<TaskUpdateResult> {
         if (!current()) return blocked();
         if (phase === "conflict" || phase === "unconfirmed" || phase === "blocked") return blocked();
@@ -45,7 +45,7 @@ export function createTaskEditing(adapter: EditingAdapter) {
         phase = "saving";
         error = "";
         const result: TaskUpdateResult = uncoveredFields.some(field => Object.prototype.hasOwnProperty.call(submitted, field))
-          ? { ok: false, kind: "versionConflict", status: 409, error: "Diese Detailfelder stammen aus einem älteren Stand. Bitte vergleichen und bewusst erneut speichern." }
+          ? { ok: false, kind: "versionConflict", status: 409, error: "Die Aufgabendetails sind nicht aktuell. Vergleiche die Angaben, bevor du erneut speicherst." }
           : await adapter.saveTask(basis, submitted, context);
         saves--;
         if (!sameSession()) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
