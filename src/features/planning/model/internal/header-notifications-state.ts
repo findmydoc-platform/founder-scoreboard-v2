@@ -183,6 +183,16 @@ export function createHeaderNotificationsState(options: {
     checkPlatformReleaseSeen: version => check(`release:${version}`),
   };
   return { publicState,
+    deliveryStarted() {
+      affectedAt=++clock;
+      if(slots.notifications.readStatus!=="not-loaded"){slots.notifications={readStatus:"stale",error:""};acceptedHeaderAt.set("notifications",affectedAt);headerReads.delete("notifications");}
+      if(notificationStatus!=="not-loaded")notificationStatus="stale";
+      if(releaseStatus!=="not-loaded"){releaseStatus="stale";releaseRead=undefined;}
+      options.changed();
+    },
+    async refreshDeliveryEffects() {
+      await Promise.all([slots.notifications.readStatus!=="not-loaded"?refreshHeader(["notifications"]):Promise.resolve(true),notificationStatus!=="not-loaded"?options.refreshNotifications():Promise.resolve(true),releaseStatus!=="not-loaded"?loadPlatformReleases():Promise.resolve(true)]);
+    },
     beginWorkspaceRead(workspace: string) { const started = ++clock; if (workspace === "notifications") notificationStatus = "loading"; return started; },
     acceptWorkspaceRead(workspace: string, data: PlanningShellState, headerData: PlanningHeaderData | undefined, started: number, coverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]) {
       acceptHeader(headerData, started);

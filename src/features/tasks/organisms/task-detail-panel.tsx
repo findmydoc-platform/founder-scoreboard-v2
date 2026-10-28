@@ -71,7 +71,7 @@ type Props = {
   onWithdraw: (reason: string) => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }, basis?: Task) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
-  onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
+  onDecideApproval: (action: ApprovalDecisionAction, note?: string, basis?: Task) => void;
 };
 
 export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {

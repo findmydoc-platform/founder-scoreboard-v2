@@ -5,10 +5,7 @@ import type { AuthorityCapabilities } from "@/features/administrator-access/mode
 import type { AdministrationWorkspaceModel } from "@/features/administration/model/administration-read-model";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 
-type ErrorBody = { error?: string; code?: string };
-
 export function useAdministrationWorkspaceController({
-  apiClient,
   planningState,
   capabilities,
   onAdministratorAccessInvalid,
@@ -22,15 +19,7 @@ export function useAdministrationWorkspaceController({
   const [, publish] = useReducer(value => value + 1, 0);
   useEffect(() => planningState.subscribe(publish), [planningState]);
   const model = planningState.administration().model;
-  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-
-  const handleAccessError = useCallback((body?: ErrorBody | null) => {
-    if (body?.code !== "administrator_access_required" && body?.code !== "administrator_access_expired") return false;
-
-    onAdministratorAccessInvalid();
-    return true;
-  }, [onAdministratorAccessInvalid]);
 
   const load = useCallback(async () => {
     const loaded = await planningState.loadAdministration();
@@ -42,46 +31,11 @@ export function useAdministrationWorkspaceController({
     return loaded ? state.model : null;
   }, [planningState, onAdministratorAccessInvalid]);
 
-  const runCommand = useCallback(async <Body extends ErrorBody>(
-    request: () => Promise<{ response: Response; body: Body | null }>,
-    fallback: string,
-  ) => {
-    setBusy(true);
-    setMessage("");
-    try {
-      const { response, body } = await request();
-      if (!response.ok) {
-        handleAccessError(body);
-        throw new Error(body?.error || fallback);
-      }
-      await load();
-      return body;
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : fallback);
-      throw error;
-    } finally {
-      setBusy(false);
-    }
-  }, [handleAccessError, load]);
-
-  const deliverNotifications = useCallback(async (payload: Record<string, unknown>) => {
-    await runCommand(
-      () => apiClient.requestJson<ErrorBody>("/api/notifications/deliver", {
-        method: "POST",
-        json: payload,
-        useDevProfileOverride: false,
-      }),
-      "Zustellung konnte nicht ausgeführt werden.",
-    );
-    setMessage("Zustellung abgeschlossen.");
-  }, [apiClient, runCommand]);
-
   useEffect(() => { window.queueMicrotask(() => void load()); }, [load]);
 
   return {
-    busy,
+    busy: false,
     capabilities,
-    deliverNotifications,
     load,
     message,
     model,

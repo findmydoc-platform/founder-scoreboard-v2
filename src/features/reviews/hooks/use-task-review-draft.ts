@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReviewDecision, TaskReviewChecklist } from "@/lib/types";
 
 export type TaskReviewDraft = {
+  expectedUpdatedAt?: string;
   checklist: TaskReviewChecklist;
   comment: string;
   decision: ReviewDecision | "";
@@ -28,19 +29,20 @@ function draftStorageKey(taskId: string, reviewRequestedAt: string, profileId: s
   return `founderops:task-review-draft:v2:${taskId}:${encodeURIComponent(reviewRequestedAt || "unknown")}:${encodeURIComponent(profileId || "anonymous")}`;
 }
 
-function loadDraft(storageKey: string): TaskReviewDraft {
-  if (typeof window === "undefined") return emptyDraft;
+function loadDraft(storageKey: string, expectedUpdatedAt?:string): TaskReviewDraft {
+  if (typeof window === "undefined") return {...emptyDraft,expectedUpdatedAt};
   try {
     const stored = window.sessionStorage.getItem(storageKey);
-    if (!stored) return emptyDraft;
+    if (!stored) return {...emptyDraft,expectedUpdatedAt};
     const parsed = JSON.parse(stored) as Partial<TaskReviewDraft>;
     return {
+      expectedUpdatedAt:typeof parsed.expectedUpdatedAt==="string"?parsed.expectedUpdatedAt:undefined,
       checklist: { ...emptyDraft.checklist, ...(parsed.checklist || {}) },
       comment: typeof parsed.comment === "string" ? parsed.comment : "",
       decision: parsed.decision === "accepted" || parsed.decision === "partial" || parsed.decision === "changes_requested" ? parsed.decision : "",
     };
   } catch {
-    return emptyDraft;
+    return {...emptyDraft,expectedUpdatedAt};
   }
 }
 
@@ -50,9 +52,9 @@ export function clearTaskReviewDraft(taskId: string, reviewRequestedAt: string, 
   window.sessionStorage.removeItem(legacyDraftStorageKey(taskId));
 }
 
-export function useTaskReviewDraft(taskId: string, reviewRequestedAt: string, profileId: string) {
+export function useTaskReviewDraft(taskId: string, reviewRequestedAt: string, profileId: string, expectedUpdatedAt?:string) {
   const storageKey = draftStorageKey(taskId, reviewRequestedAt, profileId);
-  const [draft, setDraft] = useState<TaskReviewDraft>(() => loadDraft(storageKey));
+  const [draft, setDraft] = useState<TaskReviewDraft>(() => loadDraft(storageKey,expectedUpdatedAt));
 
   useEffect(() => {
     window.sessionStorage.removeItem(legacyDraftStorageKey(taskId));

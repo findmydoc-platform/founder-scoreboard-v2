@@ -222,6 +222,8 @@ test("request, decide, withdraw, and reopen share Preview policy and one atomic 
     assert.equal(currentCase.current.calls.at(-1)[1].p_request_ip, "test-ip");
     assert.deepEqual(currentCase.current.calls.at(-1)[1].p_mention_recipient_profile_ids, ["mentioned"]);
     assert.ok(model.planningReviewTaskFromResult(committed));
+    assert.equal(model.planningReviewActivitiesFromResult(committed)[0].taskId,"task-one");
+    if(currentCase.command.action.kind==="decideReview")assert.deepEqual(model.planningTaskReviewFromResult(committed),{id:21,taskId:"task-one",sprintId:"sprint-one",reviewerProfileId:"ceo",decision:"accepted",points:10,comment:"",checklist,createdAt:"2026-08-12T13:01:00.000Z"});
   }
 });
 
@@ -283,4 +285,13 @@ test("review role, ownership, reviewer, lock, revision, and state boundaries fai
     assert.equal(result.error.code, code);
     assert.equal(current.calls.filter(([name]) => name === "mutate_planning_review_command_transaction_v2").length, 0);
   }
+});
+
+test("decision transport carries the original displayed revision to the existing atomic review command", async()=>{
+ const model=await loadModel(); const revision="2026-08-12T13:00:00.000Z";
+ const parsed=model.parsePlanningReviewDecisionPayload({decision:"accepted",comment:"",checklist,expectedUpdatedAt:revision});
+ assert.equal(parsed.ok,true); assert.equal(parsed.value.expectedUpdatedAt,revision);
+ assert.equal(model.decidePlanningReviewCommand("task-one",parsed.value).action.expectedRevision,revision);
+ assert.equal(model.parsePlanningReviewDecisionPayload({decision:"accepted",comment:"",checklist,expectedUpdatedAt:"invalid"}).ok,false);
+ assert.equal(model.parsePlanningReviewDecisionPayload({decision:"accepted",comment:"",checklist}).ok,true);
 });

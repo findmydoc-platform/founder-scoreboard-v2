@@ -61,3 +61,15 @@ test("expiry clears submitted relationship metadata before a late confirmation",
  expect(planning.taskRelationshipChanges(source.id)).toEqual([]);
  expect(planning.protectedCache()).toBeNull();
 });
+
+
+test("an unknown relationship pauses related task creation without blocking an independent creation", async () => {
+ let writes = 0;
+ const { planning } = fixture({ addTaskRelationship: async () => { throw new Error("Lost"); }, createTask: async () => { writes++; return { task: { ...source, id: `created-${writes}` } }; } });
+ await planning.addTaskRelationship(source, input);
+ const creation = { creationRequestId: "related-create", title: "Related", description: "", taskType: "deliverable" as const, parentTaskId: "", ownerId: "author", relatedTaskId: source.id };
+ expect(await planning.createTask(creation)).toMatchObject({ kind: "unconfirmed" });
+ expect(writes).toBe(0);
+ expect(await planning.createTask({ ...creation, creationRequestId: "independent-create", relatedTaskId: "other" })).toMatchObject({ ok: true });
+ expect(writes).toBe(1);
+});

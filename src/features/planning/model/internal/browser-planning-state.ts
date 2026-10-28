@@ -55,6 +55,11 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     administrationActorProfileId: options.initialCurrentProfile?.id,
     initialAdministrationAuthority: options.initialAdministratorAccess ? sessionAuthority({ platformRole: options.initialCurrentProfile?.platformRole || "viewer", credentialKind: "session", administratorAccess: options.initialAdministratorAccess }) : undefined,
     adapter: {
+      async executeAdministrationDelivery(selection) {
+        const payload=selection.kind==="events"?{eventIds:[...selection.eventIds]}:selection.kind==="pending"?{limit:selection.limit}:selection.kind==="webhook-test"?{testDelivery:"webhook_digest"}:{testDelivery:"direct_dm",profileId:selection.profileId};
+        const {response,body}=await runtime.apiClient.requestJson<Omit<import("@/features/administration/model/administration-delivery-state").AdministrationDeliveryResponse,"ok"|"status">>("/api/notifications/deliver",{method:"POST",json:payload,useDevProfileOverride:false});
+        return {...body,ok:response.ok,status:response.status};
+      },
       async saveAdministrationProject(project,expected) {
         const {response,body}=await runtime.apiClient.requestJson<{ok?:boolean;project?:{id:string;githubProjectOwner:string;githubProjectNumber:number;githubMentionTeamSlug:string};error?:string;code?:string}>("/api/founderops-settings/github-project",{method:"PATCH",json:{expectedGithubProjectOwner:expected.owner,expectedGithubProjectNumber:expected.number,expectedGithubMentionTeamSlug:expected.mentionTeamSlug,githubProjectOwner:project.owner,githubProjectNumber:project.number,githubMentionTeamSlug:project.mentionTeamSlug},useDevProfileOverride:false});
         if(!response.ok)throw Object.assign(new Error(body?.error||"GitHub Project konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
@@ -94,6 +99,31 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok) throw Object.assign(new Error(body?.error || "Anhang konnte nicht hochgeladen werden."), { status: response.status, code: body?.code });
         if (!body?.markdown || !body.path || !body.url || !body.filename || !body.contentType || typeof body.size !== "number") throw new Error("Die Upload-Bestätigung ist unvollständig.");
         return { filename: body.filename, contentType: body.contentType, size: body.size, markdown: body.markdown, path: body.path, url: body.url, htmlUrl: body.htmlUrl || "", activity: body.activity || null, effects: body.effects === "confirmed" ? "confirmed" : "unconfirmed", warning: body.warning };
+      },
+      async decideTaskApproval(task,action,note) {
+        const {response,body}=await taskApi.decideTaskApprovalRequest(runtime.apiClient,task.id,action,task.approvalRevision,note);
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Freigabeentscheidung konnte nicht gespeichert werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task)throw new Error("Die Freigabeentscheidung ist noch nicht bestätigt.");return {task:body.task};
+      },
+      async requestTaskReview(task,input) {
+        const {response,body}=await taskApi.updateTaskRequest(runtime.apiClient,task.id,taskUpdateRequestPayload({...input,status:"Review",reviewStatus:"requested",scoreFinal:false},task.updatedAt||""));
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht angefragt werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task)throw new Error("Die Review-Anfrage ist noch nicht bestätigt.");return {task:body.task,activities:body.activities};
+      },
+      async decideTaskReview(task,input) {
+        const {response,body}=await taskApi.reviewTaskRequest(runtime.apiClient,task.id,{...input,expectedUpdatedAt:task.updatedAt});
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht gespeichert werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task||!body.review)throw new Error("Die Review-Entscheidung ist noch nicht bestätigt.");return {task:body.task,review:body.review,activities:body.activities};
+      },
+      async withdrawTaskReview(task,reason) {
+        const {response,body}=await taskApi.withdrawTaskReviewRequest(runtime.apiClient,task.id,reason,task.updatedAt||"");
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht zurückgezogen werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task)throw new Error("Das Zurückziehen ist noch nicht bestätigt.");return {task:body.task,activities:body.activities};
+      },
+      async reopenTaskReview(task,input) {
+        const {response,body}=await taskApi.reopenTaskReviewRequest(runtime.apiClient,task.id,task.updatedAt||"",input);
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht erneut geöffnet werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task)throw new Error("Das erneute Öffnen ist noch nicht bestätigt.");return {task:body.task,activities:body.activities};
       },
       async importTaskGitHubComments(taskId) {
         const { response, body } = await taskApi.importGitHubCommentsRequest(runtime.apiClient, taskId);

@@ -21,7 +21,7 @@ type Props = {
   pending: boolean;
   onEditingStart?: () => void;
   onUpdate: (patch: Partial<Task>) => void;
-  onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
+  onDecideApproval: (action: ApprovalDecisionAction, note?: string, basis?: Task) => void;
 };
 
 function approvalTitle(task: Task) {
@@ -45,7 +45,7 @@ export function TaskDetailWorkflowStrips({
   onEditingStart,
   onDecideApproval,
 }: Props) {
-  const [decisionAction, setDecisionAction] = useState<ApprovalReasonAction | null>(null);
+  const [decisionAction, setDecisionAction] = useState<{action:ApprovalReasonAction;task:Task} | null>(null);
   const effectivelyApproved = task.taskType === "initiative" ? task.approvalStatus === "approved" : isTaskPlanningActive(task);
   const reviewOpen = task.taskType === "deliverable" && task.reviewStatus === "requested";
   const showApproval = !effectivelyApproved && !reviewOpen;
@@ -58,7 +58,7 @@ export function TaskDetailWorkflowStrips({
   const reviewOwnerProfile = teamProfiles.find((profile) => profile.id === task.reviewOwnerProfileId);
   const selfReview = Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
 
-  if (!showApproval && !showReview) return null;
+  if (!showApproval && !showReview && !decisionAction) return null;
 
   return (
     <div className="mt-4 overflow-hidden rounded-lg border border-slate-200" aria-label="Workflow-Status">
@@ -77,8 +77,8 @@ export function TaskDetailWorkflowStrips({
           {canApprove || canReject || canReturnToDraft ? (
             <div className="flex flex-wrap items-center gap-2">
               {canApprove ? <UiButton size="sm" variant="primary" disabled={pending} onClick={() => onDecideApproval("approve")}>Freigeben</UiButton> : null}
-              {canReject ? <UiButton size="sm" disabled={pending} onClick={() => setDecisionAction("reject")}>Ablehnen</UiButton> : null}
-              {canReturnToDraft ? <UiButton size="sm" disabled={pending} onClick={() => setDecisionAction("return_to_draft")}>Zur Überarbeitung</UiButton> : null}
+              {canReject ? <UiButton size="sm" disabled={pending} onClick={() => setDecisionAction({action:"reject",task})}>Ablehnen</UiButton> : null}
+              {canReturnToDraft ? <UiButton size="sm" disabled={pending} onClick={() => setDecisionAction({action:"return_to_draft",task})}>Zur Überarbeitung</UiButton> : null}
             </div>
           ) : null}
         </section>
@@ -124,14 +124,14 @@ export function TaskDetailWorkflowStrips({
 
       {decisionAction ? (
         <ApprovalDecisionDialog
-          action={decisionAction}
+          action={decisionAction.action}
           entityLabel={task.taskType === "initiative" ? "Initiative" : "Deliverable"}
           pending={pending}
           onClose={() => setDecisionAction(null)}
           onConfirm={(note) => {
             const action = decisionAction;
             setDecisionAction(null);
-            onDecideApproval(action, note);
+            onDecideApproval(action.action, note, action.task);
           }}
         />
       ) : null}

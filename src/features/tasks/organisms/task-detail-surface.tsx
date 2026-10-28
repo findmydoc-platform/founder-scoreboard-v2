@@ -109,7 +109,7 @@ type TaskDetailSurfaceProps = {
   onWithdraw: (reason: string) => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }, basis?: Task) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
-  onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
+  onDecideApproval: (action: ApprovalDecisionAction, note?: string, basis?: Task) => void;
 };
 
 export function TaskDetailSurface(props: TaskDetailSurfaceProps) {
@@ -210,6 +210,7 @@ function HydratedTaskDetailSurface({
     return requestedCommentTarget ? "activity" : "overview";
   });
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
+  const [reviewEvidenceTask,setReviewEvidenceTask]=useState<Task|null>(null);
   const [reviewEvidenceGateIntent, setReviewEvidenceGateIntent] = useState<"request" | "reopen" | null>(null);
   const [reviewDraftDirty, setReviewDraftDirty] = useState(false);
   const controller = useTaskDetailController({
@@ -410,6 +411,8 @@ function HydratedTaskDetailSurface({
       && requestsReview
       && !taskHasValidReviewEvidence(task, directChildren)
       && !includesEvidence) {
+      beginInlineEditing();
+      setReviewEvidenceTask(task);
       setReviewEvidenceGateIntent("request");
       return;
     }
@@ -417,6 +420,7 @@ function HydratedTaskDetailSurface({
   };
   const reopenReview = () => {
     if (!taskHasValidReviewEvidence(task, directChildren)) {
+      setReviewEvidenceTask(task);
       setReviewEvidenceGateIntent("reopen");
       return;
     }
@@ -424,7 +428,7 @@ function HydratedTaskDetailSurface({
   };
   const submitReviewEvidence = async (submission: ReviewEvidenceSubmission) => {
     if (reviewEvidenceGateIntent === "reopen") {
-      const result = await onReopenReview(task, submission);
+      const result = await onReopenReview(reviewEvidenceTask||task, submission);
       return result !== false;
     }
     const result = await updateInline({

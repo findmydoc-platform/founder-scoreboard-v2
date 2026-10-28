@@ -14,17 +14,17 @@ function formatDeliveryTime(value: string) {
   }).format(date);
 }
 
-export function DeliveryStatusRow({ event, delivery, busy, onRetry }: { event: NotificationEvent; delivery?: NotificationDelivery; busy: boolean; onRetry: () => void }) {
-  const status = delivery?.status || event.status;
+export function DeliveryStatusRow({ event, delivery, reportedResult, busy, onRetry }: { event: NotificationEvent; delivery?: NotificationDelivery; reportedResult?: import("../model/administration-delivery-state").AdministrationDeliveryItem; busy: boolean; onRetry: () => void }) {
+  const status = reportedResult?.status || delivery?.status || event.status;
   const tone = status === "sent" ? "emerald" : status === "failed" ? "red" : "amber";
-  const label = status === "sent" ? "Zugestellt" : status === "failed" ? "Fehlgeschlagen" : status === "pending" ? "Ausstehend" : status;
+  const label = status === "sent" ? "Zugestellt" : status === "failed" ? "Fehlgeschlagen" : status === "pending" ? "Ausstehend" : status === "skipped" ? "Übersprungen" : status;
   const recipient = delivery?.target || event.recipientProfileId;
   return (
     <article className="grid gap-3 border-b border-slate-100 px-5 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_13rem_7.5rem_9rem] sm:items-center">
       <div className="min-w-0">
         <h3 className="truncate text-sm font-semibold text-slate-950">{event.title}</h3>
         {recipient && <p className="mt-0.5 truncate text-xs text-slate-500">An {recipient}</p>}
-        {delivery?.lastError && <p className="mt-1 line-clamp-2 text-xs text-red-700">{delivery.lastError}</p>}
+        {status === "failed" && (reportedResult?.error || delivery?.lastError) && <p className="mt-1 line-clamp-2 text-xs text-red-700">{reportedResult?.error || delivery?.lastError}</p>}
       </div>
       <time dateTime={event.createdAt} className="text-xs text-slate-500">{formatDeliveryTime(event.createdAt)}</time>
       <UiBadge tone={tone} size="xs" className="justify-self-start">{label}</UiBadge>

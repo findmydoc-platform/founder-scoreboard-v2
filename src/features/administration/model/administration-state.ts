@@ -1,3 +1,4 @@
+import type { AdministrationDeliveriesState } from "./administration-delivery-state";
 import type { AdministrationProfile, AdministrationReadCoverage, AdministrationWorkspaceModel, PersonAdministrationPatch, TechnicalIdentityBasis } from "./administration-read-model";
 import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
 import type { PlanningReadStatus } from "@/features/planning/model/planning-state";
@@ -34,7 +35,7 @@ export type AdministrationStateView = {
     readStatus: PlanningReadStatus;
     coverage: AdministrationReadCoverage;
 };
-export interface AdministrationPeopleState {
+export interface AdministrationPeopleState extends AdministrationDeliveriesState {
     beginAdministrationProjectEdit(project: AdministrationProjectSettings): AdministrationProjectEditor;
     administrationProjectEdits(): readonly AdministrationProjectEditView[];
     resumeAdministrationProjectEdit(): AdministrationProjectEditor | null;
@@ -44,7 +45,7 @@ export interface AdministrationPeopleState {
     administrationPersonEdits(profileId: string): readonly AdministrationPersonEditView[];
     resumeAdministrationPersonEdit(profileId: string): AdministrationPersonEditor | null;
 }
-export type AdministrationPersonAdapter = {
+export type AdministrationPersonAdapter = import("./administration-delivery-state").AdministrationDeliveryAdapter & {
     saveAdministrationProject?: (project: AdministrationProjectSettings, expected: AdministrationProjectSettings) => Promise<{
         project: AdministrationProjectSettings;
     }>;
