@@ -54,6 +54,8 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!body?.basis?.sprint?.updatedAt||!Array.isArray(body.basis.tasks)||typeof body.tasksComplete!=="boolean")throw new Error("Abschlussstand ist unvollständig.");
         return {basis:body.basis,tasksComplete:body.tasksComplete,receipt:body.receipt||null};
       },
+      readWorkweekConflict: () => privateWorkweekApi(runtime.apiClient).readWorkweekConflict(),
+      resolveWorkweekConflict: input => privateWorkweekApi(runtime.apiClient).resolveWorkweekConflict(input),
       reconcilePrivateWorkweek: () => privateWorkweekApi(runtime.apiClient).reconcilePrivateWorkweek(),
       readPrivateWorkweek: week => privateWorkweekApi(runtime.apiClient).readPrivateWorkweek(week),
       savePrivateWorkweek: input => privateWorkweekApi(runtime.apiClient).savePrivateWorkweek(input),

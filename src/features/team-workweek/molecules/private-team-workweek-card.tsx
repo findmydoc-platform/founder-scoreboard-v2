@@ -63,6 +63,7 @@ export function PrivateTeamWorkweekCard({ apiClient, planningState, profile, edi
           </div>
         </div>
         {state.message && !open && <UiNotice className="mt-4" tone={state.messageTone === "success" ? "success" : "warning"}>{state.message}</UiNotice>}
+        {card.showConflictCheck && !open && <UiButton className="mt-3 min-h-11" variant="secondary" onClick={() => void state.refreshConflict()} disabled={state.pending}>Konfliktstand prüfen</UiButton>}
         {state.conflict && !open && (
           <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-labelledby="team-workweek-conflict-title">
             <h3 id="team-workweek-conflict-title" className="text-sm font-semibold text-amber-950">FounderOps und Google wurden parallel geändert</h3>
