@@ -249,6 +249,8 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       {workspace === "notifications" && (
         <NotificationsOverview
           completeness={planningState.notifications().completeness}
+          readStatus={planningState.notifications().readStatus}
+          pendingEventIds={planningState.notifications().operations.filter(operation => operation.phase === "saving" || operation.phase === "unconfirmed").flatMap(operation => operation.eventId || [])}
           currentProfile={currentProfile}
           data={data}
           onOpenNotification={openNotification}

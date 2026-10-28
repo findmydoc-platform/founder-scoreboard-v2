@@ -1,4 +1,4 @@
-import type { HeaderDataSlot, NotificationEvent, NotificationDelivery, PlanningHeaderData } from "@/lib/types";
+import type { NotificationEvent, NotificationDelivery, PlanningHeaderData } from "@/lib/types";
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
 import type { PlatformReleaseRecord } from "@/features/platform-releases/model/platform-release-model";
 import type { PlanningReadStatus } from "./planning-state";
@@ -20,4 +20,3 @@ export interface PlanningNotificationsState {
   markPlatformReleaseSeen(version: string): Promise<NotificationActionResult>;
   checkPlatformReleaseSeen(version: string): Promise<boolean>;
 }
-export type HeaderSlot = HeaderDataSlot<unknown>;

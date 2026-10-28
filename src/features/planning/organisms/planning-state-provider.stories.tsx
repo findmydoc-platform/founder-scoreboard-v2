@@ -29,13 +29,13 @@ function networkFixture() {
   return { client, completeHeader: () => finishHeader?.({ response: new Response(null), body: { model: { revision: "header", project: initial.project, items: initial.tasks, people: [], sprints: [], relationships: [], preferences: [] }, headerData: { ...emptyPlanningHeaderData, notifications: { state: "ready", data: { unreadCount: 7, items: [] } } } } }), conflict: () => finish?.({ response: new Response(null, { status: 409 }), body: { error: "Geänderte Aufgabe", conflictReason: "revision" } }), lose: () => finish?.({ response: new Response(null, { status: 503 }), body: null }), confirm: () => finish?.({ response: new Response(null), body: { task: { ...task, title: "Submitted before navigation", updatedAt: "r2" } } }) };
 }
 function Page({ workspace, network, account = "navigation-user" }: { workspace: "planning" | "team"; account?: string; network: ReturnType<typeof networkFixture> }) {
-  const [header, setHeaderData] = useState(emptyPlanningHeaderData);
-  const owner = usePlanningStateOwner({ initialData: initial, initialHeaderData: header, initialUserId: account, initialCurrentProfile: null, initialWorkspace: workspace, setHeaderData });
-  useEffect(() => { owner.configure(network.client, workspace, header, null); }, [owner, network, workspace, header]);
+  const header = emptyPlanningHeaderData;
+  const owner = usePlanningStateOwner({ initialData: initial, initialHeaderData: header, initialUserId: account, initialCurrentProfile: null, initialWorkspace: workspace });
+  useEffect(() => { owner.configure(network.client, workspace, null); }, [owner, network, workspace, header]);
   const [draft, setDraft] = useState("");
   return <section aria-label={workspace}>
     <label>Local draft<input value={draft} onChange={event => setDraft(event.target.value)} /></label>
-    <p>Header count: {header.notifications.data.unreadCount}</p>
+    <p>Header count: {owner.planningState.header().data.notifications.data.unreadCount}</p>
     <p>Editor: {owner.planningState.taskEdits(task.id)[0]?.phase || "none"}</p>
     <p>Task: {owner.planningState.taskDetail(task.id).task?.title || "cleared"}</p>
     <p>Status: {owner.planningState.taskDetail(task.id).saveStatus}</p>

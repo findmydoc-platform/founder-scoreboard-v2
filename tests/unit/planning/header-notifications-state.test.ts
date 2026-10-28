@@ -149,3 +149,31 @@ test("an inactive initial owner withholds protected Header hydration", () => {
   expect(planning.header().data.notifications.data.items).toEqual([]);
   expect(planning.header().data.notifications.data.unreadCount).toBe(0);
 });
+
+test("denied notification reads withhold submitted input without enabling a lost action to replay after access returns", async () => {
+  let failure: number | undefined = 403; let writes = 0;
+  const { planning } = createPlanningState({ userId: "header-user", initialData: notificationData, initialWorkspace: "notifications", adapter: {
+    saveTask: async () => ({ task: {} }),
+    readWorkspace: async () => { if (failure) throw Object.assign(new Error("Read failed"), { status: failure }); return { data: notificationData }; },
+    updateNotification: async () => { writes++; throw new Error("Lost response"); },
+  } });
+  await planning.updateNotificationStatus(1, "dismiss");
+  await planning.checkNotificationStatus(1); expect(planning.notifications().operations).toEqual([]);
+  failure = 503; await planning.checkNotificationStatus(1); expect(planning.notifications().operations).toEqual([]);
+  failure = undefined; await planning.checkNotificationStatus(1);
+  expect(planning.notifications().operations[0]).toMatchObject({ phase: "unconfirmed", action: "dismiss" });
+  await planning.updateNotificationStatus(1, "dismiss"); expect(writes).toBe(1);
+});
+
+test.each([false, true])("a task confirmation refreshes only an already loaded notification Header (%s)", async loaded => {
+  const header = deferred<typeof notificationHeader>(); let reads = 0;
+  const task = { id: "task", title: "Task", updatedAt: "r1" } as import("@/lib/types").Task;
+  const { planning } = createPlanningState({ userId: "header-user", initialData: { ...emptyPlanningShellState, tasks: [task] }, initialHeaderData: loaded ? notificationHeader : undefined, adapter: { saveTask: async () => ({ task: { ...task, title: "Saved", updatedAt: "r2" } }), readWorkspace: async () => null, readHeader: () => { reads++; return header.promise; } } });
+  await planning.saveTask(task, { title: "Saved" });
+  expect(reads).toBe(loaded ? 1 : 0);
+  if (loaded) {
+    const first = planning.refreshHeader(["notifications"]), second = planning.refreshHeader(["notifications"]);
+    expect(reads).toBe(1); header.resolve(notificationHeader); await Promise.all([first, second]);
+    expect(planning.header().slots.notifications.readStatus).toBe("current");
+  }
+});

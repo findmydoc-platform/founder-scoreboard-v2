@@ -16,7 +16,7 @@ export function PlatformReleaseSidebarCard({ compact = false, mobile = false, on
   const planning = usePlanningBusinessState();
   useSyncExternalStore(planning?.subscribe || (() => () => {}), () => planning?.platformReleases().releases || null, () => null);
   const release = planning?.platformReleases().releases[0];
-  useEffect(() => { if (planning && planning.platformReleases().readStatus === "not-loaded") void planning.loadPlatformReleases(); }, [planning]);
+  useEffect(() => { if (planning && !["current", "loading"].includes(planning.platformReleases().readStatus)) void planning.loadPlatformReleases(); }, [planning]);
 
   if (!release) return null;
   return <PlatformReleaseSidebarCardView release={release} compact={compact} mobile={mobile} onNavigate={onNavigate} />;

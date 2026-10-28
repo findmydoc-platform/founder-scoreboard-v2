@@ -1,19 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { Dispatch, SetStateAction } from "react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import { workspacePath } from "@/features/planning/model/workspace-routes";
 import { navigateAfterNotificationStatusUpdate } from "@/features/notifications/model/notification-navigation";
 import { notificationTarget } from "@/features/notifications/model/notification-target";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
-import type { HeaderNotification, PlanningHeaderData } from "@/lib/types";
+import type { HeaderNotification } from "@/lib/types";
 import { type NotificationUserAction } from "@/lib/notification-lifecycle";
 
 type UseNotificationCommandsOptions = PlanningCommandContext & {
   openTaskPanel: (taskId: string) => void;
   refreshCurrentWorkspaceModel: () => Promise<void>;
-  setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   setShowNotifications: (show: boolean) => void;
   setWorkspace: (workspace: AppWorkspace) => void;
   workspace: AppWorkspace;

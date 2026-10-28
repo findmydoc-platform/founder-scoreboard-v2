@@ -22,14 +22,14 @@ type Props = {
 };
 
 export function PlatformReleasesShell({ authUser = null, children, currentPlatformRole = "", headerData }: Props) {
-  const [, setHeaderData] = useState(headerData);
-  const owner = usePlanningStateOwner({ initialData: emptyPlanningShellState, initialHeaderData: headerData, initialCurrentProfile: null, initialUserId: authUser?.id || "", initialWorkspace: "decision-log", setHeaderData });
+  const owner = usePlanningStateOwner({ initialData: emptyPlanningShellState, initialHeaderData: headerData, initialCurrentProfile: null, initialUserId: authUser?.id || "", initialWorkspace: "decision-log" });
   const sharedHeader = usePlanningHeaderData({ planningState: owner.planningState, enabled: Boolean(authUser) });
   const [mobileOpen, setMobileOpen] = useState(false);
   const { busy: authBusy, signOut, signedOut } = usePlatformReleaseAuth(authUser?.id);
+  const protectedUnavailable = signedOut || owner.planningState.protectedCache() === null;
   return (
     <PlanningBusinessStateContext.Provider value={owner.planningState}><div className="min-h-screen bg-white text-slate-950">
-      {!signedOut ? <AppSidebar
+      {!protectedUnavailable ? <AppSidebar
         activeWorkspace="platform-releases"
         currentPlatformRole={currentPlatformRole}
         mobileOpen={mobileOpen}
@@ -44,9 +44,9 @@ export function PlatformReleasesShell({ authUser = null, children, currentPlatfo
           description="Auslieferungen einzelner Anwendungen und der gemeinsamen Plattform."
           actions={(
             <>
-              {!signedOut ? <PlanningHeaderDataActions headerData={sharedHeader} /> : null}
+              {!protectedUnavailable ? <PlanningHeaderDataActions headerData={sharedHeader} /> : null}
               <PlanningHelpMenu />
-              {authUser && !signedOut ? (
+              {authUser && !protectedUnavailable ? (
                 <AuthControl
                   user={authUser}
                   busy={authBusy}
@@ -58,7 +58,7 @@ export function PlatformReleasesShell({ authUser = null, children, currentPlatfo
             </>
           )}
         />
-        {signedOut ? <p role="status" className="p-6">Du bist abgemeldet. Der Zugriff auf die Releases ist gesperrt.</p> : children}
+        {protectedUnavailable ? <p role="status" className="p-6">Die Sitzung ist beendet. Der Zugriff auf die Releases ist gesperrt.</p> : children}
       </main>
     </div></PlanningBusinessStateContext.Provider>
   );

@@ -25,7 +25,7 @@ function NotificationFeedbackStory() {
   } }));
   const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
   const context = { planningState: owner.planning, data, setSaveError: () => {} } as unknown as PlanningCommandContext;
-  const commands = useNotificationCommands({ ...context, openTaskPanel: () => {}, refreshCurrentWorkspaceModel: async () => {}, setHeaderData: () => {}, setShowNotifications: () => {}, setWorkspace: () => {}, workspace: "planning" });
+  const commands = useNotificationCommands({ ...context, openTaskPanel: () => {}, refreshCurrentWorkspaceModel: async () => {}, setShowNotifications: () => {}, setWorkspace: () => {}, workspace: "planning" });
   return <PlanningBusinessStateContext.Provider value={owner.planning}><main className="min-h-96 p-4">
     <h1>Benachrichtigungen</h1><p>Writes: {server.writes}</p><p>Checks: {server.reads}</p>
     <button onClick={server.lose}>Lose response</button><button onClick={server.reject}>Reject action</button>

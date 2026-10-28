@@ -26,8 +26,7 @@ export type PlanningPageState = {
 };
 
 export function createBrowserPlanningState(options: PlanningPageState, isCurrent: () => boolean = () => true) {
-  const headerListeners = new Set<(data: PlanningHeaderData) => void>();
-  const runtime = { apiClient: createBrowserApiClient(), workspace: options.initialWorkspace, userId: options.initialUserId, session: null as BrowserSessionSnapshot | null, headerData: options.initialHeaderData, currentProfile: options.initialCurrentProfile };
+  const runtime = { apiClient: createBrowserApiClient(), workspace: options.initialWorkspace, userId: options.initialUserId, session: null as BrowserSessionSnapshot | null, currentProfile: options.initialCurrentProfile };
   const owner = createPlanningState({
     userId: options.initialUserId,
     initialData: options.initialData,
@@ -110,10 +109,8 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     },
     acceptWorkspaceContext(result) {
       if (!isCurrent()) return;
-      runtime.headerData = owner.internal.confirmedHeader();
       const profileId = result.currentProfile?.id || runtime.currentProfile?.id;
       runtime.currentProfile = owner.planning.protectedCache()?.profiles.find(profile => profile.id === profileId) || null;
-      headerListeners.forEach(listener => listener(runtime.headerData));
     },
     publishCache(data, workspace) {
       if (!isCurrent()) return;
@@ -153,10 +150,6 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     owner,
     runtime,
     legacyApiClient,
-    subscribeHeader(listener: (data: PlanningHeaderData) => void) {
-      headerListeners.add(listener);
-      return () => { headerListeners.delete(listener); };
-    },
     acceptProtectedData(data: PlanningShellState, account: string, workspace: AppWorkspace = runtime.workspace) {
       if (!isCurrent() || account !== runtime.userId) return;
       owner.internal.acceptHydration(data, account, workspace);
