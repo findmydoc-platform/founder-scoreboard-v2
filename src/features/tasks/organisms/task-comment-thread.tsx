@@ -3,6 +3,8 @@
 import { MessageSquare, RefreshCw } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
+import type { TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
+import { TaskCommentCreationNotices } from "@/features/tasks/molecules/task-comment-creation-notices";
 import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-composer";
 import { TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
 import type { TaskCommentTimelineItem } from "@/features/tasks/molecules/task-comment-timeline";
@@ -12,6 +14,9 @@ import type { Profile, Sprint, Task, TaskActivity, TaskComment, TaskExternalComm
 
 type Props = {
   comments: TaskComment[];
+  commentCreations?: readonly TaskCommentCreationView[];
+  commentCompleteness?: "complete" | "partial";
+  onCheckCommentCreation?: (id: string) => void;
   externalComments?: TaskExternalComment[];
   activities?: TaskActivity[];
   reviews?: TaskReview[];
@@ -93,6 +98,9 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
 
 export function TaskCommentThread({
   comments,
+  commentCreations = [],
+  commentCompleteness = "complete",
+  onCheckCommentCreation,
   externalComments = [],
   activities = [],
   reviews = [],
@@ -150,7 +158,7 @@ export function TaskCommentThread({
           {!loading && !error && !unavailable ? (
             <>
               <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">
-                {commentCount} {commentCount === 1 ? "Kommentar" : "Kommentare"}
+                {commentCount} {commentCompleteness === "partial" ? commentCount === 1 ? "geladener Kommentar" : "geladene Kommentare" : commentCount === 1 ? "Kommentar" : "Kommentare"}
               </span>
               {activityCount > 0 && (
                 <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">
@@ -173,8 +181,11 @@ export function TaskCommentThread({
         </div>
       )}
 
+      {commentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">Die Diskussion ist als Ausschnitt geladen.</p> : null}
+      <TaskCommentCreationNotices creations={commentCreations} onCheck={onCheckCommentCreation} />
       {!readOnly && (
         <TaskCommentComposer
+          confirmationPending={commentCreations.some(item => item.phase === "unconfirmed")}
           pending={pending}
           profiles={profiles}
           onAddComment={onAddComment}

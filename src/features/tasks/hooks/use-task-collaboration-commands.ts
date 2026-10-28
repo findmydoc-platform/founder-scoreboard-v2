@@ -34,39 +34,8 @@ export function useTaskCollaborationCommands({
 
     setSaveError("");
 
-    if (source !== "supabase") {
-      setData((current) => ({
-        ...current,
-        taskComments: [
-          {
-            id: Date.now(),
-            taskId: task.id,
-            profileId: currentProfile.id,
-            comment,
-            githubDeliveryStatus: "pending",
-            githubCommentUrl: "",
-            createdAt: new Date().toISOString(),
-          },
-          ...current.taskComments,
-        ],
-      }));
-      return;
-    }
-
-    try {
-      const { response, body } = await taskApi.createTaskCommentRequest(apiClient, task.id, comment);
-      if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
-
-      setData((current) => ({
-        ...current,
-        taskComments: [body.comment!, ...current.taskComments],
-      }));
-      setCommentImportNotice(body.notice?.message || "");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Kommentar konnte nicht gespeichert werden.";
-      setSaveError(message);
-      throw error instanceof Error ? error : new Error(message);
-    }
+    const result = await planningState.createTaskComment(task, comment);
+    if (!result.ok) { setSaveError(result.error); throw new Error(result.error); }
   };
 
   const uploadTaskAttachment = async (task: Task, file: File) => {

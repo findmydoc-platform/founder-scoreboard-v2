@@ -1,4 +1,5 @@
 import { createAdministrationPersonState } from "./administration-person-state";
+import { createTaskCommentCreations } from "./task-comment-creations";
 import { createTaskBlockerReports } from "./task-blocker-reports";
 import { createBacklogOrdering } from "./backlog-ordering-state";
 import { createBacklogAssignments } from "./backlog-assignment-state";
@@ -33,7 +34,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 export type PlanningWorkspaceRead = { backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
-export type PlanningStateAdapter = import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+export type PlanningStateAdapter = import("@/features/tasks/model/task-comment-creation").TaskCommentCreationAdapter & import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   lockSprint?: (basis: import("@/features/sprint/model/sprint-lock").SprintLockBasis) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockReceipt>;
   readSprintLock?: (sprintId: string) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockObservation>;
 
@@ -113,6 +114,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadBlockerTask,
   });
+  const commentCreations = createTaskCommentCreations({ initial: active ? initialData.taskComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
+    canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)), removing: task => lifecycle.isRemoving(task), detailStatus: id => detailStatuses.get(id) || "not-loaded", endSession,
+    invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), refresh: reloadCommentDiscussion,
+  });
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
   const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, dependencyPending: id => blockerBlocksSprint(id) || backlogAssignments.blocksSprint(id) || orderingBlocksSprint(id), checkDependency: async id => { if (blockerBlocksSprint(id)) return checkSprintBlocker(id); if (orderingBlocksSprint(id)) await checkOrdering(); else await backlogAssignments.checkSprint(id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }, lockPending: id=>sprintLock.blocksSprint(id), checkLock:id=>sprintLock.check(id), planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
@@ -188,6 +193,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       taskConfirmedAt.set(task.id,++sequence); return { ...task, order: update.sortOrder, updatedAt: update.updatedAt };
     }) }; return unresolved;
   }, invalidate(unknown) { freshness = "stale"; workspaceStatuses.set("backlog", "stale"); if (unknown && workspaceStatuses.has("sprint")) workspaceStatuses.set("sprint", "stale"); } });
+  async function reloadCommentDiscussion(id: string, after: number): Promise<import("../planning-state").PlanningReadStatus> {
+    const joining = detailReads.has(id); await planning.loadTaskDetail(id);
+    if (!isActive()) return "not-loaded";
+    if (commentCreations.readStatus(id) === "forbidden") return "forbidden";
+    if (joining && commentCreations.readVersion(id) <= after) await planning.loadTaskDetail(id);
+    return commentCreations.readStatus(id);
+  }
   async function reloadBlockerTask(id: string, after: number): Promise<import("../planning-state").PlanningReadStatus> {
     const joining = detailReads.has(id);
     await planning.loadTaskDetail(id);
@@ -203,7 +215,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function orderingBlocksSprint(id: string) { return confirmed.tasks.some(task => task.sprintId === id && backlogOrdering.blocksTask(task.id)); }
   async function checkOrdering(): Promise<import("../planning-state").PlanningTaskSaveCheck> { const task = confirmed.tasks.find(task => backlogOrdering.blocksTask(task.id)); if (task) await backlogOrdering.checkTask(task.id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }
   function publish() {
-    confirmed = tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(blockerReports.projectConfirmed(confirmed)))));
+    confirmed = tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(commentCreations.projectConfirmed(blockerReports.projectConfirmed(confirmed))))));
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
       let result = task;
       for (const operation of pending.values()) {
@@ -327,7 +339,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     acceptRemoval(ids, action, rootId) {
       for (const id of ids) taskConfirmedAt.set(id, ++sequence);
       for (const members of memberships.values()) for (const id of ids) members.delete(id);
-      confirmed = lifecycle.projectConfirmed(blockerReports.projectConfirmed(confirmed));
+      confirmed = lifecycle.projectConfirmed(commentCreations.projectConfirmed(blockerReports.projectConfirmed(confirmed)));
       notifications.invalidateHeader(["notifications"]);
       if (action === "reject") { freshness = "stale"; void planning.loadTaskDetail(rootId); }
     },
@@ -370,6 +382,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     beginAdministrationPersonEdit: administration.begin,
     administrationPersonEdits: administration.views,
     resumeAdministrationPersonEdit: administration.resume,
+    createTaskComment: commentCreations.create,
+    taskComments: taskId => commentCreations.view(taskId, visible),
+    taskCommentCreations: commentCreations.views,
+    checkTaskCommentCreation: commentCreations.check,
     reportTaskBlocker: blockerReports.report,
     taskBlockerReports: blockerReports.views,
     checkTaskBlockerReport: blockerReports.check,
@@ -493,6 +509,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (existing) return existing;
       const readTaskDetail = adapter.readTaskDetail;
       detailStatuses.set(taskId, "loading");
+      commentCreations.beginRead(taskId);
       publish();
       const loaded = (async () => {
         const generation = sessionGeneration;
@@ -504,6 +521,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         } catch (error) {
           if (!isActive() || generation !== sessionGeneration) return { ok: false };
           const failedStatus = readErrorStatus(error);
+          commentCreations.failed(taskId, failedStatus);
           if (failedStatus === "forbidden") { deniedTaskReads.add(taskId); blockerReports.denied(taskId); }
           detailStatuses.set(taskId, failedStatus);
           publish();
@@ -524,6 +542,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           tasks: next.tasks.filter(task => !unresolvedIds.has(task.id)).map(task => protectedIds.has(task.id) ? confirmed.tasks.find(item => item.id === task.id)! : task),
           ...((taskConfirmedAt.get(taskId) || 0) > started ? { taskActivity: confirmed.taskActivity } : {}),
         };
+        if (result.unavailable?.includes("discussion")) commentCreations.failed(taskId, "unavailable");
+        else commentCreations.acceptRead(result.model.discussion.comments, started, result.model.coverage?.discussion === "complete", taskId);
         blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
         const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
         for (const task of returnedTasks) {
@@ -574,6 +594,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       if (workspace === "backlog") backlogCoverage = result.backlogCoverage || {};
       const coverage = result.coverage || workspaceReadCoverage(workspace);
+      if (coverage.taskComments) commentCreations.acceptRead(result.data.taskComments, started, coverage.taskComments === "complete");
       if (coverage.taskBlockers) blockerReports.acceptBlockerRead(result.data.taskBlockers, started, coverage.taskBlockers === "complete");
       const taskCoverage = result.taskCoverage === "none" ? undefined : result.taskCoverage || coverage.tasks;
       const rawIncoming = taskCoverage ? result.data.tasks : [];
@@ -630,6 +651,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     outcomeChecks.clear();
     outcomeCheckStatus.clear();
     editing.clear();
+    commentCreations.clear();
     blockerReports.clear();
     lifecycle.clear();
     administration.clear();
