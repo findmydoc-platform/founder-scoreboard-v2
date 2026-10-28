@@ -1,3 +1,4 @@
+import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
@@ -53,7 +54,7 @@ function fixture(mode: "resume" | "delayed" | "unknown") {
     throw new Error(`Unexpected fixture request: ${path}`);
   } } as BrowserApiClient;
   const { planning } = createPlanningState({ userId: "recovery-owner", initialData: { ...emptyPlanningShellState, profiles: [profile] }, adapter: {
-    saveTask: async () => ({ task: {} }), readWorkspace: async () => null, ...privateWorkweekApi(apiClient), readWorkweekCalendar: scope => readPublishedWorkweekCalendar(apiClient, scope),
+    saveTask: async () => ({ task: {} }), readWorkspace: async () => null, ...privateWorkweekApi(apiClient), ...googleWorkspaceApi(apiClient), readWorkweekCalendar: scope => readPublishedWorkweekCalendar(apiClient, scope),
   } });
   return { apiClient, planning, calls, savedInput: () => savedInput };
 }

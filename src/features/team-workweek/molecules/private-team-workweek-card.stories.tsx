@@ -1,3 +1,4 @@
+import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { privateWorkweekApi } from "../model/private-workweek-api";
 import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
@@ -1657,7 +1658,7 @@ function overlappingPrivateContextFixture() {
     if (path.includes("?week=")) return { ...result, body: { ...result.body, version: { id: "another-private-version", timezone: "Europe/Berlin", status: "preparing", createdAt: new Date().toISOString(), effectiveFrom: addCalendarDays(workweekStart(), 7), windows: publishedWindows } } };
     return result;
   } } as BrowserApiClient;
-  const owner = createPlanningState({ userId: "workweek-overlap", initialData: { ...emptyPlanningShellState, profiles: [profile] }, adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null, ...privateWorkweekApi(apiClient) } });
+  const owner = createPlanningState({ userId: "workweek-overlap", initialData: { ...emptyPlanningShellState, profiles: [profile] }, adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null, ...privateWorkweekApi(apiClient), ...googleWorkspaceApi(apiClient) } });
   return { apiClient, planningState: owner.planning, profile };
 }
 

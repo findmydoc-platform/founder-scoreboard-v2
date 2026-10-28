@@ -1,3 +1,4 @@
+import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
 import { useEffect, useState } from "react";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
@@ -9,7 +10,7 @@ import type { Profile } from "@/lib/types";
 
 export function useCalendarPlanningState(apiClient: BrowserApiClient, profiles: Profile[] = []) {
   const [owner] = useState(() => createPlanningState({ userId: "calendar-preview", initialData: { ...emptyPlanningShellState, profiles }, initialWorkspace: "team", adapter: {
-    ...privateWorkweekApi(apiClient),
+    ...privateWorkweekApi(apiClient), ...googleWorkspaceApi(apiClient),
     saveTask: async () => ({ task: {} }), readWorkspace: async () => null,
     readWorkweekCalendar: scope => readPublishedWorkweekCalendar(apiClient, scope),
   } }));

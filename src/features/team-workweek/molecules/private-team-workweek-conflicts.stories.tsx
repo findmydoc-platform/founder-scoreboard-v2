@@ -1,3 +1,4 @@
+import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
@@ -48,7 +49,7 @@ function fixture(mode: "published" | "unknown" | "preparing") {
     throw new Error(`Unexpected fixture request: ${path}`);
   } } as BrowserApiClient;
   const owner = createPlanningState({ userId: "conflict-preview", initialData: { ...emptyPlanningShellState, profiles: [profile] }, adapter: {
-    saveTask: async () => ({ task: {} }), readWorkspace: async () => null, ...privateWorkweekApi(apiClient), readWorkweekCalendar: scope => readPublishedWorkweekCalendar(apiClient, scope),
+    saveTask: async () => ({ task: {} }), readWorkspace: async () => null, ...privateWorkweekApi(apiClient), ...googleWorkspaceApi(apiClient), readWorkweekCalendar: scope => readPublishedWorkweekCalendar(apiClient, scope),
   } });
   return { apiClient, planning: owner.planning, replaceSession: () => owner.internal.sessionChanged("replacement"), advance: () => { revision++; }, posts: () => posts, calendarReads: () => calendarReads, input: () => input, reads: () => ({ private: privateReads, conflict: conflictReads }) };
 }

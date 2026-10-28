@@ -6,6 +6,7 @@ import { createTaskBlockerReports } from "./task-blocker-reports";
 import { createBacklogOrdering } from "./backlog-ordering-state";
 import { createBacklogAssignments } from "./backlog-assignment-state";
 import { createToolsState } from "./tool-state";
+import { createGoogleWorkspaceState } from "./google-workspace-state";
 import { createPrivateWorkweekState } from "./private-workweek-state";
 import { createEventsState } from "./event-state";
 import { createPublishedWorkweekCalendars } from "./published-workweek-calendars";
@@ -36,7 +37,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 export type PlanningWorkspaceRead = { backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
-export type PlanningStateAdapter = import("@/features/tasks/model/task-attachment-upload").TaskAttachmentAdapter & import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportAdapter & import("@/features/tasks/model/task-comment-creation").TaskCommentCreationAdapter & import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+export type PlanningStateAdapter = import("@/features/team-workweek/model/google-workspace-state").GoogleWorkspaceAdapter & import("@/features/tasks/model/task-attachment-upload").TaskAttachmentAdapter & import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportAdapter & import("@/features/tasks/model/task-comment-creation").TaskCommentCreationAdapter & import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   lockSprint?: (basis: import("@/features/sprint/model/sprint-lock").SprintLockBasis) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockReceipt>;
   readSprintLock?: (sprintId: string) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockObservation>;
 
@@ -102,7 +103,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" : "unavailable";
   }
   const workweekCalendars = createPublishedWorkweekCalendars({ active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), read: adapter.readWorkweekCalendar });
-  const privateWorkweek = createPrivateWorkweekState({ adapter, active: isActive, generation: () => sessionGeneration, changed: publish, published: workweekCalendars.invalidatePublishedWorkweeks });
+  const privateWorkweek = createPrivateWorkweekState({ adapter, active: isActive, generation: () => sessionGeneration, changed: () => { if (!googleWorkspace.privateContextChanged()) publish(); }, published: workweekCalendars.invalidatePublishedWorkweeks, publicationBlocked: () => googleWorkspace.blocksPublication() });
+  const googleWorkspace = createGoogleWorkspaceState({ adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidate: workweekCalendars.invalidatePublishedWorkweeks, privateBusy: privateWorkweek.publicationBusy, privateContext: privateWorkweek.disconnectBinding, privateChanged: privateWorkweek.connectionChanged });
   const administration = createAdministrationPersonState({ actorRole: () => confirmed.profiles.find(profile => profile.id === administrationActorProfileId)?.platformRole || null, active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), profiles: () => visible.profiles, nextSequence: () => ++sequence, acceptCommonPeople: (people, started) => profileSettings.acceptAdministrationPeople(people, started), commonProject: () => confirmed.project, acceptCommonProject: project => { confirmed = {...confirmed,project:{...confirmed.project,githubProjectOwner:project.owner,githubProjectNumber:project.number}}; }, initialAuthority: initialAdministrationAuthority, read: adapter.readAdministration, adapter });
   const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
   const events = createEventsState({ initial: active ? initialData.events : [], loaded: initialWorkspace === "events", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidateCalendar: () => notifications.invalidateHeader(["calendarEvents"]), refreshWorkspace: () => planning.refreshWorkspace("events"), endSession,
@@ -449,6 +451,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     ...workweekCalendars.publicState,
     ...privateWorkweek.publicState,
+    ...googleWorkspace.publicState,
     ...notifications.publicState,
     ...events.publicState,
     ...tools.publicState,
@@ -721,6 +724,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     confirmed = emptyPlanningShellState;
     workweekCalendars.clear();
     privateWorkweek.clear();
+    googleWorkspace.clear();
     notifications.clear();
     events.clear();
     tools.clear();

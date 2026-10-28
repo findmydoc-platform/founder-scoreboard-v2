@@ -5,20 +5,23 @@ import { useState } from "react";
 import { useGoogleWorkspaceConnection } from "../hooks/use-google-workspace-connection";
 import { GoogleWorkspaceDisconnectDialog } from "./google-workspace-disconnect-dialog";
 import { googleWorkspaceConnectionLabel } from "../model/google-workspace-connection";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import type { GoogleDisconnectBasis } from "../model/google-workspace-state";
 import type { Profile } from "@/lib/types";
 import { classNames, UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export function GoogleWorkspaceConnectionCard({
-  apiClient,
+  planningState,
   compact = false,
   profile,
 }: {
-  apiClient: BrowserApiClient;
+  planningState: PlanningState;
   compact?: boolean;
   profile: Profile;
 }) {
   const [disconnectOpen, setDisconnectOpen] = useState(false);
+  const [displayedBasis, setDisplayedBasis] = useState<GoogleDisconnectBasis | null>(null);
+  const [basisOwner, setBasisOwner] = useState<PlanningState | null>(null);
   const {
     callbackError,
     connection,
@@ -26,19 +29,20 @@ export function GoogleWorkspaceConnectionCard({
     disconnectView,
     load,
     loadDisconnectPreview,
-    previewPending,
+    previewPending, previewWithheld,
     previewReady,
     previewError,
     message,
-    pending,
+    pending, unavailable, canContinue, canDisconnect,
     startConnect,
-  } = useGoogleWorkspaceConnection(apiClient);
+  } = useGoogleWorkspaceConnection(planningState);
   const connected = connection.state === "connected";
   const reconnect = connection.state === "reconnect_required";
-  const cleanupPending = disconnectView.state === "cleanup_pending" || disconnectView.pendingSeriesCount > 0;
+  const cleanupPending = canContinue || ["cleaning", "cleanup_pending", "remove_pending"].includes(disconnectView.state) || disconnectView.pendingSeriesCount > 0;
+  const previewChanged = Boolean(displayedBasis && planningState.googleWorkspace().previewBasis !== displayedBasis);
 
   const confirmDisconnect = async () => {
-    await disconnectConnection();
+    if (displayedBasis) await disconnectConnection(displayedBasis);
     setDisconnectOpen(false);
   };
 
@@ -52,7 +56,7 @@ export function GoogleWorkspaceConnectionCard({
                 Google Workspace
               </h2>
               <UiBadge tone={connected ? "emerald" : reconnect ? "amber" : "slate"} size={compact ? "xs" : "md"}>
-                {pending ? "Wird geprüft" : googleWorkspaceConnectionLabel(connection.state)}
+                {pending ? "Wird geprüft" : unavailable ? "Nicht verfügbar" : googleWorkspaceConnectionLabel(connection.state)}
               </UiBadge>
             </div>
             {connected && <p className="mt-1 break-words text-xs font-medium text-slate-700">
@@ -68,7 +72,7 @@ export function GoogleWorkspaceConnectionCard({
                 Erneut prüfen
               </UiButton>
             )}
-            {!connected && (
+            {!connected && (!cleanupPending || reconnect) && (
               <UiButton
                 variant="emerald"
                 size={compact ? "iconMd" : "iconLg"}
@@ -80,7 +84,7 @@ export function GoogleWorkspaceConnectionCard({
                 <Link2 size={16} aria-hidden="true" />
               </UiButton>
             )}
-            {connected && cleanupPending && (
+            {cleanupPending && canContinue && (
               <UiButton variant="primary" size={compact ? "sm" : "lg"} disabled={pending} onClick={() => void disconnectConnection()}>
                 Bereinigung fortsetzen
               </UiButton>
@@ -89,8 +93,8 @@ export function GoogleWorkspaceConnectionCard({
               <UiButton
                 variant="red"
                 size={compact ? "iconMd" : "iconLg"}
-                disabled={pending}
-                onClick={() => { setDisconnectOpen(true); void loadDisconnectPreview(); }}
+                disabled={pending || !canDisconnect}
+                onClick={() => { setDisplayedBasis(null); setDisconnectOpen(true); void loadDisconnectPreview().then(() => { setBasisOwner(planningState); setDisplayedBasis(planningState.googleWorkspace().previewBasis); }); }}
                 aria-label="Verbindung trennen"
                 title="Verbindung trennen"
               >
@@ -105,7 +109,7 @@ export function GoogleWorkspaceConnectionCard({
           ) : cleanupPending ? (
             <UiNotice size={compact ? "compact" : "sm"} tone="warning">
               {disconnectView.pendingSeriesCount > 0
-                ? `Die Teamfreigabe ist inaktiv. ${disconnectView.pendingSeriesCount} markierte Google-Serie${disconnectView.pendingSeriesCount === 1 ? " wartet" : "n warten"} noch auf bestätigte Bereinigung.`
+                ? `${disconnectView.pendingSeriesCount} markierte Google-Serie${disconnectView.pendingSeriesCount === 1 ? " wartet" : "n warten"} noch auf bestätigte Bereinigung.`
                 : "Die Trennung ist noch nicht vollständig bestätigt. Setze die Bereinigung fort."}
             </UiNotice>
           ) : reconnect ? (
@@ -124,12 +128,13 @@ export function GoogleWorkspaceConnectionCard({
         </div>}
       </UiPanel>
       <GoogleWorkspaceDisconnectDialog
-        disconnect={disconnectView}
+        disconnect={!previewWithheld && basisOwner === planningState && displayedBasis ? displayedBasis.preview : disconnectView}
         open={disconnectOpen}
         pending={pending}
         previewPending={previewPending}
-        previewReady={previewReady}
-        previewError={previewError}
+        previewReady={Boolean(displayedBasis) && basisOwner === planningState && !previewWithheld}
+        confirmationCurrent={previewReady && !previewChanged}
+        previewError={previewChanged ? "Die Vorschau wurde geändert. Prüfe sie vor einer neuen Bestätigung erneut." : previewError}
         onCancel={() => setDisconnectOpen(false)}
         onConfirm={() => void confirmDisconnect()}
       />
