@@ -88,7 +88,9 @@ async function handlePOST(request: NextRequest, context: { params: Promise<{ id:
   });
   if (importedEvidenceLink && evidencePermissions.canEditEvidence && (!currentEvidence || currentEvidence === String(task.issue_url || "").trim())) {
     const { error: evidenceError } = await planning.updateImportedEvidence(importedEvidenceLink);
-    if (evidenceError) return apiError(evidenceError.message, 500);
+    if (evidenceError) return evidenceError.code === "import_evidence_stale"
+      ? NextResponse.json({ error: evidenceError.message, code: "github_import_evidence_stale" }, { status: 409 })
+      : apiError(evidenceError.message, 500);
   } else {
     importedEvidenceLink = "";
   }
@@ -155,7 +157,7 @@ async function handlePOST(request: NextRequest, context: { params: Promise<{ id:
   const { data: importResult, error: importError } = await planning.importExternalComments(externalRows);
   if (importError) return apiError(importError.message, 500);
 
-  const { data: importedComments, error: importedError } = await planning.readImportedComments();
+  const { data: importedComments, error: importedError, count: importedCount } = await planning.readImportedComments();
 
   if (importedError) return apiError(importedError.message, 500);
 
@@ -163,6 +165,7 @@ async function handlePOST(request: NextRequest, context: { params: Promise<{ id:
     ok: true,
     imported: Number(importResult?.imported || 0),
     evidenceLink: importedEvidenceLink,
+    commentsCoverage: typeof importedCount === "number" && importedCount === (importedComments || []).length ? "complete" : "partial",
     comments: (importedComments || []).map((comment) => ({
       id: comment.id,
       taskId: comment.task_id,

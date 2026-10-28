@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import type { TaskActionResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import * as taskApi from "@/features/tasks/model/task-api-client";
@@ -22,9 +22,9 @@ export function useTaskCollaborationCommands({
   source,
   startTransition,
 }: UseTaskCollaborationCommandsOptions) {
-  const autoImportedGitHubCommentsRef = useRef<Set<string>>(new Set());
-  const [commentImportNotice, setCommentImportNotice] = useState("");
-  const [commentImportPendingTaskIds, setCommentImportPendingTaskIds] = useState<Set<string>>(new Set());
+  const importView = selectedTask ? planningState.taskGitHubImport(selectedTask.id) : null;
+  const commentImportNotice = importView?.notice || "";
+  const commentImportPendingTaskIds = new Set(importView?.phase === "saving" && selectedTask ? [selectedTask.id] : []);
 
   const addTaskComment = async (task: Task, comment: string) => {
     if (!currentProfile) {
@@ -56,59 +56,18 @@ export function useTaskCollaborationCommands({
   };
 
   const importGitHubComments = useCallback((task: Task, options: { silent?: boolean } = {}) => {
-    if (!options.silent) {
-      setSaveError("");
-      setCommentImportNotice("");
-    }
-
+    if (!options.silent) setSaveError("");
     if (source !== "supabase") {
       if (!options.silent) setSaveError("GitHub-Kommentarimport ist in diesem Arbeitsmodus nicht verfügbar.");
       return;
     }
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await taskApi.importGitHubCommentsRequest(apiClient, task.id);
-        if (!response.ok || !body?.comments) throw new Error(body?.error || "GitHub-Kommentare konnten nicht aktualisiert werden.");
-
-        setData((current) => ({
-          ...current,
-          tasks: body.evidenceLink
-            ? current.tasks.map((item) => (item.id === task.id ? { ...item, evidenceLink: body.evidenceLink || item.evidenceLink, githubIssueSyncStatus: "not_synced" } : item))
-            : current.tasks,
-          taskExternalComments: [
-            ...current.taskExternalComments.filter((comment) => comment.taskId !== task.id),
-            ...body.comments!,
-          ],
-        }));
-        const total = body.comments.length;
-        if (!options.silent) {
-          setCommentImportNotice(
-            total > 0
-              ? `GitHub-Kommentare geladen: ${total} Kommentar${total === 1 ? "" : "e"}.`
-              : "GitHub wurde geprüft, aber für dieses Issue wurden keine externen Kommentare gefunden.",
-          );
-        }
-      } catch (error) {
-        if (!options.silent) setSaveError(error instanceof Error ? error.message : "GitHub-Kommentare konnten nicht aktualisiert werden.");
-      } finally {
-        setCommentImportPendingTaskIds((current) => {
-          const next = new Set(current);
-          next.delete(task.id);
-          return next;
-        });
-      }
+    void planningState.importTaskGitHubComments(task, { automatic: options.silent }).then(result => {
+      if (!options.silent && !result.ok && result.kind !== "ended") setSaveError(result.error);
     });
-  }, [apiClient, setData, setSaveError, source, startTransition]);
+  }, [planningState, setSaveError, source]);
 
   useEffect(() => {
-    if (!selectedTask) return;
-    if (source !== "supabase") return;
-    if (!githubInstallationAvailable) return;
-    if (!hasGitHubIssue(selectedTask)) return;
-    if (autoImportedGitHubCommentsRef.current.has(selectedTask.id)) return;
-
-    autoImportedGitHubCommentsRef.current.add(selectedTask.id);
+    if (!selectedTask || source !== "supabase" || !githubInstallationAvailable || !hasGitHubIssue(selectedTask)) return;
     importGitHubComments(selectedTask, { silent: true });
   }, [githubInstallationAvailable, importGitHubComments, selectedTask, source]);
 

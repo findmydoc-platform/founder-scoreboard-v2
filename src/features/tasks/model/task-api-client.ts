@@ -159,7 +159,7 @@ export async function uploadTaskAttachmentRequest(apiClient: BrowserApiClient, t
 }
 
 export function importGitHubCommentsRequest(apiClient: BrowserApiClient, taskId: string) {
-  return apiClient.requestJson<{ error?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[] }>(`/api/tasks/${taskId}/github-comments`, {
+  return apiClient.requestJson<{ error?: string; code?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[]; commentsCoverage?: "complete" | "partial" }>(`/api/tasks/${taskId}/github-comments`, {
     method: "POST",
   });
 }

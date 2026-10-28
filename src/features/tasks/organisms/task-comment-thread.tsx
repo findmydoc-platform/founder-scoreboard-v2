@@ -4,6 +4,7 @@ import { MessageSquare, RefreshCw } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import type { TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
+import { TaskGitHubImportNotice } from "@/features/tasks/molecules/task-github-import-notice";
 import { TaskCommentCreationNotices } from "@/features/tasks/molecules/task-comment-creation-notices";
 import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-composer";
 import { TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
@@ -14,6 +15,9 @@ import type { Profile, Sprint, Task, TaskActivity, TaskComment, TaskExternalComm
 
 type Props = {
   comments: TaskComment[];
+  githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
+  externalCommentCompleteness?: "complete" | "partial";
+  onCheckGitHubImport?: () => void;
   commentCreations?: readonly TaskCommentCreationView[];
   commentCompleteness?: "complete" | "partial";
   onCheckCommentCreation?: (id: string) => void;
@@ -98,6 +102,9 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
 
 export function TaskCommentThread({
   comments,
+  githubImport,
+  externalCommentCompleteness = "complete",
+  onCheckGitHubImport,
   commentCreations = [],
   commentCompleteness = "complete",
   onCheckCommentCreation,
@@ -148,8 +155,8 @@ export function TaskCommentThread({
             <button
               type="button"
               onClick={onImportGitHubComments}
-              disabled={pending || importPending}
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={pending || importPending || githubImport?.phase === "unconfirmed" || githubImport?.phase === "confirmed" && githubImport.taskReadStatus !== "current"}
+              className="inline-flex h-11 items-center gap-2 sm:h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw size={13} />
               {importPending ? "Aktualisiert..." : "GitHub aktualisieren"}
@@ -158,7 +165,7 @@ export function TaskCommentThread({
           {!loading && !error && !unavailable ? (
             <>
               <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">
-                {commentCount} {commentCompleteness === "partial" ? commentCount === 1 ? "geladener Kommentar" : "geladene Kommentare" : commentCount === 1 ? "Kommentar" : "Kommentare"}
+                {commentCount} {commentCompleteness === "partial" || externalCommentCompleteness === "partial" ? commentCount === 1 ? "geladener Kommentar" : "geladene Kommentare" : commentCount === 1 ? "Kommentar" : "Kommentare"}
               </span>
               {activityCount > 0 && (
                 <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">
@@ -182,6 +189,8 @@ export function TaskCommentThread({
       )}
 
       {commentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">Die Diskussion ist als Ausschnitt geladen.</p> : null}
+      {externalCommentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">GitHub-Kommentare sind als Ausschnitt geladen.</p> : null}
+      <TaskGitHubImportNotice view={githubImport} onCheck={onCheckGitHubImport} />
       <TaskCommentCreationNotices creations={commentCreations} onCheck={onCheckCommentCreation} />
       {!readOnly && (
         <TaskCommentComposer
