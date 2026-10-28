@@ -108,7 +108,7 @@ test("coalesced unknown checks expose the actual returned comparison without pro
 test("an unresolved commitment makes dependent scoring coverage partial and pauses only its Sprint lock", async () => {
   let locks = 0; const { planning } = createPlanningState({ userId: "user", initialWorkspace: "sprint", initialData: initial, adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => ({ data: initial, coverage: { sprintCommitments: "complete", sprints: "complete", tasks: "complete" } }), saveSprintCommitment: async () => { throw new Error("Lost"); }, lockSprint: async () => { locks++; throw new Error("Unexpected lock dispatch"); } } });
   await planning.refreshWorkspace("sprint"); expect(planning.sprintWorkspace().model.coverage.commitments).toBe("complete");
-  await planning.beginSprintCommitmentEdit(commitment).save({ weeklyHours: 30 }); expect(planning.sprintWorkspace().model.coverage.commitments).toBe("partial");
+  await planning.beginSprintCommitmentEdit(commitment).save({ weeklyHours: 30 }); expect(planning.sprintWorkspace().model.coverage.commitments).toBe("partial");expect(planning.backlog().model.coverage?.commitments).toBe("partial");
   await planning.beginSprintLock(sprint, []).lock({ firstSprintNumber: 1, anchorStartDate: "2026-10-01", rhythmWeeks: 2, horizonWeeks: 1, targetSprintNumber: 2 }); expect(locks).toBe(0);
 });
 

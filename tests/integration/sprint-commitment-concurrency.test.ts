@@ -24,15 +24,16 @@ it("authorized commitment compare-and-save rejects stale and absent-row races wi
  const inserts=await Promise.all([save("ceo",absent),save("deputy",{...absent,weeklyHours:12})]);expect(inserts.map(response=>response.status).sort()).toEqual([200,409]);
  expect((await f.db.query("select count(*)::int as count from public.sprint_commitments where sprint_id=$1 and profile_id=$2",[sprint,f.actors.ceo.profileId])).rows[0].count).toBe(1);
  expect(await auditCount()).toBe(5);
+ const frozenInstant=Date.now()+1000;
  vi.useFakeTimers({toFake:["Date"]});
  try {
-  vi.setSystemTime(new Date("2099-01-01T12:00:00.123Z"));
+  vi.setSystemTime(new Date(frozenInstant));
   let version=(await allowed.json()).commitment.updatedAt;
   const versions:string[]=[];
   for(const weeklyHours of [37,38,39]){
    const response=await save("founder",{...payload,expectedUpdatedAt:version,weeklyHours});expect(response.status).toBe(200);version=(await response.json()).commitment.updatedAt;versions.push(version);
   }
-  expect(versions).toEqual(["2099-01-01T12:00:00.123+00:00","2099-01-01T12:00:00.124+00:00","2099-01-01T12:00:00.125+00:00"]);
+  expect(versions.map(value=>Date.parse(value))).toEqual([frozenInstant,frozenInstant+1,frozenInstant+2]);
   const replay=await save("founder",{...payload,expectedUpdatedAt:versions[0],weeklyHours:40});expect(replay.status).toBe(409);expect(await auditCount()).toBe(8);
  } finally {vi.useRealTimers();}
 }),30_000);

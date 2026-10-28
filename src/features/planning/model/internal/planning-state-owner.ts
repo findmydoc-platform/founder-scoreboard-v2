@@ -469,7 +469,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     beginBacklogAssignment: backlogAssignments.begin,
     backlogAssignments: backlogAssignments.views,
     resumeBacklogAssignment: backlogAssignments.resume,
-    backlog: () => { const view = planning.workspace("backlog"); return { model: { revision: "", coverage: view.tasks.some(task => taskEffectsPending(task.id)) || backlogOrdering.pending() || backlogAssignments.pending() || pending.size ? { ...backlogCoverage, items: "partial" as const } : backlogCoverage, items: view.tasks, people: view.readStatus === "forbidden" || !isActive() ? [] : visible.profiles, sprints: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprints, commitments: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprintCommitments }, readStatus: view.readStatus }; },
+    backlog: () => { const view = planning.workspace("backlog"); return { model: { revision: "", coverage: { ...(view.tasks.some(task => taskEffectsPending(task.id)) || backlogOrdering.pending() || backlogAssignments.pending() || pending.size ? { ...backlogCoverage, items: "partial" as const } : backlogCoverage), ...(commitments.pending() ? { commitments: "partial" as const } : {}) }, items: view.tasks, people: view.readStatus === "forbidden" || !isActive() ? [] : visible.profiles, sprints: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprints, commitments: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprintCommitments }, readStatus: view.readStatus }; },
 
     sprintPlan: () => { isActive(); return sprintPlan.view(); },
     checkSprintPlan: () => sprintPlan.check(),
