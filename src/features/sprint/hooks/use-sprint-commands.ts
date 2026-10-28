@@ -4,7 +4,7 @@ import type { PlanningCommandContext } from "@/features/planning/hooks/planning-
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import { mapScoreObjectionResponse } from "@/features/planning/model/planning-app-model";
 import { mapFounderSprintScore } from "@/lib/planning-sprint-mappers";
-import type { ScoreObjection, ScoreObjectionResolutionInput, Sprint, SprintCommitment } from "@/lib/types";
+import type { ScoreObjection, ScoreObjectionResolutionInput, Sprint } from "@/lib/types";
 
 type UseSprintCommandsOptions = PlanningCommandContext;
 
@@ -17,38 +17,6 @@ export function useSprintCommands({
   source,
   startTransition,
 }: UseSprintCommandsOptions) {
-  const updateSprintCommitment = (commitment: SprintCommitment) => {
-    setSaveError("");
-
-    setData((current) => {
-      const exists = current.sprintCommitments.some((item) => item.sprintId === commitment.sprintId && item.profileId === commitment.profileId);
-      return {
-        ...current,
-        sprintCommitments: exists
-          ? current.sprintCommitments.map((item) => (item.sprintId === commitment.sprintId && item.profileId === commitment.profileId ? commitment : item))
-          : [commitment, ...current.sprintCommitments],
-      };
-    });
-
-    if (source !== "supabase") return;
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.updateSprintCommitmentRequest(apiClient, commitment);
-        if (!response.ok || !body?.commitment) throw new Error(body?.error || "Commitment konnte nicht gespeichert werden.");
-
-        setData((current) => ({
-          ...current,
-          sprintCommitments: current.sprintCommitments.map((item) =>
-            item.sprintId === commitment.sprintId && item.profileId === commitment.profileId ? body.commitment! : item,
-          ),
-        }));
-      } catch (error) {
-        setSaveError(error instanceof Error ? error.message : "Commitment konnte nicht gespeichert werden.");
-      }
-    });
-  };
-
   const createScoreObjection = (sprint: Sprint, comment: string) => {
     if (!currentProfile) {
       setSaveError("GitHub-User ist keinem Teamprofil zugeordnet.");
@@ -188,6 +156,5 @@ export function useSprintCommands({
   return {
     createScoreObjection,
     reviewScoreObjection,
-    updateSprintCommitment,
   };
 }

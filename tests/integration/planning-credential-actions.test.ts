@@ -124,10 +124,11 @@ it("sprint, governance, Focus and Weekly operations preserve lead and owner dist
   expect((await f.db.query("select sprint_id from public.tasks where id=$1", [task])).rows[0].sprint_id).toBe(destination);
   expect((await assignmentRoute.PATCH(f.request("deputy", "/api/tasks/bulk-sprint-assignment", "PATCH", assignment))).status).toBe(409);
   const commitments = await importTestModule("src/app/api/sprint-commitments/route.ts", { "server-only": {} });
-  const commitment = { sprintId: sprint, profileId: f.actors.founder.profileId, commitmentLevel: "Standard", weeklyHours: 12 };
+  const commitment = { sprintId: sprint, profileId: f.actors.founder.profileId, commitmentLevel: "Standard", weeklyHours: 12, expectedUpdatedAt: null };
   expect((await commitments.PUT(f.request("founder", "/api/sprint-commitments", "PUT", commitment))).status).toBe(200);
   expect((await commitments.PUT(f.request("other", "/api/sprint-commitments", "PUT", commitment))).status).toBe(403);
-  expect((await commitments.PUT(f.request("deputy", "/api/sprint-commitments", "PUT", { ...commitment, weeklyHours: 16 }))).status).toBe(200);
+  const commitmentVersion = (await f.db.query("select to_jsonb(updated_at)#>>'{}' as updated_at from public.sprint_commitments where sprint_id=$1 and profile_id=$2", [sprint, f.actors.founder.profileId])).rows[0].updated_at;
+  expect((await commitments.PUT(f.request("deputy", "/api/sprint-commitments", "PUT", { ...commitment, weeklyHours: 16, expectedUpdatedAt: commitmentVersion }))).status).toBe(200);
   expect((await f.db.query("select weekly_hours from public.sprint_commitments where sprint_id=$1 and profile_id=$2", [sprint, f.actors.founder.profileId])).rows[0].weekly_hours).toBe(16);
   const focus = await importTestModule("src/app/api/focus/route.ts", { "server-only": {} });
   expect((await focus.POST(f.request("other", "/api/focus", "POST", { taskId: task }))).status).toBe(403);

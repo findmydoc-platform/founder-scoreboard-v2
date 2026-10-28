@@ -170,6 +170,7 @@ export type Sprint = {
 };
 
 export type SprintCommitment = {
+  updatedAt?: string;
   id: number;
   sprintId: string;
   profileId: string;

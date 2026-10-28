@@ -213,6 +213,7 @@ export type DbSprint = {
 };
 
 export type DbSprintCommitment = {
+  updated_at?: string;
   id: number;
   sprint_id: string;
   profile_id: string;

@@ -16,6 +16,7 @@ export function mapSprint(row: DbSprint): Sprint {
 
 export function mapSprintCommitment(row: DbSprintCommitment): SprintCommitment {
   return {
+    updatedAt: row.updated_at,
     id: row.id,
     sprintId: row.sprint_id,
     profileId: row.profile_id,

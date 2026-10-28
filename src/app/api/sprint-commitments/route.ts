@@ -9,6 +9,7 @@ type CommitmentPayload = {
   commitmentLevel?: "Lite" | "Standard" | "Heavy" | "Away";
   weeklyHours?: number;
   note?: string;
+  expectedUpdatedAt?: string | null;
 };
 
 const levels = new Set(["Lite", "Standard", "Heavy", "Away"]);
@@ -34,16 +35,23 @@ export async function PUT(request: NextRequest) {
     return apiError("Founder können nur ihr eigenes Commitment ändern.", 403);
   }
 
-  const { data, error } = await planning.writeCommitment({ profileId, commitmentLevel, weeklyHours, note });
+  if (payload.expectedUpdatedAt !== null && (typeof payload.expectedUpdatedAt !== "string" || !payload.expectedUpdatedAt.trim())) return apiError("Die ursprüngliche Bearbeitungsbasis ist erforderlich.", 400);
 
+  const { data, error } = await planning.writeCommitment({ profileId, commitmentLevel, weeklyHours, note, expectedUpdatedAt: payload.expectedUpdatedAt });
+
+  if (error?.code === "commitment_revision_conflict") return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
+  if (error?.code === "42501") return apiError(error.message, 403);
   if (error || !data) return apiError(error?.message || "Commitment konnte nicht gespeichert werden.", 500);
 
-  await planning.auditCommitment(auditRequestMetadata(request));
+  let auditError = "";
+  try { const audit = await planning.auditCommitment(auditRequestMetadata(request)); if (audit.error) auditError = "Commitment gespeichert; Audit-Eintrag konnte nicht bestätigt werden."; } catch { auditError = "Commitment gespeichert; Audit-Eintrag konnte nicht bestätigt werden."; }
 
   return NextResponse.json({
     ok: true,
+    ...(auditError ? { auditError } : {}),
     commitment: {
       id: data.id,
+      updatedAt: data.updated_at,
       sprintId: data.sprint_id,
       profileId: data.profile_id,
       commitmentLevel: data.commitment_level,

@@ -18,7 +18,7 @@ import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-plann
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 import type { PlanningState } from "@/features/planning/model/planning-state";
 import { findCurrentSprint } from "@/lib/planning-schedule";
-import type { Meeting, MeetingAttendance, Profile, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
+import type { Meeting, MeetingAttendance, Profile, ScoreObjectionResolutionInput, Sprint, Task, TaskStatus } from "@/lib/types";
 
 export function SprintScoreTableOverview({
   planningState,
@@ -26,7 +26,6 @@ export function SprintScoreTableOverview({
   onOpenTask,
   onRequestReview,
   onChangeStatus,
-  onUpdateCommitment,
   onUpdateMeetingAttendance,
   onCreateScoreObjection,
   onReviewScoreObjection,
@@ -44,7 +43,6 @@ export function SprintScoreTableOverview({
   onOpenTask: (taskId: string) => void;
   onRequestReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onChangeStatus: (task: Task, status: TaskStatus) => void;
-  onUpdateCommitment: (commitment: SprintCommitment) => void;
   onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
   onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
   onReviewScoreObjection: (sprint: Sprint, objectionId: number, input: ScoreObjectionResolutionInput) => void;
@@ -82,7 +80,7 @@ export function SprintScoreTableOverview({
     openScores,
     sprintHasTasks,
     sprintIsCurrent,
-  } = buildSprintScoreViewModel({ data: sprintData, selectedSprintId });
+  } = buildSprintScoreViewModel({ data: sprintData, selectedSprintId, coverage: sprintView.model.coverage });
   const openObjections = sprintData.scoreObjections.filter((item) => item.sprintId === sprint?.id && item.status === "open");
   const provisionalIds = planningState.sprintPlan().provisionalSprintIds;
   const sprintPending = pending || provisionalIds.includes(sprint?.id || "");
@@ -155,9 +153,7 @@ export function SprintScoreTableOverview({
         sprint={sprint}
         scoreRows={scoreRows}
         pending={sprintPending}
-        onUpdateCommitment={(commitment) => {
-          onUpdateCommitment(commitment);
-        }}
+        planningState={planningState}
       />
 
       <SprintMeetingAttendanceSection
@@ -178,7 +174,7 @@ export function SprintScoreTableOverview({
         pending={sprintPending}
         scoreObjectionDraft={scoreObjectionDraft}
         openObjectionsCount={openObjections.length}
-        scores={scoreRows.map((row) => row.v21Score)}
+        scores={scoreRows.flatMap(row => row.v21Score ? [row.v21Score] : [])}
         onScoreObjectionDraftChange={setScoreObjectionDraft}
         onCreateScoreObjection={onCreateScoreObjection}
         onReviewScoreObjection={onReviewScoreObjection}

@@ -283,6 +283,11 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok) throw Object.assign(new Error(body?.error || "Änderung konnte nicht gespeichert werden."), { status: response.status, code: body?.code, kind: body?.conflictReason === "revision" ? "versionConflict" : undefined });
         return { task: body?.task || {}, activities: body?.activities };
       },
+      async saveSprintCommitment(basis, patch) {
+        const { response, body } = await runtime.apiClient.requestJson<import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentConfirmation & {error?:string;code?:string}>("/api/sprint-commitments", { method:"PUT", json:{...basis,...patch,expectedUpdatedAt:basis.id===0?null:basis.updatedAt},useDevProfileOverride:false });
+        if(!response.ok||!body?.commitment)throw Object.assign(new Error(body?.error||"Commitment konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
+        return {commitment:body.commitment,auditError:body.auditError};
+      },
       async readTaskDetail(taskId) {
         const { response, body } = await taskApi.requestTaskDetailData(runtime.apiClient, taskId);
         if (!response.ok || !body?.taskDetail) throw Object.assign(new Error(body?.error || "Task-Details konnten nicht geladen werden."), { status: response.status });
