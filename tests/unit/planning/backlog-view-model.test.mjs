@@ -165,3 +165,10 @@ test("backlog view model sorts by rank not priority and keeps sprint as assignme
   assert.equal(backlogTableColumnCount, 9);
   assert.equal(backlogTableMinWidth, 960);
 });
+
+test("partial Backlog coverage cannot fabricate Sprint capacity or a complete planned-hours total", async () => {
+ const { buildBacklogViewModel } = await importTestModule("src/features/backlog/model/backlog-view-model.ts");
+ const model = { ...basePlanningShellState(), coverage: { items: "partial", people: "complete", commitments: "partial", sprints: "complete" } };
+ const bucket = buildBacklogViewModel(model, "all").sprintBuckets[0];
+ assert.equal(bucket.capacityHours, null); assert.equal(bucket.plannedHoursComplete, false); assert.equal(bucket.overCapacity, false);
+});

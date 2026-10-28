@@ -19,7 +19,7 @@ function recordingSupabase(data = {}, failedTable = "") {
         then(resolve, reject) {
           return Promise.resolve(table === failedTable
             ? { data: null, error: { message: "failure" } }
-            : { data: data[table] ?? [], error: null }).then(resolve, reject);
+            : { data: data[table] ?? [], count: data[`${table}Count`] ?? null, error: null }).then(resolve, reject);
         },
       };
       return query;
@@ -63,7 +63,7 @@ test("Events and Tools expose focused fail-closed load interfaces", async () => 
   const tools = await createSupabaseToolsReadModel(toolsDb).load({ authorized: true, actorProfileId: "person" });
   assert.equal(tools.status, "ready");
   assert.deepEqual(toolsDb.calls, ["profiles", "fmd_tools"]);
-  assert.deepEqual(Object.keys(tools.model).sort(), ["people", "revision", "tools"]);
+  assert.deepEqual(Object.keys(tools.model).sort(), ["coverage", "people", "revision", "tools"]);
 });
 
 for (const count of [0, 199, 200]) test(`Event range coverage is conservative at the query cap (${count})`, async () => {
@@ -72,4 +72,9 @@ for (const count of [0, 199, 200]) test(`Event range coverage is conservative at
   const result = await createSupabaseEventsReadModel(db, range).load({ authorized: true, actorProfileId: "profile" });
   assert.equal(result.status, "ready"); assert.deepEqual(db.ranges, [["gte", "starts_at", range.from], ["lt", "starts_at", range.to]]);
   assert.deepEqual(result.model.coverage, { range, completeness: count < 200 ? "complete" : "partial" });
+});
+
+for (const [returned, count, coverage] of [[0, 0, "complete"], [1, 1, "complete"], [1, 2, "partial"], [1, null, "partial"]]) test(`Tools completeness uses the authoritative count (${returned}/${count})`, async () => {
+  const db = recordingSupabase({ fmd_tools: Array.from({ length: returned }, (_, id) => ({ id: `tool-${id}`, sort_order: id })), fmd_toolsCount: count });
+  const result = await createSupabaseToolsReadModel(db).load({ authorized: true, actorProfileId: "profile" }); assert.equal(result.status, "ready"); assert.equal(result.model.coverage, coverage);
 });

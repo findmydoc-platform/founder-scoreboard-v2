@@ -148,6 +148,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "backlog" && (
         initialBacklogModel ? <BacklogOverview
+          planningState={planningState}
           apiClient={apiClient}
           canManageBacklog={canManageTaskMeta}
           initialModel={initialBacklogModel}
@@ -170,6 +171,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "tools" && (
         <FmdQuickLinksOverview
+          planningState={planningState}
           tools={data.fmdTools}
           source={source}
           currentProfile={currentProfile}

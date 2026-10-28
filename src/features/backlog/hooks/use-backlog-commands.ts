@@ -10,6 +10,7 @@ import type { Dispatch } from "react";
 import type { Sprint, Task } from "@/lib/types";
 
 type UseBacklogCommandsOptions = {
+  planningState: import("@/features/planning/model/planning-state").PlanningState;
   apiClient: BrowserApiClient;
   canManageBacklog: boolean;
   dispatch: Dispatch<BacklogAction>;
@@ -19,6 +20,7 @@ type UseBacklogCommandsOptions = {
 };
 
 export function useBacklogCommands({
+  planningState,
   apiClient,
   canManageBacklog,
   dispatch,
@@ -37,18 +39,15 @@ export function useBacklogCommands({
     setMessage,
   });
   const sprintAssignment = useBacklogSprintAssignment({
-    apiClient,
+    planningState,
     canManageBacklog,
-    dispatch,
-    refreshBacklogModel,
     setMessage,
     sprintById,
   });
   const bulkSprintAssignment = useBacklogBulkSprintAssignment({
-    apiClient,
+    planningState,
+    sprints,
     canManageBacklog,
-    dispatch,
-    refreshBacklogModel,
     setMessage,
   });
 

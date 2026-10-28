@@ -12,10 +12,12 @@ import {
 
 export function FmdQuickLinkCard({
   tool,
+  saveStatus,
   canEditLinks,
   onEdit,
 }: {
   tool: FmdTool;
+  saveStatus?: "saving" | "unconfirmed";
   canEditLinks: boolean;
   onEdit: (tool: FmdTool) => void;
 }) {
@@ -31,6 +33,7 @@ export function FmdQuickLinkCard({
             <span className="truncate">{tool.name}</span>
             {tool.url && <ExternalLink size={14} className="shrink-0 text-blue-600 transition group-hover/tool:translate-x-0.5 group-hover/tool:-translate-y-0.5" />}
           </h3>
+          {saveStatus ? <UiBadge tone="amber" size="xs">{saveStatus === "saving" ? "Speicherung läuft" : "Speicherung unbestätigt"}</UiBadge> : null}
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{tool.description}</p>
         </div>
 

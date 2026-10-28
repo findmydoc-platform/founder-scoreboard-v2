@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-function createSupabaseFixture(failedTable = "") {
+function createSupabaseFixture(failedTable = "", counts = {}) {
   const calls = [];
   const data = {
     profiles: [{ id: "person", name: "Person", weekly_capacity: 20 }],
@@ -25,12 +25,13 @@ function createSupabaseFixture(failedTable = "") {
       calls.push(call);
       const query = {
         select() { return query; },
+        limit() { return query; },
         eq(field, value) { call.eq.push([field, value]); return query; },
         order(field, options) { call.orders.push([field, options]); return query; },
         then(resolve, reject) {
           const result = table === failedTable
             ? { data: null, error: { message: "fixture failure" } }
-            : { data: data[table] || [], error: null };
+            : { data: data[table] || [], count: counts[table], error: null };
           return Promise.resolve(result).then(resolve, reject);
         },
       };
@@ -116,4 +117,11 @@ test("backlog reducer patches only its own item slice", () => {
   assert.equal(updated.people, model.people);
   assert.equal(updated.sprints, model.sprints);
   assert.equal(updated.commitments, model.commitments);
+});
+
+test("Backlog coverage proves each capped collection independently, including complete empty auxiliaries", async () => {
+ const result = await createSupabaseBacklogReadModel(createSupabaseFixture("", { profiles: 1, active_tasks: 5, planning_item_strategy: 0, planning_item_raci_assignments: 0, task_links: 1001, sprints: 1, sprint_commitments: 1 })).load({ authorized: true, actorProfileId: "person" });
+ assert.deepEqual(result.model.coverage, { people: "complete", items: "partial", strategies: "complete", raci: "complete", links: "partial", sprints: "complete", commitments: "complete" });
+ const unknown = await createSupabaseBacklogReadModel(createSupabaseFixture()).load({ authorized: true, actorProfileId: "person" });
+ assert.equal(unknown.model.coverage.items, "partial");
 });

@@ -53,6 +53,7 @@ export type BacklogSprintBucket = {
   overCapacity: boolean;
   overCapacityHours: number;
   plannedHours: number;
+  plannedHoursComplete?: boolean;
   sprint: Sprint;
   utilization: number;
 };
@@ -89,6 +90,7 @@ function sprintDurationDays(sprint: Pick<Sprint, "startDate" | "endDate">) {
 }
 
 function sprintCapacityHours(model: BacklogModel, sprint: Sprint) {
+  if (model.coverage && (model.coverage.people !== "complete" || model.coverage.commitments !== "complete")) return null;
   const commitments = model.commitments.filter((commitment) => commitment.sprintId === sprint.id);
   const weeklyHours = commitments.length
     ? commitments.map((commitment) => commitment.weeklyHours)
@@ -301,7 +303,8 @@ export function buildBacklogViewModel(model: BacklogModel, scope: BacklogScope) 
       .reduce((sum, task) => sum + task.hours, 0);
     const capacityHours = sprintCapacityHours(model, sprint);
     const capacityUnavailable = capacityHours === null;
-    const overCapacityHours = capacityHours === null ? 0 : Math.max(plannedHours - capacityHours, 0);
+    const plannedHoursComplete = !model.coverage || model.coverage.items === "complete";
+    const overCapacityHours = capacityHours === null || !plannedHoursComplete ? 0 : Math.max(plannedHours - capacityHours, 0);
     return {
       capacityHours,
       capacityUnavailable,
@@ -310,6 +313,7 @@ export function buildBacklogViewModel(model: BacklogModel, scope: BacklogScope) 
       overCapacity: overCapacityHours > 0,
       overCapacityHours,
       plannedHours,
+      plannedHoursComplete,
       sprint,
       utilization: capacityHours && capacityHours > 0 ? plannedHours / capacityHours : 0,
     };

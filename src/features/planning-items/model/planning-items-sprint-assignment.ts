@@ -16,6 +16,7 @@ export type SprintAssignmentInput = Readonly<{
 export type SprintAssignmentRequest = Readonly<{
   assignments: readonly SprintAssignmentInput[];
   sprintId: string;
+  expectedSprintUpdatedAt?: string;
 }>;
 
 type SprintAssignmentItemState = Readonly<{
@@ -28,6 +29,7 @@ type SprintAssignmentItemState = Readonly<{
   ownerId: string;
   parentId: string;
   sprintId: string;
+  expectedSprintUpdatedAt?: string;
 }>;
 
 type SprintState = Readonly<{
@@ -44,6 +46,7 @@ export type SprintAssignmentState = Readonly<{
 export type SprintAssignmentCommitPlan = Readonly<{
   assignments: readonly SprintAssignmentInput[];
   sprintId: string;
+  expectedSprintUpdatedAt?: string;
 }>;
 
 export type SprintAssignmentUpdate = Readonly<{
@@ -69,7 +72,8 @@ function validTimestamp(value: unknown): value is string {
 
 export function parseSprintAssignmentRequest(payload: unknown): SprintAssignmentRequest | string {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "Sprint-Zuordnung ist ungültig.";
-  const candidate = payload as { assignments?: unknown; sprintId?: unknown };
+  const candidate = payload as { assignments?: unknown; sprintId?: unknown; expectedSprintUpdatedAt?: unknown };
+  if (candidate.expectedSprintUpdatedAt !== undefined && !validTimestamp(candidate.expectedSprintUpdatedAt)) return "Die angezeigte Sprint-Version ist ungültig.";
   const sprintId = typeof candidate.sprintId === "string" ? candidate.sprintId.trim() : "";
   if (!sprintId || !Array.isArray(candidate.assignments) || candidate.assignments.length < 1 || candidate.assignments.length > 100) {
     return "Wähle zwischen 1 und 100 Deliverables sowie einen Sprint aus.";
@@ -86,7 +90,7 @@ export function parseSprintAssignmentRequest(payload: unknown): SprintAssignment
     taskIds.add(taskId);
     assignments.push({ taskId, expectedUpdatedAt: assignment.expectedUpdatedAt });
   }
-  return { assignments, sprintId };
+  return { assignments, sprintId, ...(candidate.expectedSprintUpdatedAt !== undefined ? { expectedSprintUpdatedAt: candidate.expectedSprintUpdatedAt as string } : {}) };
 }
 
 export function sprintAssignmentCommand(request: SprintAssignmentRequest): ActOnItem {
@@ -99,6 +103,7 @@ export function sprintAssignmentCommand(request: SprintAssignmentRequest): ActOn
         expectedRevision: assignment.expectedUpdatedAt,
       })),
       sprintId: request.sprintId,
+      ...(request.expectedSprintUpdatedAt ? { expectedSprintUpdatedAt: request.expectedSprintUpdatedAt } : {}),
     },
   };
 }
@@ -165,7 +170,7 @@ export const sprintAssignmentDecisionCore: PlanningDecisionCore<SprintAssignment
       }],
       effects: assignments.map((assignment) => ({ kind: "audit" as const, description: `Record Sprint assignment for ${assignment.taskId}` })),
       warnings: [],
-      commitPlan: { assignments, sprintId: action.sprintId },
+      commitPlan: { assignments, sprintId: action.sprintId, ...(action.expectedSprintUpdatedAt ? { expectedSprintUpdatedAt: action.expectedSprintUpdatedAt } : {}) },
     };
   },
 };
@@ -230,6 +235,7 @@ async function prepareSprintAssignment(
 }
 
 function mappedProviderError(code: string, request: PlanningCommitRequest<SprintAssignmentCommitPlan>): PlanningCommitOutcome | null {
+  if (code === "P0018") return { ok: false, error: { code: "conflict", reason: "revision", details: { sprintAssignmentReason: "sprintRevision" } } };
   if (code === "P0001") return { ok: false, error: { code: "conflict", reason: "revision" } };
   if (code === "P0002") return { ok: false, error: { code: "notFound", entity: { kind: "deliverable", id: request.plan.assignments[0]?.taskId || "" } } };
   if (code === "P0004") return { ok: false, error: { code: "notFound", entity: { kind: "sprint", id: request.plan.sprintId } } };
@@ -263,7 +269,7 @@ async function commitSprintAssignment(
   request: PlanningCommitRequest<SprintAssignmentCommitPlan>,
 ): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
   const result = await supabase.rpc("assign_backlog_tasks_to_sprint_transaction", {
-    p_assignments: request.plan.assignments,
+    p_assignments: request.plan.assignments.map(assignment => ({ ...assignment, ...(request.plan.expectedSprintUpdatedAt ? { expectedSprintUpdatedAt: request.plan.expectedSprintUpdatedAt } : {}) })),
     p_sprint_id: request.plan.sprintId,
     p_actor_profile_id: request.actor.profileId,
     p_request_ip: request.requestMetadata?.requestIp || null,
@@ -304,7 +310,7 @@ export function sprintAssignmentUpdatesFromChanges(changes: readonly { field: st
   return updates(changes.find((change) => change.field === "sprintAssignment")?.after) || [];
 }
 
-export function sprintAssignmentError(error: PlanningError): Readonly<{ message: string; status: number }> {
+export function sprintAssignmentError(error: PlanningError): Readonly<{ message: string; status: number; code?: string }> {
   if (error.code === "invalidCommand") {
     const deliverableOnly = error.issues.some((issue) => issue.reason === "deliverableRequired");
     return { message: deliverableOnly ? "Nur Deliverables können einem Sprint zugeordnet werden." : "Sprint-Zuordnung ist ungültig.", status: 400 };
@@ -315,8 +321,9 @@ export function sprintAssignmentError(error: PlanningError): Readonly<{ message:
       ? { message: "Sprint wurde nicht gefunden.", status: 404 }
       : { message: "Mindestens ein Deliverable wurde nicht gefunden.", status: 404 };
   }
+  if (error.code === "conflict" && error.reason === "revision" && error.details?.sprintAssignmentReason === "sprintRevision") return { message: "Der gewählte Sprint wurde zwischenzeitlich geändert. Bitte den aktuellen Serverstand prüfen.", status: 409, code: "sprint_revision_conflict" };
   if (error.code === "conflict" && error.reason === "revision") {
-    return { message: "Mindestens ein Deliverable wurde zwischenzeitlich geändert. Bitte neu laden.", status: 409 };
+    return { message: "Mindestens ein Deliverable wurde zwischenzeitlich geändert. Bitte neu laden.", status: 409, code: "task_revision_conflict" };
   }
   if (error.code === "conflict") {
     const reason = String(error.details?.sprintAssignmentReason || "");

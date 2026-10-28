@@ -1,7 +1,10 @@
 import type { Profile, Sprint, SprintCommitment, Task } from "@/lib/types";
 
+export type BacklogReadCoverage = Partial<Record<"items" | "people" | "sprints" | "commitments" | "strategies" | "raci" | "links", "complete" | "partial">>;
+
 export type BacklogModel = Readonly<{
   revision: string;
+  coverage?: BacklogReadCoverage;
   items: readonly Task[];
   people: readonly Profile[];
   sprints: readonly Sprint[];

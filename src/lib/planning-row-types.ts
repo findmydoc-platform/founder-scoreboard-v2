@@ -420,6 +420,7 @@ export type DbProfileFeatureTourAcknowledgement = {
 };
 
 export type DbFmdTool = {
+  updated_at?: string;
   id: string;
   name: string;
   category: FmdTool["category"];

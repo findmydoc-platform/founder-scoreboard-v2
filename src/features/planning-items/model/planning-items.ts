@@ -218,6 +218,7 @@ export type PlanningAction =
   }>)
   | Readonly<{
     kind: "assignSprint";
+    expectedSprintUpdatedAt?: string;
     items: readonly VersionedItemReference[];
     sprintId: SprintId | null;
   }>

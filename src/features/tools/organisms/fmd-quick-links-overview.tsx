@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 import type { FmdTool, Profile } from "@/lib/types";
 import {
   defaultFmdToolDraft,
@@ -33,18 +34,20 @@ import {
 import { FilterToolbar, FilterSegmentedControl, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 
 type FmdQuickLinksOverviewProps = {
+  planningState: PlanningState;
   tools?: FmdTool[];
   source: "supabase";
   currentProfile: Profile | null;
   pending?: boolean;
   message?: string;
-  onCreateTool: (draft: FmdToolDraft) => boolean | Promise<boolean>;
+  onCreateTool: (draft: FmdToolDraft, submissionId: string) => boolean | Promise<boolean>;
   onLoadMetadata: (url: string) => Promise<FmdToolMetadataDraft | null>;
-  onUpdateTool: (tool: FmdTool, draft: FmdToolDraft) => boolean | Promise<boolean>;
-  onUploadPreviewImage: (file: File) => Promise<FmdToolPreviewImageUpload | null>;
+  onUpdateTool: (tool: FmdTool, draft: FmdToolDraft, submissionId: string) => boolean | Promise<boolean>;
+  onUploadPreviewImage: (file: File, uploadId: string) => Promise<FmdToolPreviewImageUpload | null>;
 };
 
 export function FmdQuickLinksOverview({
+  planningState,
   tools = [],
   source,
   currentProfile,
@@ -56,7 +59,11 @@ export function FmdQuickLinksOverview({
   onUploadPreviewImage,
 }: FmdQuickLinksOverviewProps) {
   const [dialogMode, setDialogMode] = useState<FmdQuickLinkDialogMode | null>(null);
-  const [editingToolId, setEditingToolId] = useState<string | null>(null);
+  const [editingTool, setEditingTool] = useState<FmdTool | null>(null);
+  const [submissionId, setSubmissionId] = useState("");
+  const [uploadId, setUploadId] = useState("");
+  const [conflictBasis, setConflictBasis] = useState<FmdTool | null>(null);
+  const [conflictAdopted, setConflictAdopted] = useState(false);
   const [draft, setDraft] = useState<FmdToolDraft>(() => defaultFmdToolDraft(currentProfile?.name || ""));
   const [categoryFilter, setCategoryFilter] = useState<FmdQuickLinkCategoryFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -70,12 +77,15 @@ export function FmdQuickLinksOverview({
   );
   const canEditLinks = canEditFmdQuickLinks(source, currentProfile);
   const createAllowed = canEditLinks;
-  const editingTool = editingToolId ? sortedTools.find((tool) => tool.id === editingToolId) || null : null;
+  const view = planningState.tools();
+  const operation = view.operations.find(item => item.id === submissionId) || view.operations.find(item => item.toolId === editingTool?.id && ["saving", "unconfirmed"].includes(item.phase));
+  const uploadBlocked = view.previews.some(item => item.id === uploadId && item.phase === "unconfirmed");
+  const saveBlocked = operation?.phase === "saving" || operation?.phase === "unconfirmed" || (operation?.phase === "conflict" && !conflictAdopted);
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase("de");
-  const curatedLinkCount = sortedTools.filter((tool) => tool.isCurated && tool.url).length;
+  const curatedLinkCount = view.curatedCount;
   const missingLinkCount = sortedTools.filter((tool) => !hasFmdToolLink(tool)).length;
   const editedToolCountsAgainstLimit = Boolean(editingTool?.isCurated && editingTool.url);
-  const curatedLimitReached = curatedLinkCount >= maxCuratedFmdToolLinks && !editedToolCountsAgainstLimit;
+  const curatedLimitReached = curatedLinkCount !== null && curatedLinkCount >= maxCuratedFmdToolLinks && !editedToolCountsAgainstLimit;
 
   const categoryCounts = useMemo(() => categoryCountsForLinks(visibleByLinkTools), [visibleByLinkTools]);
   const filteredTools = useMemo(
@@ -90,20 +100,22 @@ export function FmdQuickLinksOverview({
   ];
 
   const openCreateDialog = () => {
-    setEditingToolId(null);
+    setEditingTool(null);
     setDraft(defaultFmdToolDraft(currentProfile?.name || ""));
+    setSubmissionId(crypto.randomUUID()); setUploadId(crypto.randomUUID()); setConflictBasis(null); setConflictAdopted(false);
     setDialogMode("create");
   };
 
   const openEditDialog = (tool: FmdTool) => {
-    setEditingToolId(tool.id);
+    setEditingTool(structuredClone(tool));
     setDraft(draftFromFmdTool(tool));
+    setSubmissionId(crypto.randomUUID()); setUploadId(crypto.randomUUID()); setConflictBasis(null); setConflictAdopted(false);
     setDialogMode("edit");
   };
 
   const closeDialog = () => {
     setDialogMode(null);
-    setEditingToolId(null);
+    setEditingTool(null);
     setDraft(defaultFmdToolDraft(currentProfile?.name || ""));
   };
 
@@ -115,16 +127,32 @@ export function FmdQuickLinksOverview({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saveBlocked) return;
+    setConflictAdopted(false);
     const accepted = await (dialogMode === "edit" && editingTool
-      ? onUpdateTool(editingTool, draft)
-      : onCreateTool(draft));
+      ? onUpdateTool(editingTool, draft, submissionId)
+      : onCreateTool(draft, submissionId));
     if (accepted === false) return;
     closeDialog();
   };
 
+  const saveNotice = operation?.phase === "unconfirmed" ? <UiNotice tone="warning">Bestätigung steht aus. Die abgesendeten Eingaben bleiben erhalten; erneutes Speichern ist gesperrt. <UiButton className="min-h-11" disabled={operation.checking} onClick={() => void planningState.checkToolOutcome(operation.id)}>Serverstand prüfen</UiButton></UiNotice> : operation?.phase === "conflict" && !conflictAdopted ? <UiNotice tone="warning">
+    <p>Der Link wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten. Prüfe den Serverstand vor dem erneuten Speichern.</p>
+    {conflictBasis ? <><p className="mt-2">Serverstand: {conflictBasis.name} · {conflictBasis.url || "Link fehlt"}</p><UiButton className="mt-2 min-h-11" onClick={() => { setEditingTool(conflictBasis); setConflictAdopted(true); }}>Als Grundlage übernehmen</UiButton></> : <UiButton className="mt-2 min-h-11" onClick={async () => { if (await planningState.refreshTools()) setConflictBasis(planningState.tools().tools.find(item => item.id === editingTool?.id) || null); }}>Aktuellen Serverstand laden</UiButton>}
+  </UiNotice> : null;
+  if (view.readStatus === "not-loaded" || view.readStatus === "forbidden") return <UiNotice>Links sind in dieser Sitzung nicht verfügbar.</UiNotice>;
+
   return (
     <div className="grid gap-4">
+      <div className="space-y-2" aria-live="polite">
+        {view.readStatus === "stale" ? <UiNotice>Die Linkdaten müssen erneut geprüft werden. <UiButton className="min-h-11" onClick={() => void planningState.refreshTools()}>Links aktualisieren</UiButton></UiNotice> : null}
+        {!dialogMode ? view.operations.filter(item => item.phase === "unconfirmed").map(item => <UiNotice key={item.id} tone="warning">Bestätigung steht aus: {item.draft.name}. Die abgesendeten Eingaben bleiben erhalten. <UiButton className="min-h-11" disabled={item.checking} onClick={() => void planningState.checkToolOutcome(item.id)}>Serverstand prüfen</UiButton></UiNotice>) : null}
+        {view.operations.filter(item => item.phase === "saved" && item.warning).map(item => <UiNotice key={item.id} tone="warning">{item.warning}</UiNotice>)}
+        {view.previews.filter(item => item.phase === "unconfirmed").map(item => <UiNotice key={item.id} tone="warning">Bild-Upload unbestätigt: {item.fileName}. Ohne bestätigten Dateipfad lässt sich das Ergebnis nicht zuordnen; bitte nicht erneut hochladen. <UiButton className="min-h-11" onClick={() => void planningState.checkToolPreview(item.id)}>Upload-Ergebnis prüfen</UiButton>{item.verification === "no-reference" ? <p>Kein bestätigter Dateipfad verfügbar. Es wurde kein weiterer Upload gesendet.</p> : null}</UiNotice>)}
+        {view.previews.filter(item => item.phase === "uploaded" && item.image && !tools.some(tool => tool.previewImageUrl === item.image!.imageUrl)).map(item => <UiNotice key={item.id}>Vorschaubild hochgeladen: {item.fileName}. Der Link ist damit noch nicht gespeichert.{dialogMode ? <UiButton className="min-h-11" onClick={() => setDraft(current => ({ ...current, previewImageUrl: item.image!.imageUrl, previewImageSource: "manual" }))}>Bild für diesen Entwurf übernehmen</UiButton> : null}</UiNotice>)}
+      </div>
       <UiPanel padding="none" className="overflow-hidden">
+        <h2 className="sr-only">Links und Tools</h2>
         <div className="grid gap-4 p-4 lg:p-5">
           <div className="flex justify-end">
             <UiButton
@@ -197,6 +225,7 @@ export function FmdQuickLinksOverview({
               <FmdQuickLinkCard
                 key={tool.id}
                 tool={tool}
+                saveStatus={view.operations.some(item => item.toolId === tool.id && item.phase === "unconfirmed") ? "unconfirmed" : view.operations.some(item => item.toolId === tool.id && item.phase === "saving") ? "saving" : undefined}
                 canEditLinks={canEditLinks}
                 onEdit={openEditDialog}
               />
@@ -218,6 +247,9 @@ export function FmdQuickLinksOverview({
           mode={dialogMode}
           draft={draft}
           pending={pending}
+          saveBlocked={Boolean(saveBlocked)}
+          uploadBlocked={uploadBlocked}
+          saveNotice={saveNotice}
           currentProfile={currentProfile}
           curatedLinkCount={curatedLinkCount}
           curatedLimitReached={curatedLimitReached}
@@ -225,7 +257,7 @@ export function FmdQuickLinksOverview({
           onDraftChange={setDraft}
           onLoadMetadata={onLoadMetadata}
           onSubmit={submit}
-          onUploadPreviewImage={onUploadPreviewImage}
+          onUploadPreviewImage={async file => { const uploaded = await onUploadPreviewImage(file, uploadId); if (uploaded) setUploadId(crypto.randomUUID()); return uploaded; }}
         />
       )}
     </div>

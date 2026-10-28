@@ -1,3 +1,5 @@
+import type { PrivateWorkweekPlanningState } from "@/features/team-workweek/model/private-workweek-planning-state";
+import type { PublishedWorkweekCalendars } from "@/features/team-workweek/model/published-workweek-calendar-state";
 import type { Task, TaskComment, TaskExternalComment, TaskBlocker, TaskRelation, TaskActivity, TaskReview } from "@/lib/types";
 import type { AppWorkspace } from "./workspace-routes";
 import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
@@ -49,15 +51,21 @@ export type PlanningWorkspaceView = {
   readStatus: PlanningReadStatus;
   completeness: "complete" | "partial" | "none";
 };
+import type { PlanningToolsState } from "@/features/tools/model/tool-state";
 import type { PlanningEventsState } from "@/features/events/model/event-state";
 import type { PlanningNotificationsState } from "./planning-notifications-state";
 
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
-export interface PlanningState extends PlanningNotificationsState, PlanningEventsState {
+export interface PlanningState extends PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+  beginBacklogAssignment(tasks: readonly Task[], sprints: readonly import("@/lib/types").Sprint[], bulk: boolean): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor;
+  backlogAssignments(): readonly import("@/features/backlog/model/backlog-assignment").BacklogAssignmentView[];
+  resumeBacklogAssignment(id: string): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor | null;
+  backlog(): { model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
   beginSprintLock(sprint: import("@/lib/types").Sprint, tasks: readonly Task[]): import("@/features/sprint/model/sprint-lock").SprintLockEditor;
   sprintLocks(sprintId: string): readonly import("@/features/sprint/model/sprint-lock").SprintLockView[];
   resumeSprintLock(sprintId: string): import("@/features/sprint/model/sprint-lock").SprintLockEditor | null;
+
   sprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanView;
   checkSprintPlan(): Promise<PlanningTaskSaveCheck>;
   resumeSprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanEditor | null;

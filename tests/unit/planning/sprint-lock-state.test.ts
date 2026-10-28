@@ -4,8 +4,8 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { SprintLockReceipt } from "@/features/sprint/model/sprint-lock";
 const sprint = { id: "sprint", name: "Sprint 1", status: "review" as const, startDate: "2020-01-01", endDate: "2020-01-14", reviewDueAt: "2020-01-16T22:59:59Z", scoreLocked: false, updatedAt: "opaque/shown" };
-const task = taskDetailStoryTask({ id: "member", sprintId: sprint.id, updatedAt: "task/shown", scoreFinal: false });
-const independent = taskDetailStoryTask({ id: "independent", sprintId: "other", updatedAt: "task/independent" });
+const task = taskDetailStoryTask({ id: "member", parentTaskId: "initiative", assigneeId: "founder", sprintId: sprint.id, updatedAt: "task/shown", scoreFinal: false });
+const independent = taskDetailStoryTask({ id: "independent", parentTaskId: "initiative", assigneeId: "founder", sprintId: "other", updatedAt: "task/independent" });
 const initial = { ...emptyPlanningShellState, sprints: [sprint], tasks: [task, independent] };
 const options = { firstSprintNumber: 1, anchorStartDate: "2099-01-01", rhythmWeeks: 2, horizonWeeks: 1, targetSprintNumber: 2 };
 const receipt: SprintLockReceipt = { sprint: { id: sprint.id, status: "closed", scoreLocked: true }, carryover: { nextSprintId: "next", created: 1, evaluated: 1 }, scoring: { scores: 2, strikeEvents: 2, governanceReviews: 0 } };
@@ -66,4 +66,40 @@ test("old reads and legacy rollback preserve confirmed lock scores while unrelat
     expect(model.strikeEvents).toEqual([event]);
     expect(model.attendance).toEqual([attendance]);
     expect(model.sprints[0].scoreLocked).toBe(true);
+});
+
+
+test("unknown Backlog assignment pauses only its dependent lock while an independent Sprint can close", async () => {
+ let locks=0;
+ const otherSprint={...sprint,id:"independent-sprint"};
+ const owner=createPlanningState({userId:"user",initialWorkspace:"backlog",initialData:{...initial,sprints:[sprint,otherSprint]},adapter:{saveTask:async()=>({task:{}}),readWorkspace:async()=>null,assignBacklog:async()=>{throw new Error("Unknown assignment");},lockSprint:async basis=>{locks++;return {...receipt,sprint:{...receipt.sprint,id:basis.sprint.id}};}}});
+ await owner.planning.beginBacklogAssignment([task],[sprint],false).assign(sprint.id);
+ const dependent=owner.planning.beginSprintLock(sprint,[task]);
+ await expect(dependent.lock(options)).resolves.toMatchObject({kind:"unconfirmed"});
+ expect(dependent.view().phase).toBe("blocked");
+ await expect(owner.planning.beginSprintLock(otherSprint,[]).lock(options)).resolves.toMatchObject({ok:true});
+ expect(locks).toBe(1);
+});
+
+test("an unknown lock pauses Backlog admission to its Sprint without blocking assignment to an independent Sprint",async()=>{
+ let assignments=0;
+ const otherSprint={...sprint,id:"independent-sprint"};const unassigned={...independent,sprintId:""};
+ const owner=createPlanningState({userId:"user",initialWorkspace:"backlog",initialData:{...initial,tasks:[task,unassigned],sprints:[sprint,otherSprint]},adapter:{saveTask:async()=>({task:{}}),readWorkspace:async()=>null,lockSprint:async()=>{throw new Error("Unknown lock");},assignBacklog:async(tasks,target)=>{assignments++;return{updates:tasks.map(task=>({id:task.id,sprintId:target?.id||"",scoreRelevant:true,updatedAt:"confirmed"}))};}}});
+ await owner.planning.beginSprintLock(sprint,[task]).lock(options);
+ const dependent=owner.planning.beginBacklogAssignment([unassigned],[sprint,otherSprint],false);
+ expect(await dependent.assign(sprint.id)).toMatchObject({phase:"blocked"});
+ expect(await owner.planning.beginBacklogAssignment([unassigned],[sprint,otherSprint],false).assign(otherSprint.id)).toMatchObject({phase:"saved"});
+ expect(assignments).toBe(1);
+});
+
+test.each([["sprint_lock_objections","rejected"],["sprint_lock_window","rejected"],["session_superseded","unconfirmed"]] as const)("409 %s keeps its actual taxonomy and never removes independent confirmation",async(code,phase)=>{
+ const write=deferred<SprintLockReceipt>();
+ const owner=createPlanningState({userId:"user",initialWorkspace:"sprint",initialData:initial,adapter:{saveTask:async(_task,patch)=>({task:{...patch,updatedAt:"independent/confirmed"}}),readWorkspace:async()=>null,lockSprint:()=>write.promise}});
+ const editor=owner.planning.beginSprintLock(sprint,[task]),saving=editor.lock(options);
+ await owner.planning.saveTask(independent,{title:"Independent confirmation"});
+ write.reject(Object.assign(new Error("Policy changed"),{status:409,code}));await saving;
+ expect(editor.view().phase).toBe(phase);
+ expect(owner.planning.taskDetail(independent.id).task?.title).toBe("Independent confirmation");
+ expect(owner.planning.protectedCache()?.sprints[0].scoreLocked).toBe(false);
+ expect(owner.planning.sprintWorkspace().model.sprints[0].scoreLocked).toBe(phase==="unconfirmed");
 });

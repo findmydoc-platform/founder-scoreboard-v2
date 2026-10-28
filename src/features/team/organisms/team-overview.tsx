@@ -77,10 +77,10 @@ function TeamOverviewContent({
       <TeamRoleSummary profiles={profiles} today={today} />
 
       {actualProfile && (
-        <PrivateTeamWorkweekCard apiClient={apiClient} profile={actualProfile} editorWeek={week} editorRequested={searchParams.get("workweek") === "edit"} onEditorRequestHandled={closeWorkweekRequest} />
+        <PrivateTeamWorkweekCard planningState={planningState} apiClient={apiClient} profile={actualProfile} editorWeek={week} editorRequested={searchParams.get("workweek") === "edit"} onEditorRequestHandled={closeWorkweekRequest} />
       )}
 
-      {actualProfile && <PublishedTeamWorkweeksCard key={week || "current"} initialDate={week} apiClient={apiClient} profiles={profiles} />}
+      {actualProfile && <PublishedTeamWorkweeksCard key={week || "current"} initialDate={week} planningState={planningState} profiles={profiles} />}
 
       <div className="grid gap-2">
         {profiles.map((profile) => (

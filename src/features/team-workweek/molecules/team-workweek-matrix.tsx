@@ -17,6 +17,7 @@ import {
 } from "@/shared/molecules/data-surface";
 
 export function TeamWorkweekMatrix({
+  workweeksByDay,
   compact = false,
   dateKey,
   profiles,
@@ -24,6 +25,7 @@ export function TeamWorkweekMatrix({
   upcomingWorkweeks = [],
   publishedOwnerIds,
 }: {
+  workweeksByDay?: import("../model/published-workweek-calendar-state").WorkweeksByDay;
   compact?: boolean;
   dateKey: string;
   profiles: Profile[];
@@ -32,7 +34,7 @@ export function TeamWorkweekMatrix({
   publishedOwnerIds?: string[];
 }) {
   const rows = projectCurrentCalendarWorkweekRows({
-    calendarWorkweeks: workweeks,
+    calendarWorkweeks: workweeksByDay ? [...workweeksByDay[dateKey] || []] : workweeks,
     dateKey,
     profiles: teamWorkweekProfiles(profiles),
   }).map(row => ({ ...row,
@@ -40,7 +42,7 @@ export function TeamWorkweekMatrix({
     hasPublished: publishedOwnerIds ? publishedOwnerIds.includes(row.profile.id) : workweeks.some(entry => entry.ownerProfileId === row.profile.id),
     days: Object.fromEntries(TEAM_WORKWEEK_DAYS.map(day => {
       const date = addCalendarDays(workweekStart(dateKey), day.weekday - 1);
-      return [day.key, projectCalendarWorktimes({ calendarWorkweeks: workweeks, dateKey: date, profiles: [row.profile] })[0]?.windows || []];
+      return [day.key, projectCalendarWorktimes({ calendarWorkweeks: workweeksByDay ? [...workweeksByDay[date] || []] : workweeks, dateKey: date, profiles: [row.profile] })[0]?.windows || []];
     })),
   }));
   const hasWeekTimes = (row: typeof rows[number]) => Object.values(row.days).some(windows => windows.length > 0);

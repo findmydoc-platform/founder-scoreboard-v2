@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PrivateWorkweekContext } from "./private-workweek-planning-state";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   editableTeamWorkweekDraft,
   inflatePublishedTeamWorkweekWindows,
@@ -40,28 +43,44 @@ function initialDraft(effectiveFrom = nextMondayIso()): PrivateTeamWorkweekDraft
   return { effectiveFrom, windows: emptyTeamWorkweekWindows() };
 }
 
-export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initialWeek?: string) {
+export function usePrivateTeamWorkweekState(transport: WorkweekTransport, planningState: PlanningState, initialWeek?: string) {
   const mounted = useRef(true);
   const loadSequence = useRef(0);
-  const [weekContext, setWeekContext] = useState<null | { weekStart: string; contextToken: string; effectiveUntil: string | null; basePublicationId: string | null; basePublicationRevision: number | null; windows: Array<{weekday: number; startMinute: number; endMinute: number}> }>(null);
+  const shared = useSyncExternalStore(planningState.subscribe, planningState.privateWorkweek, planningState.privateWorkweek);
+  const context = shared.context;
+  // Pin the displayed editing basis beside the local draft. Shared reads cannot rebase it.
+  const [weekContext, setWeekContext] = useState<PrivateWorkweekContext["weekContext"] | null>(context?.weekContext || null);
+  const [editingVersionId, setEditingVersionId] = useState<string | null>(context?.version?.id || null);
   const mutationPending = useRef(false);
-  const [version, setVersion] = useState<PrivateTeamWorkweekVersion | null>(null);
-  const [publication, setPublication] = useState<OwnTeamWorkweekPublication | null>(null);
-  const [pendingPublication, setPendingPublication] = useState<PendingTeamWorkweekPublication | null>(null);
-  const [latestPublished, setLatestPublished] = useState<OwnTeamWorkweekPublication | null>(null);
-  const [currentEditBase, setCurrentEditBase] = useState<TeamWorkweekEditBase | null>(null);
-  const [preparedSuccessor, setPreparedSuccessor] = useState<OwnTeamWorkweekPublication | null>(null);
+  const version = context?.version || null;
+  const publication = context?.publication || null;
+  const pendingPublication = context?.pendingPublication || null;
+  const latestPublished = context?.latestPublished || null;
+  const [currentEditBase, setCurrentEditBase] = useState<TeamWorkweekEditBase | null>(context?.editBase || null);
+  const [elapsedSuccessorId, setElapsedSuccessorId] = useState<string | null>(null);
+  const preparedSuccessor = context?.preparedSuccessor?.id === elapsedSuccessorId ? null : context?.preparedSuccessor || null;
   const [conflict, setConflict] = useState<TeamWorkweekConflict | null>(null);
-  const [restartAvailable, setRestartAvailable] = useState(false);
-  const [contextRefreshRequired, setContextRefreshRequired] = useState(false);
-  const [minimumEffectiveFrom, setMinimumEffectiveFrom] = useState(() => nextMondayIso());
-  const [draft, setDraft] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
-  const [baseline, setBaseline] = useState<PrivateTeamWorkweekDraft>(() => initialDraft());
-  const [pending, setPending] = useState(true);
+  const restartAvailable = context?.restartAvailable || false;
+  const [localContextRefreshRequired, setContextRefreshRequired] = useState(false);
+  const contextRefreshRequired = localContextRefreshRequired || shared.contextRefreshRequired;
+  const minimumEffectiveFrom = context?.minimumEffectiveFrom || nextMondayIso();
+  const loadedDraft = () => context ? editableTeamWorkweekDraft({ version: context.version, editBase: context.editBase || null, minimumEffectiveFrom: context.minimumEffectiveFrom }) : initialDraft();
+  const retainedSubmission = useCallback(() => {
+    const current = planningState.privateWorkweek();
+    if ((current.save.phase === "unconfirmed" || current.save.phase === "saving") && current.save.submitted) return current.save.submitted;
+    if ((current.publication.phase === "unconfirmed" || current.publication.phase === "publishing" || current.publication.phase === "preparing") && current.publication.sourceVersion) return editableTeamWorkweekDraft({ version: current.publication.sourceVersion, editBase: null, minimumEffectiveFrom: current.publication.sourceVersion.effectiveFrom });
+    return undefined;
+  }, [planningState]);
+  const [draft, setDraft] = useState<PrivateTeamWorkweekDraft>(() => retainedSubmission() || loadedDraft());
+  const [baseline, setBaseline] = useState<PrivateTeamWorkweekDraft>(loadedDraft);
+  const [localPending, setPending] = useState(true);
+  const sharedOperating = shared.save.phase === "saving" || shared.publication.phase === "publishing";
+  const pending = localPending || sharedOperating;
   const [operating, setOperating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [editingToday, setEditingToday] = useState(() => workweekStart());
-  const selectedWeekStart = version?.selectedWeekStart || (publication?.status === "preparing" && version?.activationMode === "future_monday" ? version.effectiveFrom : weekContext?.weekStart || (draft.activationMode === "immediate" ? workweekStart() : draft.effectiveFrom));
+  const editingVersion = version?.id === editingVersionId ? version : null;
+  const selectedWeekStart = editingVersion?.selectedWeekStart || (publication?.status === "preparing" && editingVersion?.activationMode === "future_monday" ? editingVersion.effectiveFrom : weekContext?.weekStart || (draft.activationMode === "immediate" ? workweekStart() : draft.effectiveFrom));
   const weekExpired = selectedWeekStart < editingToday;
   useEffect(() => {
     let timer: number;
@@ -98,14 +117,14 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
       minimumEffectiveFrom: emptyEffectiveFrom,
       version: nextVersion,
     }), ...(firstPublication && !nextVersion ? { activationMode: "immediate" as const } : {}) };
-    setVersion(nextVersion);
+    setEditingVersionId(nextVersion?.id || null);
     setDraft(nextDraft);
     setBaseline(nextDraft);
     return nextDraft;
   }, []);
 
   const load = useCallback(async (preservedDraft?: PrivateTeamWorkweekDraft, requestedWeek?: string, duringOperation = false) => {
-    if (mutationPending.current && !duringOperation) return false;
+    if ((mutationPending.current || planningState.privateWorkweek().save.phase === "saving" || planningState.privateWorkweek().publication.phase === "publishing") && !duringOperation) return false;
     const sequence = ++loadSequence.current;
     setPending(true);
     setMessage("");
@@ -137,13 +156,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
       }
       if (!mounted.current || sequence !== loadSequence.current) return false;
       setWeekContext(body.weekContext || null);
-      setPublication(body.publication || null);
-      setPendingPublication(body.pendingPublication || null);
-      setLatestPublished(body.latestPublished || null);
       setCurrentEditBase(body.editBase || null);
-      setPreparedSuccessor(body.preparedSuccessor || null);
-      setMinimumEffectiveFrom(body.minimumEffectiveFrom);
-      setRestartAvailable(body.restartAvailable ?? false);
       const chosen = body.weekContext && selectedWorkweek(body.weekContext.weekStart);
       const loadedBase = body.weekContext ? {
         basePublicationId: body.weekContext.basePublicationId || undefined,
@@ -166,6 +179,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
       return true;
     } catch (error) {
       if (mounted.current && sequence === loadSequence.current) {
+        setContextRefreshRequired(true);
         setMessageTone("warning");
         setMessage(error instanceof Error ? error.message : "Private Grundwoche konnte nicht geladen werden.");
       }
@@ -173,12 +187,23 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
     } finally {
       if (mounted.current && sequence === loadSequence.current && !mutationPending.current) setPending(false);
     }
-  }, [transport, applyVersion]);
+  }, [transport, applyVersion, planningState]);
 
+  const awaitingOperationLoad = useRef(false);
   useEffect(() => {
-    const timeout = window.setTimeout(() => void load(undefined, initialWeek), 0);
+    if (planningState.privateWorkweek().save.phase === "saving" || planningState.privateWorkweek().publication.phase === "publishing") {
+      awaitingOperationLoad.current = true;
+      return;
+    }
+    const timeout = window.setTimeout(() => void load(retainedSubmission(), initialWeek), 0);
     return () => window.clearTimeout(timeout);
-  }, [load, initialWeek]);
+  }, [load, initialWeek, planningState, retainedSubmission]);
+  useEffect(() => {
+    if (!sharedOperating && awaitingOperationLoad.current) {
+      awaitingOperationLoad.current = false;
+      void load(retainedSubmission(), initialWeek);
+    }
+  }, [sharedOperating, load, initialWeek, retainedSubmission]);
 
   const boundarySource = preparedSuccessor || latestPublished;
   const nextPublicationBoundary = boundarySource
@@ -196,14 +221,14 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
       }
       if (!dirty) void load();
       else {
-        setPreparedSuccessor(null);
+        setElapsedSuccessorId(preparedSuccessor?.id || null);
         setMessageTone("warning");
         setMessage("Die geplante Arbeitswoche gilt jetzt. Deine Eingaben bleiben erhalten. Lade die Arbeitswoche neu, bevor du diese Bearbeitung veröffentlichst.");
       }
     };
     refreshAtBoundary();
     return () => window.clearTimeout(timeout);
-  }, [dirty, nextPublicationBoundary, load]);
+  }, [dirty, nextPublicationBoundary, preparedSuccessor?.id, load]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -239,7 +264,16 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
     }));
   };
 
+  const editingBasisIsCurrent = () => {
+    if ((planningState.privateWorkweek().context?.version?.id || null) === editingVersionId) return true;
+    setContextRefreshRequired(true);
+    setMessageTone("warning");
+    setMessage("Die gespeicherte Version wurde während deiner Bearbeitung geändert. Deine Eingaben bleiben erhalten. Lade den aktuellen Stand und prüfe sie vor dem Speichern.");
+    return false;
+  };
+
   const saveDraft = async () => {
+    if (!editingBasisIsCurrent()) return null;
     if (contextRefreshRequired) return null;
     if (weekExpired) { setErrors(["Die ausgewählte Woche ist vorbei. Übernimm deine Eingaben für diese Woche."]); return null; }
     if (mustRestartBeforeSaving) {
@@ -281,7 +315,6 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
       const saved = { ...body.version, windows: validation.draft.windows } as PrivateTeamWorkweekVersion;
       if (mounted.current) {
         applyVersion(saved);
-        setPublication(null);
         setMessageTone("success");
         setMessage("Entwurf gespeichert. Noch nicht veröffentlicht.");
       }
@@ -289,7 +322,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
     } catch (error) {
       if (mounted.current) {
         setMessageTone("warning");
-        setMessage(`${error instanceof Error ? error.message : "Private Grundwoche konnte nicht gespeichert werden."} Deine Eingaben bleiben hier erhalten. Versuche erneut zu speichern; die Veröffentlichung wurde nicht gestartet.`);
+        setMessage(`${error instanceof Error ? error.message : "Private Grundwoche konnte nicht gespeichert werden."} Deine Eingaben bleiben hier erhalten. ${planningState.privateWorkweek().save.phase === "unconfirmed" ? "Die Speicherbestätigung ist ausstehend. Lade zuerst den aktuellen Stand; die Speicherung wird nicht automatisch wiederholt." : "Die Veröffentlichung wurde nicht gestartet."}`);
       }
       return null;
     }
@@ -331,7 +364,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
     const refreshed = await refreshContext(preservedDraft, week);
     if (!mounted.current) return false;
     setMessageTone(refreshed ? "success" : "warning");
-    setMessage(refreshed ? success : refreshFailure || "Die Änderung ist bestätigt. Lade den aktuellen Stand vor dem Speichern erneut; deine Eingaben bleiben erhalten.");
+    setMessage(refreshed && (planningState.privateWorkweek().save.phase === "unconfirmed" || planningState.privateWorkweek().publication.phase === "unconfirmed") ? "Der aktuelle Stand ist geladen. Die Bestätigung bleibt ausstehend; deine gesendeten Eingaben bleiben erhalten. Eine Prüfung wiederholt keine Veröffentlichung." : refreshed ? success : refreshFailure || "Die Änderung ist bestätigt. Lade den aktuellen Stand vor dem Speichern erneut; deine Eingaben bleiben erhalten.");
     return refreshed;
   };
 
@@ -377,7 +410,6 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
       const preservedDraft = dirty || retainedWeek ? draft : undefined;
       const refreshedDraft = applyVersion(body.version);
       if (preservedDraft) setDraft({ ...refreshedDraft, windows: preservedDraft.windows, activationMode: preservedDraft.activationMode, effectiveFrom: preservedDraft.effectiveFrom });
-      setPublication(null);
       return await completeOperation({ preservedDraft, week: retainedWeek,
         success: "Neustart vorbereitet. Eingaben bleiben erhalten. Prüfe die ausgewählte Woche vor der Veröffentlichung.",
         refreshFailure: "Neustart vorbereitet. Der aktuelle Teamstand konnte noch nicht geladen werden. Deine Eingaben bleiben erhalten. Lade den Stand vor der Veröffentlichung erneut.",
@@ -412,8 +444,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
             ? "Ein Google-Eintrag wurde geändert. Prüfe den Konflikt vor dem Fortsetzen; deine Eingaben bleiben erhalten."
             : "Die frühere Veröffentlichung ist noch offen. Deine Eingaben bleiben erhalten."));
       }
-      setPendingPublication(null);
-      return await completeOperation({ preservedDraft: draft, week: retainedWeek, published: true,
+      return await completeOperation({ preservedDraft: draft, week: retainedWeek,
         success: "Die frühere Veröffentlichung ist bestätigt. Deine aktuellen Eingaben bleiben unveröffentlicht erhalten.",
         refreshFailure: "Die frühere Veröffentlichung ist bestätigt. Lade den aktuellen Stand vor dem Speichern erneut; deine Eingaben bleiben erhalten.",
       });
@@ -428,6 +459,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
   };
 
   const publish = async () => {
+    if (!editingBasisIsCurrent()) return false;
     if (contextRefreshRequired || mutationPending.current || pending) return false;
     if (!beginOperation()) return false;
     setPublishing(true);
@@ -473,22 +505,6 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
         throw new Error(body?.error || "Grundwoche konnte nicht veröffentlicht werden.");
       }
       if (body?.publication?.status !== "published") {
-        if (body?.publication && mounted.current) {
-          setPublication({
-            id: body.publication.id,
-            effectiveFrom: publishingVersion.effectiveFrom,
-            effectiveAt: body.publication.effectiveAt,
-            effectiveUntil: body.publication.effectiveUntil,
-            activationMode: body.publication.activationMode,
-            status: body.publication.status,
-            syncState: body.publication.syncState,
-            publicationRevision: body.publication.publicationRevision,
-            publishedAt: body.publication.publishedAt,
-            lastSyncAt: body.publication.lastSyncAt,
-            googleReconciliationState: "confirmed",
-            lastGoogleReconciliationAt: null,
-          });
-        }
         if (body?.publication?.recovery === "identity_conflict" && !await refreshContext(draft, selectedWeekStart)) return false;
         const lastSuccessfulSync = latestPublished?.lastSyncAt
           ? ` Letzter erfolgreicher Sync: ${new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(latestPublished.lastSyncAt))}.`
@@ -501,7 +517,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
             : `Synchronisierung verzögert. Google kann bereits vorläufige App-Termine enthalten. Die geänderte Arbeitswoche bleibt privat, der bisherige Teamstand bleibt sichtbar und der Vorgang kann sicher wiederholt werden.${lastSuccessfulSync}`);
         return false;
       }
-      return await completeOperation({ published: true,
+      return await completeOperation({
         success: body.publication.effectiveAt
           ? `Arbeitswoche bestätigt.${confirmedActivation(body.publication.effectiveAt, body.publication.effectiveUntil)}`
           : "Arbeitswoche wurde mit Google synchronisiert und im Team veröffentlicht.",
@@ -509,7 +525,7 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
     } catch (error) {
       if (mounted.current) {
         setMessageTone("warning");
-        setMessage(`${error instanceof Error ? error.message : "Grundwoche konnte nicht veröffentlicht werden."} Deine gespeicherte Änderung bleibt erhalten. Der zuletzt bestätigte Teamstand bleibt hier sichtbar. Wiederhole die Veröffentlichung, um den Stand zu prüfen.`);
+        setMessage(`${error instanceof Error ? error.message : "Grundwoche konnte nicht veröffentlicht werden."} Deine gespeicherte Änderung bleibt erhalten. Der zuletzt bestätigte Teamstand bleibt hier sichtbar. Lade zuerst den aktuellen Stand. Die Veröffentlichung wird zur Prüfung nicht wiederholt.`);
       }
       return false;
     } finally {
@@ -621,7 +637,9 @@ export function usePrivateTeamWorkweekState(transport: WorkweekTransport, initia
   const reconciliationState = latestPublished?.googleReconciliationState;
   const showConfirmedTeamBaseline = Boolean(conflict || syncDelayed || reconciliationState === "conflict" || reconciliationState === "delayed");
   const latestIsPrepared = Boolean(latestPublished && (latestPublished.effectiveAt ? new Date(latestPublished.effectiveAt) > new Date() : latestPublished.effectiveFrom > berlinTodayIso()));
-  const badge = contextRefreshRequired
+  const badge = shared.save.phase === "unconfirmed" || shared.publication.phase === "unconfirmed"
+    ? { tone: "amber" as const, label: "Bestätigung ausstehend" }
+    : contextRefreshRequired
     ? { tone: "amber" as const, label: "Stand nicht aktuell" }
     : syncDelayed
     ? { tone: "amber" as const, label: "Synchronisierung verzögert" }

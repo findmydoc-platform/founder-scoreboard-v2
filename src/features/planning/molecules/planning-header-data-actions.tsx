@@ -54,7 +54,7 @@ export function PlanningHeaderDataActions({
         onToggle={() => setQuickLinksOpen((value) => !value)}
       />
       <HeaderCalendarAction
-        apiClient={calendar?.apiClient}
+        planningState={calendar?.apiClient ? planningState || undefined : undefined}
         events={headerData.calendarEvents}
         onOpenTeam={openTeam}
         profiles={calendar?.profiles || []}
