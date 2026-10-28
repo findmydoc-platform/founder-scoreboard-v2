@@ -3,7 +3,7 @@
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "@/features/planning/hooks/use-planning-auth";
+import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import {
   idlePlanningHeaderSlots,

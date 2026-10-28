@@ -8,7 +8,7 @@ import { emptyPlanningHeaderData, readyHeaderSlot } from "@/lib/planning-header-
 import type { BrowserApiClient, BrowserApiJsonResult } from "@/lib/browser-api-client";
 import type { PlanningHeaderData } from "@/lib/types";
 import { usePlanningHeaderData } from "./use-planning-header-data";
-import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "./use-planning-auth";
+import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";
 
 const initialHeader: PlanningHeaderData = {
   ...emptyPlanningHeaderData,

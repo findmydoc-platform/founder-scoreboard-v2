@@ -10,7 +10,7 @@ import { useTaskUpdateCommand } from "@/features/tasks/hooks/use-task-update-com
 import { emptyPlanningShellState } from "../model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
-import { getProtectedPlanningShellStateCache } from "./use-planning-auth";
+import { getProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";
 import type { TaskComment } from "@/lib/types";
 import type { BrowserApiClient, BrowserApiJsonResult } from "@/lib/browser-api-client";
 

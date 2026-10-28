@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "@/features/planning/hooks/use-planning-auth";
+import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import type { ServerSessionView } from "@/lib/credentials/session-types";
