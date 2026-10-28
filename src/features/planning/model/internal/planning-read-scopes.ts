@@ -4,7 +4,7 @@ import type { AppWorkspace } from "../workspace-routes";
 export type PlanningReadCoverage = Partial<Record<keyof PlanningShellState, "complete" | "partial">>;
 export function workspaceReadCoverage(workspace: AppWorkspace): PlanningReadCoverage {
   switch (workspace) {
-    case "planning": case "projects": return { project: "complete", profiles: "complete", tasks: "complete", sprints: "partial", taskRelations: "partial", profileUiPreferences: "complete" };
+    case "planning": case "projects": return { project: "complete", profiles: "partial", tasks: "partial", sprints: "partial", taskRelations: "partial", profileUiPreferences: "partial" };
     case "backlog": return { tasks: "partial", profiles: "partial", sprints: "partial", sprintCommitments: "partial" };
     case "sprint": return { project: "complete", profiles: "partial", tasks: "partial", sprints: "partial", sprintCommitments: "partial", founderSprintScores: "partial", founderStrikeStates: "partial", strikeEvents: "partial", scoreObjections: "partial", meetings: "partial", meetingAttendance: "partial" };
     case "events": return { profiles: "complete", events: "complete" };

@@ -6,6 +6,7 @@ import { googleWorkspaceApi } from "@/features/team-workweek/model/google-worksp
 import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
 import { requestBacklogModel } from "@/features/backlog/model/backlog-api-client";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
+import { hierarchyReadCoverage, hierarchyOmittedFields } from "./hierarchy-read-coverage";
 import { backlogModelCoverage, backlogOmittedFields } from "./backlog-read-coverage";
 import { readPublishedWorkweekCalendar } from "@/features/team-workweek/model/published-workweek-calendar-api";
 
@@ -286,6 +287,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         return { task: body.task, relation: body.relation, relatedTask: body.relatedTask, approvalError: body.code === "task_created_approval_failed" ? body.error || "Die Aufgabe wurde erstellt. Die Freigabe ist fehlgeschlagen." : undefined };
       },
       async removeTask(task, action, reason) {
+        if (action === "delete_epic") {
+          const { response, body } = await planningApi.deleteEpicRequest(runtime.apiClient, task.id, { expectedUpdatedAt: task.updatedAt || "" });
+          if (!response.ok) throw Object.assign(new Error(body && "error" in body && body.error || "Meilenstein konnte nicht gelöscht werden."), { status: response.status });
+          if (!body || !("task" in body) || body.task?.id !== task.id || body.task.taskType !== "epic") throw new Error("Das Löschen ist noch nicht bestätigt.");
+          return { affectedTaskIds: [body.task.id] };
+        }
         if (action === "withdraw") {
           const { response, body } = await taskApi.withdrawTaskRequest(runtime.apiClient, task.id, task.approvalRevision, reason);
           if (!response.ok) throw Object.assign(new Error(body?.error || "Deliverable konnte nicht zurückgezogen werden."), { status: response.status, code: body?.code });
@@ -344,7 +351,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (workspace === "planning" || workspace === "projects") {
           const { response, body } = await planningApi.requestPlanningWorkspaceData(runtime.apiClient, workspace);
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status });
-          return body?.model ? { data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), headerData: body.headerData, currentProfile: body.currentProfile } : null;
+          return body?.model ? { data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), coverage: hierarchyReadCoverage(body.model), taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: hierarchyOmittedFields(body.model), headerData: body.headerData, currentProfile: body.currentProfile } : null;
         }
         if (workspace === "backlog") {
           const { response, body } = await requestBacklogModel(runtime.apiClient);

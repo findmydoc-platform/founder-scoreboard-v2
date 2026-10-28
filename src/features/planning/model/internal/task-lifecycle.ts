@@ -5,11 +5,11 @@ import type { PlanningTaskCreationInput, PlanningTaskCreationConfirmation, Plann
 type LifecycleAdapter = {
   removalBlocked?: (task:Task) => boolean;
   createTask?: (input: PlanningTaskCreationInput) => Promise<PlanningTaskCreationConfirmation>;
-  removeTask?: (task: Task, action: "withdraw" | "reject", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
+  removeTask?: (task: Task, action: "withdraw" | "reject" | "delete_epic", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
   checkCreation(): Promise<PlanningTaskSaveCheck["readStatus"]>;
   checkRemoval(taskId: string): Promise<PlanningTaskSaveCheck["readStatus"]>;
   current(): PlanningShellState;
-  acceptRemoval(ids: ReadonlySet<string>, action: "withdraw" | "reject", rootId: string): void;
+  acceptRemoval(ids: ReadonlySet<string>, action: "withdraw" | "reject" | "delete_epic", rootId: string): void;
   capture(): number;
   acceptCreation(result: PlanningTaskCreationConfirmation, started: number, relatedBasis?: { id: string; updatedAt?: string }): void;
   generation(): number;
@@ -25,7 +25,7 @@ function temporaryTask(input: PlanningTaskCreationInput, data: PlanningShellStat
     definitionOfDone: input.definitionOfDone || "", dependsOn: "", evidenceLink: "", evidenceLinks: [], linkedPullRequests: [], issueNumber: "", issueUrl: "", note: "", watched: false,
     hours: input.hours || 0, sprintId: "", reviewStatus: "not_requested", scorePoints: 0, scoreFinal: false,
     githubRepo: input.githubRepo || "", githubIssueNumber: null, githubIssueUrl: "", githubIssueSyncStatus: "not_synced", githubIssueLastSyncedAt: "", githubIssueSyncError: "",
-    taskType: input.taskType, parentTaskId: input.parentTaskId,
+    taskType: input.taskType, parentTaskId: input.parentTaskId, targetDate: input.targetDate, strategy: input.strategy, raciAssignments: input.raciAssignments,
     approvalStatus: input.taskType === "deliverable" || input.taskType === "initiative" ? "proposed" : null,
     approvalRevision: 1, parentApprovalStatus: data.tasks.find(task => task.id === input.parentTaskId)?.approvalStatus || null,
     scoreRelevant: false, problemStatement: input.problemStatement, intendedOutcome: input.intendedOutcome,
@@ -125,7 +125,7 @@ export function createTaskLifecycle(adapter: LifecycleAdapter) {
       const remaining = withoutTasks(data, subtreeIds(data, new Set(removing.values())));
       return temporary.size ? { ...remaining, tasks: [...remaining.tasks, ...[...temporary.values()].filter(task => !isRemoved(task))] } : remaining;
     },
-    async removeTask(task: Task, action: "withdraw" | "reject", reason: string): Promise<PlanningTaskRemovalResult> {
+    async removeTask(task: Task, action: "withdraw" | "reject" | "delete_epic", reason: string): Promise<PlanningTaskRemovalResult> {
       if (!adapter.isActive()) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
       if (!adapter.removeTask) return { ok: false, kind: "rejected", error: "Entfernen ist nicht verfügbar." };
       if (isRemoved(task)) return { ok: false, kind: "rejected", code: "task_removed", error: "Diese Aufgabe wurde bereits entfernt." };

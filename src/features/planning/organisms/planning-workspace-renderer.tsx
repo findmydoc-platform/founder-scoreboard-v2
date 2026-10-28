@@ -70,7 +70,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     saveProfileSettings,
     saveOwnProfileSettings,
     setGithubSyncQueueOpen,
-    setInitiativeDialogDefaults,
+    editInitiative,
     setEpicDeleteTarget,
     setEpicDialogDefaults,
     setTaskDialogDefaults,
@@ -103,8 +103,9 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "projects" && (
         <ProjectsOverview
-          data={data}
-          tasks={data.tasks}
+          planningState={planningState}
+          data={{ ...data, tasks: [...planningState.hierarchy().tasks] }}
+          tasks={[...planningState.hierarchy().tasks]}
           currentProfile={currentProfile}
           canManageInitiatives={canManageTaskMeta}
           canManageEpics={canManageProjectEpics}
@@ -122,26 +123,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
           onOpenTask={openTaskPanel}
           onDecideInitiative={decideInitiativeApproval}
           onWithdrawInitiative={withdrawInitiative}
-          onEditInitiative={(initiative) => setInitiativeDialogDefaults({
-            id: initiative.id,
-            expectedUpdatedAt: initiative.updatedAt,
-            title: initiative.title,
-            parentTaskId: initiative.parentTaskId || "",
-            ownerId: initiative.ownerId || "",
-            accountableProfileId: initiative.raciAssignments?.find((assignment) => assignment.role === "accountable")?.profileId || initiative.ownerId || "",
-            responsibleProfileIds: initiative.raciAssignments?.filter((assignment) => assignment.role === "responsible").map((assignment) => assignment.profileId) || [],
-            consultedProfileIds: initiative.raciAssignments?.filter((assignment) => assignment.role === "consulted").map((assignment) => assignment.profileId) || [],
-            informedProfileIds: initiative.raciAssignments?.filter((assignment) => assignment.role === "informed").map((assignment) => assignment.profileId) || [],
-            priority: initiative.priority,
-            status: initiative.status === "In Arbeit" ? "active" : initiative.status === "Erledigt" ? "done" : initiative.status === "Pausiert" ? "paused" : "planned",
-            targetDate: initiative.targetDate || "",
-            goal: initiative.strategy?.goal || initiative.description,
-            successCriteria: initiative.strategy?.successCriteria || "",
-            scopeConstraints: initiative.strategy?.scopeConstraints || "",
-            approvalStatus: initiative.approvalStatus || "proposed",
-            approvalRevision: initiative.approvalRevision,
-            decisionNote: initiative.decisionNote,
-          })}
+          onEditInitiative={editInitiative}
         />
       )}
       {workspace === "backlog" && (

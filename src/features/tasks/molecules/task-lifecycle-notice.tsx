@@ -8,7 +8,7 @@ import { displaySubmittedValue, taskSubmittedValues } from "./task-save-notice";
 export function TaskLifecycleNotice({ operation, onCheck }: { operation: PlanningTaskLifecycleView; onCheck: (id: string) => Promise<PlanningTaskSaveCheck> }) {
   if (!["unconfirmed", "blocked", "partiallyConfirmed"].includes(operation.phase)) return null;
   const partial = operation.phase === "partiallyConfirmed";
-  const heading = partial ? "Aufgabe erstellt, Freigabe fehlgeschlagen" : operation.phase === "blocked" ? "Erstellung wartet" : operation.kind === "create" ? "Erstellung noch nicht bestätigt" : operation.kind === "withdraw" ? "Zurückziehen noch nicht bestätigt" : "Ablehnung noch nicht bestätigt";
+  const heading = partial ? "Aufgabe erstellt, Freigabe fehlgeschlagen" : operation.phase === "blocked" ? "Erstellung wartet" : operation.kind === "create" ? "Erstellung noch nicht bestätigt" : operation.kind === "delete_epic" ? "Löschen noch nicht bestätigt" : operation.kind === "withdraw" ? "Zurückziehen noch nicht bestätigt" : "Ablehnung noch nicht bestätigt";
   const fields = operation.kind === "create" ? operation.submitted ? taskSubmittedValues(operation.submitted) : [] : operation.submitted ? [["Aufgabe", operation.submitted.task.title], ["Begründung", operation.submitted.reason]] : [];
   return <UiNotice role="status" tone="info" className="my-4 min-w-0 [overflow-wrap:anywhere]">
     <h2 className="font-semibold text-slate-950">{heading}</h2>

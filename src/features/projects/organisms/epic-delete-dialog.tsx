@@ -1,5 +1,7 @@
 "use client";
 
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import { TaskLifecycleNotice } from "@/features/tasks/molecules/task-lifecycle-notice";
 import { useId, useState } from "react";
 import { buildEpicDeletePolicy, formatEpicChildCounts } from "@/features/projects/model/epic-policy";
 import type { EpicChildCounts } from "@/features/projects/model/epic-contract";
@@ -16,24 +18,32 @@ export function EpicDeleteDialog({
   target,
   onClose,
   onConfirm,
+  planningState,
 }: {
   target: EpicDeleteTarget;
   onClose: () => void;
-  onConfirm: (epic: Task) => Promise<void>;
+  onConfirm?: (epic: Task) => Promise<void>;
+  planningState?: PlanningState;
 }) {
   const titleId = useId();
   const descriptionId = useId();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const operation = planningState?.taskLifecycle().findLast(op => op.kind === "delete_epic" && op.taskId === target.epic.id);
+  const blocked = operation?.phase === "unconfirmed" || operation?.phase === "blocked";
   const policy = buildEpicDeletePolicy(target.children);
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
 
   const confirm = async () => {
-    if (!policy.canDelete || pending) return;
+    if (!policy.canDelete || pending || blocked) return;
     setPending(true);
     setError("");
     try {
-      await onConfirm(target.epic);
+      if (planningState) {
+        const result = await planningState.deleteEmptyEpic(target.epic);
+        if (result.ok) onClose(); else setError(result.error);
+        setPending(false);
+      } else await onConfirm?.(target.epic);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Der Meilenstein konnte nicht gelöscht werden.");
       setPending(false);
@@ -72,11 +82,12 @@ export function EpicDeleteDialog({
               <p className="mt-1">Zugeordnet: {formatEpicChildCounts(policy.children)}.</p>
             </div>
           )}
+          {operation && planningState ? <TaskLifecycleNotice operation={operation} onCheck={id => planningState.checkTaskLifecycle(id)} /> : null}
           {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</div>}
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <UiButton disabled={pending} onClick={onClose}>Abbrechen</UiButton>
-          <UiButton variant="red" disabled={pending || !policy.canDelete} onClick={() => void confirm()}>
+          <UiButton size="lg" disabled={pending} onClick={onClose}>Abbrechen</UiButton>
+          <UiButton size="lg" variant="red" disabled={pending || blocked || !policy.canDelete} onClick={() => void confirm()}>
             {pending ? "Löscht …" : "Meilenstein löschen"}
           </UiButton>
         </div>

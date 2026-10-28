@@ -30,7 +30,7 @@ test("complete empty queries change only their membership while detail identitie
   const other = { ...task, id: "task-b", title: "Team only" };
   const { planning } = createPlanningState({ userId: "user-a", initialData: initial, adapter: {
     saveTask: async () => ({ task }), readTaskDetail: async () => ({ model: detail() }),
-    readWorkspace: async workspace => ({ data: { ...initial, tasks: workspace === "team" ? [other] : [] } }),
+    readWorkspace: async workspace => ({ data: { ...initial, tasks: workspace === "team" ? [other] : [] }, taskCoverage: workspace === "planning" ? "complete" : "partial" }),
   } });
   await planning.loadTaskDetail(task.id);
   await planning.refreshWorkspace("team");
@@ -118,14 +118,14 @@ test("partial detail collections and capped Board relationships do not erase sep
 });
 
 test("a delayed complete empty Board cannot remove a task confirmed after the query began", async () => {
-  const read = deferred<{ data: typeof initial }>();
+  const read = deferred<{ data: typeof initial; taskCoverage: "complete" }>();
   const { planning } = createPlanningState({ userId: "user-a", initialData: initial, adapter: {
     saveTask: async () => ({ task: { ...task, title: "Confirmed while reading", updatedAt: "opaque-after" } }),
     readWorkspace: () => read.promise,
   } });
   const reading = planning.refreshWorkspace("planning");
   await planning.saveTask(task, { title: "Confirmed while reading" });
-  read.resolve({ data: { ...initial, tasks: [] } });
+  read.resolve({ data: { ...initial, tasks: [] }, taskCoverage: "complete" });
   await reading;
   expect(planning.workspace("planning")).toMatchObject({ tasks: [{ title: "Confirmed while reading" }], readStatus: "stale" });
   expect(planning.protectedCache("planning")?.tasks[0].updatedAt).toBe("opaque-after");

@@ -18,4 +18,4 @@ export type PlanningTaskLifecycleView = {
   taskId: string;
   error: string;
   checkStatus: "not-checked" | "checking" | "checked" | "unavailable" | "forbidden";
-} & ({ kind: "create"; submitted: Readonly<PlanningTaskCreationInput> | null } | { kind: "withdraw" | "reject"; submitted: Readonly<{ task: Task; reason: string }> | null });
+} & ({ kind: "create"; submitted: Readonly<PlanningTaskCreationInput> | null } | { kind: "withdraw" | "reject" | "delete_epic"; submitted: Readonly<{ task: Task; reason: string }> | null });

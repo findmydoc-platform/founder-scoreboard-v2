@@ -1,37 +1,18 @@
 "use client";
 
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import { HierarchyEditNotice } from "../molecules/hierarchy-edit-notice";
 import { X } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { ProfileMultiSelect } from "@/features/team/molecules/profile-multi-select";
 import { currentApprovalDecisionReason } from "@/features/planning/model/approval-domain";
-import type { ApprovalStatus, PlanningShellState } from "@/lib/types";
+import type { PlanningShellState } from "@/lib/types";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
-export type InitiativeDraft = {
-  id?: string;
-  expectedUpdatedAt?: string;
-  creationRequestId: string;
-  title: string;
-  parentTaskId: string;
-  ownerId: string;
-  accountableProfileId: string;
-  responsibleProfileIds: string[];
-  consultedProfileIds: string[];
-  informedProfileIds: string[];
-  priority: string;
-  status: "planned" | "active" | "done" | "paused";
-  targetDate: string;
-  goal: string;
-  successCriteria: string;
-  scopeConstraints: string;
-  approveNow: boolean;
-  approvalStatus?: ApprovalStatus;
-  approvalRevision?: number;
-  decisionNote?: string;
-};
+import type { InitiativeDraft } from "@/features/projects/model/hierarchy-state";
 
 type InitiativeValidationErrors = {
   title: string;
@@ -65,13 +46,15 @@ export function InitiativeDialog({
   pending,
   onClose,
   onSave,
+  planningState,
   canApproveNow = false,
 }: {
   defaults: Partial<InitiativeDraft>;
   data: PlanningShellState;
   pending: boolean;
   onClose: () => void;
-  onSave: (draft: InitiativeDraft) => void | Promise<void>;
+  onSave?: (draft: InitiativeDraft) => void | Promise<void>;
+  planningState?: PlanningState;
   canApproveNow?: boolean;
 }) {
   const epics = data.tasks.filter((item) => item.taskType === "epic");
@@ -99,6 +82,16 @@ export function InitiativeDialog({
     approvalRevision: defaults.approvalRevision,
     decisionNote: defaults.decisionNote,
   });
+  const [editor] = useState(() => planningState?.beginInitiativeEdit(draft));
+  const [, render] = useState(0);
+  const editorView = editor?.view();
+  const saveBlocked = Boolean(editorView && ["saving", "unconfirmed", "blocked", "conflict", "partiallyConfirmed", "ended"].includes(editorView.phase));
+  const save = async (resave = false) => {
+    if (!editor) return onSave?.(draft);
+    const result = await (resave ? editor.resave(draft) : editor.save(draft));
+    render(value => value + 1);
+    if (result.ok) { editor.close(); onClose(); } else setSubmissionError(result.error);
+  };
   const [touchedValidationFields, setTouchedValidationFields] = useState<Partial<Record<InitiativeValidationField, boolean>>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -202,10 +195,10 @@ export function InitiativeDialog({
             focusFirstInvalidField();
             return;
           }
-          if (closeBlocked) return;
+          if (closeBlocked || saveBlocked) return;
           setSubmitting(true);
           try {
-            await onSave(draft);
+            await save();
           } catch (error) {
             setSubmissionError(error instanceof Error ? error.message : "Initiative konnte nicht gespeichert werden.");
             window.requestAnimationFrame(() => errorSummaryRef.current?.focus());
@@ -241,6 +234,7 @@ export function InitiativeDialog({
           ref={bodyRef}
           className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-5 py-5 [scrollbar-gutter:stable] sm:px-6"
         >
+          {editor && editorView ? <HierarchyEditNotice view={editorView} onCheck={() => { void editor.checkOutcome().then(() => render(value => value + 1)); }} onRefresh={() => { void editor.refreshConflict().then(() => render(value => value + 1)); }} onResave={() => { void save(true); }} /> : null}
           {submissionError && (
             <div
               ref={errorSummaryRef}
@@ -498,7 +492,7 @@ export function InitiativeDialog({
               <UiButton onClick={onClose} disabled={closeBlocked} size="lg">Abbrechen</UiButton>
               <UiButton
                 type="submit"
-                disabled={closeBlocked || !canSave}
+                disabled={closeBlocked || saveBlocked || !canSave}
                 aria-describedby={hasVisibleValidationErrors ? primaryDisabledReasonId : undefined}
                 variant="primary"
                 size="lg"
