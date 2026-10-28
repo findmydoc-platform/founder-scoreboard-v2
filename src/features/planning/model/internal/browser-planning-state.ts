@@ -42,6 +42,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialWorkspace: options.initialWorkspace,
     initialHeaderData: options.initialHeaderData,
     adapter: {
+      async createTaskComment(taskId, submitted) {
+        const { response, body } = await taskApi.createTaskCommentRequest(runtime.apiClient, taskId, submitted);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Kommentar konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        if (!body?.comment) throw new Error("Die Kommentarbestätigung ist unvollständig.");
+        return { comment: body.comment, notice: body.notice };
+      },
       async reportBlocker(taskId, submitted) {
         const { response, body } = await taskApi.reportTaskBlockerRequest(runtime.apiClient, taskId, submitted);
         if (!response.ok) throw Object.assign(new Error(body?.error || "Blocker konnte nicht gespeichert werden."), { status: response.status, code: body?.code });

@@ -1,3 +1,4 @@
+import type { PlanningTaskComments } from "@/features/tasks/model/task-comment-creation";
 import type { PlanningTaskBlockerReports } from "@/features/tasks/model/task-blocker-report";
 import type { PrivateWorkweekPlanningState } from "@/features/team-workweek/model/private-workweek-planning-state";
 import type { PublishedWorkweekCalendars } from "@/features/team-workweek/model/published-workweek-calendar-state";
@@ -58,7 +59,7 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
-export interface PlanningState extends PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+export interface PlanningState extends PlanningTaskComments, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   beginBacklogOrder(tasks: readonly Task[]): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
   backlogOrders(): readonly import("@/features/backlog/model/backlog-ordering").BacklogOrderView[];
   resumeBacklogOrder(id: string): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor | null;

@@ -142,6 +142,9 @@ export function TaskDetailPage({
           commentImportPending={controller.commentImportPendingTaskIds.has(task.id)}
           githubInstallationAvailable={controller.githubInstallationAvailable}
           taskSaves={controller.planningState.taskSaves(task.id)}
+          commentCreations={controller.planningState.taskCommentCreations(task.id)}
+          commentCompleteness={controller.planningState.taskComments(task.id).completeness}
+          onCheckCommentCreation={id => { void controller.planningState.checkTaskCommentCreation(id); }}
           blockerReports={controller.planningState.taskBlockerReports(task.id)}
           onCheckBlockerReport={id => { void controller.planningState.checkTaskBlockerReport(id); }}
           onCheckTaskSave={() => controller.planningState.checkTaskSave(task.id)}

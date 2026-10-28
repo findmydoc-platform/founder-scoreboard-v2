@@ -70,6 +70,9 @@ type TaskDetailSurfaceProps = {
   operationalCorrection?: boolean;
   pending: boolean;
   taskSaves?: readonly PlanningTaskSaveView[];
+  commentCreations?: readonly import("@/features/tasks/model/task-comment-creation").TaskCommentCreationView[];
+  commentCompleteness?: "complete" | "partial";
+  onCheckCommentCreation?: (id: string) => void;
   blockerReports?: readonly import("@/features/tasks/model/task-blocker-report").TaskBlockerReportView[];
   onCheckBlockerReport?: (id: string) => void;
   onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;
@@ -152,6 +155,9 @@ function HydratedTaskDetailSurface({
   operationalCorrection = false,
   pending: requestPending,
   taskSaves = [],
+  commentCreations = [],
+  commentCompleteness = "complete",
+  onCheckCommentCreation,
   blockerReports = [],
   onCheckBlockerReport,
   onCheckTaskSave,
@@ -521,6 +527,9 @@ function HydratedTaskDetailSurface({
     activity: (
       <TaskCommentThread
         comments={comments}
+        commentCreations={commentCreations}
+        commentCompleteness={commentCompleteness}
+        onCheckCommentCreation={onCheckCommentCreation}
         externalComments={externalComments}
         activities={activities}
         reviews={reviews}
