@@ -42,6 +42,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialWorkspace: options.initialWorkspace,
     initialHeaderData: options.initialHeaderData,
     adapter: {
+      async reportBlocker(taskId, submitted) {
+        const { response, body } = await taskApi.reportTaskBlockerRequest(runtime.apiClient, taskId, submitted);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Blocker konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        if (!body?.blocker) throw new Error("Die Blocker-Meldung ist noch nicht bestätigt.");
+        return { blocker: body.blocker };
+      },
       async lockSprint(basis) {
         const {response,body}=await planningApi.lockSprintRequest(runtime.apiClient,basis.sprint.id,{expectedUpdatedAt:basis.sprint.updatedAt,expectedTasks:basis.tasks.map(task=>({id:task.id,updatedAt:task.updatedAt}))});
         if(!response.ok)throw Object.assign(new Error(body?.error||"Sprint-Abschluss fehlgeschlagen."),{status:response.status,code:body?.code});

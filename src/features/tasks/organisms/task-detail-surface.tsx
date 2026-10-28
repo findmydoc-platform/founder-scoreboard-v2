@@ -70,6 +70,8 @@ type TaskDetailSurfaceProps = {
   operationalCorrection?: boolean;
   pending: boolean;
   taskSaves?: readonly PlanningTaskSaveView[];
+  blockerReports?: readonly import("@/features/tasks/model/task-blocker-report").TaskBlockerReportView[];
+  onCheckBlockerReport?: (id: string) => void;
   onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;
   error?: string;
   detailDataError?: string;
@@ -150,6 +152,8 @@ function HydratedTaskDetailSurface({
   operationalCorrection = false,
   pending: requestPending,
   taskSaves = [],
+  blockerReports = [],
+  onCheckBlockerReport,
   onCheckTaskSave,
   error = "",
   detailDataError = "",
@@ -459,10 +463,12 @@ function HydratedTaskDetailSurface({
                   variant="review"
                 />
               ) : null}
-              {detailDataLoading || detailDataUnavailable || blockers.length > 0 || controller.permissions.canReportBlocker ? (
+              {detailDataLoading || detailDataUnavailable || blockers.length > 0 || blockerReports.length > 0 || controller.permissions.canReportBlocker ? (
                 <TaskDetailPanelBlockerSection
                   canReport={controller.permissions.canReportBlocker}
                   blockers={blockers}
+                  reports={blockerReports}
+                  onCheckReport={onCheckBlockerReport}
                   blockerDraft={controller.blockerDraft}
                   embedded={task.taskType === "sub_issue"}
                   loading={detailDataLoading}

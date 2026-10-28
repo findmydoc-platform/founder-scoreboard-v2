@@ -38,6 +38,8 @@ type Props = {
   source: "supabase";
   pending: boolean;
   taskSaves?: readonly PlanningTaskSaveView[];
+  blockerReports?: readonly import("@/features/tasks/model/task-blocker-report").TaskBlockerReportView[];
+  onCheckBlockerReport?: (id: string) => void;
   onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;
   error?: string;
   githubInstallationAvailable: boolean;

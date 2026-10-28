@@ -178,7 +178,7 @@ export function removeTaskRelationshipRequest(apiClient: BrowserApiClient, taskI
 }
 
 export function reportTaskBlockerRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; blocker?: PlanningShellState["taskBlockers"][number] }>(`/api/tasks/${taskId}/blockers`, {
+  return apiClient.requestJson<{ error?: string; code?: string; blocker?: PlanningShellState["taskBlockers"][number] }>(`/api/tasks/${taskId}/blockers`, {
     method: "POST",
     json: payload,
   });

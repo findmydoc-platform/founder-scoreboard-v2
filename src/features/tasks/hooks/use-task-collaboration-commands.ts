@@ -12,6 +12,7 @@ type UseTaskCollaborationCommandsOptions = PlanningCommandContext & {
 };
 
 export function useTaskCollaborationCommands({
+  planningState,
   apiClient,
   currentProfile,
   githubInstallationAvailable,
@@ -150,49 +151,7 @@ export function useTaskCollaborationCommands({
 
     setSaveError("");
 
-    const localBlocker = {
-      id: Date.now(),
-      taskId: task.id,
-      profileId: currentProfile.id,
-      reason: payload.reason,
-      impact: payload.impact,
-      needsHelpFrom: payload.needsHelpFrom,
-      status: "open" as const,
-      createdAt: new Date().toISOString(),
-      resolvedAt: "",
-    };
-    const previousTask = task;
-
-    setData((current) => ({
-      ...current,
-      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, status: "Blockiert", githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" } : item)),
-      taskBlockers: [localBlocker, ...current.taskBlockers],
-    }));
-
-    if (source !== "supabase") return { ok: true };
-
-    return new Promise<TaskActionResult>((resolve) => {
-      startTransition(async () => {
-        try {
-          const { response, body } = await taskApi.reportTaskBlockerRequest(apiClient, task.id, payload);
-          if (!response.ok || !body?.blocker) throw new Error(body?.error || "Blocker konnte nicht gespeichert werden.");
-
-          setData((current) => ({
-            ...current,
-            taskBlockers: [body.blocker!, ...current.taskBlockers.filter((blocker) => blocker.id !== localBlocker.id)],
-          }));
-          resolve({ ok: true });
-        } catch (caught) {
-          const error = caught instanceof Error ? caught.message : "Blocker konnte nicht gespeichert werden.";
-          setData((current) => ({
-            ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
-            taskBlockers: current.taskBlockers.filter((blocker) => blocker.id !== localBlocker.id),
-          }));
-          resolve({ ok: false, error });
-        }
-      });
-    });
+    return planningState.reportTaskBlocker(task, payload);
   };
 
   const addTaskRelation = async (task: Task, payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }): Promise<TaskActionResult> => {

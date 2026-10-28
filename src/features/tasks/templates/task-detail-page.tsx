@@ -142,6 +142,8 @@ export function TaskDetailPage({
           commentImportPending={controller.commentImportPendingTaskIds.has(task.id)}
           githubInstallationAvailable={controller.githubInstallationAvailable}
           taskSaves={controller.planningState.taskSaves(task.id)}
+          blockerReports={controller.planningState.taskBlockerReports(task.id)}
+          onCheckBlockerReport={id => { void controller.planningState.checkTaskBlockerReport(id); }}
           onCheckTaskSave={() => controller.planningState.checkTaskSave(task.id)}
           onBeginEdit={() => controller.beginTaskEdit(task)}
           onUpdate={(patch, options) => controller.updateTask(task, patch, options)}
