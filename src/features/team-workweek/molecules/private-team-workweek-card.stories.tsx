@@ -456,7 +456,7 @@ export const ChecksTheSavedRevisionAfterALostResponse: Story = {
     await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
     await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand laden" }));
     await expect(await canvas.findByText(/Die Bestätigung bleibt ausstehend/)).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
     await expect(end).toHaveValue("18:00");
   },
 };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
+import { usePrivateTeamWorkweekState } from "../model/private-team-workweek-state";
 import { formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS } from "../model/team-workweek-draft";
 import { PrivateTeamWorkweekEditor } from "../organisms/private-team-workweek-editor";
 import { formatDate } from "@/lib/display";
@@ -29,7 +29,7 @@ export function PrivateTeamWorkweekCard({ apiClient, planningState, profile, edi
     onEditorRequestHandled?.();
   };
   const requestedWeek = editorRequested && editorWeek && selectedWorkweek(workweekStart(editorWeek)).ok ? workweekStart(editorWeek) : undefined;
-  const state = usePrivateTeamWorkweek(apiClient, planningState, requestedWeek);
+  const state = usePrivateTeamWorkweekState(planningState, requestedWeek);
   const { card } = state;
 
   return (

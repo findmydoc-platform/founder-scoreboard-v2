@@ -28,6 +28,7 @@ export type PrivateWorkweekOperation<Input> = Readonly<{
   phase: "idle" | "saving" | "publishing" | "confirmed" | "preparing" | "rejected" | "unconfirmed";
   submitted: Readonly<Input> | null; error: string; checked: boolean;
 }>;
+export type PrivateWorkweekPublicationView = PrivateWorkweekOperation<{ versionId: string }> & { result: PrivateWorkweekPublication | null; sourceVersion: PrivateTeamWorkweekVersion | null; conflict: PrivateWorkweekFailure["conflict"] | null; completionPending: boolean };
 export type WorkweekReconciliation = Readonly<{
   state: "unchanged" | "updated" | "delayed" | "conflict";
   lastSuccessfulSyncAt: string | null;
@@ -55,7 +56,30 @@ export type WorkweekConflictDecisionView = Readonly<{
   error: string;
   checked: boolean;
 }>;
+export type WorkweekRestartInput = Readonly<{ versionId: string; pendingPublicationId: string | null }>;
+export type WorkweekRestartConfirmation = { version?: PrivateTeamWorkweekVersion; restart: { state: "ready" | "delayed"; recovery: "retry" | "reconnect" | "identity_conflict" | null; reason?: "in_progress" | "uncertain" | "legacy_untracked" } };
+export type WorkweekRestartView = Readonly<{
+  phase: "idle" | "restarting" | "ready" | "delayed" | "rejected" | "unconfirmed";
+  submitted: WorkweekRestartInput | null; result: WorkweekRestartConfirmation | null; error: string; checked: boolean;
+}>;
+export type WorkweekResumeInput = Readonly<{ publicationId: string; versionId: string }>;
+export type WorkweekResumeView = Readonly<{
+  phase: "idle" | "resuming" | "confirmed" | "preparing" | "rejected" | "unconfirmed";
+  submitted: WorkweekResumeInput | null; result: WorkweekConflictPublication | null; error: string; checked: boolean;
+}>;
+export type WorkweekOperationHistory = Readonly<
+  | { kind: "save"; operation: PrivateWorkweekOperation<PrivateWorkweekSaveInput> }
+  | { kind: "publication"; operation: PrivateWorkweekPublicationView }
+  | { kind: "reconciliation"; operation: WorkweekReconciliationView }
+  | { kind: "conflictDecision"; operation: WorkweekConflictDecisionView }
+  | { kind: "restart"; operation: WorkweekRestartView }
+  | { kind: "resume"; operation: WorkweekResumeView }>;
 export type PrivateWorkweekView = Readonly<{
+  currentContextReady: boolean;
+  recovery: Readonly<{ restartVersionId: string | null; resumablePublication: Pick<PendingTeamWorkweekPublication, "id" | "sourceVersionId"> | null }>;
+  history: ReadonlyArray<WorkweekOperationHistory>;
+  resume: WorkweekResumeView;
+  restart: WorkweekRestartView;
   conflict: TeamWorkweekConflict | null;
   conflictReadStatus: PlanningReadStatus;
   conflictDecision: WorkweekConflictDecisionView;
@@ -66,9 +90,10 @@ export type PrivateWorkweekView = Readonly<{
   readStatus: PlanningReadStatus;
   contextRefreshRequired: boolean;
   save: PrivateWorkweekOperation<PrivateWorkweekSaveInput>;
-  publication: PrivateWorkweekOperation<{ versionId: string }> & { result: PrivateWorkweekPublication | null; sourceVersion: PrivateTeamWorkweekVersion | null; conflict: PrivateWorkweekFailure["conflict"] | null; completionPending: boolean };
+  publication: PrivateWorkweekPublicationView;
 }>;
 export type PrivateWorkweekAdapter = {
+  restartPrivateWorkweek?: (versionId: string) => Promise<PrivateWorkweekReply<WorkweekRestartConfirmation>>;
   resolveWorkweekConflict?: (input: WorkweekConflictInput) => Promise<PrivateWorkweekReply<WorkweekConflictConfirmation>>;
   readWorkweekConflict?: () => Promise<PrivateWorkweekReply<WorkweekConflictRead>>;
   reconcilePrivateWorkweek?: () => Promise<PrivateWorkweekReply<WorkweekReconciliationConfirmation>>;
@@ -78,6 +103,8 @@ export type PrivateWorkweekAdapter = {
 };
 export interface PrivateWorkweekPlanningState {
   privateWorkweek(): PrivateWorkweekView;
+  resumeWorkweekPublication(pending: Pick<PendingTeamWorkweekPublication, "id" | "sourceVersionId">): Promise<PrivateWorkweekReply<PrivateWorkweekPublicationConfirmation>>;
+  restartWorkweek(versionId: string): Promise<PrivateWorkweekReply<WorkweekRestartConfirmation>>;
   resolveWorkweekConflict(basis: TeamWorkweekConflict, decision: "founderops" | "google"): Promise<PrivateWorkweekReply<WorkweekConflictConfirmation>>;
   loadWorkweekConflict(): Promise<PrivateWorkweekReply<WorkweekConflictRead>>;
   reconcileWorkweek(): Promise<PrivateWorkweekReply<WorkweekReconciliationConfirmation>>;

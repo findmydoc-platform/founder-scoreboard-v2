@@ -1,8 +1,12 @@
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { PrivateWorkweekAdapter, PrivateWorkweekContext, PrivateWorkweekPublicationConfirmation, PrivateWorkweekSaveConfirmation, WorkweekReconciliationConfirmation, WorkweekConflictRead, WorkweekConflictConfirmation } from "./private-workweek-planning-state";
+import type { PrivateWorkweekAdapter, PrivateWorkweekContext, PrivateWorkweekPublicationConfirmation, PrivateWorkweekSaveConfirmation, WorkweekReconciliationConfirmation, WorkweekRestartConfirmation, WorkweekConflictRead, WorkweekConflictConfirmation } from "./private-workweek-planning-state";
 
 export function privateWorkweekApi(apiClient: BrowserApiClient): Required<PrivateWorkweekAdapter> {
   return {
+    async restartPrivateWorkweek(versionId) {
+      const { response, body } = await apiClient.requestJson<WorkweekRestartConfirmation>("/api/team-workweek/restart", { method: "POST", json: { versionId }, useDevProfileOverride: false });
+      return { status: response.status, value: body };
+    },
     async readWorkweekConflict() {
       const { response, body } = await apiClient.requestJson<WorkweekConflictRead>("/api/team-workweek/conflict", { cache: "no-store", useDevProfileOverride: false });
       return { status: response.status, value: body };

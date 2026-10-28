@@ -76,7 +76,8 @@ export const ChecksUnknownReconciliationWithoutProviderReplay: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Arbeitswoche bearbeiten" }));
     await userEvent.click(await canvas.findByRole("button", { name: "Aktuellen Stand laden" }));
     await expect(await canvas.findByText(/Die Abgleichsbestätigung bleibt ausstehend/)).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
+    await expect(args.value.planning.privateWorkweek().currentContextReady).toBe(true);
     await expect(args.value.posts()).toBe(1);
     await expect(args.value.planning.privateWorkweek().reconciliation.phase).toBe("unconfirmed");
     await expect(args.value.privateReads()).toBe(2);
