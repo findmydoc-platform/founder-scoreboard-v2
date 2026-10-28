@@ -1,3 +1,6 @@
+import { HeaderCalendarAction } from "../molecules/header-calendar-action";
+import { PublishedTeamWorkweeksCard } from "@/features/team-workweek/molecules/published-team-workweeks-card";
+import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { useState } from "react";
@@ -143,12 +146,13 @@ export const KeepsAnInitialLoadErrorDistinctFromNoPublication: Story = {
 
 
 function HookDialog({ apiClient }: { apiClient: BrowserApiClient }) {
-  const calendar = useHeaderCalendar({ apiClient, onOpenTeam: fn() });
+  const planningState = useCalendarPlanningState(apiClient, [profile]);
+  const calendar = useHeaderCalendar({ planningState, onOpenTeam: fn() });
   return <>
     <button onClick={calendar.openCalendar}>Kalender öffnen</button>
     {calendar.open && <HeaderCalendarDialog
       activeTab={calendar.activeTab} anchor={{ right: 12, top: 12 }}
-      calendarWorkweeks={calendar.calendarWorkweeks} desktopPopover={false}
+      calendarWorkweeks={calendar.calendarWorkweeks} workweeksByDay={calendar.workweeksByDay} desktopPopover={false}
       eventSlot={{ data: [], error: "", state: "ready" }} message={calendar.message}
       now={calendar.now} onActiveTabChange={calendar.setActiveTab} onClose={calendar.closeCalendar}
       onOpenTeam={calendar.openTeamWorkspace} onSelectedDateChange={calendar.setSelectedDate}
@@ -347,5 +351,41 @@ export const HookRetainsOtherMonthsWhenReturningDuringAnOutage: Story = {
     await canvas.findByText("Aktualisierung verzögert. Zuletzt bestätigte Zeiten.");
     await expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0);
     await expect(canvas.queryByText("11:00–17:00")).not.toBeInTheDocument();
+  },
+};
+
+
+let denySharedCalendar: () => void;
+function SharedCalendarFixture() {
+  const monday = firstMondayOfVisibleMonth();
+  const [apiClient] = useState(() => {
+    let reads = 0;
+    let denied = false;
+    denySharedCalendar = () => { denied = true; window.dispatchEvent(new Event("founderops:team-workweek-published")); };
+    return { requestJson: async () => {
+      if (denied) return { response: new Response(null, { status: 403 }), body: { error: "Kalenderzugriff entzogen." } };
+      const schedule = { id: "shared-publication", ownerProfileId: profile.id, effectiveFrom: monday, effectiveTo: null, timezone: "Europe/Berlin", publicationRevision: ++reads, lastSyncAt: "2026-10-01T07:00:00Z", windows: { ...emptyWindows, monday: [{ start: reads === 1 ? "09:00" : "11:00", end: "17:00" }] } };
+      return { response: new Response(null, { status: 200 }), body: { currentWorkweeks: [schedule], calendarWorkweeks: [schedule], publishedOwnerIds: [profile.id], referenceDate: berlinDateKey() } };
+    } } as unknown as BrowserApiClient;
+  });
+  const planningState = useCalendarPlanningState(apiClient, [profile]);
+  return <><HeaderCalendarAction planningState={planningState} events={{ data: [], state: "ready" }} profiles={[profile]} onOpenTeam={fn()} /><PublishedTeamWorkweeksCard planningState={planningState} profiles={[profile]} initialDate={monday} /></>;
+}
+export const SharesHeaderAndTeamPublicationsAndWithholdsDeniedScopes: Story = {
+  render: () => <SharedCalendarFixture />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    await canvas.findAllByText("09:00–17:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+    await waitFor(() => expect(canvas.getAllByText("11:00–17:00").length).toBeGreaterThan(0));
+    await expect(canvas.queryByText("09:00–17:00")).not.toBeInTheDocument();
+    await body.findByRole("dialog", { name: "Kalender" });
+    const label = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" }).format(new Date(`${firstMondayOfVisibleMonth()}T12:00:00Z`));
+    await userEvent.click(body.getByRole("button", { name: new RegExp(`^${label},`) }));
+    await expect(within(body.getByRole("dialog", { name: "Kalender" })).getByText("11:00–17:00")).toBeVisible();
+    denySharedCalendar();
+    await waitFor(() => expect(body.queryAllByText("11:00–17:00")).toHaveLength(0));
+    await expect(body.getAllByText("Kein Zugriff auf veröffentlichte Arbeitszeiten.").length).toBeGreaterThan(0);
   },
 };

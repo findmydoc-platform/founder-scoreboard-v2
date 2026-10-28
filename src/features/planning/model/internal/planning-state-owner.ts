@@ -1,4 +1,5 @@
 import { createEventsState } from "./event-state";
+import { createPublishedWorkweekCalendars } from "./published-workweek-calendars";
 import { createHeaderNotificationsState, type HeaderNotificationsAdapter } from "./header-notifications-state";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState, Task, TaskActivity } from "@/lib/types";
@@ -29,6 +30,7 @@ export type PlanningStateAdapter = import("@/features/events/model/event-state")
   createSprintPlan?: (options: import("@/features/sprint/model/sprint-planning-options").SprintPlanningOptions, basis: import("@/features/sprint/model/sprint-plan").SprintPlanBasis) => Promise<import("@/features/sprint/model/sprint-plan").SprintPlanConfirmation>;
   saveReviewWindow?: (expectedHours: number, hours: number) => Promise<import("@/features/sprint/model/review-window-editing").ReviewWindowConfirmation>;
   saveSprint?: (sprint: import("@/lib/types").Sprint, patch: import("@/features/sprint/model/sprint-editing").SprintEditPatch) => Promise<{ sprint: import("@/lib/types").Sprint }>;
+  readWorkweekCalendar?: (scope: import("@/features/team-workweek/model/published-workweek-calendar-state").WorkweekCalendarScope) => Promise<import("@/features/team-workweek/model/published-workweek-calendar-state").WorkweekCalendarResponse>;
   now?: () => number;
   removeTask?: (task: Task, action: "withdraw" | "reject", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
   createTask?: (input: PlanningTaskCreationInput) => Promise<PlanningTaskCreationConfirmation>;
@@ -83,6 +85,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function readErrorStatus(error: unknown): "forbidden" | "unavailable" {
     return typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" : "unavailable";
   }
+  const workweekCalendars = createPublishedWorkweekCalendars({ active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), read: adapter.readWorkweekCalendar });
   const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
   const events = createEventsState({ initial: active ? initialData.events : [], loaded: initialWorkspace === "events", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidateCalendar: () => notifications.invalidateHeader(["calendarEvents"]), refreshWorkspace: () => planning.refreshWorkspace("events"), endSession,
     beginHeaderRead: () => notifications.beginWorkspaceRead("events"),
@@ -256,6 +259,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const data = sprintState.denied() ? emptyPlanningShellState : visible;
       return { readStatus: workspaceStatuses.get("sprint") || "not-loaded", model: { coverage: sprintViewCoverage(sprintState.coverage()), revision: "", project: data.project, people: data.profiles, items: sprintState.denied() ? [] : planning.workspace("sprint").tasks, sprints: data.sprints, commitments: data.sprintCommitments, scores: data.founderSprintScores, strikeStates: data.founderStrikeStates, strikeEvents: data.strikeEvents, objections: data.scoreObjections, meetings: data.meetings, attendance: data.meetingAttendance } };
     },
+    ...workweekCalendars.publicState,
     ...notifications.publicState,
     ...events.publicState,
     createTask: input => lifecycle.createTask(input),
@@ -464,6 +468,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     detailStatuses.clear();
     deniedTaskReads.clear();
     confirmed = emptyPlanningShellState;
+    workweekCalendars.clear();
     notifications.clear();
     events.clear();
     publish();
@@ -524,6 +529,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     confirmedHeader: notifications.confirmedHeader,
     acceptHeaderHydration: notifications.hydrateHeader,
     invalidateHeader: notifications.invalidateHeader,
+    invalidatePublishedWorkweeks: workweekCalendars.invalidatePublishedWorkweeks,
+    invalidateWorkweekCalendarAuthority: workweekCalendars.invalidateAuthority,
     invalidateNotificationAuthority: notifications.invalidateNotificationAuthority,
     applyLegacyProjection,
     acceptHydration,

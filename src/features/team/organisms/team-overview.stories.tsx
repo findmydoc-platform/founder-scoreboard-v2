@@ -1,3 +1,4 @@
+import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
 import { useState, useSyncExternalStore } from "react";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { useProfileSettingsCommands } from "../hooks/use-profile-settings-commands";
@@ -46,9 +47,13 @@ function previewClient(hasPlan:boolean):BrowserApiClient {
   }} as BrowserApiClient;
 }
 
-const meta={component:TeamOverview,title:"Team/Organisms/TeamOverview",parameters:{layout:"padded",nextjs:{appDirectory:true,navigation:{pathname:'/team',query:{}}}},tags:["layer:organism","status:stable"],
-  args:{planningState:createPlanningState({ userId:"preview", initialData:{...emptyPlanningShellState,profiles:[profile]},initialWorkspace:"team",adapter:{saveTask:async()=>({task:{}}),readWorkspace:async()=>null} }).planning,actualProfile:profile,tasks:[],pending:false,canManageTeam:false,onSaveProfileSettings:fn(async()=>{}),apiClient:previewClient(true)},
-} satisfies Meta<typeof TeamOverview>;
+function TeamCalendarFixture(props: Omit<Parameters<typeof TeamOverview>[0], "planningState">) {
+  const planningState = useCalendarPlanningState(props.apiClient, [profile]);
+  return <TeamOverview {...props} planningState={planningState} />;
+}
+const meta={component:TeamCalendarFixture,title:"Team/Organisms/TeamOverview",parameters:{layout:"padded",nextjs:{appDirectory:true,navigation:{pathname:'/team',query:{}}}},tags:["layer:organism","status:stable"],
+  args:{actualProfile:profile,tasks:[],pending:false,canManageTeam:false,onSaveProfileSettings:fn(async()=>{}),apiClient:previewClient(true)},
+} satisfies Meta<typeof TeamCalendarFixture>;
 export default meta;
 type Story=StoryObj<typeof meta>;
 

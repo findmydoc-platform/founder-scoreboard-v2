@@ -7,13 +7,13 @@ import {
   calendarGridRange,
   firstCalendarDayOfMonth,
 } from "@/features/team-workweek/model/team-workweek-calendar";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { PlanningState } from "../model/planning-state";
 
 export function useHeaderCalendar({
-  apiClient,
+  planningState,
   onOpenTeam,
 }: {
-  apiClient?: BrowserApiClient;
+  planningState?: PlanningState;
   onOpenTeam: (editWorkweek?: boolean, week?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -22,7 +22,7 @@ export function useHeaderCalendar({
   const [viewMonth, setViewMonth] = useState(() => firstCalendarDayOfMonth(berlinDateKey()));
   const range = calendarGridRange(viewMonth);
   const { snapshot, pending, message, load: loadVisibleRange, now } = useWorkweekCalendarLoading({
-    apiClient, ...range, enabled: open, policy: "header-month",
+    planningState, ...range, enabled: open, policy: "header-month",
   });
 
   const openCalendar = useCallback(() => {
@@ -37,7 +37,8 @@ export function useHeaderCalendar({
 
   return {
     activeTab,
-    calendarWorkweeks: snapshot?.calendarWorkweeks || [],
+    calendarWorkweeks: [...snapshot?.calendarWorkweeks || []],
+    workweeksByDay: snapshot?.calendarByDay,
     closeCalendar,
     message,
     now,
@@ -52,6 +53,6 @@ export function useHeaderCalendar({
     setViewMonth,
     viewMonth,
     workweekReferenceDate: snapshot?.referenceDate || berlinDateKey(),
-    workweeks: snapshot?.currentWorkweeks || [],
+    workweeks: [...snapshot?.currentWorkweeks || []],
   };
 }

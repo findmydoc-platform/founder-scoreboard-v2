@@ -1,5 +1,7 @@
 "use client";
 
+import { readPublishedWorkweekCalendar } from "@/features/team-workweek/model/published-workweek-calendar-api";
+
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
@@ -41,6 +43,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!Array.isArray(body?.sprints)) throw new Error("Die Planung ist noch nicht bestätigt.");
         return { sprints: body.sprints };
       },
+      readWorkweekCalendar: scope => readPublishedWorkweekCalendar(runtime.apiClient, scope),
       async saveReviewWindow(expectedHours, hours) {
         const { response, body } = await planningApi.updateSprintReviewWindowRequest(runtime.apiClient, expectedHours, hours);
         if (!response.ok) throw Object.assign(new Error(body?.error || "Prozesseinstellung konnte nicht gespeichert werden."), { status: response.status, code: body?.code });

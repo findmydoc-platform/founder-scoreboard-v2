@@ -1,3 +1,4 @@
+import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
 import { ProductUpdatesProvider } from "@/features/product-updates/organisms/product-updates-provider";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
 import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
@@ -354,8 +355,9 @@ function CalendarJourney() {
     after: { editBase: { windows: publishedWindows }, latestPublished: { ...latestPublished, effectiveFrom: nextMondayIso() }, minimumEffectiveFrom: nextMondayIso(), publication: null, version: null },
     result: { ...latestPublished, recovery: null },
   } }));
+  const planningState = useCalendarPlanningState(apiClient, [profile]);
   return <>
-    <HeaderCalendarAction apiClient={apiClient} events={{ data: [], state: "ready", error: "" }} profiles={[profile]} onOpenTeam={(editWorkweek) => { setTeamOpen(true); setEditorRequested(Boolean(editWorkweek)); }} />
+    <HeaderCalendarAction planningState={planningState} events={{ data: [], state: "ready", error: "" }} profiles={[profile]} onOpenTeam={(editWorkweek) => { setTeamOpen(true); setEditorRequested(Boolean(editWorkweek)); }} />
     {teamOpen && <PrivateTeamWorkweekCard apiClient={apiClient} profile={profile} editorRequested={editorRequested} onEditorRequestHandled={() => setEditorRequested(false)} />}
   </>;
 }

@@ -1,3 +1,4 @@
+import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { PublishedTeamWorkweeksCard } from "./published-team-workweeks-card";
@@ -19,11 +20,15 @@ function client(failInitially: boolean): BrowserApiClient {
     },
   } as unknown as BrowserApiClient;
 }
+function CalendarCardFixture({ apiClient, ...props }: Omit<Parameters<typeof PublishedTeamWorkweeksCard>[0], "planningState"> & { apiClient: BrowserApiClient }) {
+  const planningState = useCalendarPlanningState(apiClient, props.profiles);
+  return <PublishedTeamWorkweeksCard {...props} planningState={planningState} />;
+}
 const meta = {
-  component: PublishedTeamWorkweeksCard,
+  component: CalendarCardFixture,
   title: "Team Workweek/Molecules/PublishedTeamWorkweeksCard",
   tags: ["layer:molecule", "status:stable"],
-} satisfies Meta<typeof PublishedTeamWorkweeksCard>;
+} satisfies Meta<typeof CalendarCardFixture>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
