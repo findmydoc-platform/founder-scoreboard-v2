@@ -47,6 +47,11 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     administrationActorProfileId: options.initialCurrentProfile?.id,
     initialAdministrationAuthority: options.initialAdministratorAccess ? sessionAuthority({ platformRole: options.initialCurrentProfile?.platformRole || "viewer", credentialKind: "session", administratorAccess: options.initialAdministratorAccess }) : undefined,
     adapter: {
+      async executeAdministrationDelivery(selection) {
+        const payload=selection.kind==="events"?{eventIds:[...selection.eventIds]}:selection.kind==="pending"?{limit:selection.limit}:selection.kind==="webhook-test"?{testDelivery:"webhook_digest"}:{testDelivery:"direct_dm",profileId:selection.profileId};
+        const {response,body}=await runtime.apiClient.requestJson<Omit<import("@/features/administration/model/administration-delivery-state").AdministrationDeliveryResponse,"ok"|"status">>("/api/notifications/deliver",{method:"POST",json:payload,useDevProfileOverride:false});
+        return {...body,ok:response.ok,status:response.status};
+      },
       async saveAdministrationProject(project,expected) {
         const {response,body}=await runtime.apiClient.requestJson<{ok?:boolean;project?:{id:string;githubProjectOwner:string;githubProjectNumber:number;githubMentionTeamSlug:string};error?:string;code?:string}>("/api/founderops-settings/github-project",{method:"PATCH",json:{expectedGithubProjectOwner:expected.owner,expectedGithubProjectNumber:expected.number,expectedGithubMentionTeamSlug:expected.mentionTeamSlug,githubProjectOwner:project.owner,githubProjectNumber:project.number,githubMentionTeamSlug:project.mentionTeamSlug},useDevProfileOverride:false});
         if(!response.ok)throw Object.assign(new Error(body?.error||"GitHub Project konnte nicht gespeichert werden."),{status:response.status,code:body?.code});

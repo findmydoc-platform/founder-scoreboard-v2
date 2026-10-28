@@ -55,7 +55,6 @@ export function AdministrationWorkspaceHost({ apiClient, planningState, capabili
         <IntegrationsDeliveryAdministration
           busy={controller.busy}
           model={model}
-          onDeliver={controller.deliverNotifications}
           planningState={planningState}
         />
       )}
