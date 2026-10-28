@@ -1,6 +1,7 @@
 import type { PlanningTaskGitHubImports } from "@/features/tasks/model/task-github-comment-import";
 import type { PlanningTaskComments } from "@/features/tasks/model/task-comment-creation";
 import type { PlanningTaskBlockerReports } from "@/features/tasks/model/task-blocker-report";
+import type { GoogleWorkspacePlanningState } from "@/features/team-workweek/model/google-workspace-state";
 import type { PrivateWorkweekPlanningState } from "@/features/team-workweek/model/private-workweek-planning-state";
 import type { PublishedWorkweekCalendars } from "@/features/team-workweek/model/published-workweek-calendar-state";
 import type { Task, TaskComment, TaskExternalComment, TaskBlocker, TaskRelation, TaskActivity, TaskReview } from "@/lib/types";
@@ -61,7 +62,7 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 import type { AdministrationPeopleState } from "@/features/administration/model/administration-state";
-export interface PlanningState extends PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+export interface PlanningState extends GoogleWorkspacePlanningState, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   beginBacklogOrder(tasks: readonly Task[]): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
   backlogOrders(): readonly import("@/features/backlog/model/backlog-ordering").BacklogOrderView[];
   resumeBacklogOrder(id: string): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor | null;

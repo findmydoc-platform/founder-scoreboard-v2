@@ -14,6 +14,7 @@ export function GoogleWorkspaceDisconnectDialog({
   previewPending = false,
   previewReady = true,
   previewError = "",
+  confirmationCurrent = true,
 }: {
   disconnect: GoogleWorkspaceDisconnectView;
   onCancel: () => void;
@@ -23,6 +24,7 @@ export function GoogleWorkspaceDisconnectDialog({
   previewPending?: boolean;
   previewReady?: boolean;
   previewError?: string;
+  confirmationCurrent?: boolean;
 }) {
   const dialogRef = useModalDialog<HTMLDivElement>({ open, onClose: onCancel, closeDisabled: pending });
   if (!open) return null;
@@ -61,7 +63,7 @@ export function GoogleWorkspaceDisconnectDialog({
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4">
           <UiButton variant="secondary" size="lg" onClick={onCancel} disabled={pending}>Abbrechen</UiButton>
-          <UiButton variant="red" size="lg" data-autofocus onClick={onConfirm} disabled={pending || !previewReady || previewPending}>
+          <UiButton variant="red" size="lg" data-autofocus onClick={onConfirm} disabled={pending || !previewReady || previewPending || !confirmationCurrent}>
             {pending ? "Trennung läuft …" : "Verbindung trennen"}
           </UiButton>
         </div>

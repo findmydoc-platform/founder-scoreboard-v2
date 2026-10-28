@@ -2,6 +2,7 @@
 
 import { sessionAuthority } from "@/features/administrator-access/model/administrator-access";
 
+import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
 import { requestBacklogModel } from "@/features/backlog/model/backlog-api-client";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
@@ -98,6 +99,9 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!body?.basis?.sprint?.updatedAt||!Array.isArray(body.basis.tasks)||typeof body.tasksComplete!=="boolean")throw new Error("Abschlussstand ist unvollständig.");
         return {basis:body.basis,tasksComplete:body.tasksComplete,receipt:body.receipt||null};
       },
+      readGoogleWorkspace: () => googleWorkspaceApi(runtime.apiClient).readGoogleWorkspace(),
+      readGoogleDisconnect: () => googleWorkspaceApi(runtime.apiClient).readGoogleDisconnect(),
+      disconnectGoogleWorkspace: () => googleWorkspaceApi(runtime.apiClient).disconnectGoogleWorkspace(),
       restartPrivateWorkweek: versionId => privateWorkweekApi(runtime.apiClient).restartPrivateWorkweek(versionId),
       readWorkweekConflict: () => privateWorkweekApi(runtime.apiClient).readWorkweekConflict(),
       resolveWorkweekConflict: input => privateWorkweekApi(runtime.apiClient).resolveWorkweekConflict(input),
