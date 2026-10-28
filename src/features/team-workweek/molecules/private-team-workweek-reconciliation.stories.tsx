@@ -1,3 +1,4 @@
+import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
@@ -46,7 +47,7 @@ function fixture(mode: "unknown" | "navigation" | "delayed") {
     throw new Error(`Unexpected fixture request: ${input}`);
   } } as BrowserApiClient;
   const owner = createPlanningState({ userId: "reconciliation-preview", initialData: { ...emptyPlanningShellState, profiles: [profile] }, adapter: {
-    saveTask: async () => ({ task: {} }), readWorkspace: async () => null, ...privateWorkweekApi(apiClient),
+    saveTask: async () => ({ task: {} }), readWorkspace: async () => null, ...privateWorkweekApi(apiClient), ...googleWorkspaceApi(apiClient),
     readWorkweekCalendar: scope => readPublishedWorkweekCalendar(apiClient, scope),
   } });
   return { apiClient, planning: owner.planning, posts: () => posts, privateReads: () => privateReads, conflictReads: () => conflictReads, calendarReads: () => calendarReads, release: () => release(), navigate: (callback: () => void) => { navigate = callback; } };

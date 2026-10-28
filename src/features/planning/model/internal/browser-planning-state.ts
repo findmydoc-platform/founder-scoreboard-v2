@@ -2,6 +2,7 @@
 
 import { sessionAuthority } from "@/features/administrator-access/model/administrator-access";
 
+import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
 import { requestBacklogModel } from "@/features/backlog/model/backlog-api-client";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
@@ -73,6 +74,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!response.ok)throw Object.assign(new Error(body?.error||"Adminberechtigung konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
         if(!body?.administratorAccess)throw new Error("Die Adminberechtigung ist noch nicht bestätigt.");return body.administratorAccess;
       },
+      async importTaskGitHubComments(taskId) {
+        const { response, body } = await taskApi.importGitHubCommentsRequest(runtime.apiClient, taskId);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "GitHub-Kommentare konnten nicht aktualisiert werden."), { status: response.status, code: body?.code });
+        if (!Array.isArray(body?.comments) || typeof body.evidenceLink !== "string" || typeof body.imported !== "number") throw new Error("Die Importbestätigung ist unvollständig.");
+        return { comments: body.comments, commentsCoverage: body.commentsCoverage === "complete" ? "complete" : "partial", evidenceLink: body.evidenceLink, imported: body.imported };
+      },
       async createTaskComment(taskId, submitted) {
         const { response, body } = await taskApi.createTaskCommentRequest(runtime.apiClient, taskId, submitted);
         if (!response.ok) throw Object.assign(new Error(body?.error || "Kommentar konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
@@ -97,6 +104,9 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!body?.basis?.sprint?.updatedAt||!Array.isArray(body.basis.tasks)||typeof body.tasksComplete!=="boolean")throw new Error("Abschlussstand ist unvollständig.");
         return {basis:body.basis,tasksComplete:body.tasksComplete,receipt:body.receipt||null};
       },
+      readGoogleWorkspace: () => googleWorkspaceApi(runtime.apiClient).readGoogleWorkspace(),
+      readGoogleDisconnect: () => googleWorkspaceApi(runtime.apiClient).readGoogleDisconnect(),
+      disconnectGoogleWorkspace: () => googleWorkspaceApi(runtime.apiClient).disconnectGoogleWorkspace(),
       restartPrivateWorkweek: versionId => privateWorkweekApi(runtime.apiClient).restartPrivateWorkweek(versionId),
       readWorkweekConflict: () => privateWorkweekApi(runtime.apiClient).readWorkweekConflict(),
       resolveWorkweekConflict: input => privateWorkweekApi(runtime.apiClient).resolveWorkweekConflict(input),
