@@ -30,7 +30,10 @@ export type PlanningItemRaciAssignment = {
   sortOrder: number;
 };
 
+export type ProfilePersistenceBasis = Partial<Record<"focus" | "profile_color" | "notifications_enabled" | "platform_role" | "org_role" | "weekly_capacity" | "deputy_for" | "deputy_active_from" | "deputy_active_until", string | number | boolean | null>>;
+
 export type Profile = {
+  persistenceBasis?: ProfilePersistenceBasis;
   id: string;
   name: string;
   platformRole: PlatformRole;
@@ -389,7 +392,10 @@ export type PlanningFilterPreferences = {
   direction: "asc" | "desc";
 };
 
+export type ProfileUiPersistenceBasis = { default_workspace: string | null; default_task_view: string | null; planning_filters: unknown; expanded_item_ids: string[] | null };
+
 export type ProfileUiPreference = {
+  persistenceBasis?: ProfileUiPersistenceBasis;
   profileId: string;
   defaultWorkspace: string;
   defaultTaskView: ViewMode;

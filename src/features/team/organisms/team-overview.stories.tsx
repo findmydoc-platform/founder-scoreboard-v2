@@ -1,3 +1,8 @@
+import { useState, useSyncExternalStore } from "react";
+import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
+import { useProfileSettingsCommands } from "../hooks/use-profile-settings-commands";
+import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-profile-settings-commands";
+import type { Profile } from "@/lib/types";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
@@ -42,7 +47,7 @@ function previewClient(hasPlan:boolean):BrowserApiClient {
 }
 
 const meta={component:TeamOverview,title:"Team/Organisms/TeamOverview",parameters:{layout:"padded",nextjs:{appDirectory:true,navigation:{pathname:'/team',query:{}}}},tags:["layer:organism","status:stable"],
-  args:{data:{...emptyPlanningShellState,profiles:[profile]},actualProfile:profile,tasks:[],pending:false,canManageTeam:false,onSaveProfileSettings:fn(async()=>{}),apiClient:previewClient(true)},
+  args:{planningState:createPlanningState({ userId:"preview", initialData:{...emptyPlanningShellState,profiles:[profile]},initialWorkspace:"team",adapter:{saveTask:async()=>({task:{}}),readWorkspace:async()=>null} }).planning,actualProfile:profile,tasks:[],pending:false,canManageTeam:false,onSaveProfileSettings:fn(async()=>{}),apiClient:previewClient(true)},
 } satisfies Meta<typeof TeamOverview>;
 export default meta;
 type Story=StoryObj<typeof meta>;
@@ -56,3 +61,72 @@ export const ShowsAConfirmedPlanInItsSelectedWeek:Story={
   },
 };
 export const StartsWithoutPublishedTimes:Story={args:{apiClient:previewClient(false)}};
+
+
+function TeamEditingFixture({ lost = false, conflict = false }: { lost?: boolean; conflict?: boolean }) {
+  const target = { ...profile, id: "target", name: "Bea", platformRole: "founder" as const, orgRole: "Founder" };
+  const [counts] = useState(() => ({ writes: 0, reads: 0 }));
+  const [owner] = useState(() => createPlanningState({ userId: "preview", initialData: { ...emptyPlanningShellState, profiles: [profile, target] }, initialWorkspace: "team", adapter: {
+    saveTask: async () => ({ task: {} }),
+    readWorkspace: async () => { counts.reads++; return { data: { ...emptyPlanningShellState, profiles: [profile, { ...target, weeklyCapacity: conflict && counts.writes === 1 ? 28 : 30 }] } }; },
+    saveTeamProfile: async (profileId, patch) => { counts.writes++; if (conflict && counts.writes === 1) throw Object.assign(new Error("Das Profil wurde zwischenzeitlich geändert."), { status: 409, code: "profile_revision_conflict" }); if (lost) throw new Error("Die Profiländerung ist noch nicht bestätigt."); return { id: profileId, ...patch }; },
+    saveOwnProfileSettings: async patch => ({ profile: { ...target, ...patch.profilePatch }, notificationPreferences: [] }),
+  } }));
+  const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
+  const [error, setSaveError] = useState("");
+  const { saveProfileSettings } = useProfileSettingsCommands({ planningState: owner.planning, setSaveError });
+  const { saveOwnProfileSettings } = useOwnProfileSettingsCommands({ planningState: owner.planning, currentProfile: target as Profile, setSaveError });
+  return <><p>{error}</p><p>Writes: {counts.writes}; reads: {counts.reads}</p><button onClick={() => { void saveOwnProfileSettings({ profilePatch: { focus: "Eigener Fokus bestätigt" } }); }}>Eigenen Fokus speichern</button><p>Eigener Fokus: {data.profiles.find(person => person.id === target.id)?.focus || "leer"}</p><TeamOverview planningState={owner.planning} actualProfile={null} tasks={[]} pending={false} canManageTeam apiClient={previewClient(false)} onSaveProfileSettings={saveProfileSettings} /></>;
+}
+export const KeepsUnknownTeamDraftOpenAndChecksWithoutReplay: Story = {
+  render: () => <TeamEditingFixture lost />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Bea bearbeiten" }));
+    const dialog = within(await canvas.findByRole("dialog", { name: "Bea bearbeiten" }));
+    await userEvent.clear(dialog.getByRole("spinbutton", { name: "Kapazität" }));
+    await userEvent.type(dialog.getByRole("spinbutton", { name: "Kapazität" }), "30");
+    await userEvent.click(dialog.getByRole("button", { name: "Speichern" }));
+    await expect(canvas.getByRole("dialog", { name: "Bea bearbeiten" })).toBeVisible();
+    await expect(dialog.getByRole("spinbutton", { name: "Kapazität" })).toHaveValue(30);
+    await expect(dialog.getByRole("button", { name: "Speichern" })).toBeDisabled();
+    await userEvent.click(dialog.getByRole("button", { name: "Serverstand prüfen" }));
+    await expect(dialog.getByText("Serverstand geprüft. Die Speicherbestätigung bleibt offen.")).toBeVisible();
+    await expect(canvas.getByText("Writes: 1; reads: 1")).toBeVisible();
+  },
+};
+export const KeepsTeamDraftDuringOwnSettingsConfirmation: Story = {
+  render: () => <TeamEditingFixture />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Eigenen Fokus speichern" }));
+    await expect(canvas.getByText("Eigener Fokus: Eigener Fokus bestätigt")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Bea bearbeiten" }));
+    const dialog = within(await canvas.findByRole("dialog", { name: "Bea bearbeiten" }));
+    await userEvent.clear(dialog.getByRole("spinbutton", { name: "Kapazität" }));
+    await userEvent.type(dialog.getByRole("spinbutton", { name: "Kapazität" }), "30");
+    await userEvent.click(dialog.getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(canvas.queryByRole("dialog", { name: "Bea bearbeiten" })).not.toBeInTheDocument());
+    await expect(canvas.getByText("Eigener Fokus: Eigener Fokus bestätigt")).toBeVisible();
+    await expect(canvas.getByText("Writes: 1; reads: 1")).toBeVisible();
+  },
+};
+
+export const KeepsConflictingTeamDraftUntilConsciousSave: Story = {
+  render: () => <TeamEditingFixture conflict />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Bea bearbeiten" }));
+    const dialog = within(await canvas.findByRole("dialog", { name: "Bea bearbeiten" }));
+    await userEvent.clear(dialog.getByRole("spinbutton", { name: "Kapazität" }));
+    await userEvent.type(dialog.getByRole("spinbutton", { name: "Kapazität" }), "30");
+    await userEvent.click(dialog.getByRole("button", { name: "Speichern" }));
+    await expect(dialog.getByText(/Aktueller Serverstand:.*Kapazität: 28 Stunden/)).toBeVisible();
+    await expect(dialog.getByRole("spinbutton", { name: "Kapazität" })).toHaveValue(30);
+    await expect(dialog.getByRole("button", { name: "Speichern" })).toBeDisabled();
+    await expect(canvas.getByText("Writes: 1; reads: 1")).toBeVisible();
+    await userEvent.click(dialog.getByRole("button", { name: "Erneut speichern" }));
+    await waitFor(() => expect(canvas.queryByRole("dialog", { name: "Bea bearbeiten" })).not.toBeInTheDocument());
+    await expect(canvas.getByText("Writes: 2; reads: 2")).toBeVisible();
+  },
+};

@@ -19,6 +19,7 @@ import { planningHeaderSlotLoaders } from "./planning-header-cache";
 import { platformReleaseSeed } from "@/features/platform-releases/model/platform-release-seed";
 import { loadPlatformReleases } from "@/features/platform-releases/server/platform-release-read-model-supabase";
 import { requiresSupabaseAuth } from "../../supabase-configuration";
+import { settingsPreconditions, governancePreconditions } from "./profile-edit-preconditions";
 
 const accountActions = new Set(["account.profile.read", "account.settings.update", "account.github-project.update", "account.notifications.update", "account.tour.acknowledge", "account.preview.write", "account.preview.read", "account.governance.update", "releases.read", "releases.seen"]);
 function configurationFingerprint() {
@@ -179,11 +180,14 @@ export async function authorizeAccount(input: AccountCredentialInput) {
       await service.from("audit_log").insert({ actor_profile_id: profile.id, action: "notification_preference.update", entity_type: "notification_preference", entity_id: `${snapshot.profileId}:${snapshot.eventType}`, after_data: { profile_id: snapshot.profileId, channel: "google_chat", event_type: snapshot.eventType, enabled: snapshot.enabled }, request_ip: snapshot.metadata.request_ip || null, user_agent: snapshot.metadata.user_agent || null });
       return { data: result.data, error: null };
     },
-    async updateGovernance(patch: Record<string, string | number | null>, metadata: { request_ip?: string | null; user_agent?: string | null }) {
-      const snapshot = structuredClone({ patch, metadata });
+    async updateGovernance(patch: Record<string, string | number | null>, metadata: { request_ip?: string | null; user_agent?: string | null }, expected?: Record<string, unknown>) {
+      const snapshot = structuredClone({ patch, metadata, expected });
       if (action !== "account.governance.update" || !userData) return { data: null, error: { code: "42501", message: "Nur der CEO kann fachliche Rollen verwalten." } };
+      const cleanPatch = pick(snapshot.patch, governanceFields);
+      const basis = governancePreconditions(snapshot.expected, cleanPatch);
+      if (!basis.ok) return { data: null, error: { code: "22023", message: "Ungültige Vergleichswerte für die Profiländerung." } };
       return await userData.rpc("update_profile_governance_transaction", {
-        p_profile_id: targetProfileId, p_profile_patch: pick(snapshot.patch, governanceFields),
+        p_profile_id: targetProfileId, p_profile_patch: { ...cleanPatch, ...(basis.value ? { _expected: basis.value } : {}) },
         p_request_ip: snapshot.metadata.request_ip || null, p_user_agent: snapshot.metadata.user_agent || null,
       });
     },
@@ -207,11 +211,16 @@ export async function authorizeAccount(input: AccountCredentialInput) {
     async updateSettings(value: AccountSettingsUpdate) {
       const snapshot = structuredClone(value);
       if (action !== "account.settings.update" || !profile) return { data: null, error: { code: "42501", message: "Profil konnte nicht bestimmt werden." } };
+      const cleanPatch = pick(snapshot.profilePatch, settingsFields);
+      const cleanUi = snapshot.uiPreferences ? pick(snapshot.uiPreferences, uiFields) : null;
+      const cleanEvents = Object.fromEntries(Object.entries(snapshot.notificationEvents).filter(([key, value]) => notificationTypes.has(key) && typeof value === "boolean"));
+      const basis = settingsPreconditions(snapshot.expected, cleanPatch, cleanUi, cleanEvents);
+      if (!basis.ok) return { data: null, error: { code: "22023", message: "Ungültige Vergleichswerte für die Profileinstellungen." } };
       return await service.rpc("update_profile_settings_transaction", {
         p_profile_id: profile.id,
-        p_profile_patch: pick(snapshot.profilePatch, settingsFields),
-        p_ui_preferences: snapshot.uiPreferences ? pick(snapshot.uiPreferences, uiFields) : null,
-        p_notification_events: Object.fromEntries(Object.entries(snapshot.notificationEvents).filter(([key, value]) => notificationTypes.has(key) && typeof value === "boolean")),
+        p_profile_patch: { ...cleanPatch, ...(basis.value ? { _expected: basis.value } : {}) },
+        p_ui_preferences: cleanUi,
+        p_notification_events: cleanEvents,
         p_request_ip: snapshot.metadata.request_ip || null,
         p_user_agent: snapshot.metadata.user_agent || null,
       });

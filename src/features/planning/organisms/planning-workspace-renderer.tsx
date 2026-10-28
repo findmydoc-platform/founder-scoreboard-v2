@@ -160,6 +160,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "events" && (
         <EventsOverview
+          planningState={planningState}
           events={data.events}
           profiles={data.profiles}
           canManageEvents={canManageTaskMeta || controller.canCorrectOperationally}
@@ -186,7 +187,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
         <TeamOverview
           actualProfile={actualProfile}
           apiClient={apiClient}
-          data={data}
+          planningState={controller.planningState}
           tasks={data.tasks}
           pending={isPending}
           canManageTeam={currentProfile?.platformRole === "ceo"}

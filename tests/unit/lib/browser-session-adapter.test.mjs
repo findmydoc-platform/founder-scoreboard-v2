@@ -80,3 +80,62 @@ test("late protected API data is discarded after logout without replaying the op
   expect(result.body).toMatchObject({ code: "session_superseded" });
   expect(JSON.stringify(result.body)).not.toContain("old protected data");
 });
+
+test("reads started by new subscribers during a held global logout cannot restore the still-valid server cookie", async () => {
+  let releaseLogout, enteredLogout;
+  const entered = new Promise(resolve => { enteredLogout = resolve; });
+  const fetch = vi.fn(async input => {
+    if (String(input).endsWith("logout")) { enteredLogout(); await new Promise(resolve => { releaseLogout = resolve; }); return Response.json({ outcome: "cleared", session: null }); }
+    return Response.json({ session: view() });
+  });
+  vi.stubGlobal("fetch", fetch); const session = await adapter(); await session.current();
+  const changes = [], subscriberChecks = [];
+  const unsubscribe = session.subscribe(value => { changes.push(value); if (!value) subscriberChecks.push(session.refresh()); });
+  const pending = session.logout(); await entered;
+  expect(await Promise.all(subscriberChecks)).toEqual([null]);
+  expect(await session.refresh()).toBeNull(); expect(await session.current()).toBeNull();
+  expect(changes.some(Boolean)).toBe(false); expect(fetch.mock.calls.filter(([url]) => String(url) === "/api/auth/session")).toHaveLength(1);
+  releaseLogout(); expect(await pending).toBe(true); expect(await session.current()).toBeNull(); unsubscribe();
+});
+
+test.each(["response", "transport"])("a failed logout (%s) keeps identity withheld during the attempt and permits a fresh check after settlement", async failure => {
+  let releaseLogout, enteredLogout;
+  const entered = new Promise(resolve => { enteredLogout = resolve; });
+  vi.stubGlobal("fetch", async input => {
+    if (String(input).endsWith("logout")) { enteredLogout(); await new Promise(resolve => { releaseLogout = resolve; }); if (failure === "transport") throw new Error("Lost logout response"); return Response.json({ outcome: "temporarily_unavailable" }, { status: 503 }); }
+    return Response.json({ session: view() });
+  });
+  const session = await adapter(); await session.current(); const pending = session.logout(); await entered;
+  expect(await session.refresh()).toBeNull(); releaseLogout(); expect(await pending).toBe(false);
+  expect(await session.current()).toBeNull(); expect(await session.refresh()).toEqual(view());
+});
+
+test("a focus notification and newly requested recovery cannot reopen identity during a held logout", async () => {
+  let focus, releaseLogout, enteredLogout;
+  const entered = new Promise(resolve => { enteredLogout = resolve; });
+  vi.stubGlobal("window", { addEventListener: (type, callback) => { if (type === "focus") focus = callback; } });
+  vi.stubGlobal("BroadcastChannel", undefined);
+  const fetch = vi.fn(async input => {
+    if (String(input).endsWith("logout")) { enteredLogout(); await new Promise(resolve => { releaseLogout = resolve; }); return Response.json({ outcome: "cleared", session: null }); }
+    return Response.json({ session: view() });
+  });
+  vi.stubGlobal("fetch", fetch); const session = await adapter(); const original = await session.current();
+  const pending = session.logout(); await entered; focus();
+  expect(await session.recover(original)).toEqual({ kind: "superseded" });
+  expect(await session.current()).toBeNull(); releaseLogout(); expect(await pending).toBe(true);
+  expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("recover"))).toHaveLength(0);
+});
+
+test("concurrent global logout calls share one bound request and an unknown initial view never publishes identity", async () => {
+  let releaseLogout, enteredLogout;
+  const entered = new Promise(resolve => { enteredLogout = resolve; });
+  const fetch = vi.fn(async input => {
+    if (String(input).endsWith("logout")) { enteredLogout(); await new Promise(resolve => { releaseLogout = resolve; }); return Response.json({ outcome: "cleared", session: null }); }
+    return Response.json({ session: view() });
+  });
+  vi.stubGlobal("fetch", fetch); const session = await adapter(), changes = []; const unsubscribe = session.subscribe(value => changes.push(value));
+  const first = session.logout(), second = session.logout(); await entered;
+  expect(await session.refresh()).toBeNull(); expect(changes.some(Boolean)).toBe(false);
+  expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("logout"))).toHaveLength(1);
+  releaseLogout(); expect(await Promise.all([first, second])).toEqual([true, true]); expect(await session.current()).toBeNull(); unsubscribe();
+});

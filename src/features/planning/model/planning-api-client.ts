@@ -197,7 +197,7 @@ export function updateSprintCommitmentRequest(apiClient: BrowserApiClient, commi
 }
 
 export function updateProfileRequest(apiClient: BrowserApiClient, profileId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; profile?: Partial<Profile>; notificationPreferences?: NotificationPreference[] }>(`/api/profiles/${profileId}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; profile?: Partial<Profile>; notificationPreferences?: NotificationPreference[] }>(`/api/profiles/${profileId}`, {
     method: "PATCH",
     json: payload,
   });
@@ -247,14 +247,14 @@ export function updateMeetingAttendanceRequest(apiClient: BrowserApiClient, meet
 }
 
 export function createFounderEventRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; event?: FounderEvent }>("/api/events", {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; event?: FounderEvent }>("/api/events", {
     method: "POST",
     json: payload,
   });
 }
 
 export function updateFounderEventRequest(apiClient: BrowserApiClient, eventId: number, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; event?: FounderEvent }>(`/api/events/${eventId}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; event?: FounderEvent }>(`/api/events/${eventId}`, {
     method: "PATCH",
     json: payload,
   });
