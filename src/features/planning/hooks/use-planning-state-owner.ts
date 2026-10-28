@@ -1,5 +1,7 @@
 "use client";
 
+import { sessionAuthority } from "@/features/administrator-access/model/administrator-access";
+
 import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { AuthenticatedProfile } from "@/lib/types";
@@ -34,8 +36,9 @@ export function usePlanningStateOwner(options: PlanningPageState) {
     acceptProtectedData: bundle.acceptProtectedData,
     clearPlanningState: bundle.owner.internal.suspendProtected,
     legacyApiClient: bundle.legacyApiClient,
-    configure: (apiClient: BrowserApiClient, workspace: AppWorkspace, currentProfile: AuthenticatedProfile | null) => {
+    configure: (apiClient: BrowserApiClient, workspace: AppWorkspace, currentProfile: AuthenticatedProfile | null, administratorAccess?: import("@/features/administrator-access/model/administrator-access").AdministratorAccessSnapshot) => {
       Object.assign(bundle.runtime, { apiClient, workspace, currentProfile });
+      if (administratorAccess) bundle.owner.internal.bindAdministrationAuthority(sessionAuthority({ platformRole: currentProfile?.platformRole || "viewer", credentialKind: "session", administratorAccess }));
     },
   }), [bundle, data]);
 }

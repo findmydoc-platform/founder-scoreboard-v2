@@ -66,6 +66,7 @@ export function PlanningApp({
     initialProtectedDataLoaded,
     initialAuthError,
     operationalCorrection: administratorAccessController.authority.capabilities.operationalCorrection,
+    administratorAccess: administratorAccessController.administratorAccess,
   });
   const revalidateAdministratorAccess = administratorAccessController.revalidate;
   const setWorkspace = controller.setWorkspace;

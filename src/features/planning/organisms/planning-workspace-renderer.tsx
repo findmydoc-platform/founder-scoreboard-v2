@@ -250,6 +250,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       {workspace === "administration" && (
         <AdministrationWorkspaceHost
           apiClient={apiClient}
+          planningState={controller.planningState}
           capabilities={administrationCapabilities}
           initialModel={initialAdministrationModel}
           onAdministratorAccessInvalid={onAdministratorAccessInvalid}

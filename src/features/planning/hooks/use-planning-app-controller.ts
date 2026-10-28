@@ -20,6 +20,7 @@ export function usePlanningAppController({
   initialProtectedDataLoaded = false,
   initialAuthError = "",
   operationalCorrection = false,
+  administratorAccess,
 }: PlanningAppControllerOptions) {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
@@ -33,6 +34,7 @@ export function usePlanningAppController({
     initialProtectedDataLoaded,
     initialAuthError,
     operationalCorrection,
+    administratorAccess,
   });
   const {
     actualProfile,

@@ -1,5 +1,7 @@
 "use client";
 
+import { sessionAuthority } from "@/features/administrator-access/model/administrator-access";
+
 import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
 import { requestBacklogModel } from "@/features/backlog/model/backlog-api-client";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
@@ -32,6 +34,7 @@ export type PlanningPageState = {
   initialCurrentProfile: AuthenticatedProfile | null;
   initialUserId: string;
   initialWorkspace: AppWorkspace;
+  initialAdministratorAccess?: import("@/features/administrator-access/model/administrator-access").AdministratorAccessSnapshot;
 };
 
 export function createBrowserPlanningState(options: PlanningPageState, isCurrent: () => boolean = () => true) {
@@ -41,7 +44,24 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialData: options.initialData,
     initialWorkspace: options.initialWorkspace,
     initialHeaderData: options.initialHeaderData,
+    administrationActorProfileId: options.initialCurrentProfile?.id,
+    initialAdministrationAuthority: options.initialAdministratorAccess ? sessionAuthority({ platformRole: options.initialCurrentProfile?.platformRole || "viewer", credentialKind: "session", administratorAccess: options.initialAdministratorAccess }) : undefined,
     adapter: {
+      async readAdministration() {
+        const {response,body}=await runtime.apiClient.requestJson<{administration?:import("@/features/administration/model/administration-read-model").AdministrationWorkspaceModel;error?:string;code?:string}>("/api/administration-data",{useDevProfileOverride:false});
+        if(!response.ok||!body?.administration)throw Object.assign(new Error(body?.error||"Administrationsdaten konnten nicht geladen werden."),{status:response.status,code:body?.code});
+        return body.administration;
+      },
+      async saveAdministrationTechnical(profileId,patch,expected) {
+        const {response,body}=await runtime.apiClient.requestJson<{ok?:boolean;profile?:{id:string}&import("@/features/administration/model/administration-read-model").TechnicalIdentityBasis;error?:string;code?:string}>(`/api/administration/profiles/${encodeURIComponent(profileId)}/technical`,{method:"PATCH",json:{...patch,expected},useDevProfileOverride:false});
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Technische Identität konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
+        if(!body?.ok)throw new Error("Die technische Speicherung ist noch nicht bestätigt.");return{profile:body.profile};
+      },
+      async saveAdministrationEligibility(profileId,eligible,expectedEligible) {
+        const {response,body}=await runtime.apiClient.requestJson<{administratorAccess?:import("@/features/administrator-access/model/administrator-access").AdministratorAccessSnapshot&{profileId:string};error?:string;code?:string}>(`/api/administrator-access/profiles/${encodeURIComponent(profileId)}`,{method:"PATCH",json:{eligible,expectedEligible},useDevProfileOverride:false});
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Adminberechtigung konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
+        if(!body?.administratorAccess)throw new Error("Die Adminberechtigung ist noch nicht bestätigt.");return body.administratorAccess;
+      },
       async reportBlocker(taskId, submitted) {
         const { response, body } = await taskApi.reportTaskBlockerRequest(runtime.apiClient, taskId, submitted);
         if (!response.ok) throw Object.assign(new Error(body?.error || "Blocker konnte nicht gespeichert werden."), { status: response.status, code: body?.code });

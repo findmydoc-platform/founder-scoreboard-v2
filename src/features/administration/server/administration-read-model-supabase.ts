@@ -23,6 +23,7 @@ export type AdministrationDirectorySnapshot = {
     name: string;
     platformRole: PlatformRole;
     orgRole: string;
+    technicalBasis?: import("../model/administration-read-model").TechnicalIdentityBasis;
     githubLogin?: string;
     githubConnection?: {
       status: "incomplete" | "prepared" | "active";
@@ -95,6 +96,7 @@ export function createSupabaseAdministrationReadModel(
         name: profile.name,
         platformRole: profile.platformRole,
         orgRole: profile.orgRole || "",
+        technicalBasis: technical ? profile.technicalBasis : undefined,
         githubLogin: technical ? profile.githubLogin || "" : "",
         githubConnection: technical && profile.githubConnection ? profile.githubConnection : null,
         googleChatUserId: technical ? profile.googleChatUserId || "" : "",
@@ -126,6 +128,7 @@ export function createSupabaseAdministrationReadModel(
         status: "ready",
         model: {
           revision,
+          coverage: { people: "complete", technical, notificationEvents: technical ? "partial" : "none", notificationDeliveries: technical ? "partial" : "none" },
           capabilities,
           people,
           githubProject: technical && project ? project : null,

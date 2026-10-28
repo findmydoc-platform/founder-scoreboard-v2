@@ -1,3 +1,4 @@
+import { createAdministrationPersonState } from "./administration-person-state";
 import { createTaskBlockerReports } from "./task-blocker-reports";
 import { createBacklogOrdering } from "./backlog-ordering-state";
 import { createBacklogAssignments } from "./backlog-assignment-state";
@@ -32,7 +33,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 export type PlanningWorkspaceRead = { backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
-export type PlanningStateAdapter = import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+export type PlanningStateAdapter = import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   lockSprint?: (basis: import("@/features/sprint/model/sprint-lock").SprintLockBasis) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockReceipt>;
   readSprintLock?: (sprintId: string) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockObservation>;
 
@@ -52,12 +53,14 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-blocker-r
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialSession, initialHeaderData, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialSession, initialHeaderData, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
   initialSession?: BrowserSessionSnapshot;
   initialHeaderData?: PlanningHeaderData;
+  administrationActorProfileId?: string;
+  initialAdministrationAuthority?: import("@/features/administrator-access/model/administrator-access").AuthorityProjection;
   adapter: PlanningStateAdapter;
   publishCache?: (data: PlanningShellState | null, workspace?: AppWorkspace) => void;
   acceptWorkspaceContext?: (result: PlanningWorkspaceRead) => void;
@@ -97,6 +100,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   const workweekCalendars = createPublishedWorkweekCalendars({ active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), read: adapter.readWorkweekCalendar });
   const privateWorkweek = createPrivateWorkweekState({ adapter, active: isActive, generation: () => sessionGeneration, changed: publish, published: workweekCalendars.invalidatePublishedWorkweeks });
+  const administration = createAdministrationPersonState({ actorRole: () => confirmed.profiles.find(profile => profile.id === administrationActorProfileId)?.platformRole || null, active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), profiles: () => visible.profiles, nextSequence: () => ++sequence, acceptCommonPeople: (people, started) => profileSettings.acceptAdministrationPeople(people, started), initialAuthority: initialAdministrationAuthority, read: adapter.readAdministration, adapter });
   const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
   const events = createEventsState({ initial: active ? initialData.events : [], loaded: initialWorkspace === "events", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidateCalendar: () => notifications.invalidateHeader(["calendarEvents"]), refreshWorkspace: () => planning.refreshWorkspace("events"), endSession,
     beginHeaderRead: () => notifications.beginWorkspaceRead("events"),
@@ -361,6 +365,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const planning: PlanningState = {
+    administration: administration.view,
+    loadAdministration: administration.load,
+    beginAdministrationPersonEdit: administration.begin,
+    administrationPersonEdits: administration.views,
+    resumeAdministrationPersonEdit: administration.resume,
     reportTaskBlocker: blockerReports.report,
     taskBlockerReports: blockerReports.views,
     checkTaskBlockerReport: blockerReports.check,
@@ -623,6 +632,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     editing.clear();
     blockerReports.clear();
     lifecycle.clear();
+    administration.clear();
     backlogOrdering.clear();
     backlogAssignments.clear();
     sprintState.clear();
@@ -701,6 +711,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   return { planning, internal: {
     getSnapshot: () => visible,
+    bindAdministrationAuthority: administration.bindAuthority,
     confirmedHeader: notifications.confirmedHeader,
     acceptHeaderHydration: notifications.hydrateHeader,
     invalidateHeader: notifications.invalidateHeader,
@@ -714,6 +725,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     bindSession,
     suspendProtected,
     endSession,
-    dispose: () => unsubscribeSession?.(),
+    dispose: () => { administration.clear(); unsubscribeSession?.(); },
   } };
 }

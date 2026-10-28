@@ -117,3 +117,17 @@ test("issued directory operations distinguish expired authority from a temporary
   expect(await permission.administrator.directory.readNotificationEvents()).toMatchObject({ error: { code: "42501" } });
   expect(current.calls).toEqual([]);
 });
+
+test("eligibility CAS keeps the displayed boolean while the CEO remains authorized without a technical lease",async()=>{
+ const current=await routes({role:"ceo",snapshot:{eligible:false,active:false,expiresAt:null},responses:{set_administrator_eligibility_if_current:{profileId:"target",eligible:true,active:false,expiresAt:null}}});
+ const response=await current.eligibility.PATCH(current.request("/","PATCH",{eligible:true,expectedEligible:false}),{params:Promise.resolve({id:"target"})});
+ expect(response.status).toBe(200);expect(await response.json()).toMatchObject({administratorAccess:{profileId:"target",eligible:true}});
+ expect(current.calls).toEqual([{name:"set_administrator_eligibility_if_current",body:{p_profile_id:"target",p_expected_eligible:false,p_eligible:true}}]);
+});
+
+
+test("eligibility CAS validates its basis and distinguishes a real conflict",async()=>{
+ const current=await routes({role:"ceo",snapshot:{eligible:false,active:false,expiresAt:null},responses:{set_administrator_eligibility_if_current:()=>Response.json({code:"P0020",message:"Private database detail"},{status:400})}});
+ const context={params:Promise.resolve({id:"target"})};expect((await current.eligibility.PATCH(current.request("/","PATCH",{eligible:true,expectedEligible:null}),context)).status).toBe(400);expect(current.calls).toEqual([]);
+ const response=await current.eligibility.PATCH(current.request("/","PATCH",{eligible:true,expectedEligible:false}),context);expect(response.status).toBe(409);const body=await response.json();expect(body.code).toBe("administration_eligibility_conflict");expect(JSON.stringify(body)).not.toContain("Private database detail");
+});
