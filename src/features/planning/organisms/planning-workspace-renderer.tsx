@@ -150,6 +150,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "backlog" && (
         initialBacklogModel ? <BacklogOverview
+          planningState={planningState}
           apiClient={apiClient}
           canManageBacklog={canManageTaskMeta}
           initialModel={initialBacklogModel}

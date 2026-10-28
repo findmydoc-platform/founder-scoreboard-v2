@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest) {
   });
   if (!result.ok) {
     const mapped = sprintAssignmentError(result.error);
-    return apiError(mapped.message, mapped.status);
+    return NextResponse.json({ error: mapped.message, ...(mapped.code ? { code: mapped.code } : {}) }, { status: mapped.status });
   }
   return NextResponse.json({ ok: true, updates: sprintAssignmentUpdatesFromChanges(result.changes) });
 }

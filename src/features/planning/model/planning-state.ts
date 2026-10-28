@@ -58,6 +58,10 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 export interface PlanningState extends PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+  beginBacklogAssignment(tasks: readonly Task[], sprints: readonly import("@/lib/types").Sprint[], bulk: boolean): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor;
+  backlogAssignments(): readonly import("@/features/backlog/model/backlog-assignment").BacklogAssignmentView[];
+  resumeBacklogAssignment(id: string): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor | null;
+  backlog(): { model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
   sprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanView;
   checkSprintPlan(): Promise<PlanningTaskSaveCheck>;
   resumeSprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanEditor | null;

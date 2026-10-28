@@ -53,17 +53,18 @@ export function createSupabaseBacklogReadModel(supabase: SupabaseClient): Backlo
     async load(context): Promise<BacklogLoadResult> {
       if (!context.authorized) return { status: "forbidden" };
       const [profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, commitmentResult] = await Promise.all([
-        supabase.from("profiles").select(profileSelect).order("name"),
-        supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", projectId).order("sort_order").order("id"),
-        supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"),
-        supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order"),
-        supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"),
-        supabase.from("sprints").select(sprintSelect).order("start_date").order("id"),
-        supabase.from("sprint_commitments").select(commitmentSelect).order("profile_id").order("id"),
+        supabase.from("profiles").select(profileSelect, { count: "exact" }).order("name").limit(1000),
+        supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect, { count: "exact" }).limit(1000).eq("project_id", projectId).order("sort_order").order("id"),
+        supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints", { count: "exact" }).limit(1000),
+        supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order", { count: "exact" }).limit(1000).order("task_id").order("sort_order"),
+        supabase.from("task_links").select("id,task_id,type,label,url,position,metadata", { count: "exact" }).limit(1000).order("position").order("id"),
+        supabase.from("sprints").select(sprintSelect, { count: "exact" }).limit(1000).order("start_date").order("id"),
+        supabase.from("sprint_commitments").select(commitmentSelect, { count: "exact" }).limit(1000).order("profile_id").order("id"),
       ]);
       if (profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error || sprintResult.error || commitmentResult.error) {
         return { status: "unavailable" };
       }
+      const complete = (result: { data: unknown[] | null; count: number | null }) => typeof result.count === "number" && (result.data?.length || 0) >= result.count ? "complete" as const : "partial" as const;
       const people = ((profileResult.data || []) as DbProfile[]).map(mapProfile);
       const items = mapItems(
         (itemResult.data || []) as unknown as DbTask[],
@@ -77,6 +78,7 @@ export function createSupabaseBacklogReadModel(supabase: SupabaseClient): Backlo
         status: "ready",
         model: {
           revision,
+          coverage: { items: complete(itemResult), people: complete(profileResult), strategies: complete(strategyResult), raci: complete(raciResult), links: complete(linkResult), sprints: complete(sprintResult), commitments: complete(commitmentResult) },
           items,
           people,
           sprints: ((sprintResult.data || []) as DbSprint[]).map(mapSprint),
