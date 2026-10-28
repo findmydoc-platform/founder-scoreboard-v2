@@ -5,6 +5,7 @@ import { createBrowserApiClient } from "@/lib/browser-api-client";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState } from "@/lib/types";
 import * as planningApi from "../planning-api-client";
+import * as profileTokenApi from "@/features/profile/model/profile-planning-items-api";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
 import { createPlanningState } from "./planning-state-owner";
@@ -54,6 +55,30 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok) throw Object.assign(new Error(body?.error || "Release konnte nicht bestätigt werden."), { status: response.status });
         if (!body?.ok) throw new Error("Bestätigung unvollständig.");
       },
+      async saveOwnProfileSettings(patch) {
+        const { response, body } = await planningApi.updateOwnProfileSettingsRequest(runtime.apiClient, { ...patch.profilePatch, profileColorDuplicateMode: patch.profileColorDuplicateMode, notificationEvents: patch.notificationEvents, uiPreferences: patch.uiPreferences });
+        if (!response.ok || !body?.profile) throw Object.assign(new Error(body?.error || "Profil konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        return { profile: body.profile, uiPreference: body.uiPreference, notificationPreferences: body.notificationPreferences || [] };
+      },
+      async acknowledgeFeatureTour(tourId) {
+        const { response, body } = await planningApi.markProfileFeatureTourSeenRequest(runtime.apiClient, tourId);
+        if (!response.ok || !body?.acknowledgement) throw Object.assign(new Error(body?.error || "Die Bestätigung der Hilfe-Tour steht noch aus."), { status: response.status, code: body?.code });
+        return body.acknowledgement;
+      },
+      async readProfileApiTokens() {
+        const { response, body } = await profileTokenApi.loadPlanningItemsTokens(runtime.apiClient);
+        if (!response.ok || !body?.tokens) throw Object.assign(new Error(body?.error || "Planning-API-Tokens konnten nicht geladen werden."), { status: response.status, code: body?.code });
+        return { tokens: body.tokens, canIssueEmptyEpicDeletes: Boolean(body.capabilities?.canIssueEmptyEpicDeletes) };
+      },
+      async issueProfileApiToken(draft) {
+        const { response, body } = await profileTokenApi.createPlanningItemsToken(runtime.apiClient, draft.label, draft.allowUpdates, draft.allowEmptyEpicDeletes, draft.allowGitHubSync);
+        if (!response.ok || !body?.token || !body.tokenRecord) throw Object.assign(new Error(body?.error || "Planning-API-Token konnte nicht erstellt werden."), { status: response.status, code: body?.code });
+        return { token: body.token, tokenRecord: body.tokenRecord };
+      },
+      async revokeProfileApiToken(tokenId) {
+        const { response, body } = await profileTokenApi.revokePlanningItemsToken(runtime.apiClient, tokenId);
+        if (!response.ok || !body?.ok) throw Object.assign(new Error(body?.error || "Planning-API-Token konnte nicht widerrufen werden."), { status: response.status, code: body?.code });
+      },
       async saveTask(task, patch) {
         const { response, body } = await taskApi.updateTaskRequest(runtime.apiClient, task.id, taskUpdateRequestPayload(patch, task.updatedAt || ""));
         if (!response.ok) throw Object.assign(new Error(body?.error || "Änderung konnte nicht gespeichert werden."), { status: response.status, code: body?.code, kind: body?.conflictReason === "revision" ? "versionConflict" : undefined });
@@ -86,7 +111,8 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     acceptWorkspaceContext(result) {
       if (!isCurrent()) return;
       runtime.headerData = owner.internal.confirmedHeader();
-      runtime.currentProfile = result.currentProfile || runtime.currentProfile;
+      const profileId = result.currentProfile?.id || runtime.currentProfile?.id;
+      runtime.currentProfile = owner.planning.protectedCache()?.profiles.find(profile => profile.id === profileId) || null;
       headerListeners.forEach(listener => listener(runtime.headerData));
     },
     publishCache(data, workspace) {
@@ -101,7 +127,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         authorityExpiresAt: runtime.session?.expiresAt,
         data,
         headerData: confirmedHeader,
-        currentProfile: runtime.currentProfile,
+        currentProfile: data.profiles.find(profile => profile.id === runtime.currentProfile?.id) || null,
       });
     },
   });

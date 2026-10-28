@@ -38,7 +38,7 @@ export function ProfileSettingsNavButton({
       </span>
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold">{section.label}</span>
-        {!compact && <span className="mt-0.5 block truncate text-xs text-slate-500">{section.description}</span>}
+        {!compact && <span className="mt-0.5 block truncate text-xs text-slate-600">{section.description}</span>}
       </span>
     </button>
   );

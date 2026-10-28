@@ -4,6 +4,7 @@ import type { TeamPlanningItemTokenRecord } from "@/features/planning-items/mode
 type TokenListResponse = {
   ok?: boolean;
   error?: string;
+  code?: string;
   tokens?: TeamPlanningItemTokenRecord[];
   capabilities?: {
     canIssueEmptyEpicDeletes?: boolean;
@@ -13,6 +14,7 @@ type TokenListResponse = {
 type TokenCreateResponse = {
   ok?: boolean;
   error?: string;
+  code?: string;
   token?: string;
   tokenRecord?: TeamPlanningItemTokenRecord;
 };
@@ -37,7 +39,7 @@ export function createPlanningItemsToken(
 }
 
 export function revokePlanningItemsToken(apiClient: BrowserApiClient, tokenId: string) {
-  return apiClient.requestJson<{ ok?: boolean; error?: string }>(`${tokensEndpoint}/${tokenId}`, {
+  return apiClient.requestJson<{ ok?: boolean; error?: string; code?: string }>(`${tokensEndpoint}/${tokenId}`, {
     method: "DELETE",
   });
 }

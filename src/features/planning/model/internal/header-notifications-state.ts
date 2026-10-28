@@ -38,7 +38,7 @@ export function createHeaderNotificationsState(options: {
     for (const operation of operations.values()) if (operation.eventId && ["saving", "unconfirmed"].includes(operation.phase)) next = next.map(event => event.id === operation.eventId ? applyLocalNotificationAction(event, operation.action) : event);
     return next;
   }
-  function headerView() {
+  function headerView(optimistic = true) {
     const data = { ...header };
     for (const key of planningHeaderSlotKeys) {
       const status = slots[key].readStatus;
@@ -46,7 +46,7 @@ export function createHeaderNotificationsState(options: {
       Object.assign(data, { [key]: { ...header[key], state, freshness: status === "current" ? "current" : "stale", error: slots[key].error || undefined } });
     }
     const hidden = new Set([...operations.values()].filter(operation => ["saving", "unconfirmed"].includes(operation.phase)).map(operation => operation.eventId).filter(Boolean));
-    if (hidden.size) data.notifications = { ...data.notifications, data: { ...data.notifications.data, items: data.notifications.data.items.filter(event => !hidden.has(event.id)) } };
+    if (optimistic && hidden.size) data.notifications = { ...data.notifications, data: { ...data.notifications.data, items: data.notifications.data.items.filter(event => !hidden.has(event.id)) } };
     return { data, slots: { ...slots } };
   }
   function invalidateNotifications() {
@@ -182,7 +182,7 @@ export function createHeaderNotificationsState(options: {
     workspaceFailed(workspace: string, error: unknown) { if (workspace !== "notifications") return; notificationStatus = denied(error) ? "forbidden" : "unavailable"; if (denied(error)) { events = []; deliveries = []; operations.clear(); header.notifications = emptyPlanningHeaderData.notifications; slots.notifications = { readStatus: "forbidden", error: "Kein Zugriff auf Benachrichtigungen." }; } },
     projectConfirmed(data: PlanningShellState) { return { ...data, notificationEvents: events, notificationDeliveries: deliveries }; },
     projectVisible(data: PlanningShellState) { return { ...data, notificationEvents: projectedEvents(), notificationDeliveries: deliveries }; },
-    confirmedHeader: () => header,
+    confirmedHeader: () => headerView(false).data,
     invalidateHeader(keys: readonly PlanningHeaderSlotKey[]) {
       const loaded = keys.filter(key => slots[key].readStatus !== "not-loaded");
       if (!loaded.length || !options.isActive()) return;

@@ -198,7 +198,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "profile" && (
         <ProfileSettingsOverview
-          apiClient={apiClient}
+          planningState={controller.planningState}
           data={data}
           currentProfile={currentProfile}
           pending={isPending}
