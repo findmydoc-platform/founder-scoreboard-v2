@@ -4,7 +4,7 @@ import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-cal
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { useState } from "react";
-import { addCalendarDays, addCalendarMonths, berlinDateKey, firstCalendarDayOfMonth } from "@/features/team-workweek/model/team-workweek-calendar";
+import { addCalendarDays, addCalendarMonths, berlinDateKey, firstCalendarDayOfMonth, calendarGridRange } from "@/features/team-workweek/model/team-workweek-calendar";
 import { useHeaderCalendar } from "../hooks/use-header-calendar";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { HeaderCalendarDialog } from "./header-calendar-dialog";
@@ -152,6 +152,7 @@ function HookDialog({ apiClient }: { apiClient: BrowserApiClient }) {
     <button onClick={calendar.openCalendar}>Kalender öffnen</button>
     {calendar.open && <HeaderCalendarDialog
       activeTab={calendar.activeTab} anchor={{ right: 12, top: 12 }}
+      workweekCoverage={planningState.workweekCalendar({ policy: "header-month", ...calendarGridRange(calendar.viewMonth) }).coverage}
       calendarWorkweeks={calendar.calendarWorkweeks} workweeksByDay={calendar.workweeksByDay} desktopPopover={false}
       eventSlot={{ data: [], error: "", state: "ready" }} message={calendar.message}
       now={calendar.now} onActiveTabChange={calendar.setActiveTab} onClose={calendar.closeCalendar}
@@ -375,7 +376,7 @@ export const SharesHeaderAndTeamPublicationsAndWithholdsDeniedScopes: Story = {
   render: () => <SharedCalendarFixture />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const body = within(document.body);
+    const body = within(canvasElement.ownerDocument.body);
     await canvas.findAllByText("09:00–17:00");
     await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
     await waitFor(() => expect(canvas.getAllByText("11:00–17:00").length).toBeGreaterThan(0));
@@ -384,8 +385,61 @@ export const SharesHeaderAndTeamPublicationsAndWithholdsDeniedScopes: Story = {
     const label = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" }).format(new Date(`${firstMondayOfVisibleMonth()}T12:00:00Z`));
     await userEvent.click(body.getByRole("button", { name: new RegExp(`^${label},`) }));
     await expect(within(body.getByRole("dialog", { name: "Kalender" })).getByText("11:00–17:00")).toBeVisible();
+    await expect(body.getByRole("button", { name: new RegExp(`^${label},`) })).toHaveAccessibleName(/1 eingeplant/);
     denySharedCalendar();
     await waitFor(() => expect(body.queryAllByText("11:00–17:00")).toHaveLength(0));
     await expect(body.getAllByText("Kein Zugriff auf veröffentlichte Arbeitszeiten.").length).toBeGreaterThan(0);
+    await expect(body.getByRole("button", { name: new RegExp(`^${label},`) })).not.toHaveAccessibleName(/\d+ eingeplant/);
+  },
+};
+
+function publicationCountClient(mode: "complete-empty" | "complete" | "partial" | "unavailable"): BrowserApiClient {
+  return { requestJson: async () => {
+    if (mode === "unavailable") return { response: new Response(null, { status: 503 }), body: { error: "Arbeitszeiten konnten nicht geladen werden." } };
+    const schedule = { id: "count-publication", ownerProfileId: profile.id, effectiveFrom: "2020-01-01", effectiveTo: null, timezone: "Europe/Berlin", publicationRevision: 1, lastSyncAt: null, windows: { ...emptyWindows, monday: [{ start: "09:00", end: "17:00" }] } };
+    const rows = mode === "complete-empty" ? [] : [schedule];
+    return { response: new Response(null), body: { currentWorkweeks: rows, calendarWorkweeks: rows, calendarCoverage: mode === "partial" ? "partial" : "complete", referenceDate: berlinDateKey() } };
+  } } as unknown as BrowserApiClient;
+}
+async function openCountDay(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+  const label = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" }).format(new Date(`${firstMondayOfVisibleMonth()}T12:00:00Z`));
+  const day = await canvas.findByRole("button", { name: new RegExp(`^${label},`) });
+  await userEvent.click(day);
+  return { canvas, day };
+}
+export const PreservesAuthoritativeCompleteEmptyDayCount: Story = {
+  render: () => <HookDialog apiClient={publicationCountClient("complete-empty")} />,
+  play: async ({ canvasElement }) => {
+    const { canvas, day } = await openCountDay(canvasElement);
+    await waitFor(() => expect(day).toHaveAccessibleName(/0 eingeplant/));
+    await expect(canvas.getByText("Niemand eingeplant.")).toBeVisible();
+  },
+};
+export const PreservesAuthoritativeCompleteDayCount: Story = {
+  render: () => <HookDialog apiClient={publicationCountClient("complete")} />,
+  play: async ({ canvasElement }) => {
+    const { canvas, day } = await openCountDay(canvasElement);
+    await canvas.findByText("09:00–17:00");
+    await expect(day).toHaveAccessibleName(/1 eingeplant/);
+  },
+};
+export const PartialPublicationKeepsKnownHoursWithoutAnExactCount: Story = {
+  render: () => <HookDialog apiClient={publicationCountClient("partial")} />,
+  play: async ({ canvasElement }) => {
+    const { canvas, day } = await openCountDay(canvasElement);
+    await canvas.findByText("09:00–17:00");
+    await expect(day).not.toHaveAccessibleName(/\d+ eingeplant/);
+    await expect(canvas.queryByText("Niemand eingeplant.")).not.toBeInTheDocument();
+  },
+};
+export const UnavailablePublicationDoesNotClaimZeroPlannedPeople: Story = {
+  render: () => <HookDialog apiClient={publicationCountClient("unavailable")} />,
+  play: async ({ canvasElement }) => {
+    const { canvas, day } = await openCountDay(canvasElement);
+    await canvas.findByText("Arbeitszeiten konnten nicht geladen werden.");
+    await expect(day).not.toHaveAccessibleName(/\d+ eingeplant/);
+    await expect(canvas.queryByText("Niemand eingeplant.")).not.toBeInTheDocument();
   },
 };

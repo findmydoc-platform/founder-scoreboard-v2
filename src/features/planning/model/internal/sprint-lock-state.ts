@@ -74,7 +74,7 @@ export function createSprintLockState(options: {
                     return { ok: false, kind: "unconfirmed", error: view.error };
                 }
                 const started = options.nextSequence();
-                view = { ...view, phase: "saving", submitted: structuredClone(input) };
+                view = { ...view, phase: "saving", submitted: structuredClone(input), error: "" };
                 options.changed();
                 try {
                     if (basis.sprint.scoreLocked || options.current().sprints.find(sprint => sprint.id === basis.sprint.id)?.scoreLocked)
@@ -89,7 +89,7 @@ export function createSprintLockState(options: {
                     if (receipt.sprint.id !== shown.id || !receipt.sprint.scoreLocked || receipt.sprint.status !== "closed")
                         throw new Error("Sprint-Abschluss noch nicht bestätigt.");
                     options.accept(receipt, basis, started);
-                    view = { ...view, phase: "locked", receipt };
+                    view = { ...view, phase: "locked", receipt, error: "" };
                     options.changed();
                     const loaded = await options.refresh();
                     if (!active())
