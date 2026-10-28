@@ -1,5 +1,7 @@
 "use client";
 
+import { TaskGitHubSyncNotice } from "../molecules/task-github-sync-notice";
+import type { TaskGitHubSyncView } from "../model/task-github-sync-state";
 import { CircleAlert, Link2, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useState } from "react";
@@ -20,7 +22,7 @@ type QueueRow = {
   hasIssue: boolean;
   issueLabel: string;
   parent?: Task;
-  state: "open" | "comments_waiting" | "comments_failed" | "running" | "locked" | "failed" | "missing" | "waiting_for_parent" | "parent_failed";
+  state: "unconfirmed" | "partial" | "parent_unconfirmed" | "open" | "comments_waiting" | "comments_failed" | "running" | "locked" | "failed" | "missing" | "waiting_for_parent" | "parent_failed";
 };
 
 function issueLabel(task: Task) {
@@ -43,6 +45,9 @@ function queueState(task: Task, parent: Task | undefined, hasIssue: boolean, has
 }
 
 function stateDescription(row: QueueRow) {
+  if (row.state === "unconfirmed") return "Bestätigung ausstehend; zuerst den Stand prüfen";
+  if (row.state === "partial") return "GitHub-Sync teilweise bestätigt";
+  if (row.state === "parent_unconfirmed") return "Sub-Issue wartet auf die Bestätigung des Parent-Syncs";
   if (row.state === "locked") return "Sync läuft bereits";
   if (row.state === "failed") return row.task.githubIssueSyncError || "GitHub-Sync fehlgeschlagen";
   if (row.state === "parent_failed") return "Parent-Sync fehlgeschlagen; Sub-Issue wird übersprungen";
@@ -72,6 +77,8 @@ export function TaskGitHubSyncQueue({
   onReconnect,
   onSyncLinkedGitHubTasks,
   onSyncTaskToGitHub,
+  syncOperations = [],
+  onCheckSync,
 }: {
   open: boolean;
   tasks: Task[];
@@ -80,7 +87,7 @@ export function TaskGitHubSyncQueue({
   githubInstallationAvailable: boolean;
   githubUserConnected: boolean;
   githubConnectionState: GitHubUserConnectionState;
-  waitingGitHubCommentCount: number;
+  waitingGitHubCommentCount: number | null;
   githubReauthFailed: boolean;
   authBusy: boolean;
   localMode?: boolean;
@@ -90,6 +97,8 @@ export function TaskGitHubSyncQueue({
   onReconnect: () => void;
   onSyncLinkedGitHubTasks: LinkedSyncCommand;
   onSyncTaskToGitHub: TaskSyncCommand;
+  syncOperations?: readonly TaskGitHubSyncView[];
+  onCheckSync?: (taskId:string)=>void;
 }) {
   const [connectionInfoOpen, setConnectionInfoOpen] = useState(false);
   const closeQueue = useCallback(() => {
@@ -102,16 +111,23 @@ export function TaskGitHubSyncQueue({
 
   const taskById = new Map(tasks.map((task) => [task.id, task]));
   const queue = projectGitHubSyncQueue(tasks, comments);
-  const rows = queue.tasks
+  const operations=new Map(syncOperations.map(view=>[view.taskId,view]));
+  const attention=syncOperations.filter(view=>["unconfirmed","partiallyConfirmed"].includes(view.phase));
+  const queuedIds=new Set(queue.tasks.map(task=>task.id));
+  const queueTasks=[...queue.tasks,...tasks.filter(task=>!queuedIds.has(task.id)&&attention.some(view=>view.taskId===task.id))];
+  const rows = queueTasks
     .map((task) => {
       const linked = hasGitHubIssue(task);
       const parent = task.taskType === "sub_issue" ? taskById.get(task.parentTaskId) : undefined;
+      const operation=operations.get(task.id),parentOperation=parent?operations.get(parent.id):null;
+      const unknown=operation?.phase==="unconfirmed"||operation?.phase==="partiallyConfirmed"&&!operation.retryAllowed;
+      const parentUnknown=parentOperation?.phase==="unconfirmed"||parentOperation?.phase==="partiallyConfirmed"&&!parentOperation.retryAllowed;
       return {
         task,
         parent,
         hasIssue: linked,
         issueLabel: issueLabel(task),
-        state: queueState(
+        state: unknown?"unconfirmed":parentUnknown?"parent_unconfirmed":operation?.phase==="partiallyConfirmed"?"partial":queueState(
           task,
           parent,
           linked,
@@ -121,9 +137,9 @@ export function TaskGitHubSyncQueue({
       } satisfies QueueRow;
     });
 
-  const bulkRunnableRows = rows.filter((row) => row.state !== "running" && row.state !== "locked");
+  const bulkRunnableRows = rows.filter((row) => row.state !== "running" && row.state !== "locked" && row.state !== "unconfirmed" && row.state !== "parent_unconfirmed");
   const canRunLinkedSync = githubInstallationAvailable && !pending && bulkRunnableRows.length > 0;
-  const rowActionDisabled = (row: QueueRow) => pending || !githubInstallationAvailable || row.state === "running" || row.state === "locked" || row.state === "waiting_for_parent" || row.state === "parent_failed";
+  const rowActionDisabled = (row: QueueRow) => pending || !githubInstallationAvailable || row.state === "running" || row.state === "locked" || row.state === "waiting_for_parent" || row.state === "parent_failed" || row.state === "unconfirmed" || row.state === "parent_unconfirmed";
 
   return (
     <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="GitHub-Sync">
@@ -169,8 +185,9 @@ export function TaskGitHubSyncQueue({
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5">
+          {syncOperations.map(view=><TaskGitHubSyncNotice key={view.taskId} view={view} onCheck={()=>onCheckSync?.(view.taskId)} onRetry={tasks.find(task=>task.id===view.taskId)?()=>{const task=tasks.find(task=>task.id===view.taskId)!;onSyncTaskToGitHub(task,{createIfMissing:!hasGitHubIssue(task)});}:undefined}/>)}
           <h3 className="border-b border-slate-100 py-4 text-base font-semibold text-slate-950">
-            {rows.length > 0 ? `${rows.length} ${rows.length === 1 ? "Aktion" : "Aktionen"} erforderlich` : "GitHub ist aktuell"}
+            {rows.length > 0 ? `${rows.length} geladene ${rows.length === 1 ? "Aktion" : "Aktionen"} erforderlich` : "GitHub ist aktuell"}
           </h3>
           <div>
             {rows.map((row) => {
@@ -203,7 +220,7 @@ export function TaskGitHubSyncQueue({
                 <div className="col-start-2 flex shrink-0 items-center gap-2 sm:col-start-auto sm:justify-end">
                   {row.hasIssue ? (
                     <UiButton size="xs" variant="blueOutline" disabled={rowActionDisabled(row)} onClick={() => onSyncTaskToGitHub(row.task)}>
-                      {row.state === "failed" || row.state === "comments_failed" ? "Erneut versuchen" : row.state === "running" || row.state === "locked" ? "Läuft" : "Synchronisieren"}
+                      {row.state === "failed" || row.state === "comments_failed" || row.state === "partial" ? "Erneut versuchen" : row.state === "running" || row.state === "locked" ? "Läuft" : "Synchronisieren"}
                     </UiButton>
                   ) : (
                     <UiButton size="xs" variant="blueOutline" disabled={rowActionDisabled(row)} onClick={() => onSyncTaskToGitHub(row.task, { createIfMissing: true })}>
@@ -221,7 +238,7 @@ export function TaskGitHubSyncQueue({
             })}
             {!rows.length && (
               <UiEmptyState tone="muted" minHeight="md" className="my-5">
-                Alle freigegebenen Aufgaben sind mit GitHub abgeglichen.
+                Alle geladenen freigegebenen Aufgaben sind mit GitHub abgeglichen.
               </UiEmptyState>
             )}
           </div>

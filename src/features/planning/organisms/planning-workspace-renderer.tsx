@@ -268,6 +268,8 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
         onClose={() => setGithubSyncQueueOpen(false)}
         onOpenTask={openTaskPanel}
         onReconnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
+        syncOperations={controller.planningState.taskGitHubSyncs()}
+        onCheckSync={id=>{void controller.planningState.checkTaskGitHubSync(id);}}
         onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
         onSyncTaskToGitHub={syncTaskToGitHub}
       />

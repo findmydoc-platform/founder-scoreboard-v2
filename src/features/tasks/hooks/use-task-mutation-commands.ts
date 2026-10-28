@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import type { TaskMutationCommandContext } from "@/features/tasks/hooks/task-mutation-command-types";
 import { useTaskCreateCommand } from "@/features/tasks/hooks/use-task-create-command";
 import { useTaskWithdrawCommand } from "@/features/tasks/hooks/use-task-withdraw-command";
@@ -9,7 +8,6 @@ import { useTaskUpdateCommand } from "@/features/tasks/hooks/use-task-update-com
 import type { ApprovalDecisionAction, Task } from "@/lib/types";
 
 export function useTaskMutationCommands(options: TaskMutationCommandContext) {
-  const serverUpdatedAtByTask = useRef(new Map<string, string>());
   const {
     closeTaskPanel,
     setStatusGuardNotice,
@@ -19,7 +17,6 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
 
   const { githubSyncNotice, syncLinkedGitHubTasks, syncTaskToGitHub } = useTaskGitHubSyncCommand({
     ...options,
-    serverUpdatedAtByTask,
   });
   const { updateTask } = useTaskUpdateCommand({
     ...options,

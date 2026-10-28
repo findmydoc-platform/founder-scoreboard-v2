@@ -1,3 +1,5 @@
+import { TaskGitHubSyncNotice } from "@/features/tasks/molecules/task-github-sync-notice";
+import { hasGitHubIssue } from "@/lib/platform";
 import { TaskReviewOperationNotice } from "@/features/reviews/molecules/task-review-operation-notice";
 import { TaskLifecycleNotice } from "@/features/tasks/molecules/task-lifecycle-notice";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
@@ -183,6 +185,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
           />
         )}
 
+        {controller.planningState.taskGitHubSyncs().map(view=><TaskGitHubSyncNotice key={view.taskId} view={view} onCheck={()=>{void controller.planningState.checkTaskGitHubSync(view.taskId);}} onRetry={()=>{const task=controller.planningState.taskDetail(view.taskId).task;if(task)controller.syncTaskToGitHub(task,{createIfMissing:!hasGitHubIssue(task)});}}/>)}
         {controller.planningState.taskReviewOperations().map(operation=><TaskReviewOperationNotice key={operation.id} operation={operation} onCheck={id=>{void controller.planningState.checkTaskReview(id);}} />)}
         {controller.planningState.taskLifecycle().map(operation => <TaskLifecycleNotice key={operation.id} operation={operation} onCheck={id => controller.planningState.checkTaskLifecycle(id)} />)}
         <PlanningWorkspaceRenderer
