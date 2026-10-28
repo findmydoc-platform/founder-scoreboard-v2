@@ -138,7 +138,7 @@ export function createSprintState(options: {
       }
       if (coverage.project) {
         const project = { ...current.project };
-        for (const key of Object.keys(returned.project) as (keyof typeof project)[]) if ((projectStamps.get(key) || 0) <= started) { Object.assign(project, { [key]: returned.project[key] }); projectStamps.set(key, started); if (key === "reviewObjectionWindowHours") reviewWindowReadAt = started; } else stale = true;
+        for (const key of (Object.keys(returned.project) as (keyof typeof project)[]).filter(key => key !== "githubProjectOwner" && key !== "githubProjectNumber")) if ((projectStamps.get(key) || 0) <= started) { Object.assign(project, { [key]: returned.project[key] }); projectStamps.set(key, started); if (key === "reviewObjectionWindowHours") reviewWindowReadAt = started; } else stale = true;
         next.project = project;
       }
       return { data: next, stale };

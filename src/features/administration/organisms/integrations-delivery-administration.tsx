@@ -1,20 +1,26 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, MessageSquare, RefreshCw, Send } from "lucide-react";
 import { DeliveryStatusRow } from "@/features/administration/molecules/delivery-status-row";
 import type { AdministrationWorkspaceModel } from "@/features/administration/model/administration-read-model";
-import { UiButton, UiEmptyState, UiField, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { UiButton, UiEmptyState, UiField, UiPanel, UiTextInput, UiNotice } from "@/shared/atoms/ui-primitives";
 import { UiSelectField } from "@/shared/atoms/form-controls";
 
-export function IntegrationsDeliveryAdministration({ busy, model, onDeliver, onSaveGitHubProject }: {
+export function IntegrationsDeliveryAdministration({ busy, model, onDeliver, onSaveGitHubProject, planningState }: {
   busy: boolean;
   model: AdministrationWorkspaceModel;
   onDeliver: (payload: Record<string, unknown>) => Promise<void>;
-  onSaveGitHubProject: (owner: string, number: number, mentionTeamSlug: string) => Promise<void>;
+  planningState?: import("@/features/planning/model/planning-state").PlanningState;
+  onSaveGitHubProject?: (owner: string, number: number, mentionTeamSlug: string) => Promise<void>;
 }) {
-  const [project, setProject] = useState({ owner: model.githubProject?.owner || "", number: model.githubProject?.number || 0, mentionTeamSlug: model.githubProject?.mentionTeamSlug || "" });
+  const [editor] = useState(() => planningState?.resumeAdministrationProjectEdit() || (model.githubProject ? planningState?.beginAdministrationProjectEdit(model.githubProject) : null));
+  useEffect(() => () => editor?.close(),[editor]);
+  const result=editor?.view();
+  const [project, setProject] = useState(() => result?.submitted || { id:model.githubProject?.id || "findmydoc-founder-execution", owner: model.githubProject?.owner || "", number: model.githubProject?.number || 0, mentionTeamSlug: model.githubProject?.mentionTeamSlug || "" });
+  const projectBusy=editor ? Boolean(result&&["saving","unconfirmed","conflict","blocked","ended"].includes(result.phase)) : busy;
+  const saveProject=() => editor ? editor.save(project) : onSaveGitHubProject?.(project.owner,project.number,project.mentionTeamSlug);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [testProfileId, setTestProfileId] = useState(model.people.find((person) => person.googleChatReady)?.id || "");
   const latestByEvent = new Map(model.notificationDeliveries.map((delivery) => [delivery.eventId, delivery]));
@@ -50,18 +56,25 @@ export function IntegrationsDeliveryAdministration({ busy, model, onDeliver, onS
           </div>
         </div>
         <div className="grid gap-4 px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(10rem,0.7fr)_minmax(0,1fr)_auto] md:items-end">
-          <UiField>GitHub-Organisation<UiTextInput value={project.owner} disabled={busy} onChange={(event) => setProject((current) => ({ ...current, owner: event.target.value }))} /></UiField>
-          <UiField>Project-Nummer<UiTextInput type="number" min={1} value={project.number || ""} disabled={busy} onChange={(event) => setProject((current) => ({ ...current, number: Number(event.target.value) }))} /></UiField>
-          <UiField>Team-Slug für @all<UiTextInput value={project.mentionTeamSlug} disabled={busy} onChange={(event) => setProject((current) => ({ ...current, mentionTeamSlug: event.target.value.toLowerCase() }))} placeholder="founderops" /></UiField>
-          <UiButton variant="primary" disabled={busy || !project.owner || project.number < 1} onClick={() => void onSaveGitHubProject(project.owner, project.number, project.mentionTeamSlug)}><RefreshCw size={15} />Speichern und prüfen</UiButton>
+          <UiField>GitHub-Organisation<UiTextInput value={project.owner} disabled={projectBusy} onChange={(event) => setProject((current) => ({ ...current, owner: event.target.value }))} /></UiField>
+          <UiField>Project-Nummer<UiTextInput type="number" min={1} value={project.number || ""} disabled={projectBusy} onChange={(event) => setProject((current) => ({ ...current, number: Number(event.target.value) }))} /></UiField>
+          <UiField>Team-Slug für @all<UiTextInput value={project.mentionTeamSlug} disabled={projectBusy} onChange={(event) => setProject((current) => ({ ...current, mentionTeamSlug: event.target.value.toLowerCase() }))} placeholder="founderops" /></UiField>
+          <UiButton variant="primary" disabled={projectBusy || !project.owner || project.number < 1} onClick={() => { void saveProject(); }}><RefreshCw size={15} />Speichern und prüfen</UiButton>
         </div>
         <div className="border-t border-slate-100 px-5 py-4">
-          {model.integrationStatus.mentionTeam.state === "ready" ? (
+          {model.integrationStatus.mentionTeam.state === "stale" ? <p className="text-sm text-amber-800">Der Teamstatus muss aktualisiert werden.</p> : model.integrationStatus.mentionTeam.state === "ready" ? (
             <div className="text-sm text-emerald-700"><span className="font-semibold">@all → {model.integrationStatus.mentionTeam.githubHandle}</span><span className="ml-2">Team bestätigt, App-Recht aktiv, Team-Erwähnungen aktiviert.</span></div>
           ) : (
             <div className="text-sm text-amber-800"><span className="font-semibold">Fallback aktiv.</span><span className="ml-2">FounderOps erwähnt verknüpfte GitHub-Logins einzeln. {model.integrationStatus.mentionTeam.profilesWithoutGitHubLogin} Profile haben keinen GitHub-Login.</span></div>
           )}
         </div>
+        {result && result.phase !== "editing" && <UiNotice className="mx-5 mb-4" tone={result.phase === "saved" ? "success" : "warning"} role="status">
+          <p>{result.phase === "saved" ? "GitHub-Project-Einstellung gespeichert" : ["saving","unconfirmed"].includes(result.phase) ? "GitHub-Project-Speicherung noch nicht bestätigt" : result.phase === "conflict" ? "GitHub-Project-Einstellung zwischenzeitlich geändert" : result.phase === "blocked" ? "Vorherige GitHub-Project-Speicherung noch offen" : result.phase === "ended" ? "Der technische Adminzugang wurde beendet." : "GitHub-Project-Einstellung abgelehnt"}</p>
+          {result.error && <p>{result.error}</p>}{result.readStatus === "unavailable" && <p>Die Statusdaten konnten nicht nachgeladen werden.</p>}
+          {["unconfirmed","blocked"].includes(result.phase) && <UiButton className="mt-2 min-h-11" onClick={() => { void editor?.checkOutcome(); }}>Serverstand prüfen</UiButton>}
+          {result.phase === "conflict" && <div className="mt-2 flex flex-wrap gap-2"><UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }}>Serverstand vergleichen</UiButton><UiButton className="min-h-11" disabled={!result.canResave} onClick={() => { void editor?.resave(project); }}>Bewusst erneut speichern</UiButton></div>}
+          {result.serverProject && <dl className="mt-2 grid gap-1 break-words"><div><dt>Server-Organisation</dt><dd>{result.serverProject.owner}</dd></div><div><dt>Server-Project-Nummer</dt><dd>{result.serverProject.number}</dd></div><div><dt>Server-Team-Slug</dt><dd>{result.serverProject.mentionTeamSlug || "Kein Team"}</dd></div></dl>}
+        </UiNotice>}
       </UiPanel>
 
       <UiPanel padding="none" className="overflow-hidden">

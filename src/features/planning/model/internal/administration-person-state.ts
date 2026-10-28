@@ -1,9 +1,9 @@
 import type { AuthorityProjection } from "@/features/administrator-access/model/administrator-access";
 import { inactiveAdministratorAccess, sessionAuthority } from "@/features/administrator-access/model/administrator-access";
 import type { AdministrationProfile, PersonAdministrationPatch, AdministrationReadCoverage, AdministrationWorkspaceModel, TechnicalIdentityBasis } from "@/features/administration/model/administration-read-model";
-import type { AdministrationPersonAdapter, AdministrationPersonEditor, AdministrationPersonEditView, AdministrationPersonResult, AdministrationStateView } from "@/features/administration/model/administration-state";
+import type { AdministrationPersonAdapter, AdministrationPersonEditor, AdministrationPersonEditView, AdministrationPersonResult, AdministrationStateView, AdministrationProjectSettings, AdministrationProjectEditor, AdministrationProjectEditView, AdministrationProjectResult } from "@/features/administration/model/administration-state";
 import type { PlanningReadStatus } from "../planning-state";
-import type { Profile } from "@/lib/types";
+import type { PlanningShellState, Project, Profile } from "@/lib/types";
 function sameTechnicalBasis(first: TechnicalIdentityBasis | undefined, second: TechnicalIdentityBasis | undefined) {
     return first && second ? (["githubLogin", "googleChatUserId", "googleChatDmSpace"] as const).every(field => first[field] === second[field]) : first === second;
 }
@@ -20,6 +20,8 @@ export function createAdministrationPersonState(options: {
     acceptCommonPeople(people: readonly ({
         id: string;
     } & Partial<Pick<Profile, "name" | "platformRole" | "orgRole" | "githubLogin">>)[], started: number): void;
+    commonProject(): Project;
+    acceptCommonProject(project: AdministrationProjectSettings): void;
     initialAuthority?: AuthorityProjection;
     read?: () => Promise<AdministrationWorkspaceModel>;
     adapter: AdministrationPersonAdapter;
@@ -31,6 +33,9 @@ export function createAdministrationPersonState(options: {
         editor: AdministrationPersonEditor;
         revokeTechnical(): void;
     }>();
+    const projectEditors = new Map<symbol, AdministrationProjectEditor>();
+    let projectConfirmedAt = 0, commonProjectAt = 0;
+    let projectBasisComplete = false;
     const technicalStamps = new Map<string, number>(), eligibilityStamps = new Map<string, number>();
     let epoch = 0, sequence = 0;
     let eligibilityDenied = false;
@@ -40,8 +45,10 @@ export function createAdministrationPersonState(options: {
     function technical() { return authority.capabilities.technicalAdministration && authority.administratorAccess.active && authority.administratorAccess.eligible && Boolean(authority.administratorAccess.expiresAt) && Date.parse(authority.administratorAccess.expiresAt!) > options.now(); }
     function mayRead() { return options.active() && !eligibilityDenied && (authority.capabilities.ceoGovernance || technical() && authority.capabilities.manageAdministratorEligibility); }
     function eligibilityAudience() { return eligibilityDenied ? "denied" : authority.capabilities.ceoGovernance ? "ceo" : technical() ? `admin:${authority.administratorAccess.expiresAt}` : "none"; }
-    function revokeTechnical() { for (const entry of editors.values())
-        entry.revokeTechnical(); }
+    function revokeTechnical() {
+        for (const entry of editors.values())
+            entry.revokeTechnical();
+    }
     function reduced(current: AdministrationWorkspaceModel): AdministrationWorkspaceModel {
         return { ...current, capabilities: { ...authority.capabilities, technicalAdministration: false, operationalCorrection: false, manageAdministratorEligibility: mayRead() }, people: current.people.map(person => ({ ...person, githubLogin: "", githubConnection: null, googleChatUserId: "", googleChatDmSpace: "", notificationsEnabled: false, googleChatReady: false, technicalBasis: undefined })), githubProject: null, notificationEvents: [], notificationDeliveries: [], coverage: { ...current.coverage || none, technical: false, notificationEvents: "none", notificationDeliveries: "none" }, integrationStatus: { githubApp: null, googleChat: { ready: false, webhookConfigured: false, apiConfigured: false, deliveryEnabled: false, mode: "not-configured" }, mentionTeam: { state: "fallback", githubHandle: "", profilesWithoutGitHubLogin: 0 }, pendingDeliveries: 0, failedDeliveries: 0 } };
     }
@@ -145,7 +152,19 @@ export function createAdministrationPersonState(options: {
                     if (!people.some(row => row.id === person.id))
                         people.push(person);
             options.acceptCommonPeople(people.filter(person => incoming.people.some(actual => actual.id === person.id)).map(person => ({ id: person.id, name: person.name, platformRole: person.platformRole, orgRole: person.orgRole, ...(full && incoming.capabilities.technicalAdministration ? { githubLogin: person.githubLogin } : {}) })), started);
-            const covered = { ...incoming, people };
+            let acceptedProject = projectConfirmedAt > started ? previous?.githubProject || null : incoming.githubProject;
+            projectBasisComplete = false;
+            if (full && incoming.capabilities.technicalAdministration && acceptedProject) {
+                if (commonProjectAt <= started) {
+                    options.acceptCommonProject(acceptedProject);
+                    commonProjectAt = started;
+                }
+                const common = options.commonProject();
+                projectBasisComplete = common.id === acceptedProject.id && common.githubProjectOwner === acceptedProject.owner && common.githubProjectNumber === acceptedProject.number;
+                if (common.id === acceptedProject.id)
+                    acceptedProject = { ...acceptedProject, owner: common.githubProjectOwner, number: common.githubProjectNumber };
+            }
+            const covered = { ...incoming, people, githubProject: acceptedProject };
             model = full && incoming.capabilities.technicalAdministration ? structuredClone(covered) : reduced(covered);
             readStatus = "current";
             options.changed();
@@ -192,8 +211,10 @@ export function createAdministrationPersonState(options: {
         let view: AdministrationPersonEditView = { profileId: shown.id, phase: "editing", submitted: null, technical: { phase: "not-needed", error: "" }, eligibility: { phase: "not-needed", error: "" }, error: "", readStatus, serverPerson: null, canResave: false };
         const active = () => { enforceExpiry(); return options.active() && generation === options.generation() && mayRead() && audience === eligibilityAudience(); };
         const changed = () => options.changed();
-        const updatePerson = (patch: Partial<AdministrationProfile>) => { if (model)
-            model = { ...model, people: model.people.map(person => person.id === shown.id ? { ...person, ...patch } : person) }; };
+        const updatePerson = (patch: Partial<AdministrationProfile>) => {
+            if (model)
+                model = { ...model, people: model.people.map(person => person.id === shown.id ? { ...person, ...patch } : person) };
+        };
         async function save(input: PersonAdministrationPatch): Promise<AdministrationPersonResult> {
             if (closed || technicalEnded || !active())
                 return { ok: false, kind: "sessionSuperseded", error: "Der Administrationszugang wurde beendet." };
@@ -324,15 +345,20 @@ export function createAdministrationPersonState(options: {
                 return { ok: false, kind: conflict ? "versionConflict" : failure.code === "session_superseded" ? "sessionSuperseded" : unknown ? "unconfirmed" : view.technical.phase === "confirmed" ? "partial" : "rejected", error: message };
             }
         }
-        const editor: AdministrationPersonEditor = { view() { if (technicalEnded || !active() || !technical() && ["saving", "unconfirmed"].includes(view.technical.phase))
-                return { ...view, phase: "ended", submitted: null, serverPerson: null, error: "", technical: { ...view.technical, error: "" }, eligibility: { ...view.eligibility, error: "" }, canResave: false }; const shownView = structuredClone(view); if (!technical()) {
-                if (shownView.submitted)
-                    shownView.submitted = { eligible: shownView.submitted.eligible, technicalIdentity: { githubLogin: "", googleChatUserId: "", googleChatDmSpace: "" } };
-                shownView.serverPerson = shownView.serverPerson ? reduced({ ...model!, people: [shownView.serverPerson] }).people[0] : null;
-                const needsTechnical = Boolean(shownView.submitted && (["githubLogin", "googleChatUserId", "googleChatDmSpace"] as const).some(field => shownView.submitted!.technicalIdentity[field] !== basis[field]));
-                shownView.canResave = shownView.canResave && !needsTechnical;
-                shownView.technical.error = "";
-            } return shownView; }, save, async checkOutcome() {
+        const editor: AdministrationPersonEditor = { view() {
+                if (technicalEnded || !active() || !technical() && ["saving", "unconfirmed"].includes(view.technical.phase))
+                    return { ...view, phase: "ended", submitted: null, serverPerson: null, error: "", technical: { ...view.technical, error: "" }, eligibility: { ...view.eligibility, error: "" }, canResave: false };
+                const shownView = structuredClone(view);
+                if (!technical()) {
+                    if (shownView.submitted)
+                        shownView.submitted = { eligible: shownView.submitted.eligible, technicalIdentity: { githubLogin: "", googleChatUserId: "", googleChatDmSpace: "" } };
+                    shownView.serverPerson = shownView.serverPerson ? reduced({ ...model!, people: [shownView.serverPerson] }).people[0] : null;
+                    const needsTechnical = Boolean(shownView.submitted && (["githubLogin", "googleChatUserId", "googleChatDmSpace"] as const).some(field => shownView.submitted!.technicalIdentity[field] !== basis[field]));
+                    shownView.canResave = shownView.canResave && !needsTechnical;
+                    shownView.technical.error = "";
+                }
+                return shownView;
+            }, save, async checkOutcome() {
                 if (!active() || technicalEnded)
                     return false;
                 const ok = await load();
@@ -342,12 +368,30 @@ export function createAdministrationPersonState(options: {
                     changed();
                 }
                 return ok;
-            }, async refreshConflict() { if (view.phase !== "conflict" || technicalEnded || !active())
-                return false; const ok = await load(); const actual = current(shown.id); const needsTechnical = Boolean(view.submitted && (["githubLogin", "googleChatUserId", "googleChatDmSpace"] as const).some(field => view.submitted!.technicalIdentity[field] !== basis[field])); const complete = model?.coverage?.people === "complete" && (!needsTechnical || technical() && Boolean(actual?.technicalBasis)); view = { ...view, readStatus, serverPerson: ok && complete && actual ? structuredClone(actual) : null, canResave: Boolean(ok && complete && actual) }; changed(); return view.canResave; }, resave(patch) { if (!view.canResave || !view.serverPerson)
-                return Promise.resolve({ ok: false, kind: "rejected", error: "Bitte zuerst den aktuellen Serverstand vergleichen." }); basis = structuredClone(view.serverPerson); technicalBasisPending = false; acknowledgedTechnical = null; view = { ...view, phase: "editing", canResave: false, serverPerson: null }; return save(patch); }, close() { if (!view.submitted) {
-                closed = true;
-                editors.delete(key);
-            } } };
+            }, async refreshConflict() {
+                if (view.phase !== "conflict" || technicalEnded || !active())
+                    return false;
+                const ok = await load();
+                const actual = current(shown.id);
+                const needsTechnical = Boolean(view.submitted && (["githubLogin", "googleChatUserId", "googleChatDmSpace"] as const).some(field => view.submitted!.technicalIdentity[field] !== basis[field]));
+                const complete = model?.coverage?.people === "complete" && (!needsTechnical || technical() && Boolean(actual?.technicalBasis));
+                view = { ...view, readStatus, serverPerson: ok && complete && actual ? structuredClone(actual) : null, canResave: Boolean(ok && complete && actual) };
+                changed();
+                return view.canResave;
+            }, resave(patch) {
+                if (!view.canResave || !view.serverPerson)
+                    return Promise.resolve({ ok: false, kind: "rejected", error: "Bitte zuerst den aktuellen Serverstand vergleichen." });
+                basis = structuredClone(view.serverPerson);
+                technicalBasisPending = false;
+                acknowledgedTechnical = null;
+                view = { ...view, phase: "editing", canResave: false, serverPerson: null };
+                return save(patch);
+            }, close() {
+                if (!view.submitted) {
+                    closed = true;
+                    editors.delete(key);
+                }
+            } };
         editors.set(key, { id: shown.id, editor, revokeTechnical() {
                 technicalEnded ||= ["saving", "unconfirmed"].includes(view.technical.phase) || Boolean(view.submitted && (["githubLogin", "googleChatUserId", "googleChatDmSpace"] as const).some(field => view.submitted!.technicalIdentity[field] !== basis[field]));
                 basis = { ...basis, githubLogin: "", googleChatUserId: "", googleChatDmSpace: "", technicalBasis: undefined, githubConnection: null };
@@ -357,7 +401,122 @@ export function createAdministrationPersonState(options: {
             } });
         return editor;
     }
-    return { bindAuthority, load, begin, views: (id: string) => options.active() ? [...editors.values()].filter(entry => entry.id === id).map(entry => entry.editor.view()) : [], resume: (id: string) => [...editors.values()].findLast(entry => entry.id === id && entry.editor.view().submitted)?.editor || null,
+    function sameProject(first: AdministrationProjectSettings | null | undefined, second: AdministrationProjectSettings | null | undefined) {
+        return first && second ? first.id === second.id && first.owner === second.owner && first.number === second.number && first.mentionTeamSlug === second.mentionTeamSlug : first === second;
+    }
+    function beginProject(shown: AdministrationProjectSettings): AdministrationProjectEditor {
+        let basis = structuredClone(shown);
+        const startedGeneration = options.generation(), startedEpoch = epoch, key = Symbol(shown.id);
+        let closed = false;
+        let state: AdministrationProjectEditView = { phase: "editing", submitted: null, serverProject: null, error: "", readStatus, canResave: false };
+        const active = () => { enforceExpiry(); return options.active() && startedGeneration === options.generation() && startedEpoch === epoch && technical(); };
+        async function save(proposed: AdministrationProjectSettings): Promise<AdministrationProjectResult> {
+            if (closed || !active())
+                return { ok: false, kind: "sessionSuperseded", error: "Der technische Adminzugang wurde beendet." };
+            if (["saving", "unconfirmed", "conflict"].includes(state.phase))
+                return { ok: false, kind: state.phase === "conflict" ? "versionConflict" : "unconfirmed", error: state.error };
+            if ([...projectEditors.values()].some(other => other !== editor && ["saving", "unconfirmed", "conflict"].includes(other.view().phase))) {
+                state = { ...state, phase: "blocked", submitted: structuredClone(proposed), error: "Eine vorherige GitHub-Project-Speicherung ist offen." };
+                options.changed();
+                return { ok: false, kind: "unconfirmed", error: state.error };
+            }
+            if (!projectBasisComplete || !sameProject(model?.githubProject, basis)) {
+                state = { ...state, phase: "conflict", submitted: structuredClone(proposed), error: "Die GitHub-Project-Einstellung wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.", canResave: false };
+                options.changed();
+                return { ok: false, kind: "versionConflict", error: state.error };
+            }
+            state = { ...state, phase: "saving", submitted: structuredClone(proposed), error: "" };
+            options.changed();
+            try {
+                if (!options.adapter.saveAdministrationProject)
+                    throw Object.assign(new Error("GitHub Project ist nicht verfügbar."), { status: 400 });
+                const result = await options.adapter.saveAdministrationProject(proposed, basis);
+                if (!active())
+                    return { ok: false, kind: "sessionSuperseded", error: "Der technische Adminzugang wurde beendet." };
+                if (!result.project || result.project.id !== basis.id || typeof result.project.owner !== "string" || !Number.isInteger(result.project.number) || typeof result.project.mentionTeamSlug !== "string")
+                    throw new Error("Die GitHub-Project-Speicherung ist noch nicht bestätigt.");
+                if (sameProject(model?.githubProject, basis) || sameProject(model?.githubProject, result.project)) {
+                    projectConfirmedAt = options.nextSequence();
+                    commonProjectAt = projectConfirmedAt;
+                    projectBasisComplete = true;
+                    if (model)
+                        model = { ...model, githubProject: structuredClone(result.project), integrationStatus: { ...model.integrationStatus, mentionTeam: { ...model.integrationStatus.mentionTeam, state: "stale", githubHandle: "" } } };
+                    options.acceptCommonProject(result.project);
+                }
+                basis = structuredClone(result.project);
+                state = { ...state, phase: "saved" };
+                readStatus = "stale";
+                options.changed();
+                await load();
+                if (active()) {
+                    state = { ...state, readStatus };
+                    options.changed();
+                }
+                return { ok: true };
+            }
+            catch (error) {
+                if (!active())
+                    return { ok: false, kind: "sessionSuperseded", error: "Der technische Adminzugang wurde beendet." };
+                const failure = error as {
+                    status?: number;
+                    code?: string;
+                };
+                const conflict = failure.code === "administration_project_conflict";
+                const unknown = !conflict && (!failure.status || failure.status >= 500 || failure.code === "session_superseded");
+                state = { ...state, phase: conflict ? "conflict" : unknown ? "unconfirmed" : "rejected", error: error instanceof Error ? error.message : "GitHub Project konnte nicht gespeichert werden.", canResave: false };
+                if (failure.status === 401 || failure.status === 403) {
+                    if (failure.status === 401 || !["administrator_access_required", "administrator_access_expired"].includes(failure.code || ""))
+                        eligibilityDenied = true;
+                    revokeTechnical();
+                    authority = { ...authority, administratorAccess: inactiveAdministratorAccess, capabilities: { ...inactive.capabilities, ceoGovernance: authority.capabilities.ceoGovernance, manageAdministratorEligibility: authority.capabilities.ceoGovernance } };
+                    epoch++;
+                    sequence++;
+                    model = null;
+                    readStatus = "forbidden";
+                }
+                options.changed();
+                return { ok: false, kind: conflict ? "versionConflict" : failure.code === "session_superseded" ? "sessionSuperseded" : unknown ? "unconfirmed" : "rejected", error: state.error };
+            }
+        }
+        const editor: AdministrationProjectEditor = { view() { return active() ? structuredClone(state) : { ...state, phase: "ended", submitted: null, serverProject: null, error: "", canResave: false }; }, save, async checkOutcome() { if (!active())
+                return false; const ok = await load(); if (active()) {
+                const released = state.phase === "blocked" && ![...projectEditors.values()].some(other => other !== editor && ["saving", "unconfirmed", "conflict"].includes(other.view().phase));
+                state = { ...state, ...(released ? { phase: "editing" as const, error: "" } : {}), readStatus, serverProject: ok && model?.githubProject ? structuredClone(model.githubProject) : null };
+                options.changed();
+            } return ok; }, async refreshConflict() { if (!active() || state.phase !== "conflict")
+                return false; const ok = await load(); const actual = model?.githubProject; state = { ...state, readStatus, serverProject: ok && technical() && projectBasisComplete && actual ? structuredClone(actual) : null, canResave: Boolean(ok && technical() && projectBasisComplete && actual) }; options.changed(); return state.canResave; }, resave(proposed) { if (!state.canResave || !state.serverProject)
+                return Promise.resolve({ ok: false, kind: "rejected" }); basis = structuredClone(state.serverProject); state = { ...state, phase: "editing", canResave: false, serverProject: null }; return save(proposed); }, close() { if (!state.submitted) {
+                closed = true;
+                projectEditors.delete(key);
+            } } };
+        projectEditors.set(key, editor);
+        return editor;
+    }
+    function acceptProjectRead(incoming: Project, started: number) {
+        const current = options.commonProject();
+        if (Math.max(projectConfirmedAt, commonProjectAt) > started)
+            return { project: { ...incoming, githubProjectOwner: current.githubProjectOwner, githubProjectNumber: current.githubProjectNumber }, stale: true };
+        commonProjectAt = started;
+        const before = model?.githubProject;
+        if (before && before.id === incoming.id && (before.owner !== incoming.githubProjectOwner || before.number !== incoming.githubProjectNumber)) {
+            model = { ...model!, githubProject: { ...before, owner: incoming.githubProjectOwner, number: incoming.githubProjectNumber }, integrationStatus: { ...model!.integrationStatus, mentionTeam: { ...model!.integrationStatus.mentionTeam, state: "stale", githubHandle: "" } } };
+            projectBasisComplete = false;
+            if (technical())
+                readStatus = "stale";
+        }
+        return { project: incoming, stale: false };
+    }
+    function projectVisible(data: PlanningShellState) {
+        if (!options.active() || !technical())
+            return data;
+        for (const editor of projectEditors.values()) {
+            const edit = editor.view();
+            if (edit.submitted && edit.submitted.id === data.project.id && ["saving", "unconfirmed"].includes(edit.phase))
+                return { ...data, project: { ...data.project, githubProjectOwner: edit.submitted.owner, githubProjectNumber: edit.submitted.number } };
+        }
+        return data;
+    }
+    return { acceptProjectRead, projectVisible, beginProject, projectViews: () => [...projectEditors.values()].map(editor => editor.view()), resumeProject: () => [...projectEditors.values()].findLast(editor => editor.view().submitted) || null, bindAuthority, load, begin, views: (id: string) => options.active() ? [...editors.values()].filter(entry => entry.id === id).map(entry => entry.editor.view()) : [], resume: (id: string) => [...editors.values()].findLast(entry => entry.id === id && entry.editor.view().submitted)?.editor || null,
         view(): AdministrationStateView {
             enforceExpiry();
             let shown = mayRead() && model ? technical() ? model : reduced(model) : null;
@@ -370,9 +529,31 @@ export function createAdministrationPersonState(options: {
                     if (view.submitted && ["saving", "unconfirmed"].includes(view.phase))
                         shown = { ...shown, people: shown.people.map(person => person.id !== entry.id ? person : { ...person, ...(technical() && ["saving", "unconfirmed"].includes(view.technical.phase) ? view.submitted!.technicalIdentity : {}), ...(["saving", "unconfirmed"].includes(view.eligibility.phase) ? { administratorAccess: { ...person.administratorAccess, eligible: view.submitted!.eligible } } : {}) }) };
                 }
+            if (shown && technical())
+                for (const editor of projectEditors.values()) {
+                    const edit = editor.view();
+                    if (edit.submitted && ["saving", "unconfirmed"].includes(edit.phase))
+                        shown = { ...shown, githubProject: edit.submitted, integrationStatus: { ...shown.integrationStatus, mentionTeam: { ...shown.integrationStatus.mentionTeam, state: "stale", githubHandle: "" } } };
+                }
             return { model: shown ? structuredClone(shown) : null, readStatus: options.active() ? commonStale && readStatus === "current" ? "stale" : readStatus : "forbidden", coverage: shown?.coverage || (shown ? { ...none, technical: technical() } : none) };
         },
-        clear() { if (expiry)
-            clearTimeout(expiry); authority = inactive; boundSignature = JSON.stringify(inactive); eligibilityDenied = false; model = null; editors.clear(); technicalStamps.clear(); eligibilityStamps.clear(); epoch++; sequence++; readStatus = "not-loaded"; },
+        clear() {
+            if (expiry)
+                clearTimeout(expiry);
+            authority = inactive;
+            boundSignature = JSON.stringify(inactive);
+            eligibilityDenied = false;
+            model = null;
+            editors.clear();
+            projectEditors.clear();
+            projectConfirmedAt = 0;
+            commonProjectAt = 0;
+            projectBasisComplete = false;
+            technicalStamps.clear();
+            eligibilityStamps.clear();
+            epoch++;
+            sequence++;
+            readStatus = "not-loaded";
+        },
     };
 }

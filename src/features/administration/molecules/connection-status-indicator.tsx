@@ -35,7 +35,7 @@ export function ConnectionStatusIndicator({
   return (
     <div
       ref={rootRef}
-      className="inline-flex items-center gap-1.5"
+      className="relative inline-flex items-center gap-1.5"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={close}
       onFocusCapture={() => setOpen(true)}
