@@ -81,6 +81,18 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!response.ok)throw Object.assign(new Error(body?.error||"Adminberechtigung konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
         if(!body?.administratorAccess)throw new Error("Die Adminberechtigung ist noch nicht bestätigt.");return body.administratorAccess;
       },
+      async addTaskRelationship(task, input) {
+        const { response, body } = await taskApi.addTaskRelationshipRequest(runtime.apiClient, task.id, { ...input, expectedUpdatedAt: task.updatedAt });
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Abhängigkeit konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        if (!body?.relation) throw new Error("Die Beziehungsbestätigung ist unvollständig.");
+        return { relation: body.relation };
+      },
+      async removeTaskRelationship(task, relation) {
+        const { response, body } = await taskApi.removeTaskRelationshipRequest(runtime.apiClient, task.id, relation.id, task.updatedAt);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Abhängigkeit konnte nicht entfernt werden."), { status: response.status, code: body?.code });
+        if (!Number.isSafeInteger(body?.relationId)) throw new Error("Die Entfernung ist noch nicht bestätigt.");
+        return { relationId: body!.relationId! };
+      },
       async uploadTaskAttachment(taskId, file) {
         const session = await currentUploadSession();
         const { response, body } = await taskApi.uploadTaskAttachmentRequest(runtime.apiClient, taskId, file, { userId: session.userId, sessionRevision: session.revision, isCurrent: () => isCurrent() && runtime.session?.userId === session.userId && runtime.session?.revision === session.revision });

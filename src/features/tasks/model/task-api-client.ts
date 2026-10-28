@@ -169,16 +169,16 @@ export function importGitHubCommentsRequest(apiClient: BrowserApiClient, taskId:
 }
 
 export function addTaskRelationshipRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; relation?: TaskRelation }>(`/api/tasks/${taskId}/relationships`, {
+  return apiClient.requestJson<{ error?: string; code?: string; relation?: TaskRelation }>(`/api/tasks/${taskId}/relationships`, {
     method: "POST",
     json: payload,
   });
 }
 
-export function removeTaskRelationshipRequest(apiClient: BrowserApiClient, taskId: string, relationId: number) {
-  return apiClient.requestJson<{ error?: string }>(`/api/tasks/${taskId}/relationships`, {
+export function removeTaskRelationshipRequest(apiClient: BrowserApiClient, taskId: string, relationId: number, expectedUpdatedAt?: string) {
+  return apiClient.requestJson<{ error?: string; code?: string; relationId?: number }>(`/api/tasks/${taskId}/relationships`, {
     method: "DELETE",
-    json: { relationId },
+    json: { relationId, ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}) },
   });
 }
 

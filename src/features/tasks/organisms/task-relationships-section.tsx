@@ -3,6 +3,7 @@
 import { GitBranch, Pencil, Plus, X } from "lucide-react";
 import { useId, useState } from "react";
 import type { TaskActionResult, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
+import { TaskRelationshipChangeNotices } from "@/features/tasks/molecules/task-relationship-change-notices";
 import { RelationshipList } from "@/features/tasks/molecules/relationship-list";
 import { TaskRelationshipForm, type TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
@@ -33,7 +34,9 @@ type Props = {
   onLegacyEditingStart?: () => void;
   onUpdateLegacyDependsOn?: (value: string) => Promise<TaskUpdateResult>;
   onRelationDraftChange: (patch: Partial<TaskRelationshipDraft>) => void;
-  onAddRelation: () => Promise<TaskActionResult>;
+  onAddRelation: (basis: Task) => Promise<TaskActionResult>;
+  relationshipChanges?: readonly import("@/features/tasks/model/task-relationship-change").TaskRelationshipChangeView[];
+  onCheckRelationshipChange?: (id: string) => void;
 };
 
 export function TaskRelationshipsSection({
@@ -58,11 +61,14 @@ export function TaskRelationshipsSection({
   onLegacyEditingStart,
   onRelationDraftChange,
   onAddRelation,
+  relationshipChanges = [],
+  onCheckRelationshipChange,
 }: Props) {
   const generatedId = useId().replaceAll(":", "");
   const relationTriggerId = `task-relationship-trigger-${generatedId}`;
   const legacyTriggerId = `task-legacy-dependency-trigger-${generatedId}`;
   const [formOpen, setFormOpen] = useState(false);
+  const [relationshipBasis, setRelationshipBasis] = useState<Task | null>(null);
   const [relationSubmitting, setRelationSubmitting] = useState(false);
   const [relationError, setRelationError] = useState("");
   const [legacyEditing, setLegacyEditing] = useState(false);
@@ -73,7 +79,9 @@ export function TaskRelationshipsSection({
   const duplicateRelation = Boolean(relationDraft.relatedTaskId) && relationshipRows.some(({ relation }) => relationMatchesDraft(task.id, relation, relationDraft));
   const canAdd = allowedRelationTypes.length > 0;
   const canEditLegacy = canEditLegacyDependsOn && Boolean(onUpdateLegacyDependsOn);
-  const relationBusy = pending || relationSubmitting;
+  const relationshipBlocked = (id: string) => relationshipChanges.some(view => (view.taskId === id || view.relatedTaskId === id) && (view.phase === "saving" || view.phase === "unconfirmed" || view.phase === "confirmed" && view.taskReads[id] !== "current"));
+  const relationshipPending = relationshipBlocked(task.id);
+  const relationBusy = pending || relationSubmitting || relationshipPending || relationshipBlocked(relationDraft.relatedTaskId);
   const relationshipDataReady = !loading && !error && !unavailable;
 
   const closeRelationForm = () => {
@@ -94,7 +102,7 @@ export function TaskRelationshipsSection({
     setRelationSubmitting(true);
     setRelationError("");
     try {
-      const result = await onAddRelation();
+      const result = await onAddRelation(relationshipBasis || task);
       if (!result.ok) {
         setRelationError(result.error);
         window.requestAnimationFrame(() => document.getElementById("task-relationship-error")?.focus());
@@ -143,7 +151,7 @@ export function TaskRelationshipsSection({
           <p className="mt-1 text-sm text-slate-500">Abhängigkeiten und ihre Richtung im Arbeitsablauf.</p>
         </div>
         {canAdd && relationshipDataReady && !formOpen ? (
-          <UiButton id={relationTriggerId} size="lg" className="h-11" onClick={() => { setRelationError(""); setFormOpen(true); }} aria-expanded="false" aria-controls="task-relationship-form">
+          <UiButton id={relationTriggerId} size="lg" className="h-11" disabled={relationshipPending} onClick={() => { setRelationError(""); setRelationshipBasis(structuredClone(task)); setFormOpen(true); }} aria-expanded="false" aria-controls="task-relationship-form">
             <Plus size={15} aria-hidden="true" />
             Beziehung hinzufügen
           </UiButton>
@@ -165,11 +173,12 @@ export function TaskRelationshipsSection({
         </div>
       ) : null}
 
+      <TaskRelationshipChangeNotices changes={relationshipChanges} onCheck={onCheckRelationshipChange} />
       {relationshipDataReady ? (
         <div className="mt-4 grid gap-4">
-          {waitsOn.length ? <RelationshipList title="Wartet auf" currentTask={task} rows={waitsOn} empty="" canRemove={canRemoveRelation} onRemove={onRemoveRelation} onOpenTask={onOpenTask} /> : null}
-          {blocks.length ? <RelationshipList title="Andere warten hierauf" currentTask={task} rows={blocks} empty="" canRemove={canRemoveRelation} onRemove={onRemoveRelation} onOpenTask={onOpenTask} /> : null}
-          {related.length ? <RelationshipList title="Verknüpft mit" currentTask={task} rows={related} empty="" canRemove={canRemoveRelation} onRemove={onRemoveRelation} onOpenTask={onOpenTask} /> : null}
+          {waitsOn.length ? <RelationshipList title="Wartet auf" currentTask={task} rows={waitsOn} empty="" canRemove={relation => !relationshipBlocked(relation.taskId) && !relationshipBlocked(relation.relatedTaskId) && canRemoveRelation(relation)} onRemove={onRemoveRelation} onOpenTask={onOpenTask} /> : null}
+          {blocks.length ? <RelationshipList title="Andere warten hierauf" currentTask={task} rows={blocks} empty="" canRemove={relation => !relationshipBlocked(relation.taskId) && !relationshipBlocked(relation.relatedTaskId) && canRemoveRelation(relation)} onRemove={onRemoveRelation} onOpenTask={onOpenTask} /> : null}
+          {related.length ? <RelationshipList title="Verknüpft mit" currentTask={task} rows={related} empty="" canRemove={relation => !relationshipBlocked(relation.taskId) && !relationshipBlocked(relation.relatedTaskId) && canRemoveRelation(relation)} onRemove={onRemoveRelation} onOpenTask={onOpenTask} /> : null}
           {!relationshipRows.length ? <UiEmptyState tone="muted">Keine Beziehungen vorhanden.</UiEmptyState> : null}
         </div>
       ) : null}
@@ -249,7 +258,7 @@ export function TaskRelationshipsSection({
             onRelationDraftChange={onRelationDraftChange}
             onAddRelation={() => void addRelation()}
           />
-          <UiButton type="button" size="lg" className="mt-3 h-11" disabled={relationBusy} onClick={closeRelationForm}>
+          <UiButton type="button" size="lg" className="mt-3 h-11" disabled={pending || relationSubmitting || relationshipChanges.some(view => view.phase === "saving")} onClick={closeRelationForm}>
             <X size={15} aria-hidden="true" />
             Abbrechen
           </UiButton>

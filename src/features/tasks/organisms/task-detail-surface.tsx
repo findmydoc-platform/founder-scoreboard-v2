@@ -70,6 +70,8 @@ type TaskDetailSurfaceProps = {
   operationalCorrection?: boolean;
   pending: boolean;
   taskSaves?: readonly PlanningTaskSaveView[];
+  relationshipChanges?: readonly import("@/features/tasks/model/task-relationship-change").TaskRelationshipChangeView[];
+  onCheckRelationshipChange?: (id: string) => void;
   attachmentUploads?: readonly import("@/features/tasks/model/task-attachment-upload").TaskAttachmentUploadView[];
   onCheckAttachmentUpload?: (id: string) => void;
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
@@ -105,7 +107,7 @@ type TaskDetailSurfaceProps = {
   onReopenReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onWithdrawReview: (task: Task, reason: string) => Promise<boolean> | boolean | void;
   onWithdraw: (reason: string) => void;
-  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;
+  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }, basis?: Task) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
   onDecideApproval: (action: ApprovalDecisionAction, note?: string, basis?: Task) => void;
 };
@@ -160,6 +162,8 @@ function HydratedTaskDetailSurface({
   operationalCorrection = false,
   pending: requestPending,
   taskSaves = [],
+  relationshipChanges = [],
+  onCheckRelationshipChange,
   attachmentUploads = [],
   onCheckAttachmentUpload,
   githubImport,
@@ -513,6 +517,8 @@ function HydratedTaskDetailSurface({
         blocks={relationshipGroups.blocks}
         related={relationshipGroups.related}
         legacyDependsOn={task.dependsOn}
+        relationshipChanges={relationshipChanges}
+        onCheckRelationshipChange={onCheckRelationshipChange}
         relationDraft={controller.relationDraft}
         relationTargetOptions={relationTargetOptions}
         allowedRelationTypes={relationshipAccess.allowedRelationTypes}
@@ -529,8 +535,8 @@ function HydratedTaskDetailSurface({
           return result || { ok: true, task: { dependsOn: value } };
         }}
         onRelationDraftChange={(patch) => controller.setRelationDraft((current) => ({ ...current, ...patch }))}
-        onAddRelation={async () => {
-          const result = await onAddRelation(controller.relationDraft);
+        onAddRelation={async (basis) => {
+          const result = await onAddRelation(controller.relationDraft, basis);
           if (result.ok) {
             controller.setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
           }
