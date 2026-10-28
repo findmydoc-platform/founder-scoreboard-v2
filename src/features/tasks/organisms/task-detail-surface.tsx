@@ -70,6 +70,8 @@ type TaskDetailSurfaceProps = {
   operationalCorrection?: boolean;
   pending: boolean;
   taskSaves?: readonly PlanningTaskSaveView[];
+  relationshipChanges?: readonly import("@/features/tasks/model/task-relationship-change").TaskRelationshipChangeView[];
+  onCheckRelationshipChange?: (id: string) => void;
   attachmentUploads?: readonly import("@/features/tasks/model/task-attachment-upload").TaskAttachmentUploadView[];
   onCheckAttachmentUpload?: (id: string) => void;
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
@@ -105,9 +107,9 @@ type TaskDetailSurfaceProps = {
   onReopenReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onWithdrawReview: (task: Task, reason: string) => Promise<boolean> | boolean | void;
   onWithdraw: (reason: string) => void;
-  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;
+  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }, basis?: Task) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
-  onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
+  onDecideApproval: (action: ApprovalDecisionAction, note?: string, basis?: Task) => void;
 };
 
 export function TaskDetailSurface(props: TaskDetailSurfaceProps) {
@@ -160,6 +162,8 @@ function HydratedTaskDetailSurface({
   operationalCorrection = false,
   pending: requestPending,
   taskSaves = [],
+  relationshipChanges = [],
+  onCheckRelationshipChange,
   attachmentUploads = [],
   onCheckAttachmentUpload,
   githubImport,
@@ -206,6 +210,7 @@ function HydratedTaskDetailSurface({
     return requestedCommentTarget ? "activity" : "overview";
   });
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
+  const [reviewEvidenceTask,setReviewEvidenceTask]=useState<Task|null>(null);
   const [reviewEvidenceGateIntent, setReviewEvidenceGateIntent] = useState<"request" | "reopen" | null>(null);
   const [reviewDraftDirty, setReviewDraftDirty] = useState(false);
   const controller = useTaskDetailController({
@@ -406,6 +411,8 @@ function HydratedTaskDetailSurface({
       && requestsReview
       && !taskHasValidReviewEvidence(task, directChildren)
       && !includesEvidence) {
+      beginInlineEditing();
+      setReviewEvidenceTask(task);
       setReviewEvidenceGateIntent("request");
       return;
     }
@@ -413,6 +420,7 @@ function HydratedTaskDetailSurface({
   };
   const reopenReview = () => {
     if (!taskHasValidReviewEvidence(task, directChildren)) {
+      setReviewEvidenceTask(task);
       setReviewEvidenceGateIntent("reopen");
       return;
     }
@@ -420,7 +428,7 @@ function HydratedTaskDetailSurface({
   };
   const submitReviewEvidence = async (submission: ReviewEvidenceSubmission) => {
     if (reviewEvidenceGateIntent === "reopen") {
-      const result = await onReopenReview(task, submission);
+      const result = await onReopenReview(reviewEvidenceTask||task, submission);
       return result !== false;
     }
     const result = await updateInline({
@@ -509,6 +517,8 @@ function HydratedTaskDetailSurface({
         blocks={relationshipGroups.blocks}
         related={relationshipGroups.related}
         legacyDependsOn={task.dependsOn}
+        relationshipChanges={relationshipChanges}
+        onCheckRelationshipChange={onCheckRelationshipChange}
         relationDraft={controller.relationDraft}
         relationTargetOptions={relationTargetOptions}
         allowedRelationTypes={relationshipAccess.allowedRelationTypes}
@@ -525,8 +535,8 @@ function HydratedTaskDetailSurface({
           return result || { ok: true, task: { dependsOn: value } };
         }}
         onRelationDraftChange={(patch) => controller.setRelationDraft((current) => ({ ...current, ...patch }))}
-        onAddRelation={async () => {
-          const result = await onAddRelation(controller.relationDraft);
+        onAddRelation={async (basis) => {
+          const result = await onAddRelation(controller.relationDraft, basis);
           if (result.ok) {
             controller.setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
           }

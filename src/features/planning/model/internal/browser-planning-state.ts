@@ -81,12 +81,49 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!response.ok)throw Object.assign(new Error(body?.error||"Adminberechtigung konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
         if(!body?.administratorAccess)throw new Error("Die Adminberechtigung ist noch nicht bestätigt.");return body.administratorAccess;
       },
+      async addTaskRelationship(task, input) {
+        const { response, body } = await taskApi.addTaskRelationshipRequest(runtime.apiClient, task.id, { ...input, expectedUpdatedAt: task.updatedAt });
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Abhängigkeit konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        if (!body?.relation) throw new Error("Die Beziehungsbestätigung ist unvollständig.");
+        return { relation: body.relation };
+      },
+      async removeTaskRelationship(task, relation) {
+        const { response, body } = await taskApi.removeTaskRelationshipRequest(runtime.apiClient, task.id, relation.id, task.updatedAt);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Abhängigkeit konnte nicht entfernt werden."), { status: response.status, code: body?.code });
+        if (!Number.isSafeInteger(body?.relationId)) throw new Error("Die Entfernung ist noch nicht bestätigt.");
+        return { relationId: body!.relationId! };
+      },
       async uploadTaskAttachment(taskId, file) {
         const session = await currentUploadSession();
         const { response, body } = await taskApi.uploadTaskAttachmentRequest(runtime.apiClient, taskId, file, { userId: session.userId, sessionRevision: session.revision, isCurrent: () => isCurrent() && runtime.session?.userId === session.userId && runtime.session?.revision === session.revision });
         if (!response.ok) throw Object.assign(new Error(body?.error || "Anhang konnte nicht hochgeladen werden."), { status: response.status, code: body?.code });
         if (!body?.markdown || !body.path || !body.url || !body.filename || !body.contentType || typeof body.size !== "number") throw new Error("Die Upload-Bestätigung ist unvollständig.");
         return { filename: body.filename, contentType: body.contentType, size: body.size, markdown: body.markdown, path: body.path, url: body.url, htmlUrl: body.htmlUrl || "", activity: body.activity || null, effects: body.effects === "confirmed" ? "confirmed" : "unconfirmed", warning: body.warning };
+      },
+      async decideTaskApproval(task,action,note) {
+        const {response,body}=await taskApi.decideTaskApprovalRequest(runtime.apiClient,task.id,action,task.approvalRevision,note);
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Freigabeentscheidung konnte nicht gespeichert werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task)throw new Error("Die Freigabeentscheidung ist noch nicht bestätigt.");return {task:body.task};
+      },
+      async requestTaskReview(task,input) {
+        const {response,body}=await taskApi.updateTaskRequest(runtime.apiClient,task.id,taskUpdateRequestPayload({...input,status:"Review",reviewStatus:"requested",scoreFinal:false},task.updatedAt||""));
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht angefragt werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task)throw new Error("Die Review-Anfrage ist noch nicht bestätigt.");return {task:body.task,activities:body.activities};
+      },
+      async decideTaskReview(task,input) {
+        const {response,body}=await taskApi.reviewTaskRequest(runtime.apiClient,task.id,{...input,expectedUpdatedAt:task.updatedAt});
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht gespeichert werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task||!body.review)throw new Error("Die Review-Entscheidung ist noch nicht bestätigt.");return {task:body.task,review:body.review,activities:body.activities};
+      },
+      async withdrawTaskReview(task,reason) {
+        const {response,body}=await taskApi.withdrawTaskReviewRequest(runtime.apiClient,task.id,reason,task.updatedAt||"");
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht zurückgezogen werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task)throw new Error("Das Zurückziehen ist noch nicht bestätigt.");return {task:body.task,activities:body.activities};
+      },
+      async reopenTaskReview(task,input) {
+        const {response,body}=await taskApi.reopenTaskReviewRequest(runtime.apiClient,task.id,task.updatedAt||"",input);
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht erneut geöffnet werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
+        if(!body?.task)throw new Error("Das erneute Öffnen ist noch nicht bestätigt.");return {task:body.task,activities:body.activities};
       },
       async importTaskGitHubComments(taskId) {
         const { response, body } = await taskApi.importGitHubCommentsRequest(runtime.apiClient, taskId);

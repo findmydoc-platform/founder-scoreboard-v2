@@ -1,3 +1,4 @@
+import { taskAuditActionFromMessage } from "@/features/tasks/model/task-comment-timeline-policy";
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { apiError } from "@/lib/api-response";
@@ -5,6 +6,7 @@ import { requirePlanningJsonContext } from "@/features/planning/server/planning-
 import { mentionedProfileIds } from "@/lib/mentions";
 import {
   parsePlanningReviewReopenPayload,
+  planningReviewActivitiesFromResult,
   planningReviewError,
   planningReviewTaskFromResult,
   reopenPlanningReviewCommand,
@@ -32,9 +34,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   });
   if (!result.ok) {
     const mapped = planningReviewError(result.error, "reopen");
-    return apiError(mapped.message, mapped.status);
+    return NextResponse.json({error:mapped.message,...(result.error.code==="conflict"&&result.error.reason==="revision"?{conflictReason:"revision"}:{}),code:result.error.code}, {status:mapped.status});
   }
   const task = planningReviewTaskFromResult(result);
   if (result.status !== "committed" || !task) return apiError("Review konnte nicht vollständig wieder geöffnet werden.", 500);
-  return NextResponse.json({ ok: true, task });
+  const activities = planningReviewActivitiesFromResult(result).map(activity=>({ ...activity, action:taskAuditActionFromMessage(activity.message),actorProfileId:apiContext.permission.profile?.id||"",beforeData:null,afterData:{message:activity.message} })).filter(activity=>activity.action);
+  return NextResponse.json({ ok: true, activities, task });
 }

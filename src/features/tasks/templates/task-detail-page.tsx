@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { TaskReviewOperationNotice } from "@/features/reviews/molecules/task-review-operation-notice";
+
 import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -116,6 +118,7 @@ export function TaskDetailPage({
       />
 
       <div className="mx-auto max-w-[1392px] px-6 py-6 sm:px-8">
+        {controller.planningState.taskReviewOperations(task.id).map(operation=><TaskReviewOperationNotice key={operation.id} operation={operation} onCheck={id=>{void controller.planningState.checkTaskReview(id);}} />)}
         <TaskDetailSurface
           surface="page"
           task={task}
@@ -142,6 +145,8 @@ export function TaskDetailPage({
           commentImportPending={controller.commentImportPendingTaskIds.has(task.id)}
           githubInstallationAvailable={controller.githubInstallationAvailable}
           taskSaves={controller.planningState.taskSaves(task.id)}
+          relationshipChanges={controller.planningState.taskRelationshipChanges(task.id)}
+          onCheckRelationshipChange={changeId => { void controller.planningState.checkTaskRelationshipChange(changeId); }}
           attachmentUploads={controller.planningState.taskAttachmentUploads(task.id)}
           onCheckAttachmentUpload={id => { void controller.planningState.checkTaskAttachmentUpload(id); }}
           githubImport={controller.planningState.taskGitHubImport(task.id)}
@@ -178,9 +183,9 @@ export function TaskDetailPage({
           onWithdraw={(reason) => {
             if (controller.withdrawTask(task, reason)) router.replace("/planning");
           }}
-          onAddRelation={(payload) => controller.addTaskRelation(task, payload)}
+          onAddRelation={(payload, basis) => controller.addTaskRelation(basis || task, payload)}
           onRemoveRelation={(relation) => controller.removeTaskRelation(task, relation)}
-          onDecideApproval={(action, note) => controller.decideTaskApproval(task, action, note)}
+          onDecideApproval={(action, note, basis) => controller.decideTaskApproval(basis || task, action, note)}
         />
       </div>
 

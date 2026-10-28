@@ -10,7 +10,7 @@ import type {
 import type { ReviewEvidenceSubmission } from "@/features/reviews/model/review-evidence";
 
 export function decideTaskApprovalRequest(apiClient: BrowserApiClient, taskId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {
-  return apiClient.requestJson<{ error?: string; code?: string; task?: Task }>(`/api/tasks/${taskId}/approval`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; task?: Task }>(`/api/tasks/${taskId}/approval`, {
     method: "POST",
     json: { action, expectedRevision, note },
   });
@@ -169,16 +169,16 @@ export function importGitHubCommentsRequest(apiClient: BrowserApiClient, taskId:
 }
 
 export function addTaskRelationshipRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; relation?: TaskRelation }>(`/api/tasks/${taskId}/relationships`, {
+  return apiClient.requestJson<{ error?: string; code?: string; relation?: TaskRelation }>(`/api/tasks/${taskId}/relationships`, {
     method: "POST",
     json: payload,
   });
 }
 
-export function removeTaskRelationshipRequest(apiClient: BrowserApiClient, taskId: string, relationId: number) {
-  return apiClient.requestJson<{ error?: string }>(`/api/tasks/${taskId}/relationships`, {
+export function removeTaskRelationshipRequest(apiClient: BrowserApiClient, taskId: string, relationId: number, expectedUpdatedAt?: string) {
+  return apiClient.requestJson<{ error?: string; code?: string; relationId?: number }>(`/api/tasks/${taskId}/relationships`, {
     method: "DELETE",
-    json: { relationId },
+    json: { relationId, ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}) },
   });
 }
 
@@ -190,14 +190,14 @@ export function reportTaskBlockerRequest(apiClient: BrowserApiClient, taskId: st
 }
 
 export function reviewTaskRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; review?: TaskReview; task?: Partial<Task> }>(`/api/tasks/${taskId}/review`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; activities?: TaskActivity[]; review?: TaskReview; task?: Partial<Task> }>(`/api/tasks/${taskId}/review`, {
     method: "POST",
     json: payload,
   });
 }
 
 export function withdrawTaskReviewRequest(apiClient: BrowserApiClient, taskId: string, reason: string, expectedUpdatedAt: string) {
-  return apiClient.requestJson<{ error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/withdraw`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; activities?: TaskActivity[]; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/withdraw`, {
     method: "POST",
     json: { reason, expectedUpdatedAt },
   });
@@ -209,7 +209,7 @@ export function reopenTaskReviewRequest(
   expectedUpdatedAt: string,
   evidence: ReviewEvidenceSubmission = {},
 ) {
-  return apiClient.requestJson<{ error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/reopen`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; activities?: TaskActivity[]; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/reopen`, {
     method: "POST",
     json: {
       expectedUpdatedAt,

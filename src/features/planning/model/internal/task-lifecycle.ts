@@ -80,6 +80,8 @@ export function createTaskLifecycle(adapter: LifecycleAdapter) {
     return withoutTasks({ ...data, taskRelations }, removed);
   }
   return {
+    confirmRelationship(relation: TaskRelation) { if (!removedRelations.has(relation.id)) createdRelations.set(relation.id, { relation: structuredClone(relation), acceptedAt: adapter.capture() }); },
+    confirmRelationshipRemoval(id: number) { createdRelations.delete(id); removedRelations.add(id); },
     isRemoved,
     isRemoving,
     projectConfirmed,
@@ -200,7 +202,7 @@ export function createTaskLifecycle(adapter: LifecycleAdapter) {
           adapter.changed();
           return { ok: false, kind: "rejected", error: operation.error };
         }
-        if (result.relation) createdRelations.set(result.relation.id, { relation: result.relation, acceptedAt: adapter.capture() });
+        if (result.relation && !removedRelations.has(result.relation.id)) createdRelations.set(result.relation.id, { relation: result.relation, acceptedAt: adapter.capture() });
         adapter.acceptCreation(result, started, relatedBasis);
         temporary.delete(operation.id);
         operation.phase = result.approvalError ? "partiallyConfirmed" : "saved";
