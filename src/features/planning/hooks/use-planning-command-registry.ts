@@ -12,7 +12,6 @@ import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-
 import { useEpicCommands } from "@/features/projects/hooks/use-epic-commands";
 import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
 import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
-import { useWeeklyAttendanceCommands } from "@/features/sprint/hooks/use-weekly-attendance-commands";
 import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
 import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
@@ -107,7 +106,6 @@ export function usePlanningCommandRegistry({
     setView,
   });
   const eventCommands = useFounderEventCommands(commandContext);
-  const weeklyAttendanceCommands = useWeeklyAttendanceCommands(commandContext);
   const reviewCommands = useReviewCommands({
     ...commandContext,
     syncTaskToGitHub,
@@ -137,6 +135,5 @@ export function usePlanningCommandRegistry({
     sprintCommands,
     taskCollaborationCommands,
     taskMutationCommands,
-    weeklyAttendanceCommands,
   };
 }

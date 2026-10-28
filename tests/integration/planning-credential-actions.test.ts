@@ -139,8 +139,10 @@ it("sprint, governance, Focus and Weekly operations preserve lead and owner dist
   expect((await focus.DELETE(f.request("founder", `/api/focus?id=${focusId}`, "DELETE"))).status).toBe(200);
   const attendance = await importTestModule("src/app/api/meetings/[id]/attendance/route.ts", { "server-only": {} });
   expect((await attendance.POST(f.request("founder", `/api/meetings/${meeting}/attendance`, "POST", { status: "present" }), context(String(meeting)))).status).toBe(403);
-  expect((await attendance.POST(f.request("founder", `/api/meetings/${meeting}/attendance`, "POST", { status: "excused", absenceReason: "Synthetic acceptance appointment." }), context(String(meeting)))).status).toBe(200);
-  expect((await attendance.POST(f.request("deputy", `/api/meetings/${meeting}/attendance`, "POST", { profileId: f.actors.founder.profileId, status: "present" }), context(String(meeting)))).status).toBe(200);
+  const selfReport = await attendance.POST(f.request("founder", `/api/meetings/${meeting}/attendance`, "POST", { expectedUpdatedAt: null, status: "excused", absenceReason: "Synthetic acceptance appointment." }), context(String(meeting)));
+  expect(selfReport.status).toBe(200);
+  const attendanceBasis = (await selfReport.json()).attendance.updatedAt;
+  expect((await attendance.POST(f.request("deputy", `/api/meetings/${meeting}/attendance`, "POST", { expectedUpdatedAt: attendanceBasis, profileId: f.actors.founder.profileId, status: "present" }), context(String(meeting)))).status).toBe(200);
   expect((await f.db.query("select profile_id,points from public.meeting_attendance where meeting_id=$1", [meeting])).rows).toEqual([{ profile_id: f.actors.founder.profileId, points: 2 }]);
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   for (const actor of ["deputy", "administrator"] as const) expect(await authorizeCredentialAction({ credential: { kind: "session-request", request: f.request(actor, "/api/sprints/lock") }, action: "planning.sprint.lock", targetId: sprint })).toMatchObject({ ok: false, status: 403 });

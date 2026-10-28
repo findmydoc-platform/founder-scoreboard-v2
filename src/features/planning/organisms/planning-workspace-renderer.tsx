@@ -84,7 +84,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
     updateFounderEvent,
-    updateMeetingAttendance,
     updateTask,
     waitingGitHubCommentCount,
     withdrawInitiative,
@@ -217,7 +216,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
             return result.ok;
           }}
           onChangeStatus={(task, status) => updateTask(task, { status })}
-          onUpdateMeetingAttendance={updateMeetingAttendance}
           onCreateScoreObjection={createScoreObjection}
           onReviewScoreObjection={reviewScoreObjection}
           onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
