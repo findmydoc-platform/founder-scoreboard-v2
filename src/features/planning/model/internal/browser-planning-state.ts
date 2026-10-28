@@ -14,8 +14,8 @@ import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-
 import { isSupportingWorkspace, supportingWorkspaceModelToPlanningShellState } from "../supporting-planning-shell-projection";
 import { sprintModelCoverage } from "@/features/sprint/model/sprint-read-coverage";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
-import { mergePlanningHeaderData, normalizePlanningHeaderData } from "@/lib/planning-header-data";
-import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";
+import { normalizePlanningHeaderData } from "@/lib/planning-header-data";
+import { setProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";
 import type { AppWorkspace } from "../workspace-routes";
 
 export type PlanningPageState = {
@@ -27,18 +27,39 @@ export type PlanningPageState = {
 };
 
 export function createBrowserPlanningState(options: PlanningPageState, isCurrent: () => boolean = () => true) {
-  const headerListeners = new Set<(data: PlanningHeaderData) => void>();
-  const runtime = { apiClient: createBrowserApiClient(), workspace: options.initialWorkspace, userId: options.initialUserId, session: null as BrowserSessionSnapshot | null, headerData: options.initialHeaderData, currentProfile: options.initialCurrentProfile };
+  const runtime = { apiClient: createBrowserApiClient(), workspace: options.initialWorkspace, userId: options.initialUserId, session: null as BrowserSessionSnapshot | null, currentProfile: options.initialCurrentProfile };
   const owner = createPlanningState({
     userId: options.initialUserId,
     initialData: options.initialData,
     initialWorkspace: options.initialWorkspace,
+    initialHeaderData: options.initialHeaderData,
     adapter: {
       async saveSprint(sprint, patch) {
         const { response, body } = await planningApi.updateSprintRequest(runtime.apiClient, sprint.id, { ...patch, expectedUpdatedAt: sprint.updatedAt });
         if (!response.ok) throw Object.assign(new Error(body?.error || "Sprint konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
         if (!body?.sprint?.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
         return { sprint: body.sprint };
+      },
+      async readHeader(slots) {
+        const { response, body } = await planningApi.requestPlanningHeaderData(runtime.apiClient, slots);
+        if (!response.ok || !body?.headerData) throw Object.assign(new Error(body?.error || "Headerdaten konnten nicht geladen werden."), { status: response.status });
+        return normalizePlanningHeaderData(body.headerData);
+      },
+      async updateNotification(eventId, action) {
+        const { response, body } = await planningApi.updateNotificationStatusRequest(runtime.apiClient, eventId, action);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Benachrichtigung konnte nicht aktualisiert werden."), { status: response.status, code: body?.code });
+        if (!body?.ok || !body.action || !body.status) throw new Error("Bestätigung unvollständig.");
+        return { action: body.action, status: body.status };
+      },
+      async readPlatformReleases() {
+        const { response, body } = await runtime.apiClient.requestJson<{ releases?: import("@/features/platform-releases/model/platform-release-model").PlatformReleaseRecord[]; error?: string }>("/api/team/platform-releases/v1/releases");
+        if (!response.ok || !Array.isArray(body?.releases)) throw Object.assign(new Error(body?.error || "Releases konnten nicht geladen werden."), { status: response.status });
+        return body.releases;
+      },
+      async markPlatformReleaseSeen(version) {
+        const { response, body } = await runtime.apiClient.requestJson<{ ok?: boolean; error?: string }>(`/api/team/platform-releases/v1/releases/${encodeURIComponent(version)}/seen`, { method: "POST" });
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Release konnte nicht bestätigt werden."), { status: response.status });
+        if (!body?.ok) throw new Error("Bestätigung unvollständig.");
       },
       async createTask(input) {
         const { response, body } = await taskApi.createTaskRequest(runtime.apiClient, input);
@@ -100,7 +121,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (isSupportingWorkspace(workspace)) {
           const { response, body } = await planningApi.requestSupportingWorkspaceData(runtime.apiClient, workspace);
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status });
-          return body?.model ? { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState(workspace, body.model)), taskCoverage: (workspace === "team" || workspace === "profile" || workspace === "notifications" ? "partial" : "none") as "partial" | "none", headerData: body.headerData, currentProfile: body.currentProfile } : null;
+          return body?.model ? { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState(workspace, body.model)), notificationCoverage: workspace === "notifications" ? (body.model as import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel).coverage : undefined, taskCoverage: (workspace === "team" || workspace === "profile" || workspace === "notifications" ? "partial" : "none") as "partial" | "none", headerData: body.headerData, currentProfile: body.currentProfile } : null;
         }
         if (workspace === "sprint") {
           const { response, body } = await planningApi.requestSprintWorkspaceData(runtime.apiClient);
@@ -112,23 +133,22 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     },
     acceptWorkspaceContext(result) {
       if (!isCurrent()) return;
-      runtime.headerData = mergePlanningHeaderData(runtime.headerData, normalizePlanningHeaderData(result.headerData));
-      runtime.currentProfile = result.currentProfile || runtime.currentProfile;
-      headerListeners.forEach(listener => listener(runtime.headerData));
+      const profileId = result.currentProfile?.id || runtime.currentProfile?.id;
+      runtime.currentProfile = owner.planning.protectedCache()?.profiles.find(profile => profile.id === profileId) || null;
     },
     publishCache(data, workspace) {
       if (!isCurrent()) return;
       if (!data) { setProtectedPlanningShellStateCache(null, workspace); return; }
       workspace ??= runtime.workspace;
-      const cached = getProtectedPlanningShellStateCache(workspace);
+      const confirmedHeader = owner.internal.confirmedHeader();
       setProtectedPlanningShellStateCache({
         authUserId: runtime.userId,
         workspace,
         sessionRevision: runtime.session?.revision,
         authorityExpiresAt: runtime.session?.expiresAt,
         data,
-        headerData: cached?.authUserId === runtime.userId ? mergePlanningHeaderData(cached.headerData, runtime.headerData) : runtime.headerData,
-        currentProfile: runtime.currentProfile,
+        headerData: confirmedHeader,
+        currentProfile: data.profiles.find(profile => profile.id === runtime.currentProfile?.id) || null,
       });
     },
   });
@@ -150,13 +170,10 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
   };
   return {
     initialPage: options,
+    acceptHeaderHydration: owner.internal.acceptHeaderHydration,
     owner,
     runtime,
     legacyApiClient,
-    subscribeHeader(listener: (data: PlanningHeaderData) => void) {
-      headerListeners.add(listener);
-      return () => { headerListeners.delete(listener); };
-    },
     acceptProtectedData(data: PlanningShellState, account: string, workspace: AppWorkspace = runtime.workspace) {
       if (!isCurrent() || account !== runtime.userId) return;
       owner.internal.acceptHydration(data, account, workspace);

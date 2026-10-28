@@ -445,6 +445,7 @@ export type HeaderCalendarEvent = Pick<FounderEvent, "id" | "title" | "category"
 export type HeaderNotification = Pick<NotificationEvent, "id" | "type" | "actorProfileId" | "actorLabel" | "recipientProfileId" | "entityType" | "entityId" | "title" | "body" | "targetPath" | "createdAt">;
 
 export type HeaderDataSlot<T> = {
+  freshness?: "current" | "stale";
   state: "idle" | "loading" | "ready" | "error";
   data: T;
   loadedAt?: string;

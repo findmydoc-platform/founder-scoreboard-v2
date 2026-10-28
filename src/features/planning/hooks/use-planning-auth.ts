@@ -1,4 +1,3 @@
-import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import type { User } from "@supabase/supabase-js";
 import { flushSync } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,7 +27,6 @@ type UsePlanningAuthOptions = {
   initialAuthError?: string;
   setData: (data: PlanningShellState, account: string) => void;
   clearPlanningState: () => void;
-  setHeaderData: (data: PlanningHeaderData) => void;
   normalizePlanningShellState: (data: PlanningShellState) => PlanningShellState;
   normalizePlanningHeaderData: (data?: Partial<PlanningHeaderData> | null) => PlanningHeaderData;
   onSignedOut: () => void;
@@ -55,7 +53,6 @@ export function usePlanningAuth({
   initialAuthError = "",
   setData,
   clearPlanningState,
-  setHeaderData,
   normalizePlanningShellState,
   normalizePlanningHeaderData,
   onSignedOut,
@@ -120,7 +117,7 @@ export function usePlanningAuth({
       protectedDataUserIdRef.current = "";
       setProtectedPlanningShellStateCache(null);
       setServerCurrentProfile(null);
-      setHeaderData(emptyPlanningHeaderData);
+
       setProtectedDataLoaded(false);
       onSignedOut();
     };
@@ -149,7 +146,7 @@ export function usePlanningAuth({
     });
     return () => { active = false; unsubscribe(); };
 
-  }, [apiClient, authRequired, initialAuthUser?.id, onSignedOut, setData, clearPlanningState, setHeaderData]);
+  }, [apiClient, authRequired, initialAuthUser?.id, onSignedOut, setData, clearPlanningState]);
 
   useEffect(() => {
     if (!authRequired || source !== "supabase" || !authUser) return;
@@ -172,7 +169,7 @@ export function usePlanningAuth({
           protectedDataUserIdRef.current = authUserId;
           setServerCurrentProfile(cached.currentProfile);
           setData(cached.data, authUserId);
-          setHeaderData(cached.headerData);
+
           setProtectedDataLoaded(true);
           setAuthError("");
           return;
@@ -212,7 +209,7 @@ export function usePlanningAuth({
           protectedDataUserIdRef.current = "";
           setServerCurrentProfile(null);
           clearPlanningState();
-          setHeaderData(emptyPlanningHeaderData);
+
           setProtectedDataLoaded(false);
           setAuthError(payload?.error || "Planungsdaten konnten nicht geladen werden.");
           return;
@@ -226,7 +223,7 @@ export function usePlanningAuth({
         setProtectedPlanningShellStateCache({ authUserId, workspace, sessionRevision: acceptedSession.revision, authorityExpiresAt: acceptedSession.expiresAt, data: nextData, headerData: nextHeaderData, currentProfile: payload.currentProfile });
         setServerCurrentProfile(payload.currentProfile);
         setData(nextData, authUserId);
-        setHeaderData(nextHeaderData);
+
         setProtectedDataLoaded(true);
         setAuthError("");
       } catch (error) {
@@ -245,7 +242,7 @@ export function usePlanningAuth({
     return () => {
       active = false;
     };
-  }, [apiClient, authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, setData, clearPlanningState, setHeaderData, source, taskCount, workspace]);
+  }, [apiClient, authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, setData, clearPlanningState, source, taskCount, workspace]);
 
   const signIn = useCallback(async (options: SignInOptions = {}) => {
     setAuthBusy(true);
@@ -299,7 +296,7 @@ export function usePlanningAuth({
     setWaitingGitHubCommentCount(0);
     setGithubConnectionState("unknown");
     clearPlanningState();
-    setHeaderData(emptyPlanningHeaderData);
+
     setProtectedDataLoaded(false);
     onSignedOut();
     setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");

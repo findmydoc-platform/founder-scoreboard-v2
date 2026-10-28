@@ -55,7 +55,13 @@ export function NotificationsOverview({
   data,
   onOpenNotification,
   onDismissNotification,
+  completeness = "partial",
+  pendingEventIds = [],
+  readStatus = "current",
 }: {
+  completeness?: "complete" | "partial";
+  pendingEventIds?: readonly number[];
+  readStatus?: import("@/features/planning/model/planning-state").PlanningReadStatus;
   currentProfile: Profile | null;
   data: PlanningShellState;
   onOpenNotification: (event: NotificationEvent) => void;
@@ -80,8 +86,14 @@ export function NotificationsOverview({
   const personalNewCount = personalNotifications.filter((event) => event.status === "pending" && !event.seenAt).length;
   const personalDoneCount = personalNotifications.filter((event) => isPersonalNotificationDone(event)).length;
   const personalTodayCount = personalNotifications.filter((event) => isToday(event.createdAt)).length;
+  if (readStatus === "forbidden") return <p role="status" className="p-4 text-sm text-slate-700">Kein Zugriff auf Benachrichtigungen.</p>;
+  if (readStatus === "not-loaded" || readStatus === "loading" && !personalNotifications.length) return <p role="status" className="p-4 text-sm text-slate-700">Benachrichtigungen werden geladen.</p>;
+  if (readStatus === "unavailable" && !personalNotifications.length) return <p role="status" className="p-4 text-sm text-slate-700">Benachrichtigungen konnten nicht geladen werden.</p>;
   return (
     <div className="grid min-w-0 gap-4">
+      {readStatus === "unavailable" ? <p role="status" className="text-sm text-slate-600">Benachrichtigungen konnten nicht aktualisiert werden. Der letzte verfügbare Stand bleibt sichtbar.</p> : null}
+      {readStatus === "stale" || readStatus === "loading" ? <p role="status" className="text-sm text-slate-600">Der Stand der Benachrichtigungen wird geprüft.</p> : null}
+      {completeness === "partial" ? <p className="text-sm text-slate-600">Die Angaben beziehen sich auf den geladenen Ausschnitt.</p> : null}
       <section className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
         <span><strong className="text-slate-900">{personalNewCount}</strong> neu</span>
         <span><strong className="text-slate-900">{personalOpenCount}</strong> offen</span>
@@ -152,6 +164,7 @@ export function NotificationsOverview({
                       <button
                         type="button"
                         onClick={() => onDismissNotification(event.id)}
+                        disabled={pendingEventIds.includes(event.id)}
                         className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-md text-slate-400 opacity-0 transition hover:bg-slate-100 hover:text-slate-700 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-200 group-hover:opacity-100"
                         aria-label="Notification als erledigt schließen"
                       >

@@ -19,7 +19,7 @@ import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutatio
 import { useFmdToolCommands } from "@/features/tools/hooks/use-fmd-tool-commands";
 import { useSprintReviewSettingsCommand } from "@/features/sprint/hooks/use-sprint-review-settings-command";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import type { PlanningShellState, PlanningHeaderData, Task } from "@/lib/types";
+import type { PlanningShellState, Task } from "@/lib/types";
 
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
@@ -34,7 +34,6 @@ type UsePlanningCommandRegistryOptions = {
   refreshCurrentWorkspaceModel: () => Promise<void>;
   selectedTask: Task | null;
   setFilters: PlanningViewState["setFilters"];
-  setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
   setEpicDeleteTarget: PlanningViewState["setEpicDeleteTarget"];
   setEpicDialogDefaults: PlanningViewState["setEpicDialogDefaults"];
@@ -59,7 +58,6 @@ export function usePlanningCommandRegistry({
   refreshCurrentWorkspaceModel,
   selectedTask,
   setFilters,
-  setHeaderData,
   setInitiativeDialogDefaults,
   setEpicDeleteTarget,
   setEpicDialogDefaults,
@@ -130,8 +128,7 @@ export function usePlanningCommandRegistry({
     ...commandContext,
     openTaskPanel,
     refreshCurrentWorkspaceModel,
-    setHeaderData,
-    setShowNotifications,
+      setShowNotifications,
     setWorkspace,
     workspace,
   });

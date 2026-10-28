@@ -287,7 +287,7 @@ export function uploadFmdToolPreviewImageRequest(apiClient: BrowserApiClient, fi
 }
 
 export function updateNotificationStatusRequest(apiClient: BrowserApiClient, eventId: number, action: "seen" | "dismiss") {
-  return apiClient.requestJson<{ error?: string }>(`/api/notifications/${eventId}`, {
+  return apiClient.requestJson<{ ok?: boolean; action?: "seen" | "dismiss"; status?: import("@/lib/types").NotificationEvent["status"]; error?: string; code?: string }>(`/api/notifications/${eventId}`, {
     method: "PATCH",
     json: { action },
   });

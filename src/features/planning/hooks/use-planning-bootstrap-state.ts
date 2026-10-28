@@ -1,7 +1,7 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { usePlanningStateOwner } from "./use-planning-state-owner";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { useCurrentWorkspaceModelRefresh } from "@/features/planning/hooks/use-workspace-model-refresh";
@@ -46,8 +46,7 @@ export function usePlanningBootstrapState({
   const safeInitialData = useMemo(() => normalizePlanningShellState(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
-  const [baseHeaderData, setBaseHeaderData] = useState(safeInitialHeaderData);
-  const stateOwner = usePlanningStateOwner({ initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, setHeaderData: setBaseHeaderData });
+  const stateOwner = usePlanningStateOwner({ initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace });
   const { data, setData, planningState } = stateOwner;
   const { workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const viewState = usePlanningViewState({
@@ -72,7 +71,6 @@ export function usePlanningBootstrapState({
     initialAuthError,
     setData: stateOwner.acceptProtectedData,
     clearPlanningState: stateOwner.clearPlanningState,
-    setHeaderData: setBaseHeaderData,
     normalizePlanningShellState,
     normalizePlanningHeaderData,
     onSignedOut: clearSelectedTask,
@@ -87,27 +85,10 @@ export function usePlanningBootstrapState({
     currentProfileId: auth.serverCurrentProfile?.id || "",
   });
   useEffect(() => {
-    stateOwner.configure(requestContext.apiClient, workspace, baseHeaderData, auth.serverCurrentProfile);
-  }, [stateOwner, requestContext.apiClient, workspace, baseHeaderData, auth.serverCurrentProfile]);
+    stateOwner.configure(requestContext.apiClient, workspace, auth.serverCurrentProfile);
+  }, [stateOwner, requestContext.apiClient, workspace, auth.serverCurrentProfile]);
   const currentProfileId = requestContext.currentProfile?.id || "";
-  const notificationsWorkspaceRefreshRef = useRef<() => Promise<void>>(async () => undefined);
-  const refreshNotificationsWorkspace = useCallback(
-    () => notificationsWorkspaceRefreshRef.current(),
-    [],
-  );
-  const headerData = usePlanningHeaderData({
-    apiClient: requestContext.apiClient,
-    authRequired,
-    authUser: auth.authUser,
-    baseHeaderData,
-    currentProfileId,
-    data,
-    protectedDataLoaded: auth.protectedDataLoaded,
-    refreshNotificationsWorkspace,
-    serverCurrentProfile: auth.serverCurrentProfile,
-    setHeaderData: setBaseHeaderData,
-    workspace,
-  });
+  const headerData = usePlanningHeaderData({ planningState, enabled: Boolean(auth.authUser) && (!authRequired || auth.protectedDataLoaded), notificationsWorkspace: workspace === "notifications" });
   const canManageTaskMeta = requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
   const canCorrectOperationally = operationalCorrection;
   const canManageFinalTaskStatus = requestContext.currentProfile?.platformRole === "ceo";
@@ -124,14 +105,10 @@ export function usePlanningBootstrapState({
     headerData,
     serverCurrentProfile: auth.serverCurrentProfile,
     setData,
-    setHeaderData: setBaseHeaderData,
     setProtectedDataLoaded: auth.setProtectedDataLoaded,
     source,
     workspace,
   });
-  useEffect(() => {
-    notificationsWorkspaceRefreshRef.current = dataRefresh.refreshCurrentWorkspaceModel;
-  }, [dataRefresh.refreshCurrentWorkspaceModel]);
   const focusMode = usePlanningFocusMode();
   const remoteChanges = usePlanningRemoteChanges({
     apiClient: requestContext.apiClient,
@@ -162,7 +139,6 @@ export function usePlanningBootstrapState({
     saveError,
     setData,
     setGithubSyncQueueOpen,
-    setHeaderData: setBaseHeaderData,
     setSaveError,
     setStatusGuardNotice,
     setStatusGuardTaskId,

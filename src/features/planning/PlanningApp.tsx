@@ -1,6 +1,7 @@
 "use client";
 
 import "driver.js/dist/driver.css";
+import { PlanningBusinessStateContext } from "./hooks/use-planning-business-state";
 import type { User } from "@supabase/supabase-js";
 import { usePlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { PlanningAppShell } from "@/features/planning/templates/planning-app-shell";
@@ -73,5 +74,5 @@ export function PlanningApp({
     setWorkspace("planning");
   }, [revalidateAdministratorAccess, setWorkspace]);
 
-  return <PlanningAppShell authRequired={authRequired} controller={controller} administratorAccessController={administratorAccessController} initialAdministrationModel={initialAdministrationModel} onAdministratorAccessInvalid={handleAdministratorAccessInvalid} source={source} decisionLogResult={initialDecisionLogResult} initialBacklogModel={initialBacklogModel} initialSprintModel={initialSprintModel} />;
+  return <PlanningBusinessStateContext.Provider value={controller.planningState}><PlanningAppShell authRequired={authRequired} controller={controller} administratorAccessController={administratorAccessController} initialAdministrationModel={initialAdministrationModel} onAdministratorAccessInvalid={handleAdministratorAccessInvalid} source={source} decisionLogResult={initialDecisionLogResult} initialBacklogModel={initialBacklogModel} initialSprintModel={initialSprintModel} /></PlanningBusinessStateContext.Provider>;
 }

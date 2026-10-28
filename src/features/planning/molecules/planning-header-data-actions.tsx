@@ -1,5 +1,8 @@
 "use client";
 
+import { usePlanningBusinessState } from "../hooks/use-planning-business-state";
+import { notificationTarget } from "@/features/notifications/model/notification-target";
+import { PlanningNotificationFeedback } from "./planning-notification-feedback";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { NotificationInbox } from "@/features/notifications/organisms/notification-inbox";
@@ -30,6 +33,7 @@ export function PlanningHeaderDataActions({
   calendar,
 }: PlanningHeaderDataActionsProps) {
   const router = useRouter();
+  const planningState = usePlanningBusinessState();
   const [quickLinksOpen, setQuickLinksOpen] = useState(false);
   const [localNotificationsOpen, setLocalNotificationsOpen] = useState(false);
   const notificationPopoverOpen = notificationsOpen ?? localNotificationsOpen;
@@ -43,6 +47,7 @@ export function PlanningHeaderDataActions({
 
   return (
     <>
+      <PlanningNotificationFeedback />
       <FmdToolQuickLinks
         quickLinks={headerData.quickLinks}
         open={quickLinksOpen}
@@ -58,8 +63,8 @@ export function PlanningHeaderDataActions({
         notifications={headerData.notifications}
         open={notificationPopoverOpen}
         onToggle={toggleNotifications}
-        onOpen={onOpenNotification}
-        onDismiss={onDismissNotification}
+        onOpen={onOpenNotification || (planningState ? event => { void planningState.updateNotificationStatus(event.id, "seen").then(() => router.push(notificationTarget(event).href)); } : undefined)}
+        onDismiss={onDismissNotification || (planningState ? eventId => { void planningState.updateNotificationStatus(eventId, "dismiss"); } : undefined)}
       />
     </>
   );

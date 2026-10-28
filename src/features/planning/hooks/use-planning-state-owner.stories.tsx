@@ -17,8 +17,7 @@ import type { BrowserApiClient, BrowserApiJsonResult } from "@/lib/browser-api-c
 const task = taskDetailStoryTask({ id: "owner-task", title: "Before", updatedAt: "r1" });
 const initial = { ...emptyPlanningShellState, tasks: [task], taskComments: [{ id: 1, taskId: task.id, profileId: "story-profile", comment: "Loaded discussion", githubDeliveryStatus: "not_applicable", githubCommentUrl: "", createdAt: "2026-10-28T00:00:00Z" } satisfies TaskComment] };
 function PlanningOwnerStory() {
-  const [, setHeaderData] = useState(emptyPlanningHeaderData);
-  const owner = usePlanningStateOwner({ initialData: initial, initialHeaderData: emptyPlanningHeaderData, initialUserId: "owner-story", initialCurrentProfile: null, initialWorkspace: "planning", setHeaderData });
+  const owner = usePlanningStateOwner({ initialData: initial, initialHeaderData: emptyPlanningHeaderData, initialUserId: "owner-story", initialCurrentProfile: null, initialWorkspace: "planning" });
   const [network] = useState(() => {
     const pending = new Map<string, (result: BrowserApiJsonResult<unknown>) => void>();
     const client: BrowserApiClient = {
@@ -28,7 +27,7 @@ function PlanningOwnerStory() {
     };
     return { client, pending };
   });
-  useEffect(() => { owner.configure(network.client, "planning", emptyPlanningHeaderData, null); }, [owner, network]);
+  useEffect(() => { owner.configure(network.client, "planning", null); }, [owner, network]);
   const [, setError] = useState("");
   const { updateTask } = useTaskUpdateCommand({
     planningState: owner.planningState, data: owner.data,

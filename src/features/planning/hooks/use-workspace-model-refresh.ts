@@ -14,7 +14,6 @@ type UseCurrentWorkspaceModelRefreshOptions = {
   headerData: PlanningHeaderData;
   serverCurrentProfile: AuthenticatedProfile | null;
   setData: Dispatch<SetStateAction<PlanningShellState>>;
-  setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   setProtectedDataLoaded: Dispatch<SetStateAction<boolean>>;
   source: "supabase";
   workspace: AppWorkspace;
