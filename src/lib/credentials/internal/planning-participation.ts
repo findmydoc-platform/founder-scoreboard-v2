@@ -49,14 +49,23 @@ export function planningParticipationOperations({ action, targetId, profile, ser
       if (action !== "planning.attendance.write" || !targetId || await current()) return denied();
       return await service.from("meetings").select("id,title").eq("id", Number(targetId)).single();
     },
-    async writeAttendance(suppliedValues: { profileId: string; status: MeetingAttendanceStatus; absenceReason: string; reasonAccepted: boolean; writtenUpdate: string; points: number }) {
+    async readAttendance(profileId: string) {
+      if (action !== "planning.attendance.write" || !targetId || !profile || (!lead && profileId !== profile.id) || await current()) return denied();
+      return await service.from("meeting_attendance").select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at").eq("meeting_id", Number(targetId)).eq("profile_id", profileId).maybeSingle();
+    },
+    async writeAttendance(suppliedValues: { profileId: string; status: MeetingAttendanceStatus; absenceReason: string; reasonAccepted: boolean; writtenUpdate: string; points: number; expectedUpdatedAt: string | null }) {
       const values = structuredClone(suppliedValues);
       if (action !== "planning.attendance.write" || !targetId || !profile || await current()
         || (!lead && (values.profileId !== profile.id || !["pending", "excused", "late_excused"].includes(values.status)
           || values.reasonAccepted || values.points !== 0 || (values.status !== "pending" && !values.absenceReason)))) return denied();
-      const result = await service.from("meeting_attendance").upsert({ meeting_id: Number(targetId), profile_id: values.profileId, status: values.status,
-        absence_reason: values.absenceReason, reason_accepted: values.reasonAccepted, written_update: values.writtenUpdate, points: values.points, updated_at: new Date().toISOString() },
-        { onConflict: "meeting_id,profile_id" }).select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at").single();
+      if (values.expectedUpdatedAt !== null && (typeof values.expectedUpdatedAt !== "string" || !Number.isFinite(Date.parse(values.expectedUpdatedAt)))) return { data: null, error: { code: "22023", message: "Die angezeigte Weekly-Version ist erforderlich." } };
+      const updatedAt = new Date(Math.max(Date.now(), values.expectedUpdatedAt ? Date.parse(values.expectedUpdatedAt) + 1 : 0)).toISOString();
+      const patch = { status: values.status, absence_reason: values.absenceReason, reason_accepted: values.reasonAccepted, written_update: values.writtenUpdate, points: values.points, updated_at: updatedAt };
+      const columns = "id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at";
+      const result = values.expectedUpdatedAt === null
+        ? await service.from("meeting_attendance").insert({ meeting_id: Number(targetId), profile_id: values.profileId, ...patch }).select(columns).single()
+        : await service.from("meeting_attendance").update(patch).eq("meeting_id", Number(targetId)).eq("profile_id", values.profileId).eq("updated_at", values.expectedUpdatedAt).select(columns).maybeSingle();
+      if (result.error?.code === "23505" || !result.error && !result.data) return { data: null, error: { code: "attendance_revision_conflict", message: "Die Weekly-Rückmeldung wurde inzwischen geändert. Bitte den Serverstand vergleichen." } };
       if (!result.error && result.data) { attendanceProfile = values.profileId; attendanceRecipients.clear(); if (lead && values.profileId !== profile.id) attendanceRecipients.add(values.profileId); }
       return result;
     },

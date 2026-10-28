@@ -1,5 +1,8 @@
 "use client";
 
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import type { MeetingAttendanceEditor } from "@/features/sprint/model/meeting-attendance-state";
+import { MeetingAttendanceEditorForm, MeetingAttendanceNotice } from "./meeting-attendance-editor";
 import { Fragment, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { buildSprintAttendanceTableViewModel, DEFAULT_SPRINT_ATTENDANCE_FILTERS, type SprintAttendanceSignalFilter, type SprintAttendanceSort, type SprintAttendanceTableFilters } from "@/features/sprint/model/sprint-attendance-table-view-model";
@@ -44,17 +47,28 @@ export function SprintMeetingAttendanceSection({
   pending,
   currentProfile,
   canManageSprint,
-  onUpdateMeetingAttendance,
+  planningState,
 }: {
   data: PlanningShellState;
   meetings: Meeting[];
   pending: boolean;
   currentProfile: Profile | null;
   canManageSprint: boolean;
-  onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
+  planningState: PlanningState;
 }) {
   const sprintMeetings = meetings.slice(0, 2);
   const [activeRowKey, setActiveRowKey] = useState("");
+  const [editing, setEditing] = useState<{ key: string; editor: MeetingAttendanceEditor; draft: MeetingAttendance } | null>(null);
+  const openEditor = (rowKey: string, meeting: Meeting, attendance: MeetingAttendance) => {
+    if (activeRowKey === rowKey) { editing?.editor.close(); setActiveRowKey(""); setEditing(null); return; }
+    editing?.editor.close();
+    const retained = planningState.meetingAttendanceEdits(meeting.id, attendance.profileId).find(view => ["saving","unconfirmed","conflict"].includes(view.phase));
+    const editor = retained ? planningState.resumeMeetingAttendance(retained.id)! : planningState.beginMeetingAttendance(meeting, attendance.profileId, attendance.id ? attendance : null);
+    setActiveRowKey(rowKey); setEditing({ key: rowKey, editor, draft: { ...attendance, ...retained?.submitted } });
+    if (!retained) void editor.prepare().then(record => { if (editor.view().phase === "editing" && record) setEditing(current => current?.editor === editor ? { ...current, draft: record } : current); });
+  };
+  const form = (rowKey: string, canEdit: boolean, canScore: boolean) => editing?.key === rowKey ? <MeetingAttendanceEditorForm editor={editing.editor} draft={editing.draft} canEdit={canEdit} canScore={canScore} onDraftChange={patch => setEditing(current => current ? { ...current, draft: { ...current.draft, ...patch } } : current)} /> : null;
+  const notices = (meeting: Meeting, profileId: string) => planningState.meetingAttendanceEdits(meeting.id,profileId).map(view => { const editor=planningState.resumeMeetingAttendance(view.id); return editor ? <MeetingAttendanceNotice key={view.id} editor={editor}/> : null; });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { state: filters, updateState: updateFilters, resetState: resetFilters } = useTableUrlState({ namespace: "weekly", schema: attendanceFilterSchema });
   const { visibleRows, totalCount } = buildSprintAttendanceTableViewModel({ data, meetings: sprintMeetings, filters });
@@ -112,25 +126,12 @@ export function SprintMeetingAttendanceSection({
       mobileContent={(
         <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-2 md:gap-3 md:divide-y-0 md:bg-slate-50 md:p-3">
           {sprintMeetings.length ? visibleRows.map(({ rowKey, meeting, profile, attendance }) => {
-            const patchAttendance = (patch: Partial<MeetingAttendance>) => onUpdateMeetingAttendance(meeting, { ...attendance, ...patch, updatedAt: new Date().toISOString() });
             const canEditAttendanceRow = canManageSprint || currentProfile?.id === profile.id;
             const canScoreAttendance = canManageSprint;
             const expanded = activeRowKey === rowKey;
-            const summary = attendance.writtenUpdate.trim() || attendance.absenceReason.trim() || "Keine Rückmeldung";
-            const statusOptions = canManageSprint
-              ? [
-                { value: "pending", label: "Offen" },
-                { value: "present", label: "Anwesend" },
-                { value: "excused", label: "Entschuldigt" },
-                { value: "late_excused", label: "Spät entschuldigt" },
-                { value: "unexcused", label: "Nicht akzeptiert" },
-                { value: "no_show", label: "No-Show" },
-              ]
-              : [
-                { value: "pending", label: "Offen" },
-                { value: "excused", label: "Entschuldigt" },
-                { value: "late_excused", label: "Spät entschuldigt" },
-              ];
+            const attendanceKnown = Boolean(attendance.id) || planningState.meetingAttendance(meeting.id, profile.id).readStatus === "current";
+            const summary = attendanceKnown ? attendance.writtenUpdate.trim() || attendance.absenceReason.trim() || "Keine Rückmeldung" : "Rückmeldung noch nicht geladen.";
+
             return (
               <article key={rowKey} className="grid gap-4 px-4 py-4 md:rounded-md md:border md:border-slate-200 md:bg-white">
                 <div className="flex items-start justify-between gap-3">
@@ -139,10 +140,10 @@ export function SprintMeetingAttendanceSection({
                     <p className="mt-0.5 text-xs leading-5 text-slate-500">{meeting.title} · {new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(meeting.meetingAt))}</p>
                     <p className="text-xs text-slate-500">{roleLabel(profile)}</p>
                   </div>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{attendance.points}/2</span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{attendanceKnown ? `${attendance.points}/2` : "Punkte offen"}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <UiBadge tone={attendanceStatusTone(attendance.status)}>{attendanceStatusLabels[attendance.status]}</UiBadge>
+                  <UiBadge tone={attendanceStatusTone(attendance.status)}>{attendanceKnown ? attendanceStatusLabels[attendance.status] : "Nicht geladen"}</UiBadge>
                   {attendance.reasonAccepted && <UiBadge tone="emerald">akzeptiert</UiBadge>}
                 </div>
                 <p className="text-sm leading-6 text-slate-700">{summary}</p>
@@ -151,41 +152,12 @@ export function SprintMeetingAttendanceSection({
                   size="sm"
                   variant={expanded ? "secondary" : "blue"}
                   disabled={pending || (!canEditAttendanceRow && !canScoreAttendance)}
-                  onClick={() => setActiveRowKey(expanded ? "" : rowKey)}
-                  className="w-full sm:w-auto sm:justify-self-start"
+                  onClick={() => openEditor(rowKey, meeting, attendance)}
+                  className="min-h-11 w-full sm:w-auto sm:justify-self-start"
                 >
                   {expanded ? "Schließen" : "Bearbeiten"}
                 </UiButton>
-                {expanded && (
-                  <div className="grid gap-4 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
-                    <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                      Status
-                      <CustomSelect
-                        value={attendance.status}
-                        disabled={pending || !canEditAttendanceRow}
-                        onChange={(value) => patchAttendance({ status: value as MeetingAttendance["status"], reasonAccepted: false, points: canManageSprint ? attendance.points : 0 })}
-                        className="h-11 w-full text-sm"
-                        options={statusOptions}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                      Punkte
-                      <CustomSelect value={Math.min(attendance.points, 2)} disabled={pending || !canScoreAttendance} onChange={(value) => patchAttendance({ points: Number(value) })} className="h-11 w-full text-sm" options={[0, 1, 2].map((point) => ({ value: String(point), label: String(point) }))} />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-slate-500 sm:col-span-2">
-                      Triftiger Grund
-                      <input value={attendance.absenceReason} disabled={pending || !canEditAttendanceRow} onChange={(event) => patchAttendance({ absenceReason: event.target.value })} className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:bg-slate-50" placeholder="z. B. Krankheit, Familie, nicht verschiebbar" />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-slate-500 sm:col-span-2">
-                      Update
-                      <textarea value={attendance.writtenUpdate} disabled={pending || !canEditAttendanceRow} onChange={(event) => patchAttendance({ writtenUpdate: event.target.value })} className="min-h-28 resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-5 text-slate-700 disabled:bg-slate-50" placeholder="Kurzupdate, Blocker, nächster Schritt" />
-                    </label>
-                    <label className="flex min-h-11 items-center gap-3 text-sm font-semibold text-slate-600 sm:col-span-2">
-                      <input type="checkbox" checked={attendance.reasonAccepted} disabled={pending || !canScoreAttendance} onChange={(event) => patchAttendance({ reasonAccepted: event.target.checked })} className="h-5 w-5" />
-                      Grund akzeptiert
-                    </label>
-                  </div>
-                )}
+                {expanded ? form(rowKey, canEditAttendanceRow, canScoreAttendance) : notices(meeting, profile.id)}
               </article>
             );
           }) : (
@@ -208,25 +180,12 @@ export function SprintMeetingAttendanceSection({
             </DataTableHead>
             <tbody>
               {visibleRows.map(({ rowKey, meeting, profile, attendance }) => {
-                const patchAttendance = (patch: Partial<MeetingAttendance>) => onUpdateMeetingAttendance(meeting, { ...attendance, ...patch, updatedAt: new Date().toISOString() });
                 const canEditAttendanceRow = canManageSprint || currentProfile?.id === profile.id;
                 const canScoreAttendance = canManageSprint;
                 const expanded = activeRowKey === rowKey;
-                const summary = attendance.writtenUpdate.trim() || attendance.absenceReason.trim() || "Keine Rückmeldung";
-                const statusOptions = canManageSprint
-                  ? [
-                    { value: "pending", label: "Offen" },
-                    { value: "present", label: "Anwesend" },
-                    { value: "excused", label: "Entschuldigt" },
-                    { value: "late_excused", label: "Spät entschuldigt" },
-                    { value: "unexcused", label: "Nicht akzeptiert" },
-                    { value: "no_show", label: "No-Show" },
-                  ]
-                  : [
-                    { value: "pending", label: "Offen" },
-                    { value: "excused", label: "Entschuldigt" },
-                    { value: "late_excused", label: "Spät entschuldigt" },
-                  ];
+                const attendanceKnown = Boolean(attendance.id) || planningState.meetingAttendance(meeting.id, profile.id).readStatus === "current";
+            const summary = attendanceKnown ? attendance.writtenUpdate.trim() || attendance.absenceReason.trim() || "Keine Rückmeldung" : "Rückmeldung noch nicht geladen.";
+
 
                 return (
                   <Fragment key={rowKey}>
@@ -241,78 +200,27 @@ export function SprintMeetingAttendanceSection({
                       </DataCell>
                       <DataCell>
                         <div className="flex flex-wrap gap-1.5">
-                          <UiBadge tone={attendanceStatusTone(attendance.status)}>{attendanceStatusLabels[attendance.status]}</UiBadge>
+                          <UiBadge tone={attendanceStatusTone(attendance.status)}>{attendanceKnown ? attendanceStatusLabels[attendance.status] : "Nicht geladen"}</UiBadge>
                           {attendance.reasonAccepted && <UiBadge tone="emerald">akzeptiert</UiBadge>}
                         </div>
                       </DataCell>
                       <DataCell className="max-w-[360px]">
                         <div className="line-clamp-2 text-sm text-slate-700">{summary}</div>
                       </DataCell>
-                      <DataCell className={attendance.points ? "font-semibold text-slate-900" : "text-slate-400"}>{attendance.points}/2</DataCell>
+                      <DataCell className={attendance.points ? "font-semibold text-slate-900" : "text-slate-400"}>{attendanceKnown ? `${attendance.points}/2` : "Punkte offen"}</DataCell>
                       <DataCell>
                         <UiButton
                           type="button"
                           size="sm"
                           variant={expanded ? "secondary" : "blue"}
                           disabled={pending || (!canEditAttendanceRow && !canScoreAttendance)}
-                          onClick={() => setActiveRowKey(expanded ? "" : rowKey)}
+                          onClick={() => openEditor(rowKey, meeting, attendance)}
                         >
                           {expanded ? "Schließen" : "Bearbeiten"}
                         </UiButton>
                       </DataCell>
                     </DataRow>
-                    {expanded && (
-                      <tr className="bg-slate-50/60">
-                        <td colSpan={5} className="border-b border-slate-100 px-4 py-4">
-                          <div className="grid gap-3 lg:grid-cols-[180px_minmax(220px,1fr)_140px]">
-                            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                              Status
-                              <CustomSelect
-                                value={attendance.status}
-                                disabled={pending || !canEditAttendanceRow}
-                                onChange={(value) => patchAttendance({ status: value as MeetingAttendance["status"], reasonAccepted: false, points: canManageSprint ? attendance.points : 0 })}
-                                className="h-8 w-full text-xs"
-                                options={statusOptions}
-                              />
-                            </label>
-                            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                              Triftiger Grund
-                              <input
-                                value={attendance.absenceReason}
-                                disabled={pending || !canEditAttendanceRow}
-                                onChange={(event) => patchAttendance({ absenceReason: event.target.value })}
-                                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:bg-slate-50"
-                                placeholder="z. B. Krankheit, Familie, nicht verschiebbar"
-                              />
-                            </label>
-                            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                              Punkte
-                              <CustomSelect value={Math.min(attendance.points, 2)} disabled={pending || !canScoreAttendance} onChange={(value) => patchAttendance({ points: Number(value) })} className="h-8 w-full text-xs" options={[0, 1, 2].map((point) => ({ value: String(point), label: String(point) }))} />
-                            </label>
-                            <label className="grid gap-1 text-xs font-semibold text-slate-500 lg:col-span-2">
-                              Update
-                              <textarea
-                                value={attendance.writtenUpdate}
-                                disabled={pending || !canEditAttendanceRow}
-                                onChange={(event) => patchAttendance({ writtenUpdate: event.target.value })}
-                                className="min-h-20 resize-y rounded-md border border-slate-200 bg-white px-2 py-1 text-xs leading-5 text-slate-700 disabled:bg-slate-50"
-                                placeholder="Kurzupdate, Blocker, nächster Schritt"
-                              />
-                            </label>
-                            <label className="flex items-center gap-2 self-end text-xs font-semibold text-slate-600">
-                              <input
-                                type="checkbox"
-                                checked={attendance.reasonAccepted}
-                                disabled={pending || !canScoreAttendance}
-                                onChange={(event) => patchAttendance({ reasonAccepted: event.target.checked })}
-                                aria-label="Grund akzeptiert"
-                              />
-                              Grund akzeptiert
-                            </label>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
+                    <tr><td colSpan={5} className="px-4">{expanded ? form(rowKey, canEditAttendanceRow, canScoreAttendance) : notices(meeting, profile.id)}</td></tr>
                   </Fragment>
                 );
               })}

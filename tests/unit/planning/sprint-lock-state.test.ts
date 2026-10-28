@@ -45,7 +45,7 @@ test("loaded Planning membership is reread for actual carry-over identities afte
     expect(owner.planning.workspace("planning").readStatus).toBe("current");
     expect(reads).toEqual(["sprint", "planning", "sprint"]);
 });
-test("old reads and legacy rollback preserve confirmed lock scores while unrelated attendance changes remain available", async () => {
+test("old reads and legacy rollback preserve confirmed lock scores and independent attendance", async () => {
     const old = deferred<{
         data: typeof initial;
     }>();
@@ -54,12 +54,13 @@ test("old reads and legacy rollback preserve confirmed lock scores while unrelat
     const strike = { id: 1, profileId: "founder", strikeLevel: 1, fulfilledResetStreak: 0, lastEvaluatedSprintId: sprint.id, updatedAt: "confirmed" };
     const event = { id: 1, profileId: "founder", sprintId: sprint.id, eventType: "strike_added" as const, previousStrikeLevel: 0, nextStrikeLevel: 1, reason: "Actual event", createdAt: "confirmed", createdBy: "ceo" };
     const attendance = { id: 1, meetingId: 1, profileId: "other", status: "present" as const, absenceReason: "", reasonAccepted: false, writtenUpdate: "Independent attendance", points: 1, createdAt: "before", updatedAt: "after" };
-    const owner = createPlanningState({ userId: "user", initialWorkspace: "sprint", initialData: initial, adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => ++reads === 1 ? old.promise : { data: { ...initial, sprints: [{ ...sprint, status: "closed", scoreLocked: true, updatedAt: "locked" }], founderSprintScores: [score], founderStrikeStates: [strike], strikeEvents: [event] } }, lockSprint: async () => receipt, createSprintPlan: async () => ({ sprints: [] }) } });
+    const owner = createPlanningState({ userId: "user", initialWorkspace: "sprint", initialData: initial, adapter: { saveMeetingAttendance: async () => ({ attendance, effects: "confirmed" }), saveTask: async () => ({ task: {} }), readWorkspace: async () => ++reads === 1 ? old.promise : { data: { ...initial, sprints: [{ ...sprint, status: "closed", scoreLocked: true, updatedAt: "locked" }], founderSprintScores: [score], founderStrikeStates: [strike], strikeEvents: [event] } }, lockSprint: async () => receipt, createSprintPlan: async () => ({ sprints: [] }) } });
     const delayed = owner.planning.refreshWorkspace("sprint");
     await owner.planning.beginSprintLock(sprint, [task]).lock(options);
     old.resolve({ data: initial });
     await delayed;
-    owner.internal.applyLegacyProjection({ ...initial, meetingAttendance: [attendance] });
+    await owner.planning.beginMeetingAttendance({ id: 1, sprintId: "other", title: "Independent Weekly", meetingAt: "2026-10-28T09:00:00Z", status: "planned", agenda: "" }, attendance.profileId, { ...attendance, writtenUpdate: "", updatedAt: "before" }).save({ writtenUpdate: attendance.writtenUpdate });
+    owner.internal.applyLegacyProjection(initial);
     const model = owner.planning.sprintWorkspace().model;
     expect(model.scores).toEqual([score]);
     expect(model.strikeStates).toEqual([strike]);

@@ -509,7 +509,7 @@ test("Weekly self reports bind owner and meeting while lead reviews preserve sco
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.attendance.write", targetId: "7" });
   expect(grant.ok).toBe(true);
-  const values = { profileId: "synthetic-profile", status: "excused", absenceReason: "Customer appointment", reasonAccepted: false, writtenUpdate: "Evidence", points: 0 };
+  const values = { expectedUpdatedAt: null, profileId: "synthetic-profile", status: "excused", absenceReason: "Customer appointment", reasonAccepted: false, writtenUpdate: "Evidence", points: 0 };
   expect(await grant.planning.writeAttendance({ ...values, profileId: "foreign" })).toMatchObject({ error: { code: "42501" } });
   expect(await grant.planning.writeAttendance({ ...values, points: 2 })).toMatchObject({ error: { code: "42501" } });
   expect(await grant.planning.writeAttendance(values)).toMatchObject({ error: null, data: { meeting_id: 7, profile_id: "synthetic-profile", points: 0 } });
@@ -517,7 +517,7 @@ test("Weekly self reports bind owner and meeting while lead reviews preserve sco
   const { POST } = await importTestModule("src/app/api/meetings/[id]/attendance/route.ts", { "server-only": {} });
   expect((await POST(protocol.request("/api/meetings/7/attendance", "POST", { status: "present" }), { params: Promise.resolve({ id: "7" }) })).status).toBe(403);
   protocol.state.role = "deputy";
-  const response = await POST(protocol.request("/api/meetings/7/attendance", "POST", { profileId: "foreign", status: "present" }), { params: Promise.resolve({ id: "7" }) });
+  const response = await POST(protocol.request("/api/meetings/7/attendance", "POST", { expectedUpdatedAt: null, profileId: "foreign", status: "present" }), { params: Promise.resolve({ id: "7" }) });
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ attendance: { meetingId: 7, profileId: "foreign", points: 2 } });
   expect(writes).toHaveLength(2);
