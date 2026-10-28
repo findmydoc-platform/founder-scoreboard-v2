@@ -7,7 +7,6 @@ import { TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workwe
 import { formatDate } from "@/lib/display";
 import { GoogleWorkspaceConnectionCard } from "../molecules/google-workspace-connection-card";
 import { TeamWorkweekDiscardDialog } from "../molecules/team-workweek-discard-dialog";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Profile } from "@/lib/types";
 import { WorkweekPicker } from "../molecules/workweek-picker";
 import { workweekLabel } from "../model/team-workweek-week";
@@ -18,13 +17,13 @@ import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 type WorkweekState = ReturnType<typeof usePrivateTeamWorkweekState>;
 
 export function PrivateTeamWorkweekEditor({
-  apiClient,
+  planningState,
   profile,
   state,
   onClose,
   restoreFocusRef,
 }: {
-  apiClient: BrowserApiClient;
+  planningState: import("@/features/planning/model/planning-state").PlanningState;
   profile: Profile;
   state: WorkweekState;
   onClose: () => void;
@@ -105,7 +104,7 @@ export function PrivateTeamWorkweekEditor({
                 </UiButton>
               </UiNotice>}
 
-              <GoogleWorkspaceConnectionCard compact apiClient={apiClient} profile={profile} />
+              <GoogleWorkspaceConnectionCard compact planningState={planningState} profile={profile} />
 
               <section className="overflow-hidden rounded-lg border border-slate-200 bg-white" aria-labelledby="workweek-windows-title">
                 <div className="px-3 py-2.5">

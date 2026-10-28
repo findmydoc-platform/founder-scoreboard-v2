@@ -20,7 +20,7 @@ function conflictWindows(windows: Array<Readonly<{ weekday: number; startMinute:
   }).join(" · ");
 }
 
-export function PrivateTeamWorkweekCard({ apiClient, planningState, profile, editorRequested = false, editorWeek, onEditorRequestHandled }: { apiClient: BrowserApiClient; planningState: import("@/features/planning/model/planning-state").PlanningState; profile: Profile; editorRequested?: boolean; editorWeek?: string; onEditorRequestHandled?: () => void }) {
+export function PrivateTeamWorkweekCard({ planningState, profile, editorRequested = false, editorWeek, onEditorRequestHandled }: { apiClient: BrowserApiClient; planningState: import("@/features/planning/model/planning-state").PlanningState; profile: Profile; editorRequested?: boolean; editorWeek?: string; onEditorRequestHandled?: () => void }) {
   const editorTriggerRef = useRef<HTMLButtonElement>(null);
   const [localOpen, setOpen] = useState(false);
   const open = localOpen || editorRequested;
@@ -91,7 +91,7 @@ export function PrivateTeamWorkweekCard({ apiClient, planningState, profile, edi
           </section>
         )}
       </UiPanel>
-      {open && <PrivateTeamWorkweekEditor apiClient={apiClient} profile={profile} state={state} onClose={closeEditor} restoreFocusRef={editorTriggerRef} />}
+      {open && <PrivateTeamWorkweekEditor planningState={planningState} profile={profile} state={state} onClose={closeEditor} restoreFocusRef={editorTriggerRef} />}
     </>
   );
 }

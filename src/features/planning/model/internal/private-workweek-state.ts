@@ -12,7 +12,7 @@ function fullPublication(publication: WorkweekConflictPublication): PrivateWorkw
     ? publication as PrivateWorkweekPublication : null;
 }
 
-export function createPrivateWorkweekState({ adapter, active, generation, changed, published }: { adapter: PrivateWorkweekAdapter; active(): boolean; generation(): number; changed(): void; published(): void }) {
+export function createPrivateWorkweekState({ adapter, active, generation, changed, published, publicationBlocked = () => false }: { adapter: PrivateWorkweekAdapter; active(): boolean; generation(): number; changed(): void; published(): void; publicationBlocked?(): boolean }) {
   let state = freeze(empty());
   let publicView = state;
   const resolvedConflicts = new Map<string, number>();
@@ -160,6 +160,7 @@ export function createPrivateWorkweekState({ adapter, active, generation, change
   }
   async function publish(versionId: string): Promise<PrivateWorkweekReply<PrivateWorkweekPublicationConfirmation>> {
     if (!active()) return ended();
+    if (publicationBlocked()) return blockedReply();
     if (denied || blocked()) return blockedReply();
     if (!state.currentContextReady && state.publication.phase === "preparing" && state.publication.submitted?.versionId !== versionId) return blockedReply();
     const token = generation(); const audience = authority; const started = ++sequence;
@@ -191,6 +192,7 @@ export function createPrivateWorkweekState({ adapter, active, generation, change
   }
   async function reconcile(): Promise<PrivateWorkweekReply<WorkweekReconciliationConfirmation>> {
     if (!active()) return ended();
+    if (publicationBlocked()) return blockedReply();
     if (denied || blocked()) return blockedReply();
     const token = generation(); const audience = authority; ++sequence;
     const publication = state.context?.latestPublished;
@@ -212,6 +214,7 @@ export function createPrivateWorkweekState({ adapter, active, generation, change
   }
   async function resume(pending: Pick<import("@/features/team-workweek/model/team-workweek-draft").PendingTeamWorkweekPublication, "id" | "sourceVersionId">): Promise<PrivateWorkweekReply<PrivateWorkweekPublicationConfirmation>> {
     if (!active()) return ended();
+    if (publicationBlocked()) return blockedReply();
     const current = state.context?.pendingPublication;
     if (!recoveryContextCurrent() || !current?.resumeAllowed || current.id !== pending.id || current.sourceVersionId !== pending.sourceVersionId) return blockedReply();
     const token = generation(); const audience = authority; ++sequence;
@@ -238,6 +241,7 @@ export function createPrivateWorkweekState({ adapter, active, generation, change
   }
   async function restart(versionId: string): Promise<PrivateWorkweekReply<WorkweekRestartConfirmation>> {
     if (!active()) return ended();
+    if (publicationBlocked()) return blockedReply();
     const context = state.context;
     const pending = context?.pendingPublication;
     if (recoveryPermission().restartVersionId !== versionId) return blockedReply();
@@ -262,6 +266,7 @@ export function createPrivateWorkweekState({ adapter, active, generation, change
   }
   async function resolveConflict(basis: import("@/features/team-workweek/model/team-workweek-draft").TeamWorkweekConflict, decision: "founderops" | "google"): Promise<PrivateWorkweekReply<WorkweekConflictConfirmation>> {
     if (!active()) return ended();
+    if (publicationBlocked()) return blockedReply();
     const submitted = { conflictId: basis.id, conflictRevision: basis.conflictRevision, decision };
     const current = state.conflict;
     if (denied || state.readStatus !== "current" || state.conflictReadStatus !== "current"
@@ -307,5 +312,9 @@ export function createPrivateWorkweekState({ adapter, active, generation, change
     }
     return result;
   }
-  return { publicState: { resumeWorkweekPublication: resume, restartWorkweek: restart, resolveWorkweekConflict: resolveConflict, loadWorkweekConflict: loadConflict, reconcileWorkweek: reconcile, privateWorkweek: () => { active(); return denied ? forbiddenView : publicView; }, loadPrivateWorkweek: load, savePrivateWorkweek: save, publishPrivateWorkweek: publish }, clear() { ++sequence; conflictAuthority++; conflictRequest = null; resolvedConflicts.clear(); contextAcceptedAt = 0; authority++; denied = false; state = freeze(empty()); publicView = state; } };
+  return {
+    publicationBusy: busy,
+    disconnectBinding: () => JSON.stringify([state.context?.version?.id, state.context?.pendingPublication?.id, state.context?.latestPublished?.id, state.context?.latestPublished?.publicationRevision, state.conflict?.id, state.conflict?.conflictRevision, state.save.phase, state.publication.phase, state.reconciliation.phase, state.conflictDecision.phase, state.restart.phase, state.resume.phase]),
+    connectionChanged() { ++sequence; update({ currentContextReady: false, contextRefreshRequired: true, readStatus: "stale" }); },
+    publicState: { resumeWorkweekPublication: resume, restartWorkweek: restart, resolveWorkweekConflict: resolveConflict, loadWorkweekConflict: loadConflict, reconcileWorkweek: reconcile, privateWorkweek: () => { active(); return denied ? forbiddenView : publicView; }, loadPrivateWorkweek: load, savePrivateWorkweek: save, publishPrivateWorkweek: publish }, clear() { ++sequence; conflictAuthority++; conflictRequest = null; resolvedConflicts.clear(); contextAcceptedAt = 0; authority++; denied = false; state = freeze(empty()); publicView = state; } };
 }

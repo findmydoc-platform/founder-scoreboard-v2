@@ -1,28 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import {
-  googleWorkspaceConnectPath,
-  type GoogleWorkspaceConnectionStatus,
-  type GoogleWorkspaceDisconnectView,
-} from "../model/google-workspace-connection";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
-
-const EMPTY_CONNECTION: GoogleWorkspaceConnectionStatus = {
-  state: "not_connected",
-  connectedAt: null,
-  refreshedAt: null,
-  lastUsedAt: null,
-  accessTokenExpiresAt: null,
-};
-
-const EMPTY_DISCONNECT: GoogleWorkspaceDisconnectView = {
-  state: "idle",
-  activePublicationCount: 0,
-  futureSeriesCount: 0,
-  pendingSeriesCount: 0,
-  teamVisibilityWillBeDisabled: false,
-};
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import { googleWorkspaceConnectPath, type GoogleWorkspaceConnectionStatus, type GoogleWorkspaceDisconnectView } from "../model/google-workspace-connection";
+import type { GoogleDisconnectBasis } from "../model/google-workspace-state";
+const EMPTY_CONNECTION: GoogleWorkspaceConnectionStatus = { state: "not_connected", connectedAt: null, refreshedAt: null, lastUsedAt: null, accessTokenExpiresAt: null };
+const EMPTY_DISCONNECT: GoogleWorkspaceDisconnectView = { state: "idle", activePublicationCount: 0, futureSeriesCount: 0, pendingSeriesCount: 0, teamVisibilityWillBeDisabled: false };
 
 function callbackErrorFromLocation() {
   const result = new URLSearchParams(window.location.search).get("googleWorkspace");
@@ -39,118 +22,42 @@ function subscribeToStaticLocation() {
   return () => undefined;
 }
 
-export function useGoogleWorkspaceConnection(apiClient: BrowserApiClient) {
-  const mounted = useRef(true);
-  const [connection, setConnection] = useState(EMPTY_CONNECTION);
-  const [disconnectView, setDisconnectView] = useState(EMPTY_DISCONNECT);
-  const previewSequence = useRef(0);
-  const [previewPending, setPreviewPending] = useState(false);
-  const [previewReady, setPreviewReady] = useState(false);
-  const [previewError, setPreviewError] = useState("");
-  const [pending, setPending] = useState(true);
-  const [message, setMessage] = useState("");
+export function useGoogleWorkspaceConnection(planningState: PlanningState) {
+  const view = useSyncExternalStore(planningState.subscribe, planningState.googleWorkspace, planningState.googleWorkspace);
   const callbackError = useSyncExternalStore(subscribeToStaticLocation, callbackErrorFromLocation, () => "");
-
+  const load = useCallback(() => planningState.loadGoogleWorkspace(), [planningState]);
+  const disconnecting = view.operation.phase === "disconnecting";
+  const awaitingOperation = useRef(false);
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  const loadDisconnectPreview = useCallback(async () => {
-    const sequence = ++previewSequence.current;
-    setPreviewPending(true);
-    setPreviewReady(false);
-    setPreviewError("");
-    try {
-      const { response, body } = await apiClient.requestJson<{ disconnect?: GoogleWorkspaceDisconnectView; error?: string }>(
-        "/api/google-workspace/disconnect", { cache: "no-store", useDevProfileOverride: false },
-      );
-      if (!response.ok || !body?.disconnect) throw new Error(body?.error || "Trennungsvorschau konnte nicht geladen werden.");
-      if (mounted.current && sequence === previewSequence.current) {
-        setDisconnectView(body.disconnect);
-        setPreviewReady(true);
-      }
-    } catch (error) {
-      if (mounted.current && sequence === previewSequence.current) setPreviewError(error instanceof Error ? error.message : "Trennungsvorschau konnte nicht geladen werden.");
-    } finally {
-      if (mounted.current && sequence === previewSequence.current) setPreviewPending(false);
-    }
-  }, [apiClient]);
-
-  const load = useCallback(async () => {
-    setPending(true);
-    setMessage("");
-    try {
-      const { response, body } = await apiClient.requestJson<{
-        connection?: GoogleWorkspaceConnectionStatus;
-        disconnectPending?: boolean;
-        error?: string;
-      }>("/api/google-workspace/status", { cache: "no-store", useDevProfileOverride: false });
-      if (!response.ok || !body?.connection) {
-        throw new Error(body?.error || "Google-Verbindungsstatus konnte nicht geladen werden.");
-      }
-      if (mounted.current) {
-        setConnection(body.connection);
-        // Only an unfinished cleanup needs its details before the user opens the dialog.
-        if (body.disconnectPending) {
-          setDisconnectView({ ...EMPTY_DISCONNECT, state: "cleanup_pending" });
-          void loadDisconnectPreview();
-        }
-        else setDisconnectView(EMPTY_DISCONNECT);
-      }
-    } catch (error) {
-      if (mounted.current) {
-        setMessage(error instanceof Error ? error.message : "Google-Verbindungsstatus konnte nicht geladen werden.");
-      }
-    } finally {
-      if (mounted.current) setPending(false);
-    }
-  }, [apiClient, loadDisconnectPreview]);
-
-  useEffect(() => {
+    if (planningState.googleWorkspace().operation.phase === "disconnecting") { awaitingOperation.current = true; return; }
     const timeout = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timeout);
-  }, [load]);
-
-  const startConnect = useCallback(() => {
-    window.location.assign(googleWorkspaceConnectPath(window.location));
-  }, []);
-
-  const disconnectConnection = async () => {
-    setPending(true);
-    setMessage("");
-    try {
-      const { response, body } = await apiClient.requestJson<{
-        result?: { state: "completed" | "cleaning" | "cleanup_pending" | "remove_pending"; recovery: "retry" | "reconnect" | null };
-        error?: string;
-      }>("/api/google-workspace/disconnect", {
-        method: "POST",
-        json: { confirm: true },
-        useDevProfileOverride: false,
-      });
-      if ((!response.ok && response.status !== 202) || !body?.result) {
-        throw new Error(body?.error || "Google-Verbindung konnte nicht getrennt werden.");
-      }
-      await load();
-      if (mounted.current) {
-        setMessage(body.result.state === "completed"
-          ? "Google-Verbindung getrennt. Die Grundwoche bleibt privat und inaktiv erhalten."
-          : body.result.recovery === "reconnect"
-            ? "Die Google-Verbindung muss erneuert werden, bevor die Trennung fortgesetzt werden kann."
-            : "Die Trennung ist noch nicht vollständig bestätigt. Bereits bestätigte Schritte werden beim nächsten Versuch nicht wiederholt.");
-      }
-      return body.result.state === "completed";
-    } catch (error) {
-      if (mounted.current) {
-        setMessage(error instanceof Error ? error.message : "Google-Verbindung konnte nicht getrennt werden.");
-      }
-      return false;
-    } finally {
-      if (mounted.current) setPending(false);
+  }, [load, planningState]);
+  useEffect(() => {
+    if (!disconnecting && awaitingOperation.current) {
+      awaitingOperation.current = false;
+      if (view.readStatus !== "current") void load();
     }
+  }, [disconnecting, view.readStatus, load]);
+  const startConnect = useCallback(() => { window.location.assign(googleWorkspaceConnectPath(window.location)); }, []);
+  const disconnectConnection = async (basis?: GoogleDisconnectBasis) => {
+    const result = basis ? await planningState.disconnectGoogleWorkspace(basis) : await planningState.continueGoogleDisconnect();
+    if (result.value?.result) await load();
+    return result.value?.result?.state === "completed";
   };
-
-  return { callbackError, connection, disconnectConnection, disconnectView, load, loadDisconnectPreview, message, pending, previewPending, previewReady, previewError, startConnect };
+  const operation = view.operation;
+  const outcome = operation.phase === "completed" ? "Google-Verbindung getrennt. Die Grundwoche bleibt privat und inaktiv erhalten."
+    : operation.phase === "unconfirmed" ? "Die Trennungsbestätigung ist ausstehend. Erneut prüfen lädt nur den aktuellen Stand und wiederholt keine Trennung."
+    : operation.phase === "partial" ? operation.result?.recovery === "reconnect" ? "Die Google-Verbindung muss erneuert werden, bevor die Trennung fortgesetzt werden kann."
+      : "Die Trennung ist noch nicht vollständig bestätigt. Bereits bestätigte Schritte werden beim nächsten Versuch nicht wiederholt."
+    : operation.error;
+  return { callbackError, connection: view.connection || EMPTY_CONNECTION, disconnectView: view.preview || { ...EMPTY_DISCONNECT, ...(view.disconnectPending ? { state: "cleanup_pending" as const } : {}) },
+    disconnectConnection, load, loadDisconnectPreview: planningState.loadGoogleDisconnectPreview, startConnect,
+    pending: ["not-loaded", "loading"].includes(view.readStatus) || operation.phase === "disconnecting",
+    unavailable: !view.connection && ["unavailable", "forbidden"].includes(view.readStatus),
+    canContinue: view.canContinue, canDisconnect: operation.phase !== "partial" && (operation.phase !== "unconfirmed" || operation.checked && !view.disconnectPending),
+    previewWithheld: ["not-loaded", "forbidden"].includes(view.readStatus) || ["not-loaded", "forbidden"].includes(view.previewStatus),
+    previewPending: view.previewStatus === "loading", previewReady: view.previewStatus === "current", previewError: view.previewError,
+    message: [outcome, view.error].filter(Boolean).join(" "),
+  };
 }
