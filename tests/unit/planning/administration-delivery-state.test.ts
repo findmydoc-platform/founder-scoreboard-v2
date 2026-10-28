@@ -34,6 +34,8 @@ test("a lost response keeps the exact delivery selection unconfirmed after match
     const selection = { kind: "events" as const, eventIds: [7] };
     const result = await owner.planning.runAdministrationDelivery(selection);
     expect(result.phase).toBe("unconfirmed");
+    expect(result.readStatus).toBe("stale");
+    expect(owner.planning.administration().readStatus).toBe("stale");
     expect(owner.planning.administrationDeliveryAvailability(selection)).toBe("pending");
     await owner.planning.checkAdministrationDelivery(result.id);
     await owner.planning.runAdministrationDelivery(selection);

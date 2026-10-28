@@ -31,7 +31,7 @@ export function createAdministrationDeliveryState(options: {
             return structuredClone(previous.view);
         const id = `delivery:${++sequence}`, epoch = options.epoch(), generation = options.generation();
         const active = () => options.active() && epoch === options.epoch() && generation === options.generation();
-        const entry = { active, view: { id, selection: structuredClone(selection), phase: "saving", sent: null, failed: null, skipped: null, results: [], error: "", readStatus: options.readStatus(), checking: false } as AdministrationDeliveryView };
+        const entry = { active, view: { id, selection: structuredClone(selection), phase: "saving", sent: null, failed: null, skipped: null, results: [], error: "", readStatus: "stale", checking: false } as AdministrationDeliveryView };
         operations.set(id, entry);
         options.changed();
         if (!active())

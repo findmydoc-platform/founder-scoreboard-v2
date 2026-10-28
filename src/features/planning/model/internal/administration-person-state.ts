@@ -97,7 +97,7 @@ export function createAdministrationPersonState(options: {
             model = null;
             readStatus = "forbidden";
             options.changed();
-        }, invalidate: () => { sequence++; options.invalidateDeliveryEffects(); }, refreshAffected: options.refreshDeliveryEffects, active: () => { enforceExpiry(); return options.active() && technical(); }, epoch: () => epoch, generation: options.generation, changed: options.changed, read: load, readStatus: () => readStatus, adapter: options.adapter });
+        }, invalidate: () => { sequence++; readStatus = "stale"; options.invalidateDeliveryEffects(); }, refreshAffected: options.refreshDeliveryEffects, active: () => { enforceExpiry(); return options.active() && technical(); }, epoch: () => epoch, generation: options.generation, changed: options.changed, read: load, readStatus: () => readStatus, adapter: options.adapter });
     function bindAuthority(next: AuthorityProjection) {
         enforceExpiry();
         const signature = JSON.stringify(next);
