@@ -1,5 +1,8 @@
 ﻿"use client";
 
+import { TaskGitHubSyncNotice } from "@/features/tasks/molecules/task-github-sync-notice";
+import { hasGitHubIssue } from "@/lib/platform";
+
 import { TaskReviewOperationNotice } from "@/features/reviews/molecules/task-review-operation-notice";
 
 import type { User } from "@supabase/supabase-js";
@@ -118,6 +121,7 @@ export function TaskDetailPage({
       />
 
       <div className="mx-auto max-w-[1392px] px-6 py-6 sm:px-8">
+        {controller.planningState.taskGitHubSync(task.id)?<TaskGitHubSyncNotice view={controller.planningState.taskGitHubSync(task.id)!} onCheck={()=>{void controller.planningState.checkTaskGitHubSync(task.id);}} onRetry={()=>controller.syncTaskToGitHub(task,{createIfMissing:!hasGitHubIssue(task)})}/>:null}
         {controller.planningState.taskReviewOperations(task.id).map(operation=><TaskReviewOperationNotice key={operation.id} operation={operation} onCheck={id=>{void controller.planningState.checkTaskReview(id);}} />)}
         <TaskDetailSurface
           surface="page"
@@ -205,6 +209,8 @@ export function TaskDetailPage({
         onClose={() => controller.setGithubSyncQueueOpen(false)}
         onOpenTask={controller.openTaskPanel}
         onReconnect={() => controller.signIn({ githubReconnect: true, clearReconnectGuard: true })}
+        syncOperations={controller.planningState.taskGitHubSyncs()}
+        onCheckSync={id=>{void controller.planningState.checkTaskGitHubSync(id);}}
         onSyncLinkedGitHubTasks={controller.syncLinkedGitHubTasks}
         onSyncTaskToGitHub={controller.syncTaskToGitHub}
       />

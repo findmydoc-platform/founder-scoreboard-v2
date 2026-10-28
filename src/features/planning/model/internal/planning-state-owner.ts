@@ -1,4 +1,7 @@
+import { createMeetingAttendanceState } from "./meeting-attendance-state";
 import { createTaskRelationshipChanges } from "./task-relationship-changes";
+import { createTaskGitHubSyncState } from "./task-github-sync-state";
+import { createGitHubConnectionState } from "./github-connection-state";
 import { createTaskAttachmentUploads } from "./task-attachment-uploads";
 import { createTaskReviewOperations } from "./task-review-operations";
 import { createTaskGitHubImports } from "./task-github-comment-imports";
@@ -41,7 +44,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 export type PlanningWorkspaceRead = { backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
-export type PlanningStateAdapter = import("@/features/reviews/model/planning-task-review").TaskReviewAdapter & import("@/features/tasks/model/task-relationship-change").TaskRelationshipAdapter & import("@/features/team-workweek/model/google-workspace-state").GoogleWorkspaceAdapter & import("@/features/tasks/model/task-attachment-upload").TaskAttachmentAdapter & import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportAdapter & import("@/features/tasks/model/task-comment-creation").TaskCommentCreationAdapter & import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sync-state").TaskGitHubSyncAdapter & import("@/features/sprint/model/meeting-attendance-state").MeetingAttendanceAdapter & import("@/features/reviews/model/planning-task-review").TaskReviewAdapter & import("@/features/tasks/model/task-relationship-change").TaskRelationshipAdapter & import("@/features/team-workweek/model/google-workspace-state").GoogleWorkspaceAdapter & import("@/features/tasks/model/task-attachment-upload").TaskAttachmentAdapter & import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportAdapter & import("@/features/tasks/model/task-comment-creation").TaskCommentCreationAdapter & import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   createScoreObjection?: (sprintId: string, comment: string) => Promise<import("@/features/sprint/model/score-objection-state").ScoreObjectionConfirmation>;
   processScoreObjection?: (objection: import("@/lib/types").ScoreObjection, score: import("@/lib/types").FounderSprintScore | null, input: import("@/lib/types").ScoreObjectionResolutionInput) => Promise<import("@/features/sprint/model/score-objection-state").ScoreObjectionConfirmation>;
   saveSprintCommitment?: (basis: import("@/lib/types").SprintCommitment, patch: import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentPatch) => Promise<import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentConfirmation>;
@@ -109,6 +112,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function readErrorStatus(error: unknown): "forbidden" | "unavailable" {
     return typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" : "unavailable";
   }
+  const githubConnection = createGitHubConnectionState({active:isActive,generation:()=>sessionGeneration,changed:publish,endSession,read:adapter.readGitHubConnection});
+  const githubSync = createTaskGitHubSyncState({adapter,current:()=>confirmed,active:isActive,generation:()=>sessionGeneration,changed:publish,nextSequence:()=>++sequence,now:()=>adapter.now?.()??Date.now(),canRead:id=>!deniedTaskReads.has(id)&&confirmed.tasks.some(task=>task.id===id&&!lifecycle.isRemoved(task)),dependencyPending:task=>relationshipChanges.blocksTask(task.id)||taskReviews.blocksTask(task.id)||attachmentUploads.blocksTask(task.id)||blockerReports.blocksTask(task.id)||githubImports.blocksTask(task.id)||lifecycle.isRemoving(task)||backlogAssignments.blocksTask(task.id)||backlogOrdering.blocksTask(task.id)||sprintLock.blocksTask(task)||taskSchedulePending(task.id)||[...pending.values()].some(operation=>operation.taskId===task.id),accept(task,patch,started){
+    const current=confirmed.tasks.find(row=>row.id===task.id);
+    if(!current)return false;
+    if(Math.max(taskConfirmedAt.get(task.id)||0,taskReadAt.get(task.id)||0)>started&&current.updatedAt!==task.updatedAt&&current.updatedAt!==patch.updatedAt)return false;
+    confirmed={...confirmed,tasks:confirmed.tasks.map(row=>row.id===task.id?{...row,...patch}:row)};taskConfirmedAt.set(task.id,++sequence);return true;
+  },invalidateTask(id){taskConfirmedAt.set(id,++sequence);freshness="stale";detailStatuses.set(id,"stale");for(const [workspace,members] of memberships)if(members.has(id))workspaceStatuses.set(workspace,"stale");},refresh:reloadBlockerTask,timelineLoaded:id=>detailReads.has(id)||detailStatuses.get(id)==="current"||confirmed.taskComments.some(comment=>comment.taskId===id),invalidateConnection:githubConnection.invalidate,endSession});
   const workweekCalendars = createPublishedWorkweekCalendars({ active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), read: adapter.readWorkweekCalendar });
   const privateWorkweek = createPrivateWorkweekState({ adapter, active: isActive, generation: () => sessionGeneration, changed: () => { if (!googleWorkspace.privateContextChanged()) publish(); }, published: workweekCalendars.invalidatePublishedWorkweeks, publicationBlocked: () => googleWorkspace.blocksPublication() });
   const googleWorkspace = createGoogleWorkspaceState({ adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidate: workweekCalendars.invalidatePublishedWorkweeks, privateBusy: privateWorkweek.publicationBusy, privateContext: privateWorkweek.disconnectBinding, privateChanged: privateWorkweek.connectionChanged });
@@ -121,7 +131,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const tools = createToolsState({ initial: active ? initialData.fmdTools : [], loaded: initialWorkspace === "tools", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, endSession, invalidateQuickLinks: () => notifications.invalidateHeader(["quickLinks"]), refreshWorkspace: () => planning.refreshWorkspace("tools"), beginHeaderRead: () => notifications.beginWorkspaceRead("tools"), acceptHeaderRead: (data, started) => notifications.acceptWorkspaceRead("tools", confirmed, { ...emptyPlanningHeaderData, quickLinks: notifications.publicState.header().slots.quickLinks.readStatus === "not-loaded" ? emptyPlanningHeaderData.quickLinks : data.quickLinks }, started) });
   const blockerReports = createTaskBlockerReports({ initial: active ? initialData.taskBlockers : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
     canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)),
-    dependencyPending: task => taskReviews.blocksTask(task.id) || relationshipChanges.blocksTask(task.id) || attachmentUploads.blocksTask(task.id) || githubImports.blocksTask(task.id) || lifecycle.isRemoving(task) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id) || sprintLock.blocksTask(task) || taskSchedulePending(task.id),
+    dependencyPending: task => githubSync.blocksTask(task.id) || taskReviews.blocksTask(task.id) || relationshipChanges.blocksTask(task.id) || attachmentUploads.blocksTask(task.id) || githubImports.blocksTask(task.id) || lifecycle.isRemoving(task) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id) || sprintLock.blocksTask(task) || taskSchedulePending(task.id),
     invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadBlockerTask,
   });
@@ -131,24 +141,24 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   });
   const githubImports = createTaskGitHubImports({ initial: active ? initialData.taskExternalComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
     canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)),
-    dependencyPending: task => taskReviews.blocksTask(task.id) || relationshipChanges.blocksTask(task.id) || attachmentUploads.blocksTask(task.id) || lifecycle.isRemoving(task) || blockerReports.blocksTask(task.id) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id) || sprintLock.blocksTask(task) || taskSchedulePending(task.id) || [...pending.values()].some(item => item.taskId === task.id),
+    dependencyPending: task => githubSync.blocksTask(task.id) || taskReviews.blocksTask(task.id) || relationshipChanges.blocksTask(task.id) || attachmentUploads.blocksTask(task.id) || lifecycle.isRemoving(task) || blockerReports.blocksTask(task.id) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id) || sprintLock.blocksTask(task) || taskSchedulePending(task.id) || [...pending.values()].some(item => item.taskId === task.id),
     invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadGitHubImport,
   });
   const attachmentUploads = createTaskAttachmentUploads({ initial: active ? initialData.taskActivity : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
     canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)),
-    dependencyPending: task => taskReviews.blocksTask(task.id) || relationshipChanges.blocksTask(task.id) || blockerReports.blocksTask(task.id) || githubImports.blocksTask(task.id) || lifecycle.isRemoving(task) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id) || sprintLock.blocksTask(task) || taskSchedulePending(task.id),
+    dependencyPending: task => githubSync.blocksTask(task.id) || taskReviews.blocksTask(task.id) || relationshipChanges.blocksTask(task.id) || blockerReports.blocksTask(task.id) || githubImports.blocksTask(task.id) || lifecycle.isRemoving(task) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id) || sprintLock.blocksTask(task) || taskSchedulePending(task.id),
     invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     endSession, refresh: reloadBlockerTask,
   });
   const relationshipChanges = createTaskRelationshipChanges({ initial: active ? initialData.taskRelations : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
     canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)), currentTask: id => confirmed.tasks.find(task => task.id === id),
-    dependencyPending: id => taskReviews.blocksTask(id) || taskSchedulePending(id) || blockerReports.blocksTask(id) || githubImports.blocksTask(id) || attachmentUploads.blocksTask(id) || backlogAssignments.blocksTask(id) || backlogOrdering.blocksTask(id) || lifecycle.isRemoving({ id } as Task) || lifecycle.isRemoved({ id } as Task) || Boolean(confirmed.tasks.find(task => task.id === id && sprintLock.blocksTask(task))),
+    dependencyPending: id => githubSync.blocksTask(id) || taskReviews.blocksTask(id) || taskSchedulePending(id) || blockerReports.blocksTask(id) || githubImports.blocksTask(id) || attachmentUploads.blocksTask(id) || backlogAssignments.blocksTask(id) || backlogOrdering.blocksTask(id) || lifecycle.isRemoving({ id } as Task) || lifecycle.isRemoved({ id } as Task) || Boolean(confirmed.tasks.find(task => task.id === id && sprintLock.blocksTask(task))),
     invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadBlockerTask,
     confirmRelation: relation => lifecycle.confirmRelationship(relation), removeRelation: id => lifecycle.confirmRelationshipRemoval(id),
   });
-  const taskReviews = createTaskReviewOperations({ adapter, current: () => confirmed, active:isActive, generation:()=>sessionGeneration, changed:publish,nextSequence:()=>++sequence,canRead:id=>!deniedTaskReads.has(id)&&confirmed.tasks.some(task=>task.id===id&&!lifecycle.isRemoved(task)),dependencyPending:task=>relationshipChanges.blocksTask(task.id)||attachmentUploads.blocksTask(task.id)||lifecycle.isRemoving(task)||githubImports.blocksTask(task.id)||blockerReports.blocksTask(task.id)||backlogAssignments.blocksTask(task.id)||backlogOrdering.blocksTask(task.id)||sprintLock.blocksTask(task)||taskSchedulePending(task.id)||[...pending.values()].some(op=>op.taskId===task.id),refresh:reloadBlockerTask,invalidate:()=>notifications.invalidateHeader(["notifications"]),accept(receipt,task,started,command){
+  const taskReviews = createTaskReviewOperations({ adapter, current: () => confirmed, active:isActive, generation:()=>sessionGeneration, changed:publish,nextSequence:()=>++sequence,canRead:id=>!deniedTaskReads.has(id)&&confirmed.tasks.some(task=>task.id===id&&!lifecycle.isRemoved(task)),dependencyPending:task=>githubSync.blocksTask(task.id)||relationshipChanges.blocksTask(task.id)||attachmentUploads.blocksTask(task.id)||lifecycle.isRemoving(task)||githubImports.blocksTask(task.id)||blockerReports.blocksTask(task.id)||backlogAssignments.blocksTask(task.id)||backlogOrdering.blocksTask(task.id)||sprintLock.blocksTask(task)||taskSchedulePending(task.id)||[...pending.values()].some(op=>op.taskId===task.id),refresh:reloadBlockerTask,invalidate:()=>notifications.invalidateHeader(["notifications"]),accept(receipt,task,started,command){
     const current=confirmed.tasks.find(row=>row.id===task.id);
     const newer=Math.max(taskConfirmedAt.get(task.id)||0,taskReadAt.get(task.id)||0)>started&&current?.updatedAt!==task.updatedAt&&current?.updatedAt!==receipt.task.updatedAt;
     if(!newer) { const patch={...receipt.task,id:task.id}; confirmed=patch.approvalStatus!==undefined?applyDeliverableApprovalPatch(confirmed,{...patch,approvalStatus:patch.approvalStatus}):{...confirmed,tasks:confirmed.tasks.map(row=>row.id===task.id?{...row,...patch}:row)};taskConfirmedAt.set(task.id,++sequence);
@@ -158,6 +168,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if(receipt.activities?.length){const byId=new Map(confirmed.taskActivity.map(activity=>[activity.id,activity]));for(const activity of receipt.activities)byId.set(activity.id,activity);confirmed={...confirmed,taskActivity:[...byId.values()]};}
     if(command.kind==="approval"&&detailStatuses.get(task.id)==="current") {detailStatuses.set(task.id,"stale");void planning.loadTaskDetail(task.id);}
   }});
+  const attendanceState = createMeetingAttendanceState({ initial: active ? initialData.meetingAttendance : [], adapter, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, changed: publish, endSession, dependencyPending: meeting => sprintLock.blocksSprint(meeting.sprintId), invalidateNotifications: () => notifications.invalidateHeader(["notifications"]) });
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
   const scoreObjections=createScoreObjectionState({current:()=>confirmed,update:data=>{confirmed=data;},changed:publish,nextSequence:()=>++sequence,active:isActive,generation:()=>sessionGeneration,refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded",canRead:()=>!sprintState.denied(),dependencyPending:id=>sprintLock.blocksSprint(id),create:adapter.createScoreObjection,process:adapter.processScoreObjection});
@@ -166,7 +177,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: () => sprintState.schedulesPending() || sprintPlan.blocksSchedules() || sprintLock.pending() || backlogAssignments.pending() || backlogOrdering.pending() || confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)), checkSchedules: () => confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)) ? checkSprintBlocker() : backlogOrdering.pending() ? checkOrdering() : sprintLock.pending() ? sprintLock.check() : sprintPlan.blocksSchedules() ? sprintPlan.check() : sprintState.checkPendingSchedules(), save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   const sprintPlan = createSprintPlanState({ schedulesPending: () => sprintState.schedulesPending() || reviewWindow.blocksSprints() || sprintLock.pending() || backlogAssignments.pending() || backlogOrdering.pending() || confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)), checkSchedules: () => confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)) ? checkSprintBlocker() : backlogOrdering.pending() ? checkOrdering() : sprintLock.pending() ? sprintLock.check() : reviewWindow.blocksSprints() ? reviewWindow.check() : sprintState.checkPendingSchedules(), current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, create: adapter.createSprintPlan, accept: sprintState.acceptPlan, denied: sprintState.denied, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   const sprintLock = createSprintLockState({
-    dependenciesPending: basis => blockerBlocksSprint(basis.sprint.id) || sprintLock.blocksSprint(basis.sprint.id)
+    dependenciesPending: basis => attendanceState.pendingSprint(basis.sprint.id) || blockerBlocksSprint(basis.sprint.id) || sprintLock.blocksSprint(basis.sprint.id)
       || orderingBlocksSprint(basis.sprint.id)
       || commitments.pending(basis.sprint.id)
       || scoreObjections.blocks(basis.sprint.id)
@@ -260,14 +271,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (deniedTaskReads.has(id)) return "forbidden";
     return (taskReadAt.get(id) || 0) > after && confirmed.tasks.find(task => task.id === id)?.updatedAt ? "current" : detailStatuses.get(id) === "current" ? "stale" : detailStatuses.get(id) || "unavailable";
   }
-  function taskEffectsPending(id: string) { return taskReviews.blocksTask(id) || blockerReports.blocksTask(id) || githubImports.blocksTask(id) || attachmentUploads.blocksTask(id) || relationshipChanges.blocksTask(id); }
+  function taskEffectsPending(id: string) { return githubSync.blocksTask(id) || taskReviews.blocksTask(id) || blockerReports.blocksTask(id) || githubImports.blocksTask(id) || attachmentUploads.blocksTask(id) || relationshipChanges.blocksTask(id); }
   function blockerBlocksSprint(id: string) { return confirmed.tasks.some(task => task.sprintId === id && taskEffectsPending(task.id)); }
-  async function checkSprintBlocker(id?: string): Promise<import("../planning-state").PlanningTaskSaveCheck> { const task = confirmed.tasks.find(task => (id ? task.sprintId === id : Boolean(task.sprintId)) && taskEffectsPending(task.id)); return task ? taskReviews.blocksTask(task.id) ? taskReviews.check(taskReviews.blockingOperation(task.id)!.id) : relationshipChanges.blocksTask(task.id) ? relationshipChanges.checkTask(task.id) : attachmentUploads.blocksTask(task.id) ? attachmentUploads.checkTask(task.id) : githubImports.blocksTask(task.id) ? githubImports.check(task.id) : blockerReports.checkTask(task.id) : { outcome: "not-pending", readStatus: "not-needed" }; }
+  async function checkSprintBlocker(id?: string): Promise<import("../planning-state").PlanningTaskSaveCheck> { const task = confirmed.tasks.find(task => (id ? task.sprintId === id : Boolean(task.sprintId)) && taskEffectsPending(task.id)); return task ? githubSync.blocksTask(task.id) ? githubSync.check(task.id) : taskReviews.blocksTask(task.id) ? taskReviews.check(taskReviews.blockingOperation(task.id)!.id) : relationshipChanges.blocksTask(task.id) ? relationshipChanges.checkTask(task.id) : attachmentUploads.blocksTask(task.id) ? attachmentUploads.checkTask(task.id) : githubImports.blocksTask(task.id) ? githubImports.check(task.id) : blockerReports.checkTask(task.id) : { outcome: "not-pending", readStatus: "not-needed" }; }
   function taskSchedulePending(id: string) { const sprintId = confirmed.tasks.find(task => task.id === id)?.sprintId; return Boolean(sprintId && (sprintLock.blocksSprint(sprintId) || sprintState.pending(sprintId) || sprintPlan.blocksSprint(sprintId) || reviewWindow.blocksSprints())); }
   function orderingBlocksSprint(id: string) { return confirmed.tasks.some(task => task.sprintId === id && backlogOrdering.blocksTask(task.id)); }
   async function checkOrdering(): Promise<import("../planning-state").PlanningTaskSaveCheck> { const task = confirmed.tasks.find(task => backlogOrdering.blocksTask(task.id)); if (task) await backlogOrdering.checkTask(task.id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }
   function publish() {
-    confirmed = tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(relationshipChanges.projectConfirmed(attachmentUploads.projectConfirmed(githubImports.projectConfirmed(commentCreations.projectConfirmed(blockerReports.projectConfirmed(confirmed)))))))));
+    confirmed = attendanceState.projectConfirmed(tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(relationshipChanges.projectConfirmed(attachmentUploads.projectConfirmed(githubImports.projectConfirmed(commentCreations.projectConfirmed(blockerReports.projectConfirmed(confirmed))))))))));
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
       let result = task;
       for (const operation of pending.values()) {
@@ -276,7 +287,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return result;
     }) };
     visible = sprintLock.project(backlogOrdering.project(backlogAssignments.project(sprintPlan.project(reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView))))))));
-    visible = taskReviews.projectVisible(visible);
+    visible = attendanceState.projectVisible(githubSync.protect(githubSync.projectVisible(taskReviews.projectVisible(visible))));
     visible = relationshipChanges.protect(relationshipChanges.projectVisible(attachmentUploads.protect(githubImports.protect(blockerReports.protect(blockerReports.projectVisible(visible))))));
     visible = commitments.project(visible);
     visible = administration.projectVisible(tools.projectVisible(events.projectVisible(notifications.projectVisible(visible))));
@@ -284,7 +295,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
       if (workspaceStatuses.get(workspace) === "forbidden") publishCache?.(null, workspace);
-      else { const protectedData = profileSettings.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed))))); publishCache?.({ ...protectedData, tasks: protectedData.tasks.filter(task => members.has(task.id)) }, workspace); }
+      else { const protectedData = profileSettings.protect(githubSync.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed)))))); publishCache?.({ ...protectedData, tasks: protectedData.tasks.filter(task => members.has(task.id)) }, workspace); }
     }
     listeners.forEach(listener => listener());
   }
@@ -432,10 +443,23 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const planning: PlanningState = {
+    syncTaskToGitHub:githubSync.sync,
+    syncGitHubTasks:githubSync.syncBatch,
+    taskGitHubSync:githubSync.view,
+    taskGitHubSyncs:githubSync.views,
+    githubSyncBatch:githubSync.batch,
+    githubSyncNotice:githubSync.notice,
+    checkTaskGitHubSync:githubSync.check,
+    githubConnection:githubConnection.view,
+    loadGitHubConnection:githubConnection.load,
     runAdministrationDelivery: administration.delivery.run,
     administrationDeliveries: administration.delivery.views,
     checkAdministrationDelivery: administration.delivery.check,
     administrationDeliveryAvailability: administration.delivery.availability,
+    beginMeetingAttendance: attendanceState.begin,
+    meetingAttendance: attendanceState.pair,
+    meetingAttendanceEdits: attendanceState.views,
+    resumeMeetingAttendance: attendanceState.resume,
     ...taskReviews.publicState,
     taskReviewOperations: taskReviews.views,
     checkTaskReview: taskReviews.check,
@@ -504,7 +528,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     sprintWorkspace: () => {
       isActive();
       const data = sprintState.denied() ? emptyPlanningShellState : visible;
-      return { readStatus: workspaceStatuses.get("sprint") || "not-loaded", model: { coverage: { ...sprintViewCoverage(sprintState.coverage()), ...(commitments.pending() ? { commitments: "partial" as const } : {}), ...(scoreObjections.scoresUnconfirmed()?{scores:"partial" as const}:{} ) }, revision: "", project: data.project, people: data.profiles, items: sprintState.denied() ? [] : planning.workspace("sprint").tasks, sprints: data.sprints, commitments: data.sprintCommitments, scores: data.founderSprintScores.filter(row=>scoreObjections.scoreCurrent(row.sprintId,row.profileId)), strikeStates: data.founderStrikeStates, strikeEvents: data.strikeEvents, objections: data.scoreObjections, meetings: data.meetings, attendance: data.meetingAttendance } };
+      return { readStatus: workspaceStatuses.get("sprint") || "not-loaded", model: { coverage: { ...sprintViewCoverage(sprintState.coverage()), attendance: attendanceState.coverage(), ...(commitments.pending() ? { commitments: "partial" as const } : {}), ...(scoreObjections.scoresUnconfirmed()?{scores:"partial" as const}:{} ) }, revision: "", project: data.project, people: data.profiles, items: sprintState.denied() ? [] : planning.workspace("sprint").tasks, sprints: data.sprints, commitments: data.sprintCommitments, scores: data.founderSprintScores.filter(row=>scoreObjections.scoreCurrent(row.sprintId,row.profileId)), strikeStates: data.founderStrikeStates, strikeEvents: data.strikeEvents, objections: data.scoreObjections, meetings: data.meetings, attendance: data.meetingAttendance } };
     },
     ...workweekCalendars.publicState,
     ...privateWorkweek.publicState,
@@ -534,7 +558,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id) || ((workspace === "planning" || workspace === "projects") && lifecycle.isTemporary(task.id))), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
     taskDetail: taskId => { isActive(); return ({
       task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
-      saveStatus: taskReviews.blocksTask(taskId) ? taskReviews.blockingOperation(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : relationshipChanges.blocksTask(taskId) ? relationshipChanges.pendingViews(taskId).some(view => view.phase === "saving") ? "saving" : "unconfirmed" : attachmentUploads.blocksTask(taskId) ? attachmentUploads.views(taskId).some(view => view.phase === "uploading") ? "saving" : "unconfirmed" : githubImports.blocksTask(taskId) ? githubImports.view(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : blockerReports.saveStatus(taskId) || backlogOrdering.saveStatus(taskId) || backlogAssignments.saveStatus(taskId) || status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
+      saveStatus: githubSync.blocksTask(taskId) ? githubSync.view(taskId)?.phase === "syncing" ? "saving" : "unconfirmed" : taskReviews.blocksTask(taskId) ? taskReviews.blockingOperation(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : relationshipChanges.blocksTask(taskId) ? relationshipChanges.pendingViews(taskId).some(view => view.phase === "saving") ? "saving" : "unconfirmed" : attachmentUploads.blocksTask(taskId) ? attachmentUploads.views(taskId).some(view => view.phase === "uploading") ? "saving" : "unconfirmed" : githubImports.blocksTask(taskId) ? githubImports.view(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : blockerReports.saveStatus(taskId) || backlogOrdering.saveStatus(taskId) || backlogAssignments.saveStatus(taskId) || status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
       comments: deniedTaskReads.has(taskId) ? [] : visible.taskComments.filter(item => item.taskId === taskId),
       externalComments: deniedTaskReads.has(taskId) ? [] : visible.taskExternalComments.filter(item => item.taskId === taskId),
       blockers: deniedTaskReads.has(taskId) ? [] : visible.taskBlockers.filter(item => item.taskId === taskId),
@@ -544,7 +568,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }); },
     protectedCache(workspace) {
       if (!isActive() || (workspace && (!memberships.has(workspace) || workspaceStatuses.get(workspace) === "forbidden"))) return null;
-      const data = profileSettings.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed)))));
+      const data = profileSettings.protect(githubSync.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed))))));
       return { tasks: data.tasks.filter(task => !deniedTaskReads.has(task.id) && (!workspace || memberships.get(workspace)?.has(task.id))), profiles: data.profiles, sprints: data.sprints, notificationPreferences: data.notificationPreferences, profileUiPreferences: data.profileUiPreferences, profileFeatureTourAcknowledgements: data.profileFeatureTourAcknowledgements };
     },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
@@ -560,6 +584,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     checkTaskSave(taskId) {
       if (!isActive()) return Promise.resolve({ outcome: "session-ended", readStatus: "not-needed" });
+      if(githubSync.blocksTask(taskId))return githubSync.check(taskId);
       const reviewOperation=taskReviews.blockingOperation(taskId)||taskReviews.views(taskId).find(op=>op.phase==="blocked");
       if(reviewOperation)return taskReviews.check(reviewOperation.id);
       const lockTask=confirmed.tasks.find(task=>task.id===taskId);
@@ -620,7 +645,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           const failedStatus = readErrorStatus(error);
           commentCreations.failed(taskId, failedStatus);
           githubImports.failed(taskId, failedStatus);
-          if (failedStatus === "forbidden") { deniedTaskReads.add(taskId); taskReviews.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId); }
+          if (failedStatus === "forbidden") { deniedTaskReads.add(taskId); taskReviews.deny(taskId); githubSync.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId); }
           detailStatuses.set(taskId, failedStatus);
           publish();
           return { ok: false, error: error instanceof Error ? error.message : "Task-Details konnten nicht geladen werden." };
@@ -648,6 +673,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (!result.unavailable?.includes("relationships")) relationshipChanges.acceptRead(result.model.relationships, started, result.model.coverage?.relationships === "complete", taskId);
         relationshipChanges.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         attachmentUploads.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
+        githubSync.acceptTaskRead(taskId,started,!protectedIds.has(taskId)&&!unresolvedIds.has(taskId),result.model.item.updatedAt);
         githubImports.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
         const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
@@ -684,7 +710,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (toolRead !== null) tools.failed(error, toolRead);
         if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
         workspaceStatuses.set(workspace, readErrorStatus(error));
-        if (workspace === "sprint") {sprintState.readStatus(readErrorStatus(error));if(readErrorStatus(error)==="forbidden")scoreObjections.deny();}
+        if (workspace === "sprint") { sprintState.readStatus(readErrorStatus(error)); if (readErrorStatus(error) === "forbidden") {attendanceState.denyWorkspace();scoreObjections.deny();} }
         profileSettings.readStatus(readErrorStatus(error), workspace);
         publish();
         return false;
@@ -731,7 +757,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         Object.assign(covered,{[field]:[...incoming,...retained]});
       }
       const profileRead = profileSettings.acceptRead(covered, coverage, started, workspace, result.data);
-      const sprintRead = sprintState.acceptRead(profileRead.data, coverage, started, result.data);
+      const sprintCoverage = { ...coverage }; delete sprintCoverage.meetingAttendance;
+      const sprintRead = sprintState.acceptRead(profileRead.data, sprintCoverage, started, result.data);
+      if (coverage.meetingAttendance) attendanceState.acceptRead(result.data.meetingAttendance, started, coverage.meetingAttendance === "complete");
       const scoreRead=scoreObjections.acceptRead(sprintRead.data,coverage,started,result.data);
       sprintRead.data=scoreRead.data;
       const commitmentRead=commitments.acceptRead(result.data.sprintCommitments,coverage.sprintCommitments,started);
@@ -771,9 +799,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     outcomeChecks.clear();
     outcomeCheckStatus.clear();
     editing.clear();
+    attendanceState.clear();
     relationshipChanges.clear();
     attachmentUploads.clear();
     taskReviews.clear();
+    githubSync.clear();
+    githubConnection.clear();
     githubImports.clear();
     commentCreations.clear();
     blockerReports.clear();
@@ -843,6 +874,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
     initialized = true;
     githubImports.acceptRead(data.taskExternalComments, ++sequence, false);
+    attendanceState.acceptRead(data.meetingAttendance, ++sequence, false);
     relationshipChanges.acceptRead(data.taskRelations, ++sequence, false);
     for (const taskId of new Set(data.taskActivity.map(row => row.taskId))) attachmentUploads.acceptRead(data.taskActivity, ++sequence, false, taskId);
     if (workspace === "tools") tools.acceptRead({ tools: data.fmdTools, completeness: "partial" }, tools.beginRead());

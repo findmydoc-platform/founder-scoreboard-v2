@@ -105,9 +105,11 @@ export function syncTaskToGitHubRequest(
   apiClient: BrowserApiClient,
   taskId: string,
   command: TaskGitHubSyncCommand,
+  options: { expectedSession?: Pick<import("@/lib/credentials/browser").BrowserSessionSnapshot,"userId"|"revision"> } = {},
 ) {
   return apiClient.requestJson<TaskGitHubProjectionResult>(`/api/tasks/${taskId}/sync-github`, {
     method: "POST",
+    ...options,
     json: command,
   });
 }

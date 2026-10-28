@@ -63,7 +63,7 @@ export function useTaskDetailWorkflow({
   const currentProfile = initialCurrentProfile;
   const [githubInstallationAvailable, setGithubInstallationAvailable] = useState(false);
   const [githubUserConnected, setGithubUserConnected] = useState(false);
-  const [waitingGitHubCommentCount, setWaitingGitHubCommentCount] = useState(0);
+  const [waitingGitHubCommentCount, setWaitingGitHubCommentCount] = useState<number|null>(null);
   const [githubReconnectFailed, setGithubReconnectFailed] = useState(false);
   const [apiClient] = useState(() => createBrowserApiClient());
   const [isPending, startTransition] = useTransition();

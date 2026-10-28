@@ -19,9 +19,10 @@ type BrowserApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
   json?: unknown;
   jsonContentType?: boolean;
   useDevProfileOverride?: boolean;
+  expectedSession?: Pick<BrowserSessionSnapshot, "userId" | "revision">;
 };
 
-type BrowserApiBlobOptions = Omit<BrowserApiRequestOptions, "json" | "jsonContentType">;
+type BrowserApiBlobOptions = Omit<BrowserApiRequestOptions, "json" | "jsonContentType" | "expectedSession">;
 type BrowserApiFormOptions = BrowserApiBlobOptions & { expectedSession?: Pick<BrowserSessionSnapshot, "userId" | "revision"> };
 type BrowserApiInput = string | URL;
 
@@ -59,6 +60,7 @@ export function createBrowserApiClient({
       json,
       jsonContentType = true,
       useDevProfileOverride = true,
+      expectedSession,
       ...requestInit
     } = options;
     const headers = new Headers(requestHeaders);
@@ -75,6 +77,7 @@ export function createBrowserApiClient({
     }
 
     return {
+      expectedSession,
       callerAuthorization: headers.has("authorization"),
       replayAllowed: method === "GET" || method === "HEAD" || typeof body === "string",
       requestInit: { ...requestInit, body, headers, method },
@@ -103,6 +106,7 @@ export function createBrowserApiClient({
     firstBody: unknown,
     rejectedSession: BrowserSessionSnapshot | null,
     replayAllowed = true,
+    expectedSession?: Pick<BrowserSessionSnapshot, "userId" | "revision">,
   ) {
     if (
       !replayAllowed
@@ -115,6 +119,9 @@ export function createBrowserApiClient({
 
     const recovery = await sessionPort.recover(rejectedSession);
     if (recovery.kind !== "refreshed") return null;
+    if (expectedSession && (recovery.session.userId !== expectedSession.userId || sessionPort.isCurrent && !sessionPort.isCurrent(recovery.session))) {
+      return { attachedSession: null, response: Response.json({ error: "Die Sitzung wurde ersetzt.", code: "session_superseded" }, { status: 409 }) };
+    }
     return send(input, requestInit, recovery.session);
   }
 
@@ -124,6 +131,10 @@ export function createBrowserApiClient({
   ): Promise<BrowserApiJsonResult<T>> {
     const prepared = prepareRequest(options);
     const session = prepared.callerAuthorization ? null : await sessionPort.current();
+    if (prepared.expectedSession && (!prepared.expectedSession.userId || !prepared.expectedSession.revision || !session || session.userId !== prepared.expectedSession.userId || session.revision !== prepared.expectedSession.revision || sessionPort.isCurrent && !sessionPort.isCurrent(session))) {
+      const body = { error: "Die Sitzung wurde ersetzt.", code: "session_superseded" };
+      return { response: Response.json(body, { status: 409 }), body: body as T };
+    }
     const first = await send(input, prepared.requestInit, session);
     const firstBody = await first.response.clone().json().catch(() => null) as T | null;
     transitionIfRequired(first.response, firstBody, first.attachedSession);
@@ -134,6 +145,7 @@ export function createBrowserApiClient({
       firstBody,
       first.attachedSession,
       prepared.replayAllowed,
+      prepared.expectedSession,
     );
     if (!replay) return { response: first.response, body: firstBody };
 

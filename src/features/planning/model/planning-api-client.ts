@@ -233,7 +233,7 @@ export function markProfileFeatureTourSeenRequest(apiClient: BrowserApiClient, t
 }
 
 export function updateMeetingAttendanceRequest(apiClient: BrowserApiClient, meetingId: number, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; attendance?: MeetingAttendance }>(`/api/meetings/${meetingId}/attendance`, {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; effects?: "confirmed" | "unconfirmed"; attendance?: MeetingAttendance }>(`/api/meetings/${meetingId}/attendance`, {
     method: "POST",
     json: payload,
   });

@@ -1,0 +1,24 @@
+import { afterEach, expect, test, vi } from "vitest";
+import { createBrowserPlanningState } from "@/features/planning/model/internal/browser-planning-state";
+import { createBrowserApiClient } from "@/lib/browser-api-client";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
+import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
+import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
+afterEach(() => vi.unstubAllGlobals());
+test("owned GitHub sync cannot acquire a replacement account during the held JSON session lookup", async () => {
+    let finish!: (session: BrowserSessionSnapshot) => void;
+    const initial = { userId: "user", revision: "old", expiresAt: 4102444800, user: { id: "user" } }, replacement = { ...initial, userId: "replacement", revision: "new", user: { id: "replacement" } };
+    const task = taskDetailStoryTask({ id: "task", updatedAt: "revision" });
+    const browser = createBrowserPlanningState({ initialUserId: "user", initialWorkspace: "planning", initialCurrentProfile: null, initialData: { ...emptyPlanningShellState, tasks: [task] }, initialHeaderData: emptyPlanningHeaderData });
+    browser.runtime.session = initial;
+    browser.runtime.apiClient = createBrowserApiClient({ sessionPort: { current: () => new Promise(resolve => { finish = resolve; }), recover: async () => ({ kind: "superseded" }), clearIfCurrent: async () => { } } });
+    const fetch = vi.fn(async () => Response.json({ error: "Should never reach this endpoint" }, { status: 403 }));
+    vi.stubGlobal("fetch", fetch);
+    const writing = browser.owner.planning.syncTaskToGitHub(task);
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    finish(replacement);
+    expect(await writing).toMatchObject({ phase: "ended" });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(browser.owner.planning.protectedCache()).toBeNull();
+});

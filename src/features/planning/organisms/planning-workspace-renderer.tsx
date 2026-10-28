@@ -82,7 +82,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
     updateFounderEvent,
-    updateMeetingAttendance,
     updateTask,
     waitingGitHubCommentCount,
     withdrawInitiative,
@@ -215,7 +214,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
             return result.ok;
           }}
           onChangeStatus={(task, status) => updateTask(task, { status })}
-          onUpdateMeetingAttendance={updateMeetingAttendance}
           onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
           sprintPlanningOptions={sprintPlanningOptions}
           plannedSprintCount={futureSprintDrafts(
@@ -266,6 +264,8 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
         onClose={() => setGithubSyncQueueOpen(false)}
         onOpenTask={openTaskPanel}
         onReconnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
+        syncOperations={controller.planningState.taskGitHubSyncs()}
+        onCheckSync={id=>{void controller.planningState.checkTaskGitHubSync(id);}}
         onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
         onSyncTaskToGitHub={syncTaskToGitHub}
       />

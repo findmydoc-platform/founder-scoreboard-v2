@@ -18,7 +18,7 @@ import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-plann
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 import type { PlanningState } from "@/features/planning/model/planning-state";
 import { findCurrentSprint } from "@/lib/planning-schedule";
-import type { Meeting, MeetingAttendance, Profile, Task, TaskStatus } from "@/lib/types";
+import type { Profile, Task, TaskStatus } from "@/lib/types";
 
 export function SprintScoreTableOverview({
   planningState,
@@ -26,7 +26,6 @@ export function SprintScoreTableOverview({
   onOpenTask,
   onRequestReview,
   onChangeStatus,
-  onUpdateMeetingAttendance,
   onAssignSprint,
   sprintPlanningOptions,
   plannedSprintCount,
@@ -41,7 +40,6 @@ export function SprintScoreTableOverview({
   onOpenTask: (taskId: string) => void;
   onRequestReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onChangeStatus: (task: Task, status: TaskStatus) => void;
-  onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
   onAssignSprint: (task: Task, sprintId: string) => void;
   sprintPlanningOptions: SprintPlanningOptions;
   plannedSprintCount: number;
@@ -158,9 +156,7 @@ export function SprintScoreTableOverview({
         pending={sprintPending}
         currentProfile={currentProfile}
         canManageSprint={canManageSprint}
-        onUpdateMeetingAttendance={(meeting, attendance) => {
-          onUpdateMeetingAttendance(meeting, attendance);
-        }}
+        planningState={planningState}
       />
 
       <SprintScoreObjections

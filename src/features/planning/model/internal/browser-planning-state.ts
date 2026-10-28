@@ -1,5 +1,7 @@
 "use client";
 
+import { classifyTaskGitHubSyncResponse } from "@/lib/github-sync/contract";
+import { githubUserConnectionStateFromStatus } from "../github-app-connection";
 import { sessionAuthority } from "@/features/administrator-access/model/administrator-access";
 
 import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
@@ -42,9 +44,9 @@ export type PlanningPageState = {
 
 export function createBrowserPlanningState(options: PlanningPageState, isCurrent: () => boolean = () => true) {
   const runtime = { apiClient: createBrowserApiClient(), workspace: options.initialWorkspace, userId: options.initialUserId, session: null as BrowserSessionSnapshot | null, currentProfile: options.initialCurrentProfile };
-  async function currentUploadSession() {
+  async function currentOperationSession() {
     const session = runtime.session || await createBrowserSessionAdapter().current();
-    if (!session || session.expiresAt * 1000 <= Date.now()) throw Object.assign(new Error("Für Anhänge ist eine aktive Sitzung erforderlich."), { status: 401 });
+    if (!session || session.expiresAt * 1000 <= Date.now()) throw Object.assign(new Error("Für diese Aktion ist eine aktive Sitzung erforderlich."), { status: 401 });
     if (!isCurrent() || session.userId !== runtime.userId) throw Object.assign(new Error("Die Sitzung wurde ersetzt."), { code: "session_superseded" });
     runtime.session = session;
     return session;
@@ -57,6 +59,34 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     administrationActorProfileId: options.initialCurrentProfile?.id,
     initialAdministrationAuthority: options.initialAdministratorAccess ? sessionAuthority({ platformRole: options.initialCurrentProfile?.platformRole || "viewer", credentialKind: "session", administratorAccess: options.initialAdministratorAccess }) : undefined,
     adapter: {
+      async readMeetingAttendance(meetingId, profileId) {
+        const {response,body}=await runtime.apiClient.requestJson<{attendance?: import("@/lib/types").MeetingAttendance|null;error?:string;code?:string}>(`/api/meetings/${meetingId}/attendance?profileId=${encodeURIComponent(profileId)}`);
+        if(!response.ok||!body||!("attendance" in body))throw Object.assign(new Error(body?.error||"Weekly-Rückmeldung konnte nicht geprüft werden."),{status:response.status,code:body?.code});
+        return {attendance:body.attendance ?? null};
+      },
+      async saveMeetingAttendance(meeting,basis,input) {
+        const {response,body}=await planningApi.updateMeetingAttendanceRequest(runtime.apiClient,meeting.id,{profileId:input.profileId,status:input.status,absenceReason:input.absenceReason,reasonAccepted:input.reasonAccepted,writtenUpdate:input.writtenUpdate,points:input.points,expectedUpdatedAt:basis?.updatedAt ?? null});
+        if(!response.ok||!body?.attendance)throw Object.assign(new Error(body?.error||"Weekly-Rückmeldung konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
+        return {attendance:body.attendance,effects:body.effects||"unconfirmed",warning:body.warning};
+      },
+      async syncTaskGitHub(taskId,command) {
+        const session=await currentOperationSession();
+        const {response,body}=await taskApi.syncTaskToGitHubRequest(runtime.apiClient,taskId,command,{expectedSession:{userId:session.userId,revision:session.revision}});
+        const failure=body as {code?:string;error?:string}|null;
+        if(failure?.code==="session_superseded")throw Object.assign(new Error(failure.error||"Die Sitzung wurde ersetzt."),{code:failure.code,status:response.status});
+        if(!body || typeof body.ok!=="boolean" || !body.ok && (typeof body.code!=="string" || !body.code.startsWith("github_sync_") && body.code!=="github_content_too_long")) {
+          if(response.status>=500||response.ok)throw new Error("Die GitHub-Synchronisierung ist noch nicht bestätigt.");
+          return classifyTaskGitHubSyncResponse(response.status,null);
+        }
+        return classifyTaskGitHubSyncResponse(response.status,body);
+      },
+      async readGitHubConnection() {
+        const session=await currentOperationSession();
+        const {response,body}=await runtime.apiClient.requestJson<{installation?:{available?:boolean};user?:{connected?:boolean;needsReconnect?:boolean};waitingCommentCount?:number|null;error?:string;code?:string}>("/api/github-app/status",{expectedSession:{userId:session.userId,revision:session.revision}});
+        if(!response.ok||typeof body?.installation?.available!=="boolean"||!body.user)throw Object.assign(new Error(body?.error||"GitHub-Verbindungsstatus ist nicht verfügbar."),{status:response.status,code:body?.code});
+        const state=githubUserConnectionStateFromStatus(body.user);
+        return {installationAvailable:body.installation.available,userConnected:state==="connected",state,waitingCommentCount:typeof body.waitingCommentCount==="number"?body.waitingCommentCount:null};
+      },
       async executeAdministrationDelivery(selection) {
         const payload=selection.kind==="events"?{eventIds:[...selection.eventIds]}:selection.kind==="pending"?{limit:selection.limit}:selection.kind==="webhook-test"?{testDelivery:"webhook_digest"}:{testDelivery:"direct_dm",profileId:selection.profileId};
         const {response,body}=await runtime.apiClient.requestJson<Omit<import("@/features/administration/model/administration-delivery-state").AdministrationDeliveryResponse,"ok"|"status">>("/api/notifications/deliver",{method:"POST",json:payload,useDevProfileOverride:false});
@@ -96,7 +126,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         return { relationId: body!.relationId! };
       },
       async uploadTaskAttachment(taskId, file) {
-        const session = await currentUploadSession();
+        const session = await currentOperationSession();
         const { response, body } = await taskApi.uploadTaskAttachmentRequest(runtime.apiClient, taskId, file, { userId: session.userId, sessionRevision: session.revision, isCurrent: () => isCurrent() && runtime.session?.userId === session.userId && runtime.session?.revision === session.revision });
         if (!response.ok) throw Object.assign(new Error(body?.error || "Anhang konnte nicht hochgeladen werden."), { status: response.status, code: body?.code });
         if (!body?.markdown || !body.path || !body.url || !body.filename || !body.contentType || typeof body.size !== "number") throw new Error("Die Upload-Bestätigung ist unvollständig.");
@@ -257,7 +287,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         return { tool: body.tool, warning: body.warning };
       },
       async uploadToolPreview(file) {
-        const session = await currentUploadSession();
+        const session = await currentOperationSession();
         const { response, body } = await planningApi.uploadFmdToolPreviewImageRequest(runtime.apiClient, file, { userId: session.userId, revision: session.revision });
         if (!response.ok || !body?.imageUrl || body.source !== "manual") throw Object.assign(new Error(body?.error || "Bild-Upload ist noch nicht bestätigt."), { status: response.status, code: body?.code });
         return { imageUrl: body.imageUrl, source: body.source };
