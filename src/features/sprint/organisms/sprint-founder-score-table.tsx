@@ -1,11 +1,13 @@
 "use client";
 
+import { SprintCommitmentField } from "../molecules/sprint-commitment-field";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 import { useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { formatDate } from "@/lib/display";
 import { roleLabel } from "@/lib/platform";
 import { buildSprintScoreTableViewModel, DEFAULT_SPRINT_SCORE_FILTERS, type SprintScoreAttentionFilter, type SprintScoreSort, type SprintScoreTableFilters } from "@/features/sprint/model/sprint-score-table-view-model";
-import type { CommitmentLevel, Sprint, SprintCommitment } from "@/lib/types";
+import type { Sprint } from "@/lib/types";
 import { UiBadge, UiEmptyState } from "@/shared/atoms/ui-primitives";
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
 import { DataCell, DataColumnHeader, DataEmptyRow, DataHeaderCell, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
@@ -46,12 +48,12 @@ export function SprintFounderScoreTable({
   sprint,
   scoreRows,
   pending,
-  onUpdateCommitment,
+  planningState,
 }: {
   sprint: Sprint;
   scoreRows: SprintScoreRows;
   pending: boolean;
-  onUpdateCommitment: (commitment: SprintCommitment) => void;
+  planningState: PlanningState;
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { state: filters, updateState: updateFilters, resetState: resetFilters } = useTableUrlState({ namespace: "score", schema: scoreFilterSchema });
@@ -124,16 +126,16 @@ export function SprintFounderScoreTable({
             const strikeLevel = row.strikeState?.strikeLevel ?? 0;
             const resetStreak = row.strikeState?.fulfilledResetStreak ?? 0;
             const hasOpenScoreSignal = row.openScore > 0 || row.openScoreObjections > 0;
-            const totalStatusClass = row.v21Score.awayNeutral
+            const totalStatusClass = !row.v21Score ? "text-slate-600" : row.v21Score.awayNeutral
               ? "text-blue-700"
-              : row.v21Score.fulfilled
+              : row.v21Score?.fulfilled
                 ? "text-emerald-700"
                 : relevantTasks
                   ? "text-amber-700"
                   : "text-slate-400";
-            const totalStatusLabel = row.v21Score.awayNeutral
+            const totalStatusLabel = !row.v21Score ? "Berechnung unvollständig" : row.v21Score.awayNeutral
               ? "Away-neutral"
-              : row.v21Score.fulfilled
+              : row.v21Score?.fulfilled
                 ? "erfüllt"
                 : relevantTasks
                   ? "nicht erfüllt"
@@ -146,34 +148,26 @@ export function SprintFounderScoreTable({
                     <p className="text-xs text-slate-500">{roleLabel(row.profile)}</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <div className="text-xl font-semibold tabular-nums text-slate-950">{row.v21Score.totalPoints}/20</div>
+                    <div className="text-xl font-semibold tabular-nums text-slate-950">{row.v21Score ? `${row.v21Score.totalPoints}/20` : "–"}</div>
                     <div className={`text-xs font-semibold ${totalStatusClass}`}>{totalStatusLabel}</div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="grid gap-1 text-xs font-semibold text-slate-500">
                     Commitment
-                    <CustomSelect value={row.commitment.commitmentLevel} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateCommitment({ ...row.commitment, commitmentLevel: value as CommitmentLevel })} className="h-11 w-full text-sm" options={["Lite", "Standard", "Heavy", "Away"].map((level) => ({ value: level, label: level }))} />
+                    <SprintCommitmentField planningState={planningState} shown={row.commitment} field="level" disabled={pending || sprint.scoreLocked} />
                   </label>
                   <label className="grid gap-1 text-xs font-semibold text-slate-500">
                     Wochenstunden
-                    <input
-                      type="number"
-                      min={0}
-                      max={80}
-                      value={row.commitment.weeklyHours}
-                      disabled={pending || sprint.scoreLocked}
-                      onChange={(event) => onUpdateCommitment({ ...row.commitment, weeklyHours: Number(event.target.value) })}
-                      className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:bg-slate-50 disabled:opacity-60"
-                    />
+                    <SprintCommitmentField planningState={planningState} shown={row.commitment} field="hours" disabled={pending || sprint.scoreLocked} />
                   </label>
                 </div>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md bg-slate-50 p-3 text-xs">
                   <div><dt className="text-slate-500">Aufgaben</dt><dd className="mt-0.5 font-semibold text-slate-900">{row.committed}</dd></div>
                   <div><dt className="text-slate-500">Workflow</dt><dd className={row.blocked > 0 ? "mt-0.5 font-semibold text-red-700" : "mt-0.5 font-semibold text-slate-900"}>{row.active} aktiv · {row.blocked} blockiert</dd></div>
-                  <div><dt className="text-slate-500">Delivery</dt><dd className="mt-0.5">{scoreFraction(row.v21Score.deliveryPoints, 12, relevantTasks)}</dd></div>
-                  <div><dt className="text-slate-500">Form / Review-Reife</dt><dd className="mt-0.5">{scoreFraction(row.v21Score.formPoints, 4, relevantTasks)}</dd></div>
-                  <div><dt className="text-slate-500">Weekly</dt><dd className="mt-0.5">{scoreFraction(row.v21Score.weeklyPoints, 4, relevantTasks)}</dd></div>
+                  <div><dt className="text-slate-500">Delivery</dt><dd className="mt-0.5">{row.v21Score ? scoreFraction(row.v21Score.deliveryPoints, 12, relevantTasks) : "–"}</dd></div>
+                  <div><dt className="text-slate-500">Form / Review-Reife</dt><dd className="mt-0.5">{row.v21Score ? scoreFraction(row.v21Score.formPoints, 4, relevantTasks) : "–"}</dd></div>
+                  <div><dt className="text-slate-500">Weekly</dt><dd className="mt-0.5">{row.v21Score ? scoreFraction(row.v21Score.weeklyPoints, 4, relevantTasks) : "–"}</dd></div>
                   <div><dt className="text-slate-500">Aufwand</dt><dd className="mt-0.5 font-semibold text-slate-900">{row.hours}h</dd></div>
                 </dl>
                 <div className="flex flex-wrap gap-2">
@@ -213,16 +207,16 @@ export function SprintFounderScoreTable({
               const strikeLevel = row.strikeState?.strikeLevel ?? 0;
               const resetStreak = row.strikeState?.fulfilledResetStreak ?? 0;
               const hasOpenScoreSignal = row.openScore > 0 || row.openScoreObjections > 0;
-              const totalStatusClass = row.v21Score.awayNeutral
+              const totalStatusClass = !row.v21Score ? "text-slate-600" : row.v21Score.awayNeutral
                 ? "text-blue-700"
-                : row.v21Score.fulfilled
+                : row.v21Score?.fulfilled
                   ? "text-emerald-700"
                   : relevantTasks
                     ? "text-amber-700"
                     : "text-slate-400";
-              const totalStatusLabel = row.v21Score.awayNeutral
+              const totalStatusLabel = !row.v21Score ? "Berechnung unvollständig" : row.v21Score.awayNeutral
                 ? "Away-neutral"
-                : row.v21Score.fulfilled
+                : row.v21Score?.fulfilled
                   ? "erfüllt"
                   : relevantTasks
                     ? "nicht erfüllt"
@@ -235,18 +229,10 @@ export function SprintFounderScoreTable({
                     <div className="text-xs text-slate-500">{roleLabel(row.profile)}</div>
                   </DataCell>
                   <DataCell>
-                    <CustomSelect value={row.commitment.commitmentLevel} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateCommitment({ ...row.commitment, commitmentLevel: value as CommitmentLevel })} className="h-8 w-28 text-xs" options={["Lite", "Standard", "Heavy", "Away"].map((level) => ({ value: level, label: level }))} />
+                    <SprintCommitmentField planningState={planningState} shown={row.commitment} field="level" disabled={pending || sprint.scoreLocked} compact />
                   </DataCell>
                   <DataCell>
-                    <input
-                      type="number"
-                      min={0}
-                      max={80}
-                      value={row.commitment.weeklyHours}
-                      disabled={pending || sprint.scoreLocked}
-                      onChange={(event) => onUpdateCommitment({ ...row.commitment, weeklyHours: Number(event.target.value) })}
-                      className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:bg-slate-50 disabled:opacity-60"
-                    />
+                    <SprintCommitmentField planningState={planningState} shown={row.commitment} field="hours" disabled={pending || sprint.scoreLocked} compact />
                   </DataCell>
                   <DataCell className="font-semibold">{quietValue(row.committed, relevantTasks)}</DataCell>
                   <DataCell className={row.blocked > 0 ? "font-semibold text-red-700" : "text-slate-700"}>
@@ -254,11 +240,11 @@ export function SprintFounderScoreTable({
                   </DataCell>
                   <DataCell>{quietValue(row.reviewReady, row.reviewReady > 0)}</DataCell>
                   <DataCell>{quietValue(row.finalScore, row.finalScore > 0)}</DataCell>
-                  <DataCell>{scoreFraction(row.v21Score.deliveryPoints, 12, relevantTasks)}</DataCell>
-                  <DataCell>{scoreFraction(row.v21Score.formPoints, 4, relevantTasks)}</DataCell>
-                  <DataCell>{scoreFraction(row.v21Score.weeklyPoints, 4, relevantTasks)}</DataCell>
+                  <DataCell>{row.v21Score ? scoreFraction(row.v21Score.deliveryPoints, 12, relevantTasks) : "–"}</DataCell>
+                  <DataCell>{row.v21Score ? scoreFraction(row.v21Score.formPoints, 4, relevantTasks) : "–"}</DataCell>
+                  <DataCell>{row.v21Score ? scoreFraction(row.v21Score.weeklyPoints, 4, relevantTasks) : "–"}</DataCell>
                   <DataCell>
-                    <div className={`text-lg font-semibold ${relevantTasks || row.v21Score.totalPoints > 0 ? "text-slate-950" : "text-slate-400"}`}>{row.v21Score.totalPoints}/20</div>
+                    <div className={`text-lg font-semibold ${relevantTasks || (row.v21Score?.totalPoints || 0) > 0 ? "text-slate-950" : "text-slate-400"}`}>{row.v21Score ? `${row.v21Score.totalPoints}/20` : "–"}</div>
                     <div className={`text-xs font-semibold ${totalStatusClass}`}>
                       {totalStatusLabel}
                     </div>

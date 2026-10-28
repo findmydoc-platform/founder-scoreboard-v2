@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); vi.useRealTimers(); });
-async function protocol({role="deputy",auditFailure=false}={}) {
+async function protocol({role="deputy",auditFailure=false,writeFailure=false}={}) {
  const auth=administratorProtocol({role}),fallback=globalThis.fetch;
  let row=null,writes=0,audits=0;
  vi.stubGlobal("fetch",async(input,init)=>{
@@ -13,7 +13,7 @@ async function protocol({role="deputy",auditFailure=false}={}) {
    writes++; const values=await request.json();
    if(request.method==="POST"&&row)return Response.json({code:"23505",message:"Duplicate"},{status:409});
    if(request.method==="PATCH") {expect(url.searchParams.get("meeting_id")).toBe("eq.7");expect(url.searchParams.get("profile_id")).toBe("eq.synthetic-profile");if(url.searchParams.get("updated_at")!==`eq.${row?.updated_at}`)return Response.json(null);}
-   row={id:8,created_at:"2026-10-28T00:00:00Z",...row,...values};return Response.json(row);
+   row={id:8,created_at:"2026-10-28T00:00:00Z",...row,...values};return writeFailure?Response.json({message:"Write confirmation lost"},{status:503}):Response.json(row);
   }
   if(url.pathname==="/rest/v1/profiles")return Response.json([{id:"lead"}]);
   if(url.pathname==="/rest/v1/notification_events")return Response.json([],{status:201});
@@ -46,4 +46,9 @@ test("attendance version advances even when Postgres spelling differs at the sam
  expect((await p.post({expectedUpdatedAt:second,writtenUpdate:"Third"})).status).toBe(200);
  expect(Date.parse(p.state().row.updated_at)).toBeGreaterThan(Date.parse(second));
  expect((await p.post({expectedUpdatedAt:previous,writtenUpdate:"Stale ABA"})).status).toBe(409);
+});
+
+test("an applied write with lost database confirmation returns no invented attendance receipt and GET never repeats it",async()=>{
+ const p=await protocol({writeFailure:true});const response=await p.post({expectedUpdatedAt:null,writtenUpdate:"Applied remotely"});expect(response.status).toBe(500);expect(await response.json()).not.toHaveProperty("attendance");
+ const checked=await p.get("synthetic-profile");expect(checked.status).toBe(200);expect(await checked.json()).toMatchObject({attendance:{writtenUpdate:"Applied remotely"}});expect(p.state().writes).toBe(1);expect(p.state().audits).toBe(0);
 });

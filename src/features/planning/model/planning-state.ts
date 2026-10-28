@@ -74,6 +74,9 @@ export interface PlanningState extends PlanningMeetingAttendance, PlanningTaskRe
   backlogAssignments(): readonly import("@/features/backlog/model/backlog-assignment").BacklogAssignmentView[];
   resumeBacklogAssignment(id: string): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor | null;
   backlog(): { model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
+  sprintCommitmentEdits(sprintId: string, profileId: string): readonly import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditView[];
+  resumeSprintCommitmentEdit(sprintId: string, profileId: string): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor | null;
+  beginSprintCommitmentEdit(shown: import("@/lib/types").SprintCommitment): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor;
   beginSprintLock(sprint: import("@/lib/types").Sprint, tasks: readonly Task[]): import("@/features/sprint/model/sprint-lock").SprintLockEditor;
   sprintLocks(sprintId: string): readonly import("@/features/sprint/model/sprint-lock").SprintLockView[];
   resumeSprintLock(sprintId: string): import("@/features/sprint/model/sprint-lock").SprintLockEditor | null;

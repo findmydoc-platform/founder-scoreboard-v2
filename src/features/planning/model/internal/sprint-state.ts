@@ -121,7 +121,7 @@ export function createSprintState(options: {
       const current = options.current();
       let stale = false;
       const next = { ...data };
-      const scopes = ["sprints", "sprintCommitments", "founderSprintScores", "founderStrikeStates", "strikeEvents", "scoreObjections", "meetings", "meetingAttendance"] as const;
+      const scopes = ["sprints", "founderSprintScores", "founderStrikeStates", "strikeEvents", "scoreObjections", "meetings", "meetingAttendance"] as const;
       for (const key of scopes) {
         if (!coverage[key]) continue;
         if ((lockScopeAt.get(key)||0)>started) { stale=true;Object.assign(next,{[key]:current[key]});continue; }

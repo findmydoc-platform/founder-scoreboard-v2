@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { createPlanningState, type PlanningStateAdapter } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
+import { emptyPlanningHeaderData, readyHeaderSlot } from "@/lib/planning-header-data";
 import type { Meeting, MeetingAttendance } from "@/lib/types";
 const meeting: Meeting = { id: 7, sprintId: "sprint", title: "Weekly", meetingAt: "2026-10-28T09:00:00Z", status: "planned", agenda: "" };
 const attendance: MeetingAttendance = { id: 8, meetingId: 7, profileId: "founder", status: "pending", absenceReason: "", writtenUpdate: "", reasonAccepted: false, points: 0, createdAt: "created", updatedAt: "shown-r1" };
@@ -93,4 +94,10 @@ test("an older attendance rejection preserves a confirmed Sprint edit and actual
  const response=deferred<never>();const {planning}=createPlanningState({userId:"user",initialData:{...emptyPlanningShellState,sprints:[sprint],meetings:[meeting],meetingAttendance:[attendance]},adapter:{saveTask:async()=>({task:{}}),saveMeetingAttendance:()=>response.promise,saveSprint:async(basis,patch)=>({sprint:{...basis,...patch,updatedAt:"sprint-r2"}}),readWorkspace:async()=>({data:{...emptyPlanningShellState,founderSprintScores:[score]},coverage:{founderSprintScores:"complete"}})}});
  const editor=planning.beginMeetingAttendance(meeting,attendance.profileId,attendance),saving=editor.save({writtenUpdate:"Reject me"});expect(await planning.beginSprintEdit(sprint).save({name:"Confirmed Sprint"})).toMatchObject({ok:true});await planning.refreshWorkspace("sprint");response.reject(Object.assign(new Error("Rejected"),{status:400}));await saving;
  expect(planning.sprintWorkspace().model.sprints[0]).toMatchObject({name:"Confirmed Sprint",updatedAt:"sprint-r2"});expect(planning.sprintWorkspace().model.scores).toEqual([score]);
+});
+
+test.each(["confirmed","unknown","rejected"] as const)("%s attendance only rereads an already loaded notification Header slot", async mode => {
+ let reads=0;const header={...emptyPlanningHeaderData,notifications:readyHeaderSlot({unreadCount:0,items:[]})};
+ const {planning}=createPlanningState({userId:"user",initialData:{...emptyPlanningShellState,meetings:[meeting],meetingAttendance:[attendance]},initialHeaderData:header,adapter:{readWorkspace:async()=>null,saveTask:async()=>({task:{}}),readHeader:async slots=>{expect(slots).toEqual(["notifications"]);reads++;return header;},saveMeetingAttendance:async(_,basis,input)=>{if(mode!=="confirmed")throw Object.assign(new Error("Failure"),mode==="rejected"?{status:403}:{});return{attendance:{...input,updatedAt:"accepted-r2"},effects:"confirmed"};}}});
+ await planning.beginMeetingAttendance(meeting,attendance.profileId,attendance).save({writtenUpdate:"Submitted"});expect(reads).toBe(mode==="rejected"?0:1);expect(planning.header().slots.quickLinks.readStatus).toBe("not-loaded");
 });

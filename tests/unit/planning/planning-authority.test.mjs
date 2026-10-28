@@ -230,7 +230,7 @@ test("commitment data stays with the owner unless the actor is an operational le
   const input = { credential: { kind: "session-request", request: protocol.request() }, action: "planning.sprint.commitment.write", targetId: "sprint-one" };
   const permission = await authorizeCredentialAction(input);
   expect(permission.ok).toBe(true);
-  const values = { profileId: "synthetic-profile", commitmentLevel: "Standard", weeklyHours: 12, note: "Owner plan" };
+  const values = { profileId: "synthetic-profile", commitmentLevel: "Standard", weeklyHours: 12, expectedUpdatedAt: null, note: "Owner plan" };
   expect(await permission.planning.writeCommitment(values)).toMatchObject({ data: { sprint_id: "sprint-one", profile_id: "synthetic-profile", weekly_hours: 12 }, error: null });
   expect(await permission.planning.writeCommitment({ ...values, profileId: "foreign" })).toMatchObject({ data: null, error: { code: "42501" } });
   protocol.state.role = "deputy";
@@ -680,7 +680,7 @@ test("commitment owner is captured before an awaited current binding check", asy
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.sprint.commitment.write", targetId: "sprint-one" });
   expect(grant.ok).toBe(true);
-  const values = { profileId: "synthetic-profile", commitmentLevel: "full", weeklyHours: 24, note: "Evidence" };
+  const values = { profileId: "synthetic-profile", commitmentLevel: "full", weeklyHours: 24, expectedUpdatedAt: null, note: "Evidence" };
   gateCurrent = true;
   const pending = grant.planning.writeCommitment(values);
   await waiting;

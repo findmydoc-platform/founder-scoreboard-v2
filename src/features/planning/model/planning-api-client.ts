@@ -1,7 +1,7 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskFocusItem } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, Task, TaskFocusItem } from "@/lib/types";
 import type { EpicNotEmptyError, EpicDeleteRequest } from "@/features/projects/model/epic-contract";
 import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
@@ -186,13 +186,6 @@ export function createSprintPlanRequest(apiClient: BrowserApiClient, payload: un
   return apiClient.requestJson<{ error?: string; code?: string; sprints?: Sprint[] }>("/api/sprints", {
     method: "POST",
     json: payload,
-  });
-}
-
-export function updateSprintCommitmentRequest(apiClient: BrowserApiClient, commitment: SprintCommitment) {
-  return apiClient.requestJson<{ error?: string; commitment?: SprintCommitment }>("/api/sprint-commitments", {
-    method: "PUT",
-    json: commitment,
   });
 }
 

@@ -145,13 +145,19 @@ export function planningSprintOperations({ action, targetId, profile, service, f
       return await service.rpc("update_sprint_schedule_transaction", { p_sprint_id: targetId, p_expected_updated_at: values.expectedUpdatedAt,
         p_sprint_patch: values.patch, p_actor_profile_id: profile.id, p_request_ip: metadata.request_ip || null, p_user_agent: metadata.user_agent || null });
     },
-    async writeCommitment(suppliedValues: { profileId: string; commitmentLevel: string; weeklyHours: number; note: string }) {
+    async writeCommitment(suppliedValues: { profileId: string; commitmentLevel: string; weeklyHours: number; note: string; expectedUpdatedAt: string | null }) {
       const values = structuredClone(suppliedValues);
       if (action !== "planning.sprint.commitment.write" || !targetId || !profile
         || (!rolePermitsAction("operations.lead", profile.platformRole) && values.profileId !== profile.id) || await current()) return { data: null, error: forbidden() };
-      const result = await service.from("sprint_commitments").upsert({ sprint_id: targetId, profile_id: values.profileId,
-        commitment_level: values.commitmentLevel, weekly_hours: values.weeklyHours, note: values.note, updated_at: new Date().toISOString(),
-      }, { onConflict: "sprint_id,profile_id" }).select("id,sprint_id,profile_id,commitment_level,weekly_hours,note").single();
+      if (values.expectedUpdatedAt !== null && (typeof values.expectedUpdatedAt !== "string" || !values.expectedUpdatedAt.trim())) return { data: null, error: { code: "22023", message: "Die Bearbeitungsbasis fehlt." } };
+      const now = Date.now();
+      const row = { sprint_id: targetId, profile_id: values.profileId, commitment_level: values.commitmentLevel,
+        weekly_hours: values.weeklyHours, note: values.note, updated_at: new Date(values.expectedUpdatedAt === null ? now : Math.max(now, Date.parse(values.expectedUpdatedAt) + 1)).toISOString() };
+      const selection = "id,sprint_id,profile_id,commitment_level,weekly_hours,note,updated_at";
+      const result = values.expectedUpdatedAt === null
+        ? await service.from("sprint_commitments").insert(row).select(selection).single()
+        : await service.from("sprint_commitments").update(row).eq("sprint_id", targetId).eq("profile_id", values.profileId).eq("updated_at", values.expectedUpdatedAt).select(selection).maybeSingle();
+      if (result.error?.code === "23505" || (!result.error && !result.data)) return { data: null, error: { code: "commitment_revision_conflict", message: "Das Commitment wurde zwischenzeitlich geändert." } };
       if (!result.error && result.data) savedCommitment = { ...result.data };
       return result;
     },
