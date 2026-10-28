@@ -17,7 +17,7 @@ export function SprintScoreObjections({data,sprint,currentProfile,pending,planni
  const retained=operations.findLast(view=>view.objectionId===null&&view.profileId===currentProfile?.id&&["saving","unconfirmed","blocked"].includes(view.phase));
  const [editor,setEditor]=useState<ScoreObjectionCreationEditor|null>(()=>retained?planningState.resumeScoreObjectionCreation(retained.id):null);
  useEffect(()=>()=>editor?.close(),[editor]);
- const [scoreObjectionDraft,onScoreObjectionDraftChange]=useState(()=>retained?.submitted&&"comment" in retained.submitted?retained.submitted.comment:"");
+ const [scoreObjectionDraft,onScoreObjectionDraftChange]=useState(()=>retained?.submitted && ("comment" in retained.submitted) ? retained.submitted.comment : "");
  const view=retained||editor?.view();
  const disabled=pending||Boolean(view&&["saving","unconfirmed","blocked","ended"].includes(view.phase));
  const openObjectionsCount=data.scoreObjections.filter(item=>item.sprintId===sprint.id&&item.status==="open").length;

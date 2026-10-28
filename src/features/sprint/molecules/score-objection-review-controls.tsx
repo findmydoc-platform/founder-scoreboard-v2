@@ -28,7 +28,7 @@ export function ScoreObjectionReviewControls({
   const retained=planningState.scoreObjectionOperations(objection.sprintId).findLast(view=>view.objectionId===objection.id&&(["saving","unconfirmed","conflict","blocked"].includes(view.phase)||view.phase==="saved"&&Boolean(view.error)));
   const [editor,setEditor]=useState<ScoreObjectionEditor|null>(()=>retained?planningState.resumeScoreObjectionReview(retained.id):null);
   useEffect(()=>()=>editor?.close(),[editor]);
-  const submitted=retained?.submitted&&"action" in retained.submitted?retained.submitted:null;
+  const submitted=retained?.submitted && ("action" in retained.submitted) ? retained.submitted : null;
   const [draft,setDraft]=useState<{resolutionComment:string;deliveryPoints:number;formPoints:number;weeklyPoints:number;secondReviewerProfileId:string;secondReviewDecision:string}|null>(()=>submitted?{resolutionComment:submitted.resolutionComment||"",deliveryPoints:submitted.deliveryPoints??currentScore?.deliveryPoints??0,formPoints:submitted.formPoints??currentScore?.formPoints??0,weeklyPoints:submitted.weeklyPoints??currentScore?.weeklyPoints??0,secondReviewerProfileId:submitted.secondReviewerProfileId||objection.secondReviewerProfileId||"",secondReviewDecision:submitted.secondReviewDecision||""}:null);
   const values=draft||{resolutionComment:"",deliveryPoints:currentScore?.deliveryPoints??0,formPoints:currentScore?.formPoints??0,weeklyPoints:currentScore?.weeklyPoints??0,secondReviewerProfileId:objection.secondReviewerProfileId||"",secondReviewDecision:""};
   const {resolutionComment,deliveryPoints,formPoints,weeklyPoints,secondReviewerProfileId,secondReviewDecision}=values;
@@ -62,7 +62,7 @@ export function ScoreObjectionReviewControls({
 
   return (
     <div className="grid min-w-0 gap-3 border-t border-slate-200 pt-3" onFocusCapture={()=>{begin();}}>
-      {view&&<ScoreObjectionOperationStatus profiles={profiles} view={view} check={()=>{void editor?.checkOutcome();}} compare={()=>{void editor?.refreshConflict();}} resave={()=>{if(view.submitted&&"action" in view.submitted)void editor?.resubmit(view.submitted);}}/>}
+      {view&&<ScoreObjectionOperationStatus profiles={profiles} view={view} check={()=>{void editor?.checkOutcome();}} compare={()=>{void editor?.refreshConflict();}} resave={()=>{if(view.submitted && ("action" in view.submitted))void editor?.resubmit(view.submitted);}}/>}
       {isCeo && !objection.secondReviewedAt ? (
         <div className="grid gap-2 rounded-md border border-slate-200 bg-white p-3">
           <label className="grid gap-1 text-xs font-semibold text-slate-700">

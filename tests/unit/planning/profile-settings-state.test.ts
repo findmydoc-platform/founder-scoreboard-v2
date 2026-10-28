@@ -112,7 +112,7 @@ test("persisted tour acknowledgements share confirmation, cache and session acce
 test("temporary profile read failures preserve authorized data, while denial remains withheld until an authorized read succeeds", async () => {
   let status = 503;
   const read = deferred<typeof initial>();
-  let load = async () => { throw Object.assign(new Error("Unavailable"), { status }); return { data: initial }; };
+  let load = async (): Promise<{ data: typeof initial }> => { throw Object.assign(new Error("Unavailable"), { status }); };
   const { planning } = createPlanningState({ userId: "account-a", initialData: initial, initialWorkspace: "profile", adapter: {
     saveTask: async () => ({ task }), readWorkspace: () => load(),
   } });

@@ -32,7 +32,14 @@ export function createScoreObjectionState(options: {
     && item.view().sprintId === sprintId && (!profileId || item.view().profileId === profileId)
     && ["saving", "unconfirmed", "conflict"].includes(item.view().phase));
   const scoreCurrent = (sprintId: string, profileId: string) => !invalidScores.has(pair({sprintId,profileId})) && (!invalidSprints.has(sprintId)||(readStamps.get(`founderSprintScores:${pair({sprintId,profileId})}`)||0)>lockAt) && ![...operations.values()].some(item=>{
-    const view=item.view();return view.sprintId===sprintId&&view.profileId===profileId&&["saving","unconfirmed"].includes(view.phase)&&view.submitted&&"action" in view.submitted&&view.submitted.action==="resolve"&&view.submitted.status==="accepted";
+    const view = item.view();
+    return view.sprintId === sprintId
+      && view.profileId === profileId
+      && ["saving", "unconfirmed"].includes(view.phase)
+      && view.submitted
+      && ("action" in view.submitted)
+      && view.submitted.action === "resolve"
+      && view.submitted.status === "accepted";
   });
   const currentScore = (row: { sprintId: string; profileId: string }) => options.current().founderSprintScores.find(item => pair(item) === pair(row)) || null;
   const returnedScore = (row: { sprintId: string; profileId: string }, started: number) => (readStamps.get(`founderSprintScores:${pair(row)}`) || 0) > started
