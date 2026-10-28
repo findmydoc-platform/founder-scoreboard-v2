@@ -32,7 +32,6 @@ type UsePlanningCommandRegistryOptions = {
   hasPlanningFilterUrlState: boolean;
   openTaskPanel: (taskId: string) => void;
   refreshCurrentWorkspaceModel: () => Promise<void>;
-  refreshCurrentWorkspaceModelWithResult: () => Promise<boolean>;
   selectedTask: Task | null;
   setFilters: PlanningViewState["setFilters"];
   setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
@@ -58,7 +57,6 @@ export function usePlanningCommandRegistry({
   hasPlanningFilterUrlState,
   openTaskPanel,
   refreshCurrentWorkspaceModel,
-  refreshCurrentWorkspaceModelWithResult,
   selectedTask,
   setFilters,
   setHeaderData,
@@ -125,10 +123,7 @@ export function usePlanningCommandRegistry({
     sprintPlanningOptions,
   });
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
-  const ownProfileSettingsCommands = useOwnProfileSettingsCommands({
-    ...commandContext,
-    refreshCurrentWorkspaceModel: refreshCurrentWorkspaceModelWithResult,
-  });
+  const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
   const sprintReviewSettingsCommand = useSprintReviewSettingsCommand(commandContext);
   const fmdToolCommands = useFmdToolCommands(commandContext);
   const notificationCommands = useNotificationCommands({
