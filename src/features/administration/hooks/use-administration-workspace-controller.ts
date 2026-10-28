@@ -64,26 +64,6 @@ export function useAdministrationWorkspaceController({
     }
   }, [handleAccessError, load]);
 
-  const saveGitHubProject = useCallback(async (owner: string, number: number, mentionTeamSlug: string) => {
-    const current = model?.githubProject;
-    if (!current) return;
-    await runCommand(
-      () => apiClient.requestJson<ErrorBody>("/api/founderops-settings/github-project", {
-        method: "PATCH",
-        json: {
-          expectedGithubProjectOwner: current.owner,
-          expectedGithubProjectNumber: current.number,
-          expectedGithubMentionTeamSlug: current.mentionTeamSlug,
-          githubProjectOwner: owner,
-          githubProjectNumber: number,
-          githubMentionTeamSlug: mentionTeamSlug,
-        },
-        useDevProfileOverride: false,
-      }),
-      "GitHub Project konnte nicht gespeichert werden.",
-    );
-  }, [apiClient, model?.githubProject, runCommand]);
-
   const deliverNotifications = useCallback(async (payload: Record<string, unknown>) => {
     await runCommand(
       () => apiClient.requestJson<ErrorBody>("/api/notifications/deliver", {
@@ -105,7 +85,6 @@ export function useAdministrationWorkspaceController({
     load,
     message,
     model,
-    saveGitHubProject,
     planningState,
   };
 }

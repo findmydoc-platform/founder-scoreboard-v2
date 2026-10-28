@@ -53,11 +53,10 @@ export function AdministrationWorkspaceHost({ apiClient, planningState, capabili
       )}
       {visibleTab === "integrations" && technical && (
         <IntegrationsDeliveryAdministration
-          key={`${model.githubProject?.owner || ""}:${model.githubProject?.number || 0}`}
           busy={controller.busy}
           model={model}
           onDeliver={controller.deliverNotifications}
-          onSaveGitHubProject={controller.saveGitHubProject}
+          planningState={planningState}
         />
       )}
     </AdministrationWorkspaceTemplate>

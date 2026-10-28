@@ -47,6 +47,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     administrationActorProfileId: options.initialCurrentProfile?.id,
     initialAdministrationAuthority: options.initialAdministratorAccess ? sessionAuthority({ platformRole: options.initialCurrentProfile?.platformRole || "viewer", credentialKind: "session", administratorAccess: options.initialAdministratorAccess }) : undefined,
     adapter: {
+      async saveAdministrationProject(project,expected) {
+        const {response,body}=await runtime.apiClient.requestJson<{ok?:boolean;project?:{id:string;githubProjectOwner:string;githubProjectNumber:number;githubMentionTeamSlug:string};error?:string;code?:string}>("/api/founderops-settings/github-project",{method:"PATCH",json:{expectedGithubProjectOwner:expected.owner,expectedGithubProjectNumber:expected.number,expectedGithubMentionTeamSlug:expected.mentionTeamSlug,githubProjectOwner:project.owner,githubProjectNumber:project.number,githubMentionTeamSlug:project.mentionTeamSlug},useDevProfileOverride:false});
+        if(!response.ok)throw Object.assign(new Error(body?.error||"GitHub Project konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
+        if(!body?.ok||!body.project)throw new Error("Die GitHub-Project-Speicherung ist noch nicht bestätigt.");
+        return {project:{id:body.project.id,owner:body.project.githubProjectOwner,number:body.project.githubProjectNumber,mentionTeamSlug:body.project.githubMentionTeamSlug}};
+      },
       async readAdministration() {
         const {response,body}=await runtime.apiClient.requestJson<{administration?:import("@/features/administration/model/administration-read-model").AdministrationWorkspaceModel;error?:string;code?:string}>("/api/administration-data",{useDevProfileOverride:false});
         if(!response.ok||!body?.administration)throw Object.assign(new Error(body?.error||"Administrationsdaten konnten nicht geladen werden."),{status:response.status,code:body?.code});

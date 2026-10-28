@@ -100,7 +100,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   const workweekCalendars = createPublishedWorkweekCalendars({ active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), read: adapter.readWorkweekCalendar });
   const privateWorkweek = createPrivateWorkweekState({ adapter, active: isActive, generation: () => sessionGeneration, changed: publish, published: workweekCalendars.invalidatePublishedWorkweeks });
-  const administration = createAdministrationPersonState({ actorRole: () => confirmed.profiles.find(profile => profile.id === administrationActorProfileId)?.platformRole || null, active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), profiles: () => visible.profiles, nextSequence: () => ++sequence, acceptCommonPeople: (people, started) => profileSettings.acceptAdministrationPeople(people, started), initialAuthority: initialAdministrationAuthority, read: adapter.readAdministration, adapter });
+  const administration = createAdministrationPersonState({ actorRole: () => confirmed.profiles.find(profile => profile.id === administrationActorProfileId)?.platformRole || null, active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), profiles: () => visible.profiles, nextSequence: () => ++sequence, acceptCommonPeople: (people, started) => profileSettings.acceptAdministrationPeople(people, started), commonProject: () => confirmed.project, acceptCommonProject: project => { confirmed = {...confirmed,project:{...confirmed.project,githubProjectOwner:project.owner,githubProjectNumber:project.number}}; }, initialAuthority: initialAdministrationAuthority, read: adapter.readAdministration, adapter });
   const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
   const events = createEventsState({ initial: active ? initialData.events : [], loaded: initialWorkspace === "events", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidateCalendar: () => notifications.invalidateHeader(["calendarEvents"]), refreshWorkspace: () => planning.refreshWorkspace("events"), endSession,
     beginHeaderRead: () => notifications.beginWorkspaceRead("events"),
@@ -213,7 +213,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }) };
     visible = sprintLock.project(backlogOrdering.project(backlogAssignments.project(sprintPlan.project(reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView))))))));
     visible = blockerReports.protect(blockerReports.projectVisible(visible));
-    visible = tools.projectVisible(events.projectVisible(notifications.projectVisible(visible)));
+    visible = administration.projectVisible(tools.projectVisible(events.projectVisible(notifications.projectVisible(visible))));
 
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
@@ -365,6 +365,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const planning: PlanningState = {
+    beginAdministrationProjectEdit: administration.beginProject,
+    administrationProjectEdits: administration.projectViews,
+    resumeAdministrationProjectEdit: administration.resumeProject,
     administration: administration.view,
     loadAdministration: administration.load,
     beginAdministrationPersonEdit: administration.begin,
@@ -593,11 +596,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const known = new Set(confirmed.tasks.map(task => task.id));
       for (const task of replacements.values()) taskReadAt.set(task.id, started);
       const covered = projectCoveredRead(confirmed, result.data, coverage);
+      const projectRead = coverage.project ? administration.acceptProjectRead(covered.project, started) : {project:covered.project,stale:false};
+      covered.project=projectRead.project;
       if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
       const profileRead = profileSettings.acceptRead(covered, coverage, started, workspace, result.data);
       const sprintRead = sprintState.acceptRead(profileRead.data, coverage, started, result.data);
       confirmed = {
         ...sprintRead.data,
+        project: {...sprintRead.data.project,githubProjectOwner:projectRead.project.githubProjectOwner,githubProjectNumber:projectRead.project.githubProjectNumber},
         tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
       };
       if (taskCoverage) {
@@ -608,7 +614,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       if (!memberships.has(workspace)) memberships.set(workspace, new Set());
       completeness.set(workspace, taskCoverage || "none");
-      const stale = rawIncoming.length !== incoming.length || sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
+      const stale = projectRead.stale || rawIncoming.length !== incoming.length || sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
       workspaceStatuses.set(workspace, stale ? "stale" : "current");
       if (toolRead !== null) tools.acceptRead({ tools: result.data.fmdTools, completeness: result.toolCoverage || "partial" }, toolRead, Boolean(result.headerData && result.headerData.quickLinks.state === "ready"));
       if (eventRead !== null) events.acceptRead({ events: result.data.events, coverage: result.eventCoverage || { range: null, completeness: "partial" } }, eventRead, Boolean(result.headerData && result.headerData.calendarEvents.state !== "idle"));
@@ -676,7 +682,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (!isActive()) return;
     const incoming = typeof update === "function" ? update(visible) : update;
     if (incoming.tasks !== visible.tasks) freshness = "stale";
-    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), ...sprintState.preserveLockScopes(incoming,confirmed), tasks: confirmed.tasks, sprints: confirmed.sprints, project: { ...incoming.project, reviewObjectionWindowHours: confirmed.project.reviewObjectionWindowHours } };
+    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), ...sprintState.preserveLockScopes(incoming,confirmed), tasks: confirmed.tasks, sprints: confirmed.sprints, project: { ...incoming.project, githubProjectOwner: confirmed.project.githubProjectOwner, githubProjectNumber: confirmed.project.githubProjectNumber, reviewObjectionWindowHours: confirmed.project.reviewObjectionWindowHours } };
     publish();
   }
   function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace) {

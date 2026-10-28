@@ -51,7 +51,7 @@ export type AdministrationIntegrationStatus = Readonly<{
     mode: "direct-dm" | "space-webhook" | "not-configured";
   };
   mentionTeam: {
-    state: "ready" | "fallback";
+    state: "ready" | "fallback" | "stale";
     githubHandle: string;
     profilesWithoutGitHubLogin: number;
   };

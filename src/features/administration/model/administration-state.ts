@@ -35,6 +35,9 @@ export type AdministrationStateView = {
     coverage: AdministrationReadCoverage;
 };
 export interface AdministrationPeopleState {
+    beginAdministrationProjectEdit(project: AdministrationProjectSettings): AdministrationProjectEditor;
+    administrationProjectEdits(): readonly AdministrationProjectEditView[];
+    resumeAdministrationProjectEdit(): AdministrationProjectEditor | null;
     administration(): AdministrationStateView;
     loadAdministration(): Promise<boolean>;
     beginAdministrationPersonEdit(person: AdministrationProfile): AdministrationPersonEditor;
@@ -42,6 +45,9 @@ export interface AdministrationPeopleState {
     resumeAdministrationPersonEdit(profileId: string): AdministrationPersonEditor | null;
 }
 export type AdministrationPersonAdapter = {
+    saveAdministrationProject?: (project: AdministrationProjectSettings, expected: AdministrationProjectSettings) => Promise<{
+        project: AdministrationProjectSettings;
+    }>;
     readAdministration?: () => Promise<AdministrationWorkspaceModel>;
     saveAdministrationTechnical?: (profileId: string, patch: PersonAdministrationPatch["technicalIdentity"], expected: TechnicalIdentityBasis) => Promise<{
         profile?: {
@@ -52,3 +58,21 @@ export type AdministrationPersonAdapter = {
         profileId: string;
     }>;
 };
+export type AdministrationProjectSettings = NonNullable<AdministrationWorkspaceModel["githubProject"]>;
+export type AdministrationProjectEditView = {
+    phase: "editing" | "saving" | "saved" | "rejected" | "unconfirmed" | "conflict" | "blocked" | "ended";
+    submitted: AdministrationProjectSettings | null;
+    serverProject: AdministrationProjectSettings | null;
+    error: string;
+    readStatus: PlanningReadStatus;
+    canResave: boolean;
+};
+export type AdministrationProjectResult = { ok: boolean; kind?: "unconfirmed" | "rejected" | "versionConflict" | "sessionSuperseded"; error?: string };
+export interface AdministrationProjectEditor {
+    view(): AdministrationProjectEditView;
+    save(project: AdministrationProjectSettings): Promise<AdministrationProjectResult>;
+    checkOutcome(): Promise<boolean>;
+    refreshConflict(): Promise<boolean>;
+    resave(project: AdministrationProjectSettings): Promise<AdministrationProjectResult>;
+    close(): void;
+}
