@@ -78,6 +78,12 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   backlog(): { model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
   sprintCommitmentEdits(sprintId: string, profileId: string): readonly import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditView[];
   resumeSprintCommitmentEdit(sprintId: string, profileId: string): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor | null;
+  scoreObjectionScore(sprintId: string, profileId: string): { score: import("@/lib/types").FounderSprintScore | null; complete: boolean };
+  beginScoreObjectionCreation(sprintId: string, profileId: string): import("@/features/sprint/model/score-objection-state").ScoreObjectionCreationEditor;
+  resumeScoreObjectionCreation(id: string): import("@/features/sprint/model/score-objection-state").ScoreObjectionCreationEditor | null;
+  resumeScoreObjectionReview(id: string): import("@/features/sprint/model/score-objection-state").ScoreObjectionEditor | null;
+  scoreObjectionOperations(sprintId: string): readonly import("@/features/sprint/model/score-objection-state").ScoreObjectionOperation[];
+  beginScoreObjectionReview(shown: import("@/lib/types").ScoreObjection, score: import("@/lib/types").FounderSprintScore | null): import("@/features/sprint/model/score-objection-state").ScoreObjectionEditor;
   beginSprintCommitmentEdit(shown: import("@/lib/types").SprintCommitment): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor;
   beginSprintLock(sprint: import("@/lib/types").Sprint, tasks: readonly Task[]): import("@/features/sprint/model/sprint-lock").SprintLockEditor;
   sprintLocks(sprintId: string): readonly import("@/features/sprint/model/sprint-lock").SprintLockView[];

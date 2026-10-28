@@ -42,7 +42,7 @@ export function buildSprintScoreViewModel({
     const commitment = data.sprintCommitments.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
     const sprintMeetings = sprint ? data.meetings.filter((item) => item.sprintId === sprint.id) : [];
     const persistedScore = data.founderSprintScores.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
-    const canCompute = !coverage || ["items", "commitments", "meetings", "attendance"].every(key => coverage[key as keyof SprintReadCoverage] === "complete");
+    const canCompute = !coverage || ["items", "commitments", "meetings", "attendance", "scores", "objections"].every(key => coverage[key as keyof SprintReadCoverage] === "complete");
     const computedScore = canCompute ? computeFounderSprintScore({
       profile,
       tasks: sprintTasks,

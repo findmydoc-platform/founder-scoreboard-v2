@@ -24,6 +24,7 @@ export function SprintControlsSummary({
   canFinalizeSprintScore,
   sprintPlanningOptions,
   openObjectionsCount,
+  objectionsComplete = true,
   onSelectedSprintChange,
 }: {
   data: PlanningShellState;
@@ -41,6 +42,7 @@ export function SprintControlsSummary({
   canFinalizeSprintScore: boolean;
   sprintPlanningOptions: import("../model/sprint-planning-options").SprintPlanningOptions;
   openObjectionsCount: number;
+  objectionsComplete?: boolean;
   onSelectedSprintChange: (sprintId: string) => void;
 }) {
   const provisionalIds = planningState.sprintPlan().provisionalSprintIds;
@@ -158,7 +160,7 @@ export function SprintControlsSummary({
       </UiNotice>}
       {openObjectionsCount > 0 && (
         <UiNotice tone="warning" radius="none" className="!border-x-0 !border-b-0 border-t-amber-100 px-4 py-3 font-medium">
-          {openObjectionsCount} offener Score-Einwand blockiert den Sprint-Lock bis zur Prüfung.
+          {objectionsComplete?"":"Mindestens "}{openObjectionsCount} {openObjectionsCount===1?"offener Score-Einwand blockiert":"offene Score-Einwände blockieren"} den Sprint-Lock bis zur Prüfung.
         </UiNotice>
       )}
       {!sprint.scoreLocked && reviewWindowOpen && (

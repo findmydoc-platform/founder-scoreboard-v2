@@ -10,7 +10,6 @@ import { useProfileUiPreferenceSync } from "@/features/profile/hooks/use-profile
 import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-commands";
 import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
-import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
 import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
 import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
@@ -97,7 +96,6 @@ export function usePlanningCommandRegistry({
     ...commandContext,
     syncTaskToGitHub,
   });
-  const sprintCommands = useSprintCommands(commandContext);
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
   const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
   const fmdToolCommands = useFmdToolCommands(commandContext);
@@ -118,7 +116,6 @@ export function usePlanningCommandRegistry({
     ownProfileSettingsCommands,
     profileSettingsCommands,
     reviewCommands,
-    sprintCommands,
     taskCollaborationCommands,
     taskMutationCommands,
   };

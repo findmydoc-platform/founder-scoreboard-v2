@@ -294,7 +294,6 @@ export function usePlanningAppController({
     ...commandRegistry.ownProfileSettingsCommands,
     ...commandRegistry.profileSettingsCommands,
     ...commandRegistry.reviewCommands,
-    ...commandRegistry.sprintCommands,
     ...commandRegistry.taskCollaborationCommands,
     ...commandRegistry.taskMutationCommands,
   };

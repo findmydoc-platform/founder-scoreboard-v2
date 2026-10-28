@@ -24,12 +24,13 @@ export function planningSprintOperations({ action, targetId, profile, service, f
         p_request_ip: metadata.request_ip || null, p_user_agent: metadata.user_agent || null });
     },
     async processScoreObjection(suppliedValues: { action: "assign_second_review" | "resolve" | "second_review"; objectionId: number; status?: string | null;
-      resolutionComment?: string; deliveryPoints?: number; formPoints?: number; weeklyPoints?: number; secondReviewerProfileId?: string; secondReviewDecision?: string },
+      resolutionComment?: string; deliveryPoints?: number; formPoints?: number; weeklyPoints?: number; secondReviewerProfileId?: string; secondReviewDecision?: string; expectedObjection: import("../../planning-row-types").DbScoreObjection; expectedScore: import("../../planning-row-types").DbFounderSprintScore | null },
       metadata: { request_ip?: string | null; user_agent?: string | null }) {
       const values = structuredClone(suppliedValues);
       if (action !== "planning.sprint.objection.process" || !targetId || !profile
         || (values.action !== "second_review" && !rolePermitsAction("governance.ceo", profile.platformRole)) || await current()) return { data: null, error: forbidden() };
-      return await service.rpc("process_score_objection_transaction", { p_sprint_id: targetId, p_objection_id: values.objectionId, p_actor_profile_id: profile.id,
+      return await service.rpc("process_score_objection_with_basis_transaction", { p_sprint_id: targetId, p_objection_id: values.objectionId, p_actor_profile_id: profile.id,
+        p_expected_objection:values.expectedObjection,p_expected_score:values.expectedScore,
         p_action: values.action, p_status: values.status || null, p_resolution_comment: values.resolutionComment || null,
         p_delivery_points: values.deliveryPoints ?? null, p_form_points: values.formPoints ?? null, p_weekly_points: values.weeklyPoints ?? null,
         p_second_reviewer_profile_id: values.secondReviewerProfileId || null, p_second_review_decision: values.secondReviewDecision || null,

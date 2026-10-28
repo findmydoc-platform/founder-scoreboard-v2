@@ -340,7 +340,7 @@ test("score objections bind their owner and reserve resolution for the CEO", asy
       expect(body.p_profile_id).toBe("synthetic-profile");
       return Response.json({ id: 10, profile_id: body.p_profile_id, sprint_id: body.p_sprint_id });
     },
-    process_score_objection_transaction: body => {
+    process_score_objection_with_basis_transaction: body => {
       expect(body.p_actor_profile_id).toBe("synthetic-profile");
       return Response.json({ objection: { id: body.p_objection_id, sprint_id: body.p_sprint_id } });
     },
