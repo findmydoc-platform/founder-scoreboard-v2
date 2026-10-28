@@ -33,3 +33,20 @@ test("technical administration preserves the late expiry distinction", async () 
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ code: "administrator_access_expired", error: "Der Adminzugang ist abgelaufen." });
 });
+
+test("technical identity carries the original nullable tuple and returns only its actual narrow receipt", async () => {
+ const current=await fixture();current.state.responses.update_profile_technical_identity_transaction={profile:{id:"target",github_login:"valid-login",google_chat_user_id:null,google_chat_dm_space:"",auth_user_id:"must-not-leak"}};
+ const expected={githubLogin:null,googleChatUserId:null,googleChatDmSpace:""};
+ const response=await current.patch({githubLogin:"valid-login",expected});
+ expect(response.status).toBe(200);expect(await response.json()).toEqual({ok:true,profile:{id:"target",githubLogin:"valid-login",googleChatUserId:null,googleChatDmSpace:""}});
+ expect(current.calls[0].body.p_profile_patch).toEqual({github_login:"valid-login",__expected_technical_identity:{github_login:null,google_chat_user_id:null,google_chat_dm_space:""}});
+});
+
+
+test.each([null,{},[],{githubLogin:1,googleChatUserId:null,googleChatDmSpace:null}])("technical route rejects malformed original tuple %s before writing",async(expected)=>{
+ const current=await fixture();expect((await current.patch({githubLogin:"valid-login",expected})).status).toBe(400);expect(current.calls).toEqual([]);
+});
+test("technical route distinguishes an actual original-basis conflict without exposing database detail",async()=>{
+ const current=await fixture();current.state.responses.update_profile_technical_identity_transaction=()=>Response.json({code:"P0019",message:"Private database detail"},{status:400});
+ const response=await current.patch({githubLogin:"valid-login",expected:{githubLogin:null,googleChatUserId:null,googleChatDmSpace:""}});expect(response.status).toBe(409);const body=await response.json();expect(body.code).toBe("administration_technical_conflict");expect(JSON.stringify(body)).not.toContain("Private database detail");
+});

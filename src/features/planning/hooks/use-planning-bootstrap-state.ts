@@ -29,6 +29,7 @@ export type PlanningBootstrapStateOptions = {
   initialProtectedDataLoaded?: boolean;
   initialAuthError?: string;
   operationalCorrection?: boolean;
+  administratorAccess?: import("@/features/administrator-access/model/administrator-access").AdministratorAccessSnapshot;
 };
 
 export function usePlanningBootstrapState({
@@ -42,11 +43,12 @@ export function usePlanningBootstrapState({
   initialProtectedDataLoaded = false,
   initialAuthError = "",
   operationalCorrection = false,
+  administratorAccess,
 }: PlanningBootstrapStateOptions) {
   const safeInitialData = useMemo(() => normalizePlanningShellState(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
-  const stateOwner = usePlanningStateOwner({ initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace });
+  const stateOwner = usePlanningStateOwner({ initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, initialAdministratorAccess: administratorAccess });
   const { data, setData, planningState } = stateOwner;
   const { workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const viewState = usePlanningViewState({
@@ -85,8 +87,8 @@ export function usePlanningBootstrapState({
     currentProfileId: auth.serverCurrentProfile?.id || "",
   });
   useEffect(() => {
-    stateOwner.configure(requestContext.apiClient, workspace, auth.serverCurrentProfile);
-  }, [stateOwner, requestContext.apiClient, workspace, auth.serverCurrentProfile]);
+    stateOwner.configure(requestContext.apiClient, workspace, auth.serverCurrentProfile, administratorAccess);
+  }, [stateOwner, requestContext.apiClient, workspace, auth.serverCurrentProfile, administratorAccess]);
   const currentProfileId = requestContext.currentProfile?.id || "";
   const headerData = usePlanningHeaderData({ planningState, enabled: Boolean(auth.authUser) && (!authRequired || auth.protectedDataLoaded), notificationsWorkspace: workspace === "notifications" });
   const canManageTaskMeta = requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";

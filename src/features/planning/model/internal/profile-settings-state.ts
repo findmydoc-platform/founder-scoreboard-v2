@@ -330,8 +330,26 @@ export function createProfileSettingsState(context: Context) {
       conflict: patch => teamSaves.set(shown.id, { profileId: shown.id, phase: "conflict", submitted: structuredClone(patch), error: "Das Profil wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.", followup: "not-needed" }),
     });
   }
+  function acceptAdministrationPeople(people: readonly ({ id: string } & Partial<Pick<Profile, "name" | "platformRole" | "orgRole" | "githubLogin">>)[], started: number) {
+    const byId = new Map(people.map(person => [person.id, person]));
+    const current = context.confirmed();
+    context.update({ ...current, profiles: current.profiles.map(profile => {
+      const actual = byId.get(profile.id); if (!actual) return profile;
+      const next = { ...profile };
+      for (const field of ["name", "platformRole", "orgRole", "githubLogin"] as const) {
+        if (!(field in actual) || Math.max(confirmedAt.get(`profiles:${profile.id}:${field}`) || 0, readAt.get(`profiles:${profile.id}:${field}`) || 0) > started) continue;
+        Object.assign(next, { [field]: actual[field] });
+        if (next.persistenceBasis && (field === "platformRole" || field === "orgRole")) {
+          next.persistenceBasis = { ...next.persistenceBasis };
+          delete next.persistenceBasis[field === "platformRole" ? "platform_role" : "org_role"];
+        }
+        readAt.set(`profiles:${profile.id}:${field}`, started);
+      }
+      return next;
+    }) });
+  }
   function preserveOwned(current: PlanningShellState): Partial<PlanningShellState> {
     return { profiles: current.profiles, notificationPreferences: current.notificationPreferences, profileUiPreferences: current.profileUiPreferences, profileFeatureTourAcknowledgements: current.profileFeatureTourAcknowledgements };
   }
-  return { view, save, check, acknowledge, beginOwnEdit, beginTeamEdit, team, saveTeam, checkTeam, project, protect, acceptRead, preserveOwned, hydrate(data: PlanningShellState, workspace: AppWorkspace) { if (workspace === "team") { teamMembers = new Set(data.profiles.map(profile => profile.id)); teamCompleteness = "complete"; } }, readStatus(status: PlanningReadStatus, workspace: AppWorkspace) { if (workspace === "profile") { if (status === "forbidden") denied = true; else if (status === "current" || status === "stale") denied = false; } if (workspace === "team") { if (status === "forbidden") teamDenied = true; else if (status === "current" || status === "stale") teamDenied = false; } }, clear() { ceoDemotions.clear(); teamSaves.clear(); teamChecks.clear(); teamMembers = undefined; teamCompleteness = "none"; teamDenied = false; tourSaves.clear(); saves.clear(); confirmedAt.clear(); readAt.clear(); completeReadAt.clear(); owned.clear(); checks.clear(); denied = false; } };
+  return { acceptAdministrationPeople, view, save, check, acknowledge, beginOwnEdit, beginTeamEdit, team, saveTeam, checkTeam, project, protect, acceptRead, preserveOwned, hydrate(data: PlanningShellState, workspace: AppWorkspace) { if (workspace === "team") { teamMembers = new Set(data.profiles.map(profile => profile.id)); teamCompleteness = "complete"; } }, readStatus(status: PlanningReadStatus, workspace: AppWorkspace) { if (workspace === "profile") { if (status === "forbidden") denied = true; else if (status === "current" || status === "stale") denied = false; } if (workspace === "team") { if (status === "forbidden") teamDenied = true; else if (status === "current" || status === "stale") teamDenied = false; } }, clear() { ceoDemotions.clear(); teamSaves.clear(); teamChecks.clear(); teamMembers = undefined; teamCompleteness = "none"; teamDenied = false; tourSaves.clear(); saves.clear(); confirmedAt.clear(); readAt.clear(); completeReadAt.clear(); owned.clear(); checks.clear(); denied = false; } };
 }
