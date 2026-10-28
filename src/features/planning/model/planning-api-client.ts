@@ -223,6 +223,7 @@ export function updateSprintReviewWindowRequest(
 ) {
   return apiClient.requestJson<{
     error?: string;
+    code?: string;
     project?: { id: string; reviewObjectionWindowHours: number };
     sprints?: Array<{ id: string; reviewDueAt: string }>;
   }>("/api/sprints/review-window", {

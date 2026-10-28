@@ -40,7 +40,6 @@ export function SprintScoreTableOverview({
   canManageSprint,
   sprintLockMessage,
   reviewObjectionWindowHours,
-  onSaveReviewObjectionWindow,
 }: {
   planningState: PlanningState;
   pending: boolean;
@@ -61,7 +60,6 @@ export function SprintScoreTableOverview({
   canManageSprint: boolean;
   sprintLockMessage: string;
   reviewObjectionWindowHours: number;
-  onSaveReviewObjectionWindow: (hours: number) => Promise<void>;
 }) {
   const sprintView = planningState.sprintWorkspace();
   const sprintData = sprintWorkspaceModelToPlanningShellState(sprintView.model);
@@ -124,7 +122,7 @@ export function SprintScoreTableOverview({
           disabled={currentProfile.platformRole !== "ceo"}
           pending={pending}
           reviewObjectionWindowHours={reviewObjectionWindowHours}
-          onSave={onSaveReviewObjectionWindow}
+          planningState={planningState}
         />
       )}
       <SprintControlsSummary

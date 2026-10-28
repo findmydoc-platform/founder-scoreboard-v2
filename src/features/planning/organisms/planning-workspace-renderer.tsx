@@ -71,7 +71,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     reviewScoreObjection,
     saveProfileSettings,
     saveOwnProfileSettings,
-    saveSprintReviewWindow,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
     setEpicDeleteTarget,
@@ -240,7 +239,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
           canManageSprint={canManageSprint}
           sprintLockMessage={sprintLockMessage}
           reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
-          onSaveReviewObjectionWindow={saveSprintReviewWindow}
         /> : null
       )}
       {workspace === "notifications" && (

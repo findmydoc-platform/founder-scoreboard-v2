@@ -17,7 +17,6 @@ import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-se
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
 import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
 import { useFmdToolCommands } from "@/features/tools/hooks/use-fmd-tool-commands";
-import { useSprintReviewSettingsCommand } from "@/features/sprint/hooks/use-sprint-review-settings-command";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { PlanningShellState, Task } from "@/lib/types";
 
@@ -122,7 +121,6 @@ export function usePlanningCommandRegistry({
   });
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
   const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
-  const sprintReviewSettingsCommand = useSprintReviewSettingsCommand(commandContext);
   const fmdToolCommands = useFmdToolCommands(commandContext);
   const notificationCommands = useNotificationCommands({
     ...commandContext,
@@ -136,7 +134,6 @@ export function usePlanningCommandRegistry({
     boardState,
     eventCommands,
     fmdToolCommands,
-    sprintReviewSettingsCommand,
     initiativeCommands,
     epicCommands,
     notificationCommands,
