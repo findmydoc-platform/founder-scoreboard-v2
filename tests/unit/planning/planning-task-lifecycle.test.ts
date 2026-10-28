@@ -205,3 +205,19 @@ test("a created relationship survives an older complete detail response while a 
   await planning.loadTaskDetail(original.id);
   expect(planning.taskDetail(original.id).relationships).toEqual([]);
 });
+
+
+test.each(["withdraw", "reject"] as const)("an unknown ancestor removal pauses a dependent %s without dispatch and retains its submitted reason", async action => {
+  const root = { ...original, id: "root" };
+  const child = { ...original, id: "child", taskType: "sub_issue" as const, parentTaskId: root.id };
+  const removals: string[] = [];
+  const { planning } = createPlanningState({ userId: "user", initialData: { ...initial, tasks: [original, root, child] }, adapter: {
+    readWorkspace: async () => ({ data: initial }), saveTask: async () => ({ task: original }),
+    removeTask: async task => { removals.push(task.id); throw new Error("Response lost"); },
+  } });
+  await planning.withdrawTask(root, "Root uncertainty");
+  await expect(action === "withdraw" ? planning.withdrawTask(child, "Retained child reason") : planning.rejectTask(child, "Retained child reason")).resolves.toMatchObject({ ok: false, kind: "unconfirmed" });
+  expect(removals).toEqual([root.id]);
+  expect(planning.taskLifecycle().find(operation => operation.taskId === child.id)).toMatchObject({ phase: "blocked", submitted: { reason: "Retained child reason" } });
+  expect(planning.board().tasks.map(task => task.id)).toEqual([original.id]);
+});

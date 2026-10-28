@@ -131,6 +131,12 @@ export function createTaskLifecycle(adapter: LifecycleAdapter) {
       const id = `${action}:${task.id}:${++removalSequence}`;
       const operation: PlanningTaskLifecycleView = { id, kind: action, phase: "saving", submitted: structuredClone({ task, reason }), taskId: task.id, error: "", checkStatus: "not-checked" };
       operations.set(id, operation);
+      if (isRemoving(task)) {
+        operation.phase = "blocked";
+        operation.error = "Das Entfernen des übergeordneten Elements ist noch nicht bestätigt. Diese Änderung wurde noch nicht gesendet.";
+        adapter.changed();
+        return { ok: false, kind: "unconfirmed", error: operation.error };
+      }
       removing.set(id, task.id);
       adapter.changed();
       try {
