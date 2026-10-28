@@ -20,6 +20,8 @@ export function createHeaderNotificationsState(options: {
   let events = options.initialData.notificationEvents;
   let deliveries = options.initialData.notificationDeliveries;
   let notificationsDenied = false;
+  let audienceRestricted = false;
+  let notificationAuthorityGeneration = 0;
   let releasesDenied = false;
   let notificationCompleteness: "complete" | "partial" = "partial";
   let notificationStatus: PlanningReadStatus = options.notificationsLoaded ? "current" : "not-loaded";
@@ -108,21 +110,23 @@ export function createHeaderNotificationsState(options: {
   function action(key: string, operation: NotificationOperationView, execute: () => Promise<{ status?: NotificationEvent["status"] }>): Promise<NotificationActionResult> {
     if (!options.isActive()) return Promise.resolve({ ok: false, phase: "session-ended" });
     if (operation.eventId && notificationsDenied || operation.releaseVersion && releasesDenied) return Promise.resolve({ ok: false, phase: "rejected", error: "Kein Zugriff auf diesen Bereich." });
-    const pending = requests.get(key); if (pending) return pending;
     if (operations.get(key)?.phase === "unconfirmed") return Promise.resolve({ ok: false, phase: "unconfirmed", error: "Bestätigung steht noch aus." });
+    const pending = requests.get(key); if (pending) return pending;
     const generation = options.generation();
+    const authority = notificationAuthorityGeneration;
+    const acceptsOperation = () => current(generation) && (!operation.eventId || authority === notificationAuthorityGeneration);
     operations.set(key, operation); invalidateNotifications(); options.changed();
     const result = (async (): Promise<NotificationActionResult> => {
       try {
         const saved = await execute();
-        if (!current(generation)) return { ok: false, phase: "session-ended" };
+        if (!acceptsOperation()) return { ok: false, phase: "session-ended" };
         operation.phase = "saved";
         if (operation.eventId && saved.status) events = events.map(event => event.id === operation.eventId ? { ...event, status: saved.status! } : event);
         invalidateNotifications(); options.changed();
         void refreshAffected();
         return { ok: true, phase: "saved", status: saved.status };
       } catch (error) {
-        if (!current(generation)) return { ok: false, phase: "session-ended" };
+        if (!acceptsOperation()) return { ok: false, phase: "session-ended" };
         const status = typeof error === "object" && error !== null && "status" in error ? Number(error.status) : 0;
         operation.phase = [400,401,403,404,422].includes(status) ? "rejected" : "unconfirmed";
         operation.error = error instanceof Error ? error.message : "Benachrichtigung konnte nicht aktualisiert werden.";
@@ -161,7 +165,7 @@ export function createHeaderNotificationsState(options: {
   }
   const publicState: PlanningNotificationsState = {
     header: () => { options.isActive(); return headerView(); }, refreshHeader,
-    notifications: () => { options.isActive(); return { completeness: notificationCompleteness, events: projectedEvents(), deliveries, readStatus: notificationStatus, operations: [...operations.values()].filter(value => value.releaseVersion ? !releasesDenied : !notificationsDenied).map(value => ({ ...value })) }; },
+    notifications: () => { options.isActive(); return { completeness: notificationCompleteness, events: projectedEvents(), deliveries, readStatus: notificationStatus, operations: [...operations.values()].filter(value => value.releaseVersion ? !releasesDenied : !notificationsDenied && (!audienceRestricted || events.some(event => event.id === value.eventId) || header.notifications.data.items.some(event => event.id === value.eventId))).map(value => ({ ...value })) }; },
     refreshNotifications: () => options.isActive() ? options.refreshNotifications() : Promise.resolve(false),
     updateNotificationStatus: (eventId, actionValue) => action(`notification:${eventId}`, { eventId, action: actionValue, phase: "saving", error: "", checking: false }, async () => {
       if (!options.adapter.updateNotification) throw Object.assign(new Error("Notification-Aktion nicht verfügbar."), { status: 400 });
@@ -193,6 +197,23 @@ export function createHeaderNotificationsState(options: {
     projectConfirmed(data: PlanningShellState) { return { ...data, notificationEvents: events, notificationDeliveries: deliveries }; },
     projectVisible(data: PlanningShellState) { return { ...data, notificationEvents: projectedEvents(), notificationDeliveries: deliveries }; },
     confirmedHeader: () => headerView(false).data,
+    invalidateNotificationAuthority() {
+      if (!options.isActive()) return;
+      const loaded = slots.notifications.readStatus !== "not-loaded" || notificationStatus !== "not-loaded" || [...operations.values()].some(operation => operation.eventId);
+      affectedAt = ++clock;
+      notificationAuthorityGeneration++;
+      for (const operation of operations.values()) if (operation.eventId && operation.phase === "saving") { operation.phase = "unconfirmed"; operation.error = "Der Geltungsbereich wurde geändert. Die Speicherung ist noch nicht bestätigt."; }
+      acceptedHeaderAt.set("notifications", affectedAt);
+      headerReads.delete("notifications");
+      audienceRestricted = true;
+      notificationsDenied = true;
+      events = []; deliveries = [];
+      header = { ...header, notifications: emptyPlanningHeaderData.notifications };
+      slots.notifications = { readStatus: loaded ? "stale" : "not-loaded", error: "" };
+      notificationStatus = loaded ? "forbidden" : "not-loaded";
+      options.changed();
+      if (loaded) { void refreshHeader(["notifications"]); void options.refreshNotifications(); }
+    },
     invalidateHeader(keys: readonly PlanningHeaderSlotKey[]) {
       const loaded = keys.filter(key => slots[key].readStatus !== "not-loaded");
       if (!loaded.length || !options.isActive()) return;
@@ -203,6 +224,6 @@ export function createHeaderNotificationsState(options: {
       void refreshHeader(loaded);
     },
     hydrateHeader(incoming: PlanningHeaderData) { if (!options.isActive()) return; if (planningHeaderSlotKeys.some(key => incoming[key].state !== "idle")) { void refreshHeader(planningHeaderSlotKeys.filter(key => incoming[key].state !== "idle")); } },
-    clear() { header = { ...emptyPlanningHeaderData }; events = []; deliveries = []; releases = []; operations.clear(); requests.clear(); headerReads.clear(); releaseRead = undefined; notificationsDenied = false; releasesDenied = false; notificationStatus = "not-loaded"; releaseStatus = "not-loaded"; planningHeaderSlotKeys.forEach(key => { slots[key] = { readStatus: "not-loaded", error: "" }; }); },
+    clear() { header = { ...emptyPlanningHeaderData }; events = []; deliveries = []; releases = []; operations.clear(); requests.clear(); headerReads.clear(); releaseRead = undefined; notificationsDenied = false; releasesDenied = false; audienceRestricted = false; notificationStatus = "not-loaded"; releaseStatus = "not-loaded"; planningHeaderSlotKeys.forEach(key => { slots[key] = { readStatus: "not-loaded", error: "" }; }); },
   };
 }

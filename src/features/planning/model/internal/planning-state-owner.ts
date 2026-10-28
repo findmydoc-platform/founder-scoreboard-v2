@@ -470,6 +470,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     confirmedHeader: notifications.confirmedHeader,
     acceptHeaderHydration: notifications.hydrateHeader,
     invalidateHeader: notifications.invalidateHeader,
+    invalidateNotificationAuthority: notifications.invalidateNotificationAuthority,
     applyLegacyProjection,
     acceptHydration,
     invalidateTaskViews,
