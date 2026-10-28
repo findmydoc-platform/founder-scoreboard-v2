@@ -49,16 +49,26 @@ export type PlanningWorkspaceView = {
   readStatus: PlanningReadStatus;
   completeness: "complete" | "partial" | "none";
 };
+export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
+
 export interface PlanningState {
   createTask(input: import("./planning-task-lifecycle").PlanningTaskCreationInput): Promise<import("./planning-task-lifecycle").PlanningTaskCreationResult>;
   withdrawTask(task: Task, reason: string): Promise<import("./planning-task-lifecycle").PlanningTaskRemovalResult>;
   rejectTask(task: Task, reason: string): Promise<import("./planning-task-lifecycle").PlanningTaskRemovalResult>;
   checkTaskLifecycle(id: string): Promise<PlanningTaskSaveCheck>;
   taskLifecycle(): readonly import("./planning-task-lifecycle").PlanningTaskLifecycleView[];
+  profileApiTokens(): import("@/features/profile/model/profile-api-token-state").ProfileApiTokensView;
+  loadProfileApiTokens(): Promise<boolean>;
+  issueProfileApiToken(draft: import("@/features/profile/model/profile-api-token-state").ProfileApiTokenDraft): Promise<import("@/features/profile/model/profile-api-token-state").ProfileApiTokenIssueResult>;
+  revokeProfileApiToken(tokenId: string): Promise<import("@/features/profile/model/profile-settings-contract").ProfileSettingsResult>;
+  acknowledgeFeatureTour(profileId: string, tourId: string): Promise<import("@/features/profile/model/profile-settings-contract").ProfileSettingsResult>;
+  checkOwnProfileSettings(profileId: string): Promise<boolean>;
+  profileSettings(profileId: string): import("@/features/profile/model/profile-settings-contract").ProfileSettingsView;
+  saveOwnProfileSettings(profileId: string, patch: import("@/features/profile/model/profile-settings-contract").OwnProfileSettingsPatch): Promise<import("@/features/profile/model/profile-settings-contract").ProfileSettingsResult>;
   board(): PlanningBoardView;
   workspace(workspace: AppWorkspace): PlanningWorkspaceView;
   taskDetail(taskId: string): PlanningTaskDetailView;
-  protectedCache(workspace?: AppWorkspace): { tasks: readonly Task[] } | null;
+  protectedCache(workspace?: AppWorkspace): PlanningConfirmedSnapshot | null;
   subscribe(listener: () => void): () => void;
   taskSaves(taskId: string): readonly PlanningTaskSaveView[];
   checkTaskSave(taskId: string): Promise<PlanningTaskSaveCheck>;

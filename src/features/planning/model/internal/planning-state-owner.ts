@@ -8,6 +8,9 @@ import { applyTaskDetailModel } from "@/features/tasks/model/task-detail-plannin
 import { emptyPlanningShellState } from "../planning-shell-state";
 import { createTaskLifecycle } from "./task-lifecycle";
 import type { PlanningTaskCreationInput, PlanningTaskCreationConfirmation, PlanningTaskRemovalConfirmation } from "../planning-task-lifecycle";
+import { createProfileApiTokensState } from "./profile-api-tokens-state";
+import { createProfileSettingsState } from "./profile-settings-state";
+import type { OwnProfileSettingsConfirmation, OwnProfileSettingsPatch } from "@/features/profile/model/profile-settings-contract";
 import { createTaskEditing } from "./task-editing";
 import { applyDeliverableApprovalPatch } from "../approval-domain";
 
@@ -15,10 +18,12 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 export type PlanningWorkspaceRead = { data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
-export type PlanningStateAdapter = {
+export type PlanningStateAdapter = import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   now?: () => number;
   removeTask?: (task: Task, action: "withdraw" | "reject", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
   createTask?: (input: PlanningTaskCreationInput) => Promise<PlanningTaskCreationConfirmation>;
+  acknowledgeFeatureTour?: (tourId: string) => Promise<import("@/lib/types").ProfileFeatureTourAcknowledgement>;
+  saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
   readWorkspace(workspace: AppWorkspace): Promise<PlanningWorkspaceRead | null>;
   readTaskDetail?: (taskId: string) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[] }>;
@@ -66,19 +71,22 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function readErrorStatus(error: unknown): "forbidden" | "unavailable" {
     return typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" : "unavailable";
   }
+  const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, readStatus: () => workspaceStatuses.get("profile") || "not-loaded", save: adapter.saveOwnProfileSettings, acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
+  const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
   function publish() {
     confirmed = lifecycle.projectConfirmed(confirmed);
-    visible = lifecycle.projectVisible({ ...confirmed, tasks: confirmed.tasks.map(task => {
+    const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
       let result = task;
       for (const operation of pending.values()) {
         if (operation.taskId === task.id) result = { ...result, ...operation.patch };
       }
       return result;
-    }) });
+    }) };
+    visible = profileSettings.project(lifecycle.projectVisible(taskView));
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
       if (workspaceStatuses.get(workspace) === "forbidden") publishCache?.(null, workspace);
-      else publishCache?.({ ...confirmed, tasks: confirmed.tasks.filter(task => members.has(task.id)) }, workspace);
+      else publishCache?.({ ...profileSettings.protect(confirmed), tasks: confirmed.tasks.filter(task => members.has(task.id)) }, workspace);
     }
     listeners.forEach(listener => listener());
   }
@@ -213,6 +221,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     checkTaskLifecycle: id => lifecycle.check(id),
     withdrawTask: (task, reason) => lifecycle.removeTask(task, "withdraw", reason),
     rejectTask: (task, reason) => lifecycle.removeTask(task, "reject", reason),
+    profileApiTokens: profileTokens.view,
+    loadProfileApiTokens: profileTokens.load,
+    issueProfileApiToken: profileTokens.issue,
+    revokeProfileApiToken: profileTokens.revoke,
+    acknowledgeFeatureTour: profileSettings.acknowledge,
+    checkOwnProfileSettings: profileSettings.check,
+    profileSettings: profileSettings.view,
+    saveOwnProfileSettings: profileSettings.save,
     board: () => ({ tasks: planning.workspace("planning").tasks, freshness }),
     workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id) || ((workspace === "planning" || workspace === "projects") && lifecycle.isTemporary(task.id))), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
     taskDetail: taskId => { isActive(); return ({
@@ -225,7 +241,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       activities: deniedTaskReads.has(taskId) ? [] : visible.taskActivity.filter(item => item.taskId === taskId),
       reviews: deniedTaskReads.has(taskId) ? [] : visible.taskReviews.filter(item => item.taskId === taskId),
     }); },
-    protectedCache: workspace => isActive() && (!workspace || (memberships.has(workspace) && workspaceStatuses.get(workspace) !== "forbidden")) ? { tasks: workspace ? confirmed.tasks.filter(task => memberships.get(workspace)?.has(task.id)) : confirmed.tasks } : null,
+    protectedCache(workspace) {
+      if (!isActive() || (workspace && (!memberships.has(workspace) || workspaceStatuses.get(workspace) === "forbidden"))) return null;
+      const data = profileSettings.protect(confirmed);
+      return { tasks: data.tasks.filter(task => !deniedTaskReads.has(task.id) && (!workspace || memberships.get(workspace)?.has(task.id))), profiles: data.profiles, sprints: data.sprints, notificationPreferences: data.notificationPreferences, profileUiPreferences: data.profileUiPreferences, profileFeatureTourAcknowledgements: data.profileFeatureTourAcknowledgements };
+    },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     taskSaves: taskId => {
       if (!isActive()) return [];
@@ -321,6 +341,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       catch (error) {
         if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
         workspaceStatuses.set(workspace, readErrorStatus(error));
+        if (workspace === "profile") profileSettings.readStatus(readErrorStatus(error));
         publish();
         return false;
       }
@@ -339,8 +360,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       for (const task of replacements.values()) taskReadAt.set(task.id, started);
       const covered = projectCoveredRead(confirmed, result.data, coverage);
       if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
+      const profileRead = profileSettings.acceptRead(covered, coverage, started);
       confirmed = {
-        ...covered,
+        ...profileRead.data,
         tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
       };
       if (taskCoverage) {
@@ -351,8 +373,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       if (!memberships.has(workspace)) memberships.set(workspace, new Set());
       completeness.set(workspace, taskCoverage || "none");
-      const stale = incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
+      const stale = profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
       workspaceStatuses.set(workspace, stale ? "stale" : "current");
+      if (workspace === "profile") profileSettings.readStatus(stale ? "stale" : "current");
       acceptWorkspaceContext?.(result);
       freshness = stale ? "stale" : "current";
       publish();
@@ -369,6 +392,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     outcomeCheckStatus.clear();
     editing.clear();
     lifecycle.clear();
+    profileSettings.clear();
+    profileTokens.clear();
     pending.clear();
     status.clear();
     memberships.clear();
@@ -398,7 +423,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (!isActive()) return;
     const incoming = typeof update === "function" ? update(visible) : update;
     if (incoming.tasks !== visible.tasks) freshness = "stale";
-    confirmed = { ...incoming, tasks: confirmed.tasks };
+    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), tasks: confirmed.tasks };
     publish();
   }
   function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace) {

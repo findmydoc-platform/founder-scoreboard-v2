@@ -188,7 +188,7 @@ export async function PATCH(request: NextRequest) {
 
   if (transactionError) {
     const colorError = mapProfileColorTransactionError(transactionError);
-    if (colorError) return apiError(colorError.error, colorError.status);
+    if (colorError) return NextResponse.json({ error: colorError.error, code: "profile_color_conflict" }, { status: colorError.status });
     if (transactionError.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
     if (transactionError.code === "22023" || transactionError.code === "23514") {
       return apiError("Profileinstellungen sind ungültig.", 400);

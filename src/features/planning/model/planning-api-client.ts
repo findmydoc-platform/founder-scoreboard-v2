@@ -205,6 +205,7 @@ export function updateProfileRequest(apiClient: BrowserApiClient, profileId: str
 
 export function updateOwnProfileSettingsRequest(apiClient: BrowserApiClient, payload: unknown) {
   return apiClient.requestJson<{
+    code?: string;
     error?: string;
     profile?: Profile;
     uiPreference?: ProfileUiPreference;
@@ -231,7 +232,7 @@ export function updateSprintReviewWindowRequest(
 }
 
 export function markProfileFeatureTourSeenRequest(apiClient: BrowserApiClient, tourId: string) {
-  return apiClient.requestJson<{ error?: string; acknowledgement?: ProfileFeatureTourAcknowledgement }>("/api/profile-feature-tours/seen", {
+  return apiClient.requestJson<{ error?: string; code?: string; acknowledgement?: ProfileFeatureTourAcknowledgement }>("/api/profile-feature-tours/seen", {
     method: "POST",
     json: { tourId },
   });

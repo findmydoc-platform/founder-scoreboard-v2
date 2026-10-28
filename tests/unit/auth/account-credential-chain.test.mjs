@@ -234,3 +234,16 @@ it("preserves the actual tour acknowledgement response and unavailable-table err
   failed = true;
   expect((await POST(protocol.request("/api/profile-feature-tours/seen", "POST", { tourId: "planning-tour" }))).status).toBe(503);
 });
+
+it("identifies the real settings color collision without reclassifying credential replacement", async () => {
+  const previousFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).pathname === "/rest/v1/rpc/update_profile_settings_transaction") return Response.json({ code: "P0001", message: "Synthetic color collision" }, { status: 400 });
+    return previousFetch(request);
+  });
+  const { PATCH } = await importTestModule("src/app/api/profile-settings/route.ts", { "server-only": {} });
+  const response = await PATCH(protocol.request("/api/profile-settings", "PATCH", { color: "#3b82f6", profileColorDuplicateMode: false }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ code: "profile_color_conflict" });
+});

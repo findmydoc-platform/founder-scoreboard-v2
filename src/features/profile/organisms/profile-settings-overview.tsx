@@ -24,13 +24,13 @@ import {
   restoreProfileColorAfterConflict,
 } from "@/features/profile/model/profile-color-policy";
 import type { OwnProfileSettingsPatch } from "@/features/profile/hooks/use-own-profile-settings-commands";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 import { taskStatuses } from "@/lib/status";
 import type { PlanningShellState, PlanningFilterPreferences, Profile } from "@/lib/types";
 import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type ProfileSettingsOverviewProps = {
-  apiClient: BrowserApiClient;
+  planningState: PlanningState;
   data: PlanningShellState;
   currentProfile: Profile | null;
   pending: boolean;
@@ -40,6 +40,8 @@ type ProfileSettingsOverviewProps = {
 
 export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
   const { currentProfile, data } = props;
+  const settings = currentProfile ? props.planningState.profileSettings(currentProfile.id) : null;
+  if (settings?.readStatus === "forbidden") return <UiPanel padding="xl"><UiNotice tone="warning">Profileinstellungen sind nicht verfügbar.</UiNotice><UiButton className="mt-2 min-h-11" onClick={() => { void props.planningState.checkOwnProfileSettings(currentProfile!.id); }}>Zugriff erneut prüfen</UiButton></UiPanel>;
   if (!currentProfile) {
     return (
       <UiPanel padding="xl">
@@ -52,7 +54,7 @@ export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
 
   return (
     <ProfileSettingsForm
-      key={`${currentProfile.id}:${profileUiPreference?.updatedAt || "empty"}`}
+      key={currentProfile.id}
       {...props}
       currentProfile={currentProfile}
       profileUiPreference={profileUiPreference || null}
@@ -61,7 +63,7 @@ export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
 }
 
 function ProfileSettingsForm({
-  apiClient,
+  planningState,
   data,
   currentProfile,
   pending,
@@ -69,6 +71,8 @@ function ProfileSettingsForm({
   onSaveOwnProfileSettings,
   profileUiPreference,
 }: Omit<ProfileSettingsOverviewProps, "currentProfile"> & { currentProfile: Profile; profileUiPreference: NonNullable<PlanningShellState["profileUiPreferences"][number]> | null }) {
+  const settings = planningState.profileSettings(currentProfile.id);
+  const confirmationPending = settings.save.phase === "unconfirmed" || settings.save.phase === "saving";
   const initialDraft = buildInitialDraft({ currentProfile, data, profileUiPreference });
   const [draft, setDraft] = useState<ProfileSettingsDraft>(() => initialDraft);
   const [savedDraft, setSavedDraft] = useState<ProfileSettingsDraft>(() => initialDraft);
@@ -233,11 +237,19 @@ function ProfileSettingsForm({
             />
           )}
           {activeSection === "api" && operationalProfile && (
-            <ProfilePlanningItemsTokens apiClient={apiClient} source={source} />
+            <ProfilePlanningItemsTokens planningState={planningState} source={source} />
           )}
         </div>
       </div>
 
+      {settings.save.phase === "unconfirmed" && (
+        <div className="mt-4" role="status">
+          <UiNotice tone="warning">Die Speicherung ist noch nicht bestätigt. Deine abgesendeten Angaben bleiben erhalten. Der aktuelle Serverstand bestätigt diesen Speicherversuch nicht.</UiNotice>
+          <UiButton className="mt-2 min-h-11" onClick={() => { void planningState.checkOwnProfileSettings(currentProfile.id); }} disabled={settings.save.checkStatus === "checking"}>Serverstand prüfen</UiButton>
+          {settings.save.checkStatus === "checked" && <p className="mt-2 text-sm text-slate-700">Serverstand geprüft. Die Bestätigung bleibt offen.</p>}
+          {settings.save.submitted && <details className="mt-2 text-sm text-slate-700"><summary>Abgesendete Angaben</summary><pre className="overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(settings.save.submitted, null, 2)}</pre></details>}
+        </div>
+      )}
       {(isDirty || message) && (
         <div className="sticky bottom-4 z-10 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur" data-profile-save-bar>
           <div className="text-sm font-semibold text-slate-700">
@@ -246,7 +258,7 @@ function ProfileSettingsForm({
           <div className="flex items-center gap-2">
             {isDirty && message && <UiNotice tone="success" size="compact">{message}</UiNotice>}
             {isDirty && (
-              <UiButton onClick={save} disabled={pending} variant="primary">
+              <UiButton onClick={save} disabled={pending || confirmationPending || settings.readStatus === "forbidden"} variant="primary">
                 Speichern
               </UiButton>
             )}

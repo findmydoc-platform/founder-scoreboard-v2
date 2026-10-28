@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, Clipboard, KeyRound, RefreshCw } from "lucide-react";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 import {
   TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS,
   TEAM_PLANNING_ITEMS_TOKEN_TTL_DAYS,
@@ -13,13 +13,13 @@ import { ProfilePlanningItemsTokenRow } from "@/features/profile/molecules/profi
 import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 export function ProfilePlanningItemsTokens({
-  apiClient,
+  planningState,
   source,
 }: {
-  apiClient: BrowserApiClient;
+  planningState: PlanningState;
   source: "supabase";
 }) {
-  const tokens = useProfilePlanningItemsTokens({ apiClient, source });
+  const tokens = useProfilePlanningItemsTokens({ planningState });
 
   return (
     <SettingsPane

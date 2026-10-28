@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { PlanningShellState, Profile, ProfileFeatureTourAcknowledgement, ViewMode } from "@/lib/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import type { PlanningShellState, Profile, ViewMode } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import * as planningApi from "@/features/planning/model/planning-api-client";
 import {
   featureTours,
   type FeatureTourDefinition,
@@ -17,12 +16,11 @@ import { selectNextFeatureTour } from "@/features/product-tours/model/feature-to
 import { selectSubIssueEvidenceTourTask } from "@/features/product-tours/model/sub-issue-evidence-tour-task";
 
 export type FeatureTourProviderProps = {
-  apiClient: BrowserApiClient;
+  planningState: Pick<PlanningState, "acknowledgeFeatureTour">;
   currentProfile: Profile | null;
   data: PlanningShellState;
   openTaskPanel: (taskId: string) => void;
   selectedTaskId: string | null;
-  setData: Dispatch<SetStateAction<PlanningShellState>>;
   setView: (view: ViewMode) => void;
   setWorkspace: (workspace: AppWorkspace) => void;
   source: "supabase";
@@ -99,29 +97,12 @@ function waitForElement(selector: string, timeoutMs = 8000) {
   });
 }
 
-function upsertAcknowledgement(
-  data: PlanningShellState,
-  acknowledgement: ProfileFeatureTourAcknowledgement,
-) {
-  return {
-    ...data,
-    profileFeatureTourAcknowledgements: data.profileFeatureTourAcknowledgements.some((item) =>
-      item.profileId === acknowledgement.profileId && item.tourId === acknowledgement.tourId
-    )
-      ? data.profileFeatureTourAcknowledgements.map((item) =>
-        item.profileId === acknowledgement.profileId && item.tourId === acknowledgement.tourId ? acknowledgement : item,
-      )
-      : [acknowledgement, ...data.profileFeatureTourAcknowledgements],
-  };
-}
-
 export function useFeatureTour({
-  apiClient,
+  planningState,
   currentProfile,
   data,
   openTaskPanel,
   selectedTaskId,
-  setData,
   setView,
   setWorkspace,
   source,
@@ -242,18 +223,7 @@ export function useFeatureTour({
     const markSeen = async () => {
       if (seenMarked || !runIsActive() || !currentProfile) return;
       seenMarked = true;
-      if (source !== "supabase") {
-        setData((current) => upsertAcknowledgement(current, {
-          profileId: currentProfile.id,
-          tourId: activeTour.id,
-          seenAt: new Date().toISOString(),
-        }));
-        return;
-      }
-      const { response, body } = await planningApi.markProfileFeatureTourSeenRequest(apiClient, activeTour.id);
-      if (response.ok && body?.acknowledgement) {
-        setData((current) => upsertAcknowledgement(current, body.acknowledgement!));
-      }
+      await planningState.acknowledgeFeatureTour(currentProfile.id, activeTour.id);
     };
 
     async function startTour() {
@@ -549,7 +519,7 @@ export function useFeatureTour({
         startedTourRef.current = "";
       }
     };
-  }, [apiClient, currentProfile, resumeStepIndex, setData, setView, setWorkspace, source, tour, tourRequested, workspace]);
+  }, [planningState, currentProfile, resumeStepIndex, setView, setWorkspace, source, tour, tourRequested, workspace]);
 
   return tourStatus;
 }

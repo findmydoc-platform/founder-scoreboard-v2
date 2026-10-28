@@ -147,12 +147,11 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
         <PlanningHeader controller={controller} administratorAccessController={administratorAccessController} />
 
         <FeatureTourProvider
-          apiClient={controller.apiClient}
+          planningState={controller.planningState}
           currentProfile={currentProfile}
           data={data}
           openTaskPanel={controller.openTaskPanel}
           selectedTaskId={controller.selectedTaskId}
-          setData={controller.setData}
           setView={setView}
           setWorkspace={setWorkspace}
           source={source}

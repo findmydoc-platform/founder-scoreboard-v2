@@ -33,6 +33,7 @@ export function ProfileIdentitySection({
       </SettingsRow>
       <SettingsRow label="Fokus" description="Ein kurzer Kontext für dich und das Team." align="start">
         <UiTextArea
+          aria-label="Fokus"
           value={draft.focus}
           onChange={(event) => onFocusChange(event.target.value)}
           maxLength={240}

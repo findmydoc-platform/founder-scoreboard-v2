@@ -882,7 +882,12 @@ function WorkweekGuide({ apiClient }: { apiClient: BrowserApiClient }) {
     <button onClick={() => window.dispatchEvent(new CustomEvent("fmd:open-product-updates"))}>Neuerungen öffnen</button>
     <ProductUpdatesProvider profileId={profile.id} />
     <PrivateTeamWorkweekCard apiClient={apiClient} profile={profile} />
-    <FeatureTourProvider apiClient={apiClient} currentProfile={profile} data={data} setData={setData}
+    <FeatureTourProvider planningState={{ acknowledgeFeatureTour: async (_profileId, tourId) => {
+      const { response, body } = await apiClient.requestJson<{ acknowledgement?: import("@/lib/types").ProfileFeatureTourAcknowledgement }>("/api/profile-feature-tours/seen", { method: "POST", json: { tourId } });
+      if (!response.ok || !body?.acknowledgement) return { ok: false, kind: "unconfirmed", error: "Bestätigung offen." };
+      setData(current => ({ ...current, profileFeatureTourAcknowledgements: [body.acknowledgement!] }));
+      return { ok: true };
+    } }} currentProfile={profile} data={data}
       openTaskPanel={() => undefined} selectedTaskId={null} setView={() => undefined} setWorkspace={() => undefined}
       source="supabase" workspace="team" />
   </>;
