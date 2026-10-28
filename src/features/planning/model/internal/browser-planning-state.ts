@@ -78,8 +78,13 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!body?.task?.updatedAt || body.task.approvalStatus !== "rejected") throw new Error("Die Ablehnung ist noch nicht bestätigt.");
         return {};
       },
+      async saveTeamProfile(profileId, patch, expected) {
+        const { response, body } = await planningApi.updateProfileRequest(runtime.apiClient, profileId, { ...patch, expected });
+        if (!response.ok || body?.profile?.id !== profileId) throw Object.assign(new Error(body?.error || "Profil konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        return { ...body.profile, id: profileId };
+      },
       async saveOwnProfileSettings(patch) {
-        const { response, body } = await planningApi.updateOwnProfileSettingsRequest(runtime.apiClient, { ...patch.profilePatch, profileColorDuplicateMode: patch.profileColorDuplicateMode, notificationEvents: patch.notificationEvents, uiPreferences: patch.uiPreferences });
+        const { response, body } = await planningApi.updateOwnProfileSettingsRequest(runtime.apiClient, { ...patch.profilePatch, expected: patch.expected, profileColorDuplicateMode: patch.profileColorDuplicateMode, notificationEvents: patch.notificationEvents, uiPreferences: patch.uiPreferences });
         if (!response.ok || !body?.profile) throw Object.assign(new Error(body?.error || "Profil konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
         return { profile: body.profile, uiPreference: body.uiPreference, notificationPreferences: body.notificationPreferences || [] };
       },

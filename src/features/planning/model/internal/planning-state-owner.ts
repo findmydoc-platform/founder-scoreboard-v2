@@ -27,6 +27,7 @@ export type PlanningStateAdapter = HeaderNotificationsAdapter & import("@/featur
   removeTask?: (task: Task, action: "withdraw" | "reject", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
   createTask?: (input: PlanningTaskCreationInput) => Promise<PlanningTaskCreationConfirmation>;
   acknowledgeFeatureTour?: (tourId: string) => Promise<import("@/lib/types").ProfileFeatureTourAcknowledgement>;
+  saveTeamProfile?: (profileId: string, patch: import("../planning-team-state").TeamProfilePatch, expected: Record<string, unknown>) => Promise<Partial<import("@/lib/types").Profile> & { id: string }>;
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
   readWorkspace(workspace: AppWorkspace): Promise<PlanningWorkspaceRead | null>;
@@ -77,7 +78,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" : "unavailable";
   }
   const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
-  const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, readStatus: () => workspaceStatuses.get("profile") || "not-loaded", save: adapter.saveOwnProfileSettings, acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
+  const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
   const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   function publish() {
@@ -241,6 +242,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     checkTaskLifecycle: id => lifecycle.check(id),
     withdrawTask: (task, reason) => lifecycle.removeTask(task, "withdraw", reason),
     rejectTask: (task, reason) => lifecycle.removeTask(task, "reject", reason),
+    beginOwnProfileEdit: profileSettings.beginOwnEdit,
+    beginTeamProfileEdit: profileSettings.beginTeamEdit,
+    team: profileSettings.team,
+    saveTeamProfile: profileSettings.saveTeam,
+    checkTeamProfile: profileSettings.checkTeam,
     profileApiTokens: profileTokens.view,
     loadProfileApiTokens: profileTokens.load,
     issueProfileApiToken: profileTokens.issue,
@@ -366,7 +372,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         notifications.workspaceFailed(workspace, error);
         workspaceStatuses.set(workspace, readErrorStatus(error));
         if (workspace === "sprint") sprintState.readStatus(readErrorStatus(error));
-        if (workspace === "profile") profileSettings.readStatus(readErrorStatus(error));
+        profileSettings.readStatus(readErrorStatus(error), workspace);
         publish();
         return false;
       }
@@ -385,7 +391,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       for (const task of replacements.values()) taskReadAt.set(task.id, started);
       const covered = projectCoveredRead(confirmed, result.data, coverage);
       if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
-      const profileRead = profileSettings.acceptRead(covered, coverage, started);
+      const profileRead = profileSettings.acceptRead(covered, coverage, started, workspace, result.data);
       const sprintRead = sprintState.acceptRead(profileRead.data, coverage, started, result.data);
       confirmed = {
         ...sprintRead.data,
@@ -402,7 +408,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const stale = sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
       workspaceStatuses.set(workspace, stale ? "stale" : "current");
       notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
-      if (workspace === "profile") profileSettings.readStatus(stale ? "stale" : "current");
+      profileSettings.readStatus(stale ? "stale" : "current", workspace);
       if (workspace === "sprint") sprintState.readStatus(stale ? "stale" : "current");
       acceptWorkspaceContext?.(result);
       freshness = stale ? "stale" : "current";
@@ -474,6 +480,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     const known = new Set(confirmed.tasks.map(task => task.id));
     confirmed = { ...projectCoveredRead(confirmed, data, coverage), tasks: [...confirmed.tasks, ...data.tasks.filter(task => !known.has(task.id))] };
     memberships.set(workspace, new Set(data.tasks.map(task => task.id)));
+    profileSettings.hydrate(data, workspace);
     workspaceStatuses.set(workspace, "current");
     completeness.set(workspace, coverage.tasks || "none");
     publish();

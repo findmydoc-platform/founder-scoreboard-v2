@@ -63,6 +63,11 @@ export interface PlanningState extends PlanningNotificationsState {
   rejectTask(task: Task, reason: string): Promise<import("./planning-task-lifecycle").PlanningTaskRemovalResult>;
   checkTaskLifecycle(id: string): Promise<PlanningTaskSaveCheck>;
   taskLifecycle(): readonly import("./planning-task-lifecycle").PlanningTaskLifecycleView[];
+  beginOwnProfileEdit(shown: import("@/features/profile/model/profile-settings-contract").OwnProfileEditingSnapshot): import("@/features/profile/model/profile-settings-contract").OwnProfileEditor;
+  beginTeamProfileEdit(shown: import("@/lib/types").Profile): import("./planning-team-state").TeamProfileEditor;
+  team(): import("./planning-team-state").PlanningTeamView;
+  saveTeamProfile(profileId: string, patch: import("./planning-team-state").TeamProfilePatch): Promise<import("./planning-team-state").TeamProfileResult>;
+  checkTeamProfile(profileId: string): Promise<boolean>;
   profileApiTokens(): import("@/features/profile/model/profile-api-token-state").ProfileApiTokensView;
   loadProfileApiTokens(): Promise<boolean>;
   issueProfileApiToken(draft: import("@/features/profile/model/profile-api-token-state").ProfileApiTokenDraft): Promise<import("@/features/profile/model/profile-api-token-state").ProfileApiTokenIssueResult>;

@@ -11,6 +11,7 @@ type GovernancePayload = {
   deputyActiveFrom?: unknown;
   deputyActiveUntil?: unknown;
   weeklyCapacity?: unknown;
+  expected?: Record<string, unknown>;
 };
 
 type GovernanceProfileRow = {
@@ -73,7 +74,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const metadata = auditRequestMetadata(request);
-  const { data, error } = await permission.account.updateGovernance(patch, metadata);
+  const { data, error } = await permission.account.updateGovernance(patch, metadata, payload.expected);
+  if (error?.code === "P0004") return NextResponse.json({ error: "Profil wurde zwischenzeitlich geändert.", code: "profile_revision_conflict" }, { status: 409 });
   if (error?.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
   if (error?.code === "23514") return apiError("Genau ein CEO muss gesetzt bleiben.", 409);
   if (error?.code === "22023") return apiError("Profiländerung ist ungültig.", 400);
@@ -91,6 +93,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       deputyActiveFrom: profile.deputy_active_from || "",
       deputyActiveUntil: profile.deputy_active_until || "",
       weeklyCapacity: profile.weekly_capacity,
+      persistenceBasis: {
+        platform_role: profile.platform_role, org_role: profile.org_role ?? null,
+        deputy_for: profile.deputy_for ?? null, deputy_active_from: profile.deputy_active_from ?? null,
+        deputy_active_until: profile.deputy_active_until ?? null, weekly_capacity: profile.weekly_capacity,
+      },
     },
     notificationPreferences: [],
   });

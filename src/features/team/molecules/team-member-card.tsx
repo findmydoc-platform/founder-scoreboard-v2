@@ -64,7 +64,7 @@ export function TeamMemberCard({
           <TeamMetric definition={metricDefinitions.weeklyCapacity} value={`${profile.weeklyCapacity}h`} />
         </div>
         {canManageTeam && (
-          <UiButton type="button" onClick={onEdit} size="sm" variant="secondary" className="w-full justify-self-start sm:w-auto xl:justify-self-end">
+          <UiButton type="button" aria-label={`${profile.name} bearbeiten`} onClick={onEdit} size="sm" variant="secondary" className="w-full justify-self-start sm:w-auto xl:justify-self-end">
             Bearbeiten
           </UiButton>
         )}

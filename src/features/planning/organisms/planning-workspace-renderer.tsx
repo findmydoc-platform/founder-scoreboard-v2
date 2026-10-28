@@ -188,7 +188,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
         <TeamOverview
           actualProfile={actualProfile}
           apiClient={apiClient}
-          data={data}
+          planningState={controller.planningState}
           tasks={data.tasks}
           pending={isPending}
           canManageTeam={currentProfile?.platformRole === "ceo"}

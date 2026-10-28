@@ -1,3 +1,5 @@
+import type { TeamProfileEditor, TeamProfileSaveView } from "@/features/planning/model/planning-team-state";
+import { TeamProfileSaveNotice } from "../molecules/team-profile-save-notice";
 import { X } from "lucide-react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
@@ -13,17 +15,25 @@ export function TeamProfileEditDialog({
   pending,
   profiles,
   saving,
+  saveState,
+  onCheck,
   onClose,
   onPatch,
   onReset,
   onSave,
+  editor,
+  onResave,
 }: {
+  editor?: TeamProfileEditor;
+  onResave: () => Promise<void>;
   canManageTeam: boolean;
   dirty: boolean;
   draftProfile: Profile;
   pending: boolean;
   profiles: Profile[];
   saving: boolean;
+  saveState?: TeamProfileSaveView;
+  onCheck: () => Promise<boolean>;
   onClose: () => void;
   onPatch: (patch: Partial<Profile>) => void;
   onReset: () => void;
@@ -32,6 +42,7 @@ export function TeamProfileEditDialog({
   const dialogRef = useModalDialog<HTMLDivElement>({ open: canManageTeam, onClose, closeDisabled: pending || saving });
   if (!canManageTeam) return null;
 
+  const editing = editor?.view();
   const isDeputy = draftProfile.platformRole === "deputy";
   const deputyTargetOptions = [
     { value: "", label: "Keine Vertretung" },
@@ -39,7 +50,8 @@ export function TeamProfileEditDialog({
       .filter((profile) => profile.platformRole === "ceo" || profile.id === draftProfile.deputyFor)
       .map((profile) => ({ value: profile.id, label: profile.name })),
   ];
-  const controlDisabled = pending || saving;
+  const confirmationPending = saveState?.phase === "unconfirmed";
+  const controlDisabled = pending || saving || confirmationPending;
 
   const updatePlatformRole = (value: string) => {
     const platformRole = value as PlatformRole;
@@ -67,10 +79,18 @@ export function TeamProfileEditDialog({
         </div>
 
         <div className="mt-5 grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 pb-4">
+          {saveState?.phase === "conflict" && <div role="status" className="space-y-2">
+            <p className="text-sm font-semibold text-amber-900">Das Profil wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.</p>
+            {editing?.current && <p className="break-words text-sm text-slate-700">Aktueller Serverstand: Plattformrolle: {roleOptionLabel(editing.current.platformRole)}; Org-Rolle: {editing.current.orgRole}; Kapazität: {editing.current.weeklyCapacity} Stunden; Vertreter für: {editing.current.deputyFor || "niemanden"}; Von: {editing.current.deputyActiveFrom || "offen"}; Bis: {editing.current.deputyActiveUntil || "offen"}.</p>}
+            <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }} disabled={saveState.checkStatus === "checking"}>Aktuellen Serverstand laden</UiButton>
+            <UiButton className="min-h-11" onClick={() => { void onResave(); }} disabled={!editing?.canResave || controlDisabled} variant="primary">Erneut speichern</UiButton>
+          </div>}
+          {saveState && <TeamProfileSaveNotice save={saveState} onCheck={onCheck} />}
           <div className="grid gap-3 sm:grid-cols-2">
             <UiField as="div">
               Plattformrolle
               <CustomSelect
+                aria-label="Plattformrolle"
                 value={draftProfile.platformRole}
                 disabled={controlDisabled}
                 onChange={updatePlatformRole}
@@ -107,6 +127,7 @@ export function TeamProfileEditDialog({
               <UiField as="div">
                 Vertreter für
                 <CustomSelect
+                  aria-label="Vertreter für"
                   value={draftProfile.deputyFor || ""}
                   disabled={controlDisabled || !isDeputy}
                   onChange={(value) => onPatch({ deputyFor: value })}
@@ -116,11 +137,11 @@ export function TeamProfileEditDialog({
               </UiField>
               <UiField>
                 Von
-                <CustomDatePicker value={draftProfile.deputyActiveFrom || ""} disabled={controlDisabled || !isDeputy} onChange={(value) => onPatch({ deputyActiveFrom: value })} className="h-9 text-sm" />
+                <CustomDatePicker aria-label="Vertretung von" value={draftProfile.deputyActiveFrom || ""} disabled={controlDisabled || !isDeputy} onChange={(value) => onPatch({ deputyActiveFrom: value })} className="h-9 text-sm" />
               </UiField>
               <UiField>
                 Bis
-                <CustomDatePicker value={draftProfile.deputyActiveUntil || ""} disabled={controlDisabled || !isDeputy} onChange={(value) => onPatch({ deputyActiveUntil: value })} className="h-9 text-sm" />
+                <CustomDatePicker aria-label="Vertretung bis" value={draftProfile.deputyActiveUntil || ""} disabled={controlDisabled || !isDeputy} onChange={(value) => onPatch({ deputyActiveUntil: value })} className="h-9 text-sm" />
               </UiField>
             </div>
             {!isDeputy && <p className="mt-2 text-xs leading-5 text-slate-500">Deputy-Felder werden aktiv, wenn die Plattformrolle auf Deputy gesetzt ist.</p>}
@@ -128,15 +149,15 @@ export function TeamProfileEditDialog({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-4">
-          <div className="w-full text-xs font-semibold text-slate-500 sm:w-auto">{dirty ? "Ungespeicherte Änderungen" : "Keine Änderungen"}</div>
+          <div className="w-full text-xs font-semibold text-slate-500 sm:w-auto">{confirmationPending ? "Speicherbestätigung ausstehend" : dirty ? "Ungespeicherte Änderungen" : "Keine Änderungen"}</div>
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-nowrap">
-            <UiButton type="button" onClick={onReset} disabled={!dirty || saving} className="col-span-2 sm:col-span-1">
+            <UiButton type="button" onClick={onReset} disabled={!dirty || saving || confirmationPending} className="col-span-2 sm:col-span-1">
               Zurücksetzen
             </UiButton>
             <UiButton type="button" onClick={onClose} disabled={saving}>
               Schließen
             </UiButton>
-            <UiButton type="button" onClick={() => void onSave()} disabled={!dirty || saving || pending} variant="primary">
+            <UiButton type="button" onClick={() => void onSave()} disabled={!dirty || saving || pending || confirmationPending || editing?.phase === "conflict"} variant="primary">
               {saving ? "Speichert..." : "Speichern"}
             </UiButton>
           </div>

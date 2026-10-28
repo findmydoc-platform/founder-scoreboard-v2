@@ -247,3 +247,53 @@ it("identifies the real settings color collision without reclassifying credentia
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ code: "profile_color_conflict" });
 });
+
+
+it("keeps the submitted original settings values as transaction preconditions", async () => {
+  const { PATCH } = await importTestModule("src/app/api/profile-settings/route.ts", { "server-only": {} });
+  const response = await PATCH(protocol.request("/api/profile-settings", "PATCH", {
+    focus: "New focus", expected: { profile: { focus: null }, events: {} },
+  }));
+  expect(response.status).toBe(200);
+  expect(requests[0].body.p_profile_patch).toEqual({
+    focus: "New focus", _expected: { profile: { focus: null }, events: {} },
+  });
+});
+
+
+it.each([
+  { profile: { focus: null, platform_role: "ceo" }, events: {} },
+  { profile: {}, events: {} },
+  { profile: { focus: null }, events: { "task.blocker_reported": false } },
+  { profile: { focus: null }, ui: null, events: {} },
+])("rejects a mismatched settings comparison scope before mutation", async expected => {
+  const { PATCH } = await importTestModule("src/app/api/profile-settings/route.ts", { "server-only": {} });
+  const response = await PATCH(protocol.request("/api/profile-settings", "PATCH", { focus: "New focus", expected }));
+  expect(response.status).toBe(400);
+  expect(requests).toHaveLength(0);
+});
+
+it("keeps settings original UI absence and event values distinct from defaults", async () => {
+  const { PATCH } = await importTestModule("src/app/api/profile-settings/route.ts", { "server-only": {} });
+  const expected = { profile: {}, ui: null, events: { "task.blocker_reported": null } };
+  const response = await PATCH(protocol.request("/api/profile-settings", "PATCH", {
+    uiPreferences: { defaultWorkspace: "planning", defaultTaskView: "board" },
+    notificationEvents: { "task.blocker_reported": false }, expected,
+  }));
+  expect(response.status).toBe(200);
+  expect(requests[0].body.p_profile_patch).toEqual({ _expected: expected });
+  expect(requests[0].body.p_notification_events).toEqual({ "task.blocker_reported": false });
+});
+
+it("identifies an original settings comparison conflict without reporting a color collision", async () => {
+  const previous = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).pathname.endsWith("/update_profile_settings_transaction")) return Response.json({ code: "P0004", message: "Sensitive conflict detail" }, { status: 400 });
+    return previous(request);
+  });
+  const { PATCH } = await importTestModule("src/app/api/profile-settings/route.ts", { "server-only": {} });
+  const response = await PATCH(protocol.request("/api/profile-settings", "PATCH", { focus: "New focus", expected: { profile: { focus: null } } }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ code: "profile_revision_conflict", error: "Profileinstellungen wurden zwischenzeitlich geändert." });
+});

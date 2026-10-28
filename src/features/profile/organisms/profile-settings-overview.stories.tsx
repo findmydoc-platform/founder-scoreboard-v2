@@ -11,17 +11,18 @@ import { ProfileSettingsOverview } from "./profile-settings-overview";
 const profile = { id: "profile-a", name: "Ada", focus: "Gespeicherter Fokus", color: "#64748b", platformRole: "founder", notificationsEnabled: true } as Profile;
 const preference: ProfileUiPreference = { profileId: profile.id, defaultWorkspace: "planning", defaultTaskView: "board", planningFilters: defaultFilters(), expandedInitiativeIds: [], createdAt: "before", updatedAt: "before" };
 const initial = { ...emptyPlanningShellState, profiles: [profile], profileUiPreferences: [preference] };
-function Fixture({ lost = false }: { lost?: boolean }) {
+function Fixture({ lost = false, foreign = false }: { lost?: boolean; foreign?: boolean }) {
   const [counts] = useState(() => ({ writes: 0, reads: 0 }));
-  const [bundle] = useState(() => createPlanningState({ userId: "account-a", initialData: initial, initialWorkspace: "profile", adapter: {
+  const createBundle = () => createPlanningState({ userId: "account-a", initialData: initial, initialWorkspace: "profile", adapter: {
     saveTask: async () => ({ task: {} }),
-    readWorkspace: async () => { counts.reads++; return { data: { ...initial, profileUiPreferences: [{ ...preference, updatedAt: "background" }] } }; },
+    readWorkspace: async () => { counts.reads++; return { data: { ...initial, profiles: [{ ...profile, focus: foreign ? "Fremder Fokus" : profile.focus }], profileUiPreferences: [{ ...preference, updatedAt: "background" }] } }; },
     saveOwnProfileSettings: async patch => { counts.writes++; if (lost) throw new Error("Antwort verloren"); return { profile: { ...profile, ...patch.profilePatch }, uiPreference: { ...preference, ...patch.uiPreferences, updatedAt: "saved" }, notificationPreferences: [] }; },
-  } }));
+  } });
+  const [bundle, setBundle] = useState(createBundle);
   const data = useSyncExternalStore(bundle.planning.subscribe, bundle.internal.getSnapshot, bundle.internal.getSnapshot);
   const [error, setSaveError] = useState("");
   const { saveOwnProfileSettings } = useOwnProfileSettingsCommands({ planningState: bundle.planning, currentProfile: profile, setSaveError });
-  return <div className="p-4"><p role="status">{error}</p><p>Writes: {counts.writes}; reads: {counts.reads}</p><button onClick={() => { void bundle.planning.refreshWorkspace("profile"); }}>Hintergrund laden</button><ProfileSettingsOverview planningState={bundle.planning} currentProfile={data.profiles[0] || profile} data={data} pending={false} source="supabase" onSaveOwnProfileSettings={saveOwnProfileSettings} /></div>;
+  return <div className="p-4"><p role="status">{error}</p><p>Writes: {counts.writes}; reads: {counts.reads}</p><button onClick={() => setBundle(createBundle())}>Sitzung ersetzen</button><button onClick={() => { void bundle.planning.refreshWorkspace("profile"); }}>Hintergrund laden</button><ProfileSettingsOverview planningState={bundle.planning} currentProfile={data.profiles[0] || profile} data={data} pending={false} source="supabase" onSaveOwnProfileSettings={saveOwnProfileSettings} /></div>;
 }
 const meta = { title: "Features/Profile/ProfileSettingsOverview", component: Fixture, parameters: { layout: "fullscreen" } } satisfies Meta<typeof Fixture>;
 export default meta;
@@ -48,10 +49,45 @@ export const KeepsUnconfirmedInputAndChecksWithoutReplay: Story = {
     await userEvent.type(canvas.getByRole("textbox"), "Nicht bestätigter Entwurf");
     await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
     await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
+    await expect(canvas.getByText("Speicherbestätigung ausstehend")).toBeVisible();
     await expect(canvas.getByRole("textbox")).toHaveValue("Nicht bestätigter Entwurf");
     await userEvent.click(canvas.getByRole("button", { name: "Serverstand prüfen" }));
     await expect(canvas.getByText("Serverstand geprüft. Die Bestätigung bleibt offen.")).toBeVisible();
     await expect(canvas.getByText("Writes: 1; reads: 1")).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  },
+};
+
+export const RequiresConsciousSaveAfterOverlappingRefresh: Story = {
+  args: { foreign: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.clear(canvas.getByRole("textbox"));
+    await userEvent.type(canvas.getByRole("textbox"), "Mein Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Hintergrund laden" }));
+    await expect(canvas.getByRole("textbox")).toHaveValue("Mein Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(canvas.getByText(/Aktueller Serverstand: Fokus: Fremder Fokus/)).toBeVisible();
+    await expect(canvas.getByText("Writes: 0; reads: 2")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
+    await expect(canvas.getByRole("textbox")).toHaveValue("Mein Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
+    await expect(canvas.getByText("Gespeichert.")).toBeVisible();
+    await expect(canvas.getByText("Writes: 1; reads: 2")).toBeVisible();
+  },
+};
+
+export const ReplacesEditingContextWithTheOwner: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.clear(canvas.getByRole("textbox"));
+    await userEvent.type(canvas.getByRole("textbox"), "Alter Sitzungsentwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Sitzung ersetzen" }));
+    await expect(canvas.getByRole("textbox")).toHaveValue("Gespeicherter Fokus");
+    await userEvent.clear(canvas.getByRole("textbox"));
+    await userEvent.type(canvas.getByRole("textbox"), "Neuer Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(canvas.getByText("Gespeichert.")).toBeVisible();
+    await expect(canvas.getByText("Writes: 1; reads: 0")).toBeVisible();
   },
 };

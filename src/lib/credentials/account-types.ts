@@ -9,10 +9,17 @@ export type AccountCredentialInput = ({
 )) | { credential: { kind: "server-cookies" }; action: "account.preview.read"; path: string }
   | { credential: { kind: "server-cookies" }; action: "account.profile.read" | "releases.read" };
 
+export type AccountSettingsExpected = {
+  profile: Record<string, unknown>;
+  ui?: Record<string, unknown> | null;
+  events?: Record<string, boolean | null>;
+};
+
 export type AccountSettingsUpdate = {
   profilePatch: { focus?: string | null; profile_color?: string; profile_color_duplicate_mode?: boolean; notifications_enabled?: boolean };
   uiPreferences: Record<string, unknown> | null;
   notificationEvents: Record<string, boolean>;
+  expected?: AccountSettingsExpected;
   metadata: { request_ip?: string | null; user_agent?: string | null };
 };
 
