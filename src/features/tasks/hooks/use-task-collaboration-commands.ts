@@ -3,7 +3,6 @@
 import { useCallback, useEffect } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import type { TaskActionResult } from "@/features/tasks/hooks/task-mutation-command-types";
-import * as taskApi from "@/features/tasks/model/task-api-client";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task, TaskRelation, TaskRelationType } from "@/lib/types";
 
@@ -13,14 +12,11 @@ type UseTaskCollaborationCommandsOptions = PlanningCommandContext & {
 
 export function useTaskCollaborationCommands({
   planningState,
-  apiClient,
   currentProfile,
   githubInstallationAvailable,
   selectedTask,
-  setData,
   setSaveError,
   source,
-  startTransition,
 }: UseTaskCollaborationCommandsOptions) {
   const importView = selectedTask ? planningState.taskGitHubImport(selectedTask.id) : null;
   const commentImportNotice = importView?.notice || "";
@@ -79,80 +75,12 @@ export function useTaskCollaborationCommands({
 
   const addTaskRelation = async (task: Task, payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }): Promise<TaskActionResult> => {
     setSaveError("");
-    if (!payload.relatedTaskId || payload.relatedTaskId === task.id) {
-      const error = "Bitte eine andere Aufgabe auswählen.";
-      return { ok: false, error };
-    }
-
-    const localRelation: TaskRelation = {
-      id: Date.now(),
-      taskId: task.id,
-      relatedTaskId: payload.relatedTaskId,
-      relationType: payload.relationType,
-      note: payload.note,
-      createdBy: currentProfile?.id || "",
-      createdAt: new Date().toISOString(),
-    };
-
-    setData((current) => ({ ...current, taskRelations: [localRelation, ...current.taskRelations] }));
-    setData((current) => ({
-      ...current,
-      tasks: current.tasks.map((item) =>
-        item.id === task.id || item.id === payload.relatedTaskId
-          ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" }
-          : item,
-      ),
-    }));
-    if (source !== "supabase") return { ok: true };
-
-    return new Promise<TaskActionResult>((resolve) => {
-      startTransition(async () => {
-        try {
-          const { response, body } = await taskApi.addTaskRelationshipRequest(apiClient, task.id, payload);
-          if (!response.ok || !body?.relation) throw new Error(body?.error || "Abhängigkeit konnte nicht gespeichert werden.");
-
-          setData((current) => ({
-            ...current,
-            taskRelations: current.taskRelations.map((relation) => (relation.id === localRelation.id ? body.relation! : relation)),
-          }));
-          resolve({ ok: true });
-        } catch (caught) {
-          const error = caught instanceof Error ? caught.message : "Abhängigkeit konnte nicht gespeichert werden.";
-          setData((current) => ({
-            ...current,
-            taskRelations: current.taskRelations.filter((relation) => relation.id !== localRelation.id),
-          }));
-          resolve({ ok: false, error });
-        }
-      });
-    });
+    return planningState.addTaskRelationship(task, payload);
   };
 
   const removeTaskRelation = (task: Task, relation: TaskRelation) => {
     setSaveError("");
-    setData((current) => ({
-      ...current,
-      taskRelations: current.taskRelations.filter((item) => item.id !== relation.id),
-      tasks: current.tasks.map((item) =>
-        item.id === relation.taskId || item.id === relation.relatedTaskId
-          ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" }
-          : item,
-      ),
-    }));
-    if (source !== "supabase") return;
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await taskApi.removeTaskRelationshipRequest(apiClient, task.id, relation.id);
-        if (!response.ok) throw new Error(body?.error || "Abhängigkeit konnte nicht entfernt werden.");
-      } catch (error) {
-        setData((current) => ({
-          ...current,
-          taskRelations: [relation, ...current.taskRelations],
-        }));
-        setSaveError(error instanceof Error ? error.message : "Abhängigkeit konnte nicht entfernt werden.");
-      }
-    });
+    void planningState.removeTaskRelationship(task, relation);
   };
 
   return {

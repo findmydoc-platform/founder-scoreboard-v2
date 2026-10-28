@@ -142,6 +142,8 @@ export function TaskDetailPage({
           commentImportPending={controller.commentImportPendingTaskIds.has(task.id)}
           githubInstallationAvailable={controller.githubInstallationAvailable}
           taskSaves={controller.planningState.taskSaves(task.id)}
+          relationshipChanges={controller.planningState.taskRelationshipChanges(task.id)}
+          onCheckRelationshipChange={changeId => { void controller.planningState.checkTaskRelationshipChange(changeId); }}
           attachmentUploads={controller.planningState.taskAttachmentUploads(task.id)}
           onCheckAttachmentUpload={id => { void controller.planningState.checkTaskAttachmentUpload(id); }}
           githubImport={controller.planningState.taskGitHubImport(task.id)}
@@ -178,7 +180,7 @@ export function TaskDetailPage({
           onWithdraw={(reason) => {
             if (controller.withdrawTask(task, reason)) router.replace("/planning");
           }}
-          onAddRelation={(payload) => controller.addTaskRelation(task, payload)}
+          onAddRelation={(payload, basis) => controller.addTaskRelation(basis || task, payload)}
           onRemoveRelation={(relation) => controller.removeTaskRelation(task, relation)}
           onDecideApproval={(action, note) => controller.decideTaskApproval(task, action, note)}
         />

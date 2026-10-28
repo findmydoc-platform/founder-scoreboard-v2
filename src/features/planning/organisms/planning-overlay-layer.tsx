@@ -158,6 +158,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onClose={closeTaskPanel}
           onOpenTask={(taskId) => openTaskPanel(taskId, "push")}
           taskSaves={controller.planningState.taskSaves(selectedTask.id)}
+          relationshipChanges={controller.planningState.taskRelationshipChanges(selectedTask.id)}
+          onCheckRelationshipChange={changeId => { void controller.planningState.checkTaskRelationshipChange(changeId); }}
           attachmentUploads={controller.planningState.taskAttachmentUploads(selectedTask.id)}
           onCheckAttachmentUpload={id => { void controller.planningState.checkTaskAttachmentUpload(id); }}
           githubImport={controller.planningState.taskGitHubImport(selectedTask.id)}
@@ -190,7 +192,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onReopenReview={reopenReviewTask}
           onWithdrawReview={withdrawReviewTask}
           onWithdraw={(reason) => withdrawTask(selectedTask, reason)}
-          onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
+          onAddRelation={(payload, basis) => addTaskRelation(basis || selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
           onDecideApproval={(action, note) => decideTaskApproval(selectedTask, action, note)}
         />
