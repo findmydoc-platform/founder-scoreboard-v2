@@ -57,13 +57,13 @@ test("Events and Tools expose focused fail-closed load interfaces", async () => 
   const events = await createSupabaseEventsReadModel(eventsDb).load({ authorized: true, actorProfileId: "person" });
   assert.equal(events.status, "ready");
   assert.deepEqual([...eventsDb.calls].sort(), ["founder_events", "profiles"]);
-  assert.deepEqual(Object.keys(events.model).sort(), ["coverage", "events", "people", "revision"]);
+  assert.deepEqual(Object.keys(events.model).sort(), ["coverage", "events", "people", "readCoverage", "revision"]);
 
   const toolsDb = recordingSupabase({ profiles: [{ id: "person" }], fmd_tools: [{ id: "tool", sort_order: 1 }] });
   const tools = await createSupabaseToolsReadModel(toolsDb).load({ authorized: true, actorProfileId: "person" });
   assert.equal(tools.status, "ready");
   assert.deepEqual(toolsDb.calls, ["profiles", "fmd_tools"]);
-  assert.deepEqual(Object.keys(tools.model).sort(), ["coverage", "people", "revision", "tools"]);
+  assert.deepEqual(Object.keys(tools.model).sort(), ["coverage", "people", "readCoverage", "revision", "tools"]);
 });
 
 for (const count of [0, 199, 200]) test(`Event range coverage is conservative at the query cap (${count})`, async () => {
