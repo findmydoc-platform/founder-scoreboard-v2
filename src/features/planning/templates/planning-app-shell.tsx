@@ -15,7 +15,6 @@ import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-
 import { ProductUpdatesProvider } from "@/features/product-updates/organisms/product-updates-provider";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
-import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 import type { AdministratorAccessController } from "@/features/administrator-access/hooks/use-administrator-access-controller";
@@ -28,12 +27,11 @@ type PlanningAppShellProps = {
   initialAdministrationModel?: AdministrationWorkspaceModel | null;
   onAdministratorAccessInvalid: () => void;
   source: "supabase";
-  decisionLogResult?: NotionDecisionLogResult;
   initialBacklogModel?: BacklogModel;
   initialSprintModel?: SprintWorkspaceModel;
 };
 
-export function PlanningAppShell({ authRequired, controller, administratorAccessController, initialAdministrationModel = null, onAdministratorAccessInvalid, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningAppShellProps) {
+export function PlanningAppShell({ authRequired, controller, administratorAccessController, initialAdministrationModel = null, onAdministratorAccessInvalid, source, initialBacklogModel, initialSprintModel }: PlanningAppShellProps) {
   const {
     authAvailable,
     authBusy,
@@ -194,7 +192,6 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
           initialAdministrationModel={initialAdministrationModel}
           onAdministratorAccessInvalid={onAdministratorAccessInvalid}
           source={source}
-          decisionLogResult={decisionLogResult}
           initialBacklogModel={initialBacklogModel}
           initialSprintModel={initialSprintModel}
         />

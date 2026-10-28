@@ -27,15 +27,14 @@ export function usePlanningStateOwner(options: PlanningPageState) {
     if (bundle.initialPage !== initialPage) {
       bundle.acceptProtectedData(initialPage.initialData, initialPage.initialUserId, initialPage.initialWorkspace);
       bundle.acceptHeaderHydration(initialPage.initialHeaderData);
+      bundle.owner.internal.acceptDecisionLogHydration(initialPage.initialDecisionLogResult);
     }
   }, [bundle, initialPage]);
   return useMemo(() => ({
     data,
     planningState: bundle.owner.planning,
-    setData: bundle.owner.internal.applyLegacyProjection,
     acceptProtectedData: bundle.acceptProtectedData,
     clearPlanningState: bundle.owner.internal.suspendProtected,
-    legacyApiClient: bundle.legacyApiClient,
     configure: (apiClient: BrowserApiClient, workspace: AppWorkspace, currentProfile: AuthenticatedProfile | null, administratorAccess?: import("@/features/administrator-access/model/administrator-access").AdministratorAccessSnapshot) => {
       Object.assign(bundle.runtime, { apiClient, workspace, currentProfile });
       if (administratorAccess) bundle.owner.internal.bindAdministrationAuthority(sessionAuthority({ platformRole: currentProfile?.platformRole || "viewer", credentialKind: "session", administratorAccess }));

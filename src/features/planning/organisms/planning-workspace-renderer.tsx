@@ -6,9 +6,7 @@ import { futureSprintDrafts } from "@/features/planning/model/planning-app-model
 import { PlanningTaskViewRenderer } from "@/features/planning/organisms/planning-task-view-renderer";
 import { WorkspaceContentSkeleton } from "@/features/planning/templates/workspace-loading-shell";
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
-import { UiPanel } from "@/shared/atoms/ui-primitives";
 import { canManageEpics } from "@/features/projects/model/epic-policy";
-import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
@@ -24,7 +22,7 @@ const EventsOverview = dynamic(() => import("@/features/events/organisms/events-
 const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: GenericWorkspacePanelLoading });
 const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organisms/profile-settings-overview").then((mod) => mod.ProfileSettingsOverview), { loading: GenericWorkspacePanelLoading });
 const NotificationsOverview = dynamic(() => import("@/features/notifications/organisms/notifications-overview").then((mod) => mod.NotificationsOverview), { loading: GenericWorkspacePanelLoading });
-const DecisionLogOverview = dynamic(() => import("@/features/decision-log/organisms/decision-log-overview").then((mod) => mod.DecisionLogOverview), { loading: GenericWorkspacePanelLoading });
+const PlanningDecisionLog = dynamic(() => import("@/features/decision-log/organisms/planning-decision-log").then(mod => mod.PlanningDecisionLog), { loading: GenericWorkspacePanelLoading });
 const SprintScoreTableOverview = dynamic(() => import("@/features/sprint/organisms/sprint-score-overview").then((mod) => mod.SprintScoreTableOverview), { loading: GenericWorkspacePanelLoading });
 const FmdQuickLinksOverview = dynamic(() => import("@/features/tools/organisms/fmd-quick-links-overview").then((mod) => mod.FmdQuickLinksOverview), { loading: GenericWorkspacePanelLoading });
 const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overview").then((mod) => mod.TeamOverview), { loading: GenericWorkspacePanelLoading });
@@ -36,12 +34,11 @@ type PlanningWorkspaceRendererProps = {
   initialAdministrationModel?: AdministrationWorkspaceModel | null;
   onAdministratorAccessInvalid: () => void;
   source: "supabase";
-  decisionLogResult?: NotionDecisionLogResult;
   initialBacklogModel?: BacklogModel;
   initialSprintModel?: SprintWorkspaceModel;
 };
 
-export function PlanningWorkspaceRenderer({ controller, administrationCapabilities, initialAdministrationModel = null, onAdministratorAccessInvalid, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningWorkspaceRendererProps) {
+export function PlanningWorkspaceRenderer({ controller, administrationCapabilities, initialAdministrationModel = null, onAdministratorAccessInvalid, source, initialBacklogModel, initialSprintModel }: PlanningWorkspaceRendererProps) {
   const {
     actualProfile,
     authBusy,
@@ -92,13 +89,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
 
   return (
     <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
-      {workspace === "decision-log" && decisionLogResult && <DecisionLogOverview result={decisionLogResult} />}
-      {workspace === "decision-log" && !decisionLogResult && (
-        <UiPanel padding="xl">
-          <h2 className="text-lg font-semibold text-slate-950">Decision Log nicht verfügbar</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Für diesen Seitenaufruf wurden keine Notion-Daten geladen.</p>
-        </UiPanel>
-      )}
+      {workspace === "decision-log" && <PlanningDecisionLog planningState={planningState} />}
       {workspace === "projects" && (
         <ProjectsOverview
           planningState={planningState}

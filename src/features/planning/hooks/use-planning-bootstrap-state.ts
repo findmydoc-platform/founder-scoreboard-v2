@@ -19,6 +19,7 @@ import { normalizeStatus } from "@/lib/status";
 import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData, Task } from "@/lib/types";
 
 export type PlanningBootstrapStateOptions = {
+  initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
   initialData: PlanningShellState;
   initialHeaderData: PlanningHeaderData;
   initialWorkspace: AppWorkspace;
@@ -33,6 +34,7 @@ export type PlanningBootstrapStateOptions = {
 };
 
 export function usePlanningBootstrapState({
+  initialDecisionLogResult,
   initialData,
   initialHeaderData,
   initialWorkspace,
@@ -48,8 +50,8 @@ export function usePlanningBootstrapState({
   const safeInitialData = useMemo(() => normalizePlanningShellState(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
-  const stateOwner = usePlanningStateOwner({ initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, initialAdministratorAccess: administratorAccess });
-  const { data, setData, planningState } = stateOwner;
+  const stateOwner = usePlanningStateOwner({ initialDecisionLogResult, initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, initialAdministratorAccess: administratorAccess });
+  const { data, planningState } = stateOwner;
   const { workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const viewState = usePlanningViewState({
     initialData: safeInitialData,
@@ -73,10 +75,8 @@ export function usePlanningBootstrapState({
     initialCurrentProfile,
     initialProtectedDataLoaded,
     initialAuthError,
-    setData: stateOwner.acceptProtectedData,
+    planningState,
     clearPlanningState: stateOwner.clearPlanningState,
-    normalizePlanningShellState,
-    normalizePlanningHeaderData,
     onSignedOut: clearSelectedTask,
   });
 
@@ -104,11 +104,7 @@ export function usePlanningBootstrapState({
   ), [canCorrectOperationally, canManageFinalTaskStatus, canManageTaskMeta, requestContext.currentProfile]);
   const dataRefresh = useCurrentWorkspaceModelRefresh({
     planningState,
-    apiClient: requestContext.apiClient,
     authUser: auth.authUser,
-    headerData,
-    serverCurrentProfile: auth.serverCurrentProfile,
-    setData,
     setProtectedDataLoaded: auth.setProtectedDataLoaded,
     source,
     workspace,
@@ -134,7 +130,6 @@ export function usePlanningBootstrapState({
     ...requestContext,
     ...viewState,
     planningState,
-    apiClient: stateOwner.legacyApiClient,
     authAvailable,
     canChangeTaskStatus,
     canCorrectOperationally,
@@ -146,7 +141,6 @@ export function usePlanningBootstrapState({
     githubSyncQueueOpen,
     isPending,
     saveError,
-    setData,
     setGithubSyncQueueOpen,
     setSaveError,
     setStatusGuardNotice,

@@ -52,7 +52,7 @@ function Fixture({ scenario = "epic-success" }: { scenario?: string }) {
     };
     return { client, writes: () => writes, reads: () => reads };
   });
-  const [browser] = useState(() => { const value = createBrowserPlanningState({ initialData: initial, initialWorkspace: "projects", initialUserId: "user", initialCurrentProfile: profile, initialHeaderData: emptyPlanningHeaderData }); value.runtime.apiClient = network.client; return value; });
+  const [browser] = useState(() => { const value = createBrowserPlanningState({ initialData: initial, initialWorkspace: "projects", initialUserId: "user", initialCurrentProfile: profile, initialHeaderData: emptyPlanningHeaderData }); value.runtime.session = {userId:value.runtime.userId,revision:"story-session",expiresAt:4102444800,user:{id:value.runtime.userId}}; value.runtime.apiClient = network.client; return value; });
   const { planning, internal } = browser.owner;
   const data = useSyncExternalStore(planning.subscribe, internal.getSnapshot, internal.getSnapshot);
   const [open, setOpen] = useState(true);
@@ -111,6 +111,12 @@ export const UnknownContentRetainsConfirmedParentAcrossNavigation: Story = { arg
   await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
   await userEvent.click(canvas.getByRole("button", { name: "Initiative schließen" }));
   await expect(canvas.getByText(/Die Zuordnung wurde gespeichert/)).toBeVisible();
+  await userEvent.click(canvas.getByText("Behaltene Eingaben anzeigen"));
+  const retained=canvasElement.querySelector("details dl")!;
+  await expect(retained).toHaveTextContent("Other milestone");
+  await expect(retained).toHaveTextContent(profile.name);
+  await expect(retained).not.toHaveTextContent("new-epic");
+  await expect(retained).not.toHaveTextContent("ceo:");
   await userEvent.click(canvas.getByRole("button", { name: "Vorgang prüfen" }));
   expect(controls.get("parent-content-unknown")!.writes()).toHaveLength(2); expect(controls.get("parent-content-unknown")!.reads()).toBe(1);
 } };

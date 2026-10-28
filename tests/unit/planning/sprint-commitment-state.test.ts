@@ -18,7 +18,6 @@ test("a commitment confirmation changes its Sprint/profile identity while pendin
   write.resolve({ commitment: { ...commitment, weeklyHours: 30, updatedAt: "opaque/saved" } });
   await expect(save).resolves.toMatchObject({ ok: true });
   old.resolve({ data: initial }); await read;
-  owner.internal.applyLegacyProjection(initial);
   expect(owner.planning.sprintWorkspace().model.commitments).toEqual([{ ...commitment, weeklyHours: 30, updatedAt: "opaque/saved" }]);
   expect(cached.sprintCommitments[0].weeklyHours).toBe(30);
   expect(owner.planning.sprintWorkspace().readStatus).toBe("stale");

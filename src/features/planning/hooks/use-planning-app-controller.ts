@@ -10,6 +10,7 @@ import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-
 type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
+  initialDecisionLogResult,
   initialData,
   initialHeaderData,
   initialWorkspace,
@@ -24,6 +25,7 @@ export function usePlanningAppController({
 }: PlanningAppControllerOptions) {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
+    initialDecisionLogResult,
     initialData,
     initialHeaderData,
     initialWorkspace,
@@ -40,7 +42,6 @@ export function usePlanningAppController({
     actualProfile,
     planningState,
     apiClient,
-    applyPlanningShellStateUpdate,
     authAvailable,
     authBusy,
     authChecked,
@@ -81,7 +82,6 @@ export function usePlanningAppController({
     refreshPlanningRemoteChanges,
     saveError,
     selectedTaskId,
-    setData,
     setDevProfileId,
     setFilters,
     setGithubSyncQueueOpen,
@@ -118,7 +118,6 @@ export function usePlanningAppController({
   const commandContext = {
     planningState,
     apiClient,
-    applyPlanningShellStateUpdate,
     canChangeTaskStatus,
     canCorrectOperationally,
     canManageFinalTaskStatus,
@@ -127,7 +126,6 @@ export function usePlanningAppController({
     data,
     githubInstallationAvailable,
     githubUserConnected,
-    setData,
     setSaveError,
     source,
     startTransition,
@@ -253,7 +251,6 @@ export function usePlanningAppController({
     selectedTaskExternalComments: taskSelection.selectedTaskExternalComments,
     selectedTaskSubIssues: taskSelection.selectedTaskSubIssues,
     taskPanelPreviousTask: taskSelection.taskPanelPreviousTask,
-    setData,
     setDevProfileId,
     setFilters,
     setGithubSyncQueueOpen,

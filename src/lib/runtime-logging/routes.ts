@@ -6,6 +6,7 @@ export const runtimeRoutes = {
   "planning.revision": { scope: "planning", method: "GET", route: "/api/planning-revision" },
   "planning.sprint": { scope: "planning", method: "GET", route: "/api/sprint-data" },
   "planning.strategic": { scope: "planning", method: "GET", route: "/api/strategic-planning-data" },
+  "decision-log.read": { scope: "planning", method: "GET", route: "/api/decision-log" },
   "task.detail": { scope: "planning", method: "GET", route: "/api/tasks/[id]/detail-data" },
   "task.comment": { scope: "planning", method: "POST", route: "/api/tasks/[id]/comments" },
   "task.github-comments": { scope: "github", method: "POST", route: "/api/tasks/[id]/github-comments" },

@@ -17,10 +17,10 @@ const inputLabels: Partial<Record<keyof Task, string>> = {
   selfDodChecked: "Qualitätsstandard geprüft", selfEvidenceChecked: "Nachweis geprüft",
   selfDocumentedChecked: "Dokumentation geprüft", selfBlockersChecked: "Blocker geprüft",
 };
-export function taskSubmittedValues(patch: Readonly<Partial<Task>> & { approveNow?: boolean; relationType?: string; relatedTaskId?: string; relationNote?: string }) {
-  const values: [string, unknown][] = Object.entries(inputLabels).filter(([key]) => Object.hasOwn(patch, key)).map(([key, label]) => [label!, patch[key as keyof Task]]);
+export function taskSubmittedValues(patch: Readonly<Partial<Task>> & { approveNow?: boolean; relationType?: string; relatedTaskId?: string; relationNote?: string }, labels?: { profiles: readonly import("@/lib/types").Profile[]; tasks: readonly Task[] }) {
+  const values: [string, unknown][] = Object.entries(inputLabels).filter(([key]) => Object.hasOwn(patch, key)).map(([key, label]) => [label!, labels && ["assignee", "assigneeId", "owner", "ownerId", "reviewOwnerProfileId"].includes(key) ? labels.profiles.find(profile => profile.id === patch[key as keyof Task] || profile.name === patch[key as keyof Task])?.name || (patch[key as keyof Task] ? "Person nicht verfügbar" : "Nicht gesetzt") : labels && ["parentTaskId", "dependsOn"].includes(key) ? labels.tasks.find(task => task.id === patch[key as keyof Task])?.title || (patch[key as keyof Task] ? "Planungselement nicht verfügbar" : "Nicht gesetzt") : patch[key as keyof Task]]);
   if (patch.strategy) values.push(["Strategisches Ziel", patch.strategy.goal], ["Erfolgskriterien", patch.strategy.successCriteria], ["Strategischer Umfang", patch.strategy.scopeConstraints]);
-  if (patch.raciAssignments) values.push(["Beteiligung", patch.raciAssignments.map(item => `${item.profileId}: ${item.role}`).join("\n")]);
+  if (patch.raciAssignments) values.push(["Beteiligung", patch.raciAssignments.map(item => `${labels ? labels.profiles.find(profile => profile.id === item.profileId)?.name || "Person nicht verfügbar" : item.profileId}: ${{accountable:"Verantwortlich",responsible:"Umsetzung",consulted:"Beratung",informed:"Information"}[item.role] || item.role}`).join("\n")]);
   if (patch.approveNow !== undefined) values.push(["Direkte Freigabe angefragt", patch.approveNow]);
   if (patch.relatedTaskId) values.push(["Verknüpfte Aufgabe", patch.relatedTaskId], ["Beziehungstyp", patch.relationType], ["Beziehungsnotiz", patch.relationNote]);
   return values;

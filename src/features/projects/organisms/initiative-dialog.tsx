@@ -234,7 +234,7 @@ export function InitiativeDialog({
           ref={bodyRef}
           className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-5 py-5 [scrollbar-gutter:stable] sm:px-6"
         >
-          {editor && editorView ? <HierarchyEditNotice view={editorView} onCheck={() => { void editor.checkOutcome().then(() => render(value => value + 1)); }} onRefresh={() => { void editor.refreshConflict().then(() => render(value => value + 1)); }} onResave={() => { void save(true); }} /> : null}
+          {editor && editorView ? <HierarchyEditNotice profiles={data.profiles} tasks={data.tasks} view={editorView} onCheck={() => { void editor.checkOutcome().then(() => render(value => value + 1)); }} onRefresh={() => { void editor.refreshConflict().then(() => render(value => value + 1)); }} onResave={() => { void save(true); }} /> : null}
           {submissionError && (
             <div
               ref={errorSummaryRef}

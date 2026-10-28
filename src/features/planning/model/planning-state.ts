@@ -69,6 +69,9 @@ export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" 
 
 import type { AdministrationPeopleState } from "@/features/administration/model/administration-state";
 export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+  decisionLog(): import("./planning-decision-log").PlanningDecisionLogView;
+  loadDecisionLog(): Promise<boolean>;
+  currentProfile(): import("@/lib/types").AuthenticatedProfile | null;
   beginBacklogOrder(tasks: readonly Task[]): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
   backlogOrders(): readonly import("@/features/backlog/model/backlog-ordering").BacklogOrderView[];
   resumeBacklogOrder(id: string): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor | null;

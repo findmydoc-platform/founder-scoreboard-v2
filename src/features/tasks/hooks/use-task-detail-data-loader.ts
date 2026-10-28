@@ -22,7 +22,7 @@ export function useTaskDetailDataLoader({
   const [attempt, setAttempt] = useState(0);
   const [loadState, setLoadState] = useState({ taskId: "", loading: false, error: "" });
   const selectedTaskId = selectedTask?.id || "";
-  const selectedTaskIsSummary = selectedTask?.detailAvailability === "summary";
+  const selectedTaskIsSummary = (selectedTask?.detailAvailability === "summary" || selectedTask?.detailAvailability === "stale");
   const retrySelectedTaskDetail = useCallback(() => {
     setLoadedTaskIds((current) => {
       if (!current.has(selectedTaskId)) return current;

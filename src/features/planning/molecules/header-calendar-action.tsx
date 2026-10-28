@@ -77,6 +77,7 @@ export function HeaderCalendarAction({
           anchor={anchor}
           calendarWorkweeks={state.calendarWorkweeks}
           workweeksByDay={state.workweeksByDay}
+          workweekCoverage={state.workweekCoverage}
           desktopPopover={desktopPopover}
           eventSlot={events}
           message={state.message}

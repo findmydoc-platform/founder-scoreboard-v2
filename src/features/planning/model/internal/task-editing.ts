@@ -4,6 +4,7 @@ import type { PlanningTaskEditor, PlanningTaskEditorView, PlanningTaskSaveCheck 
 
 type EditingAdapter = {
   currentTask(taskId: string): Task | null;
+  uncoveredFields(task: Task): readonly (keyof Task)[];
   saveTask(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult>;
   checkOutcome(taskId: string): Promise<PlanningTaskSaveCheck>;
   reload(taskId: string): Promise<{ ok: boolean }>;
@@ -24,6 +25,7 @@ export function createTaskEditing(adapter: EditingAdapter) {
       const generation = adapter.generation();
       const openedTask = typeof task === "string" ? adapter.currentTask(taskId) : task;
       let basis = openedTask ? { ...openedTask } : null;
+      let uncoveredFields = basis ? adapter.uncoveredFields(basis) : [];
       let conflictBasis: Task | null = null;
       let phase: PlanningTaskEditorView["phase"] = "editing";
       let submitted: Partial<Task> | null = null;
@@ -42,7 +44,9 @@ export function createTaskEditing(adapter: EditingAdapter) {
         saves++;
         phase = "saving";
         error = "";
-        const result = await adapter.saveTask(basis, submitted, context);
+        const result: TaskUpdateResult = uncoveredFields.some(field => Object.prototype.hasOwnProperty.call(submitted, field))
+          ? { ok: false, kind: "versionConflict", status: 409, error: "Diese Detailfelder stammen aus einem älteren Stand. Bitte vergleichen und bewusst erneut speichern." }
+          : await adapter.saveTask(basis, submitted, context);
         saves--;
         if (!sameSession()) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
         if (result.ok) {
@@ -88,6 +92,7 @@ export function createTaskEditing(adapter: EditingAdapter) {
         resave(patch) {
           if (!current() || !adapter.canReadTask(taskId) || phase !== "conflict" || !conflictBasis?.updatedAt) return Promise.resolve(blocked());
           basis = { ...conflictBasis };
+          uncoveredFields = adapter.uncoveredFields(basis);
           conflictBasis = null;
           phase = "editing";
           return save(patch);

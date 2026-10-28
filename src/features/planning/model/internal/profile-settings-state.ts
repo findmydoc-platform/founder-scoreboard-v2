@@ -30,7 +30,7 @@ export function createProfileSettingsState(context: Context) {
   const ceoDemotions = new Map<string, Set<string>>();
   const teamSaves = new Map<string, TeamProfileSaveView>();
   let teamMembers = context.initialWorkspace === "team" ? new Set(context.confirmed().profiles.map(profile => profile.id)) : undefined;
-  let teamCompleteness: PlanningTeamView["completeness"] = teamMembers ? "complete" : "none";
+  let teamCompleteness: PlanningTeamView["completeness"] = teamMembers ? "partial" : "none";
   let teamDenied = false;
   const teamChecks = new Map<string, Promise<boolean>>();
   const tourSaves = new Map<string, { profileId: string; tourId: string; phase: "saving" | "saved" | "rejected" | "unconfirmed"; error: string }>();
@@ -270,7 +270,7 @@ export function createProfileSettingsState(context: Context) {
     checks.set(profileId, checking);
     return checking;
   }
-  function acceptRead(incoming: PlanningShellState, coverage: import("./planning-read-scopes").PlanningReadCoverage, started: number, workspace: AppWorkspace, raw: PlanningShellState) {
+  function acceptRead(incoming: PlanningShellState, coverage: import("./planning-read-scopes").PlanningReadCoverage, started: number, workspace: AppWorkspace, raw: PlanningShellState, omittedProfileFields: readonly (keyof Profile)[] = []) {
     const current = context.confirmed();
     let stale = false;
     function accept<T>(key: keyof PlanningShellState, before: T[], after: T[], identity: (item: T) => string) {
@@ -296,6 +296,11 @@ export function createProfileSettingsState(context: Context) {
           const next = { ...previous, ...profile };
           const acceptedBusinessFields: ("focus" | "color" | "notificationsEnabled" | typeof governanceFields[number])[] = [];
           for (const field of Object.keys(profile).filter(field => field !== "persistenceBasis") as (keyof Profile)[]) {
+            if (omittedProfileFields.includes(field)) {
+              if (previous && Object.prototype.hasOwnProperty.call(previous, field)) Object.assign(next, { [field]: previous[field] });
+              else delete next[field];
+              continue;
+            }
             const key = `profiles:${profile.id}:${field}`;
             if (Math.max(confirmedAt.get(key) || 0, readAt.get(key) || 0) > started) { Object.assign(next, { [field]: previous?.[field] }); stale = true; }
             else { readAt.set(key, started); if (["focus", "color", "notificationsEnabled", ...governanceFields].includes(field)) acceptedBusinessFields.push(field as typeof acceptedBusinessFields[number]); }
@@ -351,5 +356,5 @@ export function createProfileSettingsState(context: Context) {
   function preserveOwned(current: PlanningShellState): Partial<PlanningShellState> {
     return { profiles: current.profiles, notificationPreferences: current.notificationPreferences, profileUiPreferences: current.profileUiPreferences, profileFeatureTourAcknowledgements: current.profileFeatureTourAcknowledgements };
   }
-  return { acceptAdministrationPeople, view, save, check, acknowledge, beginOwnEdit, beginTeamEdit, team, saveTeam, checkTeam, project, protect, acceptRead, preserveOwned, hydrate(data: PlanningShellState, workspace: AppWorkspace) { if (workspace === "team") { teamMembers = new Set(data.profiles.map(profile => profile.id)); teamCompleteness = "complete"; } }, readStatus(status: PlanningReadStatus, workspace: AppWorkspace) { if (workspace === "profile") { if (status === "forbidden") denied = true; else if (status === "current" || status === "stale") denied = false; } if (workspace === "team") { if (status === "forbidden") teamDenied = true; else if (status === "current" || status === "stale") teamDenied = false; } }, clear() { ceoDemotions.clear(); teamSaves.clear(); teamChecks.clear(); teamMembers = undefined; teamCompleteness = "none"; teamDenied = false; tourSaves.clear(); saves.clear(); confirmedAt.clear(); readAt.clear(); completeReadAt.clear(); owned.clear(); checks.clear(); denied = false; } };
+  return { acceptAdministrationPeople, view, save, check, acknowledge, beginOwnEdit, beginTeamEdit, team, saveTeam, checkTeam, project, protect, acceptRead, preserveOwned, hydrate(data: PlanningShellState, workspace: AppWorkspace) { if (workspace === "team") { teamMembers = new Set(data.profiles.map(profile => profile.id)); teamCompleteness = "partial"; } }, readStatus(status: PlanningReadStatus, workspace: AppWorkspace) { if (workspace === "profile") { if (status === "forbidden") denied = true; else if (status === "current" || status === "stale") denied = false; } if (workspace === "team") { if (status === "forbidden") teamDenied = true; else if (status === "current" || status === "stale") teamDenied = false; } }, clear() { ceoDemotions.clear(); teamSaves.clear(); teamChecks.clear(); teamMembers = undefined; teamCompleteness = "none"; teamDenied = false; tourSaves.clear(); saves.clear(); confirmedAt.clear(); readAt.clear(); completeReadAt.clear(); owned.clear(); checks.clear(); denied = false; } };
 }

@@ -17,7 +17,8 @@ test("Sprint reads preserve opaque editing versions and distinguish proven empty
   const loaded = await createSupabaseSprintReadModel(fixture()).load({ authorized: true, actorProfileId: "person" });
   expect(loaded.status).toBe("ready");
   expect(loaded.model.sprints[0].updatedAt).toBe("opaque/shown");
-  expect(loaded.model.coverage).toMatchObject({ sprints: "complete", commitments: "complete", meetings: "partial", people: "partial", items: "partial" });
+  expect(loaded.model.coverage).toMatchObject({ sprints: "complete", commitments: "complete", meetings: "partial", people: "complete", items: "complete" });
+  expect(loaded.model.readCoverage).toEqual({people:"complete",items:"complete",strategies:"complete",raci:"complete",links:"complete"});
   expect(loaded.model.commitments).toEqual([]);
   expect(loaded.model.meetings).toHaveLength(100);
   const unproven = await createSupabaseSprintReadModel(fixture({ missingCount: true })).load({ authorized: true, actorProfileId: "person" });

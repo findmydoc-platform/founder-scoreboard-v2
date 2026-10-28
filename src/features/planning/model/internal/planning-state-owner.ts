@@ -1,3 +1,4 @@
+import { createDecisionLogState } from "./decision-log-state";
 import { createHierarchyCommands } from "./hierarchy-commands";
 import { createMeetingAttendanceState } from "./meeting-attendance-state";
 import { createTaskRelationshipChanges } from "./task-relationship-changes";
@@ -43,9 +44,10 @@ import { applyPlanningItemApprovalPatch } from "../approval-domain";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
-export type PlanningWorkspaceRead = { backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
 export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sync-state").TaskGitHubSyncAdapter & import("@/features/sprint/model/meeting-attendance-state").MeetingAttendanceAdapter & import("@/features/reviews/model/planning-task-review").TaskReviewAdapter & import("@/features/tasks/model/task-relationship-change").TaskRelationshipAdapter & import("@/features/team-workweek/model/google-workspace-state").GoogleWorkspaceAdapter & import("@/features/tasks/model/task-attachment-upload").TaskAttachmentAdapter & import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportAdapter & import("@/features/tasks/model/task-comment-creation").TaskCommentCreationAdapter & import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+  readDecisionLog?: () => Promise<import("@/lib/notion-decision-log").NotionDecisionLogResult>;
   createScoreObjection?: (sprintId: string, comment: string) => Promise<import("@/features/sprint/model/score-objection-state").ScoreObjectionConfirmation>;
   processScoreObjection?: (objection: import("@/lib/types").ScoreObjection, score: import("@/lib/types").FounderSprintScore | null, input: import("@/lib/types").ScoreObjectionResolutionInput) => Promise<import("@/features/sprint/model/score-objection-state").ScoreObjectionConfirmation>;
   saveSprintCommitment?: (basis: import("@/lib/types").SprintCommitment, patch: import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentPatch) => Promise<import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentConfirmation>;
@@ -68,18 +70,21 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialSession, initialHeaderData, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialSession, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
   initialSession?: BrowserSessionSnapshot;
   initialHeaderData?: PlanningHeaderData;
+  initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
+  initialCurrentProfile?: AuthenticatedProfile | null;
   administrationActorProfileId?: string;
   initialAdministrationAuthority?: import("@/features/administrator-access/model/administrator-access").AuthorityProjection;
   adapter: PlanningStateAdapter;
   publishCache?: (data: PlanningShellState | null, workspace?: AppWorkspace) => void;
   acceptWorkspaceContext?: (result: PlanningWorkspaceRead) => void;
 }) {
+  let actorIdentity = initialCurrentProfile || null;
   let confirmed = initialData;
   let visible = initialData;
   let active = Boolean(userId);
@@ -98,7 +103,37 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let ended = false;
   const detailUnavailable = new Map<string, TaskDetailUnavailableArea[]>();
   const deniedTaskReads = new Set<string>();
-  const detailStatuses = new Map<string, PlanningReadStatus>();
+  const retainedTaskFields = new Map<string, Set<keyof Task>>();
+  const summaryDetailFields: (keyof Task)[] = ["problemStatement", "intendedOutcome", "scopeConstraints", "evidenceRequired", "note"];
+  const staleSnapshotFields: (keyof Task)[] = [...summaryDetailFields,"dependsOn","strategy","raciAssignments","evidenceLink","evidenceLinks","linkedPullRequests","assignee","owner","createdBy","parentApprovalStatus"];
+  function restoreTaskFieldCoverage(tasks: readonly Task[]) {
+    for (const task of tasks) {
+      if (task.detailAvailability === "summary") retainedTaskFields.set(task.id,new Set(summaryDetailFields));
+      if (task.detailAvailability === "stale") retainedTaskFields.set(task.id,new Set(staleSnapshotFields));
+    }
+  }
+  restoreTaskFieldCoverage(initialData.tasks);
+  function acceptTaskFieldCoverage(task: Partial<Task> & { id: string }, omitted: readonly (keyof Task)[] = []) {
+    const previous = confirmed.tasks.find(row => row.id === task.id);
+    const retained = new Set(retainedTaskFields.get(task.id));
+    const excluded = new Set(omitted);
+    for (const field of Object.keys(task) as (keyof Task)[]) if (!excluded.has(field)) retained.delete(field);
+    if (previous?.updatedAt !== task.updatedAt) omitted.forEach(field => retained.add(field));
+    if (retained.size) retainedTaskFields.set(task.id, retained); else retainedTaskFields.delete(task.id);
+  }
+
+  const profileScopes = new Map<string, Set<string>>([[initialWorkspace, new Set(initialData.profiles.map(profile => profile.id))]]);
+  if (administrationActorProfileId) profileScopes.set("session", new Set([administrationActorProfileId]));
+  function acceptProfileScope(scope: string, profiles: readonly { id: string }[], complete = false) {
+    const members = complete ? new Set<string>() : new Set(profileScopes.get(scope));
+    profiles.forEach(profile => members.add(profile.id));
+    profileScopes.set(scope, members);
+  }
+  function canPresentProfile(id: string) {
+    return [...profileScopes].some(([scope, members]) => members.has(id) && (scope.startsWith("task:") ? !deniedTaskReads.has(scope.slice(5)) : workspaceStatuses.get(scope as AppWorkspace) !== "forbidden"));
+  }
+
+  const detailStatuses = new Map<string, PlanningReadStatus>(initialData.tasks.filter(task=>task.detailAvailability === "stale").map(task=>[task.id,"stale"]));
   const detailReads = new Map<string, ReturnType<PlanningState["loadTaskDetail"]>>();
   const tails = new Map<string, { context: symbol; result: Promise<TaskUpdateResult> }>();
   const pending = new Map<symbol, { taskId: string; patch: Partial<Task>; submitted: Partial<Task>; phase: PlanningTaskSaveView["phase"] }>();
@@ -278,6 +313,19 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function taskSchedulePending(id: string) { const sprintId = confirmed.tasks.find(task => task.id === id)?.sprintId; return Boolean(sprintId && (sprintLock.blocksSprint(sprintId) || sprintState.pending(sprintId) || sprintPlan.blocksSprint(sprintId) || reviewWindow.blocksSprints())); }
   function orderingBlocksSprint(id: string) { return confirmed.tasks.some(task => task.sprintId === id && backlogOrdering.blocksTask(task.id)); }
   async function checkOrdering(): Promise<import("../planning-state").PlanningTaskSaveCheck> { const task = confirmed.tasks.find(task => backlogOrdering.blocksTask(task.id)); if (task) await backlogOrdering.checkTask(task.id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }
+  function protectedPublication(data: PlanningShellState): PlanningShellState {
+    const permitted = (id: string) => !deniedTaskReads.has(id);
+    return { ...data,
+      profiles: data.profiles.filter(profile => canPresentProfile(profile.id)),
+      tasks: data.tasks.filter(task => permitted(task.id)),
+      taskComments: data.taskComments.filter(row => permitted(row.taskId)),
+      taskExternalComments: data.taskExternalComments.filter(row => permitted(row.taskId)),
+      taskBlockers: data.taskBlockers.filter(row => permitted(row.taskId)),
+      taskRelations: data.taskRelations.filter(row => permitted(row.taskId) && permitted(row.relatedTaskId)),
+      taskActivity: data.taskActivity.filter(row => permitted(row.taskId)),
+      taskReviews: data.taskReviews.filter(row => permitted(row.taskId)),
+    };
+  }
   function publish() {
     confirmed = attendanceState.projectConfirmed(tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(relationshipChanges.projectConfirmed(attachmentUploads.projectConfirmed(githubImports.projectConfirmed(commentCreations.projectConfirmed(blockerReports.projectConfirmed(confirmed))))))))));
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
@@ -293,14 +341,16 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     visible = commitments.project(visible);
     visible = administration.projectVisible(tools.projectVisible(events.projectVisible(notifications.projectVisible(visible))));
 
+    visible = protectedPublication(visible);
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
       if (workspaceStatuses.get(workspace) === "forbidden") publishCache?.(null, workspace);
-      else { const protectedData = profileSettings.protect(githubSync.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed)))))); publishCache?.({ ...protectedData, tasks: protectedData.tasks.filter(task => members.has(task.id)) }, workspace); }
+      else { const protectedData = protectedPublication(profileSettings.protect(githubSync.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed))))))); publishCache?.({ ...protectedData, tasks: protectedData.tasks.filter(task => members.has(task.id)) }, workspace); }
     }
     listeners.forEach(listener => listener());
   }
   function saveTaskWithContext(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult> {
+    if ([...retainedTaskFields.get(task.id) || []].some(field => Object.prototype.hasOwnProperty.call(patch, field))) return Promise.resolve({ ok: false, kind: "versionConflict", status: 409, error: "Diese Detailfelder stammen aus einem älteren Stand. Bitte zuerst den vollständigen Stand vergleichen." });
     if (!isActive()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 });
     if (patch.status === "Review" || patch.reviewStatus === "requested") return taskReviews.publicState.requestTaskReview(task, patch);
     if (sprintLock.blocksTask(task,patch.sprintId)) return Promise.resolve({ok:false,kind:"unconfirmed",code:"predecessor_unconfirmed",error:"Der Sprint-Abschluss ist noch nicht vollständig bestätigt. Diese Änderung wurde nicht gesendet."});
@@ -352,6 +402,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         }
         if (!result.task.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
         if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
+        acceptTaskFieldCoverage({ ...result.task, id: task.id }, [...retainedTaskFields.get(task.id) || []].filter(field => !Object.prototype.hasOwnProperty.call(result.task, field)));
         taskConfirmedAt.set(task.id, ++sequence);
         notifications.invalidateHeader(["notifications"]);
         const currentAfterWrite = confirmed.tasks.find(item => item.id === task.id);
@@ -383,6 +434,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           pending.get(operation)!.phase = "unconfirmed";
           status.set(task.id, "unconfirmed");
           freshness = "stale";
+          notifications.invalidateHeader(["notifications"]);
         }
         publish();
         return { ok: false, kind, code: failure.code, status: statusCode, error: error instanceof Error ? error.message : "Änderung konnte nicht gespeichert werden." };
@@ -441,6 +493,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const editing = createTaskEditing({
+    uncoveredFields: task => [...retainedTaskFields.get(task.id) || []],
     currentTask: taskId => confirmed.tasks.find(task => task.id === taskId) || null,
     saveTask: saveTaskWithContext,
     reload: taskId => planning.loadTaskDetail(taskId),
@@ -451,7 +504,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const hierarchy = createHierarchyCommands({planning:()=>planning,currentTask:id=>confirmed.tasks.find(task=>task.id===id),active:isActive,generation:()=>sessionGeneration,changed:publish});
+  const decisionLog = createDecisionLogState({initial:active ? initialDecisionLogResult : undefined,active:isActive,generation:()=>sessionGeneration,changed:publish,read:adapter.readDecisionLog});
   const planning: PlanningState = {
+    decisionLog: decisionLog.view,
+    loadDecisionLog: decisionLog.load,
+    currentProfile() { if (!isActive()) return null; const row = confirmed.profiles.find(profile => profile.id === actorIdentity?.id && canPresentProfile(profile.id)); return row ? { id: row.id, name: row.name, platformRole: row.platformRole, githubLogin: row.githubLogin } : actorIdentity; },
     hierarchy: () => planning.workspace("projects"),
     hierarchyEdits: hierarchy.views,
     checkHierarchyEdit: hierarchy.check,
@@ -584,7 +641,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }); },
     protectedCache(workspace) {
       if (!isActive() || (workspace && (!memberships.has(workspace) || workspaceStatuses.get(workspace) === "forbidden"))) return null;
-      const data = profileSettings.protect(githubSync.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed))))));
+      const data = protectedPublication(profileSettings.protect(githubSync.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed)))))));
       return { tasks: data.tasks.filter(task => !deniedTaskReads.has(task.id) && (!workspace || memberships.get(workspace)?.has(task.id))), profiles: data.profiles, sprints: data.sprints, notificationPreferences: data.notificationPreferences, profileUiPreferences: data.profileUiPreferences, profileFeatureTourAcknowledgements: data.profileFeatureTourAcknowledgements };
     },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
@@ -668,10 +725,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         }
         if (!isActive() || generation !== sessionGeneration) return { ok: false };
         const detailProjection = applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {});
-        const sprintRead = sprintState.acceptRead(detailProjection, { sprints: "partial" }, started, { ...detailProjection, sprints: [...result.model.sprints] });
+        const profileRead = profileSettings.acceptRead(detailProjection, { profiles: "partial" }, started, "planning", { ...detailProjection, profiles: [...result.model.people] }, ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"]);
+        const sprintRead = sprintState.acceptRead(profileRead.data, { sprints: "partial" }, started, { ...detailProjection, sprints: [...result.model.sprints] });
         const next = sprintRead.data;
         if (!result.unavailable?.includes("relationships")) lifecycle.acceptRelationshipRead(next, started, result.model.coverage?.relationships === "complete", taskId);
         deniedTaskReads.delete(taskId);
+        acceptProfileScope(`task:${taskId}`, result.model.people);
         detailUnavailable.set(taskId, result.unavailable || []);
         detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
         const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
@@ -693,10 +752,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         githubImports.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
         const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
+        for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) acceptTaskFieldCoverage(task);
         for (const task of returnedTasks) {
           if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) taskReadAt.set(task.id, started);
         }
-        if (sprintRead.stale || unresolvedIds.size || returnedTasks.some(task => protectedIds.has(task.id))) {
+        if (profileRead.stale || sprintRead.stale || unresolvedIds.size || returnedTasks.some(task => protectedIds.has(task.id))) {
           freshness = "stale";
           if (!result.unavailable?.length) detailStatuses.set(taskId, "stale");
         }
@@ -741,6 +801,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       if (workspace === "backlog") backlogCoverage = result.backlogCoverage || {};
       const coverage = result.coverage || workspaceReadCoverage(workspace);
+      if (coverage.profiles) acceptProfileScope(workspace, result.data.profiles, coverage.profiles === "complete");
       if (coverage.taskRelations) relationshipChanges.acceptRead(result.data.taskRelations, started, coverage.taskRelations === "complete");
       if (coverage.taskActivity) for (const taskId of new Set([...result.data.tasks.map(task => task.id), ...result.data.taskActivity.map(row => row.taskId)])) attachmentUploads.acceptRead(result.data.taskActivity, started, coverage.taskActivity === "complete", taskId);
       if (coverage.taskExternalComments) githubImports.acceptRead(result.data.taskExternalComments, started, coverage.taskExternalComments === "complete");
@@ -754,16 +815,22 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
       const acceptedTask = (task: Task) => {
         const previous = confirmed.tasks.find(item => item.id === task.id);
-        if (!previous || !result.taskOmittedFields?.length) return task;
+        const omittedFields = result.taskOmittedFields || (task.detailAvailability === "summary" ? summaryDetailFields : []);
+        acceptTaskFieldCoverage(task, omittedFields);
+        if (!previous || !omittedFields.length) return task;
         const next = { ...previous, ...task };
-        for (const field of result.taskOmittedFields) Object.assign(next, { [field]: previous[field] });
-        if (detailStatuses.get(task.id) === "current") detailStatuses.set(task.id, "stale");
+        for (const field of omittedFields) Object.assign(next, { [field]: previous[field] });
+        if (previous.detailAvailability !== "summary") {
+          next.detailAvailability = "stale";
+          detailStatuses.set(task.id, "stale");
+        }
         return next;
       };
       const replacements = new Map(incoming.filter(task => !protectedIds.has(task.id)).map(task => [task.id, acceptedTask(task)]));
       const known = new Set(confirmed.tasks.map(task => task.id));
       for (const task of replacements.values()) taskReadAt.set(task.id, started);
       const covered = projectCoveredRead(confirmed, result.data, coverage);
+      for (const field of result.projectOmittedFields || []) Object.assign(covered.project, { [field]: confirmed.project[field] });
       const projectRead = coverage.project ? administration.acceptProjectRead(covered.project, started) : {project:covered.project,stale:false};
       covered.project=projectRead.project;
       if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
@@ -772,7 +839,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         const incoming = covered[field].filter(item=>!protectedIds.has(item.taskId));
         Object.assign(covered,{[field]:[...incoming,...retained]});
       }
-      const profileRead = profileSettings.acceptRead(covered, coverage, started, workspace, result.data);
+      const profileRead = profileSettings.acceptRead(covered, coverage, started, workspace, result.data, result.profileOmittedFields);
       const sprintCoverage = { ...coverage }; delete sprintCoverage.meetingAttendance;
       const sprintRead = sprintState.acceptRead(profileRead.data, sprintCoverage, started, result.data);
       if (coverage.meetingAttendance) attendanceState.acceptRead(result.data.meetingAttendance, started, coverage.meetingAttendance === "complete");
@@ -800,6 +867,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
       profileSettings.readStatus(stale ? "stale" : "current", workspace);
       if (workspace === "sprint") sprintState.readStatus(stale ? "stale" : "current");
+      if (result.currentProfile) actorIdentity = { ...result.currentProfile };
       acceptWorkspaceContext?.(result);
       freshness = stale ? "stale" : "current";
       publish();
@@ -816,6 +884,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     outcomeCheckStatus.clear();
     editing.clear();
     hierarchy.clear();
+    decisionLog.clear();
     attendanceState.clear();
     relationshipChanges.clear();
     attachmentUploads.clear();
@@ -845,6 +914,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     backlogCoverage = {};
     detailStatuses.clear();
     deniedTaskReads.clear();
+    retainedTaskFields.clear();
+    profileScopes.clear();
+    actorIdentity = null;
     confirmed = emptyPlanningShellState;
     workweekCalendars.clear();
     privateWorkweek.clear();
@@ -868,14 +940,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     isActive();
   }
   const unsubscribeSession = adapter.subscribeSession?.(sessionChanged);
-  // The legacy projection is internal migration scaffolding. Callers cannot confirm tasks through it.
-  function applyLegacyProjection(update: PlanningShellState | ((current: PlanningShellState) => PlanningShellState)) {
-    if (!isActive()) return;
-    const incoming = typeof update === "function" ? update(visible) : update;
-    if (incoming.tasks !== visible.tasks) freshness = "stale";
-    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), ...sprintState.preserveLockScopes(incoming,confirmed), tasks: confirmed.tasks, taskReviews:confirmed.taskReviews, sprints: confirmed.sprints, sprintCommitments: confirmed.sprintCommitments, scoreObjections:confirmed.scoreObjections,founderSprintScores:confirmed.founderSprintScores, project: { ...incoming.project, githubProjectOwner: confirmed.project.githubProjectOwner, githubProjectNumber: confirmed.project.githubProjectNumber, reviewObjectionWindowHours: confirmed.project.reviewObjectionWindowHours } };
-    publish();
-  }
   function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace) {
     if (ended || (userId && userId !== account)) return;
     userId = account;
@@ -890,6 +954,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return;
     }
     initialized = true;
+    restoreTaskFieldCoverage(data.tasks);
+    for(const task of data.tasks)if(task.detailAvailability === "stale")detailStatuses.set(task.id,"stale");
     githubImports.acceptRead(data.taskExternalComments, ++sequence, false);
     attendanceState.acceptRead(data.meetingAttendance, ++sequence, false);
     relationshipChanges.acceptRead(data.taskRelations, ++sequence, false);
@@ -900,30 +966,27 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     const known = new Set(confirmed.tasks.map(task => task.id));
     confirmed = { ...projectCoveredRead(confirmed, data, coverage), tasks: [...confirmed.tasks, ...data.tasks.filter(task => !known.has(task.id))] };
     memberships.set(workspace, new Set(data.tasks.map(task => task.id)));
+    acceptProfileScope(workspace, data.profiles);
     profileSettings.hydrate(data, workspace);
     workspaceStatuses.set(workspace, "current");
     completeness.set(workspace, coverage.tasks || "none");
     publish();
   }
-  function invalidateTaskViews() {
-    if (!isActive()) return;
-    freshness = "stale";
-    publish();
-  }
   return { planning, internal: {
     getSnapshot: () => visible,
+    isActive,
     bindAdministrationAuthority: administration.bindAuthority,
+    captureAdministrationDispatchGuard: administration.captureDispatchGuard,
     confirmedHeader: notifications.confirmedHeader,
     acceptHeaderHydration: notifications.hydrateHeader,
     invalidateHeader: notifications.invalidateHeader,
     invalidatePublishedWorkweeks: workweekCalendars.invalidatePublishedWorkweeks,
     invalidateWorkweekCalendarAuthority: workweekCalendars.invalidateAuthority,
     invalidateNotificationAuthority: notifications.invalidateNotificationAuthority,
-    applyLegacyProjection,
     acceptHydration,
-    invalidateTaskViews,
     sessionChanged,
     bindSession,
+    acceptDecisionLogHydration: decisionLog.hydrate,
     suspendProtected,
     endSession,
     dispose: () => { administration.clear(); unsubscribeSession?.(); },

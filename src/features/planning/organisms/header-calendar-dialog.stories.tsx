@@ -145,8 +145,9 @@ export const KeepsAnInitialLoadErrorDistinctFromNoPublication: Story = {
 };
 
 
+let invalidateFixturePublication: () => void;
 function HookDialog({ apiClient }: { apiClient: BrowserApiClient }) {
-  const planningState = useCalendarPlanningState(apiClient, [profile]);
+  const planningState = useCalendarPlanningState(apiClient, [profile], invalidate => { invalidateFixturePublication = invalidate; });
   const calendar = useHeaderCalendar({ planningState, onOpenTeam: fn() });
   return <>
     <button onClick={calendar.openCalendar}>Kalender öffnen</button>
@@ -193,7 +194,7 @@ export const HookRetainsConfirmedHoursOnFailedPublicationRefresh: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
     await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
     await canvas.findAllByText("09:00–17:00");
-    window.dispatchEvent(new Event("founderops:team-workweek-published"));
+    invalidateFixturePublication();
     await expect(await canvas.findByText("Aktualisierung verzögert. Zuletzt bestätigte Zeiten.")).toBeVisible();
     await expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0);
   },
@@ -206,7 +207,7 @@ export const HookRefreshesPublishedHours: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
     await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
     await canvas.findAllByText("Noch nicht veröffentlicht");
-    window.dispatchEvent(new Event("founderops:team-workweek-published"));
+    invalidateFixturePublication();
     await canvas.findAllByText("09:00–17:00");
   },
 };
@@ -362,14 +363,14 @@ function SharedCalendarFixture() {
   const [apiClient] = useState(() => {
     let reads = 0;
     let denied = false;
-    denySharedCalendar = () => { denied = true; window.dispatchEvent(new Event("founderops:team-workweek-published")); };
+    denySharedCalendar = () => { denied = true; invalidateFixturePublication(); };
     return { requestJson: async () => {
       if (denied) return { response: new Response(null, { status: 403 }), body: { error: "Kalenderzugriff entzogen." } };
       const schedule = { id: "shared-publication", ownerProfileId: profile.id, effectiveFrom: monday, effectiveTo: null, timezone: "Europe/Berlin", publicationRevision: ++reads, lastSyncAt: "2026-10-01T07:00:00Z", windows: { ...emptyWindows, monday: [{ start: reads === 1 ? "09:00" : "11:00", end: "17:00" }] } };
       return { response: new Response(null, { status: 200 }), body: { currentWorkweeks: [schedule], calendarWorkweeks: [schedule], publishedOwnerIds: [profile.id], referenceDate: berlinDateKey() } };
     } } as unknown as BrowserApiClient;
   });
-  const planningState = useCalendarPlanningState(apiClient, [profile]);
+  const planningState = useCalendarPlanningState(apiClient, [profile], invalidate => { invalidateFixturePublication = invalidate; });
   return <><HeaderCalendarAction planningState={planningState} events={{ data: [], state: "ready" }} profiles={[profile]} onOpenTeam={fn()} /><PublishedTeamWorkweeksCard planningState={planningState} profiles={[profile]} initialDate={monday} /></>;
 }
 export const SharesHeaderAndTeamPublicationsAndWithholdsDeniedScopes: Story = {

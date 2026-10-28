@@ -56,6 +56,7 @@ export function PlanningApp({
     platformRole: initialCurrentProfile?.platformRole || null,
   });
   const controller = usePlanningAppController({
+    initialDecisionLogResult,
     initialData,
     initialHeaderData,
     initialWorkspace,
@@ -75,5 +76,5 @@ export function PlanningApp({
     setWorkspace("planning");
   }, [revalidateAdministratorAccess, setWorkspace]);
 
-  return <PlanningBusinessStateContext.Provider value={controller.planningState}><PlanningAppShell authRequired={authRequired} controller={controller} administratorAccessController={administratorAccessController} initialAdministrationModel={initialAdministrationModel} onAdministratorAccessInvalid={handleAdministratorAccessInvalid} source={source} decisionLogResult={initialDecisionLogResult} initialBacklogModel={initialBacklogModel} initialSprintModel={initialSprintModel} /></PlanningBusinessStateContext.Provider>;
+  return <PlanningBusinessStateContext.Provider value={controller.planningState}><PlanningAppShell authRequired={authRequired} controller={controller} administratorAccessController={administratorAccessController} initialAdministrationModel={initialAdministrationModel} onAdministratorAccessInvalid={handleAdministratorAccessInvalid} source={source} initialBacklogModel={initialBacklogModel} initialSprintModel={initialSprintModel} /></PlanningBusinessStateContext.Provider>;
 }

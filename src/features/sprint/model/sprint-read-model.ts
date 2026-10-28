@@ -3,6 +3,7 @@ import type { FounderSprintScore, FounderStrikeState, Meeting, MeetingAttendance
 export type SprintReadCoverage = Partial<Record<"project" | "people" | "items" | "sprints" | "commitments" | "scores" | "strikeStates" | "strikeEvents" | "objections" | "meetings" | "attendance", "complete" | "partial">>;
 export type SprintWorkspaceModel = Readonly<{
   coverage?: Readonly<SprintReadCoverage>;
+  readCoverage?: Readonly<Partial<Record<"people" | "items" | "strategies" | "raci" | "links", "complete" | "partial">>>;
   revision: string;
   project: Project;
   people: readonly Profile[];

@@ -30,7 +30,8 @@ export function createSupabaseSprintReadModel(supabase: SupabaseClient): SprintR
       return {
         status: "ready",
         model: {
-          coverage: { project: "complete", people: "partial", items: "partial", sprints: complete(sprintResult, 1000), commitments: complete(commitmentResult, 1000), scores: complete(scoreResult, 500), strikeStates: complete(strikeStateResult, 1000), strikeEvents: complete(strikeEventResult, 500), objections: complete(objectionResult, 300), meetings: complete(meetingResult, 100), attendance: complete(attendanceResult, 300) },
+          readCoverage: state.readCoverage,
+          coverage: { project: "complete", people: state.readCoverage?.people || "partial", items: state.readCoverage?.items || "partial", sprints: complete(sprintResult, 1000), commitments: complete(commitmentResult, 1000), scores: complete(scoreResult, 500), strikeStates: complete(strikeStateResult, 1000), strikeEvents: complete(strikeEventResult, 500), objections: complete(objectionResult, 300), meetings: complete(meetingResult, 100), attendance: complete(attendanceResult, 300) },
           revision: sprints.map((sprint) => `${sprint.id}:${sprint.status}:${sprint.scoreLocked}`).join("|"),
           project: mapPlanningProject(projectResult.data),
           people: state.people,

@@ -499,3 +499,31 @@ export const LostResponseKeepsInputAndChecksWithoutReplay: Story = {
     await expect(within(submitted.closest("details")!).getByText("Mein abgesendeter Entwurf", { selector: "dd" })).toBeVisible();
   },
 };
+
+function RetainedFieldBasisHarness(args: React.ComponentProps<typeof TaskDetailSurface>) {
+  const [writes, setWrites] = useState(0);
+  const [owner] = useState(() => createPlanningState({ userId: "field-story", initialData: { ...emptyPlanningShellState, tasks: [{ ...task, updatedAt: "r1" }] }, adapter: {
+    readWorkspace: async () => ({ data: { ...emptyPlanningShellState, tasks: [{ ...task, updatedAt: "r2", problemStatement: "", detailAvailability: "summary" }] }, taskOmittedFields: ["problemStatement"] }),
+    readTaskDetail: async () => ({ model: { revision: "read", project: emptyPlanningShellState.project, item: { ...task, updatedAt: "r2", problemStatement: "Fremder vollständiger Problemstand" }, ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } }),
+    saveTask: async (_, patch) => { setWrites(count => count + 1); return { task: { ...patch, updatedAt: "r3" } }; },
+  } }));
+  const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
+  return <><button onClick={() => void owner.planning.refreshWorkspace("planning")}>Neuere Übersicht laden</button><output aria-label="Detail field writes">{writes}</output><TaskDetailSurface {...args} task={data.tasks[0]} onBeginEdit={() => owner.planning.beginTaskEdit(data.tasks[0])} onUpdate={(patch, options) => options?.resave ? options.editor.resave(patch) : options!.editor.save(patch)} /></>;
+}
+export const RetainedDetailNeedsConsciousComparison: Story = {
+  render: args => <RetainedFieldBasisHarness {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Neuere Übersicht laden" }));
+    await expect(canvas.getByText(task.problemStatement!)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
+    const problem = canvas.getByRole("textbox", { name: "Problem" });
+    await userEvent.clear(problem); await userEvent.type(problem, "Mein Detailentwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(await canvas.findByRole("button", { name: "Erneut speichern" })).toBeEnabled();
+    await expect(canvas.getByLabelText("Detail field writes")).toHaveTextContent("0");
+    await expect(problem).toHaveValue("Mein Detailentwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Erneut speichern" }));
+    await waitFor(() => expect(canvas.getByLabelText("Detail field writes")).toHaveTextContent("1"));
+  },
+};

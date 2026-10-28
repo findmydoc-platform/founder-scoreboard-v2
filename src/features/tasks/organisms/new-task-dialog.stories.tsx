@@ -31,7 +31,7 @@ function CreateStory({ partial = false }: { partial?: boolean }) {
       },
       requestForm: async () => { throw new Error("Unexpected form"); }, requestBlob: async () => { throw new Error("Unexpected blob"); },
     };
-    state.runtime.apiClient = client;
+    state.runtime.session = {userId:state.runtime.userId,revision:"story-session",expiresAt:4102444800,user:{id:state.runtime.userId}}; state.runtime.apiClient = client;
     return state;
   });
   const data = useSyncExternalStore(bundle.owner.planning.subscribe, bundle.owner.internal.getSnapshot, bundle.owner.internal.getSnapshot);

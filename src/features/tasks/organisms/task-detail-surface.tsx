@@ -113,16 +113,7 @@ type TaskDetailSurfaceProps = {
 };
 
 export function TaskDetailSurface(props: TaskDetailSurfaceProps) {
-  // Keep the editor mounted when a workspace refresh returns a summary for
-  // the same item, including failed-save refreshes with an unsaved draft.
-  const [lastHydratedTask, setLastHydratedTask] = useState(props.task);
-  if (props.task.detailAvailability !== "summary" && props.task !== lastHydratedTask) {
-    setLastHydratedTask(props.task);
-  }
-  const cachedTask = lastHydratedTask.id === props.task.id && lastHydratedTask.detailAvailability !== "summary"
-    ? lastHydratedTask
-    : null;
-  if (props.task.detailAvailability === "summary" && !cachedTask) {
+  if (props.task.detailAvailability === "summary") {
     return (
       <div className="p-6" role="status" aria-live="polite">
         <UiNotice tone={props.detailDataError ? "danger" : "info"}>
@@ -139,7 +130,7 @@ export function TaskDetailSurface(props: TaskDetailSurfaceProps) {
       {props.detailDataError && props.onRetryDetailData ? (
         <UiButton className="m-3" onClick={props.onRetryDetailData}>Erneut laden</UiButton>
       ) : null}
-      <HydratedTaskDetailSurface {...props} task={props.task.detailAvailability === "summary" ? cachedTask! : props.task} />
+      <HydratedTaskDetailSurface {...props} />
     </>
   );
 }

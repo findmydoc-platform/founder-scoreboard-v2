@@ -44,7 +44,7 @@ function Harness({ mode = "unknown" }: {
                     body = { taskDetail: { revision: "check", project: initialData.project, item: { ...task, ...success.task }, ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [], coverage: { timeline: "complete", discussion: "complete" } } };
                 }
                 else {
-                    expect(options?.expectedSession).toEqual({ userId: "sync-user", revision: "sync-session" });
+                    expect(options?.expectedSession).toMatchObject({ userId: "sync-user", revision: "sync-session" });
                     attempts++;
                     setWrites(n => n + 1);
                     if (mode === "unknown")

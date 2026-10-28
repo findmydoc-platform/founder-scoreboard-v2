@@ -73,7 +73,7 @@ function TeamEditingFixture({ lost = false, conflict = false }: { lost?: boolean
   const [counts] = useState(() => ({ writes: 0, reads: 0 }));
   const [owner] = useState(() => createPlanningState({ userId: "preview", initialData: { ...emptyPlanningShellState, profiles: [profile, target] }, initialWorkspace: "team", adapter: {
     saveTask: async () => ({ task: {} }),
-    readWorkspace: async () => { counts.reads++; return { data: { ...emptyPlanningShellState, profiles: [profile, { ...target, weeklyCapacity: conflict && counts.writes === 1 ? 28 : 30 }] } }; },
+    readWorkspace: async () => { counts.reads++; return { data: { ...emptyPlanningShellState, profiles: [profile, { ...target, weeklyCapacity: conflict && counts.writes === 1 ? 28 : 30 }] }, coverage:{profiles:"complete"} }; },
     saveTeamProfile: async (profileId, patch) => { counts.writes++; if (conflict && counts.writes === 1) throw Object.assign(new Error("Das Profil wurde zwischenzeitlich geändert."), { status: 409, code: "profile_revision_conflict" }); if (lost) throw new Error("Die Profiländerung ist noch nicht bestätigt."); return { id: profileId, ...patch }; },
     saveOwnProfileSettings: async patch => ({ profile: { ...target, ...patch.profilePatch }, notificationPreferences: [] }),
   } }));

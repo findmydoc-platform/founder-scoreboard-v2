@@ -26,7 +26,6 @@ test("an ordinary Sprint edit has a separate pending display and survives older 
   await expect(saved).resolves.toMatchObject({ ok: true });
   read.resolve({ data: initial });
   await refresh;
-  owner.internal.applyLegacyProjection(initial);
   expect(owner.planning.sprintWorkspace().model.sprints[0]).toMatchObject({ name: "Edited Sprint", updatedAt: "opaque/confirmed" });
   expect(owner.planning.board().tasks[0].title).toBe("Independent task");
   expect(owner.planning.protectedCache()?.sprints[0].name).toBe("Edited Sprint");

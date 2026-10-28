@@ -550,7 +550,7 @@ export function createAdministrationPersonState(options: {
         }
         return data;
     }
-    return { delivery, acceptProjectRead, projectVisible, beginProject, projectViews: () => [...projectEditors.values()].map(editor => editor.view()), resumeProject: () => [...projectEditors.values()].findLast(editor => editor.view().submitted) || null, bindAuthority, load, begin, views: (id: string) => options.active() ? [...editors.values()].filter(entry => entry.id === id).map(entry => entry.editor.view()) : [], resume: (id: string) => [...editors.values()].findLast(entry => entry.id === id && entry.editor.view().submitted)?.editor || null,
+    return { captureDispatchGuard() { enforceExpiry(); const audience = epoch; return () => { enforceExpiry(); return options.active() && epoch === audience; }; }, delivery, acceptProjectRead, projectVisible, beginProject, projectViews: () => [...projectEditors.values()].map(editor => editor.view()), resumeProject: () => [...projectEditors.values()].findLast(editor => editor.view().submitted) || null, bindAuthority, load, begin, views: (id: string) => options.active() ? [...editors.values()].filter(entry => entry.id === id).map(entry => entry.editor.view()) : [], resume: (id: string) => [...editors.values()].findLast(entry => entry.id === id && entry.editor.view().submitted)?.editor || null,
         view(): AdministrationStateView {
             enforceExpiry();
             let shown = mayRead() && model ? technical() ? model : reduced(model) : null;

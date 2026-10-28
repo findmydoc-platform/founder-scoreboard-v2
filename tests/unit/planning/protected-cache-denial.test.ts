@@ -1,0 +1,44 @@
+import { afterEach, expect, test, vi } from "vitest";
+import { createBrowserPlanningState } from "@/features/planning/model/internal/browser-planning-state";
+import { createBrowserApiClient } from "@/lib/browser-api-client";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
+import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";
+import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
+afterEach(() => { vi.unstubAllGlobals(); setProtectedPlanningShellStateCache(null); });
+test("a denied Task detail cannot reappear in actual cache publication or a remounted owner after an independent save", async () => {
+  const session = { userId: "user", revision: "same", expiresAt: 4102444800, user: { id: "user" } };
+  const denied = taskDetailStoryTask({ id: "denied", updatedAt: "r1" }), independent = taskDetailStoryTask({ id: "independent", updatedAt: "r1" });
+  const data = { ...emptyPlanningShellState, tasks: [denied, independent], taskComments: [{ id: 1, taskId: denied.id, profileId: "p", comment: "Denied detail", createdAt: "now", githubDeliveryApplicable: false, githubDeliveryStatus: "not_applicable" as const, githubCommentUrl: "" }] };
+  const page = { initialUserId: "user", initialWorkspace: "planning" as const, initialCurrentProfile: null, initialData: data, initialHeaderData: emptyPlanningHeaderData };
+  const browser = createBrowserPlanningState(page);
+  browser.runtime.session = session;
+  browser.runtime.apiClient = createBrowserApiClient({ sessionPort: { current: async () => session, recover: async () => ({ kind: "superseded" }), clearIfCurrent: async () => {} } });
+  vi.stubGlobal("fetch", vi.fn(async (_input, init) => init?.method === "PATCH" ? Response.json({ task: { id: independent.id, title: "Confirmed independent", updatedAt: "r2" } }) : Response.json({ error: "Denied" }, { status: 403 })));
+  await browser.owner.planning.loadTaskDetail(denied.id);
+  await browser.owner.planning.saveTask(independent, { title: "Confirmed independent" });
+  const cached = getProtectedPlanningShellStateCache("planning", session)!;
+  expect(cached.data.tasks.map(task => task.id)).toEqual([independent.id]);
+  expect(cached.data.taskComments).toEqual([]);
+  const remounted = createBrowserPlanningState({ ...page, initialData: cached.data });
+  expect(remounted.owner.planning.taskDetail(denied.id).task).toBeNull();
+  expect(remounted.owner.planning.taskDetail(independent.id).task?.title).toBe("Confirmed independent");
+});
+
+test("Team denial withholds Team-only profiles in actual cache while independently loaded identities survive", async () => {
+  const session = { userId: "user", revision: "same", expiresAt: 4102444800, user: { id: "user" } };
+  const task = taskDetailStoryTask({ id: "independent", updatedAt: "r1" });
+  const own = { id: "own", name: "Own", platformRole: "founder" as const, orgRole: "Founder", githubLogin: "", weeklyCapacity: 20 }, taskPerson = { id: "task-person", name: "Task person", platformRole: "founder" as const, orgRole: "Founder", githubLogin: "", weeklyCapacity: 20 }, teamOnly = { id: "team-only", name: "Team only", platformRole: "founder" as const, orgRole: "Founder", githubLogin: "", weeklyCapacity: 20 };
+  const browser = createBrowserPlanningState({ initialUserId: "user", initialWorkspace: "planning", initialCurrentProfile: { ...own, githubLogin: "own" }, initialData: { ...emptyPlanningShellState, tasks: [task], profiles: [own, taskPerson] }, initialHeaderData: emptyPlanningHeaderData });
+  browser.runtime.session = session;
+  browser.runtime.apiClient = createBrowserApiClient({ sessionPort: { current: async () => session, recover: async () => ({ kind: "superseded" }), clearIfCurrent: async () => {} } });
+  let teamReads = 0;
+  vi.stubGlobal("fetch", vi.fn(async (_input, init) => init?.method === "PATCH" ? Response.json({ task: { id: task.id, title: "Confirmed independent", updatedAt: "r2" } }) : ++teamReads === 1 ? Response.json({ model: { revision: "read", people: [own, taskPerson, teamOnly], items: [] } }) : Response.json({ error: "Denied" }, { status: 403 })));
+  await browser.owner.planning.refreshWorkspace("team");
+  await browser.owner.planning.refreshWorkspace("team");
+  await browser.owner.planning.saveTask(task, { title: "Confirmed independent" });
+  const cached = getProtectedPlanningShellStateCache("planning", session)!;
+  expect(cached.data.profiles.map(profile => profile.id).sort()).toEqual([own.id, taskPerson.id].sort());
+  expect(browser.owner.planning.protectedCache()?.profiles.map(profile => profile.id).sort()).toEqual([own.id, taskPerson.id].sort());
+  expect(browser.owner.planning.team().profiles).toEqual([]);
+});

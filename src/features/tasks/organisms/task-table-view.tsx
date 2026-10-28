@@ -1,5 +1,9 @@
 "use client";
 
+import { useRef, useState } from "react";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import type { BacklogAssignmentEditor } from "@/features/backlog/model/backlog-assignment";
+
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import type { PlanningFilters } from "@/features/planning/hooks/use-planning-view-state";
@@ -17,6 +21,7 @@ import { buildTaskTableViewModel, type TaskTableSort } from "@/features/tasks/mo
 import { projectDeliverableSchedule } from "@/features/planning-items/model/deliverable-schedule";
 
 type TaskTableViewProps = {
+  planningState: PlanningState;
   visibleTasks: Task[];
   profiles: Profile[];
   sprints: Sprint[];
@@ -88,6 +93,7 @@ function TaskTableRiskBadges({
 }
 
 export function TaskTableView({
+  planningState,
   visibleTasks,
   profiles,
   sprints,
@@ -102,6 +108,14 @@ export function TaskTableView({
   onBeginTaskEdit,
   onFiltersChange,
 }: TaskTableViewProps) {
+  const [assignmentError,setAssignmentError]=useState("");
+  const sprintEditors = useRef(new Map<string, BacklogAssignmentEditor>());
+  const beginSprintAssignment = (task: Task) => {
+    const editor=planningState.beginBacklogAssignment([task],sprints,false);
+    sprintEditors.current.set(task.id,editor);return editor;
+  };
+  const assignSprint = (task:Task,sprintId:string) => { setAssignmentError("");void (sprintEditors.current.get(task.id)||beginSprintAssignment(task)).assign(sprintId || null).then(result=>{if(result.phase === "rejected")setAssignmentError(result.error || "Sprint-Zuordnung konnte nicht gespeichert werden.");}); };
+  const assignments=planningState.backlogAssignments().filter(view=>view.tasks.some(task=>allTasks.some(shown=>shown.id===task.id)) && ["conflict","unconfirmed","blocked","rejected"].includes(view.phase));
   const sortKeys: TaskTableSort[] = ["title", "status", "assignee", "priority", "sprint", "start", "fixedDate"];
   const sortKey: TaskTableSort = sortKeys.includes(filters.sort as TaskTableSort) ? filters.sort as TaskTableSort : "priority";
   const { rows: sortedTasks } = buildTaskTableViewModel({ tasks: visibleTasks, profiles, sprints, filters: { sort: sortKey, direction: filters.direction } });
@@ -114,6 +128,9 @@ export function TaskTableView({
   const riskOptions = [{ value: "Alle", label: "Alle Risiken" }, { value: "critical", label: "Kritisch" }, { value: "blocked", label: "Blockiert" }, { value: "evidence", label: "Evidence fehlt" }, { value: "github", label: "GitHub fehlt" }];
 
   return (
+    <>
+    {assignmentError ? <p role="alert" className="mb-3">{assignmentError}</p>:null}
+    {assignments.map(item=><div role="status" className="mb-4 rounded border border-amber-300 bg-amber-50 p-4" key={item.id}><p>Sprint-Zuordnung: {item.tasks.map(task=>task.title).join(", ")} → {item.targetSprint?.name || "ohne Sprint"}</p><p>{item.error}</p>{item.serverSprints.map(sprint=><p key={sprint.id}>Aktueller Sprint: {sprint.name} · {sprint.startDate} bis {sprint.endDate}</p>)}<button type="button" className="min-h-11 px-3" disabled={item.checking} onClick={()=>{const editor=planningState.resumeBacklogAssignment(item.id);void (item.phase==="conflict" ? editor?.refreshConflict() : editor?.checkOutcome());}}>Serverstand prüfen</button>{item.phase==="conflict" && item.canResave ? <button type="button" className="min-h-11 px-3" onClick={()=>{void planningState.resumeBacklogAssignment(item.id)?.resave();}}>Bewusst erneut zuordnen</button>:null}</div>)}
     <DataTableFrame
       title="Aufgaben"
       description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "fixedDate" ? "Fixtermin" : "Status"}`}
@@ -156,7 +173,7 @@ export function TaskTableView({
                   </label>
                   <label className="grid gap-1 text-xs font-semibold text-slate-500 sm:col-span-2">
                     Sprint
-                    <CustomSelect onOpen={() => onBeginTaskEdit?.(task)} aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => onUpdateTask(task, { sprintId: value })} className="h-11 w-full text-sm" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
+                    <CustomSelect onOpen={() => beginSprintAssignment(task)} aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => assignSprint(task, value)} className="h-11 w-full text-sm" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
                   </label>
                 </div>
                 <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
@@ -215,7 +232,7 @@ export function TaskTableView({
                 </DataCell>
                 <DataCell><UiBadge tone={priorityBadgeTone(task.priority)}>{task.priority}</UiBadge></DataCell>
                 <DataCell>
-                  <CustomSelect onOpen={() => onBeginTaskEdit?.(task)} aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => onUpdateTask(task, { sprintId: value })} className="h-8 w-36 text-xs" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
+                  <CustomSelect onOpen={() => beginSprintAssignment(task)} aria-label={`Sprint für ${task.title} ändern`} value={task.sprintId} onChange={(value) => assignSprint(task, value)} className="h-8 w-36 text-xs" options={[{ value: "", label: "Ohne Sprint" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))]} />
                 </DataCell>
                 <DataCell>{schedule.sprint ? dateRange(schedule.sprint) : "–"}</DataCell>
                 <DataCell>{schedule.fixedDate || "–"}</DataCell>
@@ -232,5 +249,6 @@ export function TaskTableView({
           )}
         </tbody>
     </DataTableFrame>
+    </>
   );
 }

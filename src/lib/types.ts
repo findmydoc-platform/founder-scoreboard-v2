@@ -73,7 +73,7 @@ export type LinkedPullRequest = {
 
 export type Task = {
   // Planning startup omits detail-only briefs until the task detail API hydrates them.
-  detailAvailability?: "summary";
+  detailAvailability?: "summary" | "stale";
   id: string;
   order: number;
   title: string;

@@ -20,7 +20,7 @@ test("Team governance uses common profiles, keeps CEO side effects optimistic un
   const write = deferred<Partial<Profile> & { id: string }>();
   const read = deferred<typeof initial>();
   const { planning } = createPlanningState({ userId: "account", initialData: initial, initialWorkspace: "team", adapter: {
-    saveTask: async () => ({ task }), readWorkspace: async () => ({ data: await read.promise }), saveTeamProfile: () => write.promise,
+    saveTask: async () => ({ task }), readWorkspace: async () => ({ data: await read.promise, coverage: { profiles: "complete", profileUiPreferences: "complete", notificationPreferences: "complete" } }), saveTeamProfile: () => write.promise,
   } });
   const saving = planning.saveTeamProfile(founder.id, { platformRole: "ceo", orgRole: "CEO" });
   expect(planning.team().profiles).toMatchObject([{ id: ceo.id, platformRole: "founder" }, { id: founder.id, platformRole: "ceo" }]);
@@ -70,7 +70,7 @@ test("a delayed own-settings acknowledgement does not replace independently conf
 test("an own-settings confirmation protects only its fields from a delayed Team read", async () => {
   const read = deferred<typeof initial>();
   const { planning } = createPlanningState({ userId: "account", initialData: initial, initialWorkspace: "team", adapter: {
-    saveTask: async () => ({ task }), readWorkspace: async () => ({ data: await read.promise }),
+    saveTask: async () => ({ task }), readWorkspace: async () => ({ data: await read.promise, coverage: { profiles: "complete", profileUiPreferences: "complete", notificationPreferences: "complete" } }),
     saveTeamProfile: async () => ({ id: ceo.id, weeklyCapacity: 30 }),
     saveOwnProfileSettings: async () => ({ profile: { ...ceo, focus: "Confirmed own", weeklyCapacity: 35 }, notificationPreferences: [] }),
   } });
@@ -199,7 +199,7 @@ test("an editor retains its displayed basis, stops a known overlap and requires 
   let data = initial;
   let sent: unknown;
   const { planning } = createPlanningState({ userId: "account", initialData: initial, initialWorkspace: "team", adapter: {
-    saveTask: async () => ({ task }), readWorkspace: async () => ({ data }),
+    saveTask: async () => ({ task }), readWorkspace: async () => ({ data, coverage: { profiles: "complete", profileUiPreferences: "complete", notificationPreferences: "complete" } }),
     saveOwnProfileSettings: async patch => { writes++; sent = patch; return { profile: { ...ceo, ...patch.profilePatch }, notificationPreferences: [] }; },
   } });
   const editor = planning.beginOwnProfileEdit({ profile: ceo, uiPreference: null, notificationPreferences: [] });
@@ -218,7 +218,7 @@ test("an editor submits only dirty fields and preserves unrelated accepted prefe
   let data = { ...initial, profileUiPreferences: [preference] };
   let sent: unknown;
   const { planning } = createPlanningState({ userId: "account", initialData: data, initialWorkspace: "profile", adapter: {
-    saveTask: async () => ({ task }), readWorkspace: async () => ({ data }),
+    saveTask: async () => ({ task }), readWorkspace: async () => ({ data, coverage: { profiles: "complete", profileUiPreferences: "complete", notificationPreferences: "complete" } }),
     saveOwnProfileSettings: async patch => { sent = patch; return { profile: { ...ceo, ...patch.profilePatch }, notificationPreferences: [] }; },
   } });
   const editor = planning.beginOwnProfileEdit({ profile: ceo, uiPreference: preference, notificationPreferences: [] });
@@ -234,7 +234,7 @@ test("Team editors preserve a rejected server CAS draft and bind conscious resav
   let data = initial;
   let expected: unknown;
   const { planning } = createPlanningState({ userId: "account", initialData: initial, initialWorkspace: "team", adapter: {
-    saveTask: async () => ({ task }), readWorkspace: async () => ({ data }),
+    saveTask: async () => ({ task }), readWorkspace: async () => ({ data, coverage: { profiles: "complete", profileUiPreferences: "complete", notificationPreferences: "complete" } }),
     saveTeamProfile: async (_id, patch, basis) => { writes++; expected = basis; if (writes === 1) { data = { ...initial, profiles: [ceo, { ...founder, weeklyCapacity: 28 }] }; throw Object.assign(new Error("Foreign change"), { status: 409, code: "profile_revision_conflict" }); } return { id: founder.id, ...patch }; },
   } });
   const editor = planning.beginTeamProfileEdit(founder);
@@ -251,7 +251,7 @@ test("a second accepted change invalidates the reviewed rebase and unavailable r
   let available = true;
   let writes = 0;
   const { planning } = createPlanningState({ userId: "account", initialData: initial, initialWorkspace: "team", adapter: {
-    saveTask: async () => ({ task }), readWorkspace: async () => { if (!available) throw new Error("Offline"); return { data }; },
+    saveTask: async () => ({ task }), readWorkspace: async () => { if (!available) throw new Error("Offline"); return { data, coverage: { profiles: "complete", profileUiPreferences: "complete", notificationPreferences: "complete" } }; },
     saveTeamProfile: async (_id, patch) => { writes++; return { id: founder.id, ...patch }; },
   } });
   const editor = planning.beginTeamProfileEdit(founder);
@@ -348,7 +348,7 @@ test("a late followup for an earlier confirmed Team write cannot replace a newer
   const secondWrite = deferred<Partial<Profile> & { id: string }>();
   let writes = 0;
   const { planning } = createPlanningState({ userId: "account", initialData: initial, initialWorkspace: "team", adapter: {
-    saveTask: async () => ({ task }), readWorkspace: async () => ({ data: await read.promise }),
+    saveTask: async () => ({ task }), readWorkspace: async () => ({ data: await read.promise, coverage: { profiles: "complete", profileUiPreferences: "complete", notificationPreferences: "complete" } }),
     saveTeamProfile: async () => ++writes === 1 ? { id: founder.id, weeklyCapacity: 30 } : secondWrite.promise,
   } });
   const first = planning.saveTeamProfile(founder.id, { weeklyCapacity: 30 });

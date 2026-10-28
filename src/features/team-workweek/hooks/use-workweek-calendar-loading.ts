@@ -43,5 +43,5 @@ export function useWorkweekCalendarLoading({ planningState, from, to, enabled, p
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  return { snapshot: canPresent ? view?.snapshot || null : null, hasLoadedRange: Boolean(canPresent && view?.snapshot && view.coverage !== "none"), pending: enabled && (!view || view.readStatus === "not-loaded" || view.readStatus === "loading"), message: view?.error || "", load, now };
+  return { workweekCoverage: canPresent && view?.snapshot ? view.coverage : "none" as const, snapshot: canPresent ? view?.snapshot || null : null, hasLoadedRange: Boolean(canPresent && view?.snapshot && view.coverage !== "none"), pending: enabled && (!view || view.readStatus === "not-loaded" || view.readStatus === "loading"), message: view?.error || "", load, now };
 }

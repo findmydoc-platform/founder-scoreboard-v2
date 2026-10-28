@@ -73,7 +73,6 @@ test("earlier Project reads and a legacy whole snapshot cannot replace confirmed
     await saving;
     await loading;
     await oldAdmin;
-    owner.internal.applyLegacyProjection(data);
     expect(owner.planning.administration().model?.githubProject?.number).toBe(8);
     expect(owner.planning.sprintWorkspace().model.project.githubProjectNumber).toBe(8);
 });

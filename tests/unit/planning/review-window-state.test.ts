@@ -118,7 +118,6 @@ test("an older project read and a legacy whole-shell rollback cannot undo a conf
   const read = owner.planning.refreshWorkspace("profile");
   await owner.planning.beginReviewWindowEdit(48).save(72);
   old.resolve({ data: initial, coverage: { project: "complete" } }); await read;
-  owner.internal.applyLegacyProjection(initial);
   expect(owner.planning.reviewWindow().hours).toBe(72);
   expect(owner.planning.sprintWorkspace().model.sprints[0].reviewDueAt).toBe("new-deadline");
 });

@@ -1,6 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
+import { PlanningStateLifetimeContext } from "../model/internal/planning-state-lifetime-context";
+import { createBrowserPlanningLifetime } from "../model/internal/browser-planning-lifetime";
 import { usePlanningStateOwner } from "./use-planning-state-owner";
 import { usePlanningBoardState } from "./use-planning-board-state";
 import { PlanningTaskViewRenderer } from "../organisms/planning-task-view-renderer";
@@ -17,6 +19,11 @@ import type { BrowserApiClient, BrowserApiJsonResult } from "@/lib/browser-api-c
 const task = taskDetailStoryTask({ id: "owner-task", title: "Before", updatedAt: "r1" });
 const initial = { ...emptyPlanningShellState, tasks: [task], taskComments: [{ id: 1, taskId: task.id, profileId: "story-profile", comment: "Loaded discussion", githubDeliveryStatus: "not_applicable", githubCommentUrl: "", createdAt: "2026-10-28T00:00:00Z" } satisfies TaskComment] };
 function PlanningOwnerStory() {
+  const [lifetime]=useState(()=>createBrowserPlanningLifetime({current:async()=>({userId:"owner-story",revision:"owner-story-session",expiresAt:Math.floor(Date.now()/1000)+3600,user:{id:"owner-story"}}),subscribe:()=>()=>{}}));
+  useEffect(()=>lifetime.connect(),[lifetime]);
+  return <PlanningStateLifetimeContext.Provider value={lifetime}><PlanningOwnerContent/></PlanningStateLifetimeContext.Provider>;
+}
+function PlanningOwnerContent() {
   const owner = usePlanningStateOwner({ initialData: initial, initialHeaderData: emptyPlanningHeaderData, initialUserId: "owner-story", initialCurrentProfile: null, initialWorkspace: "planning" });
   const [network] = useState(() => {
     const pending = new Map<string, (result: BrowserApiJsonResult<unknown>) => void>();
@@ -48,14 +55,13 @@ function PlanningOwnerStory() {
     <button onClick={() => network.pending.get("save")?.({ response: new Response(null), body: { task: { id: task.id, title: "Saved task", updatedAt: "r2" } } })}>Confirm save</button>
     <button onClick={() => network.pending.get("read")?.({ response: new Response(null), body: { model: { revision: "old", project: initial.project, items: initial.tasks, people: [], sprints: [], relationships: [], preferences: [] } } })}>Complete old refresh</button>
     <button onClick={() => owner.acceptProtectedData({ ...initial, tasks: [{ ...task, title: "Old page task" }], taskComments: [] }, "owner-story")}>Hydrate old page</button>
-    <button onClick={() => owner.setData(initial)}>Restore legacy snapshot</button>
     <button onClick={owner.clearPlanningState}>End session</button>
   </main>;
 }
 const meta = { component: PlanningOwnerStory, title: "Planning/Hooks/TaskStateOwnership" } satisfies Meta<typeof PlanningOwnerStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const ConfirmedTaskSurvivesRefreshAndLegacyRollback: Story = {
+export const ConfirmedTaskSurvivesOlderRefresh: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Refresh Board" }));
@@ -67,7 +73,6 @@ export const ConfirmedTaskSurvivesRefreshAndLegacyRollback: Story = {
     await waitFor(() => expect(canvas.getByText("Status: saved")).toBeVisible());
     await expect(canvas.getByText("Cache: Saved task")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Complete old refresh" }));
-    await userEvent.click(canvas.getByRole("button", { name: "Restore legacy snapshot" }));
     await expect(canvas.getByText("Task: Saved task")).toBeVisible();
     await expect(canvas.getByText("Cache: Saved task")).toBeVisible();
     await expect(canvas.getByText("Freshness: stale")).toBeVisible();

@@ -7,11 +7,11 @@ export function workspaceReadCoverage(workspace: AppWorkspace): PlanningReadCove
     case "planning": case "projects": return { project: "complete", profiles: "partial", tasks: "partial", sprints: "partial", taskRelations: "partial", profileUiPreferences: "partial" };
     case "backlog": return { tasks: "partial", profiles: "partial", sprints: "partial", sprintCommitments: "partial" };
     case "sprint": return { project: "complete", profiles: "partial", tasks: "partial", sprints: "partial", sprintCommitments: "partial", founderSprintScores: "partial", founderStrikeStates: "partial", strikeEvents: "partial", scoreObjections: "partial", meetings: "partial", meetingAttendance: "partial" };
-    case "events": return { profiles: "complete", events: "complete" };
-    case "tools": return { profiles: "complete", fmdTools: "complete" };
-    case "team": return { profiles: "complete", tasks: "partial" };
-    case "profile": return { project: "complete", profiles: "complete", tasks: "partial", notificationPreferences: "partial", profileUiPreferences: "partial" };
-    case "notifications": return { profiles: "complete", tasks: "partial", notificationEvents: "complete", notificationDeliveries: "complete" };
+    case "events": return { profiles: "partial", events: "partial" };
+    case "tools": return { profiles: "partial", fmdTools: "partial" };
+    case "team": return { profiles: "partial", tasks: "partial" };
+    case "profile": return { project: "complete", profiles: "partial", tasks: "partial", notificationPreferences: "partial", profileUiPreferences: "partial" };
+    case "notifications": return { profiles: "partial", tasks: "partial", notificationEvents: "partial", notificationDeliveries: "partial" };
     default: return {};
   }
 }

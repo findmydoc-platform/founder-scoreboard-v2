@@ -15,7 +15,7 @@ function Fixture({ lost = false, foreign = false }: { lost?: boolean; foreign?: 
   const [counts] = useState(() => ({ writes: 0, reads: 0 }));
   const createBundle = () => createPlanningState({ userId: "account-a", initialData: initial, initialWorkspace: "profile", adapter: {
     saveTask: async () => ({ task: {} }),
-    readWorkspace: async () => { counts.reads++; return { data: { ...initial, profiles: [{ ...profile, focus: foreign ? "Fremder Fokus" : profile.focus }], profileUiPreferences: [{ ...preference, updatedAt: "background" }] } }; },
+    readWorkspace: async () => { counts.reads++; return { data: { ...initial, profiles: [{ ...profile, focus: foreign ? "Fremder Fokus" : profile.focus }], profileUiPreferences: [{ ...preference, updatedAt: "background" }] }, coverage:{profiles:"complete",profileUiPreferences:"complete",notificationPreferences:"complete"} }; },
     saveOwnProfileSettings: async patch => { counts.writes++; if (lost) throw new Error("Antwort verloren"); return { profile: { ...profile, ...patch.profilePatch }, uiPreference: { ...preference, ...patch.uiPreferences, updatedAt: "saved" }, notificationPreferences: [] }; },
   } });
   const [bundle, setBundle] = useState(createBundle);

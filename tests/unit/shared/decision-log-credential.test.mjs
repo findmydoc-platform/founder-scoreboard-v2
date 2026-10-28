@@ -302,3 +302,28 @@ test("changed database configuration after the final header authorization read c
   await expect(permission.loadHeader()).rejects.toThrow();
   expect(dataRequests).toHaveLength(0);
 });
+
+async function readDecisionLogRoute() {
+  const { GET } = await importTestModule("src/app/api/decision-log/route.ts", framework());
+  return GET(new Request("https://application.example.test/api/decision-log"));
+}
+test.each(["ceo", "deputy", "founder", "viewer"])("the actual readonly Decision Log GET retains %s cookie authority and exposes only the fixed paginated business result", async readerRole => {
+  role=readerRole;
+  const prior=network;
+  network=async request=>{
+    if(new URL(request.url).hostname!=="api.notion.com")return prior(request);
+    notionRequests.push(request);const body=await request.json();
+    return Response.json(body.start_cursor ? {results:[page("second")],has_more:false} : {results:[page("first")],has_more:true,next_cursor:"second-page"});
+  };
+  const response=await readDecisionLogRoute();expect(response.status).toBe(200);expect(response.headers.get("cache-control")).toBe("no-store");
+  const body=await response.json();expect(body.result).toMatchObject({ok:true,entries:[{id:"first"},{id:"second"}]});expect(JSON.stringify(body)).not.toContain("synthetic-notion");expect(notionRequests).toHaveLength(2);expect(dataRequests).toHaveLength(0);
+});
+test.each(["anonymous","unmapped","forbidden"])("Decision Log GET withholds %s cookies before any provider dispatch",async caller=>{
+ if(caller==="anonymous")jar.getAll().forEach(cookie=>jar.set(cookie.name,"",{maxAge:0}));
+ if(caller==="unmapped")mapped=false;if(caller==="forbidden")role="technical-bot";
+ const response=await readDecisionLogRoute();expect([401,403]).toContain(response.status);expect(notionRequests).toHaveLength(0);expect(dataRequests).toHaveLength(0);
+});
+test("Decision Log GET reports provider unavailability as a safe result without fabricated empty decisions",async()=>{
+ const prior=network;network=async request=>new URL(request.url).hostname==="api.notion.com"?new Response("private diagnostic",{status:503}):prior(request);
+ const response=await readDecisionLogRoute();const body=await response.json();expect(body.result).toMatchObject({ok:false,code:"notion_unavailable"});expect(body.result).not.toHaveProperty("entries");expect(JSON.stringify(body)).not.toContain("private diagnostic");
+});

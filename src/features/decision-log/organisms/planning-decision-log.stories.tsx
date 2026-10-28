@@ -1,0 +1,11 @@
+import { useState } from "react";
+import type { Meta,StoryObj } from "@storybook/nextjs-vite";
+import { expect,userEvent,within } from "storybook/test";
+import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import { PlanningDecisionLog } from "./planning-decision-log";
+import type { NotionDecisionLogEntry } from "@/lib/notion-decision-log";
+function Fixture(){const [owner]=useState(()=>createPlanningState({userId:"reader",initialData:emptyPlanningShellState,initialDecisionLogResult:{ok:true,entries:[{id:"decision",decision:"Gemeinsame Entscheidung",owners:[],decisionCircle:[],notionUrl:"",date:"2026-10-28",status:"Beschlossen",category:"",summary:"",resolution:"",requiredApproval:"",vote:"",confirmation:"",reviewDate:"",sourceUrl:"",googleFormUrl:"",pdfArchiveUrl:""} as unknown as NotionDecisionLogEntry],fetchedAt:"2026-10-28"},adapter:{saveTask:async()=>({task:{}}),readWorkspace:async()=>null,readDecisionLog:async()=>{throw Object.assign(new Error("Denied"),{status:403});}}}));return <><button onClick={()=>owner.internal.endSession()}>Sitzung beenden</button><PlanningDecisionLog planningState={owner.planning}/></>;}
+const meta={title:"Features/DecisionLog/SharedReadonly",component:Fixture} satisfies Meta<typeof Fixture>;export default meta;type Story=StoryObj<typeof meta>;
+export const DeniedReadWithholdsConfirmedEntries:Story={play:async({canvasElement})=>{const c=within(canvasElement);await expect(c.getAllByText("Gemeinsame Entscheidung").find(element=>element.checkVisibility())!).toBeVisible();await userEvent.click(c.getByRole("button",{name:"Decision Log aktualisieren"}));await expect(await c.findByText("Kein Zugriff auf das Decision Log.")).toBeVisible();await expect(c.queryAllByText("Gemeinsame Entscheidung")).toHaveLength(0);}};
+export const SessionEndWithholdsConfirmedEntries:Story={play:async({canvasElement})=>{const c=within(canvasElement);await expect(c.getAllByText("Gemeinsame Entscheidung").find(element=>element.checkVisibility())!).toBeVisible();await userEvent.click(c.getByRole("button",{name:"Sitzung beenden"}));await expect(c.queryAllByText("Gemeinsame Entscheidung")).toHaveLength(0);}};

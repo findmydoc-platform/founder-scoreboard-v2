@@ -36,7 +36,7 @@ function DeliveryStory({ unknown = false }: {
                 }
                 throw new Error("Unexpected delivery story request");
             }, requestForm: async () => { throw new Error("Unexpected upload"); }, requestBlob: async () => { throw new Error("Unexpected blob"); } };
-        Object.assign(bundle.runtime, { apiClient: client });
+        Object.assign(bundle.runtime, { apiClient: client, session:{userId:bundle.runtime.userId,revision:"story-session",expiresAt:Math.floor(Date.now()/1000)+3600,user:{id:bundle.runtime.userId}} });
         return { bundle, client, writes: () => writes };
     });
     useSyncExternalStore(fixture.bundle.owner.planning.subscribe, fixture.bundle.owner.internal.getSnapshot, fixture.bundle.owner.internal.getSnapshot);

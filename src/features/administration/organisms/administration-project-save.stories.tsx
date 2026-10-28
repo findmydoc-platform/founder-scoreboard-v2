@@ -37,7 +37,7 @@ function ProjectStory({ mode = "confirmed" }: {
                 }
                 throw new Error("Unexpected Project story request");
             }, requestForm: async () => { throw new Error("Unexpected form"); }, requestBlob: async () => { throw new Error("Unexpected blob"); } };
-        Object.assign(bundle.runtime, { apiClient: client });
+        Object.assign(bundle.runtime, { apiClient: client, session:{userId:bundle.runtime.userId,revision:"story-session",expiresAt:Math.floor(Date.now()/1000)+3600,user:{id:bundle.runtime.userId}} });
         return { bundle, client, counts: () => ({ reads, writes, expected }), background: async () => { model = { ...model, githubProject: { ...model.githubProject!, owner: "foreign-org", number: 9, mentionTeamSlug: "foreign-team" } }; await bundle.owner.planning.loadAdministration(); } };
     });
     useSyncExternalStore(fixture.bundle.owner.planning.subscribe, fixture.bundle.owner.internal.getSnapshot, fixture.bundle.owner.internal.getSnapshot);

@@ -21,7 +21,7 @@ export function useHeaderCalendar({
   const [selectedDate, setSelectedDate] = useState(() => berlinDateKey());
   const [viewMonth, setViewMonth] = useState(() => firstCalendarDayOfMonth(berlinDateKey()));
   const range = calendarGridRange(viewMonth);
-  const { snapshot, pending, message, load: loadVisibleRange, now } = useWorkweekCalendarLoading({
+  const { snapshot, pending, message, load: loadVisibleRange, now, workweekCoverage } = useWorkweekCalendarLoading({
     planningState, ...range, enabled: open, policy: "header-month",
   });
 
@@ -39,6 +39,7 @@ export function useHeaderCalendar({
     activeTab,
     calendarWorkweeks: [...snapshot?.calendarWorkweeks || []],
     workweeksByDay: snapshot?.calendarByDay,
+    workweekCoverage,
     closeCalendar,
     message,
     now,

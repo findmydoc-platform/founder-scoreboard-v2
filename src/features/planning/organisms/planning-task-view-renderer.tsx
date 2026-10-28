@@ -153,6 +153,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
           {view === "table" && (
             <TaskTableView
+              planningState={controller.planningState}
               visibleTasks={planningBoardTasks}
               profiles={data.profiles}
               sprints={data.sprints}
