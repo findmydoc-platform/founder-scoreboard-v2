@@ -6,8 +6,6 @@ import { useTaskCreateCommand } from "@/features/tasks/hooks/use-task-create-com
 import { useTaskWithdrawCommand } from "@/features/tasks/hooks/use-task-withdraw-command";
 import { useTaskGitHubSyncCommand } from "@/features/tasks/hooks/use-task-github-sync-command";
 import { useTaskUpdateCommand } from "@/features/tasks/hooks/use-task-update-command";
-import { applyDeliverableApprovalPatch, applyOptimisticDeliverableApprovalDecision } from "@/features/planning/model/approval-domain";
-import * as taskApi from "@/features/tasks/model/task-api-client";
 import type { ApprovalDecisionAction, Task } from "@/lib/types";
 
 export function useTaskMutationCommands(options: TaskMutationCommandContext) {
@@ -49,18 +47,9 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
       });
       return;
     }
-    if (options.source !== "supabase") {
-      options.applyPlanningShellStateUpdate((current) => applyDeliverableApprovalPatch(current, applyOptimisticDeliverableApprovalDecision(task, action, note)));
-      return;
-    }
     options.startTransition(async () => {
-      try {
-        const { response, body } = await taskApi.decideTaskApprovalRequest(options.apiClient, task.id, action, task.approvalRevision, note);
-        if (!response.ok || !body?.task) throw new Error(body?.error || "Freigabeentscheidung konnte nicht gespeichert werden.");
-        options.applyPlanningShellStateUpdate((current) => applyDeliverableApprovalPatch(current, body.task!));
-      } catch (error) {
-        options.setSaveError(error instanceof Error ? error.message : "Freigabeentscheidung konnte nicht gespeichert werden.");
-      }
+      const result = await options.planningState.decideTaskApproval(task,action,note);
+      if(!result.ok)options.setSaveError(result.error);
     });
   };
 

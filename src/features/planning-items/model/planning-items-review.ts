@@ -208,6 +208,7 @@ export function parsePlanningReviewDecisionPayload(payload: unknown):
   | Readonly<{
     ok: true;
     value: {
+      expectedUpdatedAt?: string;
       decision: "accepted" | "partial" | "changes_requested";
       comment: string;
       checklist: PlanningReviewChecklist;
@@ -219,11 +220,12 @@ export function parsePlanningReviewDecisionPayload(payload: unknown):
   if (decision !== "accepted" && decision !== "partial" && decision !== "changes_requested") {
     return { ok: false, error: "Ungültige Review-Entscheidung." };
   }
+  if (row?.expectedUpdatedAt !== undefined && !validTimestamp(row.expectedUpdatedAt)) return { ok: false, error: "Aktueller Aufgabenstand ist erforderlich." };
   const normalizedChecklist = checklist(row?.checklist);
   const comment = text(row?.comment, 2_000);
   const validation = reviewDecisionValidation(decision, normalizedChecklist, comment);
   return validation.ok
-    ? { ok: true, value: { decision, comment, checklist: normalizedChecklist } }
+    ? { ok: true, value: { decision, comment, checklist: normalizedChecklist, ...(row?.expectedUpdatedAt ? {expectedUpdatedAt:row.expectedUpdatedAt as string} : {}) } }
     : { ok: false, error: validation.message };
 }
 
@@ -869,12 +871,12 @@ export function planningReviewTaskFromResult(result: Extract<PlanningResult, { o
 
 export function planningTaskReviewFromResult(result: Extract<PlanningResult, { ok: true }>) {
   const change = result.changes.find((candidate) => candidate.field === "taskReview");
-  return change ? taskReview(change.after) : null;
+  return change ? record(change.after) as PlanningTaskReview | null : null;
 }
 
 export function planningReviewActivitiesFromResult(result: Extract<PlanningResult, { ok: true }>) {
   const change = result.changes.find((candidate) => candidate.field === "reviewActivities");
-  return activities(change?.after);
+  return Array.isArray(change?.after) ? change.after as readonly PlanningReviewActivity[] : [];
 }
 
 export function planningReviewError(error: PlanningError, action: "request" | "decide" | "withdraw" | "reopen") {

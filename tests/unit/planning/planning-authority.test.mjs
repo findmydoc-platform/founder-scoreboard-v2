@@ -107,11 +107,21 @@ test.each([
   });
   const routePath = operation === "decide" ? "src/app/api/tasks/[id]/review/route.ts" : `src/app/api/tasks/[id]/review/${operation}/route.ts`;
   const { POST } = await importTestModule(routePath, { "server-only": {} });
-  const payload = operation === "decide" ? { decision: "accepted", comment: "Reviewed evidence", checklist: fields.checklist }
+  const payload = operation === "decide" ? { decision: "accepted", expectedUpdatedAt:task.updated_at, comment: "Reviewed evidence", checklist: fields.checklist }
     : { expectedUpdatedAt: task.updated_at, ...(operation === "withdraw" ? { reason: fields.reason } : {}) };
   const response = await POST(protocol.request("/api/tasks/review-task/review", "POST", payload), { params: Promise.resolve({ id: task.id }) });
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ ok: true, task: { id: task.id } });
+  const receipt=await response.json();
+  expect(receipt).toMatchObject({ ok: true, task: { id: task.id },activities:[] });
+  if(operation==="decide") {
+    expect(receipt.review).toMatchObject({id:1,taskId:task.id,reviewerProfileId:"synthetic-profile",createdAt:"2026-10-17T08:01:00Z"});
+    expect(protocol.calls.filter(call=>call.name==="mutate_planning_review_command_transaction_v3").at(-1).body.p_expected_updated_at).toBe(task.updated_at);
+    protocol.state.responses.prepare_planning_review_command.task={...task,updated_at:"2026-10-17T09:00:00Z"};
+    const conflict=await POST(protocol.request("/api/tasks/review-task/review","POST",payload),{params:Promise.resolve({id:task.id})});expect(conflict.status).toBe(409);expect(await conflict.json()).toMatchObject({conflictReason:"revision"});
+    protocol.state.responses.prepare_planning_review_command.task=task;
+    protocol.state.responses.prepare_planning_review_command.sprintLocked=true;
+    const protectedResult=await POST(protocol.request("/api/tasks/review-task/review","POST",payload),{params:Promise.resolve({id:task.id})});expect(protectedResult.status).toBe(409);expect(await protectedResult.json()).not.toHaveProperty("conflictReason");
+  }
   protocol.state.role = "viewer";
   expect(await authorizeCredentialAction(input)).toMatchObject({ ok: false, status: 403 });
 });
