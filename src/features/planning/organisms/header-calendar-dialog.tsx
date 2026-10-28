@@ -72,6 +72,7 @@ function EventRow({ event }: { event: HeaderCalendarEvent }) {
 
 export function HeaderCalendarDialog({
   activeTab,
+  workweeksByDay,
   anchor,
   calendarWorkweeks,
   desktopPopover,
@@ -92,6 +93,7 @@ export function HeaderCalendarDialog({
   workweekDateKey,
   workweeks,
 }: {
+  workweeksByDay?: import("@/features/team-workweek/model/published-workweek-calendar-state").WorkweeksByDay;
   activeTab: "events" | "workweek";
   anchor: Readonly<{ right: number; top: number }> | null;
   calendarWorkweeks: CalendarTeamWorkweek[];
@@ -126,7 +128,7 @@ export function HeaderCalendarDialog({
   const eventsByDay = useMemo(() => eventsByCalendarDay(eventSlot.data), [eventSlot.data]);
   const selectedEvents = eventsByDay.get(selectedDate) || [];
   const selectedWorktimes = projectCalendarWorktimes({
-    calendarWorkweeks,
+    calendarWorkweeks: workweeksByDay ? [...workweeksByDay[selectedDate] || []] : calendarWorkweeks,
     dateKey: selectedDate,
     now,
     profiles: visibleProfiles,
@@ -263,7 +265,7 @@ export function HeaderCalendarDialog({
                     const today = dateKey === todayKey;
                     const currentMonth = dateKey.startsWith(viewMonth.slice(0, 7));
                     const dayEvents = eventsByDay.get(dateKey) || [];
-                    const worktimes = projectCalendarWorktimes({ calendarWorkweeks, dateKey, now, profiles: visibleProfiles });
+                    const worktimes = projectCalendarWorktimes({ calendarWorkweeks: workweeksByDay ? [...workweeksByDay[dateKey] || []] : calendarWorkweeks, dateKey, now, profiles: visibleProfiles });
                     const details = [
                       dayEvents.length ? `${dayEvents.length} Termin${dayEvents.length === 1 ? "" : "e"}` : "keine Termine",
                       showWorkweek ? `${worktimes.length} eingeplant` : null,
@@ -348,7 +350,7 @@ export function HeaderCalendarDialog({
               {message ? <UiNotice className="mb-3" tone="warning" size="xs">{workweeks.length ? "Aktualisierung verzögert. Zuletzt bestätigte Zeiten." : message}</UiNotice> : null}
               {pending && !workweeks.length ? <UiEmptyState className="min-h-48" tone="muted">Team-Arbeitswoche wird geladen.</UiEmptyState> : null}
               {(!message || workweeks.length > 0) && (!pending || workweeks.length > 0) ? (
-                <TeamWorkweekMatrix key={selectedDate} compact dateKey={selectedDate || workweekDateKey} profiles={profiles} workweeks={calendarWorkweeks.length ? calendarWorkweeks : workweeks} upcomingWorkweeks={calendarWorkweeks} />
+                <TeamWorkweekMatrix key={selectedDate} compact workweeksByDay={workweeksByDay} dateKey={selectedDate || workweekDateKey} profiles={profiles} workweeks={calendarWorkweeks.length ? calendarWorkweeks : workweeks} upcomingWorkweeks={calendarWorkweeks} />
               ) : null}
             </div>
           )}

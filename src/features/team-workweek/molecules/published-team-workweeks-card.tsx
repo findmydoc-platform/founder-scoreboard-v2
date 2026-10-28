@@ -5,20 +5,20 @@ import { resolvePublishedTeamWorkweekViewState } from "../model/team-workweek-vi
 import { workweekStart } from "../model/team-workweek-week";
 import { WorkweekNavigation } from "./workweek-navigation";
 import { TeamWorkweekMatrix } from "./team-workweek-matrix";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 import type { Profile } from "@/lib/types";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export function PublishedTeamWorkweeksCard({
-  apiClient,
+  planningState,
   profiles,
   initialDate,
 }: {
-  apiClient: BrowserApiClient;
+  planningState: PlanningState;
   profiles: Profile[];
   initialDate?: string;
 }) {
-  const state = usePublishedTeamWorkweeks(apiClient, initialDate);
+  const state = usePublishedTeamWorkweeks(planningState, initialDate);
   const viewState = resolvePublishedTeamWorkweekViewState({
     hasLoadedSuccessfully: state.hasLoadedSuccessfully,
     message: state.message,
@@ -54,7 +54,7 @@ export function PublishedTeamWorkweeksCard({
       {nextPrepared && <UiButton className="mt-2 min-h-11" size="sm" onClick={() => state.selectDate(nextPrepared.effectiveFrom)}>Geplante Woche ansehen</UiButton>}
       {state.hasLoadedSuccessfully && (
         <div className="mt-4">
-          <TeamWorkweekMatrix key={state.selectedDate} dateKey={state.referenceDate} profiles={profiles} workweeks={state.workweeks} upcomingWorkweeks={state.upcomingWorkweeks} publishedOwnerIds={state.publishedOwnerIds} />
+          <TeamWorkweekMatrix key={state.selectedDate} dateKey={state.referenceDate} profiles={profiles} workweeks={state.workweeks} workweeksByDay={state.workweeksByDay} upcomingWorkweeks={state.upcomingWorkweeks} publishedOwnerIds={state.publishedOwnerIds} />
         </div>
       )}
     </UiPanel>

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import { TEAM_WORKWEEK_PUBLISHED_EVENT } from "./use-published-team-workweeks";
+import { TEAM_WORKWEEK_PUBLISHED_EVENT } from "../model/published-workweek-events";
 import { usePrivateTeamWorkweekState, type WorkweekTransport } from "../model/private-team-workweek-state";
 
 /** Keeps browser HTTP details outside the editor's state and recovery policies. */

@@ -1,5 +1,7 @@
 "use client";
 
+import { TEAM_WORKWEEK_PUBLISHED_EVENT } from "@/features/team-workweek/model/published-workweek-events";
+
 import { createBrowserSessionAdapter, type BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import { emptyPlanningShellState } from "../planning-shell-state";
 import { createBrowserPlanningState, type BrowserPlanningState, type PlanningPageState } from "./browser-planning-state";
@@ -53,9 +55,11 @@ export function createBrowserPlanningLifetime(sessions: SessionSource = createBr
     connect() {
       let active = true;
       let received = false;
+      const refreshCalendars = () => current?.owner.internal.invalidatePublishedWorkweeks();
+      if (typeof window !== "undefined") window.addEventListener(TEAM_WORKWEEK_PUBLISHED_EVENT, refreshCalendars);
       const unsubscribe = sessions.subscribe(next => { if (active) { received = true; acceptSession(next); } });
       void sessions.current().then(next => { if (active && !received) acceptSession(next); }).catch(() => undefined);
-      return () => { active = false; unsubscribe(); if (expiry) clearTimeout(expiry); };
+      return () => { active = false; if (typeof window !== "undefined") window.removeEventListener(TEAM_WORKWEEK_PUBLISHED_EVENT, refreshCalendars); unsubscribe(); if (expiry) clearTimeout(expiry); };
     },
   };
 }
