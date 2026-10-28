@@ -1,3 +1,4 @@
+import type { PrivateWorkweekPlanningState } from "@/features/team-workweek/model/private-workweek-planning-state";
 import type { PublishedWorkweekCalendars } from "@/features/team-workweek/model/published-workweek-calendar-state";
 import type { Task, TaskComment, TaskExternalComment, TaskBlocker, TaskRelation, TaskActivity, TaskReview } from "@/lib/types";
 import type { AppWorkspace } from "./workspace-routes";
@@ -56,7 +57,7 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
-export interface PlanningState extends PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+export interface PlanningState extends PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   sprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanView;
   checkSprintPlan(): Promise<PlanningTaskSaveCheck>;
   resumeSprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanEditor | null;

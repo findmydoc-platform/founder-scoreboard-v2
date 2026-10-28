@@ -1,5 +1,6 @@
 "use client";
 
+import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
 import { readPublishedWorkweekCalendar } from "@/features/team-workweek/model/published-workweek-calendar-api";
 
 import { isProtectedToolPreviewUrl } from "@/lib/tool-preview-image";
@@ -38,6 +39,9 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialWorkspace: options.initialWorkspace,
     initialHeaderData: options.initialHeaderData,
     adapter: {
+      readPrivateWorkweek: week => privateWorkweekApi(runtime.apiClient).readPrivateWorkweek(week),
+      savePrivateWorkweek: input => privateWorkweekApi(runtime.apiClient).savePrivateWorkweek(input),
+      publishPrivateWorkweek: versionId => privateWorkweekApi(runtime.apiClient).publishPrivateWorkweek(versionId),
       async createSprintPlan(input, basis) {
         const { response, body } = await planningApi.createSprintPlanRequest(runtime.apiClient, { ...input, expectedSprints: basis.sprints.map(sprint => ({ id: sprint.id, number: Math.max(sprintNumber(sprint.name), sprintNumber(sprint.id)), updatedAt: sprint.updatedAt })) });
         if (!response.ok) throw Object.assign(new Error(body?.error || "Sprint-Plan konnte nicht gespeichert werden."), { status: response.status, code: body?.code });

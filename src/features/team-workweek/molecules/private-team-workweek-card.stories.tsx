@@ -1,17 +1,19 @@
+import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
+import { privateWorkweekApi } from "../model/private-workweek-api";
 import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
 import { ProductUpdatesProvider } from "@/features/product-updates/organisms/product-updates-provider";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
 import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import "driver.js/dist/driver.css";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { HeaderCalendarAction } from "@/features/planning/molecules/header-calendar-action";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { workweekLabel, workweekStart } from "../model/team-workweek-week";
 import { addCalendarDays, berlinCivilInstant } from "../model/team-workweek-calendar";
 import { nextMondayIso } from "../model/team-workweek-draft";
-import { PrivateTeamWorkweekCard } from "./private-team-workweek-card";
+import { PrivateTeamWorkweekCard as SharedPrivateTeamWorkweekCard } from "./private-team-workweek-card";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 
 const profile = {
@@ -164,6 +166,14 @@ function client(options: ClientOptions = {}): BrowserApiClient {
       throw new Error(`Unexpected request: ${path}`);
     },
   } as unknown as BrowserApiClient;
+}
+
+function StoryOwnedPrivateTeamWorkweekCard(props: Omit<React.ComponentProps<typeof SharedPrivateTeamWorkweekCard>, "planningState">) {
+  const planningState = useCalendarPlanningState(props.apiClient, [props.profile]);
+  return <SharedPrivateTeamWorkweekCard {...props} planningState={planningState} />;
+}
+function PrivateTeamWorkweekCard(props: Omit<React.ComponentProps<typeof SharedPrivateTeamWorkweekCard>, "planningState"> & { planningState?: React.ComponentProps<typeof SharedPrivateTeamWorkweekCard>["planningState"] }) {
+  return props.planningState ? <SharedPrivateTeamWorkweekCard {...props} planningState={props.planningState} /> : <StoryOwnedPrivateTeamWorkweekCard {...props} />;
 }
 
 const meta = {
@@ -319,11 +329,8 @@ export const PublishesOnlyAfterProviderConfirmation: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const published = fn();
-    window.addEventListener("founderops:team-workweek-published", published, { once: true });
     await userEvent.click(await canvas.findByRole("button", { name: "Bearbeitung fortsetzen" }));
     await userEvent.click(await canvas.findByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
-    await expect(published).toHaveBeenCalledOnce();
     await expect(canvas.queryByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).not.toBeInTheDocument();
     await expect(canvas.getByText(/Die geplante Woche ist bereits im Kalender sichtbar/)).toBeInTheDocument();
   },
@@ -358,7 +365,7 @@ function CalendarJourney() {
   const planningState = useCalendarPlanningState(apiClient, [profile]);
   return <>
     <HeaderCalendarAction planningState={planningState} events={{ data: [], state: "ready", error: "" }} profiles={[profile]} onOpenTeam={(editWorkweek) => { setTeamOpen(true); setEditorRequested(Boolean(editWorkweek)); }} />
-    {teamOpen && <PrivateTeamWorkweekCard apiClient={apiClient} profile={profile} editorRequested={editorRequested} onEditorRequestHandled={() => setEditorRequested(false)} />}
+    {teamOpen && <PrivateTeamWorkweekCard planningState={planningState} apiClient={apiClient} profile={profile} editorRequested={editorRequested} onEditorRequestHandled={() => setEditorRequested(false)} />}
   </>;
 }
 
@@ -393,9 +400,9 @@ export const KeepsInputsWhenPrivateSavingFails: Story = {
     await userEvent.clear(end);
     await userEvent.type(end, "18:00");
     await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
-    await expect(await canvas.findByText(/Speichern vorübergehend nicht möglich/)).toHaveTextContent("die Veröffentlichung wurde nicht gestartet");
+    await expect(await canvas.findByText(/Speichern vorübergehend nicht möglich/)).toHaveTextContent("Die Speicherbestätigung ist ausstehend");
     await expect(end).toHaveValue("18:00");
-    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeEnabled();
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
   },
 };
 
@@ -431,7 +438,7 @@ export const RetainsTheSavedDraftWhenPublicationIsDelayed: Story = {
   },
 };
 
-export const RetriesTheSavedRevisionAfterALostResponse: Story = {
+export const ChecksTheSavedRevisionAfterALostResponse: Story = {
   args: { apiClient: client({ losePublishResponse: true, publish: {
     after: { editBase: { windows: publishedWindows }, latestPublished: { ...latestPublished, effectiveFrom: nextMondayIso() }, minimumEffectiveFrom: nextMondayIso(), publication: null, version: null },
     result: { ...latestPublished, recovery: null },
@@ -443,11 +450,14 @@ export const RetriesTheSavedRevisionAfterALostResponse: Story = {
     await userEvent.clear(end);
     await userEvent.type(end, "18:00");
     await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
-    await expect(await canvas.findByText(/Antwort der Veröffentlichung/)).toHaveTextContent("Wiederhole die Veröffentlichung, um den Stand zu prüfen");
+    await expect(await canvas.findByText(/Antwort der Veröffentlichung/)).toHaveTextContent("Die Veröffentlichung wird zur Prüfung nicht wiederholt");
     await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
     await expect(end).toHaveValue("18:00");
-    await userEvent.click(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" }));
-    await expect(await canvas.findByText("Arbeitswoche wurde mit Google synchronisiert und im Team veröffentlicht.")).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Aktuellen Stand laden" }));
+    await expect(await canvas.findByText(/Die Bestätigung bleibt ausstehend/)).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+    await expect(end).toHaveValue("18:00");
   },
 };
 
@@ -1588,5 +1598,100 @@ export const DiscardedInputsStayDiscardedAfterALateWeekRead: Story = {
     await userEvent.click(canvas.getByRole("button", { name: /Arbeitswoche bearbeiten|Bearbeitung fortsetzen/ }));
     await expect(canvas.getByLabelText("Montag, Fenster 1, Beginn")).toHaveValue("09:00");
     await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
+  },
+};
+
+function RetainedPrivateSaveJourney({ loseConfirmation = false }: { loseConfirmation?: boolean }) {
+  const [teamOpen, setTeamOpen] = useState(true);
+  const [fixture] = useState(() => {
+    const base = client();
+    let release!: () => void;
+    const confirmation = new Promise<void>(resolve => { release = resolve; });
+    let saved = false;
+    const apiClient = { requestJson: async (path: string, options?: { method?: string; json?: unknown }) => {
+      if (path.startsWith("/api/team-workweek/private-draft") && options?.method === "POST") {
+        const result = await base.requestJson(path, options);
+        saved = true;
+        setTeamOpen(false);
+        await confirmation;
+        if (loseConfirmation) throw new Error("Speicherantwort verloren.");
+        return result;
+      }
+      if (saved && path.startsWith("/api/team-workweek/private-draft")) return { response: new Response(null, { status: 503 }), body: { error: "Stand nach Bereichswechsel nicht erreichbar." } };
+      return base.requestJson(path, options);
+    } } as BrowserApiClient;
+    return { apiClient, release: () => release() };
+  });
+  const planningState = useCalendarPlanningState(fixture.apiClient, [profile]);
+  const state = useSyncExternalStore(planningState.subscribe, planningState.privateWorkweek, planningState.privateWorkweek);
+  return <>
+    {!teamOpen && <><p role="status">Speicherstand: {state.save.phase}</p><button onClick={fixture.release}>Speicherung bestätigen</button><button onClick={() => setTeamOpen(true)}>Team öffnen</button></>}
+    {teamOpen && <SharedPrivateTeamWorkweekCard apiClient={fixture.apiClient} planningState={planningState} profile={profile} />}
+  </>;
+}
+
+export const RetainsPrivateConfirmationAcrossNavigationAndUnavailableContext: Story = {
+  args: { apiClient: client(), profile },
+  render: () => <RetainedPrivateSaveJourney />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    const end = await canvas.findByLabelText("Montag, Fenster 1, Ende");
+    await userEvent.clear(end); await userEvent.type(end, "18:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Entwurf speichern" }));
+    await expect(await canvas.findByRole("status")).toHaveTextContent("Speicherstand: saving");
+    await userEvent.click(canvas.getByRole("button", { name: "Speicherung bestätigen" }));
+    await expect(canvas.getByRole("status")).toHaveTextContent("Speicherstand: confirmed");
+    await userEvent.click(canvas.getByRole("button", { name: "Team öffnen" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeitung fortsetzen" }));
+    await expect(await canvas.findByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await expect(await canvas.findByText(/Stand nach Bereichswechsel nicht erreichbar/)).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
+  },
+};
+
+function overlappingPrivateContextFixture() {
+  const base = client();
+  const apiClient = { requestJson: async (path: string, options?: { method?: string; json?: unknown }) => {
+    const result = await base.requestJson<Record<string, unknown>>(path, options);
+    if (path.includes("?week=")) return { ...result, body: { ...result.body, version: { id: "another-private-version", timezone: "Europe/Berlin", status: "preparing", createdAt: new Date().toISOString(), effectiveFrom: addCalendarDays(workweekStart(), 7), windows: publishedWindows } } };
+    return result;
+  } } as BrowserApiClient;
+  const owner = createPlanningState({ userId: "workweek-overlap", initialData: { ...emptyPlanningShellState, profiles: [profile] }, adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null, ...privateWorkweekApi(apiClient) } });
+  return { apiClient, planningState: owner.planning, profile };
+}
+
+export const RetainsDisplayedEditingBasisWhenAnotherContextLoads: Story = {
+  args: overlappingPrivateContextFixture(),
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    const end = await canvas.findByLabelText("Montag, Fenster 1, Ende");
+    await userEvent.clear(end); await userEvent.type(end, "18:00");
+    await args.planningState!.loadPrivateWorkweek(addCalendarDays(workweekStart(), 7));
+    await userEvent.click(canvas.getByRole("button", { name: "Entwurf speichern" }));
+    await expect(await canvas.findByText(/Die gespeicherte Version wurde während deiner Bearbeitung geändert/)).toBeVisible();
+    await expect(end).toHaveValue("18:00");
+    await expect(args.planningState!.privateWorkweek().save.phase).toBe("idle");
+    await expect(canvas.getByRole("button", { name: "Aktuellen Stand laden" })).toBeEnabled();
+  },
+};
+
+export const RetainsSubmittedWindowsAcrossUnknownSaveNavigation: Story = {
+  args: { apiClient: client(), profile },
+  render: () => <RetainedPrivateSaveJourney loseConfirmation />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    const end = await canvas.findByLabelText("Montag, Fenster 1, Ende");
+    await userEvent.clear(end); await userEvent.type(end, "18:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Entwurf speichern" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "Speicherung bestätigen" }));
+    await expect(canvas.getByRole("status")).toHaveTextContent("Speicherstand: unconfirmed");
+    await userEvent.click(canvas.getByRole("button", { name: "Team öffnen" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
+    await expect(await canvas.findByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
+    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "Aktuellen Stand laden" })).toBeEnabled();
   },
 };
