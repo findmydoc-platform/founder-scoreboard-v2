@@ -376,7 +376,7 @@ export const ContinuesAndPublishesFromTheCalendar: Story = {
   parameters: { layout: "fullscreen" },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const body = within(document.body);
+    const body = within(canvasElement.ownerDocument.body);
     await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
     await userEvent.click(await body.findByRole("tab", { name: "Arbeitswoche" }));
     const action = body.getByRole("button", { name: "Meine Arbeitswoche bearbeiten" });
