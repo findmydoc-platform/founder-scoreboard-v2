@@ -1,3 +1,4 @@
+import { taskAuditActionFromMessage } from "@/features/tasks/model/task-comment-timeline-policy";
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { apiError } from "@/lib/api-response";
@@ -6,6 +7,7 @@ import { mentionedProfileIds } from "@/lib/mentions";
 import {
   decidePlanningReviewCommand,
   parsePlanningReviewDecisionPayload,
+  planningReviewActivitiesFromResult,
   planningReviewError,
   planningReviewTaskFromResult,
   planningTaskReviewFromResult,
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   });
   if (!result.ok) {
     const mapped = planningReviewError(result.error, "decide");
-    return apiError(mapped.message, mapped.status);
+    return NextResponse.json({error:mapped.message,...(result.error.code==="conflict"&&result.error.reason==="revision"?{conflictReason:"revision"}:{}),code:result.error.code}, {status:mapped.status});
   }
   const task = planningReviewTaskFromResult(result);
   const review = planningTaskReviewFromResult(result);
@@ -41,5 +43,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Review konnte nicht vollständig gespeichert werden.", 500);
   }
   await apiContext.planning.deliverReviews().catch(() => undefined);
-  return NextResponse.json({ ok: true, review, task });
+  const activities = planningReviewActivitiesFromResult(result).map(activity=>({ ...activity, action:taskAuditActionFromMessage(activity.message),actorProfileId:apiContext.permission.profile?.id||"",beforeData:null,afterData:{message:activity.message} })).filter(activity=>activity.action);
+  return NextResponse.json({ ok: true, activities, review, task });
 }

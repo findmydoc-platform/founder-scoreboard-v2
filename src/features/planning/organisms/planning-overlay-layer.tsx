@@ -192,7 +192,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onWithdraw={(reason) => withdrawTask(selectedTask, reason)}
           onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
-          onDecideApproval={(action, note) => decideTaskApproval(selectedTask, action, note)}
+          onDecideApproval={(action, note, basis) => decideTaskApproval(basis || selectedTask, action, note)}
         />
       )}
       {taskDialogDefaults && (
