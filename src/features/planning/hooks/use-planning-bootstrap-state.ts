@@ -62,7 +62,9 @@ export function usePlanningBootstrapState({
   const [githubSyncQueueOpen, setGithubSyncQueueOpen] = useState(false);
 
   const clearSelectedTask = useCallback(() => setSelectedTaskId(null), [setSelectedTaskId]);
+  const githubConnection=planningState.githubConnection();
   const auth = usePlanningAuth({
+    loadGitHubConnection:planningState.loadGitHubConnection,
     authRequired,
     source,
     taskCount: data.tasks.length,
@@ -121,6 +123,11 @@ export function usePlanningBootstrapState({
 
   return {
     ...auth,
+    githubConnectionState:githubConnection.readStatus==="loading"?"checking" as const:githubConnection.state,
+    githubInstallationAvailable:githubConnection.installationAvailable,
+    githubUserConnected:githubConnection.userConnected,
+    waitingGitHubCommentCount:githubConnection.waitingCommentCount,
+    githubReauthFailed:githubConnection.state==="reconnect_required",
     ...dataRefresh,
     ...focusMode,
     ...remoteChanges,

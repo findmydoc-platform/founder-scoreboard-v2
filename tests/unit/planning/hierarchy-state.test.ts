@@ -75,13 +75,14 @@ test("a delayed direct-child creation cannot restore the old Initiative approval
 test("opening a summary Initiative loads required detail fields while keeping the original displayed version",async()=>{
  const shown={...initiative,detailAvailability:"summary" as const,strategy:undefined,raciAssignments:[]};
  const actual={...initiative,updatedAt:"detail/newer",strategy:{goal:"Read full goal",successCriteria:"Full criteria",scopeConstraints:"Full scope"},raciAssignments:[{profileId:"accountable",role:"accountable" as const,sortOrder:0},{profileId:"responsible",role:"responsible" as const,sortOrder:0}]};
- let reads=0,writes=0,defaults:Partial<InitiativeDraft>|null=null;
+ let reads=0,writes=0;const opened:{draft:Partial<InitiativeDraft>|null}={draft:null};
  const {planning}=createPlanningState({userId:"user",initialData:{...emptyPlanningShellState,tasks:[epic,shown]},adapter:{readWorkspace:async()=>null,saveTask:async()=>{writes++;return{task:{updatedAt:"unexpected"}};},readTaskDetail:async()=>{reads++;return{model:{revision:"detail",project:emptyPlanningShellState.project,item:actual,ancestors:[epic],children:[],relatedItems:[],people:[],sprints:[],discussion:{comments:[],externalComments:[]},blockers:[],relationships:[],activity:[],reviews:[]}};}}});
- const commands=useInitiativeCommands({planningState:planning,currentProfile:null,setSaveError:()=>{},setInitiativeDialogDefaults:value=>{defaults=typeof value==="function"?value(defaults):value;}});
+ const commands=useInitiativeCommands({planningState:planning,currentProfile:null,setSaveError:()=>{},setInitiativeDialogDefaults:value=>{opened.draft=typeof value==="function"?value(opened.draft):value;}});
  await commands.editInitiative(shown);
- expect(defaults).toMatchObject({expectedUpdatedAt:"original/source",goal:"Read full goal",accountableProfileId:"accountable",responsibleProfileIds:["responsible"]});
- const editor=planning.beginInitiativeEdit(defaults! as InitiativeDraft);
- expect(await editor.save({...initiativeDraft,...(defaults as Partial<InitiativeDraft>)})).toMatchObject({ok:false,kind:"versionConflict"});
+ expect(opened.draft).toMatchObject({expectedUpdatedAt:"original/source",goal:"Read full goal",accountableProfileId:"accountable",responsibleProfileIds:["responsible"]});
+ if(!opened.draft)throw new Error("Expected Initiative form to open");
+ const editor=planning.beginInitiativeEdit({...initiativeDraft,...opened.draft});
+ expect(await editor.save({...initiativeDraft,...opened.draft})).toMatchObject({ok:false,kind:"versionConflict"});
  expect(writes).toBe(0);expect(reads).toBe(2);
 });
 test("failed required Initiative detail read leaves the form closed and session replacement clears submitted hierarchy intent",async()=>{

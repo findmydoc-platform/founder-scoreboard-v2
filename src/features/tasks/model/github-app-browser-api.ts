@@ -5,13 +5,13 @@ import type { BrowserApiClient } from "@/lib/browser-api-client";
 type GitHubAppStatusResponse = {
   installation?: { available?: boolean };
   user?: { connected?: boolean };
-  waitingCommentCount?: number;
+  waitingCommentCount?: number | null;
 };
 
 export type GitHubAppBrowserSnapshot = {
   githubInstallationAvailable: boolean;
   githubUserConnected: boolean;
-  waitingGitHubCommentCount: number;
+  waitingGitHubCommentCount: number | null;
 };
 
 function currentRelativeUrl() {
@@ -23,7 +23,7 @@ function unavailableSnapshot(): GitHubAppBrowserSnapshot {
   return {
     githubInstallationAvailable: false,
     githubUserConnected: false,
-    waitingGitHubCommentCount: 0,
+    waitingGitHubCommentCount: null,
   };
 }
 
@@ -34,7 +34,7 @@ export async function loadGitHubAppBrowserSnapshot(apiClient: BrowserApiClient):
     return {
       githubInstallationAvailable: Boolean(body?.installation?.available),
       githubUserConnected: Boolean(body?.user?.connected),
-      waitingGitHubCommentCount: Number(body?.waitingCommentCount || 0),
+      waitingGitHubCommentCount: Number.isSafeInteger(body?.waitingCommentCount) && body!.waitingCommentCount! >= 0 ? body!.waitingCommentCount! : null,
     };
   } catch {
     return unavailableSnapshot();

@@ -5,7 +5,6 @@ import { createBrowserApiClient } from "@/lib/browser-api-client";
 import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
 import type { ServerSessionView } from "@/lib/credentials/session-types";
 import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData } from "@/lib/types";
-import { githubUserConnectionStateFromStatus, type GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
@@ -17,6 +16,7 @@ import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/mode
 import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "../model/internal/planning-protected-cache";
 
 type UsePlanningAuthOptions = {
+  loadGitHubConnection: () => Promise<boolean>;
   authRequired: boolean;
   source: "supabase";
   taskCount: number;
@@ -43,6 +43,7 @@ function currentRelativeUrl() {
 }
 
 export function usePlanningAuth({
+  loadGitHubConnection,
   authRequired,
   source,
   taskCount,
@@ -63,11 +64,6 @@ export function usePlanningAuth({
   const [authChecked, setAuthChecked] = useState(!authRequired || Boolean(initialAuthUser));
   const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired || initialProtectedDataLoaded);
   const [serverCurrentProfile, setServerCurrentProfile] = useState<AuthenticatedProfile | null>(initialCurrentProfile);
-  const [githubConnectionState, setGithubConnectionState] = useState<GitHubUserConnectionState>(authRequired && initialAuthUser ? "checking" : "unknown");
-  const [githubInstallationAvailable, setGithubInstallationAvailable] = useState(false);
-  const [githubUserConnected, setGithubUserConnected] = useState(false);
-  const [waitingGitHubCommentCount, setWaitingGitHubCommentCount] = useState(0);
-  const [githubReauthFailed, setGithubReauthFailed] = useState(false);
   const [authError, setAuthError] = useState(initialAuthError);
   const [authNotice, setAuthNotice] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
@@ -75,42 +71,6 @@ export function usePlanningAuth({
   useEffect(() => {
     const sessions = createBrowserSessionAdapter();
     let active = true;
-    let generation = 0;
-
-    const refreshGitHubUserConnectionState = async (session: ServerSessionView | null) => {
-      if (!active) return;
-      const started = generation;
-      if (isLocalLoginSimulationEnabled()) {
-        setGithubInstallationAvailable(false);
-        setGithubUserConnected(false);
-        setWaitingGitHubCommentCount(0);
-        setGithubReauthFailed(false);
-        setGithubConnectionState("unknown");
-        return;
-      }
-      if (!session) {
-        setGithubInstallationAvailable(false);
-        setGithubUserConnected(false);
-        setWaitingGitHubCommentCount(0);
-        setGithubReauthFailed(false);
-        setGithubConnectionState("unknown");
-        return;
-      }
-      setGithubConnectionState("checking");
-      const { response, body } = await apiClient.requestJson<{
-        installation?: { available?: boolean };
-        user?: { connected?: boolean; needsReconnect?: boolean };
-        waitingCommentCount?: number;
-      }>("/api/github-app/status").catch(() => ({ response: null, body: null }));
-      const status = response?.ok ? body : null;
-      if (!active || started !== generation) return;
-      const connectionState = githubUserConnectionStateFromStatus(status?.user || null);
-      setGithubConnectionState(connectionState);
-      setGithubInstallationAvailable(Boolean(status?.installation?.available));
-      setGithubUserConnected(connectionState === "connected");
-      setWaitingGitHubCommentCount(Number(status?.waitingCommentCount || 0));
-      setGithubReauthFailed(connectionState === "reconnect_required");
-    };
 
     const clearProtected = () => {
       clearPlanningState();
@@ -125,7 +85,6 @@ export function usePlanningAuth({
     let lastAccount = displayedUser;
     const applySessionState = (session: ServerSessionView | null) => {
       if (!active) return;
-      generation++;
       if (lastAccount && session?.userId && lastAccount !== session.userId) {
         flushSync(() => { clearProtected(); setAuthUser(null); });
         window.location.reload(); return;
@@ -138,15 +97,15 @@ export function usePlanningAuth({
       setAuthError("");
       if (!session) setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
       else setAuthNotice("");
-      refreshGitHubUserConnectionState(session).catch(() => undefined);
+      if (session && !isLocalLoginSimulationEnabled()) void loadGitHubConnection();
     };
     const unsubscribe = sessions.subscribe(applySessionState);
     sessions.refresh().catch(() => {
-      if (active) { setGithubConnectionState("unknown"); setAuthChecked(true); }
+      if (active) setAuthChecked(true);
     });
     return () => { active = false; unsubscribe(); };
 
-  }, [apiClient, authRequired, initialAuthUser?.id, onSignedOut, setData, clearPlanningState]);
+  }, [apiClient, authRequired, initialAuthUser?.id, onSignedOut, setData, clearPlanningState, loadGitHubConnection]);
 
   useEffect(() => {
     if (!authRequired || source !== "supabase" || !authUser) return;
@@ -259,8 +218,6 @@ export function usePlanningAuth({
       return;
     }
     if (options.githubReconnect) {
-      setGithubReauthFailed(false);
-      setGithubConnectionState("checking");
       window.location.assign(`/api/github-app/connect?next=${encodeURIComponent(next)}`);
       setAuthBusy(false);
       return;
@@ -274,11 +231,6 @@ export function usePlanningAuth({
     setAuthBusy(true);
     setAuthError("");
     setAuthNotice("");
-    setGithubReauthFailed(false);
-    setGithubInstallationAvailable(false);
-    setGithubUserConnected(false);
-    setWaitingGitHubCommentCount(0);
-    setGithubConnectionState("unknown");
 
     const success = await createBrowserSessionAdapter().logout();
     if (!success) {
@@ -291,10 +243,6 @@ export function usePlanningAuth({
     setProtectedPlanningShellStateCache(null);
     setServerCurrentProfile(null);
     setAuthUser(null);
-    setGithubInstallationAvailable(false);
-    setGithubUserConnected(false);
-    setWaitingGitHubCommentCount(0);
-    setGithubConnectionState("unknown");
     clearPlanningState();
 
     setProtectedDataLoaded(false);
@@ -309,11 +257,6 @@ export function usePlanningAuth({
     authChecked,
     protectedDataLoaded,
     setProtectedDataLoaded,
-    githubConnectionState,
-    githubInstallationAvailable,
-    githubUserConnected,
-    waitingGitHubCommentCount,
-    githubReauthFailed,
     authError,
     authNotice,
     authBusy,

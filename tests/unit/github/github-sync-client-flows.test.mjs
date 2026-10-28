@@ -88,9 +88,6 @@ const { useTaskGitHubSyncCommand } = await importTestModule(
     "@/features/tasks/model/task-api-client": {
       syncTaskToGitHubRequest: async () => commandSyncResponse,
     },
-    "@/features/tasks/model/task-server-revision": {
-      rememberTaskServerRevision: () => undefined,
-    },
     "@/lib/github-sync/contract": contract,
     "@/lib/platform": {
       hasGitHubIssue: () => true,
@@ -99,20 +96,12 @@ const { useTaskGitHubSyncCommand } = await importTestModule(
 );
 
 function useCommandFixture(initialTasks = [task()]) {
-  let data = {
-    tasks: initialTasks,
-    taskComments: [],
-  };
+  const owner=createPlanningState({userId:"sync-client-fixture",initialData:{...emptyPlanningShellState,tasks:initialTasks},adapter:{readWorkspace:async()=>null,saveTask:async()=>({task:{}}),syncTaskGitHub:async()=>contract.classifyTaskGitHubSyncResponse(commandSyncResponse.response.status,commandSyncResponse.body)}});
   const errors = [];
   commandTransitions.length = 0;
   const command = useTaskGitHubSyncCommand({
-    apiClient: {},
-    data,
-    setData: (update) => {
-      data = typeof update === "function" ? update(data) : update;
-    },
+    planningState:owner.planning,
     setSaveError: (value) => errors.push(value),
-    serverUpdatedAtByTask: new Map(),
     source: "supabase",
     startTransition: (callback) => {
       const transition = Promise.resolve().then(callback);
@@ -122,7 +111,7 @@ function useCommandFixture(initialTasks = [task()]) {
   return {
     command,
     errors,
-    getTask: () => data.tasks[0],
+    getTask: () => owner.planning.board().tasks[0],
     wait: async () => Promise.all(commandTransitions),
   };
 }
