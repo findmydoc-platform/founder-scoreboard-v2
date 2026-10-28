@@ -1,3 +1,4 @@
+import { createBacklogAssignments } from "./backlog-assignment-state";
 import { createToolsState } from "./tool-state";
 import { createEventsState } from "./event-state";
 import { createPublishedWorkweekCalendars } from "./published-workweek-calendars";
@@ -25,9 +26,9 @@ import { applyDeliverableApprovalPatch } from "../approval-domain";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
-export type PlanningWorkspaceRead = { toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
-export type PlanningStateAdapter = import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+export type PlanningStateAdapter = import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   createSprintPlan?: (options: import("@/features/sprint/model/sprint-planning-options").SprintPlanningOptions, basis: import("@/features/sprint/model/sprint-plan").SprintPlanBasis) => Promise<import("@/features/sprint/model/sprint-plan").SprintPlanConfirmation>;
   saveReviewWindow?: (expectedHours: number, hours: number) => Promise<import("@/features/sprint/model/review-window-editing").ReviewWindowConfirmation>;
   saveSprint?: (sprint: import("@/lib/types").Sprint, patch: import("@/features/sprint/model/sprint-editing").SprintEditPatch) => Promise<{ sprint: import("@/lib/types").Sprint }>;
@@ -67,6 +68,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const workspaceStatuses = new Map<AppWorkspace, PlanningReadStatus>([[initialWorkspace, "current"]]);
   const completeness = new Map<AppWorkspace, PlanningWorkspaceView["completeness"]>([[initialWorkspace, workspaceReadCoverage(initialWorkspace).tasks || "none"]]);
   const acceptedRead = new Map<AppWorkspace, number>();
+  let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
   let freshness: "current" | "stale" = "current";
   let ended = false;
   const detailUnavailable = new Map<string, TaskDetailUnavailableArea[]>();
@@ -95,9 +97,23 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const tools = createToolsState({ initial: active ? initialData.fmdTools : [], loaded: initialWorkspace === "tools", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, endSession, invalidateQuickLinks: () => notifications.invalidateHeader(["quickLinks"]), refreshWorkspace: () => planning.refreshWorkspace("tools"), beginHeaderRead: () => notifications.beginWorkspaceRead("tools"), acceptHeaderRead: (data, started) => notifications.acceptWorkspaceRead("tools", confirmed, { ...emptyPlanningHeaderData, quickLinks: notifications.publicState.header().slots.quickLinks.readStatus === "not-loaded" ? emptyPlanningHeaderData.quickLinks : data.quickLinks }, started) });
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
-  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
-  const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: () => sprintState.schedulesPending() || sprintPlan.blocksSchedules(), checkSchedules: () => sprintPlan.blocksSchedules() ? sprintPlan.check() : sprintState.checkPendingSchedules(), save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
-  const sprintPlan = createSprintPlanState({ schedulesPending: () => sprintState.schedulesPending() || reviewWindow.blocksSprints(), checkSchedules: () => reviewWindow.blocksSprints() ? reviewWindow.check() : sprintState.checkPendingSchedules(), current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, create: adapter.createSprintPlan, accept: sprintState.acceptPlan, denied: sprintState.denied, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, dependencyPending: id => backlogAssignments.blocksSprint(id), checkDependency: async id => { await backlogAssignments.checkSprint(id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }, planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: () => sprintState.schedulesPending() || sprintPlan.blocksSchedules() || backlogAssignments.pending(), checkSchedules: () => sprintPlan.blocksSchedules() ? sprintPlan.check() : sprintState.checkPendingSchedules(), save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const sprintPlan = createSprintPlanState({ schedulesPending: () => sprintState.schedulesPending() || reviewWindow.blocksSprints() || backlogAssignments.pending(), checkSchedules: () => reviewWindow.blocksSprints() ? reviewWindow.check() : sprintState.checkPendingSchedules(), current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, create: adapter.createSprintPlan, accept: sprintState.acceptPlan, denied: sprintState.denied, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const backlogAssignments = createBacklogAssignments({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, canRead: () => workspaceStatuses.get("backlog") !== "forbidden", changed: publish, nextSequence: () => ++sequence, readTaskVersion: id => taskReadAt.get(id) || 0, readSprintVersion: id => sprintState.readVersion(id), adapter, endSession, refresh: () => planning.refreshWorkspace("backlog"), pendingTask: id => [...pending.values()].some(item => item.taskId === id) || lifecycle.isRemoving({ id } as Task), pendingSprint: id => sprintState.pending(id) || sprintPlan.blocksSprint(id) || reviewWindow.blocksSprints(), accept(updates, started, basis, activities) {
+    const patches = new Map(updates.map(update => [update.id, update]));
+    confirmed = { ...confirmed, tasks: confirmed.tasks.map(task => {
+      const patch = patches.get(task.id); if (!patch || lifecycle.isRemoved(task)) return task;
+      const original = basis.find(item => item.id === task.id);
+      if (Math.max(taskConfirmedAt.get(task.id) || 0, taskReadAt.get(task.id) || 0) > started && task.updatedAt !== original?.updatedAt && task.updatedAt !== patch.updatedAt) return task;
+      taskConfirmedAt.set(task.id, ++sequence); return { ...task, ...patch };
+    }) };
+    if (activities?.length) { const byId = new Map(confirmed.taskActivity.map(activity => [activity.id, activity])); for (const activity of activities) byId.set(activity.id, activity); confirmed = { ...confirmed, taskActivity: [...byId.values()] }; }
+  }, invalidateDependencies(unknown) {
+    if (unknown) { freshness = "stale"; workspaceStatuses.set("backlog", "stale"); }
+    if (workspaceStatuses.has("sprint")) workspaceStatuses.set("sprint", "stale");
+    notifications.invalidateHeader(["notifications"]);
+  } });
   function publish() {
     confirmed = tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(confirmed))));
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
@@ -107,7 +123,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       return result;
     }) };
-    visible = sprintPlan.project(reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView)))));
+    visible = backlogAssignments.project(sprintPlan.project(reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView))))));
     visible = tools.projectVisible(events.projectVisible(notifications.projectVisible(visible)));
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
@@ -118,6 +134,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function saveTaskWithContext(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult> {
     if (!isActive()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 });
+    if (backlogAssignments.blocksTask(task.id)) return Promise.resolve({ ok: false, kind: "unconfirmed", code: "predecessor_unconfirmed", error: "Die Sprint-Zuordnung dieser Aufgabe ist noch nicht bestätigt. Diese Änderung wurde nicht gesendet." });
     if (status.get(task.id) === "unconfirmed") {
       pending.set(Symbol(task.id), { taskId: task.id, submitted: structuredClone(patch), patch: structuredClone(patch), phase: "blocked" });
       publish();
@@ -199,6 +216,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     void saved.then(() => { if (tails.get(task.id)?.result === saved && status.get(task.id) !== "unconfirmed") tails.delete(task.id); });
     return saved;
   }
+  function assignmentBlocksRemoval(root: Task) {
+    return confirmed.tasks.some(task => {
+      if (!backlogAssignments.blocksTask(task.id)) return false;
+      const seen = new Set<string>(); let current: Task | undefined = task;
+      while (current && !seen.has(current.id)) { if (current.id === root.id) return true; seen.add(current.id); current = confirmed.tasks.find(parent => parent.id === current!.parentTaskId); }
+      return false;
+    });
+  }
   const lifecycle = createTaskLifecycle({
     createTask: adapter.createTask,
     removeTask: adapter.removeTask,
@@ -245,6 +270,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const planning: PlanningState = {
+    beginBacklogAssignment: backlogAssignments.begin,
+    backlogAssignments: backlogAssignments.views,
+    resumeBacklogAssignment: backlogAssignments.resume,
+    backlog: () => { const view = planning.workspace("backlog"); return { model: { revision: "", coverage: backlogAssignments.pending() || pending.size ? { ...backlogCoverage, items: "partial" as const } : backlogCoverage, items: view.tasks, people: view.readStatus === "forbidden" || !isActive() ? [] : visible.profiles, sprints: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprints, commitments: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprintCommitments }, readStatus: view.readStatus }; },
     sprintPlan: () => { isActive(); return sprintPlan.view(); },
     checkSprintPlan: () => sprintPlan.check(),
     resumeSprintPlan: () => sprintPlan.resume(),
@@ -268,8 +297,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     createTask: input => lifecycle.createTask(input),
     taskLifecycle: () => lifecycle.views(),
     checkTaskLifecycle: id => lifecycle.check(id),
-    withdrawTask: (task, reason) => lifecycle.removeTask(task, "withdraw", reason),
-    rejectTask: (task, reason) => lifecycle.removeTask(task, "reject", reason),
+    withdrawTask: (task, reason) => assignmentBlocksRemoval(task) ? Promise.resolve({ ok: false, kind: "unconfirmed", error: "Die Sprint-Zuordnung einer betroffenen Aufgabe ist noch nicht bestätigt." }) : lifecycle.removeTask(task, "withdraw", reason),
+    rejectTask: (task, reason) => assignmentBlocksRemoval(task) ? Promise.resolve({ ok: false, kind: "unconfirmed", error: "Die Sprint-Zuordnung einer betroffenen Aufgabe ist noch nicht bestätigt." }) : lifecycle.removeTask(task, "reject", reason),
     beginOwnProfileEdit: profileSettings.beginOwnEdit,
     beginTeamProfileEdit: profileSettings.beginTeamEdit,
     team: profileSettings.team,
@@ -287,7 +316,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id) || ((workspace === "planning" || workspace === "projects") && lifecycle.isTemporary(task.id))), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
     taskDetail: taskId => { isActive(); return ({
       task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
-      saveStatus: status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
+      saveStatus: backlogAssignments.saveStatus(taskId) || status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
       comments: deniedTaskReads.has(taskId) ? [] : visible.taskComments.filter(item => item.taskId === taskId),
       externalComments: deniedTaskReads.has(taskId) ? [] : visible.taskExternalComments.filter(item => item.taskId === taskId),
       blockers: deniedTaskReads.has(taskId) ? [] : visible.taskBlockers.filter(item => item.taskId === taskId),
@@ -304,14 +333,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     taskSaves: taskId => {
       if (!isActive()) return [];
       const forbidden = deniedTaskReads.has(taskId);
-      return [...pending.values()].filter(operation => operation.taskId === taskId).map(operation => ({
+      return [...backlogAssignments.views().filter(view => ["saving", "unconfirmed"].includes(view.phase) && view.tasks.some(task => task.id === taskId)).map(view => ({ phase: view.phase as "saving" | "unconfirmed", submitted: forbidden ? null : { sprintId: view.targetSprint?.id || "", scoreRelevant: Boolean(view.targetSprint) }, checkStatus: view.checking ? "checking" as const : "not-checked" as const, serverTask: null })), ...[...pending.values()].filter(operation => operation.taskId === taskId).map(operation => ({
         phase: operation.phase, submitted: forbidden ? null : operation.submitted,
         checkStatus: outcomeCheckStatus.get(taskId) || "not-checked",
         serverTask: forbidden || outcomeCheckStatus.get(taskId) !== "checked" ? null : confirmed.tasks.find(task => task.id === taskId) || null,
-      }));
+      }))];
     },
     checkTaskSave(taskId) {
       if (!isActive()) return Promise.resolve({ outcome: "session-ended", readStatus: "not-needed" });
+      if (backlogAssignments.blocksTask(taskId)) return backlogAssignments.checkTask(taskId).then(() => ({ outcome: isActive() ? "unconfirmed" as const : "session-ended" as const, readStatus: workspaceStatuses.get("backlog") || "unavailable" }));
       if (status.get(taskId) !== "unconfirmed") return Promise.resolve({ outcome: "not-pending", readStatus: "not-needed" });
       const existing = outcomeChecks.get(taskId);
       if (existing) return existing;
@@ -400,6 +430,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       catch (error) {
         if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
         notifications.workspaceFailed(workspace, error);
+        if (workspace === "backlog" && readErrorStatus(error) === "forbidden") backlogAssignments.denied();
         if (toolRead !== null) tools.failed(error, toolRead);
         if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
         workspaceStatuses.set(workspace, readErrorStatus(error));
@@ -416,11 +447,20 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         publish();
         return false;
       }
+      if (workspace === "backlog") backlogCoverage = result.backlogCoverage || {};
       const coverage = result.coverage || workspaceReadCoverage(workspace);
       const taskCoverage = result.taskCoverage === "none" ? undefined : result.taskCoverage || coverage.tasks;
       const incoming = taskCoverage ? result.data.tasks : [];
       const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
-      const replacements = new Map(incoming.filter(task => !protectedIds.has(task.id)).map(task => [task.id, task]));
+      const acceptedTask = (task: Task) => {
+        const previous = confirmed.tasks.find(item => item.id === task.id);
+        if (!previous || !result.taskOmittedFields?.length) return task;
+        const next = { ...previous, ...task };
+        for (const field of result.taskOmittedFields) Object.assign(next, { [field]: previous[field] });
+        if (detailStatuses.get(task.id) === "current") detailStatuses.set(task.id, "stale");
+        return next;
+      };
+      const replacements = new Map(incoming.filter(task => !protectedIds.has(task.id)).map(task => [task.id, acceptedTask(task)]));
       const known = new Set(confirmed.tasks.map(task => task.id));
       for (const task of replacements.values()) taskReadAt.set(task.id, started);
       const covered = projectCoveredRead(confirmed, result.data, coverage);
@@ -462,6 +502,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     outcomeCheckStatus.clear();
     editing.clear();
     lifecycle.clear();
+    backlogAssignments.clear();
     sprintState.clear();
     reviewWindow.clear();
     sprintPlan.clear();
@@ -472,6 +513,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     memberships.clear();
     workspaceStatuses.clear();
     completeness.clear();
+    backlogCoverage = {};
     detailStatuses.clear();
     deniedTaskReads.clear();
     confirmed = emptyPlanningShellState;

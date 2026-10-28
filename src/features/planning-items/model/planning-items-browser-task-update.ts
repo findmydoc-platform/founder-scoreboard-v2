@@ -20,7 +20,7 @@ import {
 } from "./planning-items-empty-epic-delete";
 
 const taskUpdatePayloadFields = new Set<keyof TaskUpdatePayload>([
-  "expectedUpdatedAt", "title", "description", "status", "ownerId", "reviewOwnerProfileId",
+  "expectedSprintUpdatedAt", "expectedUpdatedAt", "title", "description", "status", "ownerId", "reviewOwnerProfileId",
   "priority", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
   "evidenceRequired", "definitionOfDone", "fixedDate", "dependsOn",
   "evidenceLink", "evidenceLinks", "evidenceExceptionNote", "note", "reviewStatus", "scorePoints", "scoreFinal",

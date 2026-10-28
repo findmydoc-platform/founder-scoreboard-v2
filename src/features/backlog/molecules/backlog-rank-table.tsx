@@ -36,7 +36,7 @@ type BacklogRankTableProps = {
   isReordering: boolean;
   items: BacklogItem[];
   onAssignTaskToSprint: (task: Task, sprint: Sprint | null) => void;
-  onAssignTasksToSprint: (tasks: Task[], sprint: Sprint) => Promise<boolean>;
+  onAssignTasksToSprint: (tasks: Task[], sprint: Sprint, shownSprints?: readonly Sprint[]) => Promise<boolean>;
   onDragTaskEnd: () => void;
   onDragTaskStart: (taskId: string) => void;
   onFiltersChange: (patch: Partial<BacklogTableFilters>) => void;
@@ -181,27 +181,33 @@ export function BacklogRankTable({
   statusOptions,
 }: BacklogRankTableProps) {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [selectionSprints, setSelectionSprints] = useState<Sprint[]>([]);
+  const [selectionBasis, setSelectionBasis] = useState(new Map<string, Task>());
+  const selectedTaskIds = new Set(selectionBasis.keys());
   const selectableItems = items.filter((item) => canSelectForBulkSprintAssignment(item.task, canManageBacklog, sprintById));
   const selectableTaskIds = new Set(selectableItems.map((item) => item.task.id));
-  const selectedTasks = items.filter((item) => selectableTaskIds.has(item.task.id) && selectedTaskIds.has(item.task.id)).map((item) => item.task);
+  const selectedTasks = items.filter((item) => selectableTaskIds.has(item.task.id) && selectedTaskIds.has(item.task.id)).map((item) => selectionBasis.get(item.task.id)!);
   const allSelectableSelected = selectableItems.length > 0 && selectableItems.every((item) => selectedTaskIds.has(item.task.id));
   const someSelectableSelected = selectableItems.some((item) => selectedTaskIds.has(item.task.id));
-  const toggleTaskSelection = (taskId: string) => setSelectedTaskIds((current) => {
-    const next = new Set(current);
-    if (next.has(taskId)) next.delete(taskId);
-    else next.add(taskId);
+  const toggleTaskSelection = (taskId: string) => {
+    if (!selectedTaskIds.size) setSelectionSprints(structuredClone([...sprintById.values()]));
+    setSelectionBasis(current => {
+    const next = new Map(current); const shown = items.find(item => item.task.id === taskId)?.task;
+    if (next.has(taskId)) next.delete(taskId); else if (shown) next.set(taskId, structuredClone(shown));
     return next;
-  });
-  const toggleAllSelectable = () => setSelectedTaskIds((current) => {
-    const next = new Set(current);
-    if (allSelectableSelected) selectableItems.forEach((item) => next.delete(item.task.id));
-    else selectableItems.forEach((item) => next.add(item.task.id));
+    });
+  };
+  const toggleAllSelectable = () => {
+    if (!selectedTaskIds.size) setSelectionSprints(structuredClone([...sprintById.values()]));
+    setSelectionBasis(current => {
+    const next = new Map(current);
+    for (const item of selectableItems) if (allSelectableSelected) next.delete(item.task.id); else if (!next.has(item.task.id)) next.set(item.task.id, structuredClone(item.task));
     return next;
-  });
+    });
+  };
   const assignSelectedTasksToSprint = async (tasks: Task[], sprint: Sprint) => {
-    const saved = await onAssignTasksToSprint(tasks, sprint);
-    if (saved) setSelectedTaskIds(new Set());
+    const saved = await onAssignTasksToSprint(tasks, selectionSprints.find(shown => shown.id === sprint.id) || sprint, selectionSprints);
+    if (saved) setSelectionBasis(new Map());
     return saved;
   };
   const actionProps = {
@@ -249,7 +255,7 @@ export function BacklogRankTable({
               variant="ghost"
               size="iconXs"
               aria-label="Mehrfachauswahl aufheben"
-              onClick={() => setSelectedTaskIds(new Set())}
+              onClick={() => setSelectionBasis(new Map())}
             >
               <X size={15} aria-hidden="true" />
             </UiButton>

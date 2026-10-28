@@ -1,5 +1,8 @@
 "use client";
 
+import { requestBacklogModel } from "@/features/backlog/model/backlog-api-client";
+import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
+import { backlogModelCoverage, backlogOmittedFields } from "./backlog-read-coverage";
 import { readPublishedWorkweekCalendar } from "@/features/team-workweek/model/published-workweek-calendar-api";
 
 import { isProtectedToolPreviewUrl } from "@/lib/tool-preview-image";
@@ -38,6 +41,19 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialWorkspace: options.initialWorkspace,
     initialHeaderData: options.initialHeaderData,
     adapter: {
+      async assignBacklog(tasks, target, bulk) {
+        if (bulk && target) {
+          const { response, body } = await taskApi.assignBacklogTasksToSprintRequest(runtime.apiClient, { assignments: tasks.map(task => ({ taskId: task.id, expectedUpdatedAt: task.updatedAt! })), sprintId: target.id, expectedSprintUpdatedAt: target.updatedAt });
+          if (!response.ok) throw Object.assign(new Error(body?.error || "Sprint-Zuordnung ist nicht bestätigt."), { status: response.status, code: body?.code });
+          if (!Array.isArray(body?.updates)) throw new Error("Sprint-Zuordnung ist nicht vollständig bestätigt.");
+          return { updates: body.updates };
+        }
+        const task = tasks[0];
+        const { response, body } = await taskApi.updateTaskRequest(runtime.apiClient, task.id, { ...taskUpdateRequestPayload({ sprintId: target?.id || "" }, task.updatedAt || ""), ...(target ? { expectedSprintUpdatedAt: target.updatedAt } : {}) });
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Sprint-Zuordnung ist nicht bestätigt."), { status: response.status, code: body?.code, kind: body?.conflictReason === "revision" ? "versionConflict" : undefined });
+        if (!body?.task) throw new Error("Sprint-Zuordnung ist noch nicht bestätigt.");
+        return { updates: [{ ...body.task, id: task.id }], activities: body.activities };
+      },
       async createSprintPlan(input, basis) {
         const { response, body } = await planningApi.createSprintPlanRequest(runtime.apiClient, { ...input, expectedSprints: basis.sprints.map(sprint => ({ id: sprint.id, number: Math.max(sprintNumber(sprint.name), sprintNumber(sprint.id)), updatedAt: sprint.updatedAt })) });
         if (!response.ok) throw Object.assign(new Error(body?.error || "Sprint-Plan konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
@@ -182,6 +198,11 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
           const { response, body } = await planningApi.requestPlanningWorkspaceData(runtime.apiClient, workspace);
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status });
           return body?.model ? { data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), headerData: body.headerData, currentProfile: body.currentProfile } : null;
+        }
+        if (workspace === "backlog") {
+          const { response, body } = await requestBacklogModel(runtime.apiClient);
+          if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status });
+          return { data: backlogModelToPlanningShellState(body.model), coverage: backlogModelCoverage(body.model), taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: backlogOmittedFields(body.model), backlogCoverage: body.model.coverage };
         }
         if (isSupportingWorkspace(workspace)) {
           const { response, body } = await planningApi.requestSupportingWorkspaceData(runtime.apiClient, workspace);

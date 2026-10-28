@@ -47,6 +47,7 @@ export function moveBacklogTaskRequest(apiClient: BrowserApiClient, move: Backlo
 }
 
 export type BulkSprintAssignmentRequest = {
+  expectedSprintUpdatedAt?: string;
   assignments: Array<{ taskId: string; expectedUpdatedAt: string }>;
   sprintId: string;
 };
@@ -59,7 +60,7 @@ export type BulkSprintAssignmentUpdate = {
 };
 
 export function assignBacklogTasksToSprintRequest(apiClient: BrowserApiClient, payload: BulkSprintAssignmentRequest) {
-  return apiClient.requestJson<{ error?: string; updates?: BulkSprintAssignmentUpdate[] }>("/api/tasks/bulk-sprint-assignment", {
+  return apiClient.requestJson<{ error?: string; code?: string; updates?: BulkSprintAssignmentUpdate[] }>("/api/tasks/bulk-sprint-assignment", {
     method: "PATCH",
     json: payload,
   });

@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, GripVertical } from "lucide-react";
-import type { DragEvent } from "react";
+import { useState, type DragEvent } from "react";
 import type { BacklogMoveAction, BacklogMoveResult } from "@/features/backlog/hooks/use-backlog-ordering";
 import type { BacklogItem, BacklogSprintBucket } from "@/features/backlog/model/backlog-view-model";
 import { buildBacklogSprintActionGroup } from "@/features/backlog/molecules/backlog-sprint-actions";
@@ -42,6 +42,7 @@ export function BacklogTaskActions({
   total,
   sprintById,
 }: BacklogTaskActionsProps) {
+  const [basis, setBasis] = useState<{ task: Task; buckets: BacklogSprintBucket[]; sprints: ReadonlyMap<string, Sprint>; assign: typeof onAssignTaskToSprint } | null>(null);
   const rankReason = rankDisabledReason({ canManageBacklog, canReorder, isReordering });
   const rankDisabled = Boolean(rankReason);
   const topDisabled = rankDisabled || index === 0;
@@ -86,11 +87,11 @@ export function BacklogTaskActions({
       ],
     },
     buildBacklogSprintActionGroup({
-      buckets,
+      buckets: basis?.buckets || buckets,
       canManageBacklog,
-      onAssignTaskToSprint,
-      sprintById,
-      task: item.task,
+      onAssignTaskToSprint: basis?.assign || onAssignTaskToSprint,
+      sprintById: basis?.sprints || sprintById,
+      task: basis?.task || item.task,
     }),
   ];
 
@@ -106,6 +107,7 @@ export function BacklogTaskActions({
         onDragStart: (event) => onDragStart(event, item.task.id),
         title: canReorder ? "Ziehen oder Aktionsmenü öffnen" : "Aktionsmenü öffnen",
       }}
+      onOpenChange={open => setBasis(open ? { task: structuredClone(item.task), buckets: structuredClone(buckets), sprints: new Map(sprintById), assign: onAssignTaskToSprint } : null)}
       groups={sprintGroups}
     />
   );

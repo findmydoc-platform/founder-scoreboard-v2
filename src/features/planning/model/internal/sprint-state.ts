@@ -6,6 +6,8 @@ import type { PlanningReadCoverage } from "./planning-read-scopes";
 export function createSprintState(options: {
   current(): PlanningShellState; update(data: PlanningShellState): void; changed(): void; active(): boolean; generation(): number; nextSequence(): number;
   save?: (sprint: Sprint, patch: SprintEditPatch) => Promise<{ sprint: Sprint }>;
+  checkDependency?: (id: string) => Promise<PlanningTaskSaveCheck>;
+  dependencyPending?: (id: string) => boolean;
   planPending?: (id: string) => boolean; checkPlan?: () => Promise<PlanningTaskSaveCheck>;
   reviewWindowPending?: () => boolean; checkReviewWindow?: () => Promise<PlanningTaskSaveCheck>;
   refresh(): Promise<boolean>; readStatus(): PlanningReadStatus;
@@ -29,6 +31,7 @@ export function createSprintState(options: {
   }
   async function check(id: string): Promise<PlanningTaskSaveCheck> {
     if (!options.active()) return { outcome: "session-ended", readStatus: "not-needed" };
+    if (options.dependencyPending?.(id) && options.checkDependency) return options.checkDependency(id);
     if (options.planPending?.(id) && options.checkPlan) return options.checkPlan();
     if (options.reviewWindowPending?.() && options.checkReviewWindow) return options.checkReviewWindow();
     if (!uncertain.has(id)) { for (const editor of editors.values()) if (editor.id === id) editor.releaseBlocked(); options.changed(); return { outcome: "not-pending", readStatus: "not-needed" }; }
@@ -57,6 +60,8 @@ export function createSprintState(options: {
       }
       options.update({ ...current, sprints: [...next.values()] });
     },
+    readVersion: (id: string) => readStamps.get(id) || 0,
+    pending: (id: string) => uncertain.has(id) || [...pending.values()].some(item => item.id === id),
     schedulesPending: () => pending.size > 0 || uncertain.size > 0,
     async checkPendingSchedules(): Promise<PlanningTaskSaveCheck> {
       if (!options.active()) return { outcome: "session-ended", readStatus: "not-needed" };
@@ -124,7 +129,7 @@ export function createSprintState(options: {
       editors.set(context, { id: shown.id, view: () => checkedView(view), releaseBlocked() { if (view.phase === "blocked") view = { ...view, phase: "editing", error: "" }; } });
       function save(patch: SprintEditPatch): Promise<SprintEditResult> {
         if (closed || !options.active() || generation !== options.generation()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Bearbeitung wurde beendet." });
-        if (uncertain.has(basis.id) || options.reviewWindowPending?.() || options.planPending?.(basis.id)) { view = { ...view, phase: "blocked", submitted: structuredClone(patch), error: "Eine vorherige Sprint-Änderung ist noch nicht bestätigt. Diese Eingabe wurde noch nicht gesendet." }; options.changed(); return Promise.resolve({ ok: false, kind: "unconfirmed", error: view.error }); }
+        if (options.dependencyPending?.(basis.id) || uncertain.has(basis.id) || options.reviewWindowPending?.() || options.planPending?.(basis.id)) { view = { ...view, phase: "blocked", submitted: structuredClone(patch), error: "Eine vorherige Sprint-Änderung ist noch nicht bestätigt. Diese Eingabe wurde noch nicht gesendet." }; options.changed(); return Promise.resolve({ ok: false, kind: "unconfirmed", error: view.error }); }
         const operation = Symbol(basis.id);
         let originalBasis = structuredClone(basis);
         const submitted = structuredClone(patch);

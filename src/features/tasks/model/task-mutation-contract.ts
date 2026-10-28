@@ -4,6 +4,7 @@ import type { PlanningItemRaciAssignment, PlanningStrategy, Profile, Task } from
 
 export type TaskUpdatePayload = {
   expectedUpdatedAt?: string;
+  expectedSprintUpdatedAt?: string;
   title?: string;
   description?: string;
   status?: string;
