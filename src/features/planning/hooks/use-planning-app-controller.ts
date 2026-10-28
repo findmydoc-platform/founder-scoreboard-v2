@@ -10,6 +10,7 @@ import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-
 type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
+  initialDecisionLogResult,
   initialData,
   initialHeaderData,
   initialWorkspace,
@@ -20,9 +21,11 @@ export function usePlanningAppController({
   initialProtectedDataLoaded = false,
   initialAuthError = "",
   operationalCorrection = false,
+  administratorAccess,
 }: PlanningAppControllerOptions) {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
+    initialDecisionLogResult,
     initialData,
     initialHeaderData,
     initialWorkspace,
@@ -33,11 +36,12 @@ export function usePlanningAppController({
     initialProtectedDataLoaded,
     initialAuthError,
     operationalCorrection,
+    administratorAccess,
   });
   const {
     actualProfile,
+    planningState,
     apiClient,
-    applyPlanningShellStateUpdate,
     authAvailable,
     authBusy,
     authChecked,
@@ -75,15 +79,12 @@ export function usePlanningAppController({
     planningRemoteChangesRefreshing,
     protectedDataLoaded,
     refreshCurrentWorkspaceModel,
-    refreshCurrentWorkspaceModelWithResult,
     refreshPlanningRemoteChanges,
     saveError,
     selectedTaskId,
-    setData,
     setDevProfileId,
     setFilters,
     setGithubSyncQueueOpen,
-    setHeaderData,
     setInitiativeDialogDefaults,
     setEpicDeleteTarget,
     setEpicDialogDefaults,
@@ -115,8 +116,8 @@ export function usePlanningAppController({
   } = bootstrap;
 
   const commandContext = {
+    planningState,
     apiClient,
-    applyPlanningShellStateUpdate,
     canChangeTaskStatus,
     canCorrectOperationally,
     canManageFinalTaskStatus,
@@ -125,7 +126,6 @@ export function usePlanningAppController({
     data,
     githubInstallationAvailable,
     githubUserConnected,
-    setData,
     setSaveError,
     source,
     startTransition,
@@ -143,8 +143,7 @@ export function usePlanningAppController({
     selectedTask,
   } = taskSelection;
   const taskDetailDataLoader = useTaskDetailDataLoader({
-    apiClient,
-    applyPlanningShellStateUpdate,
+    planningState,
     selectedTask,
     source,
     startTransition,
@@ -153,6 +152,7 @@ export function usePlanningAppController({
   const derivedState = usePlanningDerivedState({
     currentProfile,
     data,
+    workspaceTasks: planningState.workspace(workspace).tasks,
     filters,
     planningLevel,
     setInitiativeDialogDefaults,
@@ -171,20 +171,15 @@ export function usePlanningAppController({
     hasPlanningFilterUrlState,
     openTaskPanel,
     refreshCurrentWorkspaceModel,
-    refreshCurrentWorkspaceModelWithResult,
     selectedTask,
     setFilters,
-    setHeaderData,
     setInitiativeDialogDefaults,
-    setEpicDeleteTarget,
-    setEpicDialogDefaults,
     setShowNotifications,
     setStatusGuardNotice,
     setStatusGuardTaskId,
     setTaskDialogDefaults,
     setView,
     setWorkspace,
-    sprintPlanningOptions,
     workspace,
   });
   const { boardState } = commandRegistry;
@@ -198,6 +193,8 @@ export function usePlanningAppController({
 
   return {
     actualProfile,
+    planningState,
+    beginTaskEdit: planningState.beginTaskEdit,
     authAvailable,
     authBusy,
     authChecked,
@@ -254,7 +251,6 @@ export function usePlanningAppController({
     selectedTaskExternalComments: taskSelection.selectedTaskExternalComments,
     selectedTaskSubIssues: taskSelection.selectedTaskSubIssues,
     taskPanelPreviousTask: taskSelection.taskPanelPreviousTask,
-    setData,
     setDevProfileId,
     setFilters,
     setGithubSyncQueueOpen,
@@ -290,15 +286,11 @@ export function usePlanningAppController({
     ...boardState,
     ...commandRegistry.eventCommands,
     ...commandRegistry.fmdToolCommands,
-    ...commandRegistry.sprintReviewSettingsCommand,
     ...commandRegistry.initiativeCommands,
-    ...commandRegistry.epicCommands,
     ...commandRegistry.notificationCommands,
     ...commandRegistry.ownProfileSettingsCommands,
     ...commandRegistry.profileSettingsCommands,
     ...commandRegistry.reviewCommands,
-    ...commandRegistry.sprintCommands,
-    ...commandRegistry.weeklyAttendanceCommands,
     ...commandRegistry.taskCollaborationCommands,
     ...commandRegistry.taskMutationCommands,
   };

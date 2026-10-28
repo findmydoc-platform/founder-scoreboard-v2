@@ -9,6 +9,7 @@ import { useAnchoredPopover } from "@/shared/hooks/use-anchored-popover";
 type CustomDatePickerProps = {
   value: string;
   onChange: (value: string) => void;
+  onOpen?: () => void;
   mode?: "date" | "datetime";
   disabled?: boolean;
   className?: string;
@@ -87,6 +88,7 @@ function firstOfMonth(date: Date) {
 export function CustomDatePicker({
   value,
   onChange,
+  onOpen,
   mode = "date",
   disabled = false,
   className = "",
@@ -113,6 +115,7 @@ export function CustomDatePicker({
 
   const openMenu = () => {
     if (disabled) return;
+    if (!open) onOpen?.();
     const baseDate = selectedDate || new Date();
     setViewMonth(firstOfMonth(baseDate));
     setFocusedDate(baseDate);

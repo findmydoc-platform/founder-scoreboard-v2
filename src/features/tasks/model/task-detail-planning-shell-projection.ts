@@ -1,5 +1,5 @@
 import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
-import type { PlanningShellState, Task } from "@/lib/types";
+import type { PlanningShellState } from "@/lib/types";
 
 function modelTasks(model: TaskDetailModel) {
   return [...new Map([
@@ -10,7 +10,7 @@ function modelTasks(model: TaskDetailModel) {
   ].map((task) => [task.id, task])).values()];
 }
 
-function replaceTasks(current: readonly Task[], replacements: readonly Task[]) {
+function replaceTasks<T extends { id: string }>(current: readonly T[], replacements: readonly T[]): T[] {
   const replacementById = new Map(replacements.map((task) => [task.id, task]));
   const existingIds = new Set(current.map((task) => task.id));
   return [
@@ -51,23 +51,26 @@ export function taskDetailModelToPlanningShellState(model: TaskDetailModel): Pla
   };
 }
 
-export function applyTaskDetailModel(current: PlanningShellState, model: TaskDetailModel): PlanningShellState {
-  const replacements = modelTasks(model);
+export function applyTaskDetailModel(current: PlanningShellState, model: TaskDetailModel, unavailable: readonly TaskDetailUnavailableArea[] = [], coverage: NonNullable<TaskDetailModel["coverage"]> = model.coverage || { discussion: "complete", relationships: "complete", timeline: "complete" }): PlanningShellState {
   const selectedId = model.item.id;
+  function collection<T extends { id: string | number }>(area: TaskDetailUnavailableArea, existing: readonly T[], incoming: readonly T[], belongs: (item: T) => boolean): T[] {
+    if (unavailable.includes(area)) return [...existing];
+    const retained = coverage[area] === "complete" ? existing.filter(item => !belongs(item)) : existing;
+    const incomingIds = new Set(incoming.map(item => item.id));
+    return [...incoming, ...retained.filter(item => !incomingIds.has(item.id))];
+  }
+  const selected = (item: { taskId: string }) => item.taskId === selectedId;
   return {
     ...current,
-    tasks: replaceTasks(current.tasks, replacements),
-    profiles: model.people.length ? [...model.people] : current.profiles,
-    sprints: model.sprints.length ? [...model.sprints] : current.sprints,
-    taskComments: [...model.discussion.comments, ...current.taskComments.filter((item) => item.taskId !== selectedId)],
-    taskExternalComments: [...model.discussion.externalComments, ...current.taskExternalComments.filter((item) => item.taskId !== selectedId)],
-    taskBlockers: [...model.blockers, ...current.taskBlockers.filter((item) => item.taskId !== selectedId)],
-    taskActivity: [...model.activity, ...current.taskActivity.filter((item) => item.taskId !== selectedId)],
-    taskReviews: [...model.reviews, ...current.taskReviews.filter((item) => item.taskId !== selectedId)],
-    taskRelations: [
-      ...model.relationships,
-      ...current.taskRelations.filter((item) => item.taskId !== selectedId && item.relatedTaskId !== selectedId),
-    ],
+    tasks: replaceTasks(current.tasks, modelTasks(model)),
+    profiles: replaceTasks(current.profiles, model.people),
+    sprints: replaceTasks(current.sprints, model.sprints),
+    taskComments: collection("discussion", current.taskComments, model.discussion.comments, selected),
+    taskExternalComments: collection("discussion", current.taskExternalComments, model.discussion.externalComments, selected),
+    taskBlockers: collection("relationships", current.taskBlockers, model.blockers, selected),
+    taskActivity: collection("timeline", current.taskActivity, model.activity, selected),
+    taskReviews: collection("timeline", current.taskReviews, model.reviews, selected),
+    taskRelations: collection("relationships", current.taskRelations, model.relationships, item => selected(item) || item.relatedTaskId === selectedId),
   };
 }
 

@@ -9,17 +9,13 @@ import type { usePlanningViewState } from "@/features/planning/hooks/use-plannin
 import { useProfileUiPreferenceSync } from "@/features/profile/hooks/use-profile-ui-preference-sync";
 import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-commands";
-import { useEpicCommands } from "@/features/projects/hooks/use-epic-commands";
 import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
-import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
-import { useWeeklyAttendanceCommands } from "@/features/sprint/hooks/use-weekly-attendance-commands";
 import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
 import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
 import { useFmdToolCommands } from "@/features/tools/hooks/use-fmd-tool-commands";
-import { useSprintReviewSettingsCommand } from "@/features/sprint/hooks/use-sprint-review-settings-command";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import type { PlanningShellState, PlanningHeaderData, Task } from "@/lib/types";
+import type { PlanningShellState, Task } from "@/lib/types";
 
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
@@ -32,20 +28,15 @@ type UsePlanningCommandRegistryOptions = {
   hasPlanningFilterUrlState: boolean;
   openTaskPanel: (taskId: string) => void;
   refreshCurrentWorkspaceModel: () => Promise<void>;
-  refreshCurrentWorkspaceModelWithResult: () => Promise<boolean>;
   selectedTask: Task | null;
   setFilters: PlanningViewState["setFilters"];
-  setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
-  setEpicDeleteTarget: PlanningViewState["setEpicDeleteTarget"];
-  setEpicDialogDefaults: PlanningViewState["setEpicDialogDefaults"];
   setShowNotifications: PlanningViewState["setShowNotifications"];
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
   setView: PlanningViewState["setView"];
   setWorkspace: (workspace: AppWorkspace) => void;
-  sprintPlanningOptions: PlanningViewState["sprintPlanningOptions"];
   workspace: AppWorkspace;
 };
 
@@ -58,20 +49,15 @@ export function usePlanningCommandRegistry({
   hasPlanningFilterUrlState,
   openTaskPanel,
   refreshCurrentWorkspaceModel,
-  refreshCurrentWorkspaceModelWithResult,
   selectedTask,
   setFilters,
-  setHeaderData,
   setInitiativeDialogDefaults,
-  setEpicDeleteTarget,
-  setEpicDialogDefaults,
   setShowNotifications,
   setStatusGuardNotice,
   setStatusGuardTaskId,
   setTaskDialogDefaults,
   setView,
   setWorkspace,
-  sprintPlanningOptions,
   workspace,
 }: UsePlanningCommandRegistryOptions) {
   const taskMutationCommands = useTaskMutationCommands({
@@ -87,16 +73,9 @@ export function usePlanningCommandRegistry({
     ...commandContext,
     selectedTask,
   });
-  const initiativeCommands = useInitiativeCommands({
-    ...commandContext,
-    setInitiativeDialogDefaults,
-  });
-  const epicCommands = useEpicCommands({
-    ...commandContext,
-    setEpicDeleteTarget,
-    setEpicDialogDefaults,
-  });
+  const initiativeCommands = useInitiativeCommands({ ...commandContext, setInitiativeDialogDefaults });
   const boardState = usePlanningBoardState({
+    planningState: commandContext.planningState,
     canChangeTaskStatus: commandContext.canChangeTaskStatus,
     data,
     setStatusGuardNotice,
@@ -113,29 +92,18 @@ export function usePlanningCommandRegistry({
     setView,
   });
   const eventCommands = useFounderEventCommands(commandContext);
-  const weeklyAttendanceCommands = useWeeklyAttendanceCommands(commandContext);
   const reviewCommands = useReviewCommands({
     ...commandContext,
     syncTaskToGitHub,
   });
-  const sprintCommands = useSprintCommands({
-    ...commandContext,
-    refreshCurrentWorkspaceModel,
-    sprintPlanningOptions,
-  });
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
-  const ownProfileSettingsCommands = useOwnProfileSettingsCommands({
-    ...commandContext,
-    refreshCurrentWorkspaceModel: refreshCurrentWorkspaceModelWithResult,
-  });
-  const sprintReviewSettingsCommand = useSprintReviewSettingsCommand(commandContext);
+  const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
   const fmdToolCommands = useFmdToolCommands(commandContext);
   const notificationCommands = useNotificationCommands({
     ...commandContext,
     openTaskPanel,
     refreshCurrentWorkspaceModel,
-    setHeaderData,
-    setShowNotifications,
+      setShowNotifications,
     setWorkspace,
     workspace,
   });
@@ -143,16 +111,12 @@ export function usePlanningCommandRegistry({
     boardState,
     eventCommands,
     fmdToolCommands,
-    sprintReviewSettingsCommand,
     initiativeCommands,
-    epicCommands,
     notificationCommands,
     ownProfileSettingsCommands,
     profileSettingsCommands,
     reviewCommands,
-    sprintCommands,
     taskCollaborationCommands,
     taskMutationCommands,
-    weeklyAttendanceCommands,
   };
 }

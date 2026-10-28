@@ -1,10 +1,52 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { applyMigration, assertRowsPreserved, resetLocalDatabaseTo, snapshotRows, withLocalDatabase } from "./helpers/migration-test-harness.mjs";
 import { asAuthenticated, captureDatabaseError } from "../integration/helpers/local-database";
 import { verifyCatalogSecurity } from "../../scripts/lib/database-security/catalog-security.mjs";
 import { localSupabaseStatus } from "../helpers/local-supabase-target.mjs";
+
+// This migration verifies the October 17 catalog, before later RPC additions.
+// Keep its required helper contract fixed while using the real catalog verifier.
+vi.mock("../../scripts/lib/database-security/contracts.mjs", async (importOriginal) => ({
+  ...await importOriginal(),
+  // Score DML was closed on October 28; retain the exact October 17 catalog here.
+  authenticatedDeniedTablePrivileges: Object.freeze([]),
+  authenticatedFunctionAllowlist: Object.freeze([
+    "public.team_workweek_edit_context(p_week_start date)",
+    "public.create_private_selected_team_workweek_version(p_week_start date, p_windows jsonb, p_context_token text)",
+    "public.restart_private_team_workweek_version(p_version_id uuid)",
+    "public.workspace_check_request()",
+    "public.workspace_request_admitted()",
+    "public.activate_administrator_access()",
+    "public.administrator_access_snapshot()",
+    "public.administrator_directory_snapshot()",
+    "public.claim_notification_delivery(p_event_ids bigint[], p_limit integer, p_test_delivery text, p_recipient_profile_id text)",
+    "public.create_private_monday_team_workweek_version(p_effective_from date, p_windows jsonb, p_base_publication_id uuid, p_base_publication_revision integer)",
+    "public.create_private_current_team_workweek_version(p_windows jsonb, p_base_publication_id uuid, p_base_publication_revision integer)",
+    "public.create_private_immediate_team_workweek_version(p_windows jsonb)",
+    "public.create_private_team_workweek_version(p_effective_from date, p_windows jsonb)",
+    "public.current_platform_role()",
+    "public.current_authenticated_profile()",
+    "public.current_profile_id()",
+    "public.current_profile_has_active_administrator_access()",
+    "public.end_administrator_access()",
+    "public.finalize_team_workweek_publication(p_publication_id uuid)",
+    "public.mutate_administrator_planning_relationship_transaction(p_operation text, p_task_id text, p_related_task_id text, p_relation_type text, p_relation_id bigint, p_note text, p_expected_updated_at timestamp with time zone, p_actor_profile_id text, p_request_ip text, p_user_agent text)",
+    "public.mutate_administrator_planning_relationship_transaction_v2(p_operation text, p_task_id text, p_related_task_id text, p_relation_type text, p_relation_id bigint, p_note text, p_expected_updated_at timestamp with time zone, p_actor_profile_id text, p_mention_recipient_profile_ids text[], p_request_ip text, p_user_agent text)",
+    "public.prepare_team_workweek_publication(p_version_id uuid)",
+    "public.prepare_team_workweek_publication(p_version_id uuid, p_write_journal_version integer)",
+    "public.set_administrator_eligibility(p_profile_id text, p_eligible boolean)",
+    "public.update_administration_github_project_transaction(p_project_id text, p_expected_owner text, p_expected_number integer, p_github_project_owner text, p_github_project_number integer, p_request_ip text, p_user_agent text)",
+    "public.update_administration_github_project_transaction_v2(p_project_id text, p_expected_owner text, p_expected_number integer, p_expected_team_slug text, p_github_project_owner text, p_github_project_number integer, p_github_mention_team_slug text, p_request_ip text, p_user_agent text)",
+    "public.update_administrator_planning_item_transaction(p_task_id text, p_expected_updated_at timestamp with time zone, p_patch jsonb, p_strategy jsonb, p_raci_assignments jsonb, p_request_ip text, p_user_agent text)",
+    "public.update_administrator_planning_item_transaction_v2(p_task_id text, p_expected_updated_at timestamp with time zone, p_patch jsonb, p_strategy jsonb, p_raci_assignments jsonb, p_notifications jsonb, p_request_ip text, p_user_agent text)",
+    "public.update_administrator_planning_task_transaction(p_task_id text, p_expected_updated_at timestamp with time zone, p_task_patch jsonb, p_note_present boolean, p_note text, p_dependency_present boolean, p_dependency_note text, p_activity_messages text[], p_notifications jsonb)",
+    "public.update_administrator_planning_task_transaction_v2(p_task_id text, p_expected_updated_at timestamp with time zone, p_task_patch jsonb, p_note_present boolean, p_note text, p_dependency_present boolean, p_dependency_note text, p_activity_messages text[], p_notifications jsonb)",
+    "public.update_profile_governance_transaction(p_profile_id text, p_profile_patch jsonb, p_request_ip text, p_user_agent text)",
+    "public.update_profile_technical_identity_transaction(p_profile_id text, p_profile_patch jsonb, p_request_ip text, p_user_agent text)",
+  ]),
+}));
 
 const migrationFile = resolve("supabase/migrations/20261017144737_close_retired_decision_log_access.sql");
 const columns = {

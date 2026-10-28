@@ -1,10 +1,8 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskFocusItem } from "@/lib/types";
+import type { AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, Sprint, Task, TaskFocusItem } from "@/lib/types";
 import type { EpicNotEmptyError, EpicDeleteRequest } from "@/features/projects/model/epic-contract";
-import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
-import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
 import type { PlanningTaskRevision } from "@/features/planning/model/planning-revision";
@@ -12,7 +10,7 @@ import type { PlanningWorkspaceModel } from "@/features/planning-items/model/pla
 import type { SupportingWorkspace, SupportingWorkspaceModel } from "@/features/planning/model/supporting-planning-shell-projection";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 
-type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status">;
+type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status"> & { expectedUpdatedAt?: string };
 
 export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects") {
   const route = workspace === "planning" ? "/api/planning-board-data" : "/api/strategic-planning-data";
@@ -68,90 +66,11 @@ export async function requestPlanningHeaderData(apiClient: BrowserApiClient, slo
   }
 }
 
-function strategicStatus(status: string) {
-  if (status === "active") return "In Arbeit";
-  if (status === "paused") return "Pausiert";
-  if (status === "done") return "Erledigt";
-  return "Offen";
-}
-
-function initiativeMutation(draft: InitiativeDraft, expectedUpdatedAt?: string) {
-  return {
-    ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
-    ...(!draft.id ? { taskType: "initiative" as const, creationRequestId: draft.creationRequestId } : {}),
-    title: draft.title,
-    description: draft.goal,
-    ownerId: draft.ownerId,
-    priority: draft.priority,
-    status: strategicStatus(draft.status),
-    targetDate: draft.targetDate,
-    strategy: {
-      goal: draft.goal,
-      successCriteria: draft.successCriteria,
-      scopeConstraints: draft.scopeConstraints,
-    },
-    raciAssignments: [
-      { profileId: draft.accountableProfileId, role: "accountable", sortOrder: 0 },
-      ...draft.responsibleProfileIds.map((profileId, sortOrder) => ({ profileId, role: "responsible", sortOrder })),
-      ...draft.consultedProfileIds.map((profileId, sortOrder) => ({ profileId, role: "consulted", sortOrder })),
-      ...draft.informedProfileIds.map((profileId, sortOrder) => ({ profileId, role: "informed", sortOrder })),
-    ],
-    ...(!draft.id ? { parentTaskId: draft.parentTaskId, approveNow: draft.approveNow } : {}),
-  };
-}
-
-export async function saveInitiativeRequest(apiClient: BrowserApiClient, draft: InitiativeDraft) {
-  if (!draft.id) {
-    return apiClient.requestJson<{ error?: string; task?: Task }>("/api/tasks", {
-      method: "POST",
-      json: initiativeMutation(draft),
-    });
-  }
-  return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${encodeURIComponent(draft.id)}`, {
-    method: "PATCH",
-    json: {
-      ...initiativeMutation(draft, draft.expectedUpdatedAt || ""),
-      parentTaskId: draft.parentTaskId,
-    },
-  });
-}
-
-export function saveEpicRequest(apiClient: BrowserApiClient, draft: EpicDraft) {
-  const { id, expectedUpdatedAt } = draft;
-  return apiClient.requestJson<{ task?: Task } | EpicNotEmptyError | { error?: string; code?: string }>(
-    id ? `/api/tasks/${encodeURIComponent(id)}` : "/api/tasks",
-    {
-      method: id ? "PATCH" : "POST",
-      json: {
-        ...(id ? { expectedUpdatedAt } : { taskType: "epic", creationRequestId: draft.creationRequestId }),
-        title: draft.title,
-        description: draft.description,
-        targetDate: draft.targetDate,
-        status: strategicStatus(draft.status),
-      },
-    },
-  );
-}
-
 export function deleteEpicRequest(apiClient: BrowserApiClient, epicId: string, payload: EpicDeleteRequest) {
   return apiClient.requestJson<{ task?: Partial<Task> & { id: string } } | EpicNotEmptyError | { error?: string; code?: string }>(
     `/api/tasks/${encodeURIComponent(epicId)}`,
     { method: "DELETE", json: payload },
   );
-}
-
-export function decideInitiativeApprovalRequest(apiClient: BrowserApiClient, initiativeId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {
-  return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${initiativeId}/approval`, {
-    method: "POST",
-    json: { action, expectedRevision, note },
-  });
-}
-
-export function withdrawInitiativeRequest(apiClient: BrowserApiClient, initiativeId: string, expectedRevision: number, reason: string) {
-  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${initiativeId}/withdraw`, {
-    method: "POST",
-    json: { expectedRevision, reason },
-  });
 }
 
 export function restoreInitiativeRequest(apiClient: BrowserApiClient, initiativeId: string, expectedTrashRevision: number) {
@@ -176,28 +95,21 @@ export function deleteFocusItemRequest(apiClient: BrowserApiClient, focusItemId:
 }
 
 export function updateSprintRequest(apiClient: BrowserApiClient, sprintId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; sprint?: Sprint }>(`/api/sprints/${sprintId}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; sprint?: Sprint }>(`/api/sprints/${sprintId}`, {
     method: "PATCH",
     json: payload,
   });
 }
 
 export function createSprintPlanRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; sprints?: Sprint[] }>("/api/sprints", {
+  return apiClient.requestJson<{ error?: string; code?: string; sprints?: Sprint[] }>("/api/sprints", {
     method: "POST",
     json: payload,
   });
 }
 
-export function updateSprintCommitmentRequest(apiClient: BrowserApiClient, commitment: SprintCommitment) {
-  return apiClient.requestJson<{ error?: string; commitment?: SprintCommitment }>("/api/sprint-commitments", {
-    method: "PUT",
-    json: commitment,
-  });
-}
-
 export function updateProfileRequest(apiClient: BrowserApiClient, profileId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; profile?: Partial<Profile>; notificationPreferences?: NotificationPreference[] }>(`/api/profiles/${profileId}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; profile?: Partial<Profile>; notificationPreferences?: NotificationPreference[] }>(`/api/profiles/${profileId}`, {
     method: "PATCH",
     json: payload,
   });
@@ -205,6 +117,7 @@ export function updateProfileRequest(apiClient: BrowserApiClient, profileId: str
 
 export function updateOwnProfileSettingsRequest(apiClient: BrowserApiClient, payload: unknown) {
   return apiClient.requestJson<{
+    code?: string;
     error?: string;
     profile?: Profile;
     uiPreference?: ProfileUiPreference;
@@ -222,6 +135,7 @@ export function updateSprintReviewWindowRequest(
 ) {
   return apiClient.requestJson<{
     error?: string;
+    code?: string;
     project?: { id: string; reviewObjectionWindowHours: number };
     sprints?: Array<{ id: string; reviewDueAt: string }>;
   }>("/api/sprints/review-window", {
@@ -231,42 +145,42 @@ export function updateSprintReviewWindowRequest(
 }
 
 export function markProfileFeatureTourSeenRequest(apiClient: BrowserApiClient, tourId: string) {
-  return apiClient.requestJson<{ error?: string; acknowledgement?: ProfileFeatureTourAcknowledgement }>("/api/profile-feature-tours/seen", {
+  return apiClient.requestJson<{ error?: string; code?: string; acknowledgement?: ProfileFeatureTourAcknowledgement }>("/api/profile-feature-tours/seen", {
     method: "POST",
     json: { tourId },
   });
 }
 
 export function updateMeetingAttendanceRequest(apiClient: BrowserApiClient, meetingId: number, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; attendance?: MeetingAttendance }>(`/api/meetings/${meetingId}/attendance`, {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; effects?: "confirmed" | "unconfirmed"; attendance?: MeetingAttendance }>(`/api/meetings/${meetingId}/attendance`, {
     method: "POST",
     json: payload,
   });
 }
 
 export function createFounderEventRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; event?: FounderEvent }>("/api/events", {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; event?: FounderEvent }>("/api/events", {
     method: "POST",
     json: payload,
   });
 }
 
 export function updateFounderEventRequest(apiClient: BrowserApiClient, eventId: number, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; event?: FounderEvent }>(`/api/events/${eventId}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; event?: FounderEvent }>(`/api/events/${eventId}`, {
     method: "PATCH",
     json: payload,
   });
 }
 
 export function createFmdToolRequest(apiClient: BrowserApiClient, payload: FmdToolPayload) {
-  return apiClient.requestJson<{ error?: string; tool?: FmdTool }>("/api/tools", {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; tool?: FmdTool }>("/api/tools", {
     method: "POST",
     json: payload,
   });
 }
 
 export function updateFmdToolRequest(apiClient: BrowserApiClient, toolId: string, payload: FmdToolPayload) {
-  return apiClient.requestJson<{ error?: string; tool?: FmdTool }>(`/api/tools/${encodeURIComponent(toolId)}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; tool?: FmdTool }>(`/api/tools/${encodeURIComponent(toolId)}`, {
     method: "PATCH",
     json: payload,
   });
@@ -279,40 +193,22 @@ export function requestFmdToolMetadata(apiClient: BrowserApiClient, url: string)
   });
 }
 
-export function uploadFmdToolPreviewImageRequest(apiClient: BrowserApiClient, file: File) {
+export function uploadFmdToolPreviewImageRequest(apiClient: BrowserApiClient, file: File, expectedSession?: Pick<import("@/lib/credentials/browser").BrowserSessionSnapshot, "userId" | "revision">) {
   const formData = new FormData();
   formData.append("file", file);
-  return apiClient.requestForm<{ error?: string; imageUrl?: string; source?: FmdToolPreviewImageUpload["source"] }>("/api/tools/preview-image", formData);
+  return apiClient.requestForm<{ error?: string; code?: string; imageUrl?: string; source?: FmdToolPreviewImageUpload["source"] }>("/api/tools/preview-image", formData, { expectedSession });
 }
 
 export function updateNotificationStatusRequest(apiClient: BrowserApiClient, eventId: number, action: "seen" | "dismiss") {
-  return apiClient.requestJson<{ error?: string }>(`/api/notifications/${eventId}`, {
+  return apiClient.requestJson<{ ok?: boolean; action?: "seen" | "dismiss"; status?: import("@/lib/types").NotificationEvent["status"]; error?: string; code?: string }>(`/api/notifications/${eventId}`, {
     method: "PATCH",
     json: { action },
   });
 }
 
-export function createScoreObjectionRequest(apiClient: BrowserApiClient, sprintId: string, comment: string) {
-  return apiClient.requestJson<{ error?: string; objection?: Parameters<typeof import("@/features/planning/model/planning-app-model").mapScoreObjectionResponse>[0] }>(`/api/sprints/${sprintId}/score-objections`, {
-    method: "POST",
-    json: { comment },
-  });
+export function lockSprintRequest(apiClient: BrowserApiClient, sprintId: string, payload: unknown) {
+  return apiClient.requestJson<Partial<import("@/features/sprint/model/sprint-lock").SprintLockReceipt> & { error?: string; code?: string }>(`/api/sprints/${sprintId}/lock`, { method: "POST", json: payload });
 }
-
-export function reviewScoreObjectionRequest(apiClient: BrowserApiClient, sprintId: string, objectionId: number, input: ScoreObjectionResolutionInput) {
-  return apiClient.requestJson<{
-    error?: string;
-    objection?: Parameters<typeof import("@/features/planning/model/planning-app-model").mapScoreObjectionResponse>[0];
-    score?: Parameters<typeof import("@/lib/planning-sprint-mappers").mapFounderSprintScore>[0] | null;
-  }>(`/api/sprints/${sprintId}/score-objections`, {
-    method: "PATCH",
-    json: { objectionId, ...input },
-  });
-}
-
-export function lockSprintRequest(apiClient: BrowserApiClient, sprintId: string) {
-  return apiClient.requestJson<{ error?: string; carryover?: { created?: number; evaluated?: number; nextSprintId?: string }; scoring?: { scores?: number; strikeEvents?: number; governanceReviews?: number } }>(`/api/sprints/${sprintId}/lock`, {
-    method: "POST",
-    json: {},
-  });
+export function requestSprintLock(apiClient: BrowserApiClient, sprintId: string) {
+  return apiClient.requestJson<Partial<import("@/features/sprint/model/sprint-lock").SprintLockObservation> & { error?: string; code?: string }>(`/api/sprints/${sprintId}/lock`);
 }

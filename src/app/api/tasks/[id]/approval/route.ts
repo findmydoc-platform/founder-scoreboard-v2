@@ -28,7 +28,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   });
   if (!result.ok) {
     const mapped = planningApprovalError(result.error, item.task_type === "initiative" ? "Initiative" : "Deliverable");
-    return apiError(mapped.message, mapped.status);
+    return NextResponse.json({error:mapped.message,code:result.error.code,...(result.error.code==="conflict"&&result.error.reason==="revision"?{conflictReason:"revision"}:{})},{status:mapped.status});
   }
   const task = planningApprovalTaskFromResult(result);
   if (result.status !== "committed" || !task) return apiError("Freigabe konnte nicht gespeichert werden.", 500);

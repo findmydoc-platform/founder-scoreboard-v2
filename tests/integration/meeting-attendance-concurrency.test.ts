@@ -1,0 +1,43 @@
+import { expect, test } from "vitest";
+import { importTestModule } from "../helpers/vitest-module.mjs";
+import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
+
+test("attendance uses actual pair CAS for concurrent edits, absent collisions and existing actor boundaries", async () => {
+ await withPlanningCredentialDatabase(async f => {
+  const sprint = `${f.prefix}-attendance`;
+  await f.db.query("insert into public.sprints(id,project_id,name,start_date,end_date,status) values($1,'findmydoc-founder-execution','Attendance contract','2026-10-01','2026-10-14','active')", [sprint]);
+  const meeting = (await f.db.query("insert into public.meetings(sprint_id,title,meeting_at) values($1,'Attendance contract','2026-10-07T09:00:00Z') returning id", [sprint])).rows[0].id;
+  const route = await importTestModule("src/app/api/meetings/[id]/attendance/route.ts", { "server-only": {} });
+  const context = { params: Promise.resolve({ id: String(meeting) }) };
+  const path = `/api/meetings/${meeting}/attendance`;
+  const founder = f.actors.founder.profileId;
+  const post = (actor: Parameters<typeof f.request>[0], body: object) => route.POST(f.request(actor, path, "POST", { profileId: founder, status: "pending", ...body }), context);
+  expect((await post("founder", {})).status).toBe(400);
+  const absent = await route.GET(f.request("founder", `${path}?profileId=${founder}`), context);
+  expect(absent.status).toBe(200); expect(await absent.json()).toEqual({ attendance: null });
+  const creates = await Promise.all([post("founder", { expectedUpdatedAt: null, writtenUpdate: "First" }), post("founder", { expectedUpdatedAt: null, writtenUpdate: "Second" })]);
+  expect(creates.map(response => response.status).sort()).toEqual([200,409]);
+  expect(await creates.find(response => response.status===409)!.json()).toMatchObject({code:"attendance_revision_conflict"});
+  const accepted = (await creates.find(response => response.status===200)!.json()).attendance;
+  const edits = await Promise.all([post("founder", { expectedUpdatedAt: accepted.updatedAt, writtenUpdate: "New first" }), post("deputy", { expectedUpdatedAt: accepted.updatedAt, writtenUpdate: "New second" })]);
+  expect(edits.map(response => response.status).sort()).toEqual([200,409]);
+  const current = (await edits.find(response => response.status===200)!.json()).attendance;
+  expect(current.updatedAt).not.toBe(accepted.updatedAt);
+  expect((await post("founder", { expectedUpdatedAt: accepted.updatedAt, writtenUpdate: "Stale" })).status).toBe(409);
+  expect((await post("other", { expectedUpdatedAt: current.updatedAt })).status).toBe(403);
+  expect((await post("viewer", { expectedUpdatedAt: current.updatedAt })).status).toBe(403);
+  expect((await post("unmapped", { expectedUpdatedAt: current.updatedAt })).status).toBe(403);
+  expect((await post("administrator", { expectedUpdatedAt: current.updatedAt })).status).toBe(403);
+  expect((await post("founder", { expectedUpdatedAt: current.updatedAt, status: "present" })).status).toBe(403);
+  expect((await route.GET(f.request("founder", `${path}?profileId=${f.actors.other.profileId}`),context)).status).toBe(403);
+  const reviewed = await post("deputy", { expectedUpdatedAt: current.updatedAt, status: "present", points: 2, reasonAccepted: true, writtenUpdate: current.writtenUpdate });
+  expect(reviewed.status).toBe(200);
+  const independent = await route.POST(f.request("founder",path,"POST",{ expectedUpdatedAt:null, profileId:founder, status:"pending" }),{params:Promise.resolve({id:String(meeting+999999)})});
+  expect(independent.status).toBe(404);
+  const ownOther = await route.POST(f.request("other",path,"POST",{ expectedUpdatedAt:null, profileId:f.actors.other.profileId, status:"excused", absenceReason:"Appointment", points:2, reasonAccepted:true }),context);
+  expect(ownOther.status).toBe(200);expect((await ownOther.json()).attendance).toMatchObject({points:0,reasonAccepted:false});
+  const rows=(await f.db.query("select profile_id,status,points,written_update from public.meeting_attendance where meeting_id=$1 order by profile_id",[meeting])).rows;
+  expect(rows).toHaveLength(2);expect(rows.find(row=>row.profile_id===founder)).toMatchObject({status:"present",points:2,written_update:current.writtenUpdate});
+  expect((await f.db.query("select count(*)::int as total from public.audit_log where entity_type='meeting' and entity_id=$1 and action='meeting.attendance.update'",[String(meeting)])).rows[0].total).toBe(4);
+ });
+}, 60_000);

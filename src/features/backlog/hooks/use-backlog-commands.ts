@@ -4,51 +4,39 @@ import { useMemo, useState } from "react";
 import { useBacklogOrdering } from "@/features/backlog/hooks/use-backlog-ordering";
 import { useBacklogBulkSprintAssignment } from "@/features/backlog/hooks/use-backlog-bulk-sprint-assignment";
 import { useBacklogSprintAssignment } from "@/features/backlog/hooks/use-backlog-sprint-assignment";
-import type { BacklogAction } from "@/features/backlog/model/backlog-read-model";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { Dispatch } from "react";
 import type { Sprint, Task } from "@/lib/types";
 
 type UseBacklogCommandsOptions = {
-  apiClient: BrowserApiClient;
+  planningState: import("@/features/planning/model/planning-state").PlanningState;
   canManageBacklog: boolean;
-  dispatch: Dispatch<BacklogAction>;
   orderedTasks: Task[];
-  refreshBacklogModel: () => Promise<void>;
   sprints?: Sprint[];
 };
 
 export function useBacklogCommands({
-  apiClient,
+  planningState,
   canManageBacklog,
-  dispatch,
   orderedTasks,
-  refreshBacklogModel,
   sprints,
 }: UseBacklogCommandsOptions) {
   const [message, setMessage] = useState("");
   const sprintById = useMemo(() => new Map((sprints || []).map((sprint) => [sprint.id, sprint])), [sprints]);
   const ordering = useBacklogOrdering({
-    apiClient,
+    planningState,
     canManageBacklog,
     orderedTasks,
-    dispatch,
-    refreshBacklogModel,
     setMessage,
   });
   const sprintAssignment = useBacklogSprintAssignment({
-    apiClient,
+    planningState,
     canManageBacklog,
-    dispatch,
-    refreshBacklogModel,
     setMessage,
     sprintById,
   });
   const bulkSprintAssignment = useBacklogBulkSprintAssignment({
-    apiClient,
+    planningState,
+    sprints,
     canManageBacklog,
-    dispatch,
-    refreshBacklogModel,
     setMessage,
   });
 

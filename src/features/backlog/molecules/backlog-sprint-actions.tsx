@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarPlus, X } from "lucide-react";
-import type { DragEvent } from "react";
+import { useState, type DragEvent } from "react";
 import {
   backlogSprintAssignmentMessage,
   getBacklogBulkSprintAssignmentState,
@@ -88,13 +88,14 @@ export function buildBacklogSprintActionGroup({
 
 export function BacklogSprintAssignmentMenu(options: BacklogSprintActionOptions) {
   const { task } = options;
+  const [opened, setOpened] = useState<BacklogSprintActionOptions | null>(null);
 
   return (
     <CustomActionMenu
       label={`Sprint-Zuordnung für ${task.title}`}
       triggerAriaLabel={`Sprint für ${task.title} zuordnen`}
       triggerIcon={<CalendarPlus size={16} aria-hidden="true" />}
-      triggerClassName="h-8 min-h-8 w-8 min-w-8 shrink-0 border-slate-200 text-slate-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+      triggerClassName="[@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 h-8 min-h-8 w-8 min-w-8 shrink-0 border-slate-200 text-slate-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
       triggerButtonProps={{
         draggable: false,
         title: "Sprint zuordnen",
@@ -103,7 +104,8 @@ export function BacklogSprintAssignmentMenu(options: BacklogSprintActionOptions)
           event.stopPropagation();
         },
       }}
-      groups={[buildBacklogSprintActionGroup(options)]}
+      onOpenChange={open => setOpened(open ? { ...options, task: structuredClone(options.task), buckets: structuredClone(options.buckets), sprintById: new Map(options.sprintById) } : null)}
+      groups={[buildBacklogSprintActionGroup(opened || options)]}
     />
   );
 }
@@ -116,11 +118,12 @@ export function BacklogBulkSprintAssignmentMenu({
   selectedTasks,
   sprintById,
 }: BacklogBulkSprintAssignmentOptions) {
-  const items = buckets.map((bucket) => {
-    const state = getBacklogBulkSprintAssignmentState(selectedTasks, bucket.sprint, {
+  const [opened, setOpened] = useState<{ buckets: BacklogSprintBucket[]; selectedTasks: Task[]; sprintById: ReadonlyMap<string, Sprint>; assign: typeof onAssignTasksToSprint } | null>(null);
+  const items = (opened?.buckets || buckets).map((bucket) => {
+    const state = getBacklogBulkSprintAssignmentState(opened?.selectedTasks || selectedTasks, bucket.sprint, {
       canManage: canManageBacklog,
       isPending,
-      sourceSprintLocked: (task) => currentSprintLocked(task, sprintById),
+      sourceSprintLocked: (task) => currentSprintLocked(task, opened?.sprintById || sprintById),
     });
 
     return {
@@ -129,7 +132,7 @@ export function BacklogBulkSprintAssignmentMenu({
       icon: <CalendarPlus size={15} />,
       disabled: state.disabled,
       disabledReason: state.disabledReason,
-      onSelect: () => void onAssignTasksToSprint(selectedTasks, bucket.sprint),
+      onSelect: () => void (opened?.assign || onAssignTasksToSprint)(opened?.selectedTasks || selectedTasks, bucket.sprint),
     };
   });
 
@@ -139,8 +142,9 @@ export function BacklogBulkSprintAssignmentMenu({
       triggerAriaLabel={`${selectedTasks.length} ausgewählte Deliverables einem Sprint zuordnen`}
       triggerIcon={<CalendarPlus size={16} aria-hidden="true" />}
       triggerLabel={isPending ? "Wird zugeordnet …" : "Sprint zuweisen"}
-      triggerClassName="h-8 min-h-8 border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+      triggerClassName="[@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 h-8 min-h-8 border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
       disabled={!selectedTasks.length || isPending}
+      onOpenChange={open => setOpened(open ? { buckets: structuredClone(buckets), selectedTasks: structuredClone(selectedTasks), sprintById: new Map(sprintById), assign: onAssignTasksToSprint } : null)}
       groups={[{ id: "bulk-sprint", label: "Sprint zuweisen", items }]}
     />
   );

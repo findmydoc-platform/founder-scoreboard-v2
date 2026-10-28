@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useState, type SetStateAction } from "react";
-import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
+import type { InitiativeDraft } from "@/features/projects/model/hierarchy-state";
 import type { EpicDeleteTarget } from "@/features/projects/organisms/epic-delete-dialog";
-import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
+import type { EpicDraft } from "@/features/projects/model/hierarchy-state";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";

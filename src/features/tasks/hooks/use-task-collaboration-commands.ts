@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import type { TaskActionResult } from "@/features/tasks/hooks/task-mutation-command-types";
-import * as taskApi from "@/features/tasks/model/task-api-client";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task, TaskRelation, TaskRelationType } from "@/lib/types";
 
@@ -12,18 +11,16 @@ type UseTaskCollaborationCommandsOptions = PlanningCommandContext & {
 };
 
 export function useTaskCollaborationCommands({
-  apiClient,
+  planningState,
   currentProfile,
   githubInstallationAvailable,
   selectedTask,
-  setData,
   setSaveError,
   source,
-  startTransition,
 }: UseTaskCollaborationCommandsOptions) {
-  const autoImportedGitHubCommentsRef = useRef<Set<string>>(new Set());
-  const [commentImportNotice, setCommentImportNotice] = useState("");
-  const [commentImportPendingTaskIds, setCommentImportPendingTaskIds] = useState<Set<string>>(new Set());
+  const importView = selectedTask ? planningState.taskGitHubImport(selectedTask.id) : null;
+  const commentImportNotice = importView?.notice || "";
+  const commentImportPendingTaskIds = new Set(importView?.phase === "saving" && selectedTask ? [selectedTask.id] : []);
 
   const addTaskComment = async (task: Task, comment: string) => {
     if (!currentProfile) {
@@ -33,39 +30,8 @@ export function useTaskCollaborationCommands({
 
     setSaveError("");
 
-    if (source !== "supabase") {
-      setData((current) => ({
-        ...current,
-        taskComments: [
-          {
-            id: Date.now(),
-            taskId: task.id,
-            profileId: currentProfile.id,
-            comment,
-            githubDeliveryStatus: "pending",
-            githubCommentUrl: "",
-            createdAt: new Date().toISOString(),
-          },
-          ...current.taskComments,
-        ],
-      }));
-      return;
-    }
-
-    try {
-      const { response, body } = await taskApi.createTaskCommentRequest(apiClient, task.id, comment);
-      if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
-
-      setData((current) => ({
-        ...current,
-        taskComments: [body.comment!, ...current.taskComments],
-      }));
-      setCommentImportNotice(body.notice?.message || "");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Kommentar konnte nicht gespeichert werden.";
-      setSaveError(message);
-      throw error instanceof Error ? error : new Error(message);
-    }
+    const result = await planningState.createTaskComment(task, comment);
+    if (!result.ok) { setSaveError(result.error); throw new Error(result.error); }
   };
 
   const uploadTaskAttachment = async (task: Task, file: File) => {
@@ -75,70 +41,24 @@ export function useTaskCollaborationCommands({
       throw new Error("Anhänge können nur mit aktiver Verbindung hochgeladen werden.");
     }
 
-    const { response, body } = await taskApi.uploadTaskAttachmentRequest(apiClient, task.id, file);
-    if (!response.ok || !body?.markdown) throw new Error(body?.error || "Anhang konnte nicht hochgeladen werden.");
-    setData((current) => ({
-      ...current,
-      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" } : item)),
-      taskActivity: body.activity ? [body.activity, ...current.taskActivity] : current.taskActivity,
-    }));
-    return body.markdown;
+    const result = await planningState.uploadTaskAttachment(task, file);
+    if (!result.ok) throw new Error(result.error);
+    return result.markdown;
   };
 
   const importGitHubComments = useCallback((task: Task, options: { silent?: boolean } = {}) => {
-    if (!options.silent) {
-      setSaveError("");
-      setCommentImportNotice("");
-    }
-
+    if (!options.silent) setSaveError("");
     if (source !== "supabase") {
       if (!options.silent) setSaveError("GitHub-Kommentarimport ist in diesem Arbeitsmodus nicht verfügbar.");
       return;
     }
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await taskApi.importGitHubCommentsRequest(apiClient, task.id);
-        if (!response.ok || !body?.comments) throw new Error(body?.error || "GitHub-Kommentare konnten nicht aktualisiert werden.");
-
-        setData((current) => ({
-          ...current,
-          tasks: body.evidenceLink
-            ? current.tasks.map((item) => (item.id === task.id ? { ...item, evidenceLink: body.evidenceLink || item.evidenceLink, githubIssueSyncStatus: "not_synced" } : item))
-            : current.tasks,
-          taskExternalComments: [
-            ...current.taskExternalComments.filter((comment) => comment.taskId !== task.id),
-            ...body.comments!,
-          ],
-        }));
-        const total = body.comments.length;
-        if (!options.silent) {
-          setCommentImportNotice(
-            total > 0
-              ? `GitHub-Kommentare geladen: ${total} Kommentar${total === 1 ? "" : "e"}.`
-              : "GitHub wurde geprüft, aber für dieses Issue wurden keine externen Kommentare gefunden.",
-          );
-        }
-      } catch (error) {
-        if (!options.silent) setSaveError(error instanceof Error ? error.message : "GitHub-Kommentare konnten nicht aktualisiert werden.");
-      } finally {
-        setCommentImportPendingTaskIds((current) => {
-          const next = new Set(current);
-          next.delete(task.id);
-          return next;
-        });
-      }
+    void planningState.importTaskGitHubComments(task, { automatic: options.silent }).then(result => {
+      if (!options.silent && !result.ok && result.kind !== "ended") setSaveError(result.error);
     });
-  }, [apiClient, setData, setSaveError, source, startTransition]);
+  }, [planningState, setSaveError, source]);
 
   useEffect(() => {
-    if (!selectedTask) return;
-    if (source !== "supabase") return;
-    if (!githubInstallationAvailable) return;
-    if (!hasGitHubIssue(selectedTask)) return;
-    if (autoImportedGitHubCommentsRef.current.has(selectedTask.id)) return;
-
-    autoImportedGitHubCommentsRef.current.add(selectedTask.id);
+    if (!selectedTask || source !== "supabase" || !githubInstallationAvailable || !hasGitHubIssue(selectedTask)) return;
     importGitHubComments(selectedTask, { silent: true });
   }, [githubInstallationAvailable, importGitHubComments, selectedTask, source]);
 
@@ -150,127 +70,17 @@ export function useTaskCollaborationCommands({
 
     setSaveError("");
 
-    const localBlocker = {
-      id: Date.now(),
-      taskId: task.id,
-      profileId: currentProfile.id,
-      reason: payload.reason,
-      impact: payload.impact,
-      needsHelpFrom: payload.needsHelpFrom,
-      status: "open" as const,
-      createdAt: new Date().toISOString(),
-      resolvedAt: "",
-    };
-    const previousTask = task;
-
-    setData((current) => ({
-      ...current,
-      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, status: "Blockiert", githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" } : item)),
-      taskBlockers: [localBlocker, ...current.taskBlockers],
-    }));
-
-    if (source !== "supabase") return { ok: true };
-
-    return new Promise<TaskActionResult>((resolve) => {
-      startTransition(async () => {
-        try {
-          const { response, body } = await taskApi.reportTaskBlockerRequest(apiClient, task.id, payload);
-          if (!response.ok || !body?.blocker) throw new Error(body?.error || "Blocker konnte nicht gespeichert werden.");
-
-          setData((current) => ({
-            ...current,
-            taskBlockers: [body.blocker!, ...current.taskBlockers.filter((blocker) => blocker.id !== localBlocker.id)],
-          }));
-          resolve({ ok: true });
-        } catch (caught) {
-          const error = caught instanceof Error ? caught.message : "Blocker konnte nicht gespeichert werden.";
-          setData((current) => ({
-            ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
-            taskBlockers: current.taskBlockers.filter((blocker) => blocker.id !== localBlocker.id),
-          }));
-          resolve({ ok: false, error });
-        }
-      });
-    });
+    return planningState.reportTaskBlocker(task, payload);
   };
 
   const addTaskRelation = async (task: Task, payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }): Promise<TaskActionResult> => {
     setSaveError("");
-    if (!payload.relatedTaskId || payload.relatedTaskId === task.id) {
-      const error = "Bitte eine andere Aufgabe auswählen.";
-      return { ok: false, error };
-    }
-
-    const localRelation: TaskRelation = {
-      id: Date.now(),
-      taskId: task.id,
-      relatedTaskId: payload.relatedTaskId,
-      relationType: payload.relationType,
-      note: payload.note,
-      createdBy: currentProfile?.id || "",
-      createdAt: new Date().toISOString(),
-    };
-
-    setData((current) => ({ ...current, taskRelations: [localRelation, ...current.taskRelations] }));
-    setData((current) => ({
-      ...current,
-      tasks: current.tasks.map((item) =>
-        item.id === task.id || item.id === payload.relatedTaskId
-          ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" }
-          : item,
-      ),
-    }));
-    if (source !== "supabase") return { ok: true };
-
-    return new Promise<TaskActionResult>((resolve) => {
-      startTransition(async () => {
-        try {
-          const { response, body } = await taskApi.addTaskRelationshipRequest(apiClient, task.id, payload);
-          if (!response.ok || !body?.relation) throw new Error(body?.error || "Abhängigkeit konnte nicht gespeichert werden.");
-
-          setData((current) => ({
-            ...current,
-            taskRelations: current.taskRelations.map((relation) => (relation.id === localRelation.id ? body.relation! : relation)),
-          }));
-          resolve({ ok: true });
-        } catch (caught) {
-          const error = caught instanceof Error ? caught.message : "Abhängigkeit konnte nicht gespeichert werden.";
-          setData((current) => ({
-            ...current,
-            taskRelations: current.taskRelations.filter((relation) => relation.id !== localRelation.id),
-          }));
-          resolve({ ok: false, error });
-        }
-      });
-    });
+    return planningState.addTaskRelationship(task, payload);
   };
 
   const removeTaskRelation = (task: Task, relation: TaskRelation) => {
     setSaveError("");
-    setData((current) => ({
-      ...current,
-      taskRelations: current.taskRelations.filter((item) => item.id !== relation.id),
-      tasks: current.tasks.map((item) =>
-        item.id === relation.taskId || item.id === relation.relatedTaskId
-          ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" }
-          : item,
-      ),
-    }));
-    if (source !== "supabase") return;
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await taskApi.removeTaskRelationshipRequest(apiClient, task.id, relation.id);
-        if (!response.ok) throw new Error(body?.error || "Abhängigkeit konnte nicht entfernt werden.");
-      } catch (error) {
-        setData((current) => ({
-          ...current,
-          taskRelations: [relation, ...current.taskRelations],
-        }));
-        setSaveError(error instanceof Error ? error.message : "Abhängigkeit konnte nicht entfernt werden.");
-      }
-    });
+    void planningState.removeTaskRelationship(task, relation);
   };
 
   return {

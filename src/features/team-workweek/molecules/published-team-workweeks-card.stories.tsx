@@ -1,3 +1,4 @@
+import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { PublishedTeamWorkweeksCard } from "./published-team-workweeks-card";
@@ -19,11 +20,16 @@ function client(failInitially: boolean): BrowserApiClient {
     },
   } as unknown as BrowserApiClient;
 }
+let invalidatePublished = () => {};
+function CalendarCardFixture({ apiClient, ...props }: Omit<Parameters<typeof PublishedTeamWorkweeksCard>[0], "planningState"> & { apiClient: BrowserApiClient }) {
+  const planningState = useCalendarPlanningState(apiClient, props.profiles, invalidate => { invalidatePublished = invalidate; });
+  return <PublishedTeamWorkweeksCard {...props} planningState={planningState} />;
+}
 const meta = {
-  component: PublishedTeamWorkweeksCard,
+  component: CalendarCardFixture,
   title: "Team Workweek/Molecules/PublishedTeamWorkweeksCard",
   tags: ["layer:molecule", "status:stable"],
-} satisfies Meta<typeof PublishedTeamWorkweeksCard>;
+} satisfies Meta<typeof CalendarCardFixture>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -40,7 +46,7 @@ export const RetainsAndNamesTheLastConfirmedScheduleAfterAnUpdateFails: Story = 
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findAllByText("09:00–17:00");
-    window.dispatchEvent(new Event("founderops:team-workweek-published"));
+    invalidatePublished();
     await expect(await canvas.findByText("Aktualisierung verzögert. Zuletzt bestätigte Zeiten.")).toBeVisible();
     await waitFor(() => expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0));
     await expect(canvas.queryByText("Keine veröffentlichten Arbeitszeiten")).not.toBeInTheDocument();
@@ -119,7 +125,7 @@ export const ShowsCachedWeekWhileRefreshing: Story = {
     await canvas.findAllByText("09:00–17:00");
     await userEvent.click(canvas.getByRole("button", { name: "Vorherige Woche" }));
     await expect(await canvas.findAllByText("09:00–17:00")).not.toHaveLength(0);
-    window.dispatchEvent(new Event("founderops:team-workweek-published"));
+    invalidatePublished();
     await userEvent.click(canvas.getByRole("button", { name: "Nächste Woche" }));
     await expect(canvas.queryByText("09:00–17:00")).not.toBeInTheDocument();
   },

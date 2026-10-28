@@ -86,9 +86,13 @@ export async function authorizeAdministrator(input: AdministratorCredentialInput
       if (action !== "administration.eligibility.manage" || !data) return { data: null, error: forbidden() };
       return await data.rpc("set_administrator_eligibility", { p_profile_id: target, p_eligible: eligible });
     },
-    async updateTechnicalIdentity(patch: { github_login?: string | null; google_chat_user_id?: string | null; google_chat_dm_space?: string | null }, metadata: { requestIp?: string | null; userAgent?: string | null }) {
+    async setEligibilityIfCurrent(eligible: boolean, expectedEligible: boolean) {
+      if (action !== "administration.eligibility.manage" || !data) return { data: null, error: forbidden() };
+      return await data.rpc("set_administrator_eligibility_if_current", { p_profile_id: target, p_expected_eligible: expectedEligible, p_eligible: eligible });
+    },
+    async updateTechnicalIdentity(patch: { github_login?: string | null; google_chat_user_id?: string | null; google_chat_dm_space?: string | null }, metadata: { requestIp?: string | null; userAgent?: string | null }, expected?: import("@/features/administration/model/administration-read-model").TechnicalIdentityBasis) {
       if (action !== "administration.technical.update" || !data) return { data: null, error: forbidden() };
-      return await data.rpc("update_profile_technical_identity_transaction", { p_profile_id: target, p_profile_patch: patch, p_request_ip: metadata.requestIp, p_user_agent: metadata.userAgent });
+      return await data.rpc("update_profile_technical_identity_transaction", { p_profile_id: target, p_profile_patch: { ...patch, ...(expected ? { __expected_technical_identity: { github_login: expected.githubLogin, google_chat_user_id: expected.googleChatUserId, google_chat_dm_space: expected.googleChatDmSpace } } : {}) }, p_request_ip: metadata.requestIp, p_user_agent: metadata.userAgent });
     },
     directory,
     failure,

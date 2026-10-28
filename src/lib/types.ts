@@ -30,7 +30,10 @@ export type PlanningItemRaciAssignment = {
   sortOrder: number;
 };
 
+export type ProfilePersistenceBasis = Partial<Record<"focus" | "profile_color" | "notifications_enabled" | "platform_role" | "org_role" | "weekly_capacity" | "deputy_for" | "deputy_active_from" | "deputy_active_until", string | number | boolean | null>>;
+
 export type Profile = {
+  persistenceBasis?: ProfilePersistenceBasis;
   id: string;
   name: string;
   platformRole: PlatformRole;
@@ -70,7 +73,7 @@ export type LinkedPullRequest = {
 
 export type Task = {
   // Planning startup omits detail-only briefs until the task detail API hydrates them.
-  detailAvailability?: "summary";
+  detailAvailability?: "summary" | "stale";
   id: string;
   order: number;
   title: string;
@@ -156,6 +159,7 @@ export type PlanningItem = Task;
 export type AuthenticatedProfile = Pick<Profile, "id" | "name" | "platformRole" | "githubLogin">;
 
 export type Sprint = {
+  updatedAt?: string;
   id: string;
   name: string;
   status: "planning" | "active" | "review" | "closed";
@@ -166,6 +170,7 @@ export type Sprint = {
 };
 
 export type SprintCommitment = {
+  updatedAt?: string;
   id: number;
   sprintId: string;
   profileId: string;
@@ -175,6 +180,7 @@ export type SprintCommitment = {
 };
 
 export type FounderSprintScore = {
+  persistenceBasis?: import("./planning-row-types").DbFounderSprintScore;
   id: number;
   sprintId: string;
   profileId: string;
@@ -211,6 +217,7 @@ export type StrikeEvent = {
 };
 
 export type ScoreObjection = {
+  persistenceBasis?: import("./planning-row-types").DbScoreObjection;
   id: number;
   sprintId: string;
   profileId: string;
@@ -388,7 +395,10 @@ export type PlanningFilterPreferences = {
   direction: "asc" | "desc";
 };
 
+export type ProfileUiPersistenceBasis = { default_workspace: string | null; default_task_view: string | null; planning_filters: unknown; expanded_item_ids: string[] | null };
+
 export type ProfileUiPreference = {
+  persistenceBasis?: ProfileUiPersistenceBasis;
   profileId: string;
   defaultWorkspace: string;
   defaultTaskView: ViewMode;
@@ -405,6 +415,7 @@ export type ProfileFeatureTourAcknowledgement = {
 };
 
 export type FmdTool = {
+  updatedAt?: string;
   id: string;
   name: string;
   category: "tool" | "repo" | "knowledge" | "asset";
@@ -444,6 +455,7 @@ export type HeaderCalendarEvent = Pick<FounderEvent, "id" | "title" | "category"
 export type HeaderNotification = Pick<NotificationEvent, "id" | "type" | "actorProfileId" | "actorLabel" | "recipientProfileId" | "entityType" | "entityId" | "title" | "body" | "targetPath" | "createdAt">;
 
 export type HeaderDataSlot<T> = {
+  freshness?: "current" | "stale";
   state: "idle" | "loading" | "ready" | "error";
   data: T;
   loadedAt?: string;

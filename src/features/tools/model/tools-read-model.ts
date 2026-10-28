@@ -2,6 +2,8 @@ import type { FmdTool, Profile } from "@/lib/types";
 
 export type ToolsWorkspaceModel = Readonly<{
   revision: string;
+  readCoverage?: Readonly<{ people?: "complete" | "partial" }>;
+  coverage: "complete" | "partial";
   tools: readonly FmdTool[];
   people: readonly Profile[];
 }>;

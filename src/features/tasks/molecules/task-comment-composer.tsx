@@ -9,13 +9,15 @@ import { UiButton } from "@/shared/atoms/ui-primitives";
 
 type Props = {
   pending?: boolean;
+  confirmationPending?: boolean;
+  attachmentConfirmationPending?: boolean;
   profiles?: Profile[];
   onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment?: (file: File) => Promise<string>;
   renderPreview: (value: string) => ReactNode;
 };
 
-export function TaskCommentComposer({ pending = false, profiles = [], onAddComment, onUploadAttachment, renderPreview }: Props) {
+export function TaskCommentComposer({ pending = false, confirmationPending = false, attachmentConfirmationPending = false, profiles = [], onAddComment, onUploadAttachment, renderPreview }: Props) {
   const textareaId = useId();
   const [newComment, setNewComment] = useState("");
   const [uploadPending, setUploadPending] = useState(false);
@@ -91,7 +93,7 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
               <UiButton
                 type="button"
                 size="lg"
-                disabled={pending || uploadPending}
+                disabled={pending || uploadPending || attachmentConfirmationPending}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip size={15} />
@@ -104,7 +106,7 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
           type="button"
           size="lg"
           variant="primary"
-          disabled={pending || submitPending || uploadPending || newComment.trim().length < 2}
+          disabled={pending || confirmationPending || submitPending || uploadPending || newComment.trim().length < 2}
           onClick={() => void submitComment()}
         >
           {submitPending ? "Kommentiert …" : "Kommentieren"}

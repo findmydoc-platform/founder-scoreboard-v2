@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
+import { usePrivateTeamWorkweekState } from "../model/private-team-workweek-state";
 import { formatTeamWorkweekActivation, TEAM_WORKWEEK_DAYS } from "../model/team-workweek-draft";
 import { PrivateTeamWorkweekEditor } from "../organisms/private-team-workweek-editor";
 import { formatDate } from "@/lib/display";
@@ -20,7 +20,7 @@ function conflictWindows(windows: Array<Readonly<{ weekday: number; startMinute:
   }).join(" · ");
 }
 
-export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = false, editorWeek, onEditorRequestHandled }: { apiClient: BrowserApiClient; profile: Profile; editorRequested?: boolean; editorWeek?: string; onEditorRequestHandled?: () => void }) {
+export function PrivateTeamWorkweekCard({ planningState, profile, editorRequested = false, editorWeek, onEditorRequestHandled }: { apiClient: BrowserApiClient; planningState: import("@/features/planning/model/planning-state").PlanningState; profile: Profile; editorRequested?: boolean; editorWeek?: string; onEditorRequestHandled?: () => void }) {
   const editorTriggerRef = useRef<HTMLButtonElement>(null);
   const [localOpen, setOpen] = useState(false);
   const open = localOpen || editorRequested;
@@ -29,7 +29,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
     onEditorRequestHandled?.();
   };
   const requestedWeek = editorRequested && editorWeek && selectedWorkweek(workweekStart(editorWeek)).ok ? workweekStart(editorWeek) : undefined;
-  const state = usePrivateTeamWorkweek(apiClient, requestedWeek);
+  const state = usePrivateTeamWorkweekState(planningState, requestedWeek);
   const { card } = state;
 
   return (
@@ -63,10 +63,11 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
           </div>
         </div>
         {state.message && !open && <UiNotice className="mt-4" tone={state.messageTone === "success" ? "success" : "warning"}>{state.message}</UiNotice>}
+        {card.showConflictCheck && !open && <UiButton className="mt-3 min-h-11" variant="secondary" onClick={() => void state.refreshConflict()} disabled={state.pending}>Konfliktstand prüfen</UiButton>}
         {state.conflict && !open && (
           <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-labelledby="team-workweek-conflict-title">
             <h3 id="team-workweek-conflict-title" className="text-sm font-semibold text-amber-950">FounderOps und Google wurden parallel geändert</h3>
-            <p className="mt-1 text-sm leading-6 text-amber-900">Der letzte bestätigte Teamstand bleibt aktiv. Prüfe beide Varianten und entscheide bewusst.</p>
+            <p className="mt-1 text-sm leading-6 text-amber-900">Die bisherigen Arbeitszeiten bleiben aktiv. Vergleiche beide Varianten und wähle eine aus.</p>
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <div className="rounded-lg border border-white/80 bg-white p-3">
                 <div className="text-sm font-semibold text-slate-950">Meine FounderOps-Variante</div>
@@ -90,7 +91,7 @@ export function PrivateTeamWorkweekCard({ apiClient, profile, editorRequested = 
           </section>
         )}
       </UiPanel>
-      {open && <PrivateTeamWorkweekEditor apiClient={apiClient} profile={profile} state={state} onClose={closeEditor} restoreFocusRef={editorTriggerRef} />}
+      {open && <PrivateTeamWorkweekEditor planningState={planningState} profile={profile} state={state} onClose={closeEditor} restoreFocusRef={editorTriggerRef} />}
     </>
   );
 }

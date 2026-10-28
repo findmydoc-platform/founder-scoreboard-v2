@@ -19,10 +19,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const patch = buildFounderEventUpdatePatch(payload, current);
   const validationError = validateFounderEventRow(patch);
   if (validationError) return apiError(validationError.message, validationError.status);
-  const result = await resource.saveEvent(patch, auditRequestMetadata(request));
+  if (payload.expectedUpdatedAt !== undefined && (typeof payload.expectedUpdatedAt !== "string" || !payload.expectedUpdatedAt)) return apiError("Die Ausgangsversion des Events fehlt.", 400);
+  const result = await resource.saveEvent(patch, auditRequestMetadata(request), payload.expectedUpdatedAt);
+  if (result.error?.code === "event_version_conflict") return NextResponse.json({ code: "event_version_conflict", error: result.error.message }, { status: 409 });
   if ("participantError" in result && result.participantError) return apiError(result.participantError, result.participantError.includes("nicht gefunden") ? 404 : 500);
   const { data: event, error } = result;
   if (error || !event) return apiError(error?.message || "Event konnte nicht aktualisiert werden.", 500);
   invalidateSharedPlanningHeaderCache("calendarEvents");
-  return NextResponse.json({ event: mapFounderEvent(event) });
+  return NextResponse.json({ event: mapFounderEvent(event), ...("auditUnconfirmed" in result && result.auditUnconfirmed ? { code: "event_saved_audit_unconfirmed", warning: "Event gespeichert. Ob die Änderung protokolliert wurde, ist noch unklar." } : {}) });
 }

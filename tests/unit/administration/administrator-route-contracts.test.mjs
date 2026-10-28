@@ -69,5 +69,7 @@ test.each([["P0001", 409], ["P0002", 404], ["22023", 400], ["unexpected", 500]])
   protocol.state.responses.update_administration_github_project_transaction_v2 = () => Response.json({ code, message: "Sensitive upstream detail" }, { status: 400 });
   const response = await patch();
   expect(response.status).toBe(status);
-  expect(JSON.stringify(await response.json())).not.toContain("Sensitive upstream detail");
+  const body=await response.json();
+  if(code==="P0001")expect(body.code).toBe("administration_project_conflict");
+  expect(JSON.stringify(body)).not.toContain("Sensitive upstream detail");
 });

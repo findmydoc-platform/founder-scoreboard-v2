@@ -66,6 +66,7 @@ function mapViewMode(value: unknown): ViewMode {
 
 export function mapProfile(row: DbProfile): Profile {
   return {
+    persistenceBasis: { focus: row.focus ?? null, profile_color: row.profile_color ?? null, notifications_enabled: row.notifications_enabled ?? null, platform_role: row.platform_role, org_role: row.org_role ?? null, weekly_capacity: row.weekly_capacity, deputy_for: row.deputy_for ?? null, deputy_active_from: row.deputy_active_from ?? null, deputy_active_until: row.deputy_active_until ?? null },
     id: row.id,
     name: row.name,
     platformRole: row.platform_role,
@@ -92,6 +93,7 @@ function roleLabelFromPlatformRole(role: Profile["platformRole"]) {
 
 export function mapProfileUiPreference(row: DbProfileUiPreference): ProfileUiPreference {
   return {
+    persistenceBasis: { default_workspace: row.default_workspace ?? null, default_task_view: row.default_task_view ?? null, planning_filters: row.planning_filters ?? null, expanded_item_ids: row.expanded_item_ids ?? null },
     profileId: row.profile_id,
     defaultWorkspace: row.default_workspace === "reviews" ? "planning" : row.default_workspace || "planning",
     defaultTaskView: mapViewMode(row.default_task_view),

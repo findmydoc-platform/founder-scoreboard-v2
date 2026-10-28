@@ -94,11 +94,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     ? `![${file.name}](${uploaded.rawUrl})`
     : `[${file.name}](${uploaded.rawUrl})`;
 
-  const { data: audit, error: auditError } = await planning.recordAttachment(auditRequestMetadata(request));
-  if (auditError || !audit) return apiError(auditError?.message || "Anhang konnte nicht protokolliert werden.", 500);
+  let audit: Awaited<ReturnType<typeof planning.recordAttachment>>["data"] = null;
+  let effects: "confirmed" | "unconfirmed" = "unconfirmed";
+  try {
+    const result = await planning.recordAttachment(auditRequestMetadata(request));
+    audit = result.data;
+    if (!result.error && audit && result.taskSyncConfirmed) effects = "confirmed";
+  } catch { /* Provider upload is already proven; a later audit failure must retain its editor result. */ }
 
   return NextResponse.json({
     ok: true,
+    effects,
+    ...(effects === "unconfirmed" ? { code: "attachment_uploaded_effects_unconfirmed", warning: "Anhang hochgeladen. Ob der Upload protokolliert und für GitHub vorgemerkt wurde, ist noch unklar." } : {}),
     filename: file.name,
     contentType: file.type,
     size: file.size,
@@ -107,7 +114,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     htmlUrl: uploaded.htmlUrl,
     markdown,
     githubIssueNumber: resolveGitHubIssueNumber(task, { repository: task.github_repo }) || null,
-    activity: {
+    activity: audit ? {
       id: audit.id,
       taskId: audit.entity_id,
       action: audit.action,
@@ -116,6 +123,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       beforeData: audit.before_data,
       afterData: audit.after_data,
       createdAt: audit.created_at,
-    },
+    } : null,
   });
 }

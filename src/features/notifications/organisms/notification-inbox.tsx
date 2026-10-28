@@ -24,6 +24,7 @@ export function NotificationInbox({
   onDismiss?: (eventId: number) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const stale = notifications.freshness === "stale";
   const unreadCount = notifications.data.unreadCount;
   const items = notifications.data.items;
   const loading = notifications.state === "idle" || notifications.state === "loading";
@@ -61,7 +62,7 @@ export function NotificationInbox({
         {loading ? <LoaderCircle size={16} className="motion-safe:animate-spin" /> : <Bell size={16} />}
         {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-blue-600 px-1 text-[11px] font-semibold text-white">
-            {unreadCount > 9 ? "9+" : unreadCount}
+            {stale ? "…" : unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
@@ -81,7 +82,7 @@ export function NotificationInbox({
               >
                 Zum Center
               </Link>
-              <UiBadge tone="slate" bordered={false}>{unreadCount}</UiBadge>
+              <UiBadge tone="slate" bordered={false}>{stale ? "Stand wird geprüft" : unreadCount}</UiBadge>
             </div>
           </div>
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 sm:max-h-[420px]">
@@ -104,7 +105,7 @@ export function NotificationInbox({
                   </UiBadge>
                   <span className="mt-1.5 block truncate text-sm font-semibold text-slate-950">{event.title}</span>
                   {event.body && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">{event.body}</span>}
-                  <span className="mt-1 block text-xs text-slate-400">{formatDate(event.createdAt)}</span>
+                  <span className="mt-1 block text-xs text-slate-600">{formatDate(event.createdAt)}</span>
                 </>
               );
 

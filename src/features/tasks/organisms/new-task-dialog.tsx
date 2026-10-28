@@ -3,6 +3,9 @@
 import { validatePlanningFields } from "@/features/planning-items/model/planning-item-content";
 import { codepointLength } from "@/lib/github-issue-content";
 
+import type { PlanningTaskLifecycleView } from "@/features/planning/model/planning-task-lifecycle";
+import type { PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
+import { TaskLifecycleNotice } from "@/features/tasks/molecules/task-lifecycle-notice";
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
@@ -628,6 +631,8 @@ export function NewTaskDialog({
   onCreate,
   canApproveNow = false,
   currentProfileId = "",
+  taskLifecycle = [],
+  onCheckTaskLifecycle = async () => ({ outcome: "not-pending", readStatus: "not-needed" }),
 }: {
   defaults: Partial<NewTaskDraft>;
   data: TaskDialogData;
@@ -636,6 +641,8 @@ export function NewTaskDialog({
   onCreate: (draft: NewTaskDraft, callbacks?: NewTaskCreateCallbacks) => void;
   canApproveNow?: boolean;
   currentProfileId?: string;
+  taskLifecycle?: readonly PlanningTaskLifecycleView[];
+  onCheckTaskLifecycle?: (id: string) => Promise<PlanningTaskSaveCheck>;
 }) {
   const initiatives = initiativePlanningItems(data.tasks);
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
@@ -716,6 +723,8 @@ export function NewTaskDialog({
           : initialDraft;
   });
 
+  const creation = taskLifecycle.find(operation => operation.kind === "create" && operation.id === draft.creationRequestId);
+  const creationLocked = Boolean(creation && creation.phase !== "rejected");
   const selectedInitiative = initiatives.find((initiative) => initiative.id === draft.parentTaskId);
   const deliverableNeedsStructure = false;
   const subIssueNeedsParent = draft.taskType === "sub_issue" && !draft.parentTaskId;
@@ -772,7 +781,7 @@ export function NewTaskDialog({
         onSubmit={(event) => {
           event.preventDefault();
           setSubmitAttempted(true);
-          if (!canCreate || pending) {
+          if (!canCreate || pending || creationLocked) {
             if (invalidTitle) {
               requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLInputElement>("[data-task-title]")?.focus());
             }
@@ -799,6 +808,7 @@ export function NewTaskDialog({
         </header>
 
         <div className="min-h-0 overflow-y-auto overscroll-contain" data-task-creation-scroll-body>
+          {creation ? <div className="mx-5 sm:mx-6"><TaskLifecycleNotice labels={data} operation={creation} onCheck={onCheckTaskLifecycle} /></div> : null}
           {submitError ? (
             <div
               ref={errorSummaryRef}
@@ -809,7 +819,7 @@ export function NewTaskDialog({
               {submitError}
             </div>
           ) : null}
-          {draft.taskType === "sub_issue"
+          {creation?.submitted === null ? null : draft.taskType === "sub_issue"
             ? (
                 <SubIssueForm
                   data={data}
@@ -869,7 +879,7 @@ export function NewTaskDialog({
           </div>
           <div className="flex shrink-0 flex-col-reverse gap-2 sm:flex-row">
             <UiButton type="button" onClick={onClose} disabled={pending} size="lg">Abbrechen</UiButton>
-            <UiButton type="submit" disabled={pending || !canCreate} variant="primary" size="lg">
+            <UiButton type="submit" disabled={pending || creationLocked || !canCreate} variant="primary" size="lg">
               {pending
                 ? "Wird erstellt..."
                 : draft.taskType === "sub_issue"

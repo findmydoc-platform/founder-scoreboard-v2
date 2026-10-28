@@ -1,5 +1,6 @@
 import {
   authenticatedFunctionAllowlist,
+  authenticatedDeniedTablePrivileges,
   highRiskAuthenticatedTablePrivileges,
   retiredDecisionLogTables,
   sequencePrivileges,
@@ -89,6 +90,10 @@ export async function verifyCatalogSecurity(client, failures) {
     unsafeAuthenticatedTablePrivileges,
     ["relation_name", "privilege_name"],
   );
+
+  const transactionalScoreWrites = effectiveTablePrivileges.rows.filter(row => row.role_name === "authenticated"
+    && authenticatedDeniedTablePrivileges.some(([table, privileges]) => row.relation_name === table && privileges.includes(row.privilege_name)));
+  addRows(failures, "authenticated transactional Score writes", transactionalScoreWrites, ["relation_name", "privilege_name"]);
 
   const serviceRoleOnlyTableNames = [...serviceRoleOnlyTablePrivilegeMap.keys()];
   const serviceRoleOnlyRelations = await client.query(

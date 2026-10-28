@@ -1,7 +1,13 @@
+import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import { GoogleWorkspaceConnectionCard } from "./google-workspace-connection-card";
+import { GoogleWorkspaceConnectionCard as SharedGoogleWorkspaceConnectionCard } from "./google-workspace-connection-card";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
+
+function GoogleWorkspaceConnectionCard({ apiClient, ...props }: Omit<React.ComponentProps<typeof SharedGoogleWorkspaceConnectionCard>, "planningState"> & { apiClient: BrowserApiClient }) {
+  const planningState = useCalendarPlanningState(apiClient, [props.profile]);
+  return <SharedGoogleWorkspaceConnectionCard {...props} planningState={planningState} />;
+}
 
 const preview = fn();
 const apiClient = { requestJson: async (input: string) => {
@@ -45,7 +51,7 @@ export const CanResumeCleanupWhenItsPreviewFails: Story = {
   } as unknown as BrowserApiClient },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByRole("button", { name: "Bereinigung fortsetzen" })).toBeEnabled();
-    await expect(canvas.getByText("Die Trennung ist noch nicht vollständig bestätigt. Setze die Bereinigung fort.")).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: "Trennung fortsetzen" })).toBeEnabled();
+    await expect(canvas.getByText("Google ist noch nicht vollständig getrennt. Setze die Trennung fort.")).toBeVisible();
   },
 };

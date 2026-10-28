@@ -53,7 +53,7 @@ export function TaskRelationshipForm({
           value={relationDraft.relationType}
           onChange={(value) => onRelationDraftChange({ relationType: value as TaskRelationType })}
           disabled={pending}
-          className="h-9 text-sm"
+          className="h-11 text-sm sm:h-9"
           aria-label="Beziehungsrichtung"
           options={allowedRelationTypes.map((type) => ({ value: type, label: relationTypeLabel(type) }))}
         />
@@ -66,7 +66,7 @@ export function TaskRelationshipForm({
         value={relationDraft.relatedTaskId}
         onChange={(value) => onRelationDraftChange({ relatedTaskId: value })}
         disabled={pending}
-        className="h-9 text-sm"
+        className="h-11 text-sm sm:h-9"
         aria-label="Verknüpftes Item"
         options={[{ value: "", label: "Aufgabe auswählen" }, ...relationTargetOptions]}
       />
@@ -84,6 +84,7 @@ export function TaskRelationshipForm({
       {error ? <div id="task-relationship-error" tabIndex={-1} role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 outline-none focus:ring-2 focus:ring-red-400">{error}</div> : null}
       <UiButton
         type="submit"
+        className="min-h-11 sm:min-h-0"
         disabled={pending || !relationDraft.relatedTaskId || duplicateRelation}
         variant="primary"
       >

@@ -33,7 +33,7 @@ test.each([
   const protocol = setup({ responses: { update_browser_planning_task_transaction_v2: () => Response.json({ code, message: code === "P0001" ? "task revision conflict" : "Rejected" }, { status: 400 }) } });
   const response = await update(protocol);
   assert.equal(response.status, status);
-  assert.deepEqual(await response.json(), { error: message });
+  assert.deepEqual(await response.json(), { error: message, ...(code === "P0001" ? { conflictReason: "revision" } : {}) });
 });
 test("Browser adapter preserves structured length errors", async () => {
   const protocol = setup(), response = await update(protocol, { expectedUpdatedAt: task.updated_at, title: "x".repeat(241) }), body = await response.json();

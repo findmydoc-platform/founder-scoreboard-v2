@@ -1,7 +1,10 @@
+import { HeaderCalendarAction } from "../molecules/header-calendar-action";
+import { PublishedTeamWorkweeksCard } from "@/features/team-workweek/molecules/published-team-workweeks-card";
+import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { useState } from "react";
-import { addCalendarDays, addCalendarMonths, berlinDateKey, firstCalendarDayOfMonth } from "@/features/team-workweek/model/team-workweek-calendar";
+import { addCalendarDays, addCalendarMonths, berlinDateKey, firstCalendarDayOfMonth, calendarGridRange } from "@/features/team-workweek/model/team-workweek-calendar";
 import { useHeaderCalendar } from "../hooks/use-header-calendar";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { HeaderCalendarDialog } from "./header-calendar-dialog";
@@ -142,13 +145,16 @@ export const KeepsAnInitialLoadErrorDistinctFromNoPublication: Story = {
 };
 
 
+let invalidateFixturePublication: () => void;
 function HookDialog({ apiClient }: { apiClient: BrowserApiClient }) {
-  const calendar = useHeaderCalendar({ apiClient, onOpenTeam: fn() });
+  const planningState = useCalendarPlanningState(apiClient, [profile], invalidate => { invalidateFixturePublication = invalidate; });
+  const calendar = useHeaderCalendar({ planningState, onOpenTeam: fn() });
   return <>
     <button onClick={calendar.openCalendar}>Kalender öffnen</button>
     {calendar.open && <HeaderCalendarDialog
       activeTab={calendar.activeTab} anchor={{ right: 12, top: 12 }}
-      calendarWorkweeks={calendar.calendarWorkweeks} desktopPopover={false}
+      workweekCoverage={planningState.workweekCalendar({ policy: "header-month", ...calendarGridRange(calendar.viewMonth) }).coverage}
+      calendarWorkweeks={calendar.calendarWorkweeks} workweeksByDay={calendar.workweeksByDay} desktopPopover={false}
       eventSlot={{ data: [], error: "", state: "ready" }} message={calendar.message}
       now={calendar.now} onActiveTabChange={calendar.setActiveTab} onClose={calendar.closeCalendar}
       onOpenTeam={calendar.openTeamWorkspace} onSelectedDateChange={calendar.setSelectedDate}
@@ -188,7 +194,7 @@ export const HookRetainsConfirmedHoursOnFailedPublicationRefresh: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
     await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
     await canvas.findAllByText("09:00–17:00");
-    window.dispatchEvent(new Event("founderops:team-workweek-published"));
+    invalidateFixturePublication();
     await expect(await canvas.findByText("Aktualisierung verzögert. Zuletzt bestätigte Zeiten.")).toBeVisible();
     await expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0);
   },
@@ -201,7 +207,7 @@ export const HookRefreshesPublishedHours: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
     await userEvent.click(canvas.getByRole("tab", { name: "Arbeitswoche" }));
     await canvas.findAllByText("Noch nicht veröffentlicht");
-    window.dispatchEvent(new Event("founderops:team-workweek-published"));
+    invalidateFixturePublication();
     await canvas.findAllByText("09:00–17:00");
   },
 };
@@ -347,5 +353,94 @@ export const HookRetainsOtherMonthsWhenReturningDuringAnOutage: Story = {
     await canvas.findByText("Aktualisierung verzögert. Zuletzt bestätigte Zeiten.");
     await expect(canvas.getAllByText("09:00–17:00").length).toBeGreaterThan(0);
     await expect(canvas.queryByText("11:00–17:00")).not.toBeInTheDocument();
+  },
+};
+
+
+let denySharedCalendar: () => void;
+function SharedCalendarFixture() {
+  const monday = firstMondayOfVisibleMonth();
+  const [apiClient] = useState(() => {
+    let reads = 0;
+    let denied = false;
+    denySharedCalendar = () => { denied = true; invalidateFixturePublication(); };
+    return { requestJson: async () => {
+      if (denied) return { response: new Response(null, { status: 403 }), body: { error: "Kalenderzugriff entzogen." } };
+      const schedule = { id: "shared-publication", ownerProfileId: profile.id, effectiveFrom: monday, effectiveTo: null, timezone: "Europe/Berlin", publicationRevision: ++reads, lastSyncAt: "2026-10-01T07:00:00Z", windows: { ...emptyWindows, monday: [{ start: reads === 1 ? "09:00" : "11:00", end: "17:00" }] } };
+      return { response: new Response(null, { status: 200 }), body: { currentWorkweeks: [schedule], calendarWorkweeks: [schedule], publishedOwnerIds: [profile.id], referenceDate: berlinDateKey() } };
+    } } as unknown as BrowserApiClient;
+  });
+  const planningState = useCalendarPlanningState(apiClient, [profile], invalidate => { invalidateFixturePublication = invalidate; });
+  return <><HeaderCalendarAction planningState={planningState} events={{ data: [], state: "ready" }} profiles={[profile]} onOpenTeam={fn()} /><PublishedTeamWorkweeksCard planningState={planningState} profiles={[profile]} initialDate={monday} /></>;
+}
+export const SharesHeaderAndTeamPublicationsAndWithholdsDeniedScopes: Story = {
+  render: () => <SharedCalendarFixture />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(canvasElement.ownerDocument.body);
+    await canvas.findAllByText("09:00–17:00");
+    await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+    await waitFor(() => expect(canvas.getAllByText("11:00–17:00").length).toBeGreaterThan(0));
+    await expect(canvas.queryByText("09:00–17:00")).not.toBeInTheDocument();
+    await body.findByRole("dialog", { name: "Kalender" });
+    const label = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" }).format(new Date(`${firstMondayOfVisibleMonth()}T12:00:00Z`));
+    await userEvent.click(body.getByRole("button", { name: new RegExp(`^${label},`) }));
+    await expect(within(body.getByRole("dialog", { name: "Kalender" })).getByText("11:00–17:00")).toBeVisible();
+    await expect(body.getByRole("button", { name: new RegExp(`^${label},`) })).toHaveAccessibleName(/1 eingeplant/);
+    denySharedCalendar();
+    await waitFor(() => expect(body.queryAllByText("11:00–17:00")).toHaveLength(0));
+    await expect(body.getAllByText("Kein Zugriff auf veröffentlichte Arbeitszeiten.").length).toBeGreaterThan(0);
+    await expect(body.getByRole("button", { name: new RegExp(`^${label},`) })).not.toHaveAccessibleName(/\d+ eingeplant/);
+  },
+};
+
+function publicationCountClient(mode: "complete-empty" | "complete" | "partial" | "unavailable"): BrowserApiClient {
+  return { requestJson: async () => {
+    if (mode === "unavailable") return { response: new Response(null, { status: 503 }), body: { error: "Arbeitszeiten konnten nicht geladen werden." } };
+    const schedule = { id: "count-publication", ownerProfileId: profile.id, effectiveFrom: "2020-01-01", effectiveTo: null, timezone: "Europe/Berlin", publicationRevision: 1, lastSyncAt: null, windows: { ...emptyWindows, monday: [{ start: "09:00", end: "17:00" }] } };
+    const rows = mode === "complete-empty" ? [] : [schedule];
+    return { response: new Response(null), body: { currentWorkweeks: rows, calendarWorkweeks: rows, calendarCoverage: mode === "partial" ? "partial" : "complete", referenceDate: berlinDateKey() } };
+  } } as unknown as BrowserApiClient;
+}
+async function openCountDay(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByRole("button", { name: "Kalender öffnen" }));
+  const label = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" }).format(new Date(`${firstMondayOfVisibleMonth()}T12:00:00Z`));
+  const day = await canvas.findByRole("button", { name: new RegExp(`^${label},`) });
+  await userEvent.click(day);
+  return { canvas, day };
+}
+export const PreservesAuthoritativeCompleteEmptyDayCount: Story = {
+  render: () => <HookDialog apiClient={publicationCountClient("complete-empty")} />,
+  play: async ({ canvasElement }) => {
+    const { canvas, day } = await openCountDay(canvasElement);
+    await waitFor(() => expect(day).toHaveAccessibleName(/0 eingeplant/));
+    await expect(canvas.getByText("Niemand eingeplant.")).toBeVisible();
+  },
+};
+export const PreservesAuthoritativeCompleteDayCount: Story = {
+  render: () => <HookDialog apiClient={publicationCountClient("complete")} />,
+  play: async ({ canvasElement }) => {
+    const { canvas, day } = await openCountDay(canvasElement);
+    await canvas.findByText("09:00–17:00");
+    await expect(day).toHaveAccessibleName(/1 eingeplant/);
+  },
+};
+export const PartialPublicationKeepsKnownHoursWithoutAnExactCount: Story = {
+  render: () => <HookDialog apiClient={publicationCountClient("partial")} />,
+  play: async ({ canvasElement }) => {
+    const { canvas, day } = await openCountDay(canvasElement);
+    await canvas.findByText("09:00–17:00");
+    await expect(day).not.toHaveAccessibleName(/\d+ eingeplant/);
+    await expect(canvas.queryByText("Niemand eingeplant.")).not.toBeInTheDocument();
+  },
+};
+export const UnavailablePublicationDoesNotClaimZeroPlannedPeople: Story = {
+  render: () => <HookDialog apiClient={publicationCountClient("unavailable")} />,
+  play: async ({ canvasElement }) => {
+    const { canvas, day } = await openCountDay(canvasElement);
+    await canvas.findByText("Arbeitszeiten konnten nicht geladen werden.");
+    await expect(day).not.toHaveAccessibleName(/\d+ eingeplant/);
+    await expect(canvas.queryByText("Niemand eingeplant.")).not.toBeInTheDocument();
   },
 };

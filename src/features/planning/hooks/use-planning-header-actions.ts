@@ -2,8 +2,8 @@
 
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import { canManageEpics } from "@/features/projects/model/epic-policy";
-import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
-import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
+import type { InitiativeDraft } from "@/features/projects/model/hierarchy-state";
+import type { EpicDraft } from "@/features/projects/model/hierarchy-state";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { planningLevelCreateLabel, type PlanningLevel } from "@/features/planning/model/planning-level";
 import { epicPlanningItems } from "@/features/planning/model/planning-app-model";

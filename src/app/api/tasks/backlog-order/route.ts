@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest) {
   });
   if (!result.ok) {
     const mapped = backlogMoveError(result.error);
-    return apiError(mapped.message, mapped.status);
+    return NextResponse.json({ error: mapped.message, ...(mapped.code ? { code: mapped.code } : {}) }, { status: mapped.status });
   }
-  return NextResponse.json({ ok: true, updates: backlogMoveUpdatesFromChanges(result.changes) });
+  return NextResponse.json({ ok: true, completeness: "complete", updates: backlogMoveUpdatesFromChanges(result.changes) });
 }

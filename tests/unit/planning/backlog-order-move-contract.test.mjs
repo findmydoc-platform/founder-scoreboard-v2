@@ -88,7 +88,7 @@ test("Browser adapter preserves validation, invocation metadata, and response sh
   const move = { taskId: "source", targetTaskId: "target", placement: "after", expectedTaskUpdatedAt: "2026-08-12T10:00:00.000Z", expectedTargetUpdatedAt: "2026-08-12T10:01:00.000Z" };
   const response = await protocol.PATCH(move);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true, updates: [{ id: "source", sortOrder: 20, updatedAt: "2026-08-12T12:00:00.000Z" }] });
+  assert.deepEqual(await response.json(), { ok: true, completeness: "complete", updates: [{ id: "source", sortOrder: 20, updatedAt: "2026-08-12T12:00:00.000Z" }] });
   assert.deepEqual(protocol.calls[0], { name: "move_backlog_task_transaction", body: {
     p_task_id: "source", p_target_task_id: "target", p_placement: "after", p_expected_task_updated_at: move.expectedTaskUpdatedAt,
     p_expected_target_updated_at: move.expectedTargetUpdatedAt, p_actor_profile_id: "synthetic-profile", p_request_ip: "192.0.2.1", p_user_agent: "synthetic-agent",
@@ -188,4 +188,10 @@ test("Browser error mapping remains stable", async () => {
   const response = await protocol.PATCH({ taskId: "source", targetTaskId: "target", placement: "after", expectedTaskUpdatedAt: "2026-08-12T10:00:00.000Z", expectedTargetUpdatedAt: "2026-08-12T10:01:00.000Z" });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error, "Backlog wurde parallel geändert. Bitte neu laden.");
+});
+
+test("the route identifies a true ordering revision conflict without guessing from status alone", async () => {
+ const protocol = await loadBacklogOrderRoute(true);
+ const response = await protocol.PATCH({ taskId: "source", targetTaskId: "target", placement: "after", expectedTaskUpdatedAt: "2026-08-12T10:00:00.000Z", expectedTargetUpdatedAt: "2026-08-12T10:01:00.000Z" });
+ assert.equal(response.status, 409); assert.equal((await response.json()).code, "backlog_order_revision_conflict");
 });

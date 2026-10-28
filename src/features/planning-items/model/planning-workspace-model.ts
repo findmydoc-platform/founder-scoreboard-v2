@@ -1,7 +1,10 @@
 import type { Profile, ProfileUiPreference, Project, Sprint, Task, TaskRelation } from "@/lib/types";
 
+export type PlanningWorkspaceReadCoverage = Partial<Record<"items" | "people" | "strategies" | "raci" | "links" | "sprints" | "relationships" | "preferences", "complete" | "partial">>;
+
 export type PlanningWorkspaceModel = Readonly<{
   revision: string;
+  coverage?: PlanningWorkspaceReadCoverage;
   project: Project;
   items: readonly Task[];
   relationships: readonly TaskRelation[];

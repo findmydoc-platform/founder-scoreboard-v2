@@ -21,6 +21,7 @@ type TaskBoardViewProps = {
   assigneeProfileForTask: (task: Task) => Profile | undefined;
   onOpenTask: (taskId: string) => void;
   onCreateTask: (defaults: Partial<NewTaskDraft>) => void;
+  onBeginTaskEdit?: (task: Task) => void;
   onChangeTaskStatus: (task: Task, status: TaskStatus) => void;
   onDragOverStatus: (status: TaskStatus | null) => void;
   onDropTask: (status: TaskStatus, event: DragEvent<HTMLElement>) => void;
@@ -46,6 +47,7 @@ export function TaskBoardView({
   onOpenTask,
   onCreateTask,
   onChangeTaskStatus,
+  onBeginTaskEdit,
   onDragOverStatus,
   onDropTask,
   onDragStart,
@@ -156,6 +158,7 @@ export function TaskBoardView({
                     blockers={blockers}
                     childItems={directChildrenByParent.get(task.id) || []}
                     onOpenTask={onOpenTask}
+                    onStatusEditingStart={() => onBeginTaskEdit?.(task)}
                     onStatusChange={canUpdateStatus ? (status) => onChangeTaskStatus(task, status) : undefined}
                     onDragStart={canUpdateStatus && onDragStart ? onDragStart : undefined}
                     onDragEnd={onDragEnd}

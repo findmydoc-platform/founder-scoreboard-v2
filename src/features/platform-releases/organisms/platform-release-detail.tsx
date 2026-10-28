@@ -4,7 +4,7 @@ import { SiGithub } from "@icons-pack/react-simple-icons";
 import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Code2, Download, ExternalLink, MinusCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { platformReleaseRequest } from "../model/platform-release-api";
+import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
 import { platformReleaseReferenceUrl } from "../model/platform-release-manifest";
 import { formatReleaseDate, highlightedChanges, releaseKindLabel, releaseTitle, type PlatformReleasePlanningLink, type PlatformReleaseRecord } from "../model/platform-release-model";
 import { taskDetailHrefWithReturnTo } from "@/features/tasks/model/task-detail-return-navigation";
@@ -144,6 +144,7 @@ function TechnicalDetails({ release }: { release: PlatformReleaseRecord }) {
 }
 
 export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false }: Props) {
+  const planningState = usePlanningBusinessState();
   const [allChangesOpen, setAllChangesOpen] = useState(false);
   const [technicalOpen, setTechnicalOpen] = useState(technicalInitiallyOpen);
   const highlights = highlightedChanges(release);
@@ -153,8 +154,8 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
 
   useEffect(() => {
     if (release.seenAt || !release.notificationId) return;
-    void platformReleaseRequest<{ ok?: boolean }>(`/api/team/platform-releases/v1/releases/${encodeURIComponent(release.version)}/seen`, { method: "POST" }).catch(() => undefined);
-  }, [release.notificationId, release.seenAt, release.version]);
+    void planningState?.markPlatformReleaseSeen(release.version);
+  }, [planningState, release.notificationId, release.seenAt, release.version]);
 
   return (
     <div className="mx-auto max-w-[1190px] px-4 py-6 sm:px-8 lg:py-8">

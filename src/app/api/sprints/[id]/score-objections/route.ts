@@ -17,6 +17,8 @@ type ReviewPayload = {
   weeklyPoints?: number;
   secondReviewerProfileId?: string;
   secondReviewDecision?: string;
+  expectedObjection?: import("@/lib/planning-row-types").DbScoreObjection;
+  expectedScore?: import("@/lib/planning-row-types").DbFounderSprintScore | null;
 };
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -32,6 +34,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const metadata = auditRequestMetadata(request);
   const { data: objection, error } = await planning.createScoreObjection(comment, metadata);
+  if (error?.code === "42501") return apiError("Keine Berechtigung für diesen Score-Einwand.",403);
+  if (error?.code === "session_superseded") return NextResponse.json({error:"Die Sitzung wurde ersetzt.",code:"session_superseded"},{status:409});
   if (error?.code === "P0002") return apiError("Sprint oder FounderOps-Prozesseinstellung wurde nicht gefunden.", 404);
   if (error?.code === "P0003") return apiError("Gelockte Sprints können nicht mehr beanstandet werden.", 409);
   if (error?.code === "P0004") return apiError("Score-Einwände können erst nach dem Sprint-Ende eingereicht werden.", 409);
@@ -70,13 +74,20 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (action === "resolve" && !resolutionComment) return apiError("Eine Begründung zur Entscheidung ist erforderlich.", 400);
   if (action === "second_review" && !secondReviewDecision) return apiError("Eine Zweitreview-Entscheidung ist erforderlich.", 400);
 
+  const expected = payload.expectedObjection;
+  if (!expected || typeof expected !== "object" || Array.isArray(expected) || expected.id !== objectionId || expected.sprint_id !== id
+    || (action === "resolve" && status === "accepted" && !("expectedScore" in payload))) return apiError("Lade Einwand und Score neu, bevor du entscheidest.", 400);
+
   const metadata = auditRequestMetadata(request);
   const { data: transactionData, error } = await planning.processScoreObjection({ objectionId, action, status: status || null,
     resolutionComment, deliveryPoints: payload.deliveryPoints, formPoints: payload.formPoints, weeklyPoints: payload.weeklyPoints,
-    secondReviewerProfileId, secondReviewDecision,
+    secondReviewerProfileId, secondReviewDecision, expectedObjection:expected, expectedScore:payload.expectedScore ?? null,
   }, metadata);
 
   if (error) {
+    if(error.code==="42501")return apiError("Keine Berechtigung für diese Einwand-Entscheidung.",403);
+    if(error.code==="session_superseded")return NextResponse.json({error:"Die Sitzung wurde ersetzt.",code:"session_superseded"},{status:409});
+    if (error.code === "P0007") return NextResponse.json({error:"Einwand oder Score wurden inzwischen geändert. Deine Eingaben bleiben erhalten.",code:"score_objection_basis_conflict"},{status:409});
     if (error.code === "P0002") return apiError("Sprint oder Score-Einwand wurde nicht gefunden.", 404);
     if (error.code === "P0003") return apiError("Sprint-Score ist bereits gelockt.", 409);
     if (error.code === "P0004") return apiError("Score-Einwand ist bereits abgeschlossen oder der Zweitreview steht noch aus.", 409);

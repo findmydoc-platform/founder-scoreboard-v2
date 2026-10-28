@@ -11,20 +11,22 @@ import type { AdministrationWorkspaceModel } from "@/features/administration/mod
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { UiEmptyState, UiNotice } from "@/shared/atoms/ui-primitives";
 
-export function AdministrationWorkspaceHost({ apiClient, capabilities, initialModel, onAdministratorAccessInvalid }: {
+export function AdministrationWorkspaceHost({ apiClient, planningState, capabilities, initialModel, onAdministratorAccessInvalid }: {
   apiClient: BrowserApiClient;
+  planningState: import("@/features/planning/model/planning-state").PlanningState;
   capabilities: AuthorityCapabilities;
   initialModel?: AdministrationWorkspaceModel | null;
   onAdministratorAccessInvalid: () => void;
 }) {
   const controller = useAdministrationWorkspaceController({
     apiClient,
+    planningState,
     capabilities,
     initialModel,
     onAdministratorAccessInvalid,
   });
-  const technical = controller.capabilities.technicalAdministration;
-  const [activeTab, setActiveTab] = useState<AdministrationTab>(technical ? "overview" : "people");
+  const technical = Boolean(controller.model && planningState.administration().coverage.technical && controller.capabilities.technicalAdministration);
+  const [activeTab, setActiveTab] = useState<AdministrationTab>(capabilities.technicalAdministration ? "overview" : "people");
   const visibleTab = technical ? activeTab : "people";
   const visibleTabs: AdministrationTab[] = technical ? ["overview", "people", "integrations"] : ["people"];
   const { model } = controller;
@@ -32,6 +34,7 @@ export function AdministrationWorkspaceHost({ apiClient, capabilities, initialMo
   if (!controller.capabilities.manageAdministratorEligibility) {
     return <UiEmptyState tone="warning" minHeight="md">Für Administration ist eine CEO-Sitzung oder ein aktiver Adminzugang erforderlich.</UiEmptyState>;
   }
+  if (planningState.administration().readStatus === "forbidden") return <UiEmptyState tone="warning" minHeight="md">Der Administrationszugang ist nicht mehr gültig.</UiEmptyState>;
   if (!model) {
     return <UiEmptyState minHeight="md">Administrationsdaten werden geladen.</UiEmptyState>;
   }
@@ -45,19 +48,14 @@ export function AdministrationWorkspaceHost({ apiClient, capabilities, initialMo
           busy={controller.busy}
           model={model}
           showTechnicalIdentity={technical}
-          onSavePerson={(profileId, patch) => {
-            const person = model.people.find((candidate) => candidate.id === profileId);
-            return person ? controller.savePerson(person, patch) : Promise.resolve();
-          }}
+          planningState={planningState}
         />
       )}
       {visibleTab === "integrations" && technical && (
         <IntegrationsDeliveryAdministration
-          key={`${model.githubProject?.owner || ""}:${model.githubProject?.number || 0}`}
           busy={controller.busy}
           model={model}
-          onDeliver={controller.deliverNotifications}
-          onSaveGitHubProject={controller.saveGitHubProject}
+          planningState={planningState}
         />
       )}
     </AdministrationWorkspaceTemplate>

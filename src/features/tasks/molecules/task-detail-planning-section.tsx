@@ -19,6 +19,7 @@ type Props = {
   canManageTaskMeta: boolean;
   canReparentSubIssue: boolean;
   pending: boolean;
+  onEditingStart?: () => void;
   onUpdate: (patch: Partial<Task>) => void;
 };
 
@@ -40,6 +41,7 @@ export function TaskDetailPlanningSection({
   canReparentSubIssue,
   pending,
   onUpdate,
+  onEditingStart,
 }: Props) {
   const [open, setOpen] = useState(false);
   const view = taskDetailPlanningView({
@@ -75,7 +77,7 @@ export function TaskDetailPlanningSection({
         </div>
         {open && canReparentSubIssue ? (
           <div id="sub-issue-parent-control" className="border-t border-slate-200 bg-slate-50/70 px-4 py-4">
-            <UiSelectField label="Parent-Deliverable" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentDeliverableOptions(allTasks)} selectClassName="h-11 text-sm" />
+            <UiSelectField onOpen={onEditingStart} label="Parent-Deliverable" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentDeliverableOptions(allTasks)} selectClassName="h-11 text-sm" />
           </div>
         ) : null}
         {task.parentApprovalStatus !== "approved" ? <p className="pb-3 text-xs font-medium text-amber-800">Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv.</p> : null}
@@ -104,11 +106,11 @@ export function TaskDetailPlanningSection({
           <div id="strategic-planning-controls" className="grid gap-4 border-t border-slate-200 bg-slate-50/70 px-4 py-4 md:grid-cols-2">
             {task.taskType === "initiative" ? (
               view.canEditPlanning
-                ? <UiSelectField label="Parent-Epic" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentOptions} selectClassName="h-11 text-sm" />
+                ? <UiSelectField onOpen={onEditingStart} label="Parent-Epic" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentOptions} selectClassName="h-11 text-sm" />
                 : <ReadFact label="Parent-Epic">{view.currentParent?.title || "Ohne Epic"}</ReadFact>
             ) : null}
             {view.canEditPlanning ? (
-              <div><div className="text-xs font-semibold text-slate-500">Zieltermin</div><CustomDatePicker value={view.targetDate} disabled={pending} onChange={(targetDateValue) => onUpdate({ targetDate: targetDateValue })} className="mt-1 h-11 text-sm" aria-label="Zieltermin ändern" /></div>
+              <div><div className="text-xs font-semibold text-slate-500">Zieltermin</div><CustomDatePicker onOpen={onEditingStart} value={view.targetDate} disabled={pending} onChange={(targetDateValue) => onUpdate({ targetDate: targetDateValue })} className="mt-1 h-11 text-sm" aria-label="Zieltermin ändern" /></div>
             ) : <ReadFact label="Zieltermin">{view.targetDate || "Nicht gesetzt"}</ReadFact>}
             {task.taskType === "initiative" && task.raciAssignments?.length ? (
               <ReadFact label="RACI">
@@ -141,8 +143,8 @@ export function TaskDetailPlanningSection({
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {canManageTaskMeta ? (
               <>
-                <UiSelectField label="Initiative" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...view.initiatives.map((item) => ({ value: item.id, label: item.title }))]} selectClassName="h-11 text-sm" />
-                <UiSelectField label="Sprint" value={task.sprintId} disabled={!isApprovedDeliverable(task) || pending} onChange={(sprintId) => onUpdate({ sprintId })} options={sprintOptions(sprints)} selectClassName="h-11 text-sm" />
+                <UiSelectField onOpen={onEditingStart} label="Initiative" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...view.initiatives.map((item) => ({ value: item.id, label: item.title }))]} selectClassName="h-11 text-sm" />
+                <UiSelectField onOpen={onEditingStart} label="Sprint" value={task.sprintId} disabled={!isApprovedDeliverable(task) || pending} onChange={(sprintId) => onUpdate({ sprintId })} options={sprintOptions(sprints)} selectClassName="h-11 text-sm" />
                 <ReadFact label="Sprint-Zeitraum">{view.sprintPeriod}</ReadFact>
               </>
             ) : (

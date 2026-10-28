@@ -1,5 +1,8 @@
 "use client";
 
+import type { PlanningTaskEditor } from "@/features/planning/model/planning-state";
+import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
+
 import { validatePlanningFields } from "@/features/planning-items/model/planning-item-content";
 
 import { useEffect, useMemo, useState } from "react";
@@ -22,18 +25,22 @@ export function useTaskDetailController({
   unrestricted = false,
   operationalCorrection = false,
   onUpdate,
+  onBeginEdit,
   onOverviewDirtyChange,
 }: {
   task: Task;
   currentProfile?: TaskDetailProfile | null;
   unrestricted?: boolean;
   operationalCorrection?: boolean;
-  onUpdate: (patch: Partial<Task>) => Promise<TaskUpdateResult> | void;
+  onBeginEdit?: () => PlanningTaskEditor;
+  onUpdate: (patch: Partial<Task>, options?: TaskUpdateOptions) => Promise<TaskUpdateResult> | void;
   onOverviewDirtyChange?: (dirty: boolean) => void;
 }) {
   const [overviewEditing, setOverviewEditing] = useState(false);
   const [overviewBaseline, setOverviewBaseline] = useState<Task>(() => task);
   const [overviewDraft, setOverviewDraft] = useState<TaskOverviewDraft>(() => buildTaskOverviewDraft(task));
+  const [overviewEditor, setOverviewEditor] = useState<PlanningTaskEditor | null>(null);
+  const [overviewConflict, setOverviewConflict] = useState(false);
   const [overviewSaving, setOverviewSaving] = useState(false);
   const [overviewError, setOverviewError] = useState("");
   const [blockerDraft, setBlockerDraft] = useState({ reason: "", impact: "", needsHelpFrom: "" });
@@ -45,6 +52,7 @@ export function useTaskDetailController({
     canEditEvidence: permissions.canEditEvidence,
     canEditNotes: permissions.canEditNotes,
   }), [permissions.canEditBrief, permissions.canEditChecklist, permissions.canEditEvidence, permissions.canEditNotes]);
+  useEffect(() => () => overviewEditor?.close(), [overviewEditor]);
   const overviewDirty = overviewEditing && taskOverviewIsDirty(overviewBaseline, overviewDraft, overviewPermissions);
 
   useEffect(() => {
@@ -53,19 +61,25 @@ export function useTaskDetailController({
   }, [onOverviewDirtyChange, overviewDirty]);
 
   const cancelOverview = () => {
+    overviewEditor?.close();
+    setOverviewEditor(null);
+    setOverviewConflict(false);
     setOverviewDraft(buildTaskOverviewDraft(task));
     setOverviewError("");
     setOverviewEditing(false);
   };
 
   const startOverviewEditing = () => {
+    overviewEditor?.close();
+    setOverviewEditor(onBeginEdit?.() || null);
+    setOverviewConflict(false);
     setOverviewBaseline(task);
     setOverviewDraft(buildTaskOverviewDraft(task));
     setOverviewError("");
     setOverviewEditing(true);
   };
 
-  const saveOverview = async () => {
+  const saveOverview = async (resave = false) => {
     if (!overviewDirty || overviewSaving) return false;
     const patch = taskOverviewPatch(overviewBaseline, overviewDraft, overviewPermissions);
     if (!Object.keys(patch).length) return false;
@@ -79,11 +93,15 @@ export function useTaskDetailController({
     setOverviewSaving(true);
     setOverviewError("");
     try {
-      const result = await onUpdate(patch);
+      const result = await (overviewEditor ? onUpdate(patch, { editor: overviewEditor, resave }) : onUpdate(patch));
       if (result && !result.ok) {
+        setOverviewConflict(result.kind === "versionConflict");
         setOverviewError(result.error || "Änderungen konnten nicht gespeichert werden.");
         return false;
       }
+      overviewEditor?.close();
+      setOverviewEditor(null);
+      setOverviewConflict(false);
       setOverviewEditing(false);
       return true;
     } catch (error) {
@@ -97,6 +115,11 @@ export function useTaskDetailController({
   return {
     blockerDraft,
     cancelOverview,
+    overviewConflict,
+    overviewCanResave: overviewEditor?.view().canResave || false,
+    overviewServerDraft: overviewEditor?.view().serverTask ? buildTaskOverviewDraft(overviewEditor.view().serverTask!) : null,
+    refreshOverviewConflict: async () => { await overviewEditor?.refreshConflict(); },
+    resaveOverview: () => saveOverview(true),
     overviewBaselineDraft: buildTaskOverviewDraft(overviewBaseline),
     overviewDraft: overviewEditing ? overviewDraft : buildTaskOverviewDraft(task),
     overviewDirty,

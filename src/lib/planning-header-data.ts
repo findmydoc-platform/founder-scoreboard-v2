@@ -122,6 +122,7 @@ function normalizeHeaderSlot<T>(
   if (isHeaderSlot<T>(value)) {
     return {
       state: validHeaderState(value.state),
+      ...(value.freshness ? { freshness: value.freshness } : {}),
       data: normalizeData(value.data),
       ...(value.loadedAt ? { loadedAt: value.loadedAt } : {}),
       ...(value.error ? { error: value.error } : {}),

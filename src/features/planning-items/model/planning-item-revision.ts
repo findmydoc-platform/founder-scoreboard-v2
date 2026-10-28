@@ -44,7 +44,8 @@ type BrowserRevisionInput = Readonly<{
 type BrowserRevisionFailure = Readonly<{
   kind: "invalidCommand" | "forbidden" | "notFound" | "conflict" | "dependencyUnavailable";
   message: string;
-  code?: Extract<AuthzResult, { ok: false }>["code"];
+  conflictReason?: "revision";
+  code?: Extract<AuthzResult, { ok: false }>["code"] | "sprint_revision_conflict";
   lengthErrors?: Awaited<ReturnType<typeof validateStoredPlanningContent>>;
 }>;
 
@@ -60,7 +61,7 @@ const failureKinds: Record<number, BrowserRevisionFailure["kind"]> = {
 function browserFailure(
   message: string,
   status: number,
-  details: Pick<BrowserRevisionFailure, "code" | "lengthErrors"> = {},
+  details: Pick<BrowserRevisionFailure, "code" | "lengthErrors" | "conflictReason"> = {},
 ): Extract<BrowserRevisionResult, { ok: false }> {
   return { ok: false, error: { kind: failureKinds[status] || "dependencyUnavailable", message, ...details } };
 }
@@ -99,6 +100,7 @@ type PreparedRevision =
 function reviseError(error: unknown): PlanningError {
   const code = error && typeof error === "object" && "code" in error ? String(error.code || "") : "";
   const message = error && typeof error === "object" && "message" in error ? String(error.message || "") : "";
+  if (code === "P0018") return { code: "conflict", reason: "revision", details: { reviseState: "sprintRevision" } };
   if (code === "P0001") return { code: "conflict", reason: "revision" };
   if (code === "P0003") return { code: "conflict", reason: "state", details: { reviseState: "trashed" } };
   if (code === "P0008") return { code: "conflict", reason: "state", details: { reviseState: "parentApproval" } };
@@ -199,6 +201,7 @@ async function commitBrowserRevision(
   if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
     return browserFailure("Aktueller Aufgabenstand ist erforderlich.", 400);
   }
+  if (payload.expectedSprintUpdatedAt !== undefined && (!payload.sprintId || typeof payload.expectedSprintUpdatedAt !== "string" || Number.isNaN(Date.parse(payload.expectedSprintUpdatedAt)))) return browserFailure("Die angezeigte Sprint-Version fehlt oder ist ungültig.", 400);
   const expectedUpdatedAt = payload.expectedUpdatedAt;
   const update: TaskRouteDbUpdate = {};
   let nextParentApprovalStatus: Task["parentApprovalStatus"] | undefined;
@@ -349,7 +352,7 @@ async function commitBrowserRevision(
       if (operationalCorrection && result.error.code === "forbidden" && result.error.reason === "administratorAccessRequired") {
         return administratorFailure(await administratorFailureForSession!());
       }
-      if (result.error.code === "conflict" && result.error.reason === "revision") return browserFailure("Planungselement wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
+      if (result.error.code === "conflict" && result.error.reason === "revision") return browserFailure("Planungselement wurde zwischenzeitlich geändert. Bitte neu laden.", 409, { conflictReason: "revision" });
       if (result.error.code === "notFound") return browserFailure("Planungselement wurde nicht gefunden.", 404);
       if (result.error.code === "invalidCommand") return browserFailure("Planungselement ist ungültig.", 400);
       if (result.error.code === "forbidden") return browserFailure("Planungselement konnte nicht geändert werden.", 403);
@@ -668,7 +671,7 @@ async function commitBrowserRevision(
     params: {
       taskId: id,
       expectedUpdatedAt,
-      taskPatch: update,
+      taskPatch: payload.sprintId && payload.expectedSprintUpdatedAt ? { ...update, __expected_sprint_updated_at: payload.expectedSprintUpdatedAt } : update,
       notePresent: payload.note !== undefined,
       note: payload.note ?? null,
       dependencyPresent: payload.dependsOn !== undefined,
@@ -681,8 +684,9 @@ async function commitBrowserRevision(
     if (operationalCorrection && reviseResult.error.code === "forbidden" && reviseResult.error.reason === "administratorAccessRequired") {
       return administratorFailure(await administratorFailureForSession!());
     }
+    if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision" && reviseResult.error.details?.reviseState === "sprintRevision") return browserFailure("Der gewählte Sprint wurde zwischenzeitlich geändert. Bitte den aktuellen Aktuellen Stand prüfen.", 409, { code: "sprint_revision_conflict" });
     if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision") {
-      return browserFailure("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
+      return browserFailure("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409, { conflictReason: "revision" });
     }
     if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "state") {
       if (reviseResult.error.details?.reviseState === "reviewLocked") {

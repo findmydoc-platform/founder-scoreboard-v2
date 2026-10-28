@@ -4,6 +4,7 @@ import { apiError } from "@/lib/api-response";
 import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
 
 type UpdateSprintPayload = {
+  expectedUpdatedAt?: string;
   name?: string;
   status?: string;
   startDate?: string;
@@ -24,7 +25,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { data: current, error: currentError } = await planning.readSprintSchedule();
 
   if (currentError || !current) return apiError("Sprint wurde nicht gefunden.", 404);
-  if (current.score_locked) return apiError("Gelockte Sprints können nicht mehr geändert werden.", 409);
+  if (current.score_locked) return NextResponse.json({ error: "Abgeschlossene Sprints können nicht mehr geändert werden.", code: "sprint_locked" }, { status: 409 });
+  if (typeof payload.expectedUpdatedAt !== "string" || !payload.expectedUpdatedAt.trim()) return apiError("Lade den Sprint neu, bevor du speicherst.", 400);
 
   const update: Record<string, string | null> = {};
 
@@ -69,6 +71,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (taskCountError) return apiError(taskCountError.message, 500);
     if ((count || 0) > 0) {
       return NextResponse.json({
+        code: "sprint_protected",
         error: `Dieser Sprint ist geschützt, weil ${count} Aufgabe${count === 1 ? "" : "n"} damit verknüpft ${count === 1 ? "ist" : "sind"}. Zeitraum, Name und Review-Datum dürfen nur bei leeren Sprints geändert werden.`,
       }, { status: 409 });
     }
@@ -85,17 +88,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         endDate: current.end_date || "",
         reviewDueAt: current.review_due_at || "",
         scoreLocked: current.score_locked,
+        updatedAt: current.updated_at,
       },
     });
   }
 
   const metadata = auditRequestMetadata(request);
-  const { data: updated, error: updateError } = await planning.commitSprintSchedule({ expectedUpdatedAt: current.updated_at, patch: update }, metadata);
+  const { data: updated, error: updateError } = await planning.commitSprintSchedule({ expectedUpdatedAt: payload.expectedUpdatedAt, patch: update }, metadata);
   if (updateError) {
-    if (updateError.code === "P0001") return apiError("Sprint wurde parallel geändert. Bitte neu laden.", 409);
+    if (updateError.code === "P0001") return NextResponse.json({ error: "Sprint wurde parallel geändert. Bitte neu laden.", code: "sprint_revision_conflict" }, { status: 409 });
     if (updateError.code === "P0002") return apiError("Sprint oder FounderOps-Prozesseinstellung wurde nicht gefunden.", 404);
-    if (updateError.code === "P0003") return apiError("Gelockte Sprints können nicht mehr geändert werden.", 409);
-    if (updateError.code === "P0004") return apiError("Dieser Sprint ist durch zugeordnete Aufgaben geschützt.", 409);
+    if (updateError.code === "P0003") return NextResponse.json({ error: "Abgeschlossene Sprints können nicht mehr geändert werden.", code: "sprint_locked" }, { status: 409 });
+    if (updateError.code === "P0004") return NextResponse.json({ error: "Dieser Sprint ist durch zugeordnete Aufgaben geschützt.", code: "sprint_protected" }, { status: 409 });
     if (updateError.code === "22023") return apiError("Sprint-Daten sind ungültig.", 400);
     return apiError("Sprint konnte nicht gespeichert werden.", 500);
   }
@@ -109,6 +113,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     end_date: string | null;
     review_due_at: string | null;
     score_locked: boolean;
+    updated_at: string;
   };
 
   return NextResponse.json({
@@ -121,6 +126,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       endDate: updatedSprint.end_date || "",
       reviewDueAt: updatedSprint.review_due_at || "",
       scoreLocked: updatedSprint.score_locked,
+      updatedAt: updatedSprint.updated_at,
     },
   });
 }

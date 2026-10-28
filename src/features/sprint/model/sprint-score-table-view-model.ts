@@ -24,8 +24,8 @@ export const DEFAULT_SPRINT_SCORE_FILTERS: SprintScoreTableFilters = {
 
 function matchesAttention(row: SprintScoreRow, attention: SprintScoreAttentionFilter) {
   if (attention === "all") return true;
-  if (attention === "unfulfilled") return row.committed > 0 && !row.v21Score.fulfilled && !row.v21Score.awayNeutral;
-  if (attention === "away") return row.v21Score.awayNeutral;
+  if (attention === "unfulfilled") return row.committed > 0 && Boolean(row.v21Score) && !row.v21Score?.fulfilled && !row.v21Score?.awayNeutral;
+  if (attention === "away") return Boolean(row.v21Score?.awayNeutral);
   if (attention === "strike") return (row.strikeState?.strikeLevel || 0) > 0;
   return row.openScore > 0 || row.openScoreObjections > 0;
 }
@@ -40,7 +40,7 @@ export function buildSprintScoreTableViewModel(rows: SprintScoreRow[], filters: 
     .filter((row) => matchesAttention(row, filters.attention))
     .sort((left, right) => {
       let comparison = 0;
-      if (filters.sort === "score") comparison = left.v21Score.totalPoints - right.v21Score.totalPoints;
+      if (filters.sort === "score") comparison = (left.v21Score?.totalPoints ?? -1) - (right.v21Score?.totalPoints ?? -1);
       else if (filters.sort === "hours") comparison = left.hours - right.hours;
       else if (filters.sort === "open") comparison = left.openScore + left.openScoreObjections - right.openScore - right.openScoreObjections;
       else if (filters.sort === "strike") comparison = (left.strikeState?.strikeLevel || 0) - (right.strikeState?.strikeLevel || 0);

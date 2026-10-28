@@ -37,7 +37,7 @@ export function GitHubConnectionInfo({
 }: {
   installationAvailable: boolean;
   userConnected: boolean;
-  waitingCommentCount: number;
+  waitingCommentCount: number | null;
   failed: boolean;
   busy: boolean;
   localMode?: boolean;
@@ -161,7 +161,7 @@ export function GitHubConnectionInfo({
                 ) : authorNeedsAction ? (
                   <>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {waitingCommentCount > 0
+                    {waitingCommentCount !== null && waitingCommentCount > 0
                       ? `${waitingCommentCount} ${waitingCommentCount === 1 ? "Kommentar wartet" : "Kommentare warten"} auf deine Verbindung.`
                       : "Kommentare und Anhänge können nicht unter deinem Namen veröffentlicht werden."}
                   </p>

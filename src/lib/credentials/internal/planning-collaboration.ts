@@ -21,9 +21,9 @@ import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permis
 type Context = { action: PlanningCredentialInput["action"]; targetId: string; profile: AuthenticatedProfile | null; request: NextRequest; service: SupabaseClient; followup: SupabaseClient;
   current(): Promise<{ code?: string; message: string } | null> };
 const denied = () => ({ data: null, error: { code: "42501", message: "Keine Berechtigung für diese Aktion." } });
-const columns = { "planning.github-comments.import": "id,title,assignee,owner,status,review_owner_profile_id,review_status,score_final,evidence_link,issue_url,github_repo,github_issue_number,issue_number,task_type", "planning.attachment.write": "id,title,task_type,assignee,owner,status,review_owner_profile_id,review_status,score_final,github_repo,github_issue_number,issue_number", "planning.comment.create": "id,title,task_type,assignee,owner,github_issue_number,github_issue_url,issue_number,issue_url",
+const columns = { "planning.github-comments.import": "id,title,assignee,owner,status,review_owner_profile_id,review_status,score_final,evidence_link,updated_at,issue_url,github_repo,github_issue_number,issue_number,task_type", "planning.attachment.write": "id,title,task_type,assignee,owner,status,review_owner_profile_id,review_status,score_final,github_repo,github_issue_number,issue_number", "planning.comment.create": "id,title,task_type,assignee,owner,github_issue_number,github_issue_url,issue_number,issue_url",
   "planning.blocker.report": "id,title,assignee,owner,status,task_type,review_status,score_final" };
-type Task = { id: string; title: string; task_type: "epic" | "initiative" | "deliverable" | "sub_issue"; github_repo?: string; github_issue_number?: number; issue_number?: string; github_issue_url?: string; review_owner_profile_id?: string; evidence_link?: string; issue_url?: string; assignee?: string; owner?: string; status?: PlanningTask["status"]; review_status?: PlanningTask["reviewStatus"]; score_final?: boolean };
+type Task = { id: string; title: string; task_type: "epic" | "initiative" | "deliverable" | "sub_issue"; github_repo?: string; github_issue_number?: number; issue_number?: string; github_issue_url?: string; review_owner_profile_id?: string; evidence_link?: string | null; updated_at?: string; issue_url?: string; assignee?: string; owner?: string; status?: PlanningTask["status"]; review_status?: PlanningTask["reviewStatus"]; score_final?: boolean };
 export function planningCollaborationOperations({ action, targetId, profile, service, followup, request, current }: Context) {
   const permitted = action === "planning.comment.create" || action === "planning.blocker.report" || action === "planning.attachment.write" || action === "planning.github-comments.import";
   const commentIds = new Set<number>();
@@ -83,9 +83,9 @@ export function planningCollaborationOperations({ action, targetId, profile, ser
       return importGitHubTaskCommentsWithMentions(service, targetId, rows);
     },
     async readImportedComments() {
-      if (action !== "planning.github-comments.import" || !targetId || await current()) return denied();
-      return await service.from("task_external_comments").select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at")
-        .eq("task_id", targetId).order("created_at", { ascending: true });
+      if (action !== "planning.github-comments.import" || !targetId || await current()) return { ...denied(), count: null };
+      return await service.from("task_external_comments").select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at", { count: "exact" })
+        .eq("task_id", targetId).eq("source", "github").order("created_at", { ascending: true });
     },
     async updateImportedEvidence(evidence: string) {
       if (action !== "planning.github-comments.import" || !profile) return denied();
@@ -97,7 +97,13 @@ export function planningCollaborationOperations({ action, targetId, profile, ser
         taskType: row.task_type === "sub_issue" ? "sub_issue" : "deliverable" }, profile, unrestricted: false });
       const previous = String(row.evidence_link || "").trim();
       if (!permissions.canEditEvidence || (previous && previous !== String(row.issue_url || "").trim())) return denied();
-      return await service.from("tasks").update({ evidence_link: evidence, github_issue_sync_status: "not_synced", github_issue_sync_error: null }).eq("id", targetId);
+      if (!row.updated_at || row.evidence_link !== null && typeof row.evidence_link !== "string" || await current()) return denied();
+      const update = service.from("tasks").update({ evidence_link: evidence, github_issue_sync_status: "not_synced", github_issue_sync_error: null })
+        .eq("id", targetId).eq("updated_at", row.updated_at);
+      const compared = row.evidence_link === null ? update.is("evidence_link", null) : update.eq("evidence_link", row.evidence_link);
+      const saved = await compared.select("id").maybeSingle();
+      if (saved.error || saved.data) return saved;
+      return { data: null, error: { code: "import_evidence_stale", message: "Der Nachweis wurde inzwischen geändert. Die Kommentare wurden nicht importiert." } };
     },
     async uploadAttachment(input: { path: string; bytes: Uint8Array; filename: string; contentType: string }) {
       const path = input.path, bytes = Buffer.from(input.bytes), filename = input.filename, contentType = input.contentType;
@@ -115,15 +121,21 @@ export function planningCollaborationOperations({ action, targetId, profile, ser
         uploadedAttachment = { filename, contentType, size: bytes.length, url: uploaded.rawUrl };
         return { ok: true as const, uploaded };
       } catch {
-        return { ok: false as const, status: 502, error: "GitHub-Anhang konnte nicht sicher gespeichert werden. Bitte denselben Anhang erneut senden." };
+        return { ok: false as const, status: 502, error: "Ob der Anhang auf GitHub hochgeladen wurde, ist noch unklar. Prüfe zuerst die Aufgabe." };
       }
     },
     async recordAttachment(metadata: { request_ip?: string | null; user_agent?: string | null }) {
-      if (action !== "planning.attachment.write" || !uploadedAttachment || !profile) return denied();
+      if (action !== "planning.attachment.write" || !uploadedAttachment || !profile) return { ...denied(), taskSyncConfirmed: false };
       const result = await followup.from("audit_log").insert({ entity_type: "task", entity_id: targetId, action: "task.attachment_uploaded", actor_profile_id: profile.id,
         after_data: { ...uploadedAttachment }, request_ip: metadata.request_ip || null, user_agent: metadata.user_agent || null }).select("id,entity_id,action,actor_profile_id,before_data,after_data,created_at").single();
-      if (!result.error && result.data) await followup.from("tasks").update({ github_issue_sync_status: "not_synced", github_issue_sync_error: null }).eq("id", targetId);
-      return result;
+      let taskSyncConfirmed = false;
+      if (!result.error && result.data) {
+        try {
+          const sync = await followup.from("tasks").update({ github_issue_sync_status: "not_synced", github_issue_sync_error: null }).eq("id", targetId).select("id").maybeSingle();
+          taskSyncConfirmed = !sync.error && sync.data?.id === targetId;
+        } catch { /* The upload and returned activity remain confirmed when the sync marker is uncertain. */ }
+      }
+      return { ...result, taskSyncConfirmed };
     },
     async readCollaborationProfiles() {
       if ((action !== "planning.comment.create" && action !== "planning.blocker.report") || await current()) return denied();

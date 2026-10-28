@@ -6,8 +6,8 @@ export function sprintNumber(value: string) {
 }
 
 export function addDaysIso(value: string, days: number) {
-  const date = value ? new Date(`${value}T00:00:00`) : new Date();
-  date.setDate(date.getDate() + days);
+  const date = value ? new Date(`${value}T00:00:00.000Z`) : new Date();
+  date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
 

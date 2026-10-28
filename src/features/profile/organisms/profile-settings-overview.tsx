@@ -17,29 +17,35 @@ import {
   type ProfileSettingsDraft,
   type ProfileSettingsSectionId,
 } from "@/features/profile/model/profile-settings-view-model";
+import { ownProfileSettingsValues } from "../model/profile-settings-values";
 import { ProfileColorConflictError } from "@/features/profile/model/profile-color-api";
 import {
   buildProfileColorPickerModel,
   buildProfileColorSavePatch,
   restoreProfileColorAfterConflict,
 } from "@/features/profile/model/profile-color-policy";
+import type { OwnProfileEditor } from "@/features/profile/model/profile-settings-contract";
 import type { OwnProfileSettingsPatch } from "@/features/profile/hooks/use-own-profile-settings-commands";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 import { taskStatuses } from "@/lib/status";
 import type { PlanningShellState, PlanningFilterPreferences, Profile } from "@/lib/types";
 import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type ProfileSettingsOverviewProps = {
-  apiClient: BrowserApiClient;
+  planningState: PlanningState;
   data: PlanningShellState;
   currentProfile: Profile | null;
   pending: boolean;
   source: "supabase";
-  onSaveOwnProfileSettings: (patch: OwnProfileSettingsPatch) => Promise<void>;
+  onSaveOwnProfileSettings: (patch: OwnProfileSettingsPatch, editor?: OwnProfileEditor, resave?: boolean) => Promise<void>;
 };
 
 export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
   const { currentProfile, data } = props;
+  const [binding, setBinding] = useState({ owner: props.planningState, version: 0 });
+  if (binding.owner !== props.planningState) setBinding({ owner: props.planningState, version: binding.version + 1 });
+  const settings = currentProfile ? props.planningState.profileSettings(currentProfile.id) : null;
+  if (settings?.readStatus === "forbidden") return <UiPanel padding="xl"><UiNotice tone="warning">Profileinstellungen sind nicht verfügbar.</UiNotice><UiButton className="mt-2 min-h-11" onClick={() => { void props.planningState.checkOwnProfileSettings(currentProfile!.id); }}>Zugriff erneut prüfen</UiButton></UiPanel>;
   if (!currentProfile) {
     return (
       <UiPanel padding="xl">
@@ -52,7 +58,7 @@ export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
 
   return (
     <ProfileSettingsForm
-      key={`${currentProfile.id}:${profileUiPreference?.updatedAt || "empty"}`}
+      key={`${currentProfile.id}:${binding.version}`}
       {...props}
       currentProfile={currentProfile}
       profileUiPreference={profileUiPreference || null}
@@ -61,7 +67,7 @@ export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
 }
 
 function ProfileSettingsForm({
-  apiClient,
+  planningState,
   data,
   currentProfile,
   pending,
@@ -69,6 +75,10 @@ function ProfileSettingsForm({
   onSaveOwnProfileSettings,
   profileUiPreference,
 }: Omit<ProfileSettingsOverviewProps, "currentProfile"> & { currentProfile: Profile; profileUiPreference: NonNullable<PlanningShellState["profileUiPreferences"][number]> | null }) {
+  const settings = planningState.profileSettings(currentProfile.id);
+  const confirmationPending = settings.save.phase === "unconfirmed" || settings.save.phase === "saving";
+  const [editor] = useState(() => planningState.beginOwnProfileEdit({ profile: currentProfile, uiPreference: profileUiPreference, notificationPreferences: data.notificationPreferences.filter(item => item.profileId === currentProfile.id) }));
+  const editing = editor.view();
   const initialDraft = buildInitialDraft({ currentProfile, data, profileUiPreference });
   const [draft, setDraft] = useState<ProfileSettingsDraft>(() => initialDraft);
   const [savedDraft, setSavedDraft] = useState<ProfileSettingsDraft>(() => initialDraft);
@@ -134,7 +144,7 @@ function ProfileSettingsForm({
     }));
   };
 
-  const save = async () => {
+  const save = async (resave = false) => {
     setMessage("");
     const colorPatch = buildProfileColorSavePatch({
       draftColor: draft.color,
@@ -156,7 +166,7 @@ function ProfileSettingsForm({
           planningFilters: draft.planningFilters,
           expandedInitiativeIds: draft.expandedInitiativeIds,
         },
-      });
+      }, editor, resave);
     } catch (error) {
       if (error instanceof ProfileColorConflictError) {
         setDraft((current) => restoreProfileColorAfterConflict(current, savedDraft.color));
@@ -233,20 +243,36 @@ function ProfileSettingsForm({
             />
           )}
           {activeSection === "api" && operationalProfile && (
-            <ProfilePlanningItemsTokens apiClient={apiClient} source={source} />
+            <ProfilePlanningItemsTokens planningState={planningState} source={source} />
           )}
         </div>
       </div>
 
+      {settings.save.phase === "conflict" && (
+        <div className="mt-4 space-y-2" role="status">
+          <UiNotice tone="warning">Das Profil wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten. Prüfe den aktuellen Stand vor dem erneuten Speichern.</UiNotice>
+          {editing.current && <div className="break-words text-sm text-slate-700"><p className="font-semibold">Aktueller Stand</p><dl className="mt-2 grid gap-2">{ownProfileSettingsValues({ profilePatch: editing.current.profile, uiPreferences: editing.current.uiPreference || undefined, notificationEvents: Object.fromEntries(editing.current.notificationPreferences.map(preference => [preference.eventType, preference.enabled])) }, data).map(([label, value]) => <div key={label}><dt className="font-semibold">{label}</dt><dd>{value}</dd></div>)}</dl></div>}
+          <UiButton className="min-h-11" onClick={() => { void editor.refreshConflict(); }} disabled={settings.save.checkStatus === "checking"}>Aktuellen Stand laden</UiButton>
+          {editing.phase === "conflict" && <UiButton className="min-h-11" onClick={() => { void save(true); }} disabled={!editing.canResave || pending} variant="primary">Erneut speichern</UiButton>}
+        </div>
+      )}
+      {settings.save.phase === "unconfirmed" && (
+        <div className="mt-4" role="status">
+          <UiNotice tone="warning">Ob deine Änderungen gespeichert wurden, ist noch unklar. Deine Eingaben bleiben erhalten.</UiNotice>
+          <UiButton className="mt-2 min-h-11" onClick={() => { void planningState.checkOwnProfileSettings(currentProfile.id); }} disabled={settings.save.checkStatus === "checking"}>Aktuellen Stand prüfen</UiButton>
+          {settings.save.checkStatus === "checked" && <p className="mt-2 text-sm text-slate-700">Profil geprüft. Ob die Änderungen gespeichert wurden, bleibt unklar.</p>}
+          {settings.save.submitted && <details className="mt-2 text-sm text-slate-700"><summary>Abgesendete Angaben</summary><dl className="grid gap-2 whitespace-pre-wrap break-words">{ownProfileSettingsValues(settings.save.submitted, data).map(([label, value]) => <div key={label}><dt className="font-semibold">{label}</dt><dd>{value}</dd></div>)}</dl></details>}
+        </div>
+      )}
       {(isDirty || message) && (
         <div className="sticky bottom-4 z-10 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur" data-profile-save-bar>
           <div className="text-sm font-semibold text-slate-700">
-            {isDirty ? "Ungespeicherte Änderungen" : message}
+            {settings.save.phase === "unconfirmed" ? "Speicherung unklar" : isDirty ? "Ungespeicherte Änderungen" : message}
           </div>
           <div className="flex items-center gap-2">
             {isDirty && message && <UiNotice tone="success" size="compact">{message}</UiNotice>}
             {isDirty && (
-              <UiButton onClick={save} disabled={pending} variant="primary">
+              <UiButton onClick={() => { void save(); }} disabled={pending || confirmationPending || editing.phase === "conflict" || settings.readStatus === "forbidden"} variant="primary">
                 Speichern
               </UiButton>
             )}

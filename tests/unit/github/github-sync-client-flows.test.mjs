@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const contract = await importTestModule("src/lib/github-sync/contract.ts");
@@ -86,9 +88,6 @@ const { useTaskGitHubSyncCommand } = await importTestModule(
     "@/features/tasks/model/task-api-client": {
       syncTaskToGitHubRequest: async () => commandSyncResponse,
     },
-    "@/features/tasks/model/task-server-revision": {
-      rememberTaskServerRevision: () => undefined,
-    },
     "@/lib/github-sync/contract": contract,
     "@/lib/platform": {
       hasGitHubIssue: () => true,
@@ -96,21 +95,13 @@ const { useTaskGitHubSyncCommand } = await importTestModule(
   },
 );
 
-function useCommandFixture() {
-  let data = {
-    tasks: [task()],
-    taskComments: [],
-  };
+function useCommandFixture(initialTasks = [task()]) {
+  const owner=createPlanningState({userId:"sync-client-fixture",initialData:{...emptyPlanningShellState,tasks:initialTasks},adapter:{readWorkspace:async()=>null,saveTask:async()=>({task:{}}),syncTaskGitHub:async()=>contract.classifyTaskGitHubSyncResponse(commandSyncResponse.response.status,commandSyncResponse.body)}});
   const errors = [];
   commandTransitions.length = 0;
   const command = useTaskGitHubSyncCommand({
-    apiClient: {},
-    data,
-    setData: (update) => {
-      data = typeof update === "function" ? update(data) : update;
-    },
+    planningState:owner.planning,
     setSaveError: (value) => errors.push(value),
-    serverUpdatedAtByTask: new Map(),
     source: "supabase",
     startTransition: (callback) => {
       const transition = Promise.resolve().then(callback);
@@ -120,7 +111,7 @@ function useCommandFixture() {
   return {
     command,
     errors,
-    getTask: () => data.tasks[0],
+    getTask: () => owner.planning.board().tasks[0],
     wait: async () => Promise.all(commandTransitions),
   };
 }
@@ -197,20 +188,20 @@ const { useTaskCreateCommand } = await importTestModule(
 );
 
 function useCreateFixture() {
-  let data = {
-    tasks: [],
-    profiles: [],
-    taskRelations: [],
-  };
-  const errors = [];
+  commandSyncResponse = createSyncResponse;
+  const syncFixture = useCommandFixture([createdTask]);
+  const owner = createPlanningState({ userId: "create-fixture", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async () => ({ task: {} }),
+    readWorkspace: async () => null,
+    createTask: async () => ({ task: createdTask }),
+  } });
+  const errors = syncFixture.errors;
   createTransitions.length = 0;
   const command = useTaskCreateCommand({
-    apiClient: {},
-    applyPlanningShellStateUpdate: (update) => {
-      data = typeof update === "function" ? update(data) : update;
-    },
+    planningState: owner.planning,
+    syncTaskToGitHub: syncFixture.command.syncTaskToGitHub,
     currentProfile: null,
-    data,
+    data: emptyPlanningShellState,
     setSaveError: (value) => errors.push(value),
     setTaskDialogDefaults: () => undefined,
     startTransition: (callback) => {
@@ -219,10 +210,10 @@ function useCreateFixture() {
     },
   });
   return {
-    command,
-    errors,
-    getTask: () => data.tasks[0],
-    wait: async () => Promise.all(createTransitions),
+    command, errors,
+    getTask: () => syncFixture.getTask(),
+    getCreated: () => owner.planning.board().tasks[0],
+    wait: async () => { await Promise.all(createTransitions); await syncFixture.wait(); },
   };
 }
 
@@ -240,7 +231,7 @@ for (const [name, result, expectedStatus, expectsError] of [
   [
     "terminal failure",
     contract.taskGitHubSyncFailure("github_sync_invalid_target", "invalid"),
-    "not_synced",
+    "failed",
     true,
   ],
 ]) {
@@ -248,159 +239,15 @@ for (const [name, result, expectedStatus, expectsError] of [
     createSyncResponse = responseFor(result);
     const fixture = useCreateFixture();
     fixture.command.createTask({
+      creationRequestId: "create-client-flow",
       title: "Client flow task",
       taskType: "deliverable",
       createGitHubIssue: true,
       assignee: "",
     });
     await fixture.wait();
+    assert.equal(fixture.getCreated().id, createdTask.id);
     assert.equal(fixture.getTask().githubIssueSyncStatus, expectedStatus);
     assert.equal(Boolean(fixture.errors.at(-1)), expectsError);
-  });
-}
-
-let detailSyncResponse = responseFor(successResult());
-let detailStates = [];
-let detailTransitions = [];
-const { useTaskDetailWorkflow } = await importTestModule(
-  "src/features/tasks/hooks/use-task-detail-workflow.ts",
-  {
-    react: {
-      useEffect: () => undefined,
-      useRef: (value) => ({ current: value }),
-      useState: (initial) => {
-        const index = detailStates.length;
-        detailStates.push(typeof initial === "function" ? initial() : initial);
-        return [
-          detailStates[index],
-          (update) => {
-            detailStates[index] = typeof update === "function"
-              ? update(detailStates[index])
-              : update;
-          },
-        ];
-      },
-      useTransition: () => [
-        false,
-        (callback) => {
-          const transition = Promise.resolve().then(callback);
-          detailTransitions.push(transition);
-        },
-      ],
-    },
-    "next/navigation": {
-      useRouter: () => ({ push: () => undefined, refresh: () => undefined, replace: () => undefined }),
-    },
-    "@/lib/browser-api-client": {
-      createBrowserApiClient: () => ({}),
-    },
-    "@/features/tasks/model/task-api-client": {
-      createTaskRequest: async () => ({ response: { ok: false }, body: null }),
-      reportTaskBlockerRequest: async () => ({ response: { ok: false }, body: null }),
-      syncTaskToGitHubRequest: async () => detailSyncResponse,
-      updateTaskRequest: async () => ({ response: { ok: false }, body: null }),
-      withdrawTaskRequest: async () => ({ response: { ok: false }, body: null }),
-    },
-    "@/features/tasks/model/task-mutation-contract": {
-      buildClientTaskUpdatePatch: (_, patch) => patch,
-      taskUpdateRequestPayload: (_, patch) => patch,
-    },
-    "@/features/tasks/model/task-detail-state": {
-      buildEditableTaskState: (value) => ({ ...value }),
-      buildTaskDetailGitHubState: (value) => ({
-        githubRepo: value.githubRepo,
-        githubIssueNumber: value.githubIssueNumber,
-        githubIssueUrl: value.githubIssueUrl,
-        githubIssueSyncStatus: value.githubIssueSyncStatus,
-        githubIssueLastSyncedAt: value.githubIssueLastSyncedAt,
-        githubIssueSyncError: value.githubIssueSyncError,
-        githubIssueSyncPendingSince: value.githubIssueSyncPendingSince,
-      }),
-    },
-    "@/features/tasks/hooks/use-task-comments": {
-      useTaskComments: () => ({
-        taskComments: [],
-        taskExternalComments: [],
-        taskActivities: [],
-        localCommentImportNotice: "",
-        githubCommentImportPending: false,
-        addComment: () => undefined,
-        uploadAttachment: () => undefined,
-        importGitHubComments: () => undefined,
-        appendTaskActivities: () => undefined,
-      }),
-    },
-    "@/features/tasks/hooks/use-task-relationships": {
-      useTaskRelationships: () => ({
-        relations: [],
-        addRelation: () => undefined,
-        removeRelation: () => undefined,
-      }),
-    },
-    "@/lib/github-sync/contract": contract,
-    "@/lib/local-development-auth": {
-      isLocalLoginSimulationEnabled: () => false,
-    },
-  },
-);
-
-function useDetailFixture() {
-  detailStates = [];
-  detailTransitions = [];
-  const workflow = useTaskDetailWorkflow({
-    task: task(),
-    packages: [],
-    comments: [],
-    externalComments: [],
-    activities: [],
-    blockers: [],
-    subIssues: [],
-    taskRelations: [],
-    profiles: [],
-    source: "supabase",
-    commentImportNotice: "",
-  });
-  return {
-    workflow,
-    getError: () => detailStates[1],
-    getGitHubState: () => detailStates[2],
-    wait: async () => Promise.all(detailTransitions),
-  };
-}
-
-for (const [name, result, expectedStatus] of [
-  ["success", successResult(), "synced"],
-  [
-    "lock",
-    contract.taskGitHubSyncFailure("github_sync_locked", "locked", {
-      githubIssueSyncStatus: "pending",
-    }),
-    "pending",
-  ],
-  ["stale", contract.taskGitHubSyncFailure("github_sync_stale", "stale"), "not_synced"],
-  [
-    "terminal failure",
-    contract.taskGitHubSyncFailure("github_sync_invalid_target", "invalid"),
-    "failed",
-  ],
-  [
-    "cleanup failure after finalize",
-    contract.taskGitHubSyncFailure("github_sync_unavailable", "release failed", {
-      githubIssueSyncStatus: "synced",
-      updatedAt: "revision-2",
-    }),
-    "synced",
-  ],
-]) {
-  test(`detail sync applies the ${name} transition`, async () => {
-    detailSyncResponse = responseFor(result);
-    const fixture = useDetailFixture();
-    fixture.workflow.syncGitHub();
-    await fixture.wait();
-    assert.equal(fixture.getGitHubState().githubIssueSyncStatus, expectedStatus);
-    assert.equal(
-      fixture.getGitHubState().githubIssueSyncPendingSince === "",
-      expectedStatus !== "pending",
-    );
   });
 }

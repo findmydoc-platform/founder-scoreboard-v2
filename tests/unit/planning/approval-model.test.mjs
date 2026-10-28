@@ -35,14 +35,14 @@ test("approval domain keeps client affordances and optimistic state aligned", as
       { id: "child-2", taskType: "sub_issue", parentTaskId: "deliverable-2", parentApprovalStatus: "approved" },
     ],
   };
-  const approved = approval.applyDeliverableApprovalPatch(planningData, {
+  const approved = approval.applyPlanningItemApprovalPatch(planningData, {
     id: "deliverable-1",
     approvalStatus: "approved",
   });
   assert.equal(approved.tasks[0].approvalStatus, "approved");
   assert.equal(approved.tasks[1].parentApprovalStatus, "approved");
   assert.equal(approved.tasks[2].parentApprovalStatus, "approved");
-  const reset = approval.applyDeliverableApprovalPatch(approved, {
+  const reset = approval.applyPlanningItemApprovalPatch(approved, {
     id: "deliverable-1",
     approvalStatus: "proposed",
   });

@@ -1,3 +1,7 @@
+import { TaskGitHubSyncNotice } from "@/features/tasks/molecules/task-github-sync-notice";
+import { hasGitHubIssue } from "@/lib/platform";
+import { TaskReviewOperationNotice } from "@/features/reviews/molecules/task-review-operation-notice";
+import { TaskLifecycleNotice } from "@/features/tasks/molecules/task-lifecycle-notice";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { PlanningBootShell } from "@/features/planning/templates/planning-boot-shell";
@@ -11,7 +15,6 @@ import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-
 import { ProductUpdatesProvider } from "@/features/product-updates/organisms/product-updates-provider";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
-import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 import type { AdministratorAccessController } from "@/features/administrator-access/hooks/use-administrator-access-controller";
@@ -24,12 +27,11 @@ type PlanningAppShellProps = {
   initialAdministrationModel?: AdministrationWorkspaceModel | null;
   onAdministratorAccessInvalid: () => void;
   source: "supabase";
-  decisionLogResult?: NotionDecisionLogResult;
   initialBacklogModel?: BacklogModel;
   initialSprintModel?: SprintWorkspaceModel;
 };
 
-export function PlanningAppShell({ authRequired, controller, administratorAccessController, initialAdministrationModel = null, onAdministratorAccessInvalid, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningAppShellProps) {
+export function PlanningAppShell({ authRequired, controller, administratorAccessController, initialAdministrationModel = null, onAdministratorAccessInvalid, source, initialBacklogModel, initialSprintModel }: PlanningAppShellProps) {
   const {
     authAvailable,
     authBusy,
@@ -61,7 +63,8 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
   const resolvedParentFilterId = planningLevel === "deliverable"
     ? filters.initiativeId === "Alle" ? "all" : filters.initiativeId
     : planningParentFilterId;
-  const planningLevelTasks = data.tasks.filter((task) => task.taskType === planningLevel);
+  const workspaceTasks = controller.planningState.workspace(controller.workspace).tasks;
+  const planningLevelTasks = workspaceTasks.filter((task) => task.taskType === planningLevel);
   const planningVisibleTasks = controller.visibleTasks.filter((task) => (
     task.taskType === planningLevel
     && (resolvedParentFilterId === "all" || task.parentTaskId === resolvedParentFilterId)
@@ -145,12 +148,11 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
         <PlanningHeader controller={controller} administratorAccessController={administratorAccessController} />
 
         <FeatureTourProvider
-          apiClient={controller.apiClient}
+          planningState={controller.planningState}
           currentProfile={currentProfile}
           data={data}
           openTaskPanel={controller.openTaskPanel}
           selectedTaskId={controller.selectedTaskId}
-          setData={controller.setData}
           setView={setView}
           setWorkspace={setWorkspace}
           source={source}
@@ -172,7 +174,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
             quickFilters={quickFilters}
             expanded={showFilters}
             visibleCount={controller.view === "board" ? planningVisibleTasks.length : controller.visibleTasks.length}
-            totalCount={controller.view === "board" ? planningLevelTasks.length : data.tasks.filter((task) => task.taskType !== "sub_issue").length}
+            totalCount={controller.view === "board" ? planningLevelTasks.length : workspaceTasks.filter((task) => task.taskType !== "sub_issue").length}
             showPlanningLevel={controller.view === "board"}
             onExpandedChange={controller.setShowFilters}
             onChange={setFilters}
@@ -181,13 +183,15 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
           />
         )}
 
+        {controller.planningState.taskGitHubSyncs().map(view=><TaskGitHubSyncNotice key={view.taskId} view={view} onCheck={()=>{void controller.planningState.checkTaskGitHubSync(view.taskId);}} onRetry={()=>{const task=controller.planningState.taskDetail(view.taskId).task;if(task)controller.syncTaskToGitHub(task,{createIfMissing:!hasGitHubIssue(task)});}}/>)}
+        {controller.planningState.taskReviewOperations().map(operation=><TaskReviewOperationNotice key={operation.id} operation={operation} onCheck={id=>{void controller.planningState.checkTaskReview(id);}} />)}
+        {controller.planningState.taskLifecycle().map(operation => <TaskLifecycleNotice key={operation.id} operation={operation} onCheck={id => controller.planningState.checkTaskLifecycle(id)} />)}
         <PlanningWorkspaceRenderer
           controller={controller}
           administrationCapabilities={administratorAccessController.authority.capabilities}
           initialAdministrationModel={initialAdministrationModel}
           onAdministratorAccessInvalid={onAdministratorAccessInvalid}
           source={source}
-          decisionLogResult={decisionLogResult}
           initialBacklogModel={initialBacklogModel}
           initialSprintModel={initialSprintModel}
         />

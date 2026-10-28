@@ -85,9 +85,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     reviewTask,
     removeTaskRelation,
     reportTaskBlocker,
-    saveInitiative,
-    saveEpic,
-    deleteEpic,
     selectedInitiative,
     selectedTask,
     selectedTaskActivity,
@@ -157,7 +154,22 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onBack={taskPanelPreviousTask ? backTaskPanel : undefined}
           onClose={closeTaskPanel}
           onOpenTask={(taskId) => openTaskPanel(taskId, "push")}
-          onUpdate={(patch) => updateTask(selectedTask, patch)}
+          taskSaves={controller.planningState.taskSaves(selectedTask.id)}
+          relationshipChanges={controller.planningState.taskRelationshipChanges(selectedTask.id)}
+          onCheckRelationshipChange={changeId => { void controller.planningState.checkTaskRelationshipChange(changeId); }}
+          attachmentUploads={controller.planningState.taskAttachmentUploads(selectedTask.id)}
+          onCheckAttachmentUpload={id => { void controller.planningState.checkTaskAttachmentUpload(id); }}
+          githubImport={controller.planningState.taskGitHubImport(selectedTask.id)}
+          externalCommentCompleteness={controller.planningState.taskGitHubComments(selectedTask.id).completeness}
+          onCheckGitHubImport={() => { void controller.planningState.checkTaskGitHubImport(selectedTask.id); }}
+          commentCreations={controller.planningState.taskCommentCreations(selectedTask.id)}
+          commentCompleteness={controller.planningState.taskComments(selectedTask.id).completeness}
+          onCheckCommentCreation={id => { void controller.planningState.checkTaskCommentCreation(id); }}
+          blockerReports={controller.planningState.taskBlockerReports(selectedTask.id)}
+          onCheckBlockerReport={id => { void controller.planningState.checkTaskBlockerReport(id); }}
+          onCheckTaskSave={() => controller.planningState.checkTaskSave(selectedTask.id)}
+          onBeginEdit={() => controller.beginTaskEdit(selectedTask)}
+          onUpdate={(patch, options) => updateTask(selectedTask, patch, options)}
           onAddComment={(comment) => addTaskComment(selectedTask, comment)}
           onUploadAttachment={(file) => uploadTaskAttachment(selectedTask, file)}
           onImportGitHubComments={() => importGitHubComments(selectedTask)}
@@ -177,9 +189,9 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onReopenReview={reopenReviewTask}
           onWithdrawReview={withdrawReviewTask}
           onWithdraw={(reason) => withdrawTask(selectedTask, reason)}
-          onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
+          onAddRelation={(payload, basis) => addTaskRelation(basis || selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
-          onDecideApproval={(action, note) => decideTaskApproval(selectedTask, action, note)}
+          onDecideApproval={(action, note, basis) => decideTaskApproval(basis || selectedTask, action, note)}
         />
       )}
       {taskDialogDefaults && (
@@ -191,6 +203,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           pending={isPending}
           onClose={() => setTaskDialogDefaults(null)}
           onCreate={createTask}
+          taskLifecycle={controller.planningState.taskLifecycle()}
+          onCheckTaskLifecycle={id => controller.planningState.checkTaskLifecycle(id)}
         />
       )}
       {initiativeDialogDefaults && (
@@ -200,21 +214,21 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           canApproveNow={currentProfile?.platformRole === "ceo"}
           pending={isPending}
           onClose={() => setInitiativeDialogDefaults(null)}
-          onSave={saveInitiative}
+          planningState={controller.planningState}
         />
       )}
       {epicDialogDefaults && (
         <EpicDialog
           defaults={epicDialogDefaults}
           onClose={() => setEpicDialogDefaults(null)}
-          onSave={saveEpic}
+          planningState={controller.planningState}
         />
       )}
       {epicDeleteTarget && (
         <EpicDeleteDialog
           target={epicDeleteTarget}
           onClose={() => setEpicDeleteTarget(null)}
-          onConfirm={deleteEpic}
+          planningState={controller.planningState}
         />
       )}
     </>

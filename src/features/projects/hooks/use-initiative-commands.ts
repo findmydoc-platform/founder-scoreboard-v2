@@ -1,86 +1,46 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
+import type { InitiativeDraft } from "../model/hierarchy-state";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
-import * as planningApi from "@/features/planning/model/planning-api-client";
 import { canWithdrawPlanningRoot } from "@/features/planning/model/planning-trash-contract";
-import { removePlanningRootFromData } from "@/features/planning/model/planning-trash-state";
 import type { ApprovalDecisionAction, Task } from "@/lib/types";
 
-type UseInitiativeCommandsOptions = PlanningCommandContext & {
-  setInitiativeDialogDefaults: Dispatch<SetStateAction<Partial<InitiativeDraft> | null>>;
-};
-
-function replacePlanningItem(items: Task[], replacement: Task) {
-  return items.some((item) => item.id === replacement.id)
-    ? items.map((item) => item.id === replacement.id ? replacement : item)
-    : [...items, replacement];
-}
-
-export function useInitiativeCommands({
-  apiClient,
-  currentProfile,
-  setData,
-  setInitiativeDialogDefaults,
-  setSaveError,
-  startTransition,
-}: UseInitiativeCommandsOptions) {
-  const saveInitiative = (draft: InitiativeDraft) => {
+export function useInitiativeCommands({ planningState, currentProfile, setSaveError, setInitiativeDialogDefaults }: Pick<PlanningCommandContext, "planningState" | "currentProfile" | "setSaveError"> & { setInitiativeDialogDefaults: Dispatch<SetStateAction<Partial<InitiativeDraft> | null>> }) {
+  const editInitiative = async (shown: Task) => {
     setSaveError("");
-    return new Promise<void>((resolve, reject) => {
-      startTransition(async () => {
-        try {
-          const { response, body } = await planningApi.saveInitiativeRequest(apiClient, draft);
-          if (!response.ok || !body?.task) throw new Error(body?.error || "Initiative konnte nicht gespeichert werden.");
-          setData((current) => ({ ...current, tasks: replacePlanningItem(current.tasks, body.task!) }));
-          setInitiativeDialogDefaults(null);
-          resolve();
-        } catch (error) {
-          const failure = error instanceof Error ? error : new Error("Initiative konnte nicht gespeichert werden.");
-          setSaveError(failure.message);
-          reject(failure);
-        }
-      });
-    });
-  };
-
-  const decideInitiativeApproval = (initiative: Task, action: ApprovalDecisionAction, note = "") => {
-    setSaveError("");
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.decideInitiativeApprovalRequest(apiClient, initiative.id, action, initiative.approvalRevision, note);
-        if (!response.ok || !body?.task) throw new Error(body?.error || "Freigabeentscheidung konnte nicht gespeichert werden.");
-        setData((current) => action === "reject"
-          ? removePlanningRootFromData(current, "initiative", initiative.id).data
-          : { ...current, tasks: replacePlanningItem(current.tasks, body.task!) });
-      } catch (error) {
-        setSaveError(error instanceof Error ? error.message : "Freigabeentscheidung konnte nicht gespeichert werden.");
+    let detail = shown;
+    if (shown.detailAvailability === "summary") {
+      const loaded = await planningState.loadTaskDetail(shown.id);
+      const current = planningState.taskDetail(shown.id).task;
+      if (!loaded.ok || !current || current.detailAvailability === "summary") {
+        setSaveError("Initiative konnte nicht vollständig zum Bearbeiten geladen werden."); return;
       }
+      detail = current;
+    }
+    setInitiativeDialogDefaults({
+      id: shown.id, expectedUpdatedAt: shown.updatedAt, title: shown.title, parentTaskId: shown.parentTaskId || "", ownerId: shown.ownerId || "",
+      accountableProfileId: detail.raciAssignments?.find(assignment => assignment.role === "accountable")?.profileId || detail.ownerId || "",
+      responsibleProfileIds: detail.raciAssignments?.filter(assignment => assignment.role === "responsible").map(assignment => assignment.profileId) || [],
+      consultedProfileIds: detail.raciAssignments?.filter(assignment => assignment.role === "consulted").map(assignment => assignment.profileId) || [],
+      informedProfileIds: detail.raciAssignments?.filter(assignment => assignment.role === "informed").map(assignment => assignment.profileId) || [],
+      priority: shown.priority, status: shown.status === "In Arbeit" ? "active" : shown.status === "Erledigt" ? "done" : shown.status === "Pausiert" ? "paused" : "planned", targetDate: shown.targetDate || "",
+      goal: detail.strategy?.goal || detail.description, successCriteria: detail.strategy?.successCriteria || "", scopeConstraints: detail.strategy?.scopeConstraints || "",
+      approvalStatus: shown.approvalStatus || "proposed", approvalRevision: shown.approvalRevision, decisionNote: shown.decisionNote,
     });
   };
-
-  const withdrawInitiative = (initiative: Task, reason: string) => {
-    const canWithdraw = canWithdrawPlanningRoot({
-      rootType: "initiative",
-      approvalStatus: initiative.approvalStatus,
-      proposedById: initiative.proposedById,
-    }, currentProfile, false);
-    if (!canWithdraw) {
-      setSaveError("Nur Antragsteller, CEO oder Deputy können vorgeschlagene Initiativen zurückziehen.");
-      return;
+  const decideInitiativeApproval = async (initiative: Task, action: ApprovalDecisionAction, note = "") => {
+    setSaveError("");
+    const result = await planningState.decideInitiativeApproval(initiative, action, note);
+    if (!result.ok) setSaveError(result.error);
+  };
+  const withdrawInitiative = async (initiative: Task, reason: string) => {
+    if (!canWithdrawPlanningRoot({ rootType: "initiative", approvalStatus: initiative.approvalStatus, proposedById: initiative.proposedById }, currentProfile, false)) {
+      setSaveError("Nur Antragsteller, CEO oder Deputy können vorgeschlagene Initiativen zurückziehen."); return;
     }
     setSaveError("");
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.withdrawInitiativeRequest(apiClient, initiative.id, initiative.approvalRevision, reason);
-        if (!response.ok) throw new Error(body?.error || "Initiative konnte nicht zurückgezogen werden.");
-        setData((current) => removePlanningRootFromData(current, "initiative", initiative.id).data);
-      } catch (error) {
-        setSaveError(error instanceof Error ? error.message : "Initiative konnte nicht zurückgezogen werden.");
-      }
-    });
+    const result = await planningState.withdrawTask(initiative, reason);
+    if (!result.ok) setSaveError(result.error);
   };
-
-  return { decideInitiativeApproval, saveInitiative, withdrawInitiative };
+  return { editInitiative, decideInitiativeApproval, withdrawInitiative };
 }

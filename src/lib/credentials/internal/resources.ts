@@ -56,8 +56,8 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       if (action !== "strategic.read") return Promise.resolve({ status: "forbidden" as const });
       return load(createSupabaseStrategicPlanningReadModel(service));
     },
-    loadWorkspace() {
-      if (action === "events.read") return load(createSupabaseEventsReadModel(service));
+    loadWorkspace(options?: { eventsRange?: import("@/features/events/model/event-state").EventRange | null }) {
+      if (action === "events.read") return load(createSupabaseEventsReadModel(service, options?.eventsRange));
       if (action === "tools.read") return load(createSupabaseToolsReadModel(service));
       if (action === "strategic.read") return load(createSupabaseStrategicPlanningReadModel(service));
       if (action === "team.read") return load(createSupabaseTeamReadModel(service));
@@ -84,7 +84,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
     async readGitHubConnection() {
       if (action !== "connection.github.read" || !profile) throw new Error("Keine Berechtigung für diese Aktion.");
       const user = await getGitHubUserConnectionStatus(service, profile);
-      const waitingCommentCount = await countWaitingGitHubCommentsForAuthor(service, profile.id).catch(() => 0);
+      const waitingCommentCount = await countWaitingGitHubCommentsForAuthor(service, profile.id).catch(() => null);
       await context.current(); context.assertCurrent();
       return { user, waitingCommentCount };
     },
@@ -123,25 +123,31 @@ export async function authorizeResource(input: ResourceCredentialInput) {
     },
     async readTool() {
       if (action !== "tools.update") return denied();
-      const result = await service.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order").eq("id", target).single<DbFmdTool>();
+      const result = await service.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order,updated_at").eq("id", target).single<DbFmdTool>();
       if (result.data) observedTool = structuredClone(result.data);
       return result;
     },
-    async saveTool(supplied: ToolValues, suppliedMetadata: ResourceAuditMetadata) {
+    async saveTool(supplied: ToolValues, suppliedMetadata: ResourceAuditMetadata, expectedUpdatedAt?: string) {
       const fields = ["name", "category", "kind", "description", "url", "owner", "status", "is_curated", "preview_image_url", "preview_image_source"] as const;
       const values = structuredClone(Object.fromEntries(fields.map(field => [field, supplied[field]]))) as ToolValues;
       const metadata = { request_ip: suppliedMetadata.request_ip || null, user_agent: suppliedMetadata.user_agent || null };
       if ((action !== "tools.create" && action !== "tools.update") || (action === "tools.update" && !observedTool)) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
       const operation = action === "tools.create" ? "create" : "update";
-      const select = "id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order";
+      const select = "id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order,updated_at";
       return persistTool(values, operation, {
         countCurated: () => {
           const query = service.from("fmd_tools").select("id", { count: "exact", head: true }).eq("is_curated", true).not("url", "is", null);
           return operation === "update" ? query.neq("id", target) : query;
         },
         maximumOrder: () => service.from("fmd_tools").select("sort_order").order("sort_order", { ascending: false }).limit(1).maybeSingle(),
-        save: row => operation === "create" ? service.from("fmd_tools").insert(row).select(select).single<DbFmdTool>()
-          : service.from("fmd_tools").update(row).eq("id", target).select(select).single<DbFmdTool>(),
+        async save(row) {
+          if (operation === "create") return service.from("fmd_tools").insert(row).select(select).single<DbFmdTool>();
+          let query = service.from("fmd_tools").update(row).eq("id", target);
+          if (expectedUpdatedAt !== undefined) query = query.eq("updated_at", expectedUpdatedAt);
+          const result = await query.select(select).maybeSingle<DbFmdTool>();
+          if (!result.error && !result.data && expectedUpdatedAt !== undefined) return { data: null, error: { code: "tool_version_conflict", message: "Der Link wurde zwischenzeitlich geändert. Bitte den aktuellen Aktuellen Stand prüfen." } };
+          return result;
+        },
         audit: (row, saved) => followup.from("audit_log").insert({ actor_profile_id: profile?.id || null, action: operation === "create" ? "fmd_tool.create" : "fmd_tool.update",
           entity_type: "fmd_tool", entity_id: saved.id, ...(operation === "update" ? { before_data: observedTool } : {}), after_data: row, ...metadata }),
       });
@@ -152,7 +158,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       if (result.data) observedEvent = structuredClone(result.data);
       return result;
     },
-    async saveEvent(supplied: EventWrite, suppliedMetadata: ResourceAuditMetadata) {
+    async saveEvent(supplied: EventWrite, suppliedMetadata: ResourceAuditMetadata, expectedUpdatedAt?: string) {
       const row = structuredClone(Object.fromEntries(eventFields.map(field => [field, supplied[field]]))) as EventWrite;
       const metadata = { request_ip: suppliedMetadata.request_ip || null, user_agent: suppliedMetadata.user_agent || null };
       if ((action !== "events.create" && action !== "events.update") || !profile || (action === "events.update" && !observedEvent)) return denied();
@@ -168,12 +174,20 @@ export async function authorizeResource(input: ResourceCredentialInput) {
         catch { return denied(); }
       }
       const values = action === "events.create" ? { ...row, created_by: profile.id } : row;
-      const result = action === "events.create"
-        ? await write.from("founder_events").insert(values).select(founderEventSelect).single<DbFounderEvent>()
-        : await write.from("founder_events").update(values).eq("id", Number(target)).select(founderEventSelect).single<DbFounderEvent>();
+      let result;
+      if (action === "events.create") result = await write.from("founder_events").insert(values).select(founderEventSelect).single<DbFounderEvent>();
+      else {
+        let query = write.from("founder_events").update(values).eq("id", Number(target));
+        if (expectedUpdatedAt !== undefined) query = query.eq("updated_at", expectedUpdatedAt);
+        result = await query.select(founderEventSelect).maybeSingle<DbFounderEvent>();
+        if (!result.error && !result.data) return { data: null, error: { code: "event_version_conflict", message: "Event wurde zwischenzeitlich geändert. Bitte den aktuellen Stand prüfen." } };
+      }
       if (!result.error && result.data) {
-        await followup.from("audit_log").insert({ actor_profile_id: profile.id, action: action === "events.create" ? "founder_event.create" : "founder_event.update",
-          entity_type: "founder_event", entity_id: String(result.data.id), ...(action === "events.update" ? { before_data: observedEvent } : {}), after_data: values, ...metadata });
+        try {
+          const audit = await followup.from("audit_log").insert({ actor_profile_id: profile.id, action: action === "events.create" ? "founder_event.create" : "founder_event.update",
+            entity_type: "founder_event", entity_id: String(result.data.id), ...(action === "events.update" ? { before_data: observedEvent } : {}), after_data: values, ...metadata });
+          if (audit.error) return { ...result, auditUnconfirmed: true };
+        } catch { return { ...result, auditUnconfirmed: true }; }
       }
       return result;
     },

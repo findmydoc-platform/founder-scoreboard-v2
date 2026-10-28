@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
-function createSupabaseFixture(failedTable = "") {
+function createSupabaseFixture(failedTable = "", counts = {}) {
   const calls = [];
   const data = {
     projects: { id: "findmydoc-founder-execution", name: "findmydoc Planning", range_label: "", review_objection_window_hours: 48 },
@@ -29,7 +29,7 @@ function createSupabaseFixture(failedTable = "") {
       const call = { table, eq: [], orders: [], limit: null, select: "" };
       calls.push(call);
       const query = {
-        select(columns) { call.select = columns; return query; },
+        select(columns, options) { call.count = options?.count; call.select = columns; return query; },
         eq(field, value) { call.eq.push([field, value]); return query; },
         single() { return query; },
         order(field, options) { call.orders.push([field, options]); return query; },
@@ -37,7 +37,7 @@ function createSupabaseFixture(failedTable = "") {
         then(resolve, reject) {
           const result = table === failedTable
             ? { data: null, error: { message: "fixture failure" } }
-            : { data: data[table] ?? [], error: null };
+            : { data: data[table] ?? [], count: Object.hasOwn(counts, table) ? counts[table] : Array.isArray(data[table]) ? data[table].length : null, error: null };
           return Promise.resolve(result).then(resolve, reject);
         },
       };
@@ -85,7 +85,7 @@ test("planning workspace reader loads only the focused canonical model", async (
   assert.deepEqual(result.model.relationships.map(({ id }) => id), [1]);
   assert.equal(result.model.people[0].githubLogin, "person-login");
   assert.equal(result.model.people[0].avatarUrl, "https://lh3.googleusercontent.com/a/profile");
-  assert.deepEqual(Object.keys(result.model).sort(), ["items", "people", "preferences", "project", "relationships", "revision", "sprints"]);
+  assert.deepEqual(Object.keys(result.model).sort(), ["coverage", "items", "people", "preferences", "project", "relationships", "revision", "sprints"]);
   assert.deepEqual(supabase.calls.map(({ table }) => table), [
     "projects",
     "profiles",
@@ -363,4 +363,15 @@ test.each(["PGRST202", "42883"])("early avatars retain the existing batch fallba
   const value = await result;
   assert.equal(value.status, "ready");
   assert.deepEqual(value.model.people.map(({ id }) => id), ["person", "other"]);
+});
+
+test("Planning/Projects readers report capped auxiliary membership independently from exact item coverage", async () => {
+ const fixture=createSupabaseFixture("",{active_tasks:4,profiles:2,planning_item_strategy:1,planning_item_raci_assignments:1,task_links:1,sprints:2,task_relationship_edges:3,profile_ui_preferences:2});
+ const result=await loadPlanningWorkspaceModel(fixture,{authorized:true,actorProfileId:"person"});
+ assert.equal(result.status,"ready");assert.deepEqual(result.model.coverage,{items:"partial",people:"partial",strategies:"partial",raci:"partial",links:"partial",sprints:"partial",relationships:"partial",preferences:"partial"});
+ for(const table of ["active_tasks","profiles","planning_item_strategy","planning_item_raci_assignments","task_links","sprints","task_relationship_edges","profile_ui_preferences"]){assert.equal(fixture.calls.find(call=>call.table===table).count,"exact");}
+});
+test("exact equal counts and complete empty auxiliary scopes are authoritative", async () => {
+ const fixture=createSupabaseFixture();const result=await loadPlanningWorkspaceModel(fixture,{authorized:true,actorProfileId:"person"});
+ assert.equal(result.status,"ready");assert.deepEqual(result.model.coverage,{items:"complete",people:"complete",strategies:"complete",raci:"complete",links:"complete",sprints:"complete",relationships:"complete",preferences:"complete"});
 });

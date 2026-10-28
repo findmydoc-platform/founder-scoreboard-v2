@@ -1,0 +1,58 @@
+import { useState, useSyncExternalStore } from "react";
+import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import { expect, fn, userEvent, within } from "storybook/test";
+import { createBrowserPlanningState } from "@/features/planning/model/internal/browser-planning-state";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
+import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
+import { TaskDetailWorkflowStrips } from "@/features/tasks/molecules/task-detail-workflow-strips";
+import { useReviewCommands } from "../hooks/use-review-commands";
+import { TaskReviewOperationNotice } from "../molecules/task-review-operation-notice";
+import { TaskReviewRail } from "./task-review-rail";
+import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
+
+const original=taskDetailStoryTask({id:"review-operation-story",title:"Nachweise für Abnahme",status:"Review",reviewStatus:"requested",reviewOwnerProfileId:"reviewer",reviewRequestedAt:"2026-10-28T10:00:00Z",updatedAt:"2026-10-28T10:00:00Z",approvalStatus:"approved",approvalRevision:3,githubIssueNumber:17,githubIssueUrl:"https://github.com/example/project/issues/17"});
+const profile={id:"reviewer",name:"Review Owner",platformRole:"ceo" as const,orgRole:"CEO",githubLogin:"",weeklyCapacity:40};
+function Harness({mode="unknown"}:{mode?:"unknown"|"basis"|"sync"|"approval"|"denied"}) {
+ const [writes,setWrites]=useState(0),[reads,setReads]=useState(0),[sent,setSent]=useState(""),[error,setError]=useState("");
+ const [bundle]=useState(()=>{const created=createBrowserPlanningState({initialUserId:"user",initialWorkspace:"planning",initialCurrentProfile:profile,initialHeaderData:emptyPlanningHeaderData,initialData:{...emptyPlanningShellState,profiles:[profile],tasks:[mode==="approval"?{...original,status:"Offen",reviewStatus:"not_requested",approvalStatus:"proposed"}:original]}});
+ created.runtime.session = {userId:created.runtime.userId,revision:"story-session",expiresAt:4102444800,user:{id:created.runtime.userId}}; created.runtime.apiClient={...created.runtime.apiClient,requestJson:async <T,>(path:Parameters<typeof created.runtime.apiClient.requestJson>[0],options:Parameters<typeof created.runtime.apiClient.requestJson>[1])=>{
+  let body:unknown;
+  if(String(path).endsWith("detail-data")) {setReads(n=>n+1);body={taskDetail:{revision:"read",project:emptyPlanningShellState.project,item:{...original,title:"Nachweise nach Aktualisierung",updatedAt:"2026-10-28T10:02:00Z",approvalRevision:4,...(mode==="approval"?{status:"Review",reviewStatus:"requested",approvalStatus:"approved"}:{})},ancestors:[],children:[],relatedItems:[],people:[profile],sprints:[],discussion:{comments:[],externalComments:[]},blockers:[],relationships:[],activity:[],reviews:[]}};}
+  else {setWrites(n=>n+1);setSent(JSON.stringify(options?.json));if(mode==="unknown")throw new Error("Antwort verloren");if(mode==="denied")return {response:new Response(null,{status:403}),body:{error:"Nur Review Owner, CEO oder Deputy können diese Review finalisieren."} as T};body={task:{id:original.id,status:"Erledigt",reviewStatus:"accepted",scoreFinal:true,updatedAt:"2026-10-28T10:03:00Z"},review:{id:7,taskId:original.id,sprintId:"",reviewerProfileId:profile.id,decision:"accepted",points:10,comment:"",checklist:{},createdAt:"2026-10-28T10:03:00Z"}};}
+  return {response:new Response(null,{status:200}),body:body as T};
+ }};return created;});
+ const data=useSyncExternalStore(bundle.owner.planning.subscribe,bundle.owner.internal.getSnapshot,bundle.owner.internal.getSnapshot);
+ const commands=useReviewCommands({planningState:bundle.owner.planning,githubInstallationAvailable:true,setSaveError:setError,startTransition:callback=>{void callback();},syncTaskToGitHub:()=>{if(mode==="sync")throw new Error("GitHub derzeit nicht erreichbar");}} as PlanningCommandContext & {syncTaskToGitHub:()=>void});
+ const task=data.tasks[0];
+ return <main className="mx-auto max-w-3xl bg-white p-4">
+  <output aria-label="Decision writes">{writes}</output><output aria-label="Decision checks">{reads}</output><output aria-label="Submitted basis">{sent}</output><output aria-label="Current review">{task.reviewStatus}</output>
+  {error?<p role="alert">{error}</p>:null}
+  <button className="min-h-11 p-2" onClick={()=>{void bundle.owner.planning.loadTaskDetail(original.id);}}>Hintergrund aktualisieren</button>
+  {mode==="approval"?<TaskDetailWorkflowStrips task={task} teamProfiles={[profile]} canApprove canReject={false} canReturnToDraft canManageReviewOwner={false} pending={false} onUpdate={()=>{}} onDecideApproval={(action,note,basis)=>{if(action!=="reject")void bundle.owner.planning.decideTaskApproval(basis||task,action,note);}}/>:task.reviewStatus==="requested"?<TaskReviewRail key={mode} task={task} currentProfileId={profile.id} profiles={[profile]} canReview canWithdraw canManageReviewOwner={false} pending={false} onReview={commands.reviewTask} onWithdraw={commands.withdrawReviewTask} onReviewOwnerChange={()=>{}} onJumpToSection={()=>{}}/>:null}
+  {bundle.owner.planning.taskReviewOperations().map(operation=><TaskReviewOperationNotice profiles={data.profiles} key={operation.id} operation={operation} onCheck={id=>{void bundle.owner.planning.checkTaskReview(id);}}/>)}
+ </main>;
+}
+const meta={component:Harness,title:"Features/Reviews/Organisms/TaskReviewOperations",parameters:{layout:"fullscreen"},beforeEach:()=>{window.sessionStorage.removeItem(`founderops:task-review-draft:v2:${original.id}:${encodeURIComponent(original.reviewRequestedAt||"unknown")}:${profile.id}`);}} satisfies Meta<typeof Harness>;
+export default meta;
+type Story=StoryObj<typeof meta>;
+async function completeReview(canvas:ReturnType<typeof within>){
+ for(const name of ["Abnahmekriterien erfüllt","Nachweis vollständig","Ergebnis klar nachvollziehbar","Abhängigkeiten geklärt"])await userEvent.click(canvas.getByRole("checkbox",{name}));
+ await userEvent.click(canvas.getByRole("button",{name:"Akzeptiert"}));
+}
+export const UnknownDecisionChecksWithoutReplay:Story={args:{mode:"unknown"},play:async({canvasElement})=>{const canvas=within(canvasElement);await completeReview(canvas);await userEvent.click(canvas.getByRole("button",{name:"Review abschließen"}));await expect(await canvas.findByText("Review-Entscheidung: Ergebnis unklar")).toBeVisible();await userEvent.click(canvas.getByText("Eingaben anzeigen"));await expect(canvas.getByText("Akzeptiert",{selector:"dd"})).toBeVisible();await userEvent.click(canvas.getByRole("button",{name:"Aktuellen Stand prüfen"}));await expect(await canvas.findByText(/Aufgabe geladen/)).toBeVisible();await expect(canvas.getByLabelText("Decision writes")).toHaveTextContent("1");await expect(canvas.getByLabelText("Decision checks")).toHaveTextContent("1");}};
+export const BackgroundReadDoesNotRebaseDraft:Story={args:{mode:"basis"},play:async({canvasElement})=>{const canvas=within(canvasElement);await completeReview(canvas);await userEvent.type(canvas.getByRole("textbox",{name:"Review-Kommentar"}),"Lokale Begründung");await userEvent.click(canvas.getByRole("button",{name:"Hintergrund aktualisieren"}));await expect(await canvas.findByRole("button",{name:"Aktuellen Stand für Review übernehmen"})).toBeVisible();await userEvent.click(canvas.getByRole("button",{name:"Review abschließen"}));await expect(canvas.getByLabelText("Decision writes")).toHaveTextContent("0");await expect(canvas.getByRole("textbox",{name:"Review-Kommentar"})).toHaveValue("Lokale Begründung");await userEvent.click(canvas.getByRole("button",{name:"Aktuellen Stand für Review übernehmen"}));await userEvent.click(canvas.getByRole("button",{name:"Review abschließen"}));await expect(canvas.getByLabelText("Current review")).toHaveTextContent("accepted");await expect(canvas.getByLabelText("Submitted basis")).toHaveTextContent('"expectedUpdatedAt":"2026-10-28T10:02:00Z"');}};
+export const ConfirmedReviewSurvivesSyncFailure:Story={args:{mode:"sync"},play:async({canvasElement})=>{const canvas=within(canvasElement);await completeReview(canvas);await userEvent.click(canvas.getByRole("button",{name:"Review abschließen"}));await expect(await canvas.findByText("GitHub derzeit nicht erreichbar")).toBeVisible();await expect(canvas.getByLabelText("Current review")).toHaveTextContent("accepted");await expect(canvas.getByLabelText("Decision writes")).toHaveTextContent("1");}};
+export const PolicyDenialKeepsDraft:Story={args:{mode:"denied"},play:async({canvasElement})=>{const canvas=within(canvasElement);await completeReview(canvas);await userEvent.type(canvas.getByRole("textbox",{name:"Review-Kommentar"}),"Eingabe bleibt");await userEvent.click(canvas.getByRole("button",{name:"Review abschließen"}));await expect(await canvas.findByText("Review-Entscheidung: nicht gespeichert")).toBeVisible();await expect(canvas.getByRole("textbox",{name:"Review-Kommentar"})).toHaveValue("Eingabe bleibt");await expect(canvas.getByLabelText("Decision checks")).toHaveTextContent("0");}};
+export const ApprovalDialogRetainsOriginalRevision:Story={args:{mode:"approval"},play:async({canvasElement})=>{const canvas=within(canvasElement);await userEvent.click(canvas.getByRole("button",{name:"Zur Überarbeitung"}));const dialog=within(await within(document.body).findByRole("dialog"));await userEvent.type(dialog.getByRole("textbox"),"Freigabegrund bleibt an Revision 3 gebunden");await userEvent.click(canvas.getByRole("button",{name:"Hintergrund aktualisieren"}));await userEvent.click(dialog.getByRole("button",{name:"Zurückgeben"}));await expect(await canvas.findByText("Freigabe: Stand wurde geändert")).toBeVisible();await expect(canvas.getByLabelText("Decision writes")).toHaveTextContent("0");await userEvent.click(canvas.getByText("Eingaben anzeigen"));await expect(canvas.getByText("Freigabegrund bleibt an Revision 3 gebunden",{selector:"dd"})).toBeVisible();}};
+export const UnknownRequestShowsReviewerName: Story = {
+ render: () => <TaskReviewOperationNotice profiles={[profile]} operation={{ id:"request",taskId:original.id,kind:"request",phase:"unconfirmed",submitted:{task:original,command:{kind:"request",input:{reviewOwnerProfileId:profile.id,evidenceLinks:["https://example.com/result"]}}},error:"",checking:false,readStatus:"current",serverTask:original }} onCheck={fn()} />,
+ play: async ({canvasElement}) => {
+  const canvas=within(canvasElement);
+  await expect(canvas.getByText(/Ob die Review-Anfrage gespeichert wurde, ist noch unklar/)).toBeVisible();
+  await userEvent.click(canvas.getByText("Eingaben anzeigen"));
+  await expect(canvas.getByText(profile.name,{selector:"dd"})).toBeVisible();
+  await expect(canvas.queryByText(profile.id,{exact:true})).not.toBeInTheDocument();
+  await expect(canvas.queryByText(/Freigaberevision/)).not.toBeInTheDocument();
+ },
+};

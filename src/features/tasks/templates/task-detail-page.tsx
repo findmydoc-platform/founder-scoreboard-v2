@@ -1,5 +1,10 @@
 ﻿"use client";
 
+import { TaskGitHubSyncNotice } from "@/features/tasks/molecules/task-github-sync-notice";
+import { hasGitHubIssue } from "@/lib/platform";
+
+import { TaskReviewOperationNotice } from "@/features/reviews/molecules/task-review-operation-notice";
+
 import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -116,6 +121,8 @@ export function TaskDetailPage({
       />
 
       <div className="mx-auto max-w-[1392px] px-6 py-6 sm:px-8">
+        {controller.planningState.taskGitHubSync(task.id)?<TaskGitHubSyncNotice view={controller.planningState.taskGitHubSync(task.id)!} onCheck={()=>{void controller.planningState.checkTaskGitHubSync(task.id);}} onRetry={()=>controller.syncTaskToGitHub(task,{createIfMissing:!hasGitHubIssue(task)})}/>:null}
+        {controller.planningState.taskReviewOperations(task.id).map(operation=><TaskReviewOperationNotice profiles={controller.data.profiles} key={operation.id} operation={operation} onCheck={id=>{void controller.planningState.checkTaskReview(id);}} />)}
         <TaskDetailSurface
           surface="page"
           task={task}
@@ -141,7 +148,22 @@ export function TaskDetailPage({
           commentImportNotice={controller.commentImportNotice}
           commentImportPending={controller.commentImportPendingTaskIds.has(task.id)}
           githubInstallationAvailable={controller.githubInstallationAvailable}
-          onUpdate={(patch) => controller.updateTask(task, patch)}
+          taskSaves={controller.planningState.taskSaves(task.id)}
+          relationshipChanges={controller.planningState.taskRelationshipChanges(task.id)}
+          onCheckRelationshipChange={changeId => { void controller.planningState.checkTaskRelationshipChange(changeId); }}
+          attachmentUploads={controller.planningState.taskAttachmentUploads(task.id)}
+          onCheckAttachmentUpload={id => { void controller.planningState.checkTaskAttachmentUpload(id); }}
+          githubImport={controller.planningState.taskGitHubImport(task.id)}
+          externalCommentCompleteness={controller.planningState.taskGitHubComments(task.id).completeness}
+          onCheckGitHubImport={() => { void controller.planningState.checkTaskGitHubImport(task.id); }}
+          commentCreations={controller.planningState.taskCommentCreations(task.id)}
+          commentCompleteness={controller.planningState.taskComments(task.id).completeness}
+          onCheckCommentCreation={id => { void controller.planningState.checkTaskCommentCreation(id); }}
+          blockerReports={controller.planningState.taskBlockerReports(task.id)}
+          onCheckBlockerReport={id => { void controller.planningState.checkTaskBlockerReport(id); }}
+          onCheckTaskSave={() => controller.planningState.checkTaskSave(task.id)}
+          onBeginEdit={() => controller.beginTaskEdit(task)}
+          onUpdate={(patch, options) => controller.updateTask(task, patch, options)}
           onAddComment={(comment) => controller.addTaskComment(task, comment)}
           onUploadAttachment={(file) => controller.uploadTaskAttachment(task, file)}
           onImportGitHubComments={() => controller.importGitHubComments(task)}
@@ -165,9 +187,9 @@ export function TaskDetailPage({
           onWithdraw={(reason) => {
             if (controller.withdrawTask(task, reason)) router.replace("/planning");
           }}
-          onAddRelation={(payload) => controller.addTaskRelation(task, payload)}
+          onAddRelation={(payload, basis) => controller.addTaskRelation(basis || task, payload)}
           onRemoveRelation={(relation) => controller.removeTaskRelation(task, relation)}
-          onDecideApproval={(action, note) => controller.decideTaskApproval(task, action, note)}
+          onDecideApproval={(action, note, basis) => controller.decideTaskApproval(basis || task, action, note)}
         />
       </div>
 
@@ -187,6 +209,8 @@ export function TaskDetailPage({
         onClose={() => controller.setGithubSyncQueueOpen(false)}
         onOpenTask={controller.openTaskPanel}
         onReconnect={() => controller.signIn({ githubReconnect: true, clearReconnectGuard: true })}
+        syncOperations={controller.planningState.taskGitHubSyncs()}
+        onCheckSync={id=>{void controller.planningState.checkTaskGitHubSync(id);}}
         onSyncLinkedGitHubTasks={controller.syncLinkedGitHubTasks}
         onSyncTaskToGitHub={controller.syncTaskToGitHub}
       />

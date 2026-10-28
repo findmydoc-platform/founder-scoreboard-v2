@@ -8,11 +8,12 @@ import { PersonAccessDetailPanel } from "@/features/administration/molecules/per
 import { UiTextInput } from "@/shared/atoms/ui-primitives";
 import { DataEmptyRow, DataHeaderCell, DataTableFrame, DataTableHead } from "@/shared/molecules/data-surface";
 
-export function PeopleAccessAdministration({ busy, model, showTechnicalIdentity, onSavePerson }: {
+export function PeopleAccessAdministration({ busy, model, showTechnicalIdentity, onSavePerson, planningState }: {
   busy: boolean;
   model: AdministrationWorkspaceModel;
   showTechnicalIdentity: boolean;
-  onSavePerson: (profileId: string, patch: PersonAdministrationPatch) => Promise<void>;
+  planningState?: import("@/features/planning/model/planning-state").PlanningState;
+  onSavePerson?: (profileId: string, patch: PersonAdministrationPatch) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(model.people[0]?.id || "");
@@ -35,7 +36,7 @@ export function PeopleAccessAdministration({ busy, model, showTechnicalIdentity,
         <DataTableHead><tr><DataHeaderCell>Name</DataHeaderCell><DataHeaderCell>Rolle</DataHeaderCell>{showTechnicalIdentity && <DataHeaderCell>GitHub</DataHeaderCell>}{showTechnicalIdentity && <DataHeaderCell>Google Chat</DataHeaderCell>}<DataHeaderCell>Admin-Zugang</DataHeaderCell></tr></DataTableHead>
         <tbody>{people.length ? people.map((person) => <AdministratorAccessRow key={person.id} person={person} selected={person.id === selectedId} showTechnicalIdentity={showTechnicalIdentity} onSelect={() => setSelectedId(person.id)} />) : <DataEmptyRow colSpan={showTechnicalIdentity ? 5 : 3}>Keine passende Person gefunden.</DataEmptyRow>}</tbody>
       </DataTableFrame>
-      {selected && <PersonAccessDetailPanel key={`${selected.id}:${selected.githubLogin}:${selected.googleChatUserId}:${selected.googleChatDmSpace}:${selected.notificationsEnabled}:${selected.administratorAccess.eligible}`} busy={busy} person={selected} showTechnicalIdentity={showTechnicalIdentity} onClose={() => setSelectedId("")} onSave={(patch) => onSavePerson(selected.id, patch)} />}
+      {selected && <PersonAccessDetailPanel key={`${selected.id}:${showTechnicalIdentity}`} busy={busy} person={selected} showTechnicalIdentity={showTechnicalIdentity} onClose={() => setSelectedId("")} planningState={planningState} onSave={(patch) => onSavePerson?.(selected.id, patch) || Promise.resolve()} />}
     </div>
   );
 }

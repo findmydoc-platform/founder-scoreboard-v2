@@ -26,6 +26,8 @@ export function createSupabaseNotificationsReadModel(supabase: SupabaseClient): 
         status: "ready",
         model: {
           revision: events.reduce((latest, event) => event.createdAt > latest ? event.createdAt : latest, ""),
+          coverage: { events: (eventResult.data?.length || 0) < 500 ? "complete" : "partial", deliveries: !operationalLead ? "forbidden" : (deliveryResult.data?.length || 0) < 100 ? "complete" : "partial" },
+          readCoverage: state.readCoverage,
           people: state.people,
           items: state.items,
           events,

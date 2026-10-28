@@ -10,14 +10,14 @@ import type {
 import type { ReviewEvidenceSubmission } from "@/features/reviews/model/review-evidence";
 
 export function decideTaskApprovalRequest(apiClient: BrowserApiClient, taskId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {
-  return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${taskId}/approval`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; task?: Task }>(`/api/tasks/${taskId}/approval`, {
     method: "POST",
     json: { action, expectedRevision, note },
   });
 }
 
 export function updateTaskRequest(apiClient: BrowserApiClient, taskId: string, patch: unknown) {
-  return apiClient.requestJson<{ error?: string; activities?: TaskActivity[]; task?: Partial<Task> }>(`/api/tasks/${taskId}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; activities?: TaskActivity[]; task?: Partial<Task> }>(`/api/tasks/${taskId}`, {
     method: "PATCH",
     json: patch,
   });
@@ -40,13 +40,14 @@ export type BacklogMoveUpdate = {
 };
 
 export function moveBacklogTaskRequest(apiClient: BrowserApiClient, move: BacklogMoveRequest) {
-  return apiClient.requestJson<{ error?: string; updates?: BacklogMoveUpdate[] }>("/api/tasks/backlog-order", {
+  return apiClient.requestJson<{ error?: string; code?: string; completeness?: "complete" | "partial"; updates?: BacklogMoveUpdate[] }>("/api/tasks/backlog-order", {
     method: "PATCH",
     json: move,
   });
 }
 
 export type BulkSprintAssignmentRequest = {
+  expectedSprintUpdatedAt?: string;
   assignments: Array<{ taskId: string; expectedUpdatedAt: string }>;
   sprintId: string;
 };
@@ -59,21 +60,21 @@ export type BulkSprintAssignmentUpdate = {
 };
 
 export function assignBacklogTasksToSprintRequest(apiClient: BrowserApiClient, payload: BulkSprintAssignmentRequest) {
-  return apiClient.requestJson<{ error?: string; updates?: BulkSprintAssignmentUpdate[] }>("/api/tasks/bulk-sprint-assignment", {
+  return apiClient.requestJson<{ error?: string; code?: string; updates?: BulkSprintAssignmentUpdate[] }>("/api/tasks/bulk-sprint-assignment", {
     method: "PATCH",
     json: payload,
   });
 }
 
 export function withdrawTaskRequest(apiClient: BrowserApiClient, taskId: string, expectedRevision: number, reason: string) {
-  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/withdraw`, {
+  return apiClient.requestJson<{ error?: string; code?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/withdraw`, {
     method: "POST",
     json: { expectedRevision, reason },
   });
 }
 
 export function restoreTaskRequest(apiClient: BrowserApiClient, taskId: string, expectedTrashRevision: number) {
-  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/restore`, {
+  return apiClient.requestJson<{ error?: string; code?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/restore`, {
     method: "POST",
     json: { expectedTrashRevision },
   });
@@ -90,6 +91,7 @@ export function requestTaskDetailData(apiClient: BrowserApiClient, taskId: strin
 export function createTaskRequest(apiClient: BrowserApiClient, draft: unknown) {
   return apiClient.requestJson<{
     error?: string;
+    code?: string;
     task?: Task;
     relation?: TaskRelation | null;
     relatedTask?: (Partial<Task> & { id: string }) | null;
@@ -103,9 +105,11 @@ export function syncTaskToGitHubRequest(
   apiClient: BrowserApiClient,
   taskId: string,
   command: TaskGitHubSyncCommand,
+  options: { expectedSession?: Pick<import("@/lib/credentials/browser").BrowserSessionSnapshot,"userId"|"revision"> } = {},
 ) {
   return apiClient.requestJson<TaskGitHubProjectionResult>(`/api/tasks/${taskId}/sync-github`, {
     method: "POST",
+    ...options,
     json: command,
   });
 }
@@ -113,6 +117,7 @@ export function syncTaskToGitHubRequest(
 export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: string, comment: string) {
   return apiClient.requestJson<{
     error?: string;
+    code?: string;
     notice?: { code: string; level: "info"; message: string } | null;
     comment?: PlanningShellState["taskComments"][number];
   }>(`/api/tasks/${taskId}/comments`, {
@@ -123,74 +128,78 @@ export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: st
 
 const pendingAttachmentOperations = new Map<string, string>();
 
-export async function uploadTaskAttachmentRequest(apiClient: BrowserApiClient, taskId: string, file: File) {
+export type TaskAttachmentAuthority = { userId: string; sessionRevision: string; isCurrent(): boolean };
+export async function uploadTaskAttachmentRequest(apiClient: BrowserApiClient, taskId: string, file: File, authority?: TaskAttachmentAuthority) {
+  const requireCurrent = () => { if (authority && !authority.isCurrent()) throw Object.assign(new Error("Die Sitzung wurde ersetzt."), { code: "session_superseded" }); };
+  requireCurrent();
   const payload = new Uint8Array(await file.arrayBuffer());
-  const identity = new TextEncoder().encode(`${taskId}\0${file.name}\0${file.type}\0`);
+  const identity = new TextEncoder().encode(`${authority?.userId || ""}\0${authority?.sessionRevision || ""}\0${taskId}\0${file.name}\0${file.type}\0`);
   const bytes = new Uint8Array(identity.length + payload.length);
   bytes.set(identity);
   bytes.set(payload, identity.length);
   const fingerprint = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
     .map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  const key = `founderops-attachment-${fingerprint}`;
-  let operation = pendingAttachmentOperations.get(key);
+  requireCurrent();
+  const key = authority ? `founderops-attachment-${fingerprint}` : "";
+  let operation = key ? pendingAttachmentOperations.get(key) : undefined;
   try {
-    operation ||= sessionStorage.getItem(key) || undefined;
+    if (key) operation ||= sessionStorage.getItem(key) || undefined;
   } catch { /* Retain retries in memory when browser storage is unavailable. */ }
   operation ||= crypto.randomUUID();
-  pendingAttachmentOperations.set(key, operation);
+  if (key) pendingAttachmentOperations.set(key, operation);
   try {
-    sessionStorage.setItem(key, operation);
+    if (key) sessionStorage.setItem(key, operation);
   } catch { /* The in-memory operation remains available. */ }
   const formData = new FormData();
   formData.append("file", file);
-  const result = await apiClient.requestForm<{ error?: string; markdown?: string; activity?: TaskActivity }>(
-    `/api/tasks/${taskId}/attachments`, formData, { headers: { "Idempotency-Key": operation } },
+  const result = await apiClient.requestForm<Partial<import("./task-attachment-upload").TaskAttachmentReceipt> & { error?: string; code?: string }>(
+    `/api/tasks/${taskId}/attachments`, formData, { headers: { "Idempotency-Key": operation }, ...(authority ? { expectedSession: { userId: authority.userId, revision: authority.sessionRevision } } : {}) },
   );
   if (result.response.ok && result.body?.markdown) {
-    pendingAttachmentOperations.delete(key);
+    if (key) pendingAttachmentOperations.delete(key);
     try {
-      sessionStorage.removeItem(key);
+      if (key) sessionStorage.removeItem(key);
     } catch { /* The completed operation is already removed from memory. */ }
   }
   return result;
 }
 
 export function importGitHubCommentsRequest(apiClient: BrowserApiClient, taskId: string) {
-  return apiClient.requestJson<{ error?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[] }>(`/api/tasks/${taskId}/github-comments`, {
+  return apiClient.requestJson<{ error?: string; code?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[]; commentsCoverage?: "complete" | "partial" }>(`/api/tasks/${taskId}/github-comments`, {
     method: "POST",
   });
 }
 
 export function addTaskRelationshipRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; relation?: TaskRelation }>(`/api/tasks/${taskId}/relationships`, {
+  return apiClient.requestJson<{ error?: string; code?: string; relation?: TaskRelation }>(`/api/tasks/${taskId}/relationships`, {
     method: "POST",
     json: payload,
   });
 }
 
-export function removeTaskRelationshipRequest(apiClient: BrowserApiClient, taskId: string, relationId: number) {
-  return apiClient.requestJson<{ error?: string }>(`/api/tasks/${taskId}/relationships`, {
+export function removeTaskRelationshipRequest(apiClient: BrowserApiClient, taskId: string, relationId: number, expectedUpdatedAt?: string) {
+  return apiClient.requestJson<{ error?: string; code?: string; relationId?: number }>(`/api/tasks/${taskId}/relationships`, {
     method: "DELETE",
-    json: { relationId },
+    json: { relationId, ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}) },
   });
 }
 
 export function reportTaskBlockerRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; blocker?: PlanningShellState["taskBlockers"][number] }>(`/api/tasks/${taskId}/blockers`, {
+  return apiClient.requestJson<{ error?: string; code?: string; blocker?: PlanningShellState["taskBlockers"][number] }>(`/api/tasks/${taskId}/blockers`, {
     method: "POST",
     json: payload,
   });
 }
 
 export function reviewTaskRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; review?: TaskReview; task?: Partial<Task> }>(`/api/tasks/${taskId}/review`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; activities?: TaskActivity[]; review?: TaskReview; task?: Partial<Task> }>(`/api/tasks/${taskId}/review`, {
     method: "POST",
     json: payload,
   });
 }
 
 export function withdrawTaskReviewRequest(apiClient: BrowserApiClient, taskId: string, reason: string, expectedUpdatedAt: string) {
-  return apiClient.requestJson<{ error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/withdraw`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; activities?: TaskActivity[]; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/withdraw`, {
     method: "POST",
     json: { reason, expectedUpdatedAt },
   });
@@ -202,7 +211,7 @@ export function reopenTaskReviewRequest(
   expectedUpdatedAt: string,
   evidence: ReviewEvidenceSubmission = {},
 ) {
-  return apiClient.requestJson<{ error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/reopen`, {
+  return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; activities?: TaskActivity[]; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/reopen`, {
     method: "POST",
     json: {
       expectedUpdatedAt,

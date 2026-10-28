@@ -72,7 +72,7 @@ export async function PATCH(request: NextRequest) {
   });
 
   if (error) {
-    if (error.code === "P0001") return apiError("Die GitHub-Project-Einstellung wurde parallel geändert. Bitte neu laden.", 409);
+    if (error.code === "P0001") return NextResponse.json({ error: "Die GitHub-Project-Einstellung wurde parallel geändert. Bitte neu laden.", code: "administration_project_conflict" }, { status: 409 });
     if (error.code === "P0002") return apiError("FounderOps-Projekt wurde nicht gefunden.", 404);
     if (error.code === "42501") {
       return authzError(await permission.account.administratorFailure());

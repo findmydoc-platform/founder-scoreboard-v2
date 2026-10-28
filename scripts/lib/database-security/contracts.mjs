@@ -23,6 +23,7 @@ export const authenticatedFunctionAllowlist = Object.freeze([
   "public.prepare_team_workweek_publication(p_version_id uuid)",
   "public.prepare_team_workweek_publication(p_version_id uuid, p_write_journal_version integer)",
   "public.set_administrator_eligibility(p_profile_id text, p_eligible boolean)",
+  "public.set_administrator_eligibility_if_current(p_profile_id text, p_expected_eligible boolean, p_eligible boolean)",
   "public.update_administration_github_project_transaction(p_project_id text, p_expected_owner text, p_expected_number integer, p_github_project_owner text, p_github_project_number integer, p_request_ip text, p_user_agent text)",
   "public.update_administration_github_project_transaction_v2(p_project_id text, p_expected_owner text, p_expected_number integer, p_expected_team_slug text, p_github_project_owner text, p_github_project_number integer, p_github_mention_team_slug text, p_request_ip text, p_user_agent text)",
   "public.update_administrator_planning_item_transaction(p_task_id text, p_expected_updated_at timestamp with time zone, p_patch jsonb, p_strategy jsonb, p_raci_assignments jsonb, p_request_ip text, p_user_agent text)",
@@ -130,4 +131,8 @@ export const planningContributorWritePolicies = Object.freeze([
   "task_external_comments_insert_members",
   "task_external_comments_update_members",
   "task_focus_items_write_team",
+]);
+
+export const authenticatedDeniedTablePrivileges = Object.freeze([
+  ["founder_sprint_scores", Object.freeze(["INSERT", "UPDATE", "DELETE"])],
 ]);

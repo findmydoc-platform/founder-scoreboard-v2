@@ -1,5 +1,8 @@
 "use client";
 
+import type { PlanningTaskEditor, PlanningTaskSaveView, PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
+import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
+
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { TaskActionResult, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
@@ -34,13 +37,28 @@ type Props = {
   operationalCorrection?: boolean;
   source: "supabase";
   pending: boolean;
+  taskSaves?: readonly PlanningTaskSaveView[];
+  relationshipChanges?: readonly import("@/features/tasks/model/task-relationship-change").TaskRelationshipChangeView[];
+  onCheckRelationshipChange?: (id: string) => void;
+  attachmentUploads?: readonly import("@/features/tasks/model/task-attachment-upload").TaskAttachmentUploadView[];
+  onCheckAttachmentUpload?: (id: string) => void;
+  githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
+  externalCommentCompleteness?: "complete" | "partial";
+  onCheckGitHubImport?: () => void;
+  commentCreations?: readonly import("@/features/tasks/model/task-comment-creation").TaskCommentCreationView[];
+  commentCompleteness?: "complete" | "partial";
+  onCheckCommentCreation?: (id: string) => void;
+  blockerReports?: readonly import("@/features/tasks/model/task-blocker-report").TaskBlockerReportView[];
+  onCheckBlockerReport?: (id: string) => void;
+  onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;
   error?: string;
   githubInstallationAvailable: boolean;
   previousTask?: Task | null;
   onBack?: () => void;
   onClose: () => void;
   onOpenTask: (taskId: string) => void;
-  onUpdate: (patch: Partial<Task>) => Promise<TaskUpdateResult> | void;
+  onBeginEdit?: () => PlanningTaskEditor;
+  onUpdate: (patch: Partial<Task>, options?: TaskUpdateOptions) => Promise<TaskUpdateResult> | void;
   onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment: (file: File) => Promise<string>;
   onImportGitHubComments: () => void;
@@ -51,9 +69,9 @@ type Props = {
   onReopenReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onWithdrawReview: (task: Task, reason: string) => Promise<boolean> | boolean | void;
   onWithdraw: (reason: string) => void;
-  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;
+  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }, basis?: Task) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
-  onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
+  onDecideApproval: (action: ApprovalDecisionAction, note?: string, basis?: Task) => void;
 };
 
 export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {

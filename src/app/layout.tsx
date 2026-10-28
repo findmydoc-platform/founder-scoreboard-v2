@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { PlanningStateProvider } from "@/features/planning/organisms/planning-state-provider";
 
 export const metadata: Metadata = {
   title: "findmydoc Planning",
@@ -19,7 +20,7 @@ export default function RootLayout({
       lang="de"
       className="h-full antialiased"
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col"><PlanningStateProvider>{children}</PlanningStateProvider></body>
     </html>
   );
 }

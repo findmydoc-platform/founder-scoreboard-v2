@@ -1,3 +1,4 @@
+import type { SprintReadCoverage } from "./sprint-read-model";
 import { founderScore, taskBelongsToProfile } from "@/lib/platform";
 import { computeFounderSprintScore } from "@/lib/founderops-scoring";
 import { findCurrentSprint } from "@/lib/planning-schedule";
@@ -24,9 +25,11 @@ export const reviewChecklistItems = [
 export function buildSprintScoreViewModel({
   data,
   selectedSprintId,
+  coverage,
 }: {
   data: PlanningShellState;
   selectedSprintId: string;
+  coverage?: SprintReadCoverage;
 }) {
   const currentSprint = findCurrentSprint(data.sprints);
   const sprint = data.sprints.find((item) => item.id === selectedSprintId) || currentSprint || data.sprints[0];
@@ -39,13 +42,14 @@ export function buildSprintScoreViewModel({
     const commitment = data.sprintCommitments.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
     const sprintMeetings = sprint ? data.meetings.filter((item) => item.sprintId === sprint.id) : [];
     const persistedScore = data.founderSprintScores.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
-    const computedScore = computeFounderSprintScore({
+    const canCompute = !coverage || ["items", "commitments", "meetings", "attendance", "scores", "objections"].every(key => coverage[key as keyof SprintReadCoverage] === "complete");
+    const computedScore = canCompute ? computeFounderSprintScore({
       profile,
       tasks: sprintTasks,
       commitment,
       meetings: sprintMeetings,
       meetingAttendance: data.meetingAttendance,
-    });
+    }) : null;
     const strikeState = data.founderStrikeStates.find((item) => item.profileId === profile.id);
     return {
       ...row,

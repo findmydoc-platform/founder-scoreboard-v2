@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanOptionalText } from "@/lib/api-input";
 import { authorizeCredentialAction } from "@/lib/credentials";
+import type { AccountSettingsExpected } from "@/lib/credentials/account-types";
 import { mapNotificationPreference, mapProfile, mapProfileUiPreference } from "@/lib/planning-row-mappers";
 import type { DbNotificationPreference, DbProfile, DbProfileUiPreference } from "@/lib/planning-row-types";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
@@ -35,6 +36,7 @@ type ProfileSettingsPayload = Partial<{
   notificationsEnabled: boolean;
   notificationEvents: Record<string, boolean>;
   uiPreferences: UiPreferencesPayload;
+  expected: AccountSettingsExpected;
 }>;
 
 type ProfileSettingsTransactionResult = {
@@ -184,11 +186,12 @@ export async function PATCH(request: NextRequest) {
   }
 
   const metadata = auditRequestMetadata(request);
-  const { data: transactionData, error: transactionError } = await permission.account.updateSettings({ profilePatch: profileUpdate, uiPreferences: uiPreferenceUpdate, notificationEvents, metadata });
+  const { data: transactionData, error: transactionError } = await permission.account.updateSettings({ profilePatch: profileUpdate, uiPreferences: uiPreferenceUpdate, notificationEvents, metadata, expected: payload.expected });
 
   if (transactionError) {
+    if (transactionError.code === "P0004") return NextResponse.json({ error: "Profileinstellungen wurden zwischenzeitlich geändert.", code: "profile_revision_conflict" }, { status: 409 });
     const colorError = mapProfileColorTransactionError(transactionError);
-    if (colorError) return apiError(colorError.error, colorError.status);
+    if (colorError) return NextResponse.json({ error: colorError.error, code: "profile_color_conflict" }, { status: colorError.status });
     if (transactionError.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
     if (transactionError.code === "22023" || transactionError.code === "23514") {
       return apiError("Profileinstellungen sind ungültig.", 400);

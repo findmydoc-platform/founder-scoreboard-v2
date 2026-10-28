@@ -72,6 +72,8 @@ function EventRow({ event }: { event: HeaderCalendarEvent }) {
 
 export function HeaderCalendarDialog({
   activeTab,
+  workweeksByDay,
+  workweekCoverage = "none",
   anchor,
   calendarWorkweeks,
   desktopPopover,
@@ -92,6 +94,8 @@ export function HeaderCalendarDialog({
   workweekDateKey,
   workweeks,
 }: {
+  workweekCoverage?: "none" | "partial" | "complete";
+  workweeksByDay?: import("@/features/team-workweek/model/published-workweek-calendar-state").WorkweeksByDay;
   activeTab: "events" | "workweek";
   anchor: Readonly<{ right: number; top: number }> | null;
   calendarWorkweeks: CalendarTeamWorkweek[];
@@ -124,9 +128,11 @@ export function HeaderCalendarDialog({
   const visibleProfiles = useMemo(() => teamWorkweekProfiles(profiles), [profiles]);
   const days = useMemo(() => calendarGridForMonth(viewMonth), [viewMonth]);
   const eventsByDay = useMemo(() => eventsByCalendarDay(eventSlot.data), [eventSlot.data]);
+  const completeWorktimeDay = (dateKey: string) => workweekCoverage === "complete"
+    && (!workweeksByDay || Object.hasOwn(workweeksByDay, dateKey));
   const selectedEvents = eventsByDay.get(selectedDate) || [];
   const selectedWorktimes = projectCalendarWorktimes({
-    calendarWorkweeks,
+    calendarWorkweeks: workweeksByDay ? [...workweeksByDay[selectedDate] || []] : calendarWorkweeks,
     dateKey: selectedDate,
     now,
     profiles: visibleProfiles,
@@ -263,10 +269,10 @@ export function HeaderCalendarDialog({
                     const today = dateKey === todayKey;
                     const currentMonth = dateKey.startsWith(viewMonth.slice(0, 7));
                     const dayEvents = eventsByDay.get(dateKey) || [];
-                    const worktimes = projectCalendarWorktimes({ calendarWorkweeks, dateKey, now, profiles: visibleProfiles });
+                    const worktimes = projectCalendarWorktimes({ calendarWorkweeks: workweeksByDay ? [...workweeksByDay[dateKey] || []] : calendarWorkweeks, dateKey, now, profiles: visibleProfiles });
                     const details = [
                       dayEvents.length ? `${dayEvents.length} Termin${dayEvents.length === 1 ? "" : "e"}` : "keine Termine",
-                      showWorkweek ? `${worktimes.length} eingeplant` : null,
+                      showWorkweek && completeWorktimeDay(dateKey) ? `${worktimes.length} eingeplant` : null,
                     ].filter(Boolean).join(", ");
                     return (
                       <button
@@ -281,13 +287,13 @@ export function HeaderCalendarDialog({
                         onKeyDown={(event) => handleCalendarKeyDown(event, dateKey)}
                         className={classNames(
                           "group grid min-h-11 min-w-0 place-items-center rounded-lg px-0.5 py-1 text-sm outline-none transition focus-visible:relative focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-blue-500",
-                          selected ? "bg-blue-600 font-semibold text-white" : today ? "bg-blue-50 font-semibold text-blue-700" : currentMonth ? "text-slate-800 hover:bg-slate-50" : "text-slate-400 hover:bg-slate-50",
+                          selected ? "bg-blue-600 font-semibold text-white" : today ? "bg-blue-50 font-semibold text-blue-700" : currentMonth ? "text-slate-800 hover:bg-slate-50" : "text-slate-500 hover:bg-slate-50",
                         )}
                       >
                         <span>{Number(dateKey.slice(-2))}</span>
                         <span className="flex min-h-3 items-center justify-center gap-1 text-[9px] leading-none" aria-hidden="true">
                           {dayEvents.length ? <span className={classNames("h-1.5 w-1.5 rounded-full", selected ? "bg-white" : "bg-blue-500")} /> : null}
-                          {showWorkweek && worktimes.length ? (
+                          {showWorkweek && completeWorktimeDay(dateKey) && worktimes.length ? (
                             <span className={classNames("inline-flex items-center gap-0.5", selected ? "text-white" : "text-slate-400")}>
                               <UsersRound size={9} strokeWidth={2.2} />{worktimes.length}
                             </span>
@@ -335,7 +341,7 @@ export function HeaderCalendarDialog({
                           {workingNow ? <UiBadge className="shrink-0 gap-1" tone="emerald" size="xs"><Clock3 size={12} aria-hidden="true" />Jetzt eingeplant</UiBadge> : null}
                         </article>
                       ))}
-                      {!selectedWorktimes.length && !pending && (!message || calendarWorkweeks.length > 0) ? <UiEmptyState className="px-3 py-4" tone="muted">Niemand eingeplant.</UiEmptyState> : null}
+                      {completeWorktimeDay(selectedDate) && !selectedWorktimes.length && !pending && (!message || calendarWorkweeks.length > 0) ? <UiEmptyState className="px-3 py-4" tone="muted">Niemand eingeplant.</UiEmptyState> : null}
                     </div>
                   </div>
                 ) : null}
@@ -348,7 +354,7 @@ export function HeaderCalendarDialog({
               {message ? <UiNotice className="mb-3" tone="warning" size="xs">{workweeks.length ? "Aktualisierung verzögert. Zuletzt bestätigte Zeiten." : message}</UiNotice> : null}
               {pending && !workweeks.length ? <UiEmptyState className="min-h-48" tone="muted">Team-Arbeitswoche wird geladen.</UiEmptyState> : null}
               {(!message || workweeks.length > 0) && (!pending || workweeks.length > 0) ? (
-                <TeamWorkweekMatrix key={selectedDate} compact dateKey={selectedDate || workweekDateKey} profiles={profiles} workweeks={calendarWorkweeks.length ? calendarWorkweeks : workweeks} upcomingWorkweeks={calendarWorkweeks} />
+                <TeamWorkweekMatrix key={selectedDate} compact workweeksByDay={workweeksByDay} dateKey={selectedDate || workweekDateKey} profiles={profiles} workweeks={calendarWorkweeks.length ? calendarWorkweeks : workweeks} upcomingWorkweeks={calendarWorkweeks} />
               ) : null}
             </div>
           )}

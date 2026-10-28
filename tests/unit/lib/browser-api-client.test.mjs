@@ -307,3 +307,34 @@ test("a caller-provided authorization header is neither replaced nor connected t
   assert.equal(fetchMock.mock.calls.length, 1);
   assert.equal(new Headers(fetchMock.mock.calls[0][1].headers).get("authorization"), "Bearer caller-token");
 });
+
+for (const replacement of [null,{userId:"user-b",revision:"old"},{userId:"user-a",revision:"new"}]) test(`multipart expected session rejects a replacement before dispatch (${JSON.stringify(replacement)})`,async()=>{
+ let finish;const port=sessionPort();port.current=()=>new Promise(resolve=>{finish=resolve;});const client=browserApiModule.createBrowserApiClient({sessionPort:port});const fetchMock=vi.fn().mockResolvedValue(jsonResponse({markdown:"wrong-account"}));globalThis.fetch=fetchMock;const request=client.requestForm("/api/tasks/task/attachments",new FormData(),{expectedSession:{userId:"user-a",revision:"old"}});finish(replacement);const result=await request;assert.equal(result.response.status,409);assert.equal(result.body.code,"session_superseded");assert.equal(fetchMock.mock.calls.length,0);assert.equal(port.recover.mock.calls.length,0);
+});
+test("multipart expected session allows the same current authority without forwarding its metadata",async()=>{
+ const port=sessionPort({snapshot:{userId:"user-a",revision:"same"}}),client=browserApiModule.createBrowserApiClient({sessionPort:port});const fetchMock=vi.fn().mockResolvedValue(jsonResponse({markdown:"confirmed"}));globalThis.fetch=fetchMock;const result=await client.requestForm("/api/tasks/task/attachments",new FormData(),{expectedSession:{userId:"user-a",revision:"same"}});assert.equal(result.response.status,200);assert.equal(fetchMock.mock.calls.length,1);assert.equal(fetchMock.mock.calls[0][1].expectedSession,undefined);assert.equal(port.recover.mock.calls.length,0);
+});
+
+test("multipart expected authority revoked after current() resolution sends no bytes",async()=>{
+ const snapshot={userId:"user-a",revision:"same"};const port={...sessionPort({snapshot}),isCurrent:()=>false};const client=browserApiModule.createBrowserApiClient({sessionPort:port}),fetchMock=vi.fn();globalThis.fetch=fetchMock;const result=await client.requestForm("/api/tasks/task/attachments",new FormData(),{expectedSession:snapshot});assert.equal(result.body.code,"session_superseded");assert.equal(fetchMock.mock.calls.length,0);
+});
+
+for(const snapshot of [null,{userId:"other",revision:"new"},{userId:"user-a",revision:"unexpected-replacement"}])test(`bound JSON rejects ended or changed initial session ${JSON.stringify(snapshot)}`,async()=>{
+ const port=sessionPort({snapshot}),api=browserApiModule.createBrowserApiClient({sessionPort:port});const fetch=vi.fn();globalThis.fetch=fetch;
+ const result=await api.requestJson("/api/tasks/task-1/sync-github",{method:"POST",json:{createIfMissing:false},expectedSession:{userId:"user-a",revision:"current-token"}});
+ assert.equal(result.response.status,409);assert.equal(result.body.code,"session_superseded");assert.equal(fetch.mock.calls.length,0);
+});
+test("bound JSON permits legitimate same-account before-effect recovery and strips its local binding",async()=>{
+ const port=sessionPort(),api=browserApiModule.createBrowserApiClient({sessionPort:port});const fetch=vi.fn().mockResolvedValueOnce(jsonResponse({code:"session_invalid_before_effect"},401)).mockResolvedValueOnce(jsonResponse({ok:true}));globalThis.fetch=fetch;
+ const result=await api.requestJson("/api/tasks/task-1/sync-github",{method:"POST",json:{createIfMissing:false},expectedSession:{userId:"user-a",revision:"current-token"}});
+ assert.equal(result.response.status,200);assert.equal(fetch.mock.calls.length,2);assert.equal(fetch.mock.calls[0][1].body,fetch.mock.calls[1][1].body);assert.equal(Object.hasOwn(fetch.mock.calls[0][1],"expectedSession"),false);
+});
+test("bound JSON never replays under a replacement account returned during recovery",async()=>{
+ const port=sessionPort({recovery:{kind:"refreshed",session:{userId:"other",revision:"other"}}}),api=browserApiModule.createBrowserApiClient({sessionPort:port});const fetch=vi.fn().mockResolvedValue(jsonResponse({code:"session_invalid_before_effect"},401));globalThis.fetch=fetch;
+ const result=await api.requestJson("/api/tasks/task-1/sync-github",{method:"POST",json:{createIfMissing:false},expectedSession:{userId:"user-a",revision:"current-token"}});assert.equal(result.response.status,409);assert.equal(result.body.code,"session_superseded");assert.equal(fetch.mock.calls.length,1);
+});
+
+test("bound JSON rejects a recovered session that ended while recovery was held",async()=>{
+ let finish;const port=sessionPort();port.recover=()=>new Promise(resolve=>{finish=resolve;});port.isCurrent=()=>false;const api=browserApiModule.createBrowserApiClient({sessionPort:port});const fetch=vi.fn().mockResolvedValue(jsonResponse({code:"session_invalid_before_effect"},401));globalThis.fetch=fetch;
+ let alive=true;port.isCurrent=()=>alive;const writing=api.requestJson("/api/tasks/task-1/sync-github",{method:"POST",json:{createIfMissing:false},expectedSession:{userId:"user-a",revision:"current-token"}});await vi.waitFor(()=>assert.equal(typeof finish,"function"));alive=false;finish({kind:"refreshed",session:{userId:"user-a",revision:"refreshed-token"}});const result=await writing;assert.equal(result.response.status,409);assert.equal(result.body.code,"session_superseded");assert.equal(fetch.mock.calls.length,1);
+});

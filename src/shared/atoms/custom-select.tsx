@@ -17,6 +17,7 @@ type CustomSelectProps = {
   value: string | number;
   options: CustomSelectOption[];
   onChange: (value: string) => void;
+  onOpen?: () => void;
   disabled?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
@@ -32,6 +33,7 @@ export function CustomSelect({
   value,
   options,
   onChange,
+  onOpen,
   disabled = false,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
@@ -64,6 +66,7 @@ export function CustomSelect({
 
   const openMenu = (index = selectedIndex) => {
     if (disabled) return;
+    if (!open) onOpen?.();
     setActiveIndex(clampIndex(index));
     setOpen(true);
   };

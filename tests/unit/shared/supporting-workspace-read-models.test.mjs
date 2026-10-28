@@ -3,21 +3,23 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 function recordingSupabase(data = {}, failedTable = "") {
-  const calls = [];
+  const calls = [], ranges = [];
   return {
-    calls,
+    calls, ranges,
     from(table) {
       calls.push(table);
       const query = {
         select() { return query; },
         eq() { return query; },
+        gte(column, value) { ranges.push(["gte", column, value]); return query; },
+        lt(column, value) { ranges.push(["lt", column, value]); return query; },
         single() { return query; },
         order() { return query; },
         limit() { return query; },
         then(resolve, reject) {
           return Promise.resolve(table === failedTable
             ? { data: null, error: { message: "failure" } }
-            : { data: data[table] ?? [], error: null }).then(resolve, reject);
+            : { data: data[table] ?? [], count: data[`${table}Count`] ?? null, error: null }).then(resolve, reject);
         },
       };
       return query;
@@ -54,12 +56,25 @@ test("Events and Tools expose focused fail-closed load interfaces", async () => 
   const eventsDb = recordingSupabase({ profiles: [{ id: "person" }], founder_events: [{ id: 1, updated_at: "2026-08-12" }] });
   const events = await createSupabaseEventsReadModel(eventsDb).load({ authorized: true, actorProfileId: "person" });
   assert.equal(events.status, "ready");
-  assert.deepEqual(eventsDb.calls, ["profiles", "founder_events"]);
-  assert.deepEqual(Object.keys(events.model).sort(), ["events", "people", "revision"]);
+  assert.deepEqual([...eventsDb.calls].sort(), ["founder_events", "profiles"]);
+  assert.deepEqual(Object.keys(events.model).sort(), ["coverage", "events", "people", "readCoverage", "revision"]);
 
   const toolsDb = recordingSupabase({ profiles: [{ id: "person" }], fmd_tools: [{ id: "tool", sort_order: 1 }] });
   const tools = await createSupabaseToolsReadModel(toolsDb).load({ authorized: true, actorProfileId: "person" });
   assert.equal(tools.status, "ready");
   assert.deepEqual(toolsDb.calls, ["profiles", "fmd_tools"]);
-  assert.deepEqual(Object.keys(tools.model).sort(), ["people", "revision", "tools"]);
+  assert.deepEqual(Object.keys(tools.model).sort(), ["coverage", "people", "readCoverage", "revision", "tools"]);
+});
+
+for (const count of [0, 199, 200]) test(`Event range coverage is conservative at the query cap (${count})`, async () => {
+  const range = { from: "2099-01-01T00:00:00.000Z", to: "2099-02-01T00:00:00.000Z" };
+  const db = recordingSupabase({ founder_events: Array.from({ length: count }, (_, id) => ({ id, updated_at: "revision" })) });
+  const result = await createSupabaseEventsReadModel(db, range).load({ authorized: true, actorProfileId: "profile" });
+  assert.equal(result.status, "ready"); assert.deepEqual(db.ranges, [["gte", "starts_at", range.from], ["lt", "starts_at", range.to]]);
+  assert.deepEqual(result.model.coverage, { range, completeness: count < 200 ? "complete" : "partial" });
+});
+
+for (const [returned, count, coverage] of [[0, 0, "complete"], [1, 1, "complete"], [1, 2, "partial"], [1, null, "partial"]]) test(`Tools completeness uses the authoritative count (${returned}/${count})`, async () => {
+  const db = recordingSupabase({ fmd_tools: Array.from({ length: returned }, (_, id) => ({ id: `tool-${id}`, sort_order: id })), fmd_toolsCount: count });
+  const result = await createSupabaseToolsReadModel(db).load({ authorized: true, actorProfileId: "profile" }); assert.equal(result.status, "ready"); assert.equal(result.model.coverage, coverage);
 });

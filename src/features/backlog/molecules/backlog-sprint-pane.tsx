@@ -31,7 +31,7 @@ function sourceSprintLocked(task: Task, sprintById: ReadonlyMap<string, Sprint>)
 
 function capacityLabel(bucket: BacklogSprintBucket) {
   if (bucket.capacityUnavailable) return "Kapazität prüfen";
-  return `${bucket.plannedHours}h / ${bucket.capacityHours}h`;
+  return `${bucket.plannedHours}h${bucket.plannedHoursComplete === false ? " im geladenen Ausschnitt" : ""} / ${bucket.capacityHours}h`;
 }
 
 export function BacklogSprintPane({
@@ -76,7 +76,7 @@ export function BacklogSprintPane({
             const dropMessage = eligibility && (!eligibility.ok || eligibility.action === "noop")
               ? backlogSprintAssignmentMessage(eligibility.reason)
               : "Deliverable hier ablegen";
-            const utilization = bucket.capacityHours && bucket.capacityHours > 0
+            const utilization = bucket.plannedHoursComplete !== false && bucket.capacityHours && bucket.capacityHours > 0
               ? Math.min(bucket.utilization, 1)
               : 0;
 
@@ -120,7 +120,7 @@ export function BacklogSprintPane({
                   <span className="text-slate-500">Geplant</span>
                   <span className={classNames("font-semibold", bucket.overCapacity ? "text-red-700" : "text-slate-900")}>{capacityLabel(bucket)}</span>
                 </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-none bg-slate-100" aria-label={`Kapazität: ${capacityLabel(bucket)}`}>
+                <div className="mt-2 h-2 overflow-hidden rounded-none bg-slate-100" role="img" aria-label={`Kapazität: ${capacityLabel(bucket)}`}>
                   <div className={classNames("h-full", bucket.overCapacity ? "bg-red-600" : "bg-blue-700")} style={{ width: `${Math.round(utilization * 100)}%` }} />
                 </div>
                 <div className="mt-2 min-h-5 text-xs">

@@ -255,6 +255,11 @@ type Props = {
   dirty: boolean;
   saving: boolean;
   error: string;
+  confirmationPending?: boolean;
+  conflict?: boolean;
+  canResave?: boolean;
+  conflictServerDraft?: TaskOverviewDraft | null;
+  onReloadConflict?: () => Promise<void>;
   flat?: boolean;
   onCancel: () => void;
   onSave: () => Promise<boolean>;
@@ -274,6 +279,11 @@ export function TaskOverviewPanel({
   dirty,
   saving,
   error,
+  confirmationPending = false,
+  conflict = false,
+  canResave = false,
+  conflictServerDraft,
+  onReloadConflict,
   flat = false,
   onCancel,
   onSave,
@@ -327,6 +337,7 @@ export function TaskOverviewPanel({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (confirmationPending) return;
     if (evidenceInvalid) {
       document.getElementById(`task-evidence-link-${evidenceInvalidIndex}`)?.focus();
       return;
@@ -372,6 +383,17 @@ export function TaskOverviewPanel({
               {error}
             </UiNotice>
           ) : null}
+
+          {conflict ? <UiNotice tone="info" role="status">
+            <p>Deine Eingaben bleiben erhalten. Vergleiche die Änderungen, bevor du erneut speicherst.</p>
+            {conflictServerDraft && canResave ? <details className="mt-3">
+              <summary className="cursor-pointer font-semibold">Aktuellen Stand anzeigen</summary>
+              <dl className="mt-3 grid gap-3 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                {draft.title !== baseline.title ? <div><dt className="font-semibold">Titel</dt><dd>{conflictServerDraft.title || "Leer"}</dd></div> : null}
+                {overviewFields.filter(({ key }) => draft[key] !== baseline[key]).map(({ key, label }) => <div key={key}><dt className="font-semibold">{label}</dt><dd>{conflictServerDraft[key] || "Leer"}</dd></div>)}
+              </dl>
+            </details> : <UiButton type="button" size="lg" onClick={() => { void onReloadConflict?.(); }}>Aktuellen Stand erneut laden</UiButton>}
+          </UiNotice> : null}
 
           {permissions.canEditBrief ? (
             <UiField>
@@ -545,9 +567,9 @@ export function TaskOverviewPanel({
               <X size={15} aria-hidden="true" />
               Abbrechen
             </UiButton>
-            <UiButton type="submit" variant="primary" size="lg" disabled={!dirty || evidenceInvalid || saving}>
+            <UiButton type="submit" variant="primary" size="lg" disabled={!dirty || evidenceInvalid || saving || confirmationPending || (conflict && !canResave)}>
               <Save size={15} aria-hidden="true" />
-              {saving ? "Speichert …" : "Speichern"}
+              {saving ? "Speichert …" : conflict ? "Erneut speichern" : "Speichern"}
             </UiButton>
           </div>
         </form>
@@ -650,7 +672,7 @@ export function TaskOverviewPanel({
               <ReadSection label="Interne Notiz" value={draft.note} />
             </>
           )}
-          {task.updatedAt ? <p className="border-t border-slate-100 py-4 text-xs text-slate-400">Zuletzt aktualisiert am {formatDate(task.updatedAt)}</p> : null}
+          {task.updatedAt ? <p className="border-t border-slate-100 py-4 text-xs text-slate-600">Zuletzt aktualisiert am {formatDate(task.updatedAt)}</p> : null}
         </div>
       )}
       <div className="sr-only" aria-live="polite">{announcement}</div>

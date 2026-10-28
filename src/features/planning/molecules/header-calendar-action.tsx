@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useHeaderCalendar } from "../hooks/use-header-calendar";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { PlanningState } from "../model/planning-state";
 import type { HeaderCalendarEvent, HeaderDataSlot, Profile } from "@/lib/types";
 
 const HeaderCalendarDialog = dynamic(() =>
@@ -13,17 +13,17 @@ const HeaderCalendarDialog = dynamic(() =>
 );
 
 export function HeaderCalendarAction({
-  apiClient,
+  planningState,
   events,
   onOpenTeam,
   profiles,
 }: {
-  apiClient?: BrowserApiClient;
+  planningState?: PlanningState;
   events: HeaderDataSlot<HeaderCalendarEvent[]>;
   onOpenTeam: (editWorkweek?: boolean, week?: string) => void;
   profiles: Profile[];
 }) {
-  const state = useHeaderCalendar({ apiClient, onOpenTeam });
+  const state = useHeaderCalendar({ planningState, onOpenTeam });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [anchor, setAnchor] = useState<{ right: number; top: number } | null>(null);
   const [desktopPopover, setDesktopPopover] = useState(false);
@@ -76,6 +76,8 @@ export function HeaderCalendarAction({
           activeTab={state.activeTab}
           anchor={anchor}
           calendarWorkweeks={state.calendarWorkweeks}
+          workweeksByDay={state.workweeksByDay}
+          workweekCoverage={state.workweekCoverage}
           desktopPopover={desktopPopover}
           eventSlot={events}
           message={state.message}
@@ -89,7 +91,7 @@ export function HeaderCalendarAction({
           profiles={profiles}
           restoreFocusRef={triggerRef}
           selectedDate={state.selectedDate}
-          showWorkweek={Boolean(apiClient)}
+          showWorkweek={Boolean(planningState)}
           viewMonth={state.viewMonth}
           workweekDateKey={state.workweekReferenceDate}
           workweeks={state.workweeks}

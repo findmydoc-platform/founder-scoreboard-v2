@@ -141,3 +141,15 @@ test("profile preference reads use only canonical planning fields", () => {
   assert.equal(preference.planningFilters.assignee, "profile-2");
   assert.deepEqual(preference.expandedInitiativeIds, ["initiative-1"]);
 });
+
+
+test("profile read bases preserve nullable stored business values without copying credential or identity data", () => {
+  const profile = planningProfileMappers.mapProfile({ id: "sebastian", name: "Founder", platform_role: "founder", org_role: null, focus: null, profile_color: null, notifications_enabled: null, weekly_capacity: 20, deputy_for: null, deputy_active_from: null, deputy_active_until: null, auth_user_id: "private-binding", github_access_token: "private-token" });
+  assert.equal(profile.color, "#3b82f6");
+  assert.deepEqual(profile.persistenceBasis, { focus: null, profile_color: null, notifications_enabled: null, platform_role: "founder", org_role: null, weekly_capacity: 20, deputy_for: null, deputy_active_from: null, deputy_active_until: null });
+  assert.equal(JSON.stringify(profile).includes("private-binding"), false);
+  assert.equal(JSON.stringify(profile).includes("private-token"), false);
+  const preference = planningProfileMappers.mapProfileUiPreference({ profile_id: "sebastian", default_workspace: "reviews", default_task_view: "board", planning_filters: {}, expanded_item_ids: [], created_at: "before", updated_at: "before" });
+  assert.equal(preference.defaultWorkspace, "planning");
+  assert.deepEqual(preference.persistenceBasis, { default_workspace: "reviews", default_task_view: "board", planning_filters: {}, expanded_item_ids: [] });
+});

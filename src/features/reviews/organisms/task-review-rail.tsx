@@ -53,6 +53,7 @@ type Props = {
   onDirtyChange?: (dirty: boolean) => void;
   onReview: (task: Task, decision: ReviewDecision, score: number, checklist: TaskReviewChecklist, comment: string) => Promise<boolean> | boolean | void;
   onWithdraw: (task: Task, reason: string) => Promise<boolean> | boolean | void;
+  onEditingStart?: () => void;
   onReviewOwnerChange: (reviewOwnerProfileId: string) => void;
   onJumpToSection: (targetId: string) => void;
 };
@@ -81,11 +82,13 @@ export function TaskReviewRail({
   onReview,
   onWithdraw,
   onReviewOwnerChange,
+  onEditingStart,
   onJumpToSection,
 }: Props) {
-  const { draft, dirty, setDraft } = useTaskReviewDraft(task.id, task.reviewRequestedAt || "", currentProfileId);
+  const { draft, dirty, setDraft } = useTaskReviewDraft(task.id, task.reviewRequestedAt || "", currentProfileId,task.updatedAt);
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawBasis,setWithdrawBasis]=useState<Task|null>(null);
   const [withdrawReason, setWithdrawReason] = useState("");
   const score = reviewChecklistScore(draft.checklist);
   const checkedCount = reviewChecks.filter((item) => Boolean(draft.checklist[item.key])).length;
@@ -111,13 +114,13 @@ export function TaskReviewRail({
       });
       return;
     }
-    const result = await onReview(task, draft.decision, score, draft.checklist, draft.comment.trim());
+    const result = await onReview({...task,updatedAt:draft.expectedUpdatedAt}, draft.decision, score, draft.checklist, draft.comment.trim());
     if (result !== false) clearTaskReviewDraft(task.id, task.reviewRequestedAt || "", currentProfileId);
   };
 
   const submitWithdraw = async () => {
     if (!withdrawReason.trim()) return;
-    const result = await onWithdraw(task, withdrawReason.trim());
+    const result = await onWithdraw(withdrawBasis||task, withdrawReason.trim());
     if (result !== false) {
       clearTaskReviewDraft(task.id, task.reviewRequestedAt || "", currentProfileId);
       setWithdrawReason("");
@@ -136,6 +139,7 @@ export function TaskReviewRail({
               <dd className="min-w-0 font-medium">
                 {canManageReviewOwner ? (
                   <CustomSelect
+                    onOpen={onEditingStart}
                     value={task.reviewOwnerProfileId || ""}
                     onChange={onReviewOwnerChange}
                     disabled={pending}
@@ -153,6 +157,10 @@ export function TaskReviewRail({
           </dl>
         </div>
 
+        {draft.expectedUpdatedAt !== task.updatedAt ? <UiNotice tone="warning" className="mt-4">
+          <p>Die Aufgabe wurde seit Beginn dieses Reviews geändert. Deine Eingaben bleiben erhalten. Prüfe den aktuellen Stand, bevor du sie erneut absendest.</p>
+          <UiButton size="lg" className="mt-3" disabled={pending} onClick={()=>setDraft(current=>({...current,expectedUpdatedAt:task.updatedAt}))}>Aktuellen Stand für Review übernehmen</UiButton>
+        </UiNotice> : null}
         {task.reviewEvidenceExceptionNote ? (
           <UiNotice id="task-review-evidence-exception" tabIndex={-1} tone="warning" className="mt-4">
             <div className="flex items-start gap-2">
@@ -230,7 +238,7 @@ export function TaskReviewRail({
                 <span className="font-semibold text-slate-600">Score</span>
                 <span>abgeleitete Punkte</span>
               </div>
-              <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-950">{score}<span className="text-base text-slate-400">/10</span></div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-950">{score}<span className="text-base text-slate-600">/10</span></div>
             </div>
 
             <label className="mt-3 block text-sm font-semibold text-slate-950" htmlFor={`review-comment-${task.id}`}>
@@ -303,7 +311,7 @@ export function TaskReviewRail({
         {canWithdraw ? (
           <div className="mt-3 border-t border-slate-200 pt-3">
             {!withdrawOpen ? (
-              <button type="button" onClick={() => setWithdrawOpen(true)} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-950">
+              <button type="button" onClick={() => {setWithdrawOpen(true);setWithdrawBasis(task);}} className="inline-flex min-h-6 items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-950 [@media(pointer:coarse)]:min-h-11">
                 <RotateCcw size={14} aria-hidden="true" />
                 Review zurückziehen
               </button>

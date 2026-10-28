@@ -2,6 +2,7 @@ import type { Profile, Task } from "@/lib/types";
 
 export type TeamWorkspaceModel = Readonly<{
   revision: string;
+  readCoverage?: Readonly<Partial<Record<"people" | "items" | "strategies" | "raci" | "links", "complete" | "partial">>>;
   people: readonly Profile[];
   items: readonly Task[];
 }>;

@@ -202,6 +202,7 @@ export type DbPlanningItemRaciAssignment = {
 };
 
 export type DbSprint = {
+  updated_at?: string;
   id: string;
   name: string;
   status: Sprint["status"];
@@ -212,6 +213,7 @@ export type DbSprint = {
 };
 
 export type DbSprintCommitment = {
+  updated_at?: string;
   id: number;
   sprint_id: string;
   profile_id: string;
@@ -419,6 +421,7 @@ export type DbProfileFeatureTourAcknowledgement = {
 };
 
 export type DbFmdTool = {
+  updated_at?: string;
   id: string;
   name: string;
   category: FmdTool["category"];

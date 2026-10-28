@@ -107,11 +107,21 @@ test.each([
   });
   const routePath = operation === "decide" ? "src/app/api/tasks/[id]/review/route.ts" : `src/app/api/tasks/[id]/review/${operation}/route.ts`;
   const { POST } = await importTestModule(routePath, { "server-only": {} });
-  const payload = operation === "decide" ? { decision: "accepted", comment: "Reviewed evidence", checklist: fields.checklist }
+  const payload = operation === "decide" ? { decision: "accepted", expectedUpdatedAt:task.updated_at, comment: "Reviewed evidence", checklist: fields.checklist }
     : { expectedUpdatedAt: task.updated_at, ...(operation === "withdraw" ? { reason: fields.reason } : {}) };
   const response = await POST(protocol.request("/api/tasks/review-task/review", "POST", payload), { params: Promise.resolve({ id: task.id }) });
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ ok: true, task: { id: task.id } });
+  const receipt=await response.json();
+  expect(receipt).toMatchObject({ ok: true, task: { id: task.id },activities:[] });
+  if(operation==="decide") {
+    expect(receipt.review).toMatchObject({id:1,taskId:task.id,reviewerProfileId:"synthetic-profile",createdAt:"2026-10-17T08:01:00Z"});
+    expect(protocol.calls.filter(call=>call.name==="mutate_planning_review_command_transaction_v3").at(-1).body.p_expected_updated_at).toBe(task.updated_at);
+    protocol.state.responses.prepare_planning_review_command.task={...task,updated_at:"2026-10-17T09:00:00Z"};
+    const conflict=await POST(protocol.request("/api/tasks/review-task/review","POST",payload),{params:Promise.resolve({id:task.id})});expect(conflict.status).toBe(409);expect(await conflict.json()).toMatchObject({conflictReason:"revision"});
+    protocol.state.responses.prepare_planning_review_command.task=task;
+    protocol.state.responses.prepare_planning_review_command.sprintLocked=true;
+    const protectedResult=await POST(protocol.request("/api/tasks/review-task/review","POST",payload),{params:Promise.resolve({id:task.id})});expect(protectedResult.status).toBe(409);expect(await protectedResult.json()).not.toHaveProperty("conflictReason");
+  }
   protocol.state.role = "viewer";
   expect(await authorizeCredentialAction(input)).toMatchObject({ ok: false, status: 403 });
 });
@@ -220,7 +230,7 @@ test("commitment data stays with the owner unless the actor is an operational le
   const input = { credential: { kind: "session-request", request: protocol.request() }, action: "planning.sprint.commitment.write", targetId: "sprint-one" };
   const permission = await authorizeCredentialAction(input);
   expect(permission.ok).toBe(true);
-  const values = { profileId: "synthetic-profile", commitmentLevel: "Standard", weeklyHours: 12, note: "Owner plan" };
+  const values = { profileId: "synthetic-profile", commitmentLevel: "Standard", weeklyHours: 12, expectedUpdatedAt: null, note: "Owner plan" };
   expect(await permission.planning.writeCommitment(values)).toMatchObject({ data: { sprint_id: "sprint-one", profile_id: "synthetic-profile", weekly_hours: 12 }, error: null });
   expect(await permission.planning.writeCommitment({ ...values, profileId: "foreign" })).toMatchObject({ data: null, error: { code: "42501" } });
   protocol.state.role = "deputy";
@@ -250,7 +260,7 @@ test("a deputy updates only the bound sprint schedule through the real route", a
   expect(permission.ok).toBe(true);
   expect(await permission.planning.commitSprintSchedule({ expectedUpdatedAt: sprint.updated_at, patch: { name: "Renamed sprint" } }, {})).toMatchObject({ data: { id: sprint.id, name: "Renamed sprint" }, error: null });
   const { PATCH } = await importTestModule("src/app/api/sprints/[id]/route.ts", { "server-only": {} });
-  const response = await PATCH(protocol.request("/api/sprints/sprint-owned", "PATCH", { name: "Renamed sprint" }), { params: Promise.resolve({ id: sprint.id }) });
+  const response = await PATCH(protocol.request("/api/sprints/sprint-owned", "PATCH", { name: "Renamed sprint", expectedUpdatedAt: sprint.updated_at }), { params: Promise.resolve({ id: sprint.id }) });
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ ok: true, sprint: { id: sprint.id, name: "Renamed sprint" } });
   protocol.state.role = "viewer";
@@ -330,7 +340,7 @@ test("score objections bind their owner and reserve resolution for the CEO", asy
       expect(body.p_profile_id).toBe("synthetic-profile");
       return Response.json({ id: 10, profile_id: body.p_profile_id, sprint_id: body.p_sprint_id });
     },
-    process_score_objection_transaction: body => {
+    process_score_objection_with_basis_transaction: body => {
       expect(body.p_actor_profile_id).toBe("synthetic-profile");
       return Response.json({ objection: { id: body.p_objection_id, sprint_id: body.p_sprint_id } });
     },
@@ -499,7 +509,7 @@ test("Weekly self reports bind owner and meeting while lead reviews preserve sco
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.attendance.write", targetId: "7" });
   expect(grant.ok).toBe(true);
-  const values = { profileId: "synthetic-profile", status: "excused", absenceReason: "Customer appointment", reasonAccepted: false, writtenUpdate: "Evidence", points: 0 };
+  const values = { expectedUpdatedAt: null, profileId: "synthetic-profile", status: "excused", absenceReason: "Customer appointment", reasonAccepted: false, writtenUpdate: "Evidence", points: 0 };
   expect(await grant.planning.writeAttendance({ ...values, profileId: "foreign" })).toMatchObject({ error: { code: "42501" } });
   expect(await grant.planning.writeAttendance({ ...values, points: 2 })).toMatchObject({ error: { code: "42501" } });
   expect(await grant.planning.writeAttendance(values)).toMatchObject({ error: null, data: { meeting_id: 7, profile_id: "synthetic-profile", points: 0 } });
@@ -507,7 +517,7 @@ test("Weekly self reports bind owner and meeting while lead reviews preserve sco
   const { POST } = await importTestModule("src/app/api/meetings/[id]/attendance/route.ts", { "server-only": {} });
   expect((await POST(protocol.request("/api/meetings/7/attendance", "POST", { status: "present" }), { params: Promise.resolve({ id: "7" }) })).status).toBe(403);
   protocol.state.role = "deputy";
-  const response = await POST(protocol.request("/api/meetings/7/attendance", "POST", { profileId: "foreign", status: "present" }), { params: Promise.resolve({ id: "7" }) });
+  const response = await POST(protocol.request("/api/meetings/7/attendance", "POST", { expectedUpdatedAt: null, profileId: "foreign", status: "present" }), { params: Promise.resolve({ id: "7" }) });
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ attendance: { meetingId: 7, profileId: "foreign", points: 2 } });
   expect(writes).toHaveLength(2);
@@ -670,7 +680,7 @@ test("commitment owner is captured before an awaited current binding check", asy
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.sprint.commitment.write", targetId: "sprint-one" });
   expect(grant.ok).toBe(true);
-  const values = { profileId: "synthetic-profile", commitmentLevel: "full", weeklyHours: 24, note: "Evidence" };
+  const values = { profileId: "synthetic-profile", commitmentLevel: "full", weeklyHours: 24, expectedUpdatedAt: null, note: "Evidence" };
   gateCurrent = true;
   const pending = grant.planning.writeCommitment(values);
   await waiting;

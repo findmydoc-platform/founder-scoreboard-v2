@@ -1,5 +1,8 @@
 "use client";
 
+import type { PlanningTaskEditor, PlanningTaskSaveView, PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
+import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
+
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { ReviewEvidenceGateDialog } from "@/features/reviews/molecules/review-evidence-gate-dialog";
 import { TaskReviewSummary } from "@/features/reviews/molecules/task-review-summary";
@@ -42,6 +45,7 @@ import { taskDetailAvailableTabs } from "@/features/tasks/model/task-detail-tabs
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
 import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
 import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
+import { TaskSaveNotice } from "@/features/tasks/molecules/task-save-notice";
 import { TaskOverviewPanel } from "@/features/tasks/organisms/task-overview-panel";
 import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
 import { normalizeStatus } from "@/lib/status";
@@ -65,6 +69,20 @@ type TaskDetailSurfaceProps = {
   currentProfile?: Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | null;
   operationalCorrection?: boolean;
   pending: boolean;
+  taskSaves?: readonly PlanningTaskSaveView[];
+  relationshipChanges?: readonly import("@/features/tasks/model/task-relationship-change").TaskRelationshipChangeView[];
+  onCheckRelationshipChange?: (id: string) => void;
+  attachmentUploads?: readonly import("@/features/tasks/model/task-attachment-upload").TaskAttachmentUploadView[];
+  onCheckAttachmentUpload?: (id: string) => void;
+  githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
+  externalCommentCompleteness?: "complete" | "partial";
+  onCheckGitHubImport?: () => void;
+  commentCreations?: readonly import("@/features/tasks/model/task-comment-creation").TaskCommentCreationView[];
+  commentCompleteness?: "complete" | "partial";
+  onCheckCommentCreation?: (id: string) => void;
+  blockerReports?: readonly import("@/features/tasks/model/task-blocker-report").TaskBlockerReportView[];
+  onCheckBlockerReport?: (id: string) => void;
+  onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;
   error?: string;
   detailDataError?: string;
   requestedCommentTarget?: string;
@@ -75,7 +93,8 @@ type TaskDetailSurfaceProps = {
   githubInstallationAvailable: boolean;
   onOverviewDirtyChange?: (dirty: boolean) => void;
   onRequestDiscardAction: (action: () => void, force?: boolean) => void;
-  onUpdate: (patch: Partial<Task>) => Promise<TaskUpdateResult> | void;
+  onBeginEdit?: () => PlanningTaskEditor;
+  onUpdate: (patch: Partial<Task>, options?: TaskUpdateOptions) => Promise<TaskUpdateResult> | void;
   onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment: (file: File) => Promise<string>;
   onImportGitHubComments: () => void;
@@ -88,22 +107,13 @@ type TaskDetailSurfaceProps = {
   onReopenReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onWithdrawReview: (task: Task, reason: string) => Promise<boolean> | boolean | void;
   onWithdraw: (reason: string) => void;
-  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;
+  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }, basis?: Task) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
-  onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
+  onDecideApproval: (action: ApprovalDecisionAction, note?: string, basis?: Task) => void;
 };
 
 export function TaskDetailSurface(props: TaskDetailSurfaceProps) {
-  // Keep the editor mounted when a workspace refresh returns a summary for
-  // the same item, including failed-save refreshes with an unsaved draft.
-  const [lastHydratedTask, setLastHydratedTask] = useState(props.task);
-  if (props.task.detailAvailability !== "summary" && props.task !== lastHydratedTask) {
-    setLastHydratedTask(props.task);
-  }
-  const cachedTask = lastHydratedTask.id === props.task.id && lastHydratedTask.detailAvailability !== "summary"
-    ? lastHydratedTask
-    : null;
-  if (props.task.detailAvailability === "summary" && !cachedTask) {
+  if (props.task.detailAvailability === "summary") {
     return (
       <div className="p-6" role="status" aria-live="polite">
         <UiNotice tone={props.detailDataError ? "danger" : "info"}>
@@ -120,7 +130,7 @@ export function TaskDetailSurface(props: TaskDetailSurfaceProps) {
       {props.detailDataError && props.onRetryDetailData ? (
         <UiButton className="m-3" onClick={props.onRetryDetailData}>Erneut laden</UiButton>
       ) : null}
-      <HydratedTaskDetailSurface {...props} task={props.task.detailAvailability === "summary" ? cachedTask! : props.task} />
+      <HydratedTaskDetailSurface {...props} />
     </>
   );
 }
@@ -141,7 +151,21 @@ function HydratedTaskDetailSurface({
   relations,
   currentProfile = null,
   operationalCorrection = false,
-  pending,
+  pending: requestPending,
+  taskSaves = [],
+  relationshipChanges = [],
+  onCheckRelationshipChange,
+  attachmentUploads = [],
+  onCheckAttachmentUpload,
+  githubImport,
+  externalCommentCompleteness,
+  onCheckGitHubImport,
+  commentCreations = [],
+  commentCompleteness = "complete",
+  onCheckCommentCreation,
+  blockerReports = [],
+  onCheckBlockerReport,
+  onCheckTaskSave,
   error = "",
   detailDataError = "",
   requestedCommentTarget = "",
@@ -152,6 +176,7 @@ function HydratedTaskDetailSurface({
   onOverviewDirtyChange,
   onRequestDiscardAction,
   onUpdate,
+  onBeginEdit,
   onAddComment,
   onUploadAttachment,
   onImportGitHubComments,
@@ -168,12 +193,15 @@ function HydratedTaskDetailSurface({
   onRemoveRelation,
   onDecideApproval,
 }: TaskDetailSurfaceProps) {
+  const confirmationPending = taskSaves.some(save => save.phase === "unconfirmed" || save.phase === "blocked");
+  const pending = requestPending || confirmationPending;
   const [activeTab, setActiveTab] = useState<TaskDetailTabId>(() => {
     if (requestedCommentTarget.startsWith("relation:")) return "relationships";
     if (requestedCommentTarget.startsWith("field:") || requestedCommentTarget.startsWith("blocker:")) return "overview";
     return requestedCommentTarget ? "activity" : "overview";
   });
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
+  const [reviewEvidenceTask,setReviewEvidenceTask]=useState<Task|null>(null);
   const [reviewEvidenceGateIntent, setReviewEvidenceGateIntent] = useState<"request" | "reopen" | null>(null);
   const [reviewDraftDirty, setReviewDraftDirty] = useState(false);
   const controller = useTaskDetailController({
@@ -182,6 +210,7 @@ function HydratedTaskDetailSurface({
     unrestricted: false,
     operationalCorrection,
     onUpdate,
+    onBeginEdit,
   });
   const reviewActive = task.taskType === "deliverable" && isTaskReviewActive(task);
   const reviewLocked = task.taskType === "deliverable" && isTaskReviewLocked(task);
@@ -352,6 +381,20 @@ function HydratedTaskDetailSurface({
       onOpenHierarchyTask(taskId);
     });
   };
+  const [inlineEditor, setInlineEditor] = useState<{ taskId: string; editor: PlanningTaskEditor } | null>(null);
+  useEffect(() => () => inlineEditor?.editor.close(), [inlineEditor]);
+  const beginInlineEditing = () => {
+    if (inlineEditor?.taskId === task.id && inlineEditor.editor.view().phase === "saving") return inlineEditor.editor;
+    const editor = onBeginEdit?.();
+    if (editor) setInlineEditor({ taskId: task.id, editor });
+    return editor;
+  };
+  const updateInline = (patch: Partial<Task>) => {
+    const existing = inlineEditor?.taskId === task.id ? inlineEditor.editor : null;
+    const editor = existing && ["editing", "saving", "conflict", "unconfirmed", "blocked"].includes(existing.view().phase) ? existing : beginInlineEditing();
+    return editor ? onUpdate(patch, { editor }) : onUpdate(patch);
+  };
+  const inlineConflict = inlineEditor?.taskId === task.id && inlineEditor.editor.view().phase === "conflict" ? inlineEditor.editor.view() : null;
   const guardedUpdate = (patch: Partial<Task>) => {
     const requestsReview = patch.status === "Review" || patch.reviewStatus === "requested";
     const includesEvidence = Boolean(patch.evidenceLinks?.length || patch.reviewEvidenceExceptionNote?.trim());
@@ -359,13 +402,16 @@ function HydratedTaskDetailSurface({
       && requestsReview
       && !taskHasValidReviewEvidence(task, directChildren)
       && !includesEvidence) {
+      beginInlineEditing();
+      setReviewEvidenceTask(task);
       setReviewEvidenceGateIntent("request");
       return;
     }
-    return onUpdate(patch);
+    return updateInline(patch);
   };
   const reopenReview = () => {
     if (!taskHasValidReviewEvidence(task, directChildren)) {
+      setReviewEvidenceTask(task);
       setReviewEvidenceGateIntent("reopen");
       return;
     }
@@ -373,10 +419,10 @@ function HydratedTaskDetailSurface({
   };
   const submitReviewEvidence = async (submission: ReviewEvidenceSubmission) => {
     if (reviewEvidenceGateIntent === "reopen") {
-      const result = await onReopenReview(task, submission);
+      const result = await onReopenReview(reviewEvidenceTask||task, submission);
       return result !== false;
     }
-    const result = await onUpdate({
+    const result = await updateInline({
       status: "Review",
       reviewStatus: "requested",
       scoreFinal: false,
@@ -412,7 +458,12 @@ function HydratedTaskDetailSurface({
           error={controller.overviewError}
           flat={reviewActive}
           onCancel={cancelOverview}
-          onSave={controller.saveOverview}
+          confirmationPending={confirmationPending}
+          conflict={controller.overviewConflict}
+          canResave={controller.overviewCanResave}
+          conflictServerDraft={controller.overviewServerDraft}
+          onReloadConflict={controller.refreshOverviewConflict}
+          onSave={controller.overviewConflict ? controller.resaveOverview : controller.saveOverview}
           onChange={(patch) => controller.setOverviewDraft((current) => ({ ...current, ...patch }))}
           riskContent={!controller.overviewEditing ? (
             <>
@@ -427,10 +478,12 @@ function HydratedTaskDetailSurface({
                   variant="review"
                 />
               ) : null}
-              {detailDataLoading || detailDataUnavailable || blockers.length > 0 || controller.permissions.canReportBlocker ? (
+              {detailDataLoading || detailDataUnavailable || blockers.length > 0 || blockerReports.length > 0 || controller.permissions.canReportBlocker ? (
                 <TaskDetailPanelBlockerSection
                   canReport={controller.permissions.canReportBlocker}
                   blockers={blockers}
+                  reports={blockerReports}
+                  onCheckReport={onCheckBlockerReport}
                   blockerDraft={controller.blockerDraft}
                   embedded={task.taskType === "sub_issue"}
                   loading={detailDataLoading}
@@ -455,6 +508,8 @@ function HydratedTaskDetailSurface({
         blocks={relationshipGroups.blocks}
         related={relationshipGroups.related}
         legacyDependsOn={task.dependsOn}
+        relationshipChanges={relationshipChanges}
+        onCheckRelationshipChange={onCheckRelationshipChange}
         relationDraft={controller.relationDraft}
         relationTargetOptions={relationTargetOptions}
         allowedRelationTypes={relationshipAccess.allowedRelationTypes}
@@ -465,13 +520,14 @@ function HydratedTaskDetailSurface({
         onRemoveRelation={onRemoveRelation}
         canRemoveRelation={relationshipAccess.canRemoveRelation}
         canEditLegacyDependsOn={controller.permissions.canEditNotes}
+        onLegacyEditingStart={beginInlineEditing}
         onUpdateLegacyDependsOn={async (value) => {
-          const result = await onUpdate({ dependsOn: value });
+          const result = await updateInline({ dependsOn: value });
           return result || { ok: true, task: { dependsOn: value } };
         }}
         onRelationDraftChange={(patch) => controller.setRelationDraft((current) => ({ ...current, ...patch }))}
-        onAddRelation={async () => {
-          const result = await onAddRelation(controller.relationDraft);
+        onAddRelation={async (basis) => {
+          const result = await onAddRelation(controller.relationDraft, basis);
           if (result.ok) {
             controller.setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
           }
@@ -482,6 +538,14 @@ function HydratedTaskDetailSurface({
     activity: (
       <TaskCommentThread
         comments={comments}
+        attachmentUploads={attachmentUploads}
+        onCheckAttachmentUpload={onCheckAttachmentUpload}
+        githubImport={githubImport}
+        externalCommentCompleteness={externalCommentCompleteness}
+        onCheckGitHubImport={onCheckGitHubImport}
+        commentCreations={commentCreations}
+        commentCompleteness={commentCompleteness}
+        onCheckCommentCreation={onCheckCommentCreation}
         externalComments={externalComments}
         activities={activities}
         reviews={reviews}
@@ -534,6 +598,7 @@ function HydratedTaskDetailSurface({
           onWithdraw={onWithdraw}
         />
       )}
+      onEditingStart={beginInlineEditing}
       onUpdate={guardedUpdate}
     />
   );
@@ -551,7 +616,8 @@ function HydratedTaskDetailSurface({
       onDirtyChange={setReviewDraftDirty}
       onReview={onReview}
       onWithdraw={onWithdrawReview}
-      onReviewOwnerChange={(reviewOwnerProfileId) => onUpdate({ reviewOwnerProfileId })}
+      onEditingStart={beginInlineEditing}
+      onReviewOwnerChange={(reviewOwnerProfileId) => updateInline({ reviewOwnerProfileId })}
       onJumpToSection={jumpToReviewSection}
     />
   ) : null;
@@ -566,6 +632,7 @@ function HydratedTaskDetailSurface({
         canManageTaskMeta={controller.permissions.canManageTaskMeta}
         canReparentSubIssue={controller.permissions.canReparentSubIssue}
         pending={pending}
+        onEditingStart={beginInlineEditing}
         onUpdate={guardedUpdate}
       />
 
@@ -601,7 +668,8 @@ function HydratedTaskDetailSurface({
           canManageReviewOwner={task.taskType === "deliverable" && controller.permissions.canManageReviewOwner}
           forceReviewSetup={reviewSetupOpen}
           pending={pending}
-          onUpdate={guardedUpdate}
+          onEditingStart={beginInlineEditing}
+        onUpdate={guardedUpdate}
           onDecideApproval={onDecideApproval}
         />
       ) : null}
@@ -617,6 +685,13 @@ function HydratedTaskDetailSurface({
         />
       ) : null}
 
+      <TaskSaveNotice taskTitle={taskSaves[0]?.checkStatus === "forbidden" ? "Aufgabe" : task.title} saves={taskSaves} labels={{profiles:teamProfiles,tasks:allTasks,sprints}} onCheck={onCheckTaskSave} />
+      {inlineConflict ? <UiNotice tone="info" role="alert" className="mt-4">
+        <p>Die Aufgabe wurde zwischenzeitlich geändert. Deine abgesendete Änderung bleibt erhalten.</p>
+        <p className="mt-2">Aktueller Stand: {inlineConflict.serverTask?.title || "Noch nicht verfügbar"} · {inlineConflict.serverTask?.status}</p>
+        <UiButton type="button" size="lg" disabled={!inlineConflict.canResave} onClick={() => { if (inlineConflict.submitted && inlineEditor) void onUpdate(inlineConflict.submitted, { editor: inlineEditor.editor, resave: true }); }}>Änderung erneut speichern</UiButton>
+        {!inlineConflict.canResave ? <UiButton type="button" size="lg" onClick={() => { void inlineEditor?.editor.refreshConflict(); }}>Aktuellen Stand erneut laden</UiButton> : null}
+      </UiNotice> : null}
       {error ? <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div> : null}
 
       <TaskDetailTabs
@@ -649,6 +724,10 @@ function HydratedTaskDetailSurface({
       ) : null}
     </>
   );
+
+  if (taskSaves.some(save => save.phase === "unconfirmed") && taskSaves.every(save => save.submitted === null)) {
+    return <TaskSaveNotice taskTitle="Aufgabe" saves={taskSaves} labels={{profiles:teamProfiles,tasks:allTasks,sprints}} onCheck={onCheckTaskSave} />;
+  }
 
   if (surface === "modal") {
     return (

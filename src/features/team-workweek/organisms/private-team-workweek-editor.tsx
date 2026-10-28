@@ -2,12 +2,11 @@
 
 import { Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { usePrivateTeamWorkweek } from "../hooks/use-private-team-workweek";
+import type { usePrivateTeamWorkweekState } from "../model/private-team-workweek-state";
 import { TEAM_WORKWEEK_DAYS, TEAM_WORKWEEK_TIMEZONE } from "../model/team-workweek-draft";
 import { formatDate } from "@/lib/display";
 import { GoogleWorkspaceConnectionCard } from "../molecules/google-workspace-connection-card";
 import { TeamWorkweekDiscardDialog } from "../molecules/team-workweek-discard-dialog";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Profile } from "@/lib/types";
 import { WorkweekPicker } from "../molecules/workweek-picker";
 import { workweekLabel } from "../model/team-workweek-week";
@@ -15,16 +14,16 @@ import { addCalendarDays, berlinDateKey } from "../model/team-workweek-calendar"
 import { UiBadge, UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
-type WorkweekState = ReturnType<typeof usePrivateTeamWorkweek>;
+type WorkweekState = ReturnType<typeof usePrivateTeamWorkweekState>;
 
 export function PrivateTeamWorkweekEditor({
-  apiClient,
+  planningState,
   profile,
   state,
   onClose,
   restoreFocusRef,
 }: {
-  apiClient: BrowserApiClient;
+  planningState: import("@/features/planning/model/planning-state").PlanningState;
   profile: Profile;
   state: WorkweekState;
   onClose: () => void;
@@ -105,7 +104,7 @@ export function PrivateTeamWorkweekEditor({
                 </UiButton>
               </UiNotice>}
 
-              <GoogleWorkspaceConnectionCard compact apiClient={apiClient} profile={profile} />
+              <GoogleWorkspaceConnectionCard compact planningState={planningState} profile={profile} />
 
               <section className="overflow-hidden rounded-lg border border-slate-200 bg-white" aria-labelledby="workweek-windows-title">
                 <div className="px-3 py-2.5">

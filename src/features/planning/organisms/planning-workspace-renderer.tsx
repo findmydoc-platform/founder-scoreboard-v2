@@ -6,9 +6,7 @@ import { futureSprintDrafts } from "@/features/planning/model/planning-app-model
 import { PlanningTaskViewRenderer } from "@/features/planning/organisms/planning-task-view-renderer";
 import { WorkspaceContentSkeleton } from "@/features/planning/templates/workspace-loading-shell";
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
-import { UiPanel } from "@/shared/atoms/ui-primitives";
 import { canManageEpics } from "@/features/projects/model/epic-policy";
-import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
@@ -24,7 +22,7 @@ const EventsOverview = dynamic(() => import("@/features/events/organisms/events-
 const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: GenericWorkspacePanelLoading });
 const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organisms/profile-settings-overview").then((mod) => mod.ProfileSettingsOverview), { loading: GenericWorkspacePanelLoading });
 const NotificationsOverview = dynamic(() => import("@/features/notifications/organisms/notifications-overview").then((mod) => mod.NotificationsOverview), { loading: GenericWorkspacePanelLoading });
-const DecisionLogOverview = dynamic(() => import("@/features/decision-log/organisms/decision-log-overview").then((mod) => mod.DecisionLogOverview), { loading: GenericWorkspacePanelLoading });
+const PlanningDecisionLog = dynamic(() => import("@/features/decision-log/organisms/planning-decision-log").then(mod => mod.PlanningDecisionLog), { loading: GenericWorkspacePanelLoading });
 const SprintScoreTableOverview = dynamic(() => import("@/features/sprint/organisms/sprint-score-overview").then((mod) => mod.SprintScoreTableOverview), { loading: GenericWorkspacePanelLoading });
 const FmdQuickLinksOverview = dynamic(() => import("@/features/tools/organisms/fmd-quick-links-overview").then((mod) => mod.FmdQuickLinksOverview), { loading: GenericWorkspacePanelLoading });
 const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overview").then((mod) => mod.TeamOverview), { loading: GenericWorkspacePanelLoading });
@@ -36,19 +34,17 @@ type PlanningWorkspaceRendererProps = {
   initialAdministrationModel?: AdministrationWorkspaceModel | null;
   onAdministratorAccessInvalid: () => void;
   source: "supabase";
-  decisionLogResult?: NotionDecisionLogResult;
   initialBacklogModel?: BacklogModel;
   initialSprintModel?: SprintWorkspaceModel;
 };
 
-export function PlanningWorkspaceRenderer({ controller, administrationCapabilities, initialAdministrationModel = null, onAdministratorAccessInvalid, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningWorkspaceRendererProps) {
+export function PlanningWorkspaceRenderer({ controller, administrationCapabilities, initialAdministrationModel = null, onAdministratorAccessInvalid, source, initialBacklogModel, initialSprintModel }: PlanningWorkspaceRendererProps) {
   const {
     actualProfile,
     authBusy,
     canManageTaskMeta,
     createFounderEvent,
-    createScoreObjection,
-    createSprintPlan,
+    planningState,
     currentProfile,
     data,
     decideInitiativeApproval,
@@ -63,22 +59,18 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     githubSyncQueueOpen,
     githubUserConnected,
     isPending,
-    lockSprint,
     openNotification,
     openTaskPanel,
     apiClient,
-    reviewScoreObjection,
     saveProfileSettings,
     saveOwnProfileSettings,
-    saveSprintReviewWindow,
     setGithubSyncQueueOpen,
-    setInitiativeDialogDefaults,
+    editInitiative,
     setEpicDeleteTarget,
     setEpicDialogDefaults,
     setTaskDialogDefaults,
     setSprintPlanningOptions,
     signIn,
-    sprintLockMessage,
     sprintPlanningOptions,
     createFmdTool,
     loadFmdToolMetadata,
@@ -87,9 +79,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
     updateFounderEvent,
-    updateMeetingAttendance,
-    updateSprint,
-    updateSprintCommitment,
     updateTask,
     waitingGitHubCommentCount,
     withdrawInitiative,
@@ -100,17 +89,12 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
 
   return (
     <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
-      {workspace === "decision-log" && decisionLogResult && <DecisionLogOverview result={decisionLogResult} />}
-      {workspace === "decision-log" && !decisionLogResult && (
-        <UiPanel padding="xl">
-          <h2 className="text-lg font-semibold text-slate-950">Decision Log nicht verfügbar</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Für diesen Seitenaufruf wurden keine Notion-Daten geladen.</p>
-        </UiPanel>
-      )}
+      {workspace === "decision-log" && <PlanningDecisionLog planningState={planningState} />}
       {workspace === "projects" && (
         <ProjectsOverview
-          data={data}
-          tasks={data.tasks}
+          planningState={planningState}
+          data={{ ...data, tasks: [...planningState.hierarchy().tasks] }}
+          tasks={[...planningState.hierarchy().tasks]}
           currentProfile={currentProfile}
           canManageInitiatives={canManageTaskMeta}
           canManageEpics={canManageProjectEpics}
@@ -128,33 +112,13 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
           onOpenTask={openTaskPanel}
           onDecideInitiative={decideInitiativeApproval}
           onWithdrawInitiative={withdrawInitiative}
-          onEditInitiative={(initiative) => setInitiativeDialogDefaults({
-            id: initiative.id,
-            expectedUpdatedAt: initiative.updatedAt,
-            title: initiative.title,
-            parentTaskId: initiative.parentTaskId || "",
-            ownerId: initiative.ownerId || "",
-            accountableProfileId: initiative.raciAssignments?.find((assignment) => assignment.role === "accountable")?.profileId || initiative.ownerId || "",
-            responsibleProfileIds: initiative.raciAssignments?.filter((assignment) => assignment.role === "responsible").map((assignment) => assignment.profileId) || [],
-            consultedProfileIds: initiative.raciAssignments?.filter((assignment) => assignment.role === "consulted").map((assignment) => assignment.profileId) || [],
-            informedProfileIds: initiative.raciAssignments?.filter((assignment) => assignment.role === "informed").map((assignment) => assignment.profileId) || [],
-            priority: initiative.priority,
-            status: initiative.status === "In Arbeit" ? "active" : initiative.status === "Erledigt" ? "done" : initiative.status === "Pausiert" ? "paused" : "planned",
-            targetDate: initiative.targetDate || "",
-            goal: initiative.strategy?.goal || initiative.description,
-            successCriteria: initiative.strategy?.successCriteria || "",
-            scopeConstraints: initiative.strategy?.scopeConstraints || "",
-            approvalStatus: initiative.approvalStatus || "proposed",
-            approvalRevision: initiative.approvalRevision,
-            decisionNote: initiative.decisionNote,
-          })}
+          onEditInitiative={editInitiative}
         />
       )}
       {workspace === "backlog" && (
         initialBacklogModel ? <BacklogOverview
-          apiClient={apiClient}
+          planningState={planningState}
           canManageBacklog={canManageTaskMeta}
-          initialModel={initialBacklogModel}
           onOpenTask={openTaskPanel}
           onCreatePlanningItem={(taskType) => setTaskDialogDefaults({ taskType })}
           onProposeDeliverable={() => setTaskDialogDefaults({ taskType: "deliverable" })}
@@ -162,6 +126,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "events" && (
         <EventsOverview
+          planningState={planningState}
           events={data.events}
           profiles={data.profiles}
           canManageEvents={canManageTaskMeta || controller.canCorrectOperationally}
@@ -173,6 +138,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "tools" && (
         <FmdQuickLinksOverview
+          planningState={planningState}
           tools={data.fmdTools}
           source={source}
           currentProfile={currentProfile}
@@ -188,7 +154,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
         <TeamOverview
           actualProfile={actualProfile}
           apiClient={apiClient}
-          data={data}
+          planningState={controller.planningState}
           tasks={data.tasks}
           pending={isPending}
           canManageTeam={currentProfile?.platformRole === "ceo"}
@@ -197,7 +163,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "profile" && (
         <ProfileSettingsOverview
-          apiClient={apiClient}
+          planningState={controller.planningState}
           data={data}
           currentProfile={currentProfile}
           pending={isPending}
@@ -207,8 +173,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "sprint" && (
         initialSprintModel ? <SprintScoreTableOverview
-          initialModel={initialSprintModel}
-          data={data}
+          planningState={controller.planningState}
           pending={isPending}
           onOpenTask={openTaskPanel}
           onRequestReview={async (task, evidence) => {
@@ -222,12 +187,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
             return result.ok;
           }}
           onChangeStatus={(task, status) => updateTask(task, { status })}
-          onLockSprint={lockSprint}
-          onUpdateSprint={updateSprint}
-          onUpdateCommitment={updateSprintCommitment}
-          onUpdateMeetingAttendance={updateMeetingAttendance}
-          onCreateScoreObjection={createScoreObjection}
-          onReviewScoreObjection={reviewScoreObjection}
           onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
           sprintPlanningOptions={sprintPlanningOptions}
           plannedSprintCount={futureSprintDrafts(
@@ -237,16 +196,16 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
             data.project.reviewObjectionWindowHours,
           ).length}
           onUpdateSprintPlanning={setSprintPlanningOptions}
-          onCreateSprintPlan={createSprintPlan}
           currentProfile={currentProfile}
           canManageSprint={canManageSprint}
-          sprintLockMessage={sprintLockMessage}
           reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
-          onSaveReviewObjectionWindow={saveSprintReviewWindow}
         /> : null
       )}
       {workspace === "notifications" && (
         <NotificationsOverview
+          completeness={planningState.notifications().completeness}
+          readStatus={planningState.notifications().readStatus}
+          pendingEventIds={planningState.notifications().operations.filter(operation => operation.phase === "saving" || operation.phase === "unconfirmed").flatMap(operation => operation.eventId || [])}
           currentProfile={currentProfile}
           data={data}
           onOpenNotification={openNotification}
@@ -256,6 +215,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       {workspace === "administration" && (
         <AdministrationWorkspaceHost
           apiClient={apiClient}
+          planningState={controller.planningState}
           capabilities={administrationCapabilities}
           initialModel={initialAdministrationModel}
           onAdministratorAccessInvalid={onAdministratorAccessInvalid}
@@ -277,6 +237,8 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
         onClose={() => setGithubSyncQueueOpen(false)}
         onOpenTask={openTaskPanel}
         onReconnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
+        syncOperations={controller.planningState.taskGitHubSyncs()}
+        onCheckSync={id=>{void controller.planningState.checkTaskGitHubSync(id);}}
         onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
         onSyncTaskToGitHub={syncTaskToGitHub}
       />

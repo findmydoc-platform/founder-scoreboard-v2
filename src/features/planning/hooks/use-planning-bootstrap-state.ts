@@ -1,7 +1,8 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { usePlanningStateOwner } from "./use-planning-state-owner";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { useCurrentWorkspaceModelRefresh } from "@/features/planning/hooks/use-workspace-model-refresh";
 import { usePlanningFocusMode } from "@/features/planning/hooks/use-planning-focus-mode";
@@ -18,6 +19,7 @@ import { normalizeStatus } from "@/lib/status";
 import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData, Task } from "@/lib/types";
 
 export type PlanningBootstrapStateOptions = {
+  initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
   initialData: PlanningShellState;
   initialHeaderData: PlanningHeaderData;
   initialWorkspace: AppWorkspace;
@@ -28,9 +30,11 @@ export type PlanningBootstrapStateOptions = {
   initialProtectedDataLoaded?: boolean;
   initialAuthError?: string;
   operationalCorrection?: boolean;
+  administratorAccess?: import("@/features/administrator-access/model/administrator-access").AdministratorAccessSnapshot;
 };
 
 export function usePlanningBootstrapState({
+  initialDecisionLogResult,
   initialData,
   initialHeaderData,
   initialWorkspace,
@@ -41,12 +45,13 @@ export function usePlanningBootstrapState({
   initialProtectedDataLoaded = false,
   initialAuthError = "",
   operationalCorrection = false,
+  administratorAccess,
 }: PlanningBootstrapStateOptions) {
   const safeInitialData = useMemo(() => normalizePlanningShellState(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
-  const [data, setData] = useState(initialClientData);
-  const [baseHeaderData, setBaseHeaderData] = useState(safeInitialHeaderData);
+  const stateOwner = usePlanningStateOwner({ initialDecisionLogResult, initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, initialAdministratorAccess: administratorAccess });
+  const { data, planningState } = stateOwner;
   const { workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const viewState = usePlanningViewState({
     initialData: safeInitialData,
@@ -59,7 +64,9 @@ export function usePlanningBootstrapState({
   const [githubSyncQueueOpen, setGithubSyncQueueOpen] = useState(false);
 
   const clearSelectedTask = useCallback(() => setSelectedTaskId(null), [setSelectedTaskId]);
+  const githubConnection=planningState.githubConnection();
   const auth = usePlanningAuth({
+    loadGitHubConnection:planningState.loadGitHubConnection,
     authRequired,
     source,
     taskCount: data.tasks.length,
@@ -68,10 +75,8 @@ export function usePlanningBootstrapState({
     initialCurrentProfile,
     initialProtectedDataLoaded,
     initialAuthError,
-    setData,
-    setHeaderData: setBaseHeaderData,
-    normalizePlanningShellState,
-    normalizePlanningHeaderData,
+    planningState,
+    clearPlanningState: stateOwner.clearPlanningState,
     onSignedOut: clearSelectedTask,
   });
 
@@ -83,25 +88,11 @@ export function usePlanningBootstrapState({
     currentGithubLogin,
     currentProfileId: auth.serverCurrentProfile?.id || "",
   });
+  useEffect(() => {
+    stateOwner.configure(requestContext.apiClient, workspace, auth.serverCurrentProfile, administratorAccess);
+  }, [stateOwner, requestContext.apiClient, workspace, auth.serverCurrentProfile, administratorAccess]);
   const currentProfileId = requestContext.currentProfile?.id || "";
-  const notificationsWorkspaceRefreshRef = useRef<() => Promise<void>>(async () => undefined);
-  const refreshNotificationsWorkspace = useCallback(
-    () => notificationsWorkspaceRefreshRef.current(),
-    [],
-  );
-  const headerData = usePlanningHeaderData({
-    apiClient: requestContext.apiClient,
-    authRequired,
-    authUser: auth.authUser,
-    baseHeaderData,
-    currentProfileId,
-    data,
-    protectedDataLoaded: auth.protectedDataLoaded,
-    refreshNotificationsWorkspace,
-    serverCurrentProfile: auth.serverCurrentProfile,
-    setHeaderData: setBaseHeaderData,
-    workspace,
-  });
+  const headerData = usePlanningHeaderData({ planningState, enabled: Boolean(auth.authUser) && (!authRequired || auth.protectedDataLoaded), notificationsWorkspace: workspace === "notifications" });
   const canManageTaskMeta = requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
   const canCorrectOperationally = operationalCorrection;
   const canManageFinalTaskStatus = requestContext.currentProfile?.platformRole === "ceo";
@@ -112,19 +103,12 @@ export function usePlanningBootstrapState({
     && (canManageTaskMeta || canCorrectOperationally || taskBelongsToProfile(task, requestContext.currentProfile))
   ), [canCorrectOperationally, canManageFinalTaskStatus, canManageTaskMeta, requestContext.currentProfile]);
   const dataRefresh = useCurrentWorkspaceModelRefresh({
-    apiClient: requestContext.apiClient,
+    planningState,
     authUser: auth.authUser,
-    headerData,
-    serverCurrentProfile: auth.serverCurrentProfile,
-    setData,
-    setHeaderData: setBaseHeaderData,
     setProtectedDataLoaded: auth.setProtectedDataLoaded,
     source,
     workspace,
   });
-  useEffect(() => {
-    notificationsWorkspaceRefreshRef.current = dataRefresh.refreshCurrentWorkspaceModel;
-  }, [dataRefresh.refreshCurrentWorkspaceModel]);
   const focusMode = usePlanningFocusMode();
   const remoteChanges = usePlanningRemoteChanges({
     apiClient: requestContext.apiClient,
@@ -135,11 +119,17 @@ export function usePlanningBootstrapState({
 
   return {
     ...auth,
+    githubConnectionState:githubConnection.readStatus==="loading"?"checking" as const:githubConnection.state,
+    githubInstallationAvailable:githubConnection.installationAvailable,
+    githubUserConnected:githubConnection.userConnected,
+    waitingGitHubCommentCount:githubConnection.waitingCommentCount,
+    githubReauthFailed:githubConnection.state==="reconnect_required",
     ...dataRefresh,
     ...focusMode,
     ...remoteChanges,
     ...requestContext,
     ...viewState,
+    planningState,
     authAvailable,
     canChangeTaskStatus,
     canCorrectOperationally,
@@ -151,9 +141,7 @@ export function usePlanningBootstrapState({
     githubSyncQueueOpen,
     isPending,
     saveError,
-    setData,
     setGithubSyncQueueOpen,
-    setHeaderData: setBaseHeaderData,
     setSaveError,
     setStatusGuardNotice,
     setStatusGuardTaskId,

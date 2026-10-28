@@ -17,6 +17,7 @@ export type AdministrationProfile = Readonly<{
   name: string;
   platformRole: PlatformRole;
   orgRole: string;
+  technicalBasis?: TechnicalIdentityBasis;
   githubLogin: string;
   githubConnection: GitHubConnection | null;
   googleChatUserId: string;
@@ -50,7 +51,7 @@ export type AdministrationIntegrationStatus = Readonly<{
     mode: "direct-dm" | "space-webhook" | "not-configured";
   };
   mentionTeam: {
-    state: "ready" | "fallback";
+    state: "ready" | "fallback" | "stale";
     githubHandle: string;
     profilesWithoutGitHubLogin: number;
   };
@@ -60,6 +61,7 @@ export type AdministrationIntegrationStatus = Readonly<{
 
 export type AdministrationWorkspaceModel = Readonly<{
   revision: string;
+  coverage?: AdministrationReadCoverage;
   capabilities: AuthorityCapabilities;
   people: readonly AdministrationProfile[];
   githubProject: Readonly<{
@@ -83,3 +85,7 @@ export interface AdministrationReadModel {
     capabilities: AuthorityCapabilities;
   }): Promise<AdministrationLoadResult>;
 }
+
+export type AdministrationReadCoverage = Readonly<{ people: "complete" | "partial"; technical: boolean; notificationEvents: "partial" | "none"; notificationDeliveries: "partial" | "none" }>;
+
+export type TechnicalIdentityBasis = Readonly<{ githubLogin: string | null; googleChatUserId: string | null; googleChatDmSpace: string | null }>;

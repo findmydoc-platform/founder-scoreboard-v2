@@ -10,6 +10,7 @@ type UiSelectFieldProps = {
   value: string | number;
   options: CustomSelectOption[];
   onChange: (value: string) => void;
+  onOpen?: () => void;
   disabled?: boolean;
   className?: string;
   selectClassName?: string;
@@ -27,6 +28,7 @@ export function UiSelectField({
   value,
   options,
   onChange,
+  onOpen,
   disabled,
   className,
   selectClassName = "h-9 text-sm",
@@ -44,6 +46,7 @@ export function UiSelectField({
     <UiField as="div" className={className}>
       <span id={labelId}>{label}</span>
       <CustomSelect
+        onOpen={onOpen}
         value={value}
         onChange={onChange}
         disabled={disabled}

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isValidCommitmentVersion } from "@/lib/sprint-commitment-version";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { apiError, readJsonPayload } from "@/lib/api-response";
 import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
@@ -9,6 +10,7 @@ type CommitmentPayload = {
   commitmentLevel?: "Lite" | "Standard" | "Heavy" | "Away";
   weeklyHours?: number;
   note?: string;
+  expectedUpdatedAt?: string | null;
 };
 
 const levels = new Set(["Lite", "Standard", "Heavy", "Away"]);
@@ -34,16 +36,24 @@ export async function PUT(request: NextRequest) {
     return apiError("Founder können nur ihr eigenes Commitment ändern.", 403);
   }
 
-  const { data, error } = await planning.writeCommitment({ profileId, commitmentLevel, weeklyHours, note });
+  if (payload.expectedUpdatedAt !== null && !isValidCommitmentVersion(payload.expectedUpdatedAt)) return apiError("Lade das Commitment neu, bevor du speicherst.", 400);
 
+  const { data, error } = await planning.writeCommitment({ profileId, commitmentLevel, weeklyHours, note, expectedUpdatedAt: payload.expectedUpdatedAt });
+
+  if (error?.code === "commitment_revision_conflict") return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
+  if (error?.code === "22023") return apiError(error.message, 400);
+  if (error?.code === "42501") return apiError(error.message, 403);
   if (error || !data) return apiError(error?.message || "Commitment konnte nicht gespeichert werden.", 500);
 
-  await planning.auditCommitment(auditRequestMetadata(request));
+  let auditError = "";
+  try { const audit = await planning.auditCommitment(auditRequestMetadata(request)); if (audit.error) auditError = "Commitment gespeichert. Ob die Änderung protokolliert wurde, ist noch unklar."; } catch { auditError = "Commitment gespeichert. Ob die Änderung protokolliert wurde, ist noch unklar."; }
 
   return NextResponse.json({
     ok: true,
+    ...(auditError ? { auditError } : {}),
     commitment: {
       id: data.id,
+      updatedAt: data.updated_at,
       sprintId: data.sprint_id,
       profileId: data.profile_id,
       commitmentLevel: data.commitment_level,

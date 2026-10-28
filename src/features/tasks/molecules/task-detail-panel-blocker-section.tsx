@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Plus, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
+import type { TaskBlockerReportView } from "@/features/tasks/model/task-blocker-report";
 import type { TaskActionResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
 import { LinkifiedText } from "@/shared/atoms/linkified-text";
@@ -16,6 +17,8 @@ type BlockerDraft = {
 
 type Props = {
   canReport?: boolean;
+  reports?: readonly TaskBlockerReportView[];
+  onCheckReport?: (id: string) => void;
   blockers: TaskBlocker[];
   blockerDraft: BlockerDraft;
   embedded?: boolean;
@@ -31,6 +34,8 @@ type Props = {
 
 export function TaskDetailPanelBlockerSection({
   canReport = true,
+  reports = [],
+  onCheckReport,
   blockers,
   blockerDraft,
   embedded = false,
@@ -52,8 +57,9 @@ export function TaskDetailPanelBlockerSection({
   const [reportError, setReportError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const openBlockers = blockers.filter((blocker) => blocker.status === "open");
-  const busy = pending || submitting;
-  const compactEmpty = !loading && !error && !unavailable && blockers.length === 0 && !formOpen;
+  const activeReports = reports.filter(report => report.phase === "saving" || report.phase === "unconfirmed" || report.phase === "confirmed" && report.taskReadStatus !== "current");
+  const busy = pending || submitting || activeReports.length > 0;
+  const compactEmpty = !loading && !error && !unavailable && blockers.length === 0 && !formOpen && activeReports.length === 0;
 
   useEffect(() => {
     if (!formOpen) return;
@@ -94,12 +100,12 @@ export function TaskDetailPanelBlockerSection({
     }
   };
 
-  if (unavailable && blockers.length === 0 && !formOpen) return null;
+  if (unavailable && blockers.length === 0 && !formOpen && !activeReports.length) return null;
 
   if (compactEmpty) {
     return canReport ? (
       <div className={embedded ? "shrink-0" : "flex justify-end border-b border-slate-100 py-5"}>
-        <UiButton id={triggerId} size="lg" className="h-11" onClick={openForm} aria-expanded="false" aria-controls={formId}>
+        <UiButton id={triggerId} size="lg" className="h-11" disabled={activeReports.length > 0} onClick={openForm} aria-expanded="false" aria-controls={formId}>
           <Plus size={15} aria-hidden="true" />
           Blocker melden
         </UiButton>
@@ -123,13 +129,24 @@ export function TaskDetailPanelBlockerSection({
         <div className="flex items-center gap-2">
           {blockers.length ? <UiBadge tone={openBlockers.length ? "amber" : "white"}>{openBlockers.length} offen</UiBadge> : null}
           {canReport && !formOpen && !loading ? (
-            <UiButton id={triggerId} size="lg" className="h-11" onClick={openForm} aria-expanded="false" aria-controls={formId}>
+            <UiButton id={triggerId} size="lg" className="h-11" disabled={activeReports.length > 0} onClick={openForm} aria-expanded="false" aria-controls={formId}>
               <Plus size={15} aria-hidden="true" />
               Blocker melden
             </UiButton>
           ) : null}
         </div>
       </div>
+      {activeReports.map(report => (
+        <div key={report.id} role="status" className="mt-3 grid gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+          <p className="font-semibold">{report.phase === "saving" ? "Blocker-Meldung wird gespeichert …" : report.phase === "unconfirmed" ? "Ob der Blocker gespeichert wurde, ist noch unklar. Nicht erneut melden." : report.checking ? "Blocker gespeichert. Aufgabe wird geprüft …" : "Blocker gespeichert. Aufgabe noch nicht aktualisiert."}</p>
+          <p className="[overflow-wrap:anywhere]">Grund: {report.submitted.reason}</p>
+          {report.submitted.impact ? <p className="[overflow-wrap:anywhere]">Auswirkung: {report.submitted.impact}</p> : null}
+          {report.submitted.needsHelpFrom ? <p className="[overflow-wrap:anywhere]">Benötigte Hilfe: {report.submitted.needsHelpFrom}</p> : null}
+          {report.error ? <p>{report.error}</p> : null}
+          {report.serverTask ? <p>Aufgabe geladen: {report.serverTask.status}. {report.phase === "unconfirmed" ? "Ob der Blocker gespeichert wurde, bleibt unklar." : ""}</p> : null}
+          {report.phase !== "saving" && onCheckReport ? <UiButton className="min-h-11 justify-self-start" disabled={report.checking} onClick={() => onCheckReport(report.id)}>Aufgabenstand prüfen</UiButton> : null}
+        </div>
+      ))}
       {error ? <div role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div> : null}
       {loading ? (
         <div className="mt-3 grid gap-2" aria-label="Blocker werden geladen">
@@ -213,7 +230,7 @@ export function TaskDetailPanelBlockerSection({
               <X size={15} aria-hidden="true" />
               Abbrechen
             </UiButton>
-            <UiButton type="submit" size="lg" disabled={busy || blockerDraft.reason.trim().length < 5} variant="amberPrimary">
+            <UiButton type="submit" size="lg" className="bg-amber-700 hover:bg-amber-800" disabled={busy || blockerDraft.reason.trim().length < 5} variant="amberPrimary">
               {submitting ? "Meldet …" : "Blocker melden"}
             </UiButton>
           </div>
