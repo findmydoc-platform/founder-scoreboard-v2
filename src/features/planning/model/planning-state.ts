@@ -55,6 +55,9 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 export interface PlanningState extends PlanningNotificationsState, PlanningEventsState {
+  beginSprintLock(sprint: import("@/lib/types").Sprint, tasks: readonly Task[]): import("@/features/sprint/model/sprint-lock").SprintLockEditor;
+  sprintLocks(sprintId: string): readonly import("@/features/sprint/model/sprint-lock").SprintLockView[];
+  resumeSprintLock(sprintId: string): import("@/features/sprint/model/sprint-lock").SprintLockEditor | null;
   sprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanView;
   checkSprintPlan(): Promise<PlanningTaskSaveCheck>;
   resumeSprintPlan(): import("@/features/sprint/model/sprint-plan").SprintPlanEditor | null;

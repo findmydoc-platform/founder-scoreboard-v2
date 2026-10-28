@@ -35,6 +35,18 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialWorkspace: options.initialWorkspace,
     initialHeaderData: options.initialHeaderData,
     adapter: {
+      async lockSprint(basis) {
+        const {response,body}=await planningApi.lockSprintRequest(runtime.apiClient,basis.sprint.id,{expectedUpdatedAt:basis.sprint.updatedAt,expectedTasks:basis.tasks.map(task=>({id:task.id,updatedAt:task.updatedAt}))});
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Sprint-Abschluss fehlgeschlagen."),{status:response.status,code:body?.code});
+        if(!body?.sprint||body.sprint.id!==basis.sprint.id||!body.sprint.scoreLocked||body.sprint.status!=="closed")throw new Error("Sprint-Abschluss ist noch nicht bestätigt.");
+        return {...body,sprint:body.sprint};
+      },
+      async readSprintLock(sprintId) {
+        const {response,body}=await planningApi.requestSprintLock(runtime.apiClient,sprintId);
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Abschlussstand nicht verfügbar."),{status:response.status,code:body?.code});
+        if(!body?.basis?.sprint?.updatedAt||!Array.isArray(body.basis.tasks)||typeof body.tasksComplete!=="boolean")throw new Error("Abschlussstand ist unvollständig.");
+        return {basis:body.basis,tasksComplete:body.tasksComplete,receipt:body.receipt||null};
+      },
       async createSprintPlan(input, basis) {
         const { response, body } = await planningApi.createSprintPlanRequest(runtime.apiClient, { ...input, expectedSprints: basis.sprints.map(sprint => ({ id: sprint.id, number: Math.max(sprintNumber(sprint.name), sprintNumber(sprint.id)), updatedAt: sprint.updatedAt })) });
         if (!response.ok) throw Object.assign(new Error(body?.error || "Sprint-Plan konnte nicht gespeichert werden."), { status: response.status, code: body?.code });

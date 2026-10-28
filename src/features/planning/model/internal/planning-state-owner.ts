@@ -9,6 +9,7 @@ import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/task
 import { applyTaskDetailModel } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { emptyPlanningShellState } from "../planning-shell-state";
 import { sprintViewCoverage } from "./sprint-read-coverage";
+import { createSprintLockState } from "./sprint-lock-state";
 import { createSprintPlanState } from "./sprint-plan-state";
 import { createReviewWindowState } from "./review-window-state";
 import { createSprintState } from "./sprint-state";
@@ -26,6 +27,8 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 export type PlanningWorkspaceRead = { eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
 export type PlanningStateAdapter = import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+  lockSprint?: (basis: import("@/features/sprint/model/sprint-lock").SprintLockBasis) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockReceipt>;
+  readSprintLock?: (sprintId: string) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockObservation>;
   createSprintPlan?: (options: import("@/features/sprint/model/sprint-planning-options").SprintPlanningOptions, basis: import("@/features/sprint/model/sprint-plan").SprintPlanBasis) => Promise<import("@/features/sprint/model/sprint-plan").SprintPlanConfirmation>;
   saveReviewWindow?: (expectedHours: number, hours: number) => Promise<import("@/features/sprint/model/review-window-editing").ReviewWindowConfirmation>;
   saveSprint?: (sprint: import("@/lib/types").Sprint, patch: import("@/features/sprint/model/sprint-editing").SprintEditPatch) => Promise<{ sprint: import("@/lib/types").Sprint }>;
@@ -90,9 +93,50 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   });
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
-  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
-  const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: () => sprintState.schedulesPending() || sprintPlan.blocksSchedules(), checkSchedules: () => sprintPlan.blocksSchedules() ? sprintPlan.check() : sprintState.checkPendingSchedules(), save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
-  const sprintPlan = createSprintPlanState({ schedulesPending: () => sprintState.schedulesPending() || reviewWindow.blocksSprints(), checkSchedules: () => reviewWindow.blocksSprints() ? reviewWindow.check() : sprintState.checkPendingSchedules(), current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, create: adapter.createSprintPlan, accept: sprintState.acceptPlan, denied: sprintState.denied, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, lockPending: id=>sprintLock.blocksSprint(id), checkLock:id=>sprintLock.check(id), planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: () => sprintState.schedulesPending() || sprintPlan.blocksSchedules() || sprintLock.pending(), checkSchedules: () => sprintLock.pending() ? sprintLock.check() : sprintPlan.blocksSchedules() ? sprintPlan.check() : sprintState.checkPendingSchedules(), save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const sprintPlan = createSprintPlanState({ schedulesPending: () => sprintState.schedulesPending() || reviewWindow.blocksSprints() || sprintLock.pending(), checkSchedules: () => sprintLock.pending() ? sprintLock.check() : reviewWindow.blocksSprints() ? reviewWindow.check() : sprintState.checkPendingSchedules(), current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, create: adapter.createSprintPlan, accept: sprintState.acceptPlan, denied: sprintState.denied, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const sprintLock = createSprintLockState({
+    dependenciesPending: basis => sprintLock.blocksSprint(basis.sprint.id)
+      || sprintState.schedulesPending(basis.sprint.id)
+      || sprintPlan.blocksSprint(basis.sprint.id)
+      || reviewWindow.blocksSprints()
+      || basis.tasks.some(row => {
+        const task = confirmed.tasks.find(task => task.id === row.id);
+        return task && lifecycle.isRemoving(task);
+      })
+      || [...pending.values()].some(operation => basis.tasks.some(task => task.id === operation.taskId)
+        || confirmed.tasks.some(task => task.id === operation.taskId && task.sprintId === basis.sprint.id)
+        || operation.patch.sprintId === basis.sprint.id),
+    active: isActive,
+    generation: () => sessionGeneration,
+    current: () => confirmed,
+    changed: publish,
+    denied: sprintState.denied,
+    nextSequence: () => ++sequence,
+    async refresh() {
+      const loaded = (["planning", "projects"] as const).filter(workspace => workspaceStatuses.has(workspace));
+      const refreshed = await planning.refreshWorkspace("sprint");
+      for (const workspace of loaded) if (isActive()) await planning.refreshWorkspace(workspace);
+      return refreshed;
+    },
+    readStatus: () => workspaceStatuses.get("sprint") || "not-loaded",
+    lock: adapter.lockSprint,
+    observe: adapter.readSprintLock,
+    accept(receipt, basis) {
+      sprintState.acceptLock(receipt);
+      for (const task of basis.tasks) {
+        taskConfirmedAt.set(task.id, ++sequence);
+        if (detailStatuses.has(task.id)) detailStatuses.set(task.id, "stale");
+      }
+      for (const workspace of ["sprint", "planning", "projects"] as const) {
+        if (workspaceStatuses.has(workspace)) workspaceStatuses.set(workspace, "stale");
+      }
+      freshness = "stale";
+      notifications.invalidateHeader(["notifications"]);
+    },
+    plan: input => planning.beginSprintPlan().create(input),
+  });
   function publish() {
     confirmed = events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(confirmed)));
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
@@ -102,7 +146,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       return result;
     }) };
-    visible = sprintPlan.project(reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView)))));
+    visible = sprintLock.project(sprintPlan.project(reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView))))));
     visible = events.projectVisible(notifications.projectVisible(visible));
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
@@ -113,6 +157,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function saveTaskWithContext(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult> {
     if (!isActive()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 });
+    if (sprintLock.blocksTask(task,patch.sprintId)) return Promise.resolve({ok:false,kind:"unconfirmed",code:"predecessor_unconfirmed",error:"Der Sprint-Abschluss ist noch nicht vollständig bestätigt. Diese Änderung wurde nicht gesendet."});
     if (status.get(task.id) === "unconfirmed") {
       pending.set(Symbol(task.id), { taskId: task.id, submitted: structuredClone(patch), patch: structuredClone(patch), phase: "blocked" });
       publish();
@@ -195,6 +240,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return saved;
   }
   const lifecycle = createTaskLifecycle({
+    removalBlocked:task=>sprintLock.blocksTask(task),
     createTask: adapter.createTask,
     removeTask: adapter.removeTask,
     checkCreation: async () => { await planning.refreshWorkspace("planning"); return planning.workspace("planning").readStatus; },
@@ -240,6 +286,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const planning: PlanningState = {
+    beginSprintLock: (sprint,tasks) => sprintLock.begin(sprint,tasks),
+    sprintLocks: id => { isActive(); return sprintLock.views(id); },
+    resumeSprintLock: sprintLock.resume,
     sprintPlan: () => { isActive(); return sprintPlan.view(); },
     checkSprintPlan: () => sprintPlan.check(),
     resumeSprintPlan: () => sprintPlan.resume(),
@@ -305,6 +354,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     checkTaskSave(taskId) {
       if (!isActive()) return Promise.resolve({ outcome: "session-ended", readStatus: "not-needed" });
+      const lockTask=confirmed.tasks.find(task=>task.id===taskId);
+      if(lockTask&&sprintLock.blocksTask(lockTask)) return (async():Promise<import("../planning-state").PlanningTaskSaveCheck>=>{
+        const checked=await sprintLock.check();
+        if(!isActive())return{outcome:"session-ended",readStatus:"not-needed"};
+        const current=confirmed.tasks.find(task=>task.id===taskId);
+        if(checked.outcome==="not-pending"&&current&&sprintLock.blocksTask(current)&&adapter.readTaskDetail)await planning.loadTaskDetail(taskId);
+        const after=confirmed.tasks.find(task=>task.id===taskId);
+        return after&&sprintLock.blocksTask(after)?{outcome:"unconfirmed",readStatus:checked.readStatus}:checked;
+      })();
       if (status.get(taskId) !== "unconfirmed") return Promise.resolve({ outcome: "not-pending", readStatus: "not-needed" });
       const existing = outcomeChecks.get(taskId);
       if (existing) return existing;
@@ -454,6 +512,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     sprintState.clear();
     reviewWindow.clear();
     sprintPlan.clear();
+    sprintLock.clear();
     profileSettings.clear();
     profileTokens.clear();
     pending.clear();
@@ -487,7 +546,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (!isActive()) return;
     const incoming = typeof update === "function" ? update(visible) : update;
     if (incoming.tasks !== visible.tasks) freshness = "stale";
-    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), tasks: confirmed.tasks, sprints: confirmed.sprints, project: { ...incoming.project, reviewObjectionWindowHours: confirmed.project.reviewObjectionWindowHours } };
+    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), ...sprintState.preserveLockScopes(incoming,confirmed), tasks: confirmed.tasks, sprints: confirmed.sprints, project: { ...incoming.project, reviewObjectionWindowHours: confirmed.project.reviewObjectionWindowHours } };
     publish();
   }
   function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace) {

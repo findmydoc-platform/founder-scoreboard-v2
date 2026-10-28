@@ -42,7 +42,6 @@ type UsePlanningCommandRegistryOptions = {
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
   setView: PlanningViewState["setView"];
   setWorkspace: (workspace: AppWorkspace) => void;
-  sprintPlanningOptions: PlanningViewState["sprintPlanningOptions"];
   workspace: AppWorkspace;
 };
 
@@ -66,7 +65,6 @@ export function usePlanningCommandRegistry({
   setTaskDialogDefaults,
   setView,
   setWorkspace,
-  sprintPlanningOptions,
   workspace,
 }: UsePlanningCommandRegistryOptions) {
   const taskMutationCommands = useTaskMutationCommands({
@@ -114,11 +112,7 @@ export function usePlanningCommandRegistry({
     ...commandContext,
     syncTaskToGitHub,
   });
-  const sprintCommands = useSprintCommands({
-    ...commandContext,
-    refreshCurrentWorkspaceModel,
-    sprintPlanningOptions,
-  });
+  const sprintCommands = useSprintCommands(commandContext);
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
   const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
   const fmdToolCommands = useFmdToolCommands(commandContext);

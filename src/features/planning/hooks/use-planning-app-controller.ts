@@ -182,7 +182,6 @@ export function usePlanningAppController({
     setTaskDialogDefaults,
     setView,
     setWorkspace,
-    sprintPlanningOptions,
     workspace,
   });
   const { boardState } = commandRegistry;

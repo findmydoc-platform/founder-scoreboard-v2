@@ -1,5 +1,6 @@
 "use client";
 
+import { SprintLockControls } from "./sprint-lock-controls";
 import { Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
@@ -21,10 +22,9 @@ export function SprintControlsSummary({
   sprintIsCurrent,
   sprintControlsDisabled,
   canFinalizeSprintScore,
-  sprintLockMessage,
+  sprintPlanningOptions,
   openObjectionsCount,
   onSelectedSprintChange,
-  onLockSprint,
 }: {
   data: PlanningShellState;
   planningState: import("@/features/planning/model/planning-state").PlanningState;
@@ -39,10 +39,9 @@ export function SprintControlsSummary({
   sprintIsCurrent: boolean;
   sprintControlsDisabled: boolean;
   canFinalizeSprintScore: boolean;
-  sprintLockMessage: string;
+  sprintPlanningOptions: import("../model/sprint-planning-options").SprintPlanningOptions;
   openObjectionsCount: number;
   onSelectedSprintChange: (sprintId: string) => void;
-  onLockSprint: (sprintId: string) => void;
 }) {
   const provisionalIds = planningState.sprintPlan().provisionalSprintIds;
   const provisional = provisionalIds.includes(sprint.id);
@@ -134,15 +133,7 @@ export function SprintControlsSummary({
               ]}
             />
           </label>
-          <UiButton
-            type="button"
-            disabled={lockBlocked}
-            title={lockTitle}
-            onClick={() => onLockSprint(sprint.id)}
-            className="h-9"
-          >
-            Sprint abschließen
-          </UiButton>
+          <SprintLockControls planningState={planningState} sprint={sprint} tasks={sprintTasks} options={sprintPlanningOptions} disabled={lockBlocked} title={lockTitle} />
         </div>
       </div>
       <div className="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-3">
@@ -165,11 +156,6 @@ export function SprintControlsSummary({
         {["unconfirmed", "blocked"].includes(currentEdit.phase) && <UiButton className="mt-2 min-h-11" onClick={async () => { const result = await planningState.checkSprintSave(sprint.id); setCheckMessage(result.readStatus === "forbidden" ? "Kein Zugriff auf diesen Sprint-Bereich." : result.outcome === "not-pending" ? "Der Entwurf wurde noch nicht gesendet. Du kannst den Status jetzt bewusst wählen." : "Serverstand geprüft. Die Speicherung bleibt unbestätigt; sie wurde nicht erneut gesendet."); }}>Serverstand prüfen</UiButton>}
         {checkMessage && <p>{checkMessage}</p>}
       </UiNotice>}
-      {sprintLockMessage && (
-        <UiNotice tone="info" radius="none" className="!border-x-0 !border-b-0 border-t-blue-100 px-4 py-3 font-medium">
-          {sprintLockMessage}
-        </UiNotice>
-      )}
       {openObjectionsCount > 0 && (
         <UiNotice tone="warning" radius="none" className="!border-x-0 !border-b-0 border-t-amber-100 px-4 py-3 font-medium">
           {openObjectionsCount} offener Score-Einwand blockiert den Sprint-Lock bis zur Prüfung.

@@ -312,9 +312,9 @@ export function reviewScoreObjectionRequest(apiClient: BrowserApiClient, sprintI
   });
 }
 
-export function lockSprintRequest(apiClient: BrowserApiClient, sprintId: string) {
-  return apiClient.requestJson<{ error?: string; carryover?: { created?: number; evaluated?: number; nextSprintId?: string }; scoring?: { scores?: number; strikeEvents?: number; governanceReviews?: number } }>(`/api/sprints/${sprintId}/lock`, {
-    method: "POST",
-    json: {},
-  });
+export function lockSprintRequest(apiClient: BrowserApiClient, sprintId: string, payload: unknown) {
+  return apiClient.requestJson<Partial<import("@/features/sprint/model/sprint-lock").SprintLockReceipt> & { error?: string; code?: string }>(`/api/sprints/${sprintId}/lock`, { method: "POST", json: payload });
+}
+export function requestSprintLock(apiClient: BrowserApiClient, sprintId: string) {
+  return apiClient.requestJson<Partial<import("@/features/sprint/model/sprint-lock").SprintLockObservation> & { error?: string; code?: string }>(`/api/sprints/${sprintId}/lock`);
 }

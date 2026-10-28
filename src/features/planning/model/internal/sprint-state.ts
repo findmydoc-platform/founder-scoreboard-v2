@@ -6,6 +6,7 @@ import type { PlanningReadCoverage } from "./planning-read-scopes";
 export function createSprintState(options: {
   current(): PlanningShellState; update(data: PlanningShellState): void; changed(): void; active(): boolean; generation(): number; nextSequence(): number;
   save?: (sprint: Sprint, patch: SprintEditPatch) => Promise<{ sprint: Sprint }>;
+  lockPending?: (id: string) => boolean; checkLock?: (id: string) => Promise<PlanningTaskSaveCheck>;
   planPending?: (id: string) => boolean; checkPlan?: () => Promise<PlanningTaskSaveCheck>;
   reviewWindowPending?: () => boolean; checkReviewWindow?: () => Promise<PlanningTaskSaveCheck>;
   refresh(): Promise<boolean>; readStatus(): PlanningReadStatus;
@@ -20,6 +21,8 @@ export function createSprintState(options: {
   const tails = new Map<string, { context: symbol; result: Promise<SprintEditResult> }>();
   const uncertain = new Set<string>();
   const checks = new Map<string, Promise<PlanningTaskSaveCheck>>();
+  const lockedSprints=new Set<string>();
+  const lockScopeAt=new Map<string,number>();
   let denied = false;
   let reviewWindowReadAt = 0;
   let covered: PlanningReadCoverage = {};
@@ -29,6 +32,7 @@ export function createSprintState(options: {
   }
   async function check(id: string): Promise<PlanningTaskSaveCheck> {
     if (!options.active()) return { outcome: "session-ended", readStatus: "not-needed" };
+    if (options.lockPending?.(id) && options.checkLock) return options.checkLock(id);
     if (options.planPending?.(id) && options.checkPlan) return options.checkPlan();
     if (options.reviewWindowPending?.() && options.checkReviewWindow) return options.checkReviewWindow();
     if (!uncertain.has(id)) { for (const editor of editors.values()) if (editor.id === id) editor.releaseBlocked(); options.changed(); return { outcome: "not-pending", readStatus: "not-needed" }; }
@@ -45,6 +49,10 @@ export function createSprintState(options: {
   }
   return {
     check,
+    acceptLock(receipt: import("@/features/sprint/model/sprint-lock").SprintLockReceipt) {
+      const current=options.current();const accepted=options.nextSequence();stamps.set(receipt.sprint.id,accepted);lockedSprints.add(receipt.sprint.id);for(const key of ["founderSprintScores","founderStrikeStates","strikeEvents"])lockScopeAt.set(key,accepted);
+      options.update({...current,sprints:current.sprints.map(sprint=>sprint.id===receipt.sprint.id?{...sprint,...receipt.sprint,updatedAt:undefined}:sprint)});
+    },
     acceptPlan(rows: import("@/lib/types").Sprint[], started: number, basis: import("@/features/sprint/model/sprint-plan").SprintPlanBasis) {
       const current = options.current();
       const next = new Map(current.sprints.map(sprint => [sprint.id, sprint]));
@@ -57,7 +65,19 @@ export function createSprintState(options: {
       }
       options.update({ ...current, sprints: [...next.values()] });
     },
-    schedulesPending: () => pending.size > 0 || uncertain.size > 0,
+    preserveLockScopes(incoming: PlanningShellState, current: PlanningShellState): Partial<PlanningShellState> {
+      if(!lockedSprints.size)return {};
+      const keep=<T extends {id:string|number}>(before:readonly T[],after:readonly T[],owns:(row:T)=>boolean)=>{
+        const protectedRows=before.filter(owns),ids=new Set(protectedRows.map(row=>row.id));
+        return [...after.filter(row=>!owns(row)&&!ids.has(row.id)),...protectedRows];
+      };
+      return {
+        founderSprintScores:keep(current.founderSprintScores,incoming.founderSprintScores,row=>lockedSprints.has(row.sprintId)),
+        strikeEvents:keep(current.strikeEvents,incoming.strikeEvents,row=>lockedSprints.has(row.sprintId)),
+        founderStrikeStates:keep(current.founderStrikeStates,incoming.founderStrikeStates,row=>lockedSprints.has(row.lastEvaluatedSprintId)),
+      };
+    },
+    schedulesPending: (id?:string) => [...pending.values()].some(entry=>!id||entry.id===id) || [...uncertain].some(key=>!id||key===id),
     async checkPendingSchedules(): Promise<PlanningTaskSaveCheck> {
       if (!options.active()) return { outcome: "session-ended", readStatus: "not-needed" };
       const generation = options.generation();
@@ -96,13 +116,14 @@ export function createSprintState(options: {
       const scopes = ["sprints", "sprintCommitments", "founderSprintScores", "founderStrikeStates", "strikeEvents", "scoreObjections", "meetings", "meetingAttendance"] as const;
       for (const key of scopes) {
         if (!coverage[key]) continue;
+        if ((lockScopeAt.get(key)||0)>started) { stale=true;Object.assign(next,{[key]:current[key]});continue; }
         if ((completeReads.get(key) || 0) > started) { stale = true; Object.assign(next, { [key]: current[key] }); continue; }
         const accepted = key === "sprints" ? stamps : scopeStamps.get(key) || new Map<string | number, number>();
         scopeStamps.set(key, accepted);
         const before = current[key] as readonly { id: string | number }[];
         const incoming = returned[key] as readonly { id: string | number }[];
         const rows = new Map((coverage[key] === "partial" ? before : []).map(row => [row.id, row]));
-        for (const row of incoming) if ((accepted.get(row.id) || 0) <= started) { rows.set(row.id, row); accepted.set(row.id, started); if (key === "sprints") readStamps.set(row.id, started); }
+        for (const row of incoming) if (key === "sprints" && lockedSprints.has(String(row.id)) && !(row as Sprint).scoreLocked) { stale=true; const known=current.sprints.find(sprint=>sprint.id===row.id);if(known)rows.set(row.id,known); } else if ((accepted.get(row.id) || 0) <= started) { rows.set(row.id, row); accepted.set(row.id, started); if (key === "sprints") readStamps.set(row.id, started); }
         for (const row of before) if ((accepted.get(row.id) || 0) > started) { stale = true; rows.set(row.id, row); }
         if (coverage[key] === "complete") completeReads.set(key, started);
         Object.assign(next, { [key]: [...rows.values()] });
@@ -124,7 +145,7 @@ export function createSprintState(options: {
       editors.set(context, { id: shown.id, view: () => checkedView(view), releaseBlocked() { if (view.phase === "blocked") view = { ...view, phase: "editing", error: "" }; } });
       function save(patch: SprintEditPatch): Promise<SprintEditResult> {
         if (closed || !options.active() || generation !== options.generation()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Bearbeitung wurde beendet." });
-        if (uncertain.has(basis.id) || options.reviewWindowPending?.() || options.planPending?.(basis.id)) { view = { ...view, phase: "blocked", submitted: structuredClone(patch), error: "Eine vorherige Sprint-Änderung ist noch nicht bestätigt. Diese Eingabe wurde noch nicht gesendet." }; options.changed(); return Promise.resolve({ ok: false, kind: "unconfirmed", error: view.error }); }
+        if (uncertain.has(basis.id) || options.reviewWindowPending?.() || options.planPending?.(basis.id) || options.lockPending?.(basis.id)) { view = { ...view, phase: "blocked", submitted: structuredClone(patch), error: "Eine vorherige Sprint-Änderung ist noch nicht bestätigt. Diese Eingabe wurde noch nicht gesendet." }; options.changed(); return Promise.resolve({ ok: false, kind: "unconfirmed", error: view.error }); }
         const operation = Symbol(basis.id);
         let originalBasis = structuredClone(basis);
         const submitted = structuredClone(patch);
@@ -190,6 +211,6 @@ export function createSprintState(options: {
         close() { closed = true; if (!view.submitted) editors.delete(context); },
       };
     },
-    clear() { pending.clear(); stamps.clear(); readStamps.clear(); editors.clear(); tails.clear(); uncertain.clear(); checks.clear(); scopeStamps.clear(); completeReads.clear(); projectStamps.clear(); denied = false; reviewWindowReadAt = 0; covered = {}; },
+    clear() { lockedSprints.clear();lockScopeAt.clear();pending.clear(); stamps.clear(); readStamps.clear(); editors.clear(); tails.clear(); uncertain.clear(); checks.clear(); scopeStamps.clear(); completeReads.clear(); projectStamps.clear(); denied = false; reviewWindowReadAt = 0; covered = {}; },
   };
 }

@@ -3,6 +3,7 @@ import type { PlanningShellState, Task, TaskRelation } from "@/lib/types";
 import type { PlanningTaskCreationInput, PlanningTaskCreationConfirmation, PlanningTaskCreationResult, PlanningTaskLifecycleView, PlanningTaskRemovalConfirmation, PlanningTaskRemovalResult } from "../planning-task-lifecycle";
 
 type LifecycleAdapter = {
+  removalBlocked?: (task:Task) => boolean;
   createTask?: (input: PlanningTaskCreationInput) => Promise<PlanningTaskCreationConfirmation>;
   removeTask?: (task: Task, action: "withdraw" | "reject", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
   checkCreation(): Promise<PlanningTaskSaveCheck["readStatus"]>;
@@ -131,9 +132,10 @@ export function createTaskLifecycle(adapter: LifecycleAdapter) {
       const id = `${action}:${task.id}:${++removalSequence}`;
       const operation: PlanningTaskLifecycleView = { id, kind: action, phase: "saving", submitted: structuredClone({ task, reason }), taskId: task.id, error: "", checkStatus: "not-checked" };
       operations.set(id, operation);
-      if (isRemoving(task)) {
+      const affected=subtreeIds(adapter.current(),new Set([task.id]));
+      if (isRemoving(task)||adapter.current().tasks.some(row=>affected.has(row.id)&&adapter.removalBlocked?.(row))) {
         operation.phase = "blocked";
-        operation.error = "Das Entfernen des übergeordneten Elements ist noch nicht bestätigt. Diese Änderung wurde noch nicht gesendet.";
+        operation.error = "Eine abhängige Änderung oder ein Sprint-Abschluss ist noch nicht bestätigt. Diese Änderung wurde noch nicht gesendet.";
         adapter.changed();
         return { ok: false, kind: "unconfirmed", error: operation.error };
       }

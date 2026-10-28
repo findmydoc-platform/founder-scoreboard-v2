@@ -1,32 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import { mapScoreObjectionResponse } from "@/features/planning/model/planning-app-model";
 import { mapFounderSprintScore } from "@/lib/planning-sprint-mappers";
 import type { ScoreObjection, ScoreObjectionResolutionInput, Sprint, SprintCommitment } from "@/lib/types";
 
-type UseSprintCommandsOptions = PlanningCommandContext & {
-  refreshCurrentWorkspaceModel: () => Promise<void>;
-  sprintPlanningOptions: SprintPlanningOptions;
-};
+type UseSprintCommandsOptions = PlanningCommandContext;
 
 export function useSprintCommands({
   apiClient,
   currentProfile,
   data,
-  refreshCurrentWorkspaceModel,
   setData,
   setSaveError,
   source,
-  sprintPlanningOptions,
   startTransition,
-  planningState,
 }: UseSprintCommandsOptions) {
-  const [sprintLockMessage, setSprintLockMessage] = useState("");
-
   const updateSprintCommitment = (commitment: SprintCommitment) => {
     setSaveError("");
 
@@ -195,41 +185,9 @@ export function useSprintCommands({
     });
   };
 
-  const lockSprint = (sprintId: string) => {
-    setSaveError("");
-    setSprintLockMessage("");
-
-    const previousData = data;
-    setData((current) => ({
-      ...current,
-      sprints: current.sprints.map((sprint) => (sprint.id === sprintId ? { ...sprint, status: "closed", scoreLocked: true } : sprint)),
-      tasks: current.tasks.map((task) => (task.sprintId === sprintId && !task.scoreFinal ? { ...task, scorePoints: 0, scoreFinal: true } : task)),
-    }));
-
-    if (source !== "supabase") return;
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.lockSprintRequest(apiClient, sprintId);
-        if (!response.ok) throw new Error(body?.error || "Sprint konnte nicht gelockt werden.");
-        if (body?.carryover) {
-          setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt. ${body.scoring?.scores || 0} FounderOps-Scores finalisiert, ${body.scoring?.strikeEvents || 0} Strike-Ereignisse geschrieben${body.scoring?.governanceReviews ? `, ${body.scoring.governanceReviews} Governance Review nötig` : ""}.`);
-        }
-        await refreshCurrentWorkspaceModel();
-        const plan = await planningState.beginSprintPlan().create(sprintPlanningOptions);
-        if (!plan.ok) setSaveError(plan.error);
-      } catch (error) {
-        setData(previousData);
-        setSaveError(error instanceof Error ? error.message : "Sprint konnte nicht gelockt werden.");
-      }
-    });
-  };
-
   return {
     createScoreObjection,
-    lockSprint,
     reviewScoreObjection,
-    sprintLockMessage,
     updateSprintCommitment,
   };
 }

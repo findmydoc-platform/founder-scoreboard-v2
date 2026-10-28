@@ -92,7 +92,12 @@ export function createTaskEditing(adapter: EditingAdapter) {
           phase = "editing";
           return save(patch);
         },
-        checkOutcome: () => sameSession() ? adapter.checkOutcome(taskId) : Promise.resolve({ outcome: "session-ended", readStatus: "not-needed" }),
+        async checkOutcome() {
+          if(!sameSession())return {outcome:"session-ended",readStatus:"not-needed"};
+          const checked=await adapter.checkOutcome(taskId);
+          if(sameSession()&&checked.outcome==="not-pending"&&phase==="blocked"){phase="editing";error="";adapter.changed();}
+          return checked;
+        },
         close() { closed = true; if (!submitted || phase === "saved" || phase === "rejected") retained.delete(context); },
       };
       return editor;

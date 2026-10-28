@@ -63,7 +63,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     githubSyncQueueOpen,
     githubUserConnected,
     isPending,
-    lockSprint,
     openNotification,
     openTaskPanel,
     apiClient,
@@ -77,7 +76,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     setTaskDialogDefaults,
     setSprintPlanningOptions,
     signIn,
-    sprintLockMessage,
     sprintPlanningOptions,
     createFmdTool,
     loadFmdToolMetadata,
@@ -220,7 +218,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
             return result.ok;
           }}
           onChangeStatus={(task, status) => updateTask(task, { status })}
-          onLockSprint={lockSprint}
           onUpdateCommitment={updateSprintCommitment}
           onUpdateMeetingAttendance={updateMeetingAttendance}
           onCreateScoreObjection={createScoreObjection}
@@ -236,7 +233,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
           onUpdateSprintPlanning={setSprintPlanningOptions}
           currentProfile={currentProfile}
           canManageSprint={canManageSprint}
-          sprintLockMessage={sprintLockMessage}
           reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
         /> : null
       )}

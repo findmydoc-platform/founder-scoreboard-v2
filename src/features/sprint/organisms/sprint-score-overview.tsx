@@ -26,7 +26,6 @@ export function SprintScoreTableOverview({
   onOpenTask,
   onRequestReview,
   onChangeStatus,
-  onLockSprint,
   onUpdateCommitment,
   onUpdateMeetingAttendance,
   onCreateScoreObjection,
@@ -38,7 +37,6 @@ export function SprintScoreTableOverview({
 
   currentProfile,
   canManageSprint,
-  sprintLockMessage,
   reviewObjectionWindowHours,
 }: {
   planningState: PlanningState;
@@ -46,7 +44,6 @@ export function SprintScoreTableOverview({
   onOpenTask: (taskId: string) => void;
   onRequestReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onChangeStatus: (task: Task, status: TaskStatus) => void;
-  onLockSprint: (sprintId: string) => void;
   onUpdateCommitment: (commitment: SprintCommitment) => void;
   onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
   onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
@@ -57,7 +54,6 @@ export function SprintScoreTableOverview({
   onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
   currentProfile: Profile | null;
   canManageSprint: boolean;
-  sprintLockMessage: string;
   reviewObjectionWindowHours: number;
 }) {
   const sprintView = planningState.sprintWorkspace();
@@ -140,13 +136,10 @@ export function SprintScoreTableOverview({
         sprintIsCurrent={sprintIsCurrent}
         sprintControlsDisabled={sprintControlsDisabled}
         canFinalizeSprintScore={currentProfile?.platformRole === "ceo"}
-        sprintLockMessage={sprintLockMessage}
+        sprintPlanningOptions={sprintPlanningOptions}
         openObjectionsCount={openObjections.length}
         onSelectedSprintChange={setSelectedSprintId}
         planningState={planningState}
-        onLockSprint={(sprintId) => {
-          onLockSprint(sprintId);
-        }}
       />
 
       <SprintPlanningSection
