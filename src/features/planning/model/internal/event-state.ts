@@ -12,6 +12,7 @@ function normalize(draft: FounderEventDraft): FounderEventDraft {
 export function createEventsState(options: { initial: readonly FounderEvent[]; loaded: boolean; adapter: EventsAdapter; active: () => boolean; generation: () => number; changed: () => void; invalidateCalendar: () => void; refreshWorkspace: () => Promise<boolean>; endSession: () => void; beginHeaderRead: () => number; acceptHeaderRead: (data: PlanningHeaderData, started: number) => void }) {
   let records = [...options.initial], readStatus: PlanningReadStatus = options.loaded ? "current" : "not-loaded", coverage: EventCoverage | null = options.loaded ? { range: null, completeness: "partial" } : null;
   let sequence = 0, mutationBoundary = 0, localId = -1, denied = false, denialAt = 0, authorityGeneration = 0;
+  const receipts = new Map<number, { started: number; acceptedAt: number; readThrough: number; basisVersion: string | undefined }>();
   const accepted = new Map<number, number>(), barriers: { range: EventRange | null; at: number }[] = [], operations = new Map<string, EventOperation>();
   const reads = new Map<string, { started: number; promise: Promise<boolean> }>();
   function visible() {
@@ -35,15 +36,20 @@ export function createEventsState(options: { initial: readonly FounderEvent[]; l
     const previousCalendar = calendarIdentity(records);
     let stale = false;
     denied = false;
-    const protectedEvent = (event: FounderEvent) => (accepted.get(event.id) || 0) > started || barriers.some(barrier => barrier.at > started && contains(barrier.range, event));
-    const incoming = new Map(result.events.filter(event => { if (protectedEvent(event)) { stale = true; return false; } return true; }).map(event => [event.id, event]));
+    const protectedEvent = (event: FounderEvent, incoming = false) => {
+      const own = receipts.get(event.id);
+      // An overlapping read can observe a foreign successor, but the displayed predecessor is not newer evidence.
+      const successor = incoming && own && own.acceptedAt === accepted.get(event.id) && started >= own.readThrough && started > own.started && event.updatedAt !== own.basisVersion;
+      return ((accepted.get(event.id) || 0) > started && !successor) || barriers.some(barrier => barrier.at > started && contains(barrier.range, event));
+    };
+    const incoming = new Map(result.events.filter(event => { if (protectedEvent(event, true)) { stale = true; return false; } return true; }).map(event => [event.id, event]));
     records = records.filter(event => {
       if (incoming.has(event.id)) return false;
       if (result.coverage.completeness !== "complete" || !contains(result.coverage.range, event)) return true;
       if (protectedEvent(event)) { stale = true; return true; }
       accepted.set(event.id, started); return false;
     });
-    for (const event of incoming.values()) { records.push(event); accepted.set(event.id, started); }
+    for (const event of incoming.values()) { records.push(event); accepted.set(event.id, started); receipts.delete(event.id); }
     const existing = barriers.findIndex(barrier => JSON.stringify(barrier.range) === JSON.stringify(result.coverage.range));
     if (existing >= 0) barriers[existing].at = Math.max(barriers[existing].at, started);
     else barriers.push({ range: result.coverage.range, at: started });
@@ -103,8 +109,8 @@ export function createEventsState(options: { initial: readonly FounderEvent[]; l
       if (!result.event.updatedAt || !Number.isFinite(result.event.id) || result.event.id <= 0 || (basis && result.event.id !== basis.id)) throw new Error("Event-Speicherung ist noch nicht bestätigt.");
       const latest = records.find(event => event.id === result.event.id);
       const protectedResult = (accepted.get(result.event.id) || 0) > started || barriers.some(barrier => barrier.at > started && contains(barrier.range, result.event));
-      if (protectedResult && latest?.updatedAt !== result.event.updatedAt) readStatus = "stale";
-      else { records = [...records.filter(event => event.id !== result.event.id), result.event]; accepted.set(result.event.id, ++sequence); }
+      if (protectedResult && latest?.updatedAt !== result.event.updatedAt && (basis ? latest?.updatedAt !== basis.updatedAt : Boolean(latest))) readStatus = "stale";
+      else { const readThrough = accepted.get(result.event.id) || 0, acceptedAt = ++sequence; records = [...records.filter(event => event.id !== result.event.id), result.event]; accepted.set(result.event.id, acceptedAt); receipts.set(result.event.id, { started, acceptedAt, readThrough, basisVersion: basis?.updatedAt }); }
       mutationBoundary = ++sequence;
       operation.eventId = result.event.id; operation.phase = "saved"; operation.warning = result.warning;
       if (calendarChanged(basis, result.event)) options.invalidateCalendar();
@@ -135,6 +141,6 @@ export function createEventsState(options: { initial: readonly FounderEvent[]; l
   return { publicState, beginRead, acceptRead, failed,
     projectConfirmed: (data: PlanningShellState): PlanningShellState => ({ ...data, events: denied ? [] : records }),
     projectVisible: (data: PlanningShellState): PlanningShellState => ({ ...data, events: visible() }),
-    clear() { records = []; operations.clear(); reads.clear(); accepted.clear(); barriers.length = 0; coverage = null; readStatus = "not-loaded"; },
+    clear() { records = []; operations.clear(); reads.clear(); accepted.clear(); receipts.clear(); barriers.length = 0; coverage = null; readStatus = "not-loaded"; },
   };
 }

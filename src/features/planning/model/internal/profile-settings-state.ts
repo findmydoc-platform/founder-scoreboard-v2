@@ -38,6 +38,20 @@ export function createProfileSettingsState(context: Context) {
   const confirmedAt = new Map<string, number>();
   const readAt = new Map<string, number>();
   const completeReadAt = new Map<string, number>();
+  const ownReceipts = new Map<string, { started: number; acceptedAt: number; basis: unknown }>();
+  const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+  function readSupersedesOwnReceipt(key: string, incoming: unknown, started: number) {
+    const own = ownReceipts.get(key);
+    // Only a read begun after this write can replace its receipt; the unchanged predecessor cannot.
+    return Boolean(own && own.acceptedAt === confirmedAt.get(key) && (readAt.get(key) || 0) <= started && started > own.started && !same(incoming, own.basis));
+  }
+  function acceptOwnReceipt(key: string, collection: string, before: unknown, current: unknown, saved: unknown, started: number, acceptedAt: number) {
+    const newer = Math.max(confirmedAt.get(key) || 0, readAt.get(key) || 0, completeReadAt.get(collection) || 0) > started;
+    if (newer && !same(current, before) && !same(current, saved)) return false;
+    confirmedAt.set(key, acceptedAt);
+    ownReceipts.set(key, { started, acceptedAt, basis: structuredClone(before) });
+    return true;
+  }
   let denied = false;
   const owned = new Set<string>();
   const checks = new Map<string, Promise<boolean>>();
@@ -88,7 +102,7 @@ export function createProfileSettingsState(context: Context) {
       save: active && !denied ? (saves.has(profileId) ? structuredClone(saves.get(profileId)!) : null) || { phase: "saved", submitted: null, error: "" } : { phase: "saved", submitted: null, error: "" },
     };
   }
-  async function save(profileId: string, patch: OwnProfileSettingsPatch): Promise<ProfileSettingsResult> {
+  async function save(profileId: string, patch: OwnProfileSettingsPatch, acknowledged?: (receipt: OwnProfileSettingsConfirmation, patch: OwnProfileSettingsPatch) => void): Promise<ProfileSettingsResult> {
     if (!context.active()) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt." };
     owned.add(profileId);
     patch = { ...patch, profilePatch: Object.fromEntries((["focus", "color", "notificationsEnabled"] as const).filter(field => patch.profilePatch && field in patch.profilePatch).map(field => [field, patch.profilePatch![field]])) };
@@ -100,6 +114,7 @@ export function createProfileSettingsState(context: Context) {
     const profile = base.profiles.find(item => item.id === profileId);
     if (!profile) return { ok: false, kind: "rejected", status: 403, error: "Das Profil ist nicht verfügbar." };
     patch = { ...patch, expected: patch.expected || { profile: profileBasis(profile, (["focus", "color", "notificationsEnabled"] as const).filter(field => field in (patch.profilePatch || {}))), ...(patch.uiPreferences ? { ui: uiBasis(base.profileUiPreferences.find(item => item.profileId === profileId) || null) } : {}), events: Object.fromEntries(Object.keys(patch.notificationEvents || {}).map(event => [event, base.notificationPreferences.find(item => item.profileId === profileId && item.channel === "google_chat" && item.eventType === event)?.enabled ?? null])) } };
+    const started = context.nextSequence();
     const submitted = { ...patch }; delete submitted.expected;
     saves.set(profileId, { phase: "saving", submitted: structuredClone(submitted), error: "" });
     context.changed();
@@ -109,24 +124,26 @@ export function createProfileSettingsState(context: Context) {
       if (!context.active() || context.generation() !== generation) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt." };
       if (!result.profile || result.profile.id !== profileId) throw new Error("Die Speicherung ist noch nicht bestätigt.");
       const current = context.confirmed();
-      let notificationPreferences = current.notificationPreferences;
-      for (const saved of result.notificationPreferences) notificationPreferences = upsert(notificationPreferences, saved, item => item.profileId === saved.profileId && item.channel === saved.channel && item.eventType === saved.eventType);
       const confirmedSequence = context.nextSequence();
+      let notificationPreferences = current.notificationPreferences;
+      for (const saved of result.notificationPreferences) {
+        const matching = (item: typeof saved) => item.profileId === saved.profileId && item.channel === saved.channel && item.eventType === saved.eventType;
+        const key = `notificationPreferences:${saved.profileId}:${saved.channel}:${saved.eventType}`;
+        if (acceptOwnReceipt(key, "notificationPreferences", base.notificationPreferences.find(matching)?.enabled ?? null, current.notificationPreferences.find(matching)?.enabled ?? null, saved.enabled, started, confirmedSequence)) notificationPreferences = upsert(notificationPreferences, saved, matching);
+      }
       const existingProfile = current.profiles.find(profile => profile.id === profileId);
       const savedFields: Partial<Profile> = {};
       for (const field of ["focus", "color", "notificationsEnabled"] as const) {
-        if (patch.profilePatch && field in patch.profilePatch) {
-          Object.assign(savedFields, { [field]: result.profile[field] });
-          confirmedAt.set(`profiles:${profileId}:${field}`, confirmedSequence);
-        }
+        if (patch.profilePatch && field in patch.profilePatch && existingProfile && acceptOwnReceipt(`profiles:${profileId}:${field}`, "profiles", profileBasis(profile, [field]), profileBasis(existingProfile, [field]), profileBasis(result.profile, [field]), started, confirmedSequence)) Object.assign(savedFields, { [field]: result.profile[field] });
       }
-      if (result.uiPreference) confirmedAt.set(`profileUiPreferences:${profileId}`, confirmedSequence);
-      for (const saved of result.notificationPreferences) confirmedAt.set(`notificationPreferences:${saved.profileId}:${saved.channel}:${saved.eventType}`, confirmedSequence);
+      let profileUiPreferences = current.profileUiPreferences;
+      if (result.uiPreference && acceptOwnReceipt(`profileUiPreferences:${profileId}`, "profileUiPreferences", uiBasis(base.profileUiPreferences.find(item => item.profileId === profileId) || null), uiBasis(current.profileUiPreferences.find(item => item.profileId === profileId) || null), uiBasis(result.uiPreference), started, confirmedSequence)) profileUiPreferences = upsert(profileUiPreferences, result.uiPreference, item => item.profileId === profileId);
       context.update({ ...current,
         profiles: upsert(current.profiles, existingProfile ? { ...existingProfile, ...savedFields, persistenceBasis: mergeProfileBasis(existingProfile, result.profile, (["focus", "color", "notificationsEnabled"] as const).filter(field => field in savedFields)) } : result.profile, profile => profile.id === profileId),
-        profileUiPreferences: result.uiPreference ? upsert(current.profileUiPreferences, result.uiPreference, item => item.profileId === profileId) : current.profileUiPreferences,
+        profileUiPreferences,
         notificationPreferences,
       });
+      acknowledged?.(result, patch);
       saves.set(profileId, { phase: "saved", submitted: null, error: "" });
       context.changed();
       return { ok: true };
@@ -276,9 +293,18 @@ export function createProfileSettingsState(context: Context) {
     function accept<T>(key: keyof PlanningShellState, before: T[], after: T[], identity: (item: T) => string) {
       if (!coverage[key]) return before;
       if ((completeReadAt.get(key) || 0) > started) { stale = true; return before; }
-      const protectedIds = new Set(before.filter(item => Math.max(confirmedAt.get(`${key}:${identity(item)}`) || 0, readAt.get(`${key}:${identity(item)}`) || 0) > started).map(identity));
+      const rawById = new Map((raw[key] as T[]).map(item => [identity(item), item]));
+      const value = (item: T) => key === "profileUiPreferences" ? uiBasis(item as import("@/lib/types").ProfileUiPreference) : key === "notificationPreferences" ? (item as import("@/lib/types").NotificationPreference).enabled : item;
+      const protectedIds = new Set(before.filter(item => {
+        const fieldKey = `${key}:${identity(item)}`, incoming = rawById.get(identity(item));
+        return Math.max(confirmedAt.get(fieldKey) || 0, readAt.get(fieldKey) || 0) > started && !(incoming && readSupersedesOwnReceipt(fieldKey, value(incoming), started));
+      }).map(identity));
       if (protectedIds.size) stale = true;
-      for (const item of raw[key] as T[]) if (!protectedIds.has(identity(item))) readAt.set(`${key}:${identity(item)}`, started);
+      for (const item of raw[key] as T[]) if (!protectedIds.has(identity(item))) {
+        const fieldKey = `${key}:${identity(item)}`;
+        if (readSupersedesOwnReceipt(fieldKey, value(item), started)) confirmedAt.delete(fieldKey);
+        ownReceipts.delete(fieldKey); readAt.set(fieldKey, started);
+      }
       if (coverage[key] === "complete") completeReadAt.set(key, started);
       return [...after.filter(item => !protectedIds.has(identity(item))), ...before.filter(item => protectedIds.has(identity(item)))];
     }
@@ -302,8 +328,10 @@ export function createProfileSettingsState(context: Context) {
               continue;
             }
             const key = `profiles:${profile.id}:${field}`;
-            if (Math.max(confirmedAt.get(key) || 0, readAt.get(key) || 0) > started) { Object.assign(next, { [field]: previous?.[field] }); stale = true; }
-            else { readAt.set(key, started); if (["focus", "color", "notificationsEnabled", ...governanceFields].includes(field)) acceptedBusinessFields.push(field as typeof acceptedBusinessFields[number]); }
+            const ownField = field === "focus" || field === "color" || field === "notificationsEnabled";
+            const successor = ownField && readSupersedesOwnReceipt(key, profileBasis(profile, [field]), started);
+            if (Math.max(confirmedAt.get(key) || 0, readAt.get(key) || 0) > started && !successor) { Object.assign(next, { [field]: previous?.[field] }); stale = true; }
+            else { if (successor) confirmedAt.delete(key); ownReceipts.delete(key); readAt.set(key, started); if (["focus", "color", "notificationsEnabled", ...governanceFields].includes(field)) acceptedBusinessFields.push(field as typeof acceptedBusinessFields[number]); }
           }
           next.persistenceBasis = mergeProfileBasis(previous || profile, profile, acceptedBusinessFields);
           values.set(profile.id, next);
@@ -320,11 +348,21 @@ export function createProfileSettingsState(context: Context) {
     const generation = context.generation();
     const profileId = shown.profile.id;
     owned.add(profileId);
+    let receipt: { result: OwnProfileSettingsConfirmation; patch: OwnProfileSettingsPatch } | undefined;
     return createOwnProfileEditor({ shown, pending: () => ["saving", "unconfirmed"].includes(saves.get(profileId)?.phase || ""), active: () => context.active() && context.generation() === generation && !denied, current: () => {
       const data = context.confirmed();
       const profile = data.profiles.find(item => item.id === profileId);
       return profile ? { profile, uiPreference: data.profileUiPreferences.find(item => item.profileId === profileId) || null, notificationPreferences: data.notificationPreferences.filter(item => item.profileId === profileId) } : null;
-    }, refresh: async () => await check(profileId) && context.readStatus("profile") === "current", save: patch => save(profileId, patch), changed: context.changed,
+    }, refresh: async () => await check(profileId) && context.readStatus("profile") === "current", save: patch => save(profileId, patch, (result, submitted) => { receipt = { result: structuredClone(result), patch: structuredClone(submitted) }; }),
+    confirmed: basis => {
+      if (!receipt) return basis;
+      const acknowledged = receipt;
+      const fields = (["focus", "color", "notificationsEnabled"] as const).filter(field => field in (acknowledged.patch.profilePatch || {}));
+      const saved = acknowledged.result;
+      let preferences = [...basis.notificationPreferences];
+      for (const row of saved.notificationPreferences) preferences = upsert(preferences, row, item => item.profileId === row.profileId && item.channel === row.channel && item.eventType === row.eventType);
+      return { profile: { ...basis.profile, ...Object.fromEntries(fields.map(field => [field, saved.profile[field]])), persistenceBasis: mergeProfileBasis(basis.profile, saved.profile, fields) }, uiPreference: saved.uiPreference || basis.uiPreference, notificationPreferences: preferences };
+    }, changed: context.changed,
     conflict: patch => { const submitted = { ...patch }; delete submitted.expected; saves.set(profileId, { phase: "conflict", submitted: structuredClone(submitted), error: "Das Profil wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten." }); },
     });
   }
@@ -356,5 +394,5 @@ export function createProfileSettingsState(context: Context) {
   function preserveOwned(current: PlanningShellState): Partial<PlanningShellState> {
     return { profiles: current.profiles, notificationPreferences: current.notificationPreferences, profileUiPreferences: current.profileUiPreferences, profileFeatureTourAcknowledgements: current.profileFeatureTourAcknowledgements };
   }
-  return { acceptAdministrationPeople, view, save, check, acknowledge, beginOwnEdit, beginTeamEdit, team, saveTeam, checkTeam, project, protect, acceptRead, preserveOwned, hydrate(data: PlanningShellState, workspace: AppWorkspace) { if (workspace === "team") { teamMembers = new Set(data.profiles.map(profile => profile.id)); teamCompleteness = "partial"; } }, readStatus(status: PlanningReadStatus, workspace: AppWorkspace) { if (workspace === "profile") { if (status === "forbidden") denied = true; else if (status === "current" || status === "stale") denied = false; } if (workspace === "team") { if (status === "forbidden") teamDenied = true; else if (status === "current" || status === "stale") teamDenied = false; } }, clear() { ceoDemotions.clear(); teamSaves.clear(); teamChecks.clear(); teamMembers = undefined; teamCompleteness = "none"; teamDenied = false; tourSaves.clear(); saves.clear(); confirmedAt.clear(); readAt.clear(); completeReadAt.clear(); owned.clear(); checks.clear(); denied = false; } };
+  return { acceptAdministrationPeople, view, save: (profileId: string, patch: OwnProfileSettingsPatch) => save(profileId, patch), check, acknowledge, beginOwnEdit, beginTeamEdit, team, saveTeam, checkTeam, project, protect, acceptRead, preserveOwned, hydrate(data: PlanningShellState, workspace: AppWorkspace) { if (workspace === "team") { teamMembers = new Set(data.profiles.map(profile => profile.id)); teamCompleteness = "partial"; } }, readStatus(status: PlanningReadStatus, workspace: AppWorkspace) { if (workspace === "profile") { if (status === "forbidden") denied = true; else if (status === "current" || status === "stale") denied = false; } if (workspace === "team") { if (status === "forbidden") teamDenied = true; else if (status === "current" || status === "stale") teamDenied = false; } }, clear() { ceoDemotions.clear(); teamSaves.clear(); teamChecks.clear(); teamMembers = undefined; teamCompleteness = "none"; teamDenied = false; tourSaves.clear(); saves.clear(); confirmedAt.clear(); ownReceipts.clear(); readAt.clear(); completeReadAt.clear(); owned.clear(); checks.clear(); denied = false; } };
 }

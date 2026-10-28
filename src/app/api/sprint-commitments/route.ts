@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isValidCommitmentVersion } from "@/lib/sprint-commitment-version";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { apiError, readJsonPayload } from "@/lib/api-response";
 import { requirePlanningContext } from "@/features/planning/server/planning-api-context";
@@ -35,11 +36,12 @@ export async function PUT(request: NextRequest) {
     return apiError("Founder können nur ihr eigenes Commitment ändern.", 403);
   }
 
-  if (payload.expectedUpdatedAt !== null && (typeof payload.expectedUpdatedAt !== "string" || !payload.expectedUpdatedAt.trim())) return apiError("Die ursprüngliche Bearbeitungsbasis ist erforderlich.", 400);
+  if (payload.expectedUpdatedAt !== null && !isValidCommitmentVersion(payload.expectedUpdatedAt)) return apiError("Die ursprüngliche Bearbeitungsbasis ist erforderlich.", 400);
 
   const { data, error } = await planning.writeCommitment({ profileId, commitmentLevel, weeklyHours, note, expectedUpdatedAt: payload.expectedUpdatedAt });
 
   if (error?.code === "commitment_revision_conflict") return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
+  if (error?.code === "22023") return apiError(error.message, 400);
   if (error?.code === "42501") return apiError(error.message, 403);
   if (error || !data) return apiError(error?.message || "Commitment konnte nicht gespeichert werden.", 500);
 

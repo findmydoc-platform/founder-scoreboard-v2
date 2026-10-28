@@ -7,12 +7,14 @@ afterEach(() => vi.resetModules());
 const event = { id: 1, title: "Original", category: "other", startsAt: "2099-01-12T10:00:00.000Z", endsAt: "", location: "", description: "", audienceMode: "all", participantProfileIds: [], reminderDaysBefore: 7, reminderGeneratedAt: "", status: "planned", createdBy: "actor", createdAt: "r1", updatedAt: "r1" };
 async function owner(requestJson, headerData = emptyPlanningHeaderData) {
   const { createBrowserPlanningState } = await importTestModule("src/features/planning/model/internal/browser-planning-state.ts", { "@/lib/browser-api-client": { createBrowserApiClient: () => ({ requestJson }) } });
-  return createBrowserPlanningState({ initialUserId: "browser-events", initialWorkspace: "events", initialCurrentProfile: null, initialData: { ...emptyPlanningShellState, events: [event] }, initialHeaderData: headerData }).owner;
+  const browser = createBrowserPlanningState({ initialUserId: "browser-events", initialWorkspace: "events", initialCurrentProfile: null, initialData: { ...emptyPlanningShellState, events: [event] }, initialHeaderData: headerData });
+  browser.runtime.session = { userId: "browser-events", revision: "event-session", expiresAt: 4102444800, user: { id: "browser-events" } };
+  return browser.owner;
 }
 test("the owned Event browser adapter sends captured update basis and preserves actual confirmation", async () => {
   const calls = [], state = await owner(async (path, options) => { calls.push({ path, options }); return { response: new Response(null, { status: 200 }), body: { event: { ...event, title: "Confirmed", updatedAt: "r2" }, warning: "Protokollierung konnte nicht bestätigt werden." } }; });
   const result = await state.planning.updateEvent("update", event, { ...event, title: "Submitted" });
-  assert.equal(calls.length, 1); assert.equal(calls[0].path, "/api/events/1"); assert.equal(calls[0].options.json.expectedUpdatedAt, "r1"); assert.equal(calls[0].options.json.title, "Submitted"); assert.equal(result.phase, "saved"); assert.ok(result.warning); assert.equal(state.planning.events().events[0].title, "Confirmed");
+  assert.equal(calls.length, 1); assert.equal(calls[0].path, "/api/events/1"); assert.equal(calls[0].options.json.expectedUpdatedAt, "r1"); assert.equal(calls[0].options.expectedSession.userId, "browser-events"); assert.equal(calls[0].options.expectedSession.revision, "event-session"); assert.equal(calls[0].options.expectedSession.isCurrent(), true); assert.equal(calls[0].options.json.title, "Submitted"); assert.equal(result.phase, "saved"); assert.ok(result.warning); assert.equal(state.planning.events().events[0].title, "Confirmed");
 });
 test("the owned Event browser adapter preserves revision codes rather than inferring every 409 as conflict", async () => {
   const state = await owner(async () => ({ response: new Response(null, { status: 409 }), body: { code: "event_version_conflict", error: "Changed" } }));

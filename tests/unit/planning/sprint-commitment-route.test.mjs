@@ -17,7 +17,7 @@ test.each([null,{code:"23505",message:"Concurrent insert"}])("zero affected upda
 test("audit failure preserves the confirmed versioned commitment receipt",async()=>{
  const p=planningRouteProtocol({role:"ceo",tables:{sprint_commitments:row,audit_log:()=>Response.json({message:"Audit unavailable"},{status:503})}});const response=await PUT(p.request("/api/sprint-commitments","PUT",payload));expect(response.status).toBe(200);expect(await response.json()).toEqual({ok:true,auditError:"Commitment gespeichert; Audit-Eintrag konnte nicht bestätigt werden.",commitment:{id:8,sprintId:"sprint",profileId:"synthetic-profile",commitmentLevel:"Heavy",weeklyHours:32,note:"Shown draft",updatedAt:row.updated_at}});
 });
-test.each([undefined,"",32])("missing or malformed displayed basis never dispatches the commitment write: %j",async expectedUpdatedAt=>{
+test.each([undefined,"",32,"invalid","999999999999999999999999-01-01","+275760-09-13T00:00:00.000Z"])("missing or malformed displayed basis never dispatches the commitment write: %j",async expectedUpdatedAt=>{
  const p=planningRouteProtocol({role:"ceo",tables:{sprint_commitments:row}});expect((await PUT(p.request("/api/sprint-commitments","PUT",{...payload,expectedUpdatedAt}))).status).toBe(400);expect(p.requests.some(item=>item.table==="sprint_commitments")).toBe(false);
 });
 
@@ -40,4 +40,16 @@ test("a frozen-time commitment sequence rejects every previously accepted token"
  for(const expected of ["2026-10-28T12:00:00.123+00:00","2026-10-28T12:00:00.124+00:00","2026-10-28T12:00:00.125+00:00"]){const response=await PUT(p.request("/api/sprint-commitments","PUT",{...payload,expectedUpdatedAt:versions.at(-1)}));expect(response.status).toBe(200);expect((await response.json()).commitment.updatedAt).toBe(expected);versions.push(expected);}
  for(const older of versions.slice(0,-1)){const response=await PUT(p.request("/api/sprint-commitments","PUT",{...payload,expectedUpdatedAt:older}));expect(response.status).toBe(409);}
  expect(p.requests.filter(item=>item.table==="audit_log")).toHaveLength(3);
+});
+
+
+test("a valid timestamp basis keeps its exact offset and fractional spelling in the atomic comparison",async()=>{
+ const expectedUpdatedAt="2026-10-27T14:00:00.123456+02:00";
+ const p=planningRouteProtocol({role:"ceo",tables:{sprint_commitments:(request,url)=>{expect(url.searchParams.get("updated_at")).toBe(`eq.${expectedUpdatedAt}`);return Response.json(row);},audit_log:[]}});
+ expect((await PUT(p.request("/api/sprint-commitments","PUT",{...payload,expectedUpdatedAt}))).status).toBe(200);
+});
+test.each([{authError:401},{profile:false},{role:"viewer"}])("authorization still precedes malformed commitment-version validation: %j",async denied=>{
+ const p=planningRouteProtocol({...denied,tables:{sprint_commitments:row}});
+ const response=await PUT(p.request("/api/sprint-commitments","PUT",{...payload,expectedUpdatedAt:"invalid"}));
+ expect([401,403]).toContain(response.status);expect(p.requests.some(item=>item.table==="sprint_commitments")).toBe(false);
 });

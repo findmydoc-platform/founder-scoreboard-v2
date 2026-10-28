@@ -8,7 +8,9 @@ afterEach(() => vi.resetModules());
 const task = taskDetailStoryTask({ id: "initiative", taskType: "initiative", updatedAt: "opaque-original", title: "Known initiative", strategy: { goal: "Known goal", successCriteria: "Known criteria", scopeConstraints: "Known scope" }, raciAssignments: [{ profileId: "owner", role: "accountable", sortOrder: 0 }], evidenceLink: "https://example.test/evidence", evidenceLinks: ["https://example.test/evidence"], intendedOutcome: "Loaded detail", note: "Loaded note" });
 async function owner(client) {
  const { createBrowserPlanningState } = await importTestModule("src/features/planning/model/internal/browser-planning-state.ts", { "@/lib/browser-api-client": { createBrowserApiClient: () => client } });
- return createBrowserPlanningState({ initialUserId: "user", initialWorkspace: "projects", initialCurrentProfile: null, initialData: { ...emptyPlanningShellState, tasks: [task, { ...task, id: "outside" }] }, initialHeaderData: emptyPlanningHeaderData }).owner;
+ const browser = createBrowserPlanningState({ initialUserId: "user", initialWorkspace: "projects", initialCurrentProfile: null, initialData: { ...emptyPlanningShellState, tasks: [task, { ...task, id: "outside" }] }, initialHeaderData: emptyPlanningHeaderData });
+ browser.runtime.session = { userId: "user", revision: "hierarchy-session", expiresAt: 4102444800, user: { id: "user" } };
+ return browser.owner;
 }
 test("capped hierarchy summaries preserve outside membership and known detail/aux fields; exact empty removes only its covered membership", async () => {
  let complete = false; const calls = [];
@@ -29,6 +31,8 @@ test("capped hierarchy summaries preserve outside membership and known detail/au
 test("owned empty-Epic deletion sends the original opaque basis and accepts only the actual root receipt", async () => {
  const calls=[];const state=await owner({requestJson:async(path,options)=>{calls.push({path,options});return{response:new Response(null),body:{task:{id:task.id,taskType:"epic"}}};}});
  assert.equal((await state.planning.deleteEmptyEpic({...task,taskType:"epic"})).ok,true);
- assert.equal(calls[0].path,"/api/tasks/initiative");assert.deepEqual(calls[0].options,{method:"DELETE",json:{expectedUpdatedAt:"opaque-original"}});
+ assert.equal(calls[0].path,"/api/tasks/initiative");const {expectedSession,...payload}=calls[0].options;
+ assert.deepEqual(payload,{method:"DELETE",json:{expectedUpdatedAt:"opaque-original"}});
+ assert.equal(expectedSession.userId,"user");assert.equal(expectedSession.revision,"hierarchy-session");assert.equal(expectedSession.isCurrent(),true);
  assert.equal(state.planning.taskDetail(task.id).task,null);assert.equal(calls.length,1);
 });

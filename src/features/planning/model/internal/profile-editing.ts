@@ -49,6 +49,7 @@ function editingSession<Input, Current>(options: {
   active(): boolean;
   pending(): boolean;
   current(): Current | null;
+  confirmed?(basis: Current): Current;
   values(current: Current): Record<string, unknown>;
   input(input: Input): Record<string, unknown>;
   refresh(): Promise<boolean>;
@@ -114,7 +115,7 @@ function editingSession<Input, Current>(options: {
     phase = result.ok ? "saved" : result.kind === "versionConflict" ? "conflict" : result.kind === "unconfirmed" || result.kind === "sessionSuperseded" ? "unconfirmed" : "rejected";
     error = result.ok ? "" : result.error;
     if (phase === "conflict") { options.conflict(input); await refreshConflict(); }
-    if (result.ok) { basis = copy(options.current() || current); opening = copy(basis); intent.clear(); priorInput = undefined; }
+    if (result.ok) { basis = copy(options.confirmed ? options.confirmed(basis) : options.current() || current); opening = copy(basis); intent.clear(); priorInput = undefined; }
     options.changed();
     return result;
   }
@@ -124,7 +125,7 @@ function editingSession<Input, Current>(options: {
     close() { closed = true; reviewed = null; },
   };
 }
-export function createOwnProfileEditor(options: { shown: OwnProfileEditingSnapshot; current(): OwnProfileEditingSnapshot | null; active(): boolean; pending(): boolean; refresh(): Promise<boolean>; save(patch: OwnProfileSettingsPatch): Promise<ProfileSettingsResult>; conflict(patch: OwnProfileSettingsPatch): void; changed(): void }): OwnProfileEditor {
+export function createOwnProfileEditor(options: { shown: OwnProfileEditingSnapshot; current(): OwnProfileEditingSnapshot | null; confirmed?(basis: OwnProfileEditingSnapshot): OwnProfileEditingSnapshot; active(): boolean; pending(): boolean; refresh(): Promise<boolean>; save(patch: OwnProfileSettingsPatch): Promise<ProfileSettingsResult>; conflict(patch: OwnProfileSettingsPatch): void; changed(): void }): OwnProfileEditor {
   return editingSession({ ...options, values: ownValues, input: inputValues, submit(input, intent, basis, current) {
     const patch: OwnProfileSettingsPatch = { profilePatch: {}, notificationEvents: {}, expected: { profile: {}, events: {} } };
     const ui = uiValues(current.uiPreference);

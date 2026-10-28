@@ -1,4 +1,5 @@
 import "server-only";
+import { isValidCommitmentVersion } from "../../sprint-commitment-version";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthenticatedProfile } from "../../types";
 import type { PlanningCredentialInput } from "../types";
@@ -150,7 +151,7 @@ export function planningSprintOperations({ action, targetId, profile, service, f
       const values = structuredClone(suppliedValues);
       if (action !== "planning.sprint.commitment.write" || !targetId || !profile
         || (!rolePermitsAction("operations.lead", profile.platformRole) && values.profileId !== profile.id) || await current()) return { data: null, error: forbidden() };
-      if (values.expectedUpdatedAt !== null && (typeof values.expectedUpdatedAt !== "string" || !values.expectedUpdatedAt.trim())) return { data: null, error: { code: "22023", message: "Die Bearbeitungsbasis fehlt." } };
+      if (values.expectedUpdatedAt !== null && !isValidCommitmentVersion(values.expectedUpdatedAt)) return { data: null, error: { code: "22023", message: "Die Bearbeitungsbasis fehlt." } };
       const now = Date.now();
       const row = { sprint_id: targetId, profile_id: values.profileId, commitment_level: values.commitmentLevel,
         weekly_hours: values.weeklyHours, note: values.note, updated_at: new Date(values.expectedUpdatedAt === null ? now : Math.max(now, Date.parse(values.expectedUpdatedAt) + 1)).toISOString() };

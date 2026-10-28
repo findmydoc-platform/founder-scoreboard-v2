@@ -5,6 +5,11 @@ const keyOf = (meetingId: number, profileId: string) => `${meetingId}:${profileI
 const blank = (meetingId: number, profileId: string): MeetingAttendance => ({ id: 0, meetingId, profileId, status: "pending", absenceReason: "", reasonAccepted: false, writtenUpdate: "", points: 0, createdAt: "", updatedAt: "" });
 export function createMeetingAttendanceState(options: { initial: readonly MeetingAttendance[]; adapter: MeetingAttendanceAdapter; active(): boolean; generation(): number; nextSequence(): number; changed(): void; endSession(): void; dependencyPending(meeting: Meeting): boolean; invalidateNotifications(): void }) {
  const records = new Map(options.initial.map(row => [keyOf(row.meetingId, row.profileId), { row: structuredClone(row) as MeetingAttendance | null, stamp: 0 }]));
+ const ownReceipts = new Map<string, { started: number; acceptedAt: number; readThrough: number; basisVersion: string | undefined }>();
+ function canAcceptRead(key: string, row: MeetingAttendance | null | undefined, started: number) {
+  const current = records.get(key), own = ownReceipts.get(key);
+  return (current?.stamp || 0) <= started || Boolean(row && own && current?.stamp === own.acceptedAt && started >= own.readThrough && started > own.started && row.updatedAt !== own.basisVersion);
+ }
  const editors = new Map<string, { editor: MeetingAttendanceEditor; view: MeetingAttendanceEditView; key: string; meeting: Meeting; pending: MeetingAttendance | null; after: number }>();
  const checks = new Map<string, Promise<{ attendance: MeetingAttendance | null; started: number }>>();
  const denied = new Set<string>();
@@ -23,7 +28,7 @@ export function createMeetingAttendanceState(options: { initial: readonly Meetin
     if (!options.active() || generation !== options.generation() || heldAuthority !== authority || pairAuthority !== (pairAuthorities.get(key) || 0)) throw Object.assign(new Error("Die Sitzung wurde beendet."), { code: "session_superseded" });
     if (!valid(result.attendance, meetingId, profileId)) throw new Error("Die Weekly-Bestätigung ist unvollständig.");
     denied.delete(key);
-    if ((records.has(key) || started >= completeThrough) && (records.get(key)?.stamp || 0) <= started) records.set(key, { row: structuredClone(result.attendance), stamp: started });
+    if ((records.has(key) || started >= completeThrough) && canAcceptRead(key, result.attendance, started)) { records.set(key, { row: structuredClone(result.attendance), stamp: started }); ownReceipts.delete(key); }
     options.changed(); return { attendance: structuredClone(records.get(key)?.row || null), started };
    } catch (error) { const failure = error as { status?: number }; if (failure.status === 403 && options.active() && generation === options.generation()) { denied.add(key); pairAuthorities.set(key, (pairAuthorities.get(key) || 0) + 1); for (const context of editors.values()) if (context.key === key) context.pending = null; options.changed(); } throw error; }
   })();
@@ -50,12 +55,20 @@ export function createMeetingAttendanceState(options: { initial: readonly Meetin
    if (context.view.phase === "conflict") return { ok: false, kind: "conflict", error: context.view.error };
    if (!options.adapter.saveMeetingAttendance) return { ok: false, kind: "rejected", error: "Weekly kann gerade nicht gespeichert werden." };
    const submitted = structuredClone(patch), record = { ...(basis || blank(meeting.id, profileId)), ...submitted, meetingId: meeting.id, profileId };
-   context.after = options.nextSequence(); context.pending = record; context.view = { ...context.view, phase: "saving", submitted, error: "", warning: "", compared: false }; options.changed();
+   const basisVersion = basis?.updatedAt;
+   context.after = options.nextSequence(); const started = context.after; context.pending = record; context.view = { ...context.view, phase: "saving", submitted, error: "", warning: "", compared: false }; options.changed();
    try {
     const receipt = await options.adapter.saveMeetingAttendance(structuredClone(meeting), structuredClone(basis), record);
     if (!available()) return { ok: false, kind: "ended", error: "Die Sitzung oder der Zugriff wurde beendet." };
     if (!receipt.attendance || !valid(receipt.attendance, meeting.id, profileId)) throw new Error("Die gespeicherte Weekly-Rückmeldung ist noch nicht bestätigt.");
-    basis = structuredClone(receipt.attendance); records.set(key, { row: basis, stamp: options.nextSequence() }); context.pending = null;
+    // The editor advances only to its own receipt, even when shared data has a foreign successor.
+    basis = structuredClone(receipt.attendance);
+    const current = records.get(key);
+    const foreign = Math.max(current?.stamp || 0, completeThrough) > started && current?.row?.updatedAt !== basisVersion && current?.row?.updatedAt !== basis.updatedAt;
+    if (!foreign) {
+     const acceptedAt = options.nextSequence(); records.set(key, { row: basis, stamp: acceptedAt }); ownReceipts.set(key, { started, acceptedAt, readThrough: current?.stamp || 0, basisVersion });
+    }
+    context.pending = null;
     context.view = { ...context.view, phase: "confirmed", warning: receipt.warning || (receipt.effects === "unconfirmed" ? "Rückmeldung gespeichert. Benachrichtigung oder Protokoll noch nicht bestätigt." : ""), readStatus: "current" };
     options.invalidateNotifications(); options.changed(); return { ok: true };
    } catch (error) {
@@ -83,10 +96,10 @@ export function createMeetingAttendanceState(options: { initial: readonly Meetin
   pair(meetingId: number, profileId: string) { const key = keyOf(meetingId, profileId); return { record: active(key) ? structuredClone(records.get(key)?.row || null) : null, readStatus: !active(key) ? "forbidden" as const : records.has(key) || complete ? "current" as const : "not-loaded" as const }; },
   pendingSprint: (id: string) => [...editors.values()].some(context => context.meeting.sprintId === id && blocks(context.key)),
   coverage: () => complete && ![...editors.values()].some(context => blocks(context.key)) ? "complete" as const : "partial" as const,
-  acceptRead(rows: readonly MeetingAttendance[], started: number, isComplete: boolean) { workspaceDenied = false; const incoming = new Map(rows.map(row => [keyOf(row.meetingId,row.profileId),row])); for (const [key, receipt] of records) if (receipt.stamp <= started) { if (incoming.has(key)) records.set(key,{row:structuredClone(incoming.get(key)!),stamp:started}); else if (isComplete) records.set(key,{row:null,stamp:started}); } for (const [key,row] of incoming) if (!records.has(key) && started >= completeThrough) records.set(key,{row:structuredClone(row),stamp:started}); if (isComplete && started >= completeThrough) { complete = true; completeThrough = started; } },
+  acceptRead(rows: readonly MeetingAttendance[], started: number, isComplete: boolean) { workspaceDenied = false; const incoming = new Map(rows.map(row => [keyOf(row.meetingId,row.profileId),row])); for (const [key] of records) if (canAcceptRead(key, incoming.get(key), started)) { if (incoming.has(key)) { records.set(key,{row:structuredClone(incoming.get(key)!),stamp:started}); ownReceipts.delete(key); } else if (isComplete) { records.set(key,{row:null,stamp:started}); ownReceipts.delete(key); } } for (const [key,row] of incoming) if (!records.has(key) && started >= completeThrough) records.set(key,{row:structuredClone(row),stamp:started}); if (isComplete && started >= completeThrough) { complete = true; completeThrough = started; } },
   projectConfirmed(data: PlanningShellState): PlanningShellState { return { ...data, meetingAttendance: workspaceDenied ? [] : [...records.entries()].filter(([key,receipt]) => receipt.row && !denied.has(key)).map(([,receipt]) => receipt.row!) }; },
   projectVisible(data: PlanningShellState): PlanningShellState { const rows = new Map(data.meetingAttendance.map(row => [keyOf(row.meetingId,row.profileId),row])); for (const context of editors.values()) if (context.pending && active(context.key)) rows.set(context.key,context.pending); return { ...data, meetingAttendance: [...rows.values()] }; },
   denyWorkspace() { workspaceDenied = true; authority++; for (const context of editors.values()) context.pending = null; },
-  clear() { records.clear(); editors.clear(); checks.clear(); denied.clear(); pairAuthorities.clear(); complete = false; completeThrough = -1; authority++; },
+  clear() { records.clear(); ownReceipts.clear(); editors.clear(); checks.clear(); denied.clear(); pairAuthorities.clear(); complete = false; completeThrough = -1; authority++; },
  };
 }

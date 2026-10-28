@@ -20,6 +20,7 @@ function affectsQuickLinks(before: FmdTool | undefined, after: FmdTool) { return
 function statusCode(error: unknown) { return (error as { status?: number })?.status; }
 export function createToolsState(options: { initial: readonly FmdTool[]; loaded: boolean; adapter: ToolsAdapter; active: () => boolean; generation: () => number; changed: () => void; endSession: () => void; invalidateQuickLinks: () => void; beginHeaderRead: () => number; acceptHeaderRead: (data: PlanningHeaderData, started: number) => void; refreshWorkspace: () => Promise<boolean> }) {
   let records = [...options.initial], readStatus: PlanningReadStatus = options.loaded ? "current" : "not-loaded", completeness: "complete" | "partial" = "partial", sequence = 0, mutationBoundary = 0, acceptedReadAt = 0, completeReadAt = 0, authority = 0, denied = false, localId = 0;
+  const receipts = new Map<string, { started: number; acceptedAt: number; basisVersion: string | undefined }>();
   const accepted = new Map<string, number>(), operations = new Map<string, ToolOperation>(), previews = new Map<string, ToolPreviewView>();
   let reading: { started: number; promise: Promise<boolean> } | undefined;
   function visible() {
@@ -36,14 +37,18 @@ export function createToolsState(options: { initial: readonly FmdTool[]; loaded:
   function acceptRead(result: ToolRead, started: number, includesHeader = false) {
     if (started < acceptedReadAt) return false;
     const previous = quickLinksIdentity(records), incoming = new Map(result.tools.map(tool => [tool.id, tool])); let stale = false;
-    const protectedTool = (id: string) => (accepted.get(id) || 0) > started;
+    const protectedTool = (id: string, incoming?: FmdTool) => {
+      const own = receipts.get(id);
+      const successor = incoming && own && own.acceptedAt === accepted.get(id) && started > own.started && incoming.updatedAt !== own.basisVersion;
+      return (accepted.get(id) || 0) > started && !successor;
+    };
     records = records.filter(tool => {
-      if (protectedTool(tool.id)) { stale = true; incoming.delete(tool.id); return true; }
+      if (protectedTool(tool.id, incoming.get(tool.id))) { stale = true; incoming.delete(tool.id); return true; }
       if (incoming.has(tool.id)) return false;
       if (result.completeness !== "complete") return true;
       accepted.set(tool.id, started); return false;
     });
-    for (const tool of incoming.values()) if (!protectedTool(tool.id)) { records.push(tool); accepted.set(tool.id, started); } else stale = true;
+    for (const tool of incoming.values()) if (!protectedTool(tool.id, tool)) { records.push(tool); accepted.set(tool.id, started); receipts.delete(tool.id); } else stale = true;
     acceptedReadAt = started; if (result.completeness === "complete") completeReadAt = started;
     denied = false; completeness = result.completeness; readStatus = stale ? "stale" : "current";
     if (!includesHeader && previous !== quickLinksIdentity(records)) options.invalidateQuickLinks(); return true;
@@ -91,8 +96,8 @@ export function createToolsState(options: { initial: readonly FmdTool[]; loaded:
       if (!options.active() || generation !== options.generation() || scope !== authority) return { phase: "session-ended" };
       if (!result.tool.id || !result.tool.updatedAt || (basis && result.tool.id !== basis.id)) throw new Error("Link-Speicherung ist noch nicht bestätigt.");
       const current = records.find(tool => tool.id === result.tool.id);
-      if (((accepted.get(result.tool.id) || 0) > started || completeReadAt > started) && current?.updatedAt !== result.tool.updatedAt) readStatus = "stale";
-      else { records = [...records.filter(tool => tool.id !== result.tool.id), result.tool]; accepted.set(result.tool.id, ++sequence); }
+      if (((accepted.get(result.tool.id) || 0) > started || completeReadAt > started) && current?.updatedAt !== result.tool.updatedAt && (basis ? current?.updatedAt !== basis.updatedAt : Boolean(current))) readStatus = "stale";
+      else { const acceptedAt = ++sequence; records = [...records.filter(tool => tool.id !== result.tool.id), result.tool]; accepted.set(result.tool.id, acceptedAt); receipts.set(result.tool.id, { started, acceptedAt, basisVersion: basis?.updatedAt }); }
       mutationBoundary = ++sequence; operation.toolId = result.tool.id; operation.phase = "saved"; operation.warning = result.warning;
       if (affectsQuickLinks(basis, result.tool)) options.invalidateQuickLinks(); options.changed(); return { phase: "saved", warning: result.warning };
     } catch (error) {
@@ -138,5 +143,5 @@ export function createToolsState(options: { initial: readonly FmdTool[]; loaded:
       preview.checking = false; options.changed(); return { phase: "uploaded", verification: preview.verification };
     },
   };
-  return { publicState, beginRead, acceptRead, failed, projectConfirmed: (data: PlanningShellState): PlanningShellState => ({ ...data, fmdTools: denied ? [] : records }), projectVisible: (data: PlanningShellState): PlanningShellState => ({ ...data, fmdTools: visible() }), clear() { records = []; operations.clear(); previews.clear(); accepted.clear(); reading = undefined; completeness = "partial"; readStatus = "not-loaded"; } };
+  return { publicState, beginRead, acceptRead, failed, projectConfirmed: (data: PlanningShellState): PlanningShellState => ({ ...data, fmdTools: denied ? [] : records }), projectVisible: (data: PlanningShellState): PlanningShellState => ({ ...data, fmdTools: visible() }), clear() { records = []; operations.clear(); previews.clear(); accepted.clear(); receipts.clear(); reading = undefined; completeness = "partial"; readStatus = "not-loaded"; } };
 }
