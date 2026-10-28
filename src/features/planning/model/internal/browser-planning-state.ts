@@ -32,6 +32,23 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialData: options.initialData,
     initialWorkspace: options.initialWorkspace,
     adapter: {
+      async createTask(input) {
+        const { response, body } = await taskApi.createTaskRequest(runtime.apiClient, input);
+        if (!response.ok && !(body?.code === "task_created_approval_failed" && body.task?.updatedAt)) throw Object.assign(new Error(body?.error || "Aufgabe konnte nicht erstellt werden."), { status: response.status, code: body?.code });
+        if (!body?.task) throw new Error("Die Erstellung ist noch nicht bestätigt.");
+        return { task: body.task, relation: body.relation, relatedTask: body.relatedTask, approvalError: body.code === "task_created_approval_failed" ? body.error || "Die Aufgabe wurde erstellt. Die Freigabe ist fehlgeschlagen." : undefined };
+      },
+      async removeTask(task, action, reason) {
+        if (action === "withdraw") {
+          const { response, body } = await taskApi.withdrawTaskRequest(runtime.apiClient, task.id, task.approvalRevision, reason);
+          if (!response.ok) throw Object.assign(new Error(body?.error || "Deliverable konnte nicht zurückgezogen werden."), { status: response.status, code: body?.code });
+          return { affectedTaskIds: body?.affectedTaskIds };
+        }
+        const { response, body } = await taskApi.decideTaskApprovalRequest(runtime.apiClient, task.id, "reject", task.approvalRevision, reason);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Freigabeentscheidung konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        if (!body?.task?.updatedAt || body.task.approvalStatus !== "rejected") throw new Error("Die Ablehnung ist noch nicht bestätigt.");
+        return {};
+      },
       async saveTask(task, patch) {
         const { response, body } = await taskApi.updateTaskRequest(runtime.apiClient, task.id, taskUpdateRequestPayload(patch, task.updatedAt || ""));
         if (!response.ok) throw Object.assign(new Error(body?.error || "Änderung konnte nicht gespeichert werden."), { status: response.status, code: body?.code, kind: body?.conflictReason === "revision" ? "versionConflict" : undefined });

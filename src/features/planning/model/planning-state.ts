@@ -50,6 +50,11 @@ export type PlanningWorkspaceView = {
   completeness: "complete" | "partial" | "none";
 };
 export interface PlanningState {
+  createTask(input: import("./planning-task-lifecycle").PlanningTaskCreationInput): Promise<import("./planning-task-lifecycle").PlanningTaskCreationResult>;
+  withdrawTask(task: Task, reason: string): Promise<import("./planning-task-lifecycle").PlanningTaskRemovalResult>;
+  rejectTask(task: Task, reason: string): Promise<import("./planning-task-lifecycle").PlanningTaskRemovalResult>;
+  checkTaskLifecycle(id: string): Promise<PlanningTaskSaveCheck>;
+  taskLifecycle(): readonly import("./planning-task-lifecycle").PlanningTaskLifecycleView[];
   board(): PlanningBoardView;
   workspace(workspace: AppWorkspace): PlanningWorkspaceView;
   taskDetail(taskId: string): PlanningTaskDetailView;

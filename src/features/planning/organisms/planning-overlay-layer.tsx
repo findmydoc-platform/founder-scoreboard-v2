@@ -194,6 +194,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           pending={isPending}
           onClose={() => setTaskDialogDefaults(null)}
           onCreate={createTask}
+          taskLifecycle={controller.planningState.taskLifecycle()}
+          onCheckTaskLifecycle={id => controller.planningState.checkTaskLifecycle(id)}
         />
       )}
       {initiativeDialogDefaults && (
