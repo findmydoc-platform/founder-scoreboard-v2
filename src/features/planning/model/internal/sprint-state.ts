@@ -47,27 +47,28 @@ export function createSprintState(options: {
     acceptRead(data: PlanningShellState, coverage: PlanningReadCoverage, started: number, returned = data) {
       covered = { ...covered, ...coverage };
       const current = options.current();
+      let stale = false;
       const next = { ...data };
       const scopes = ["sprints", "sprintCommitments", "founderSprintScores", "founderStrikeStates", "strikeEvents", "scoreObjections", "meetings", "meetingAttendance"] as const;
       for (const key of scopes) {
         if (!coverage[key]) continue;
-        if ((completeReads.get(key) || 0) > started) { Object.assign(next, { [key]: current[key] }); continue; }
+        if ((completeReads.get(key) || 0) > started) { stale = true; Object.assign(next, { [key]: current[key] }); continue; }
         const accepted = key === "sprints" ? stamps : scopeStamps.get(key) || new Map<string | number, number>();
         scopeStamps.set(key, accepted);
         const before = current[key] as readonly { id: string | number }[];
         const incoming = returned[key] as readonly { id: string | number }[];
         const rows = new Map((coverage[key] === "partial" ? before : []).map(row => [row.id, row]));
         for (const row of incoming) if ((accepted.get(row.id) || 0) <= started) { rows.set(row.id, row); accepted.set(row.id, started); if (key === "sprints") readStamps.set(row.id, started); }
-        for (const row of before) if ((accepted.get(row.id) || 0) > started) rows.set(row.id, row);
+        for (const row of before) if ((accepted.get(row.id) || 0) > started) { stale = true; rows.set(row.id, row); }
         if (coverage[key] === "complete") completeReads.set(key, started);
         Object.assign(next, { [key]: [...rows.values()] });
       }
       if (coverage.project) {
         const project = { ...current.project };
-        for (const key of Object.keys(returned.project) as (keyof typeof project)[]) if ((projectStamps.get(key) || 0) <= started) { Object.assign(project, { [key]: returned.project[key] }); projectStamps.set(key, started); }
+        for (const key of Object.keys(returned.project) as (keyof typeof project)[]) if ((projectStamps.get(key) || 0) <= started) { Object.assign(project, { [key]: returned.project[key] }); projectStamps.set(key, started); } else stale = true;
         next.project = project;
       }
-      return next;
+      return { data: next, stale };
     },
     views: (id: string) => options.active() ? [...editors.values()].filter(editor => editor.id === id).map(editor => editor.view()) : [],
     begin(shown: Sprint): SprintEditor {

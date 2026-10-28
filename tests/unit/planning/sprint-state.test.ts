@@ -164,3 +164,16 @@ test("conflict comparison cannot rebase from a cached Sprint omitted by a partia
   await expect(editor.refreshConflict()).resolves.toBe(false);
   expect(editor.view()).toMatchObject({ submitted: { name: "Kept input" }, serverSprint: null, canResave: false });
 });
+
+
+test("a rejected older Sprint read reports stale freshness rather than claiming its retained newer value was freshly read", async () => {
+  const old = deferred<{ data: typeof initial }>();
+  const { planning } = createPlanningState({ userId: "user", initialData: initial, initialWorkspace: "sprint", adapter: {
+    readWorkspace: () => old.promise, saveTask: async () => ({ task }), saveSprint: async (basis, patch) => ({ sprint: { ...basis, ...patch, updatedAt: "opaque/saved" } }),
+  } });
+  const read = planning.refreshWorkspace("sprint");
+  await planning.beginSprintEdit(sprint).save({ name: "Confirmed name" });
+  old.resolve({ data: initial }); await read;
+  expect(planning.sprintWorkspace().model.sprints[0].name).toBe("Confirmed name");
+  expect(planning.sprintWorkspace().readStatus).toBe("stale");
+});

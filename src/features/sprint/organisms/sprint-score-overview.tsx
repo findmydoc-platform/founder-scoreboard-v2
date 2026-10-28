@@ -63,7 +63,8 @@ export function SprintScoreTableOverview({
   reviewObjectionWindowHours: number;
   onSaveReviewObjectionWindow: (hours: number) => Promise<void>;
 }) {
-  const sprintData = sprintWorkspaceModelToPlanningShellState(planningState.sprintWorkspace().model);
+  const sprintView = planningState.sprintWorkspace();
+  const sprintData = sprintWorkspaceModelToPlanningShellState(sprintView.model);
   const currentSprint = findCurrentSprint(sprintData.sprints);
   const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
   const [scoreObjectionDraft, setScoreObjectionDraft] = useState("");
@@ -103,10 +104,15 @@ export function SprintScoreTableOverview({
     return onRequestReview(task);
   };
 
-  if (!sprint) {
+  if (sprintView.readStatus === "forbidden" || !sprint) {
+    const message = sprintView.readStatus === "forbidden" ? "Keine Berechtigung für diesen Sprint-Bereich."
+      : sprintView.readStatus === "unavailable" ? "Sprint-Daten sind derzeit nicht verfügbar."
+      : sprintView.readStatus === "loading" || sprintView.readStatus === "not-loaded" ? "Sprint-Daten werden geladen."
+      : sprintView.model.coverage.sprints !== "complete" ? "Die Sprint-Liste ist noch nicht vollständig geladen."
+      : "Noch kein Sprint angelegt.";
     return (
       <section className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-        Noch kein Sprint angelegt. Nach der nächsten Migration erscheint hier die Sprint-Tabelle.
+        {message}
       </section>
     );
   }

@@ -323,7 +323,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           return { ok: false, error: error instanceof Error ? error.message : "Task-Details konnten nicht geladen werden." };
         }
         if (!isActive() || generation !== sessionGeneration) return { ok: false };
-        const next = sprintState.acceptRead(applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {}), { sprints: "partial" }, started);
+        const detailProjection = applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {});
+        const sprintRead = sprintState.acceptRead(detailProjection, { sprints: "partial" }, started, { ...detailProjection, sprints: [...result.model.sprints] });
+        const next = sprintRead.data;
         if (!result.unavailable?.includes("relationships")) lifecycle.acceptRelationshipRead(next, started, result.model.coverage?.relationships === "complete", taskId);
         deniedTaskReads.delete(taskId);
         detailUnavailable.set(taskId, result.unavailable || []);
@@ -338,7 +340,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         for (const task of returnedTasks) {
           if (!protectedIds.has(task.id)) taskReadAt.set(task.id, started);
         }
-        if (returnedTasks.some(task => protectedIds.has(task.id))) {
+        if (sprintRead.stale || returnedTasks.some(task => protectedIds.has(task.id))) {
           freshness = "stale";
           if (!result.unavailable?.length) detailStatuses.set(taskId, "stale");
         }
@@ -384,8 +386,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const covered = projectCoveredRead(confirmed, result.data, coverage);
       if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
       const profileRead = profileSettings.acceptRead(covered, coverage, started);
+      const sprintRead = sprintState.acceptRead(profileRead.data, coverage, started, result.data);
       confirmed = {
-        ...sprintState.acceptRead(profileRead.data, coverage, started, result.data),
+        ...sprintRead.data,
         tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
       };
       if (taskCoverage) {
@@ -396,7 +399,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       if (!memberships.has(workspace)) memberships.set(workspace, new Set());
       completeness.set(workspace, taskCoverage || "none");
-      const stale = profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
+      const stale = sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
       workspaceStatuses.set(workspace, stale ? "stale" : "current");
       notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
       if (workspace === "profile") profileSettings.readStatus(stale ? "stale" : "current");
