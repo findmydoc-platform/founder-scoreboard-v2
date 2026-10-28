@@ -117,8 +117,8 @@ export function planningSprintOperations({ action, targetId, profile, service, f
       return await service.from("projects").select("review_objection_window_hours").eq("id", "findmydoc-founder-execution").single();
     },
     async readPlannedSprints() {
-      if (action !== "planning.sprint.plan" || await current()) return { data: null, error: forbidden() };
-      return await service.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked,updated_at").eq("project_id", "findmydoc-founder-execution").order("start_date", { ascending: true });
+      if (action !== "planning.sprint.plan" || await current()) return { data: null, error: forbidden(), count: null };
+      return await service.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked,updated_at", { count: "exact" }).eq("project_id", "findmydoc-founder-execution").order("start_date", { ascending: true });
     },
     async readAssignedSprintIds() {
       if (action !== "planning.sprint.plan" || await current()) return { data: null, error: forbidden() };

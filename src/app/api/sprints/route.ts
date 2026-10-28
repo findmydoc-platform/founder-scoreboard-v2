@@ -63,9 +63,12 @@ export async function POST(request: NextRequest) {
   if (projectError || !project) return apiError("FounderOps-Prozesseinstellungen wurden nicht gefunden.", 409);
   const reviewObjectionWindowHours = Number(project.review_objection_window_hours || DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS);
 
-  const { data: existing, error: existingError } = await planning.readPlannedSprints();
+  const existingRead = await planning.readPlannedSprints();
+  const { data: existing, error: existingError } = existingRead;
+  const existingCount = "count" in existingRead ? existingRead.count : null;
 
   if (existingError) return apiError(existingError.message, 500);
+  if (existingCount === null || existingCount === undefined || existingCount !== (existing || []).length) return NextResponse.json({ error: "Der vorhandene Sprint-Plan wurde nicht vollständig geladen. Es wurde nichts geändert.", code: "sprint_plan_incomplete" }, { status: 409 });
 
   const { data: assignedTasks, error: assignedTasksError } = await planning.readAssignedSprintIds();
 
