@@ -54,6 +54,11 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 export interface PlanningState extends PlanningNotificationsState {
+  createTask(input: import("./planning-task-lifecycle").PlanningTaskCreationInput): Promise<import("./planning-task-lifecycle").PlanningTaskCreationResult>;
+  withdrawTask(task: Task, reason: string): Promise<import("./planning-task-lifecycle").PlanningTaskRemovalResult>;
+  rejectTask(task: Task, reason: string): Promise<import("./planning-task-lifecycle").PlanningTaskRemovalResult>;
+  checkTaskLifecycle(id: string): Promise<PlanningTaskSaveCheck>;
+  taskLifecycle(): readonly import("./planning-task-lifecycle").PlanningTaskLifecycleView[];
   profileApiTokens(): import("@/features/profile/model/profile-api-token-state").ProfileApiTokensView;
   loadProfileApiTokens(): Promise<boolean>;
   issueProfileApiToken(draft: import("@/features/profile/model/profile-api-token-state").ProfileApiTokenDraft): Promise<import("@/features/profile/model/profile-api-token-state").ProfileApiTokenIssueResult>;

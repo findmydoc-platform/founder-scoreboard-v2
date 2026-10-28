@@ -10,7 +10,7 @@ import type {
 import type { ReviewEvidenceSubmission } from "@/features/reviews/model/review-evidence";
 
 export function decideTaskApprovalRequest(apiClient: BrowserApiClient, taskId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {
-  return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${taskId}/approval`, {
+  return apiClient.requestJson<{ error?: string; code?: string; task?: Task }>(`/api/tasks/${taskId}/approval`, {
     method: "POST",
     json: { action, expectedRevision, note },
   });
@@ -66,14 +66,14 @@ export function assignBacklogTasksToSprintRequest(apiClient: BrowserApiClient, p
 }
 
 export function withdrawTaskRequest(apiClient: BrowserApiClient, taskId: string, expectedRevision: number, reason: string) {
-  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/withdraw`, {
+  return apiClient.requestJson<{ error?: string; code?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/withdraw`, {
     method: "POST",
     json: { expectedRevision, reason },
   });
 }
 
 export function restoreTaskRequest(apiClient: BrowserApiClient, taskId: string, expectedTrashRevision: number) {
-  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/restore`, {
+  return apiClient.requestJson<{ error?: string; code?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/restore`, {
     method: "POST",
     json: { expectedTrashRevision },
   });
@@ -90,6 +90,7 @@ export function requestTaskDetailData(apiClient: BrowserApiClient, taskId: strin
 export function createTaskRequest(apiClient: BrowserApiClient, draft: unknown) {
   return apiClient.requestJson<{
     error?: string;
+    code?: string;
     task?: Task;
     relation?: TaskRelation | null;
     relatedTask?: (Partial<Task> & { id: string }) | null;

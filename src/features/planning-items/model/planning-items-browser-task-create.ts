@@ -500,6 +500,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (!created?.id) return apiError("Aufgabe konnte nicht erstellt werden.", 500);
 
   let approvedTask: Task | null = null;
+  let approvalError = "";
   if (taskType === "deliverable" && payload.approveNow) {
     const approval = await planning.runCreateApproval("deliverable", {
       command: decidePlanningApprovalCommand(created.id, {
@@ -508,8 +509,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
         note: "Bei Erstellung durch CEO freigegeben.",
       }),
     });
-    if (!approval.ok) return apiError("Deliverable konnte nicht freigegeben werden.", 400);
-    approvedTask = planningApprovalTaskFromResult(approval);
+    if (!approval.ok) approvalError = "Deliverable konnte nicht freigegeben werden.";
+    else approvedTask = planningApprovalTaskFromResult(approval);
   }
 
   const profileIds = [...new Set([created.assignee, created.owner, created.created_by].filter((value): value is string => typeof value === "string" && Boolean(value)))];
@@ -532,5 +533,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
       }
     : null;
 
-  return NextResponse.json({ ok: true, task, relation, relatedTask: transaction?.relatedTask || null });
+  return NextResponse.json({
+    ok: !approvalError, task, relation, relatedTask: transaction?.relatedTask || null,
+    ...(approvalError ? { error: approvalError, code: "task_created_approval_failed" } : {}),
+  }, { status: approvalError ? 400 : 200 });
 }

@@ -7,7 +7,6 @@ import { useTaskWithdrawCommand } from "@/features/tasks/hooks/use-task-withdraw
 import { useTaskGitHubSyncCommand } from "@/features/tasks/hooks/use-task-github-sync-command";
 import { useTaskUpdateCommand } from "@/features/tasks/hooks/use-task-update-command";
 import { applyDeliverableApprovalPatch, applyOptimisticDeliverableApprovalDecision } from "@/features/planning/model/approval-domain";
-import { removePlanningRootFromData } from "@/features/planning/model/planning-trash-state";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import type { ApprovalDecisionAction, Task } from "@/lib/types";
 
@@ -33,6 +32,7 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
   const { createTask } = useTaskCreateCommand({
     ...options,
     setTaskDialogDefaults,
+    syncTaskToGitHub,
   });
   const { withdrawTask } = useTaskWithdrawCommand({
     ...options,
@@ -41,24 +41,23 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
 
   const decideTaskApproval = (task: Task, action: ApprovalDecisionAction, note = "") => {
     options.setSaveError("");
+    if (action === "reject") {
+      options.startTransition(async () => {
+        const result = await options.planningState.rejectTask(task, note);
+        if (result.ok) closeTaskPanel();
+        else options.setSaveError(result.error);
+      });
+      return;
+    }
     if (options.source !== "supabase") {
-      options.applyPlanningShellStateUpdate((current) => action === "reject"
-        ? removePlanningRootFromData(current, "deliverable", task.id).data
-        : applyDeliverableApprovalPatch(
-            current,
-            applyOptimisticDeliverableApprovalDecision(task, action, note),
-          ));
-      if (action === "reject") closeTaskPanel();
+      options.applyPlanningShellStateUpdate((current) => applyDeliverableApprovalPatch(current, applyOptimisticDeliverableApprovalDecision(task, action, note)));
       return;
     }
     options.startTransition(async () => {
       try {
         const { response, body } = await taskApi.decideTaskApprovalRequest(options.apiClient, task.id, action, task.approvalRevision, note);
         if (!response.ok || !body?.task) throw new Error(body?.error || "Freigabeentscheidung konnte nicht gespeichert werden.");
-        options.applyPlanningShellStateUpdate((current) => action === "reject"
-          ? removePlanningRootFromData(current, "deliverable", task.id).data
-          : applyDeliverableApprovalPatch(current, body.task!));
-        if (action === "reject") closeTaskPanel();
+        options.applyPlanningShellStateUpdate((current) => applyDeliverableApprovalPatch(current, body.task!));
       } catch (error) {
         options.setSaveError(error instanceof Error ? error.message : "Freigabeentscheidung konnte nicht gespeichert werden.");
       }

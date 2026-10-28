@@ -1,3 +1,4 @@
+import { TaskLifecycleNotice } from "@/features/tasks/molecules/task-lifecycle-notice";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { PlanningBootShell } from "@/features/planning/templates/planning-boot-shell";
@@ -181,6 +182,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
           />
         )}
 
+        {controller.planningState.taskLifecycle().map(operation => <TaskLifecycleNotice key={operation.id} operation={operation} onCheck={id => controller.planningState.checkTaskLifecycle(id)} />)}
         <PlanningWorkspaceRenderer
           controller={controller}
           administrationCapabilities={administratorAccessController.authority.capabilities}

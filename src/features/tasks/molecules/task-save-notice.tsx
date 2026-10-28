@@ -5,6 +5,7 @@ import type { Task } from "@/lib/types";
 import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 const inputLabels: Partial<Record<keyof Task, string>> = {
+  githubRepo: "Repository",
   title: "Titel", description: "Kontext", status: "Status", priority: "Priorität",
   problemStatement: "Problem", intendedOutcome: "Zielbild", scopeConstraints: "Umfang & Grenzen",
   acceptanceCriteria: "Abnahmekriterien", evidenceRequired: "Erforderlicher Nachweis", definitionOfDone: "Qualitätsstandard",
@@ -16,13 +17,15 @@ const inputLabels: Partial<Record<keyof Task, string>> = {
   selfDodChecked: "Qualitätsstandard geprüft", selfEvidenceChecked: "Nachweis geprüft",
   selfDocumentedChecked: "Dokumentation geprüft", selfBlockersChecked: "Blocker geprüft",
 };
-function submittedValues(patch: Readonly<Partial<Task>>) {
+export function taskSubmittedValues(patch: Readonly<Partial<Task>> & { approveNow?: boolean; relationType?: string; relatedTaskId?: string; relationNote?: string }) {
   const values: [string, unknown][] = Object.entries(inputLabels).filter(([key]) => Object.hasOwn(patch, key)).map(([key, label]) => [label!, patch[key as keyof Task]]);
   if (patch.strategy) values.push(["Strategisches Ziel", patch.strategy.goal], ["Erfolgskriterien", patch.strategy.successCriteria], ["Strategischer Umfang", patch.strategy.scopeConstraints]);
   if (patch.raciAssignments) values.push(["Beteiligung", patch.raciAssignments.map(item => `${item.profileId}: ${item.role}`).join("\n")]);
+  if (patch.approveNow !== undefined) values.push(["Direkte Freigabe angefragt", patch.approveNow]);
+  if (patch.relatedTaskId) values.push(["Verknüpfte Aufgabe", patch.relatedTaskId], ["Beziehungstyp", patch.relationType], ["Beziehungsnotiz", patch.relationNote]);
   return values;
 }
-function displayValue(value: unknown) {
+export function displaySubmittedValue(value: unknown) {
   if (value === true) return "Ja";
   if (value === false) return "Nein";
   if (Array.isArray(value)) return value.join("\n") || "Leer";
@@ -45,11 +48,11 @@ export function TaskSaveNotice({ taskTitle, saves, onCheck }: {
     {saves.map((save, index) => save.submitted ? <details className="mt-3" key={index}>
       <summary className="cursor-pointer py-2 font-semibold">{save.phase === "blocked" ? "Wartende Eingaben anzeigen" : "Abgesendete Eingaben anzeigen"}</summary>
       {save.phase === "blocked" ? <p>Diese Änderung wurde noch nicht gesendet.</p> : null}
-      <dl className="mt-2 grid gap-3 whitespace-pre-wrap">{submittedValues(save.submitted).map(([label, value], field) => <div key={field}><dt className="font-semibold">{label}</dt><dd>{displayValue(value)}</dd></div>)}</dl>
+      <dl className="mt-2 grid gap-3 whitespace-pre-wrap">{taskSubmittedValues(save.submitted).map(([label, value], field) => <div key={field}><dt className="font-semibold">{label}</dt><dd>{displaySubmittedValue(value)}</dd></div>)}</dl>
     </details> : null)}
     {saves[0].serverTask && saves[0].submitted ? <details className="mt-3">
       <summary className="cursor-pointer py-2 font-semibold">Aktuellen Serverstand anzeigen</summary>
-      <dl className="mt-2 grid gap-3 whitespace-pre-wrap">{submittedValues(Object.fromEntries(Object.keys(saves[0].submitted).map(key => [key, saves[0].serverTask![key as keyof Task]]))).map(([label, value], field) => <div key={field}><dt className="font-semibold">{label}</dt><dd>{displayValue(value)}</dd></div>)}</dl>
+      <dl className="mt-2 grid gap-3 whitespace-pre-wrap">{taskSubmittedValues(Object.fromEntries(Object.keys(saves[0].submitted).map(key => [key, saves[0].serverTask![key as keyof Task]]))).map(([label, value], field) => <div key={field}><dt className="font-semibold">{label}</dt><dd>{displaySubmittedValue(value)}</dd></div>)}</dl>
     </details> : null}
     <UiButton type="button" size="lg" className="mt-3" disabled={!onCheck || checkStatus === "checking"} onClick={() => { void onCheck?.(); }}>{checkStatus === "checking" ? "Speicherstand wird geprüft …" : "Speicherstand prüfen"}</UiButton>
   </UiNotice>;

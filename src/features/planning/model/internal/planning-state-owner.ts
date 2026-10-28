@@ -7,6 +7,8 @@ import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-comm
 import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
 import { applyTaskDetailModel } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { emptyPlanningShellState } from "../planning-shell-state";
+import { createTaskLifecycle } from "./task-lifecycle";
+import type { PlanningTaskCreationInput, PlanningTaskCreationConfirmation, PlanningTaskRemovalConfirmation } from "../planning-task-lifecycle";
 import { createProfileApiTokensState } from "./profile-api-tokens-state";
 import { createProfileSettingsState } from "./profile-settings-state";
 import type { OwnProfileSettingsConfirmation, OwnProfileSettingsPatch } from "@/features/profile/model/profile-settings-contract";
@@ -19,6 +21,8 @@ export type PlanningWorkspaceRead = { notificationCoverage?: import("@/features/
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
 export type PlanningStateAdapter = HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   now?: () => number;
+  removeTask?: (task: Task, action: "withdraw" | "reject", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
+  createTask?: (input: PlanningTaskCreationInput) => Promise<PlanningTaskCreationConfirmation>;
   acknowledgeFeatureTour?: (tourId: string) => Promise<import("@/lib/types").ProfileFeatureTourAcknowledgement>;
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
@@ -73,14 +77,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, readStatus: () => workspaceStatuses.get("profile") || "not-loaded", save: adapter.saveOwnProfileSettings, acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
   function publish() {
-    confirmed = notifications.projectConfirmed(confirmed);
-    visible = profileSettings.project({ ...confirmed, tasks: confirmed.tasks.map(task => {
+    confirmed = notifications.projectConfirmed(lifecycle.projectConfirmed(confirmed));
+    const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
       let result = task;
       for (const operation of pending.values()) {
         if (operation.taskId === task.id) result = { ...result, ...operation.patch };
       }
       return result;
-    }) });
+    }) };
+    visible = profileSettings.project(lifecycle.projectVisible(taskView));
     visible = notifications.projectVisible(visible);
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
@@ -96,6 +101,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       publish();
       return Promise.resolve({ ok: false, kind: "unconfirmed", code: "predecessor_unconfirmed", error: "Eine vorherige Speicherung ist noch nicht bestätigt. Diese Änderung wurde noch nicht gesendet." });
     }
+    if (lifecycle.isRemoving(task)) return Promise.resolve({ ok: false, kind: "unconfirmed", code: "predecessor_unconfirmed", error: "Das Entfernen dieser Aufgabe ist noch nicht bestätigt. Diese Änderung wurde noch nicht gesendet." });
+    if (lifecycle.isRemoved(task)) return Promise.resolve({ ok: false, kind: "rejected", code: "task_removed", error: "Diese Aufgabe wurde entfernt." });
     const generation = sessionGeneration;
     const operation = Symbol(task.id);
     const previous = tails.get(task.id);
@@ -118,10 +125,19 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
       try {
+        if (lifecycle.isRemoving(task)) throw Object.assign(new Error("Das Entfernen dieser Aufgabe ist noch nicht bestätigt. Diese Änderung wurde noch nicht gesendet."), { status: 409, code: "dependency_pending" });
+        if (lifecycle.isRemoved(task)) throw Object.assign(new Error("Diese Aufgabe wurde entfernt."), { status: 409, code: "task_removed" });
         const current = confirmed.tasks.find(item => item.id === task.id);
         if (current?.updatedAt && current.updatedAt !== task.updatedAt) throw Object.assign(new Error("Aufgabe wurde zwischenzeitlich geändert. Bitte den aktuellen Stand prüfen."), { status: 409, kind: "versionConflict" });
         pending.get(operation)!.phase = "saving";
         const result = await adapter.saveTask(task, patch);
+        if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
+        if (lifecycle.isRemoved(task)) {
+          pending.delete(operation);
+          status.set(task.id, "rejected");
+          publish();
+          return { ok: false, kind: "rejected", code: "task_removed", error: "Diese Aufgabe wurde entfernt." };
+        }
         if (!result.task.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
         if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
         taskConfirmedAt.set(task.id, ++sequence);
@@ -161,6 +177,41 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     void saved.then(() => { if (tails.get(task.id)?.result === saved && status.get(task.id) !== "unconfirmed") tails.delete(task.id); });
     return saved;
   }
+  const lifecycle = createTaskLifecycle({
+    createTask: adapter.createTask,
+    removeTask: adapter.removeTask,
+    checkCreation: async () => { await planning.refreshWorkspace("planning"); return planning.workspace("planning").readStatus; },
+    checkRemoval: async taskId => { await planning.loadTaskDetail(taskId); return planning.taskDetail(taskId).readStatus; },
+    acceptRemoval(ids, action, rootId) {
+      for (const id of ids) taskConfirmedAt.set(id, ++sequence);
+      for (const members of memberships.values()) for (const id of ids) members.delete(id);
+      confirmed = lifecycle.projectConfirmed(confirmed);
+      notifications.invalidateHeader(["notifications"]);
+      if (action === "reject") { freshness = "stale"; void planning.loadTaskDetail(rootId); }
+    },
+    current: () => confirmed,
+    capture: () => ++sequence,
+    acceptCreation(result, started, relatedBasis) {
+      const incoming = [result.task, ...(result.relatedTask?.updatedAt ? [result.relatedTask] : [])];
+      for (const task of incoming) {
+        const current = confirmed.tasks.find(item => item.id === task.id);
+        const unchangedRelatedBasis = relatedBasis?.id === task.id && current?.updatedAt === relatedBasis.updatedAt;
+        if (((taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started) && !unchangedRelatedBasis) { freshness = "stale"; continue; }
+        const known = confirmed.tasks.some(item => item.id === task.id);
+        if (known) confirmed = { ...confirmed, tasks: confirmed.tasks.map(item => item.id === task.id ? { ...item, ...task } : item) };
+        else if (task.id === result.task.id) confirmed = { ...confirmed, tasks: [...confirmed.tasks, result.task] };
+        else { void planning.loadTaskDetail(task.id); continue; }
+        taskConfirmedAt.set(task.id, ++sequence);
+      }
+      for (const workspace of ["planning", "projects"] as const) if (memberships.has(workspace)) memberships.get(workspace)!.add(result.task.id);
+      if (result.relation) confirmed = { ...confirmed, taskRelations: [result.relation, ...confirmed.taskRelations.filter(item => item.id !== result.relation!.id)] };
+      if (result.relatedTask && !result.relatedTask.updatedAt) { freshness = "stale"; void planning.loadTaskDetail(result.relatedTask.id); }
+      notifications.invalidateHeader(["notifications"]);
+    },
+    generation: () => sessionGeneration,
+    isActive,
+    changed: publish,
+  });
   const editing = createTaskEditing({
     currentTask: taskId => confirmed.tasks.find(task => task.id === taskId) || null,
     saveTask: saveTaskWithContext,
@@ -173,6 +224,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   });
   const planning: PlanningState = {
     ...notifications.publicState,
+    createTask: input => lifecycle.createTask(input),
+    taskLifecycle: () => lifecycle.views(),
+    checkTaskLifecycle: id => lifecycle.check(id),
+    withdrawTask: (task, reason) => lifecycle.removeTask(task, "withdraw", reason),
+    rejectTask: (task, reason) => lifecycle.removeTask(task, "reject", reason),
     profileApiTokens: profileTokens.view,
     loadProfileApiTokens: profileTokens.load,
     issueProfileApiToken: profileTokens.issue,
@@ -182,7 +238,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     profileSettings: profileSettings.view,
     saveOwnProfileSettings: profileSettings.save,
     board: () => ({ tasks: planning.workspace("planning").tasks, freshness }),
-    workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id)), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
+    workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id) || ((workspace === "planning" || workspace === "projects") && lifecycle.isTemporary(task.id))), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
     taskDetail: taskId => { isActive(); return ({
       task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
       saveStatus: status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
@@ -256,6 +312,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         }
         if (!isActive() || generation !== sessionGeneration) return { ok: false };
         const next = applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {});
+        if (!result.unavailable?.includes("relationships")) lifecycle.acceptRelationshipRead(next, started, result.model.coverage?.relationships === "complete", taskId);
         deniedTaskReads.delete(taskId);
         detailUnavailable.set(taskId, result.unavailable || []);
         detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
@@ -311,7 +368,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const replacements = new Map(incoming.filter(task => !protectedIds.has(task.id)).map(task => [task.id, task]));
       const known = new Set(confirmed.tasks.map(task => task.id));
       for (const task of replacements.values()) taskReadAt.set(task.id, started);
-      const profileRead = profileSettings.acceptRead(projectCoveredRead(confirmed, result.data, coverage), coverage, started);
+      const covered = projectCoveredRead(confirmed, result.data, coverage);
+      if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
+      const profileRead = profileSettings.acceptRead(covered, coverage, started);
       confirmed = {
         ...profileRead.data,
         tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
@@ -343,6 +402,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     outcomeChecks.clear();
     outcomeCheckStatus.clear();
     editing.clear();
+    lifecycle.clear();
     profileSettings.clear();
     profileTokens.clear();
     pending.clear();

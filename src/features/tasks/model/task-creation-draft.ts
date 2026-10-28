@@ -1,4 +1,4 @@
-import type { Task, TaskType } from "@/lib/types";
+import type { Task, TaskType, TaskRelationType } from "@/lib/types";
 
 type TaskCreationHierarchy = {
   taskType: TaskType;
@@ -11,7 +11,7 @@ type TaskCreationRequestDraft = TaskCreationHierarchy & {
   description: string;
   assignee: string;
   githubRepo: string;
-  relationType: string;
+  relationType: TaskRelationType;
   relatedTaskId: string;
   relationNote: string;
   priority: string;
