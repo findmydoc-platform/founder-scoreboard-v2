@@ -11,15 +11,16 @@ export function usePrivateTeamWorkweek(apiClient: BrowserApiClient, planningStat
   const transport = useMemo<WorkweekTransport>(() => ({
     published: () => window.dispatchEvent(new Event(TEAM_WORKWEEK_PUBLISHED_EVENT)),
     async request(operation, input) {
-      if (operation === "load" || operation === "save" || operation === "publish") {
+      if (operation === "load" || operation === "save" || operation === "publish" || operation === "reconcile") {
         const result = operation === "load" ? await planningState.loadPrivateWorkweek(input?.week)
           : operation === "save" ? await planningState.savePrivateWorkweek(input?.json as import("../model/private-workweek-planning-state").PrivateWorkweekSaveInput)
-          : await planningState.publishPrivateWorkweek((input?.json as { versionId: string }).versionId);
+          : operation === "publish" ? await planningState.publishPrivateWorkweek((input?.json as { versionId: string }).versionId)
+          : await planningState.reconcileWorkweek();
         return { response: new Response(null, { status: result.status || 503 }), body: result.value } as import("@/lib/browser-api-client").BrowserApiJsonResult<never>;
       }
       const routes = {
         loadConflict: "conflict",
-        resolveConflict: "conflict", restart: "restart", reconcile: "reconcile",
+        resolveConflict: "conflict", restart: "restart",
       };
       const read = operation === "loadConflict";
       return apiClient.requestJson(`/api/team-workweek/${routes[operation]}`, {

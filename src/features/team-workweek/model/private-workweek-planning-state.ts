@@ -28,7 +28,23 @@ export type PrivateWorkweekOperation<Input> = Readonly<{
   phase: "idle" | "saving" | "publishing" | "confirmed" | "preparing" | "rejected" | "unconfirmed";
   submitted: Readonly<Input> | null; error: string; checked: boolean;
 }>;
+export type WorkweekReconciliation = Readonly<{
+  state: "unchanged" | "updated" | "delayed" | "conflict";
+  lastSuccessfulSyncAt: string | null;
+  recovery: "retry" | "reconnect" | "resolve_conflict" | "restart" | null;
+  effectiveAt?: string | null;
+  effectiveUntil?: string | null;
+}>;
+export type WorkweekReconciliationConfirmation = { reconciliation: WorkweekReconciliation };
+export type WorkweekReconciliationView = Readonly<{
+  phase: "idle" | "reconciling" | "confirmed" | "delayed" | "conflict" | "rejected" | "unconfirmed";
+  displayedPublication: Readonly<{ id: string; publicationRevision: number }> | null;
+  result: WorkweekReconciliation | null;
+  error: string;
+  checked: boolean;
+}>;
 export type PrivateWorkweekView = Readonly<{
+  reconciliation: WorkweekReconciliationView;
   context: PrivateWorkweekContext | null;
   savedVersion: PrivateTeamWorkweekVersion | null;
   confirmedPublication: PrivateWorkweekPublication | null;
@@ -38,12 +54,14 @@ export type PrivateWorkweekView = Readonly<{
   publication: PrivateWorkweekOperation<{ versionId: string }> & { result: PrivateWorkweekPublication | null; sourceVersion: PrivateTeamWorkweekVersion | null; conflict: PrivateWorkweekFailure["conflict"] | null; completionPending: boolean };
 }>;
 export type PrivateWorkweekAdapter = {
+  reconcilePrivateWorkweek?: () => Promise<PrivateWorkweekReply<WorkweekReconciliationConfirmation>>;
   readPrivateWorkweek?: (week?: string) => Promise<PrivateWorkweekReply<PrivateWorkweekContext>>;
   savePrivateWorkweek?: (input: PrivateWorkweekSaveInput) => Promise<PrivateWorkweekReply<PrivateWorkweekSaveConfirmation>>;
   publishPrivateWorkweek?: (versionId: string) => Promise<PrivateWorkweekReply<PrivateWorkweekPublicationConfirmation>>;
 };
 export interface PrivateWorkweekPlanningState {
   privateWorkweek(): PrivateWorkweekView;
+  reconcileWorkweek(): Promise<PrivateWorkweekReply<WorkweekReconciliationConfirmation>>;
   loadPrivateWorkweek(week?: string): Promise<PrivateWorkweekReply<PrivateWorkweekContext>>;
   savePrivateWorkweek(input: PrivateWorkweekSaveInput): Promise<PrivateWorkweekReply<PrivateWorkweekSaveConfirmation>>;
   publishPrivateWorkweek(versionId: string): Promise<PrivateWorkweekReply<PrivateWorkweekPublicationConfirmation>>;
