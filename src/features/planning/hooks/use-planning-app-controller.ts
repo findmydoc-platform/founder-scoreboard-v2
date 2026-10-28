@@ -290,7 +290,6 @@ export function usePlanningAppController({
     ...boardState,
     ...commandRegistry.eventCommands,
     ...commandRegistry.fmdToolCommands,
-    ...commandRegistry.sprintReviewSettingsCommand,
     ...commandRegistry.initiativeCommands,
     ...commandRegistry.epicCommands,
     ...commandRegistry.notificationCommands,

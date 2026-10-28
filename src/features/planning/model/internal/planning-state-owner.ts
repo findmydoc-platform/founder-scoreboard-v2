@@ -8,6 +8,7 @@ import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/task
 import { applyTaskDetailModel } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { emptyPlanningShellState } from "../planning-shell-state";
 import { sprintViewCoverage } from "./sprint-read-coverage";
+import { createReviewWindowState } from "./review-window-state";
 import { createSprintState } from "./sprint-state";
 import { createTaskLifecycle } from "./task-lifecycle";
 import type { PlanningTaskCreationInput, PlanningTaskCreationConfirmation, PlanningTaskRemovalConfirmation } from "../planning-task-lifecycle";
@@ -22,6 +23,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 export type PlanningWorkspaceRead = { notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
 export type PlanningStateAdapter = HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+  saveReviewWindow?: (expectedHours: number, hours: number) => Promise<import("@/features/sprint/model/review-window-editing").ReviewWindowConfirmation>;
   saveSprint?: (sprint: import("@/lib/types").Sprint, patch: import("@/features/sprint/model/sprint-editing").SprintEditPatch) => Promise<{ sprint: import("@/lib/types").Sprint }>;
   now?: () => number;
   removeTask?: (task: Task, action: "withdraw" | "reject", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
@@ -79,7 +81,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, readStatus: () => workspaceStatuses.get("profile") || "not-loaded", save: adapter.saveOwnProfileSettings, acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
-  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: sprintState.schedulesPending, checkSchedules: sprintState.checkPendingSchedules, save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   function publish() {
     confirmed = notifications.projectConfirmed(lifecycle.projectConfirmed(confirmed));
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
@@ -89,7 +92,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       return result;
     }) };
-    visible = sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView)));
+    visible = reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView))));
     visible = notifications.projectVisible(visible);
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
@@ -227,6 +230,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const planning: PlanningState = {
+    checkReviewWindowSave: () => reviewWindow.check(),
+    reviewWindow: () => { const active = isActive(); return { hours: !active || sprintState.denied() ? null : visible.project.reviewObjectionWindowHours, edits: reviewWindow.views(), readStatus: workspaceStatuses.get("sprint") || "not-loaded" }; },
+    resumeReviewWindowEdit: () => reviewWindow.resume(),
+    beginReviewWindowEdit: hours => reviewWindow.begin(hours),
     checkSprintSave: id => sprintState.check(id),
     sprintEdits: id => sprintState.views(id),
     beginSprintEdit: sprint => sprintState.begin(sprint),
@@ -421,6 +428,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     editing.clear();
     lifecycle.clear();
     sprintState.clear();
+    reviewWindow.clear();
     profileSettings.clear();
     profileTokens.clear();
     pending.clear();
@@ -453,7 +461,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (!isActive()) return;
     const incoming = typeof update === "function" ? update(visible) : update;
     if (incoming.tasks !== visible.tasks) freshness = "stale";
-    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), tasks: confirmed.tasks, sprints: confirmed.sprints };
+    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), tasks: confirmed.tasks, sprints: confirmed.sprints, project: { ...incoming.project, reviewObjectionWindowHours: confirmed.project.reviewObjectionWindowHours } };
     publish();
   }
   function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace) {

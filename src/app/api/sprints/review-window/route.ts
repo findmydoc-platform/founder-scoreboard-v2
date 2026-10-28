@@ -34,7 +34,7 @@ export async function PATCH(request: NextRequest) {
   const { data, error } = await planning.setReviewWindow({ expectedHours: payload.expectedReviewObjectionWindowHours, hours: payload.reviewObjectionWindowHours }, metadata);
 
   if (error) {
-    if (error.code === "P0001") return apiError("Die Prozesseinstellungen wurden parallel geändert. Bitte neu laden.", 409);
+    if (error.code === "P0001") return NextResponse.json({ error: "Die Prozesseinstellungen wurden parallel geändert. Bitte neu laden.", code: "review_window_conflict" }, { status: 409 });
     if (error.code === "P0002") return apiError("FounderOps-Projekt wurde nicht gefunden.", 404);
     if (error.code === "P0005") return apiError("Nur der CEO kann diese Prozesseinstellung ändern.", 403);
     if (error.code === "22023") return apiError("Die Review- und Einspruchsfrist ist ungültig.", 400);

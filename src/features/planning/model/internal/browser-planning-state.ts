@@ -34,6 +34,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialWorkspace: options.initialWorkspace,
     initialHeaderData: options.initialHeaderData,
     adapter: {
+      async saveReviewWindow(expectedHours, hours) {
+        const { response, body } = await planningApi.updateSprintReviewWindowRequest(runtime.apiClient, expectedHours, hours);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Prozesseinstellung konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        if (!body?.project || !Array.isArray(body.sprints)) throw new Error("Die Speicherung ist noch nicht bestätigt.");
+        return { project: body.project, sprints: body.sprints };
+      },
       async saveSprint(sprint, patch) {
         const { response, body } = await planningApi.updateSprintRequest(runtime.apiClient, sprint.id, { ...patch, expectedUpdatedAt: sprint.updatedAt });
         if (!response.ok) throw Object.assign(new Error(body?.error || "Sprint konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
