@@ -123,25 +123,31 @@ export async function authorizeResource(input: ResourceCredentialInput) {
     },
     async readTool() {
       if (action !== "tools.update") return denied();
-      const result = await service.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order").eq("id", target).single<DbFmdTool>();
+      const result = await service.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order,updated_at").eq("id", target).single<DbFmdTool>();
       if (result.data) observedTool = structuredClone(result.data);
       return result;
     },
-    async saveTool(supplied: ToolValues, suppliedMetadata: ResourceAuditMetadata) {
+    async saveTool(supplied: ToolValues, suppliedMetadata: ResourceAuditMetadata, expectedUpdatedAt?: string) {
       const fields = ["name", "category", "kind", "description", "url", "owner", "status", "is_curated", "preview_image_url", "preview_image_source"] as const;
       const values = structuredClone(Object.fromEntries(fields.map(field => [field, supplied[field]]))) as ToolValues;
       const metadata = { request_ip: suppliedMetadata.request_ip || null, user_agent: suppliedMetadata.user_agent || null };
       if ((action !== "tools.create" && action !== "tools.update") || (action === "tools.update" && !observedTool)) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
       const operation = action === "tools.create" ? "create" : "update";
-      const select = "id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order";
+      const select = "id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order,updated_at";
       return persistTool(values, operation, {
         countCurated: () => {
           const query = service.from("fmd_tools").select("id", { count: "exact", head: true }).eq("is_curated", true).not("url", "is", null);
           return operation === "update" ? query.neq("id", target) : query;
         },
         maximumOrder: () => service.from("fmd_tools").select("sort_order").order("sort_order", { ascending: false }).limit(1).maybeSingle(),
-        save: row => operation === "create" ? service.from("fmd_tools").insert(row).select(select).single<DbFmdTool>()
-          : service.from("fmd_tools").update(row).eq("id", target).select(select).single<DbFmdTool>(),
+        async save(row) {
+          if (operation === "create") return service.from("fmd_tools").insert(row).select(select).single<DbFmdTool>();
+          let query = service.from("fmd_tools").update(row).eq("id", target);
+          if (expectedUpdatedAt !== undefined) query = query.eq("updated_at", expectedUpdatedAt);
+          const result = await query.select(select).maybeSingle<DbFmdTool>();
+          if (!result.error && !result.data && expectedUpdatedAt !== undefined) return { data: null, error: { code: "tool_version_conflict", message: "Der Link wurde zwischenzeitlich geändert. Bitte den aktuellen Serverstand prüfen." } };
+          return result;
+        },
         audit: (row, saved) => followup.from("audit_log").insert({ actor_profile_id: profile?.id || null, action: operation === "create" ? "fmd_tool.create" : "fmd_tool.update",
           entity_type: "fmd_tool", entity_id: saved.id, ...(operation === "update" ? { before_data: observedTool } : {}), after_data: row, ...metadata }),
       });

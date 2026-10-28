@@ -1,3 +1,4 @@
+import { createToolsState } from "./tool-state";
 import { createEventsState } from "./event-state";
 import { createHeaderNotificationsState, type HeaderNotificationsAdapter } from "./header-notifications-state";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
@@ -22,9 +23,9 @@ import { applyDeliverableApprovalPatch } from "../approval-domain";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
-export type PlanningWorkspaceRead = { eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
-export type PlanningStateAdapter = import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+export type PlanningStateAdapter = import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   saveReviewWindow?: (expectedHours: number, hours: number) => Promise<import("@/features/sprint/model/review-window-editing").ReviewWindowConfirmation>;
   saveSprint?: (sprint: import("@/lib/types").Sprint, patch: import("@/features/sprint/model/sprint-editing").SprintEditPatch) => Promise<{ sprint: import("@/lib/types").Sprint }>;
   now?: () => number;
@@ -86,12 +87,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     beginHeaderRead: () => notifications.beginWorkspaceRead("events"),
     acceptHeaderRead: (data, started) => notifications.acceptWorkspaceRead("events", confirmed, { ...emptyPlanningHeaderData, calendarEvents: notifications.publicState.header().slots.calendarEvents.readStatus === "not-loaded" ? emptyPlanningHeaderData.calendarEvents : data.calendarEvents }, started),
   });
+  const tools = createToolsState({ initial: active ? initialData.fmdTools : [], loaded: initialWorkspace === "tools", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, endSession, invalidateQuickLinks: () => notifications.invalidateHeader(["quickLinks"]), refreshWorkspace: () => planning.refreshWorkspace("tools"), beginHeaderRead: () => notifications.beginWorkspaceRead("tools"), acceptHeaderRead: (data, started) => notifications.acceptWorkspaceRead("tools", confirmed, { ...emptyPlanningHeaderData, quickLinks: notifications.publicState.header().slots.quickLinks.readStatus === "not-loaded" ? emptyPlanningHeaderData.quickLinks : data.quickLinks }, started) });
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
   const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: sprintState.schedulesPending, checkSchedules: sprintState.checkPendingSchedules, save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   function publish() {
-    confirmed = events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(confirmed)));
+    confirmed = tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(confirmed))));
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
       let result = task;
       for (const operation of pending.values()) {
@@ -100,7 +102,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return result;
     }) };
     visible = reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView))));
-    visible = events.projectVisible(notifications.projectVisible(visible));
+    visible = tools.projectVisible(events.projectVisible(notifications.projectVisible(visible)));
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
       if (workspaceStatuses.get(workspace) === "forbidden") publishCache?.(null, workspace);
@@ -251,6 +253,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     ...notifications.publicState,
     ...events.publicState,
+    ...tools.publicState,
     createTask: input => lifecycle.createTask(input),
     taskLifecycle: () => lifecycle.views(),
     checkTaskLifecycle: id => lifecycle.check(id),
@@ -377,6 +380,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const started = ++sequence;
       const notificationRead = notifications.beginWorkspaceRead(workspace);
       const eventRead = workspace === "events" ? events.beginRead() : null;
+      const toolRead = workspace === "tools" ? tools.beginRead() : null;
       acceptedRead.set(workspace, started);
       workspaceStatuses.set(workspace, "loading");
       publish();
@@ -385,6 +389,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       catch (error) {
         if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
         notifications.workspaceFailed(workspace, error);
+        if (toolRead !== null) tools.failed(error, toolRead);
         if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
         workspaceStatuses.set(workspace, readErrorStatus(error));
         if (workspace === "sprint") sprintState.readStatus(readErrorStatus(error));
@@ -394,6 +399,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
       if (!result) {
+        if (toolRead !== null) tools.failed(new Error("Links konnten nicht geladen werden."), toolRead);
         if (eventRead !== null) events.failed(new Error("Events konnten nicht geladen werden."), eventRead);
         workspaceStatuses.set(workspace, "unavailable");
         publish();
@@ -424,6 +430,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       completeness.set(workspace, taskCoverage || "none");
       const stale = sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
       workspaceStatuses.set(workspace, stale ? "stale" : "current");
+      if (toolRead !== null) tools.acceptRead({ tools: result.data.fmdTools, completeness: result.toolCoverage || "partial" }, toolRead, Boolean(result.headerData && result.headerData.quickLinks.state === "ready"));
       if (eventRead !== null) events.acceptRead({ events: result.data.events, coverage: result.eventCoverage || { range: null, completeness: "partial" } }, eventRead, Boolean(result.headerData && result.headerData.calendarEvents.state !== "idle"));
       notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
       profileSettings.readStatus(stale ? "stale" : "current", workspace);
@@ -458,6 +465,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     confirmed = emptyPlanningShellState;
     notifications.clear();
     events.clear();
+    tools.clear();
     publish();
   }
   function endSession() {
@@ -496,6 +504,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return;
     }
     initialized = true;
+    if (workspace === "tools") tools.acceptRead({ tools: data.fmdTools, completeness: "partial" }, tools.beginRead());
     if (workspace === "events") events.acceptRead({ events: data.events, coverage: { range: null, completeness: "partial" } }, events.beginRead());
     const coverage = workspaceReadCoverage(workspace);
     const known = new Set(confirmed.tasks.map(task => task.id));

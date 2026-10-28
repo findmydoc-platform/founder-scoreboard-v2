@@ -18,6 +18,7 @@ export function FmdToolQuickLinks({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const links = quickLinks.data;
+  const stale = quickLinks.freshness === "stale";
 
   useEffect(() => {
     if (!open) return;
@@ -45,7 +46,7 @@ export function FmdToolQuickLinks({
         onClick={onToggle}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+        className="grid h-9 w-9 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
         aria-label="Kuratierte Links"
         title="Kuratierte Links"
       >
@@ -59,17 +60,18 @@ export function FmdToolQuickLinks({
               <h2 className="truncate text-sm font-semibold text-slate-950">Kuratierte Links</h2>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <UiBadge tone="slate" bordered={false}>{quickLinks.state === "loading" ? "..." : `${links.length}/${maxHeaderQuickLinks}`}</UiBadge>
+              <UiBadge tone="slate" bordered={false}>{quickLinks.state === "loading" || stale ? "..." : `${links.length}/${maxHeaderQuickLinks}`}</UiBadge>
               <button
                 type="button"
                 onClick={onToggle}
-                className="grid h-7 w-7 place-items-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                className="grid h-7 w-7 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 place-items-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-700"
                 aria-label="Kuratierte Links schließen"
               >
                 <X size={14} />
               </button>
             </div>
           </div>
+          {stale && quickLinks.state !== "error" ? <p role="status" className="px-4 pt-2 text-xs text-slate-600">Linkdaten werden aktualisiert. Bereits bestätigte Links bleiben sichtbar.</p> : null}
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 sm:max-h-[360px]">
             {quickLinks.state === "loading" ? (
               <UiEmptyState className="px-4 py-8">

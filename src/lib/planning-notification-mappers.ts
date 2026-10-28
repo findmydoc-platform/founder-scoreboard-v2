@@ -52,6 +52,7 @@ export function mapNotificationPreference(row: DbNotificationPreference): Notifi
 
 export function mapFmdTool(row: DbFmdTool): FmdTool {
   return {
+    ...(row.updated_at ? { updatedAt: row.updated_at } : {}),
     id: row.id,
     name: row.name,
     category: row.category,

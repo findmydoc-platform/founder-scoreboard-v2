@@ -49,12 +49,13 @@ export type PlanningWorkspaceView = {
   readStatus: PlanningReadStatus;
   completeness: "complete" | "partial" | "none";
 };
+import type { PlanningToolsState } from "@/features/tools/model/tool-state";
 import type { PlanningEventsState } from "@/features/events/model/event-state";
 import type { PlanningNotificationsState } from "./planning-notifications-state";
 
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
-export interface PlanningState extends PlanningNotificationsState, PlanningEventsState {
+export interface PlanningState extends PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   checkReviewWindowSave(): Promise<PlanningTaskSaveCheck>;
   reviewWindow(): import("@/features/sprint/model/review-window-editing").ReviewWindowView;
   resumeReviewWindowEdit(): import("@/features/sprint/model/review-window-editing").ReviewWindowEditor | null;
