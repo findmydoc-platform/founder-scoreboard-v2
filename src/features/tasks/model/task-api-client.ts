@@ -40,7 +40,7 @@ export type BacklogMoveUpdate = {
 };
 
 export function moveBacklogTaskRequest(apiClient: BrowserApiClient, move: BacklogMoveRequest) {
-  return apiClient.requestJson<{ error?: string; updates?: BacklogMoveUpdate[] }>("/api/tasks/backlog-order", {
+  return apiClient.requestJson<{ error?: string; code?: string; completeness?: "complete" | "partial"; updates?: BacklogMoveUpdate[] }>("/api/tasks/backlog-order", {
     method: "PATCH",
     json: move,
   });

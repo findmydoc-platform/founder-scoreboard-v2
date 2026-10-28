@@ -1,3 +1,4 @@
+import { createBacklogOrdering } from "./backlog-ordering-state";
 import { createBacklogAssignments } from "./backlog-assignment-state";
 import { createToolsState } from "./tool-state";
 import { createPrivateWorkweekState } from "./private-workweek-state";
@@ -30,7 +31,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 export type PlanningWorkspaceRead = { backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
-export type PlanningStateAdapter = import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+export type PlanningStateAdapter = import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   lockSprint?: (basis: import("@/features/sprint/model/sprint-lock").SprintLockBasis) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockReceipt>;
   readSprintLock?: (sprintId: string) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockObservation>;
 
@@ -103,11 +104,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const tools = createToolsState({ initial: active ? initialData.fmdTools : [], loaded: initialWorkspace === "tools", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, endSession, invalidateQuickLinks: () => notifications.invalidateHeader(["quickLinks"]), refreshWorkspace: () => planning.refreshWorkspace("tools"), beginHeaderRead: () => notifications.beginWorkspaceRead("tools"), acceptHeaderRead: (data, started) => notifications.acceptWorkspaceRead("tools", confirmed, { ...emptyPlanningHeaderData, quickLinks: notifications.publicState.header().slots.quickLinks.readStatus === "not-loaded" ? emptyPlanningHeaderData.quickLinks : data.quickLinks }, started) });
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
-  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, dependencyPending: id => backlogAssignments.blocksSprint(id), checkDependency: async id => { await backlogAssignments.checkSprint(id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }, lockPending: id=>sprintLock.blocksSprint(id), checkLock:id=>sprintLock.check(id), planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
-  const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: () => sprintState.schedulesPending() || sprintPlan.blocksSchedules() || sprintLock.pending() || backlogAssignments.pending(), checkSchedules: () => sprintLock.pending() ? sprintLock.check() : sprintPlan.blocksSchedules() ? sprintPlan.check() : sprintState.checkPendingSchedules(), save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
-  const sprintPlan = createSprintPlanState({ schedulesPending: () => sprintState.schedulesPending() || reviewWindow.blocksSprints() || sprintLock.pending() || backlogAssignments.pending(), checkSchedules: () => sprintLock.pending() ? sprintLock.check() : reviewWindow.blocksSprints() ? reviewWindow.check() : sprintState.checkPendingSchedules(), current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, create: adapter.createSprintPlan, accept: sprintState.acceptPlan, denied: sprintState.denied, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, dependencyPending: id => backlogAssignments.blocksSprint(id) || orderingBlocksSprint(id), checkDependency: async id => { if (orderingBlocksSprint(id)) await checkOrdering(); else await backlogAssignments.checkSprint(id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }, lockPending: id=>sprintLock.blocksSprint(id), checkLock:id=>sprintLock.check(id), planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: () => sprintState.schedulesPending() || sprintPlan.blocksSchedules() || sprintLock.pending() || backlogAssignments.pending() || backlogOrdering.pending(), checkSchedules: () => backlogOrdering.pending() ? checkOrdering() : sprintLock.pending() ? sprintLock.check() : sprintPlan.blocksSchedules() ? sprintPlan.check() : sprintState.checkPendingSchedules(), save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const sprintPlan = createSprintPlanState({ schedulesPending: () => sprintState.schedulesPending() || reviewWindow.blocksSprints() || sprintLock.pending() || backlogAssignments.pending() || backlogOrdering.pending(), checkSchedules: () => backlogOrdering.pending() ? checkOrdering() : sprintLock.pending() ? sprintLock.check() : reviewWindow.blocksSprints() ? reviewWindow.check() : sprintState.checkPendingSchedules(), current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, create: adapter.createSprintPlan, accept: sprintState.acceptPlan, denied: sprintState.denied, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   const sprintLock = createSprintLockState({
     dependenciesPending: basis => sprintLock.blocksSprint(basis.sprint.id)
+      || orderingBlocksSprint(basis.sprint.id)
+      || basis.tasks.some(task => backlogOrdering.blocksTask(task.id))
       || backlogAssignments.blocksSprint(basis.sprint.id)
       || basis.tasks.some(task => backlogAssignments.blocksTask(task.id))
       || sprintState.schedulesPending(basis.sprint.id)
@@ -149,7 +152,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     plan: input => planning.beginSprintPlan().create(input),
   });
-  const backlogAssignments = createBacklogAssignments({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, canRead: () => workspaceStatuses.get("backlog") !== "forbidden", changed: publish, nextSequence: () => ++sequence, readTaskVersion: id => taskReadAt.get(id) || 0, readSprintVersion: id => sprintState.readVersion(id), adapter, endSession, refresh: () => planning.refreshWorkspace("backlog"), pendingTask: id => Boolean(confirmed.tasks.find(task => task.id === id && sprintLock.blocksTask(task))) || [...pending.values()].some(item => item.taskId === id) || lifecycle.isRemoving({ id } as Task), pendingSprint: id => sprintLock.blocksSprint(id) || sprintState.pending(id) || sprintPlan.blocksSprint(id) || reviewWindow.blocksSprints(), accept(updates, started, basis, activities) {
+  const backlogAssignments = createBacklogAssignments({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, canRead: () => workspaceStatuses.get("backlog") !== "forbidden", changed: publish, nextSequence: () => ++sequence, readTaskVersion: id => taskReadAt.get(id) || 0, readSprintVersion: id => sprintState.readVersion(id), adapter, endSession, refresh: () => planning.refreshWorkspace("backlog"), pendingTask: id => backlogOrdering.blocksTask(id) || Boolean(confirmed.tasks.find(task => task.id === id && sprintLock.blocksTask(task))) || [...pending.values()].some(item => item.taskId === id) || lifecycle.isRemoving({ id } as Task), pendingSprint: id => sprintLock.blocksSprint(id) || sprintState.pending(id) || sprintPlan.blocksSprint(id) || reviewWindow.blocksSprints(), accept(updates, started, basis, activities) {
     const patches = new Map(updates.map(update => [update.id, update]));
     confirmed = { ...confirmed, tasks: confirmed.tasks.map(task => {
       const patch = patches.get(task.id); if (!patch || lifecycle.isRemoved(task)) return task;
@@ -163,7 +166,19 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (workspaceStatuses.has("sprint")) workspaceStatuses.set("sprint", "stale");
     notifications.invalidateHeader(["notifications"]);
   } });
-
+  const backlogOrdering = createBacklogOrdering({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, canRead: () => workspaceStatuses.get("backlog") !== "forbidden", changed: publish, nextSequence: () => ++sequence, readVersion: id => taskReadAt.get(id) || 0, adapter, endSession, pendingTask: id => Boolean(confirmed.tasks.find(task => task.id === id && sprintLock.blocksTask(task))) || [...pending.values()].some(item => item.taskId === id) || backlogAssignments.blocksTask(id) || lifecycle.isRemoving({ id } as Task) || taskSchedulePending(id), refresh: () => planning.refreshWorkspace("backlog"), accept(updates, started, basis) {
+    const patches = new Map(updates.map(update => [update.id,update])); let unresolved = false;
+    for (const update of updates) if (!confirmed.tasks.some(task => task.id === update.id)) { unresolved = true; taskConfirmedAt.set(update.id,++sequence); }
+    confirmed = { ...confirmed, tasks: confirmed.tasks.map(task => {
+      const update = patches.get(task.id); if (!update || lifecycle.isRemoved(task)) return task;
+      const original = basis.find(item => item.id === task.id);
+      if (Math.max(taskConfirmedAt.get(task.id) || 0, taskReadAt.get(task.id) || 0) > started && task.updatedAt !== original?.updatedAt && task.updatedAt !== update.updatedAt) return task;
+      taskConfirmedAt.set(task.id,++sequence); return { ...task, order: update.sortOrder, updatedAt: update.updatedAt };
+    }) }; return unresolved;
+  }, invalidate(unknown) { freshness = "stale"; workspaceStatuses.set("backlog", "stale"); if (unknown && workspaceStatuses.has("sprint")) workspaceStatuses.set("sprint", "stale"); } });
+  function taskSchedulePending(id: string) { const sprintId = confirmed.tasks.find(task => task.id === id)?.sprintId; return Boolean(sprintId && (sprintLock.blocksSprint(sprintId) || sprintState.pending(sprintId) || sprintPlan.blocksSprint(sprintId) || reviewWindow.blocksSprints())); }
+  function orderingBlocksSprint(id: string) { return confirmed.tasks.some(task => task.sprintId === id && backlogOrdering.blocksTask(task.id)); }
+  async function checkOrdering(): Promise<import("../planning-state").PlanningTaskSaveCheck> { const task = confirmed.tasks.find(task => backlogOrdering.blocksTask(task.id)); if (task) await backlogOrdering.checkTask(task.id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }
   function publish() {
     confirmed = tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(confirmed))));
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
@@ -173,7 +188,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       return result;
     }) };
-    visible = sprintLock.project(backlogAssignments.project(sprintPlan.project(reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView)))))));
+    visible = sprintLock.project(backlogOrdering.project(backlogAssignments.project(sprintPlan.project(reviewWindow.project(sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView))))))));
     visible = tools.projectVisible(events.projectVisible(notifications.projectVisible(visible)));
 
     if (!isActive()) publishCache?.(null);
@@ -186,6 +201,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function saveTaskWithContext(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult> {
     if (!isActive()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 });
     if (sprintLock.blocksTask(task,patch.sprintId)) return Promise.resolve({ok:false,kind:"unconfirmed",code:"predecessor_unconfirmed",error:"Der Sprint-Abschluss ist noch nicht vollständig bestätigt. Diese Änderung wurde nicht gesendet."});
+    if (backlogOrdering.blocksTask(task.id)) return Promise.resolve({ ok: false, kind: "unconfirmed", code: "predecessor_unconfirmed", error: "Die Rangfolge einer betroffenen Aufgabe ist noch nicht bestätigt. Diese Änderung wurde nicht gesendet." });
     if (backlogAssignments.blocksTask(task.id)) return Promise.resolve({ ok: false, kind: "unconfirmed", code: "predecessor_unconfirmed", error: "Die Sprint-Zuordnung dieser Aufgabe ist noch nicht bestätigt. Diese Änderung wurde nicht gesendet." });
 
     if (status.get(task.id) === "unconfirmed") {
@@ -269,16 +285,16 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     void saved.then(() => { if (tails.get(task.id)?.result === saved && status.get(task.id) !== "unconfirmed") tails.delete(task.id); });
     return saved;
   }
-  function assignmentBlocksRemoval(root: Task) {
+  function backlogBlocksRemoval(root: Task) {
     return confirmed.tasks.some(task => {
-      if (!backlogAssignments.blocksTask(task.id)) return false;
+      if (!backlogAssignments.blocksTask(task.id) && !backlogOrdering.blocksTask(task.id)) return false;
       const seen = new Set<string>(); let current: Task | undefined = task;
       while (current && !seen.has(current.id)) { if (current.id === root.id) return true; seen.add(current.id); current = confirmed.tasks.find(parent => parent.id === current!.parentTaskId); }
       return false;
     });
   }
   const lifecycle = createTaskLifecycle({
-    removalBlocked:task=>sprintLock.blocksTask(task) || backlogAssignments.blocksTask(task.id),
+    removalBlocked:task=>sprintLock.blocksTask(task) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id),
     createTask: adapter.createTask,
     removeTask: adapter.removeTask,
     checkCreation: async () => { await planning.refreshWorkspace("planning"); return planning.workspace("planning").readStatus; },
@@ -327,10 +343,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     beginSprintLock: (sprint,tasks) => sprintLock.begin(sprint,tasks),
     sprintLocks: id => { isActive(); return sprintLock.views(id); },
     resumeSprintLock: sprintLock.resume,
+    beginBacklogOrder: backlogOrdering.begin,
+    backlogOrders: backlogOrdering.views,
+    resumeBacklogOrder: backlogOrdering.resume,
     beginBacklogAssignment: backlogAssignments.begin,
     backlogAssignments: backlogAssignments.views,
     resumeBacklogAssignment: backlogAssignments.resume,
-    backlog: () => { const view = planning.workspace("backlog"); return { model: { revision: "", coverage: backlogAssignments.pending() || pending.size ? { ...backlogCoverage, items: "partial" as const } : backlogCoverage, items: view.tasks, people: view.readStatus === "forbidden" || !isActive() ? [] : visible.profiles, sprints: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprints, commitments: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprintCommitments }, readStatus: view.readStatus }; },
+    backlog: () => { const view = planning.workspace("backlog"); return { model: { revision: "", coverage: backlogOrdering.pending() || backlogAssignments.pending() || pending.size ? { ...backlogCoverage, items: "partial" as const } : backlogCoverage, items: view.tasks, people: view.readStatus === "forbidden" || !isActive() ? [] : visible.profiles, sprints: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprints, commitments: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprintCommitments }, readStatus: view.readStatus }; },
 
     sprintPlan: () => { isActive(); return sprintPlan.view(); },
     checkSprintPlan: () => sprintPlan.check(),
@@ -353,11 +372,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     ...notifications.publicState,
     ...events.publicState,
     ...tools.publicState,
-    createTask: input => lifecycle.createTask(input),
+    createTask: input => (backlogOrdering.pending() && input.taskType === "deliverable") || backlogOrdering.blocksTask(input.relatedTaskId || input.parentTaskId) ? Promise.resolve({ ok: false, kind: "unconfirmed", error: "Eine betroffene Rangänderung ist noch nicht bestätigt. Die Aufgabe wurde noch nicht erstellt." }) : lifecycle.createTask(input),
     taskLifecycle: () => lifecycle.views(),
     checkTaskLifecycle: id => lifecycle.check(id),
-    withdrawTask: (task, reason) => assignmentBlocksRemoval(task) ? Promise.resolve({ ok: false, kind: "unconfirmed", error: "Die Sprint-Zuordnung einer betroffenen Aufgabe ist noch nicht bestätigt." }) : lifecycle.removeTask(task, "withdraw", reason),
-    rejectTask: (task, reason) => assignmentBlocksRemoval(task) ? Promise.resolve({ ok: false, kind: "unconfirmed", error: "Die Sprint-Zuordnung einer betroffenen Aufgabe ist noch nicht bestätigt." }) : lifecycle.removeTask(task, "reject", reason),
+    withdrawTask: (task, reason) => backlogBlocksRemoval(task) ? Promise.resolve({ ok: false, kind: "unconfirmed", error: "Eine betroffene Aufgabenänderung ist noch nicht bestätigt." }) : lifecycle.removeTask(task, "withdraw", reason),
+    rejectTask: (task, reason) => backlogBlocksRemoval(task) ? Promise.resolve({ ok: false, kind: "unconfirmed", error: "Eine betroffene Aufgabenänderung ist noch nicht bestätigt." }) : lifecycle.removeTask(task, "reject", reason),
     beginOwnProfileEdit: profileSettings.beginOwnEdit,
     beginTeamProfileEdit: profileSettings.beginTeamEdit,
     team: profileSettings.team,
@@ -375,7 +394,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id) || ((workspace === "planning" || workspace === "projects") && lifecycle.isTemporary(task.id))), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
     taskDetail: taskId => { isActive(); return ({
       task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
-      saveStatus: backlogAssignments.saveStatus(taskId) || status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
+      saveStatus: backlogOrdering.saveStatus(taskId) || backlogAssignments.saveStatus(taskId) || status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
       comments: deniedTaskReads.has(taskId) ? [] : visible.taskComments.filter(item => item.taskId === taskId),
       externalComments: deniedTaskReads.has(taskId) ? [] : visible.taskExternalComments.filter(item => item.taskId === taskId),
       blockers: deniedTaskReads.has(taskId) ? [] : visible.taskBlockers.filter(item => item.taskId === taskId),
@@ -392,7 +411,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     taskSaves: taskId => {
       if (!isActive()) return [];
       const forbidden = deniedTaskReads.has(taskId);
-      return [...backlogAssignments.views().filter(view => ["saving", "unconfirmed"].includes(view.phase) && view.tasks.some(task => task.id === taskId)).map(view => ({ phase: view.phase as "saving" | "unconfirmed", submitted: forbidden ? null : { sprintId: view.targetSprint?.id || "", scoreRelevant: Boolean(view.targetSprint) }, checkStatus: view.checking ? "checking" as const : "not-checked" as const, serverTask: null })), ...[...pending.values()].filter(operation => operation.taskId === taskId).map(operation => ({
+      return [...backlogOrdering.views().filter(view => ["saving", "unconfirmed"].includes(view.phase) && backlogOrdering.blocksTask(taskId)).map(view => ({ phase: view.phase as "saving" | "unconfirmed", submitted: forbidden ? null : { order: visible.tasks.find(task => task.id === taskId)?.order }, checkStatus: view.checking ? "checking" as const : "not-checked" as const, serverTask: null })), ...backlogAssignments.views().filter(view => ["saving", "unconfirmed"].includes(view.phase) && view.tasks.some(task => task.id === taskId)).map(view => ({ phase: view.phase as "saving" | "unconfirmed", submitted: forbidden ? null : { sprintId: view.targetSprint?.id || "", scoreRelevant: Boolean(view.targetSprint) }, checkStatus: view.checking ? "checking" as const : "not-checked" as const, serverTask: null })), ...[...pending.values()].filter(operation => operation.taskId === taskId).map(operation => ({
         phase: operation.phase, submitted: forbidden ? null : operation.submitted,
         checkStatus: outcomeCheckStatus.get(taskId) || "not-checked",
         serverTask: forbidden || outcomeCheckStatus.get(taskId) !== "checked" ? null : confirmed.tasks.find(task => task.id === taskId) || null,
@@ -409,6 +428,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         const after=confirmed.tasks.find(task=>task.id===taskId);
         return after&&sprintLock.blocksTask(after)?{outcome:"unconfirmed",readStatus:checked.readStatus}:checked;
       })();
+      if (backlogOrdering.blocksTask(taskId)) return backlogOrdering.checkTask(taskId).then(() => ({ outcome: isActive() ? "unconfirmed" as const : "session-ended" as const, readStatus: workspaceStatuses.get("backlog") || "unavailable" }));
       if (backlogAssignments.blocksTask(taskId)) return backlogAssignments.checkTask(taskId).then(() => ({ outcome: isActive() ? "unconfirmed" as const : "session-ended" as const, readStatus: workspaceStatuses.get("backlog") || "unavailable" }));
 
       if (status.get(taskId) !== "unconfirmed") return Promise.resolve({ outcome: "not-pending", readStatus: "not-needed" });
@@ -464,16 +484,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         detailUnavailable.set(taskId, result.unavailable || []);
         detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
         const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
+        const unresolvedIds = new Set(next.tasks.filter(task => !confirmed.tasks.some(current => current.id === task.id) && (taskConfirmedAt.get(task.id) || 0) > started).map(task => task.id));
         confirmed = {
           ...next,
-          tasks: next.tasks.map(task => protectedIds.has(task.id) ? confirmed.tasks.find(item => item.id === task.id)! : task),
+          tasks: next.tasks.filter(task => !unresolvedIds.has(task.id)).map(task => protectedIds.has(task.id) ? confirmed.tasks.find(item => item.id === task.id)! : task),
           ...((taskConfirmedAt.get(taskId) || 0) > started ? { taskActivity: confirmed.taskActivity } : {}),
         };
         const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
         for (const task of returnedTasks) {
-          if (!protectedIds.has(task.id)) taskReadAt.set(task.id, started);
+          if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) taskReadAt.set(task.id, started);
         }
-        if (sprintRead.stale || returnedTasks.some(task => protectedIds.has(task.id))) {
+        if (sprintRead.stale || unresolvedIds.size || returnedTasks.some(task => protectedIds.has(task.id))) {
           freshness = "stale";
           if (!result.unavailable?.length) detailStatuses.set(taskId, "stale");
         }
@@ -499,7 +520,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       catch (error) {
         if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
         notifications.workspaceFailed(workspace, error);
-        if (workspace === "backlog" && readErrorStatus(error) === "forbidden") backlogAssignments.denied();
+        if (workspace === "backlog" && readErrorStatus(error) === "forbidden") { backlogAssignments.denied(); backlogOrdering.denied(); }
         if (toolRead !== null) tools.failed(error, toolRead);
         if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
         workspaceStatuses.set(workspace, readErrorStatus(error));
@@ -519,7 +540,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (workspace === "backlog") backlogCoverage = result.backlogCoverage || {};
       const coverage = result.coverage || workspaceReadCoverage(workspace);
       const taskCoverage = result.taskCoverage === "none" ? undefined : result.taskCoverage || coverage.tasks;
-      const incoming = taskCoverage ? result.data.tasks : [];
+      const rawIncoming = taskCoverage ? result.data.tasks : [];
+      const currentIds = new Set(confirmed.tasks.map(task => task.id));
+      // A late full row cannot precede a confirmed partial receipt for a still-unresolved identity.
+      const incoming = rawIncoming.filter(task => currentIds.has(task.id) || (taskConfirmedAt.get(task.id) || 0) <= started);
       const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
       const acceptedTask = (task: Task) => {
         const previous = confirmed.tasks.find(item => item.id === task.id);
@@ -548,7 +572,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       if (!memberships.has(workspace)) memberships.set(workspace, new Set());
       completeness.set(workspace, taskCoverage || "none");
-      const stale = sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
+      const stale = rawIncoming.length !== incoming.length || sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
       workspaceStatuses.set(workspace, stale ? "stale" : "current");
       if (toolRead !== null) tools.acceptRead({ tools: result.data.fmdTools, completeness: result.toolCoverage || "partial" }, toolRead, Boolean(result.headerData && result.headerData.quickLinks.state === "ready"));
       if (eventRead !== null) events.acceptRead({ events: result.data.events, coverage: result.eventCoverage || { range: null, completeness: "partial" } }, eventRead, Boolean(result.headerData && result.headerData.calendarEvents.state !== "idle"));
@@ -571,6 +595,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     outcomeCheckStatus.clear();
     editing.clear();
     lifecycle.clear();
+    backlogOrdering.clear();
     backlogAssignments.clear();
     sprintState.clear();
     reviewWindow.clear();

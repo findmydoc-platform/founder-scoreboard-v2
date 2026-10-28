@@ -2,7 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import type { BacklogMoveAction, BacklogMoveResult, BacklogPlacement } from "@/features/backlog/hooks/use-backlog-ordering";
+import type { BacklogMoveAction, BacklogMoveResult, BacklogPlacement } from "@/features/backlog/model/backlog-ordering";
 import { BacklogReadiness } from "@/features/backlog/molecules/backlog-readiness";
 import { BacklogBulkSprintAssignmentMenu } from "@/features/backlog/molecules/backlog-sprint-actions";
 import { BacklogTaskActions } from "@/features/backlog/molecules/backlog-task-actions";
@@ -29,6 +29,7 @@ type BacklogRankTableProps = {
   buckets: BacklogSprintBucket[];
   canManageBacklog: boolean;
   canReorder: boolean;
+  orderedTasks: Task[];
   draggedTaskId: string;
   filters: BacklogTableFilters;
   initiativeOptions: CustomSelectOption[];
@@ -40,7 +41,7 @@ type BacklogRankTableProps = {
   onDragTaskEnd: () => void;
   onDragTaskStart: (taskId: string) => void;
   onFiltersChange: (patch: Partial<BacklogTableFilters>) => void;
-  onMoveTask: (taskId: string, action: BacklogMoveAction) => BacklogMoveResult;
+  onMoveTask: (taskId: string, action: BacklogMoveAction, shown?: readonly Task[]) => BacklogMoveResult;
   onOpenTask: (taskId: string) => void;
   onProposeDeliverable: () => void;
   onReorderTask: (taskId: string, targetTaskId: string, placement: BacklogPlacement) => BacklogMoveResult;
@@ -126,7 +127,7 @@ function RowActions({
 }: {
   item: BacklogItem;
   index: number;
-  props: Pick<BacklogRankTableProps, "buckets" | "canManageBacklog" | "canReorder" | "isReordering" | "items" | "onAssignTaskToSprint" | "onDragTaskEnd" | "onDragTaskStart" | "onMoveTask" | "sprintById">;
+  props: Pick<BacklogRankTableProps, "buckets" | "canManageBacklog" | "canReorder" | "isReordering" | "items" | "orderedTasks" | "onAssignTaskToSprint" | "onDragTaskEnd" | "onDragTaskStart" | "onMoveTask" | "sprintById">;
 }) {
   return (
     <BacklogTaskActions
@@ -135,6 +136,7 @@ function RowActions({
       canReorder={props.canReorder}
       index={index}
       isReordering={props.isReordering}
+      orderedTasks={props.orderedTasks}
       item={item}
       onAssignTaskToSprint={props.onAssignTaskToSprint}
       onDragEnd={props.onDragTaskEnd}
@@ -172,6 +174,7 @@ export function BacklogRankTable({
   onDragTaskStart,
   onFiltersChange,
   onMoveTask,
+  orderedTasks,
   onOpenTask,
   onProposeDeliverable,
   onReorderTask,
@@ -226,6 +229,7 @@ export function BacklogRankTable({
       onDragTaskStart(taskId);
     },
     onMoveTask,
+    orderedTasks,
     sprintById,
   };
   const toggleSort = (sort: BacklogSort) => onFiltersChange({ sort, direction: filters.sort === sort && filters.direction === "asc" ? "desc" : "asc" });
@@ -359,8 +363,8 @@ export function BacklogRankTable({
                   const sourceTaskId = dragTaskId(event);
                   const placement = target?.placement || dropPlacement(event);
                   setDropTarget(null);
-                  onDragTaskEnd();
                   if (sourceTaskId && sourceTaskId !== item.task.id) onReorderTask(sourceTaskId, item.task.id, placement);
+                  onDragTaskEnd();
                 }}
                 className={classNames(item.rank === 1 && "bg-blue-50/45", item.task.id === draggedTaskId && "opacity-55")}
               >

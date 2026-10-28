@@ -58,6 +58,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
       readPrivateWorkweek: week => privateWorkweekApi(runtime.apiClient).readPrivateWorkweek(week),
       savePrivateWorkweek: input => privateWorkweekApi(runtime.apiClient).savePrivateWorkweek(input),
       publishPrivateWorkweek: versionId => privateWorkweekApi(runtime.apiClient).publishPrivateWorkweek(versionId),
+      async moveBacklog(source, target, placement) {
+        const { response, body } = await taskApi.moveBacklogTaskRequest(runtime.apiClient, { taskId: source.id, targetTaskId: target.id, placement, expectedTaskUpdatedAt: source.updatedAt!, expectedTargetUpdatedAt: target.updatedAt! });
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Die Rangfolge ist nicht bestätigt."), { status: response.status, code: body?.code });
+        if (!Array.isArray(body?.updates)) throw new Error("Das Rangergebnis ist nicht bestätigt.");
+        return { updates: body.updates, completeness: body.completeness === "complete" ? "complete" : "partial" };
+      },
       async assignBacklog(tasks, target, bulk) {
         if (bulk && target) {
           const { response, body } = await taskApi.assignBacklogTasksToSprintRequest(runtime.apiClient, { assignments: tasks.map(task => ({ taskId: task.id, expectedUpdatedAt: task.updatedAt! })), sprintId: target.id, expectedSprintUpdatedAt: target.updatedAt });

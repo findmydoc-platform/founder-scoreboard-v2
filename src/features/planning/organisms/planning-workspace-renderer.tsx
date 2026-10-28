@@ -149,9 +149,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       {workspace === "backlog" && (
         initialBacklogModel ? <BacklogOverview
           planningState={planningState}
-          apiClient={apiClient}
           canManageBacklog={canManageTaskMeta}
-          initialModel={initialBacklogModel}
           onOpenTask={openTaskPanel}
           onCreatePlanningItem={(taskType) => setTaskDialogDefaults({ taskType })}
           onProposeDeliverable={() => setTaskDialogDefaults({ taskType: "deliverable" })}

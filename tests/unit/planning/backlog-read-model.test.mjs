@@ -63,10 +63,6 @@ const { createSupabaseBacklogReadModel } = await importTestModule(
   },
 );
 
-const { backlogModelReducer } = await importTestModule(
-  "src/features/backlog/model/backlog-read-model.ts",
-);
-
 test("backlog reader fails closed before queries and distinguishes dependency failure", async () => {
   const denied = createSupabaseFixture();
   assert.deepEqual(
@@ -102,21 +98,6 @@ test("backlog reader loads one deterministic feature model with complete hierarc
   ]);
   assert.deepEqual(supabase.calls.find(({ table }) => table === "active_tasks").eq, [["project_id", "findmydoc-founder-execution"]]);
   assert.deepEqual(supabase.calls.find(({ table }) => table === "active_tasks").orders.map(([field]) => field), ["sort_order", "id"]);
-});
-
-test("backlog reducer patches only its own item slice", () => {
-  const model = {
-    revision: "one",
-    items: [{ id: "item", title: "Old" }],
-    people: [{ id: "person" }],
-    sprints: [{ id: "sprint" }],
-    commitments: [{ id: 1 }],
-  };
-  const updated = backlogModelReducer(model, { type: "itemsPatched", patches: [{ id: "item", title: "New" }] });
-  assert.equal(updated.items[0].title, "New");
-  assert.equal(updated.people, model.people);
-  assert.equal(updated.sprints, model.sprints);
-  assert.equal(updated.commitments, model.commitments);
 });
 
 test("Backlog coverage proves each capped collection independently, including complete empty auxiliaries", async () => {

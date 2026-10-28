@@ -9,9 +9,7 @@ import { BacklogScopeTabs } from "@/features/backlog/molecules/backlog-scope-tab
 import { BacklogSprintPane } from "@/features/backlog/molecules/backlog-sprint-pane";
 import { PlanningBacklogTree, type BacklogPlanningLevel } from "@/features/backlog/molecules/planning-backlog-tree";
 import { DEFAULT_BACKLOG_FILTERS, buildBacklogOverviewViewModel, type BacklogReadinessFilter, type BacklogScope, type BacklogTableFilters } from "@/features/backlog/model/backlog-view-model";
-import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import { PlanningLevelSelect } from "@/features/planning/molecules/planning-level-select";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Sprint, Task } from "@/lib/types";
 import { classNames, UiNotice, UiButton } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterToolbar } from "@/shared/molecules/filter-toolbar";
@@ -33,9 +31,7 @@ const backlogFilterSchema: TableUrlSchema<BacklogTableFilters> = {
 
 type BacklogOverviewProps = {
   planningState: import("@/features/planning/model/planning-state").PlanningState;
-  apiClient: BrowserApiClient;
   canManageBacklog: boolean;
-  initialModel: BacklogModel;
   onOpenTask: (taskId: string) => void;
   onCreatePlanningItem: (taskType: BacklogPlanningLevel) => void;
   onProposeDeliverable: () => void;
@@ -43,17 +39,15 @@ type BacklogOverviewProps = {
 
 export function BacklogOverview({
   planningState,
-  apiClient,
   canManageBacklog,
-  initialModel,
   onOpenTask,
   onCreatePlanningItem,
   onProposeDeliverable,
 }: BacklogOverviewProps) {
-  const { dispatch, model, refreshBacklogModel } = useBacklogModel(planningState, initialModel);
+  const model = useBacklogModel(planningState);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState("");
-  const [draggedBasis, setDraggedBasis] = useState<{ task: Task; sprints: Sprint[] } | null>(null);
+  const [draggedBasis, setDraggedBasis] = useState<{ task: Task; tasks: Task[]; sprints: Sprint[] } | null>(null);
   const { state: filters, updateState: updateFilters } = useTableUrlState({ namespace: "backlog", schema: backlogFilterSchema });
   const backlogLevel = filters.level;
   const viewModel = useMemo(
@@ -72,18 +66,15 @@ export function BacklogOverview({
     reorderTask,
   } = useBacklogCommands({
     planningState,
-    apiClient,
     canManageBacklog,
-    dispatch,
     orderedTasks: viewModel.orderedTasks,
-    refreshBacklogModel,
     sprints: [...model.sprints],
   });
 
   const taskById = useMemo(() => new Map(viewModel.orderedTasks.map((task) => [task.id, task])), [viewModel.orderedTasks]);
   const sprintById = useMemo(() => new Map(model.sprints.map((sprint) => [sprint.id, sprint])), [model.sprints]);
   const draggedTask = draggedBasis?.task || null;
-  const startDrag = (id: string) => { const task = taskById.get(id); setDraggedTaskId(id); setDraggedBasis(task ? { task: structuredClone(task), sprints: structuredClone([...model.sprints]) } : null); };
+  const startDrag = (id: string) => { const task = taskById.get(id); setDraggedTaskId(id); setDraggedBasis(task ? { task: structuredClone(task), tasks: structuredClone(viewModel.orderedTasks), sprints: structuredClone([...model.sprints]) } : null); };
   const handleAssignTaskToSprint = (task: Task, sprint: Sprint | null) => {
     setDraggedTaskId("");
     if (draggedBasis && draggedBasis.task.id === task.id) { const target = sprint ? draggedBasis.sprints.find(item => item.id === sprint.id) : null; void planningState.beginBacklogAssignment([draggedBasis.task], draggedBasis.sprints, false).assign(target?.id || null); setDraggedBasis(null); }
@@ -171,6 +162,7 @@ export function BacklogOverview({
   if (planningState.backlog().readStatus === "forbidden" || planningState.backlog().readStatus === "not-loaded") return <UiNotice>Backlog ist in dieser Sitzung nicht verfügbar.</UiNotice>;
   return (
     <div className="grid gap-4" data-tour-id="backlog-overview">
+      {planningState.backlogOrders().filter(item => ["unconfirmed", "blocked", "conflict"].includes(item.phase)).map(item => <UiNotice key={item.id} role="status" tone="warning"><p>Bewegung: {item.source?.title} {item.placement === "before" ? "vor" : "nach"} {item.target?.title}</p><p>{item.error}</p>{item.phase === "unconfirmed" ? <p>{item.confirmedIds.length} Rangänderungen bestätigt; das übrige Ergebnis bleibt offen.</p> : null}{item.serverTasks.map(task => <p key={task.id}>Serverstand: {task.title} · Rangwert {task.order}</p>)}<UiButton className="min-h-11" disabled={item.checking} onClick={() => { const editor = planningState.resumeBacklogOrder(item.id); void (item.phase === "conflict" ? editor?.refreshConflict() : editor?.checkOutcome()); }}>Rangfolge prüfen</UiButton>{item.canResave ? <UiButton className="min-h-11" onClick={() => void planningState.resumeBacklogOrder(item.id)?.resave()}>Bewusst erneut verschieben</UiButton> : null}</UiNotice>)}
       {planningState.backlogAssignments().filter(item => ["unconfirmed", "blocked", "conflict"].includes(item.phase)).map(item => <UiNotice key={item.id} role="status" tone="warning"><p>Zuordnung: {item.tasks.map(task => task.title).join(", ")} → {item.targetSprint?.name || "ohne Sprint"}</p><p>{item.error}</p>{item.phase === "unconfirmed" ? <p>{item.confirmedTaskIds.length} von {item.tasks.length} Aufgaben bestätigt.</p> : null}{item.serverTasks.map(task => <p key={task.id}>Serverstand: {task.title} · {task.sprintId || "ohne Sprint"}</p>)}{item.serverSprints.map(sprint => <p key={sprint.id}>Server-Sprint: {sprint.name} · {sprint.startDate} bis {sprint.endDate}</p>)}<UiButton className="min-h-11" disabled={item.checking} onClick={() => { const editor = planningState.resumeBacklogAssignment(item.id); void (item.phase === "conflict" ? editor?.refreshConflict() : editor?.checkOutcome()); }}>Serverstand prüfen</UiButton>{item.phase === "conflict" && item.canResave ? <UiButton className="min-h-11" onClick={() => void planningState.resumeBacklogAssignment(item.id)?.resave()}>Bewusst erneut zuordnen</UiButton> : null}</UiNotice>)}
       {(planningState.backlog().model.coverage?.items !== "complete" || Object.values(planningState.backlog().model.coverage || {}).some(value => value !== "complete")) ? <UiNotice>Backlog-Ausschnitt: nicht alle Aufgaben und Zusatzdaten sind vollständig geladen.</UiNotice> : null}
       {message && <UiNotice role="status" tone={message.includes("aktualisiert") ? "success" : "warning"}>{message}</UiNotice>}
@@ -211,6 +203,7 @@ export function BacklogOverview({
                   isReordering={isReordering}
                   items={visibleItems}
                   allItems={viewModel.allItems}
+                  orderedTasks={viewModel.orderedTasks}
                   buckets={viewModel.sprintBuckets}
                   filters={filters}
                   isBulkAssigningSprint={isBulkAssigningSprint}
@@ -227,7 +220,7 @@ export function BacklogOverview({
                   onMoveTask={moveTask}
                   onOpenTask={onOpenTask}
                   onProposeDeliverable={onProposeDeliverable}
-                  onReorderTask={reorderTask}
+                  onReorderTask={(source, target, placement) => reorderTask(source,target,placement,draggedBasis?.tasks || viewModel.orderedTasks)}
                   sprintById={sprintById}
                 />
               </div>
