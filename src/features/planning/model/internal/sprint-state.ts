@@ -16,7 +16,7 @@ export function createSprintState(options: {
   const completeReads = new Map<keyof PlanningShellState, number>();
   const projectStamps = new Map<string, number>();
   const pending = new Map<symbol, { id: string; patch: SprintEditPatch }>();
-  const editors = new Map<symbol, { id: string; view(): SprintEditorView }>();
+  const editors = new Map<symbol, { id: string; view(): SprintEditorView; releaseBlocked(): void }>();
   const tails = new Map<string, { context: symbol; result: Promise<SprintEditResult> }>();
   const uncertain = new Set<string>();
   const checks = new Map<string, Promise<PlanningTaskSaveCheck>>();
@@ -31,7 +31,7 @@ export function createSprintState(options: {
     if (!options.active()) return { outcome: "session-ended", readStatus: "not-needed" };
     if (options.planPending?.(id) && options.checkPlan) return options.checkPlan();
     if (options.reviewWindowPending?.() && options.checkReviewWindow) return options.checkReviewWindow();
-    if (!uncertain.has(id)) return { outcome: "not-pending", readStatus: "not-needed" };
+    if (!uncertain.has(id)) { for (const editor of editors.values()) if (editor.id === id) editor.releaseBlocked(); options.changed(); return { outcome: "not-pending", readStatus: "not-needed" }; }
     const existing = checks.get(id); if (existing) return existing;
     const generation = options.generation();
     const checked = (async (): Promise<PlanningTaskSaveCheck> => {
@@ -121,7 +121,7 @@ export function createSprintState(options: {
       let view: SprintEditorView = { phase: "editing", submitted: null, serverSprint: null, error: "", canResave: false };
       const generation = options.generation();
       const context = Symbol(shown.id);
-      editors.set(context, { id: shown.id, view: () => checkedView(view) });
+      editors.set(context, { id: shown.id, view: () => checkedView(view), releaseBlocked() { if (view.phase === "blocked") view = { ...view, phase: "editing", error: "" }; } });
       function save(patch: SprintEditPatch): Promise<SprintEditResult> {
         if (closed || !options.active() || generation !== options.generation()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Bearbeitung wurde beendet." });
         if (uncertain.has(basis.id) || options.reviewWindowPending?.() || options.planPending?.(basis.id)) { view = { ...view, phase: "blocked", submitted: structuredClone(patch), error: "Eine vorherige Sprint-Änderung ist noch nicht bestätigt. Diese Eingabe wurde noch nicht gesendet." }; options.changed(); return Promise.resolve({ ok: false, kind: "unconfirmed", error: view.error }); }

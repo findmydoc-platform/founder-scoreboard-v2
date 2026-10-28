@@ -74,19 +74,20 @@ export function createSprintPlanState(options: {
       async function create(input: SprintPlanningOptions): Promise<SprintPlanResult> {
         if (closed || !options.active() || generation !== options.generation()) return { ok: false, kind: "sessionSuperseded", error: "Die Bearbeitung wurde beendet." };
         if (options.denied()) return { ok: false, kind: "rejected", error: "Kein Zugriff auf diesen Sprint-Bereich." };
+        if (view.phase === "saving" || view.phase === "unconfirmed") return { ok: false, kind: "unconfirmed", error: "Die bereits gesendete Planung ist noch nicht bestätigt." };
         if (saving || unconfirmed || options.schedulesPending()) { view = { ...view, phase: "blocked", submitted: structuredClone(input), error: "Ein vorheriger Sprint-Plan ist noch nicht bestätigt. Diese Planung wurde noch nicht gesendet." }; options.changed(); return { ok: false, kind: "unconfirmed", error: view.error }; }
         saving = true; activeBasis = basis;
         const started = options.nextSequence();
         const protectedIds = new Set(options.current().tasks.filter(task => task.sprintId).map(task => task.sprintId));
         provisional = futureSprintDrafts([...basis.sprints], input, protectedIds, basis.reviewObjectionWindowHours).map(sprint => ({ ...sprint, updatedAt: undefined }));
-        view = { ...view, phase: "saving", submitted: structuredClone(input) }; options.changed();
+        view = { ...view, phase: "saving", submitted: structuredClone(input), error: "", canRecreate: false, serverSprints: null }; options.changed();
         try {
           if (!options.create) throw Object.assign(new Error("Sprint-Planung ist nicht verfügbar."), { status: 400 });
           const result = await options.create(input, basis);
           if (!options.active() || generation !== options.generation()) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt." };
           if (result.sprints.some(sprint => !sprint.updatedAt)) throw new Error("Der Sprint-Plan ist noch nicht bestätigt.");
           options.accept(result.sprints, started, basis);
-          saving = false; provisional = []; view = { ...view, phase: "saved", changedCount: result.sprints.length }; options.changed(); void options.refresh();
+          saving = false; provisional = []; view = { ...view, phase: "saved", canRecreate: false, serverSprints: null, changedCount: result.sprints.length }; options.changed(); void options.refresh();
           return { ok: true, changedCount: result.sprints.length };
         } catch (error) {
           if (!options.active() || generation !== options.generation()) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt." };

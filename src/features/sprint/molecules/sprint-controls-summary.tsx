@@ -162,7 +162,7 @@ export function SprintControlsSummary({
           <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }}>Serverstand vergleichen</UiButton>
           <UiButton className="min-h-11" disabled={!currentEdit.canResave || !currentEdit.submitted} onClick={() => { if (currentEdit.submitted) void editor?.resave(currentEdit.submitted); }}>Bewusst erneut speichern</UiButton>
         </div>}
-        {["unconfirmed", "blocked"].includes(currentEdit.phase) && <UiButton className="mt-2 min-h-11" onClick={async () => { const result = await planningState.checkSprintSave(sprint.id); setCheckMessage(result.readStatus === "forbidden" ? "Kein Zugriff auf diesen Sprint-Bereich." : "Serverstand geprüft. Die Speicherung bleibt unbestätigt; sie wurde nicht erneut gesendet."); }}>Serverstand prüfen</UiButton>}
+        {["unconfirmed", "blocked"].includes(currentEdit.phase) && <UiButton className="mt-2 min-h-11" onClick={async () => { const result = await planningState.checkSprintSave(sprint.id); setCheckMessage(result.readStatus === "forbidden" ? "Kein Zugriff auf diesen Sprint-Bereich." : result.outcome === "not-pending" ? "Der Entwurf wurde noch nicht gesendet. Du kannst den Status jetzt bewusst wählen." : "Serverstand geprüft. Die Speicherung bleibt unbestätigt; sie wurde nicht erneut gesendet."); }}>Serverstand prüfen</UiButton>}
         {checkMessage && <p>{checkMessage}</p>}
       </UiNotice>}
       {sprintLockMessage && (

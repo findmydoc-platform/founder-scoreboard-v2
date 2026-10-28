@@ -88,7 +88,9 @@ export function SprintScoreTableOverview({
     sprintIsCurrent,
   } = buildSprintScoreViewModel({ data: sprintData, selectedSprintId });
   const openObjections = sprintData.scoreObjections.filter((item) => item.sprintId === sprint?.id && item.status === "open");
-  const sprintControlsDisabled = pending || !canManageSprint;
+  const provisionalIds = planningState.sprintPlan().provisionalSprintIds;
+  const sprintPending = pending || provisionalIds.includes(sprint?.id || "");
+  const sprintControlsDisabled = sprintPending || !canManageSprint;
   const reviewOwnerName = (task: Task) => task.reviewOwnerProfileId
     ? sprintData.profiles.find((profile) => profile.id === task.reviewOwnerProfileId)?.name || task.reviewOwnerProfileId
     : "Ohne Review Owner";
@@ -159,7 +161,7 @@ export function SprintScoreTableOverview({
       <SprintFounderScoreTable
         sprint={sprint}
         scoreRows={scoreRows}
-        pending={pending}
+        pending={sprintPending}
         onUpdateCommitment={(commitment) => {
           onUpdateCommitment(commitment);
         }}
@@ -168,7 +170,7 @@ export function SprintScoreTableOverview({
       <SprintMeetingAttendanceSection
         data={sprintData}
         meetings={meetings}
-        pending={pending}
+        pending={sprintPending}
         currentProfile={currentProfile}
         canManageSprint={canManageSprint}
         onUpdateMeetingAttendance={(meeting, attendance) => {
@@ -180,7 +182,7 @@ export function SprintScoreTableOverview({
         data={sprintData}
         sprint={sprint}
         currentProfile={currentProfile}
-        pending={pending}
+        pending={sprintPending}
         scoreObjectionDraft={scoreObjectionDraft}
         openObjectionsCount={openObjections.length}
         scores={scoreRows.map((row) => row.v21Score)}
@@ -190,7 +192,7 @@ export function SprintScoreTableOverview({
       />
 
       <SprintTaskTables
-        data={sprintData}
+        data={{ ...sprintData, sprints: sprintData.sprints.filter(item => !provisionalIds.includes(item.id)) }}
         sprint={sprint}
         sprintTasks={sprintTasks}
         otherTasks={otherTasks}
