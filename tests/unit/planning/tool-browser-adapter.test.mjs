@@ -7,7 +7,9 @@ afterEach(() => vi.resetModules());
 const tool = { id: "tool", name: "Original", category: "tool", kind: "Werkzeuge", description: "Useful tool description", url: "https://tools.example.test/", owner: "Team", status: "active", isCurated: true, previewImageUrl: "", previewImageSource: "none", sortOrder: 10, updatedAt: "r1" };
 async function owner(client, headerData = emptyPlanningHeaderData) {
   const { createBrowserPlanningState } = await importTestModule("src/features/planning/model/internal/browser-planning-state.ts", { "@/lib/browser-api-client": { createBrowserApiClient: () => client } });
-  return createBrowserPlanningState({ initialUserId: "browser-tools", initialWorkspace: "tools", initialCurrentProfile: null, initialData: { ...emptyPlanningShellState, fmdTools: [tool] }, initialHeaderData: headerData }).owner;
+  const browser = createBrowserPlanningState({ initialUserId: "browser-tools", initialWorkspace: "tools", initialCurrentProfile: null, initialData: { ...emptyPlanningShellState, fmdTools: [tool] }, initialHeaderData: headerData });
+  browser.runtime.session = { userId: "browser-tools", revision: "tool-session", expiresAt: 4102444800, user: { id: "browser-tools" } };
+  return browser.owner;
 }
 test("the owned Tool browser adapter sends captured revision and preserves actual partial confirmation", async () => {
   const calls = [], state = await owner({ requestJson: async (path, options) => { calls.push({ path, options }); return { response: new Response(null, { status: 200 }), body: { tool: { ...tool, name: "Confirmed", updatedAt: "r2" }, warning: "Protokollierung konnte nicht bestätigt werden." } }; } });

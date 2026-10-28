@@ -38,6 +38,8 @@ type Props = {
   source: "supabase";
   pending: boolean;
   taskSaves?: readonly PlanningTaskSaveView[];
+  attachmentUploads?: readonly import("@/features/tasks/model/task-attachment-upload").TaskAttachmentUploadView[];
+  onCheckAttachmentUpload?: (id: string) => void;
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
   externalCommentCompleteness?: "complete" | "partial";
   onCheckGitHubImport?: () => void;

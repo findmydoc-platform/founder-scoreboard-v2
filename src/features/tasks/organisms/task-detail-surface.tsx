@@ -70,6 +70,8 @@ type TaskDetailSurfaceProps = {
   operationalCorrection?: boolean;
   pending: boolean;
   taskSaves?: readonly PlanningTaskSaveView[];
+  attachmentUploads?: readonly import("@/features/tasks/model/task-attachment-upload").TaskAttachmentUploadView[];
+  onCheckAttachmentUpload?: (id: string) => void;
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
   externalCommentCompleteness?: "complete" | "partial";
   onCheckGitHubImport?: () => void;
@@ -158,6 +160,8 @@ function HydratedTaskDetailSurface({
   operationalCorrection = false,
   pending: requestPending,
   taskSaves = [],
+  attachmentUploads = [],
+  onCheckAttachmentUpload,
   githubImport,
   externalCommentCompleteness,
   onCheckGitHubImport,
@@ -533,6 +537,8 @@ function HydratedTaskDetailSurface({
     activity: (
       <TaskCommentThread
         comments={comments}
+        attachmentUploads={attachmentUploads}
+        onCheckAttachmentUpload={onCheckAttachmentUpload}
         githubImport={githubImport}
         externalCommentCompleteness={externalCommentCompleteness}
         onCheckGitHubImport={onCheckGitHubImport}

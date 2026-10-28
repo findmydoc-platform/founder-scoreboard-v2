@@ -15,16 +15,18 @@ test("the real attachment route binds an operation to owner and content and reco
     return `${unsigned}.${createHmac("sha256","synthetic-test-key").update(unsigned).digest("base64url")}`;
   };
   const ownerToken=sessionToken("user-1"),otherToken=sessionToken("user-2");
-  const files=new Map();let writes=0,audits=0,lost=true;
+  const files=new Map();let writes=0,audits=0,lost=true,auditFails=false,syncFails=false,lostUnverifiable=false;
   const task={id:"task-1",title:"Synthetic task",task_type:"deliverable",assignee:"author-1",owner:"author-1",status:"Offen",review_status:"not_requested",score_final:false,github_repo:"findmydoc-platform/management",github_issue_number:1,trashed_at:null};
   vi.stubGlobal("fetch",async(input,options)=>{
     const request=new Request(input,options),url=new URL(request.url);
     if(url.hostname==="api.github.com") {
       expect(request.headers.get("authorization")).toBe("Bearer synthetic-user-access");
+      if(request.method==="GET" && lostUnverifiable && files.has(url.pathname))return Response.json({message:"Verification unavailable"},{status:503});
       if(request.method==="GET") return files.has(url.pathname) ? Response.json(files.get(url.pathname)) : Response.json({message:"Not found"},{status:404});
       expect(request.method).toBe("PUT");writes++;
       expect((await request.json()).content).toBe("aGVsbG8=");
       const content={sha:"b6fc4c620b67d95f953a5c1c1230aaab5db5a1b0",download_url:`https://raw.githubusercontent.com/findmydoc-platform/management/main${url.pathname}`,html_url:"https://github.com/findmydoc-platform/management/blob/main/file.txt"};files.set(url.pathname,content);
+      if(lostUnverifiable)throw new Error("Provider stored upload; reconciliation unavailable");
       if(lost){lost=false;throw new Error("provider applied upload; response lost");}
       return Response.json({content});
     }
@@ -34,11 +36,12 @@ test("the real attachment route binds an operation to owner and content and reco
     if(url.pathname.endsWith("/rpc/workspace_access_context")) return Response.json({mode:"legacy",linkingEnforced:false,userId:other?"user-2":"user-1",profileId:other?"author-2":"author-1"});
     if(url.pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json({id:other?"author-2":"author-1",name:other?"Other":"Author",platform_role:"founder"});
     if(url.pathname.endsWith("/rpc/administrator_access_snapshot")) return Response.json({eligible:false,active:false});
-    if(url.pathname==="/rest/v1/tasks" || url.pathname==="/rest/v1/active_tasks") return request.method==="PATCH" ? new Response(null,{status:204}):Response.json(task);
+    if(url.pathname==="/rest/v1/tasks" || url.pathname==="/rest/v1/active_tasks") return request.method==="PATCH" ? syncFails?Response.json({message:"Sync marker unavailable"},{status:503}):Response.json({id:task.id}):Response.json(task);
     if(url.pathname==="/rest/v1/profiles") return Response.json({github_login:"synthetic-author"});
     if(url.pathname==="/rest/v1/github_app_user_tokens") return Response.json({profile_id:"author-1",github_login:"synthetic-author",connection_id:"connection-1",credential_version:0,encrypted_access_token:ciphertext,access_token_expires_at:new Date(Date.now()+3600000).toISOString(),revoked_at:null});
     if(url.pathname.endsWith("/rpc/use_github_user_connection")) return Response.json(true);
     if(url.pathname==="/rest/v1/audit_log") {
+      if(auditFails)return Response.json({message:"Audit unavailable",code:"42501"},{status:403});
       const body=await request.json(); expect(body.actor_profile_id).toBe("author-1"); expect(body.entity_id).toBe("task-1");
       expect(body.after_data).toMatchObject({filename:"hello.txt",contentType:"text/plain",size:5});
       expect([...files.values()].some(row=>row.download_url===body.after_data.url)).toBe(true);
@@ -57,4 +60,7 @@ test("the real attachment route binds an operation to owner and content and reco
   const changed=await send(firstId,"changed");expect(changed.status).toBe(502);expect(writes).toBe(1);
   const otherOwner=await send(firstId,"hello",otherToken);expect(otherOwner.status).toBe(403);expect(writes).toBe(1);
   const later=await send(laterId);expect(later.status).toBe(200);expect((await later.json()).path).not.toBe(firstBody.path);expect(writes).toBe(2);
+  auditFails=true;const partial=await send("33333333-3333-4333-8333-333333333333");expect(partial.status).toBe(200);const partialBody=await partial.json();expect(partialBody.markdown).toContain("[hello.txt]");expect(partialBody.effects).toBe("unconfirmed");expect(partialBody.activity).toBeNull();expect(partialBody.warning).toBeTruthy();expect(writes).toBe(3);
+  auditFails=false;syncFails=true;const syncPartial=await send("44444444-4444-4444-8444-444444444444");expect(syncPartial.status).toBe(200);const syncBody=await syncPartial.json();expect(syncBody.markdown).toContain("[hello.txt]");expect(syncBody.activity.id).toBeGreaterThan(0);expect(syncBody.effects).toBe("unconfirmed");expect(writes).toBe(4);
+  syncFails=false;lostUnverifiable=true;const unknown=await send("55555555-5555-4555-8555-555555555555");expect(unknown.status).toBe(502);const unknownBody=await unknown.json();expect(unknownBody.markdown).toBeUndefined();expect(unknownBody.activity).toBeUndefined();expect(writes).toBe(5);
 });

@@ -45,14 +45,9 @@ export function useTaskCollaborationCommands({
       throw new Error("Anhänge können nur mit aktiver Verbindung hochgeladen werden.");
     }
 
-    const { response, body } = await taskApi.uploadTaskAttachmentRequest(apiClient, task.id, file);
-    if (!response.ok || !body?.markdown) throw new Error(body?.error || "Anhang konnte nicht hochgeladen werden.");
-    setData((current) => ({
-      ...current,
-      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" } : item)),
-      taskActivity: body.activity ? [body.activity, ...current.taskActivity] : current.taskActivity,
-    }));
-    return body.markdown;
+    const result = await planningState.uploadTaskAttachment(task, file);
+    if (!result.ok) throw new Error(result.error);
+    return result.markdown;
   };
 
   const importGitHubComments = useCallback((task: Task, options: { silent?: boolean } = {}) => {

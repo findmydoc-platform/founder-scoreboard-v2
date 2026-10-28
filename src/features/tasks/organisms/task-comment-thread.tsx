@@ -4,6 +4,7 @@ import { MessageSquare, RefreshCw } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import type { TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
+import { TaskAttachmentUploadNotices } from "@/features/tasks/molecules/task-attachment-upload-notices";
 import { TaskGitHubImportNotice } from "@/features/tasks/molecules/task-github-import-notice";
 import { TaskCommentCreationNotices } from "@/features/tasks/molecules/task-comment-creation-notices";
 import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-composer";
@@ -15,6 +16,8 @@ import type { Profile, Sprint, Task, TaskActivity, TaskComment, TaskExternalComm
 
 type Props = {
   comments: TaskComment[];
+  attachmentUploads?: readonly import("@/features/tasks/model/task-attachment-upload").TaskAttachmentUploadView[];
+  onCheckAttachmentUpload?: (id: string) => void;
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
   externalCommentCompleteness?: "complete" | "partial";
   onCheckGitHubImport?: () => void;
@@ -102,6 +105,8 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
 
 export function TaskCommentThread({
   comments,
+  attachmentUploads = [],
+  onCheckAttachmentUpload,
   githubImport,
   externalCommentCompleteness = "complete",
   onCheckGitHubImport,
@@ -190,10 +195,12 @@ export function TaskCommentThread({
 
       {commentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">Die Diskussion ist als Ausschnitt geladen.</p> : null}
       {externalCommentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">GitHub-Kommentare sind als Ausschnitt geladen.</p> : null}
+      <TaskAttachmentUploadNotices uploads={attachmentUploads} onCheck={onCheckAttachmentUpload} />
       <TaskGitHubImportNotice view={githubImport} onCheck={onCheckGitHubImport} />
       <TaskCommentCreationNotices creations={commentCreations} onCheck={onCheckCommentCreation} />
       {!readOnly && (
         <TaskCommentComposer
+          attachmentConfirmationPending={attachmentUploads.some(view => view.phase === "uploading" || view.phase === "unconfirmed" || view.phase === "uploaded" && view.taskReadStatus !== "current")}
           confirmationPending={commentCreations.some(item => item.phase === "unconfirmed")}
           pending={pending}
           profiles={profiles}

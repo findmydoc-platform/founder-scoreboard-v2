@@ -307,3 +307,14 @@ test("a caller-provided authorization header is neither replaced nor connected t
   assert.equal(fetchMock.mock.calls.length, 1);
   assert.equal(new Headers(fetchMock.mock.calls[0][1].headers).get("authorization"), "Bearer caller-token");
 });
+
+for (const replacement of [null,{userId:"user-b",revision:"old"},{userId:"user-a",revision:"new"}]) test(`multipart expected session rejects a replacement before dispatch (${JSON.stringify(replacement)})`,async()=>{
+ let finish;const port=sessionPort();port.current=()=>new Promise(resolve=>{finish=resolve;});const client=browserApiModule.createBrowserApiClient({sessionPort:port});const fetchMock=vi.fn().mockResolvedValue(jsonResponse({markdown:"wrong-account"}));globalThis.fetch=fetchMock;const request=client.requestForm("/api/tasks/task/attachments",new FormData(),{expectedSession:{userId:"user-a",revision:"old"}});finish(replacement);const result=await request;assert.equal(result.response.status,409);assert.equal(result.body.code,"session_superseded");assert.equal(fetchMock.mock.calls.length,0);assert.equal(port.recover.mock.calls.length,0);
+});
+test("multipart expected session allows the same current authority without forwarding its metadata",async()=>{
+ const port=sessionPort({snapshot:{userId:"user-a",revision:"same"}}),client=browserApiModule.createBrowserApiClient({sessionPort:port});const fetchMock=vi.fn().mockResolvedValue(jsonResponse({markdown:"confirmed"}));globalThis.fetch=fetchMock;const result=await client.requestForm("/api/tasks/task/attachments",new FormData(),{expectedSession:{userId:"user-a",revision:"same"}});assert.equal(result.response.status,200);assert.equal(fetchMock.mock.calls.length,1);assert.equal(fetchMock.mock.calls[0][1].expectedSession,undefined);assert.equal(port.recover.mock.calls.length,0);
+});
+
+test("multipart expected authority revoked after current() resolution sends no bytes",async()=>{
+ const snapshot={userId:"user-a",revision:"same"};const port={...sessionPort({snapshot}),isCurrent:()=>false};const client=browserApiModule.createBrowserApiClient({sessionPort:port}),fetchMock=vi.fn();globalThis.fetch=fetchMock;const result=await client.requestForm("/api/tasks/task/attachments",new FormData(),{expectedSession:snapshot});assert.equal(result.body.code,"session_superseded");assert.equal(fetchMock.mock.calls.length,0);
+});

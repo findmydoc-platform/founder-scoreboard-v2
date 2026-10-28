@@ -126,33 +126,37 @@ export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: st
 
 const pendingAttachmentOperations = new Map<string, string>();
 
-export async function uploadTaskAttachmentRequest(apiClient: BrowserApiClient, taskId: string, file: File) {
+export type TaskAttachmentAuthority = { userId: string; sessionRevision: string; isCurrent(): boolean };
+export async function uploadTaskAttachmentRequest(apiClient: BrowserApiClient, taskId: string, file: File, authority?: TaskAttachmentAuthority) {
+  const requireCurrent = () => { if (authority && !authority.isCurrent()) throw Object.assign(new Error("Die Sitzung wurde ersetzt."), { code: "session_superseded" }); };
+  requireCurrent();
   const payload = new Uint8Array(await file.arrayBuffer());
-  const identity = new TextEncoder().encode(`${taskId}\0${file.name}\0${file.type}\0`);
+  const identity = new TextEncoder().encode(`${authority?.userId || ""}\0${authority?.sessionRevision || ""}\0${taskId}\0${file.name}\0${file.type}\0`);
   const bytes = new Uint8Array(identity.length + payload.length);
   bytes.set(identity);
   bytes.set(payload, identity.length);
   const fingerprint = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
     .map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  const key = `founderops-attachment-${fingerprint}`;
-  let operation = pendingAttachmentOperations.get(key);
+  requireCurrent();
+  const key = authority ? `founderops-attachment-${fingerprint}` : "";
+  let operation = key ? pendingAttachmentOperations.get(key) : undefined;
   try {
-    operation ||= sessionStorage.getItem(key) || undefined;
+    if (key) operation ||= sessionStorage.getItem(key) || undefined;
   } catch { /* Retain retries in memory when browser storage is unavailable. */ }
   operation ||= crypto.randomUUID();
-  pendingAttachmentOperations.set(key, operation);
+  if (key) pendingAttachmentOperations.set(key, operation);
   try {
-    sessionStorage.setItem(key, operation);
+    if (key) sessionStorage.setItem(key, operation);
   } catch { /* The in-memory operation remains available. */ }
   const formData = new FormData();
   formData.append("file", file);
-  const result = await apiClient.requestForm<{ error?: string; markdown?: string; activity?: TaskActivity }>(
-    `/api/tasks/${taskId}/attachments`, formData, { headers: { "Idempotency-Key": operation } },
+  const result = await apiClient.requestForm<Partial<import("./task-attachment-upload").TaskAttachmentReceipt> & { error?: string; code?: string }>(
+    `/api/tasks/${taskId}/attachments`, formData, { headers: { "Idempotency-Key": operation }, ...(authority ? { expectedSession: { userId: authority.userId, revision: authority.sessionRevision } } : {}) },
   );
   if (result.response.ok && result.body?.markdown) {
-    pendingAttachmentOperations.delete(key);
+    if (key) pendingAttachmentOperations.delete(key);
     try {
-      sessionStorage.removeItem(key);
+      if (key) sessionStorage.removeItem(key);
     } catch { /* The completed operation is already removed from memory. */ }
   }
   return result;

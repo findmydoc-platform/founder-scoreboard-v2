@@ -21,7 +21,8 @@ type BrowserApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
   useDevProfileOverride?: boolean;
 };
 
-type BrowserApiFormOptions = Omit<BrowserApiRequestOptions, "json" | "jsonContentType">;
+type BrowserApiBlobOptions = Omit<BrowserApiRequestOptions, "json" | "jsonContentType">;
+type BrowserApiFormOptions = BrowserApiBlobOptions & { expectedSession?: Pick<BrowserSessionSnapshot, "userId" | "revision"> };
 type BrowserApiInput = string | URL;
 
 export type BrowserApiJsonResult<T> = {
@@ -149,13 +150,17 @@ export function createBrowserApiClient({
     formData: FormData,
     options: BrowserApiFormOptions = {},
   ): Promise<BrowserApiJsonResult<T>> {
-    const { headers: requestHeaders, useDevProfileOverride = true, ...requestInit } = options;
+    const { headers: requestHeaders, useDevProfileOverride = true, expectedSession, ...requestInit } = options;
     const headers = new Headers(requestHeaders);
     if (useDevProfileOverride && devProfileOverrideEnabled && devProfileId && !headers.has("x-fmd-dev-profile-id")) {
       headers.set("x-fmd-dev-profile-id", devProfileId);
     }
     const callerAuthorization = headers.has("authorization");
     const session = callerAuthorization ? null : await sessionPort.current();
+    if (expectedSession && (!session || session.userId !== expectedSession.userId || session.revision !== expectedSession.revision || sessionPort.isCurrent && !sessionPort.isCurrent(session))) {
+      const body = { error: "Die Sitzung wurde ersetzt.", code: "session_superseded" };
+      return { response: Response.json(body, { status: 409 }), body: body as T };
+    }
     const result = await send(input, {
       ...requestInit,
       body: formData,
@@ -167,7 +172,7 @@ export function createBrowserApiClient({
     return { response: result.response, body };
   }
 
-  async function requestBlob(input: BrowserApiInput, options: BrowserApiFormOptions = {}) {
+  async function requestBlob(input: BrowserApiInput, options: BrowserApiBlobOptions = {}) {
     const prepared = prepareRequest(options);
     const session = prepared.callerAuthorization ? null : await sessionPort.current();
     const first = await send(input, prepared.requestInit, session);

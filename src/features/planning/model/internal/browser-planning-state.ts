@@ -11,7 +11,7 @@ import { readPublishedWorkweekCalendar } from "@/features/team-workweek/model/pu
 import { isProtectedToolPreviewUrl } from "@/lib/tool-preview-image";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
-import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
+import { createBrowserSessionAdapter, type BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState } from "@/lib/types";
 import * as planningApi from "../planning-api-client";
 import * as profileTokenApi from "@/features/profile/model/profile-planning-items-api";
@@ -39,6 +39,13 @@ export type PlanningPageState = {
 
 export function createBrowserPlanningState(options: PlanningPageState, isCurrent: () => boolean = () => true) {
   const runtime = { apiClient: createBrowserApiClient(), workspace: options.initialWorkspace, userId: options.initialUserId, session: null as BrowserSessionSnapshot | null, currentProfile: options.initialCurrentProfile };
+  async function currentUploadSession() {
+    const session = runtime.session || await createBrowserSessionAdapter().current();
+    if (!session || session.expiresAt * 1000 <= Date.now()) throw Object.assign(new Error("Für Anhänge ist eine aktive Sitzung erforderlich."), { status: 401 });
+    if (!isCurrent() || session.userId !== runtime.userId) throw Object.assign(new Error("Die Sitzung wurde ersetzt."), { code: "session_superseded" });
+    runtime.session = session;
+    return session;
+  }
   const owner = createPlanningState({
     userId: options.initialUserId,
     initialData: options.initialData,
@@ -67,6 +74,13 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         const {response,body}=await runtime.apiClient.requestJson<{administratorAccess?:import("@/features/administrator-access/model/administrator-access").AdministratorAccessSnapshot&{profileId:string};error?:string;code?:string}>(`/api/administrator-access/profiles/${encodeURIComponent(profileId)}`,{method:"PATCH",json:{eligible,expectedEligible},useDevProfileOverride:false});
         if(!response.ok)throw Object.assign(new Error(body?.error||"Adminberechtigung konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
         if(!body?.administratorAccess)throw new Error("Die Adminberechtigung ist noch nicht bestätigt.");return body.administratorAccess;
+      },
+      async uploadTaskAttachment(taskId, file) {
+        const session = await currentUploadSession();
+        const { response, body } = await taskApi.uploadTaskAttachmentRequest(runtime.apiClient, taskId, file, { userId: session.userId, sessionRevision: session.revision, isCurrent: () => isCurrent() && runtime.session?.userId === session.userId && runtime.session?.revision === session.revision });
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Anhang konnte nicht hochgeladen werden."), { status: response.status, code: body?.code });
+        if (!body?.markdown || !body.path || !body.url || !body.filename || !body.contentType || typeof body.size !== "number") throw new Error("Die Upload-Bestätigung ist unvollständig.");
+        return { filename: body.filename, contentType: body.contentType, size: body.size, markdown: body.markdown, path: body.path, url: body.url, htmlUrl: body.htmlUrl || "", activity: body.activity || null, effects: body.effects === "confirmed" ? "confirmed" : "unconfirmed", warning: body.warning };
       },
       async importTaskGitHubComments(taskId) {
         const { response, body } = await taskApi.importGitHubCommentsRequest(runtime.apiClient, taskId);
@@ -182,7 +196,8 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         return { tool: body.tool, warning: body.warning };
       },
       async uploadToolPreview(file) {
-        const { response, body } = await planningApi.uploadFmdToolPreviewImageRequest(runtime.apiClient, file);
+        const session = await currentUploadSession();
+        const { response, body } = await planningApi.uploadFmdToolPreviewImageRequest(runtime.apiClient, file, { userId: session.userId, revision: session.revision });
         if (!response.ok || !body?.imageUrl || body.source !== "manual") throw Object.assign(new Error(body?.error || "Bild-Upload ist noch nicht bestätigt."), { status: response.status, code: body?.code });
         return { imageUrl: body.imageUrl, source: body.source };
       },

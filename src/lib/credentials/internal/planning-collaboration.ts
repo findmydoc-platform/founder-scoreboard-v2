@@ -121,15 +121,21 @@ export function planningCollaborationOperations({ action, targetId, profile, ser
         uploadedAttachment = { filename, contentType, size: bytes.length, url: uploaded.rawUrl };
         return { ok: true as const, uploaded };
       } catch {
-        return { ok: false as const, status: 502, error: "GitHub-Anhang konnte nicht sicher gespeichert werden. Bitte denselben Anhang erneut senden." };
+        return { ok: false as const, status: 502, error: "Der GitHub-Upload ist noch nicht bestätigt. Bitte zuerst den Aufgabenstand prüfen." };
       }
     },
     async recordAttachment(metadata: { request_ip?: string | null; user_agent?: string | null }) {
-      if (action !== "planning.attachment.write" || !uploadedAttachment || !profile) return denied();
+      if (action !== "planning.attachment.write" || !uploadedAttachment || !profile) return { ...denied(), taskSyncConfirmed: false };
       const result = await followup.from("audit_log").insert({ entity_type: "task", entity_id: targetId, action: "task.attachment_uploaded", actor_profile_id: profile.id,
         after_data: { ...uploadedAttachment }, request_ip: metadata.request_ip || null, user_agent: metadata.user_agent || null }).select("id,entity_id,action,actor_profile_id,before_data,after_data,created_at").single();
-      if (!result.error && result.data) await followup.from("tasks").update({ github_issue_sync_status: "not_synced", github_issue_sync_error: null }).eq("id", targetId);
-      return result;
+      let taskSyncConfirmed = false;
+      if (!result.error && result.data) {
+        try {
+          const sync = await followup.from("tasks").update({ github_issue_sync_status: "not_synced", github_issue_sync_error: null }).eq("id", targetId).select("id").maybeSingle();
+          taskSyncConfirmed = !sync.error && sync.data?.id === targetId;
+        } catch { /* The upload and returned activity remain confirmed when the sync marker is uncertain. */ }
+      }
+      return { ...result, taskSyncConfirmed };
     },
     async readCollaborationProfiles() {
       if ((action !== "planning.comment.create" && action !== "planning.blocker.report") || await current()) return denied();

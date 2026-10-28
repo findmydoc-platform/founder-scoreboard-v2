@@ -281,10 +281,10 @@ export function requestFmdToolMetadata(apiClient: BrowserApiClient, url: string)
   });
 }
 
-export function uploadFmdToolPreviewImageRequest(apiClient: BrowserApiClient, file: File) {
+export function uploadFmdToolPreviewImageRequest(apiClient: BrowserApiClient, file: File, expectedSession?: Pick<import("@/lib/credentials/browser").BrowserSessionSnapshot, "userId" | "revision">) {
   const formData = new FormData();
   formData.append("file", file);
-  return apiClient.requestForm<{ error?: string; code?: string; imageUrl?: string; source?: FmdToolPreviewImageUpload["source"] }>("/api/tools/preview-image", formData);
+  return apiClient.requestForm<{ error?: string; code?: string; imageUrl?: string; source?: FmdToolPreviewImageUpload["source"] }>("/api/tools/preview-image", formData, { expectedSession });
 }
 
 export function updateNotificationStatusRequest(apiClient: BrowserApiClient, eventId: number, action: "seen" | "dismiss") {
