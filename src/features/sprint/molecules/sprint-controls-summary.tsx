@@ -1,7 +1,7 @@
 "use client";
 
 import { Lock } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 import { formatDate } from "@/lib/display";
@@ -9,6 +9,7 @@ import type { PlanningShellState, Sprint, Task } from "@/lib/types";
 
 export function SprintControlsSummary({
   data,
+  planningState,
   sprint,
   currentSprint,
   sprintTasks,
@@ -23,10 +24,10 @@ export function SprintControlsSummary({
   sprintLockMessage,
   openObjectionsCount,
   onSelectedSprintChange,
-  onUpdateSprint,
   onLockSprint,
 }: {
   data: PlanningShellState;
+  planningState: import("@/features/planning/model/planning-state").PlanningState;
   sprint: Sprint;
   currentSprint?: Sprint;
   sprintTasks: Task[];
@@ -41,9 +42,13 @@ export function SprintControlsSummary({
   sprintLockMessage: string;
   openObjectionsCount: number;
   onSelectedSprintChange: (sprintId: string) => void;
-  onUpdateSprint: (sprint: Sprint, patch: Partial<Sprint>) => void;
   onLockSprint: (sprintId: string) => void;
 }) {
+  const [editor, setEditor] = useState<import("../model/sprint-editing").SprintEditor | null>(null);
+  useEffect(() => () => editor?.close(), [editor]);
+  const currentEdit = editor?.view() || planningState.sprintEdits(sprint.id).findLast(edit => ["unconfirmed", "blocked", "conflict"].includes(edit.phase));
+  const editBlocked = currentEdit && ["saving", "unconfirmed", "blocked", "conflict"].includes(currentEdit.phase);
+  const [checkMessage, setCheckMessage] = useState("");
   const [renderedAt] = useState(() => Date.now());
   const reviewDueLabel = sprint.reviewDueAt
     ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(sprint.reviewDueAt))
@@ -114,9 +119,10 @@ export function SprintControlsSummary({
           <label className="grid min-w-36 gap-1 text-xs font-semibold text-slate-500">
             Status
             <CustomSelect
-              value={sprint.status}
-              disabled={sprintControlsDisabled || sprint.scoreLocked}
-              onChange={(value) => onUpdateSprint(sprint, { status: value as Sprint["status"] })}
+              value={currentEdit?.submitted?.status && editBlocked ? currentEdit.submitted.status : sprint.status}
+              disabled={sprintControlsDisabled || sprint.scoreLocked || Boolean(editBlocked)}
+              onOpen={() => { editor?.close(); setEditor(planningState.beginSprintEdit(sprint)); }}
+              onChange={(value) => { const active = editor || planningState.beginSprintEdit(sprint); setEditor(active); void active.save({ status: value as Sprint["status"] }); }}
               className="h-9 text-sm"
               options={[
                 { value: "planning", label: "Planung" },
@@ -145,6 +151,18 @@ export function SprintControlsSummary({
           </span>
         ))}
       </div>
+      {currentEdit && ["conflict", "unconfirmed", "blocked", "rejected"].includes(currentEdit.phase) && <UiNotice tone="warning" className="m-3" role="status">
+        <p className="font-semibold">{currentEdit.phase === "conflict" ? "Sprint wurde zwischenzeitlich geändert" : currentEdit.phase === "rejected" ? "Sprint-Änderung abgelehnt" : "Sprint-Änderung noch nicht bestätigt"}</p>
+        <p>{currentEdit.error}</p>
+        {currentEdit.submitted && <p>Eingabe: {Object.entries(currentEdit.submitted).map(([key, value]) => `${key}: ${value}`).join(", ")}</p>}
+        {currentEdit.serverSprint && <p>Serverstatus: {currentEdit.serverSprint.status}</p>}
+        {currentEdit.phase === "conflict" && <div className="mt-2 flex flex-wrap gap-2">
+          <UiButton className="min-h-11" onClick={() => { void editor?.refreshConflict(); }}>Serverstand vergleichen</UiButton>
+          <UiButton className="min-h-11" disabled={!currentEdit.canResave || !currentEdit.submitted} onClick={() => { if (currentEdit.submitted) void editor?.resave(currentEdit.submitted); }}>Bewusst erneut speichern</UiButton>
+        </div>}
+        {["unconfirmed", "blocked"].includes(currentEdit.phase) && <UiButton className="mt-2 min-h-11" onClick={async () => { const result = await planningState.checkSprintSave(sprint.id); setCheckMessage(result.readStatus === "forbidden" ? "Kein Zugriff auf diesen Sprint-Bereich." : "Serverstand geprüft. Die Speicherung bleibt unbestätigt; sie wurde nicht erneut gesendet."); }}>Serverstand prüfen</UiButton>}
+        {checkMessage && <p>{checkMessage}</p>}
+      </UiNotice>}
       {sprintLockMessage && (
         <UiNotice tone="info" radius="none" className="!border-x-0 !border-b-0 border-t-blue-100 px-4 py-3 font-medium">
           {sprintLockMessage}

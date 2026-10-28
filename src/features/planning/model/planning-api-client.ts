@@ -176,7 +176,7 @@ export function deleteFocusItemRequest(apiClient: BrowserApiClient, focusItemId:
 }
 
 export function updateSprintRequest(apiClient: BrowserApiClient, sprintId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; sprint?: Sprint }>(`/api/sprints/${sprintId}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; sprint?: Sprint }>(`/api/sprints/${sprintId}`, {
     method: "PATCH",
     json: payload,
   });

@@ -250,7 +250,7 @@ test("a deputy updates only the bound sprint schedule through the real route", a
   expect(permission.ok).toBe(true);
   expect(await permission.planning.commitSprintSchedule({ expectedUpdatedAt: sprint.updated_at, patch: { name: "Renamed sprint" } }, {})).toMatchObject({ data: { id: sprint.id, name: "Renamed sprint" }, error: null });
   const { PATCH } = await importTestModule("src/app/api/sprints/[id]/route.ts", { "server-only": {} });
-  const response = await PATCH(protocol.request("/api/sprints/sprint-owned", "PATCH", { name: "Renamed sprint" }), { params: Promise.resolve({ id: sprint.id }) });
+  const response = await PATCH(protocol.request("/api/sprints/sprint-owned", "PATCH", { name: "Renamed sprint", expectedUpdatedAt: sprint.updated_at }), { params: Promise.resolve({ id: sprint.id }) });
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ ok: true, sprint: { id: sprint.id, name: "Renamed sprint" } });
   protocol.state.role = "viewer";

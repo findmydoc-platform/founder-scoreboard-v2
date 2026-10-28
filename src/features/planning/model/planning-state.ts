@@ -52,6 +52,10 @@ export type PlanningWorkspaceView = {
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 export interface PlanningState {
+  sprintWorkspace(): { model: import("@/features/sprint/model/sprint-read-model").SprintWorkspaceModel & { coverage: import("@/features/sprint/model/sprint-read-model").SprintReadCoverage }; readStatus: PlanningReadStatus };
+  checkSprintSave(sprintId: string): Promise<PlanningTaskSaveCheck>;
+  sprintEdits(sprintId: string): readonly import("@/features/sprint/model/sprint-editing").SprintEditorView[];
+  beginSprintEdit(sprint: import("@/lib/types").Sprint): import("@/features/sprint/model/sprint-editing").SprintEditor;
   createTask(input: import("./planning-task-lifecycle").PlanningTaskCreationInput): Promise<import("./planning-task-lifecycle").PlanningTaskCreationResult>;
   withdrawTask(task: Task, reason: string): Promise<import("./planning-task-lifecycle").PlanningTaskRemovalResult>;
   rejectTask(task: Task, reason: string): Promise<import("./planning-task-lifecycle").PlanningTaskRemovalResult>;

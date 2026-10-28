@@ -26,46 +26,6 @@ export function useSprintCommands({
 }: UseSprintCommandsOptions) {
   const [sprintLockMessage, setSprintLockMessage] = useState("");
 
-  const updateSprint = (sprint: Sprint, patch: Partial<Sprint>) => {
-    setSaveError("");
-
-    setData((current) => ({
-      ...current,
-      sprints: current.sprints.map((item) => (item.id === sprint.id ? { ...item, ...patch } : item)),
-    }));
-
-    if (source !== "supabase") return;
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.updateSprintRequest(apiClient, sprint.id, {
-          name: patch.name,
-          status: patch.status,
-          startDate: patch.startDate,
-          endDate: patch.endDate,
-        });
-
-        if (!response.ok) {
-          throw new Error(body?.error || "Sprint konnte nicht gespeichert werden.");
-        }
-
-        if (body?.sprint) {
-          const savedSprint = body.sprint;
-          setData((current) => ({
-            ...current,
-            sprints: current.sprints.map((item) => (item.id === sprint.id ? savedSprint : item)),
-          }));
-        }
-      } catch (error) {
-        setData((current) => ({
-          ...current,
-          sprints: current.sprints.map((item) => (item.id === sprint.id ? sprint : item)),
-        }));
-        setSaveError(error instanceof Error ? error.message : "Sprint konnte nicht gespeichert werden.");
-      }
-    });
-  };
-
   const createSprintPlanAsync = async (options: SprintPlanningOptions, silent = false) => {
     const protectedSprintIds = new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId));
     const drafts = futureSprintDrafts(data.sprints, options, protectedSprintIds, data.project.reviewObjectionWindowHours);
@@ -325,7 +285,6 @@ export function useSprintCommands({
     lockSprint,
     reviewScoreObjection,
     sprintLockMessage,
-    updateSprint,
     updateSprintCommitment,
   };
 }

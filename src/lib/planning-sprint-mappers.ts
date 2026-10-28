@@ -10,6 +10,7 @@ export function mapSprint(row: DbSprint): Sprint {
     endDate: row.end_date || "",
     reviewDueAt: row.review_due_at || "",
     scoreLocked: row.score_locked,
+    updatedAt: row.updated_at,
   };
 }
 

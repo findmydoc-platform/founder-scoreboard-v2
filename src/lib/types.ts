@@ -156,6 +156,7 @@ export type PlanningItem = Task;
 export type AuthenticatedProfile = Pick<Profile, "id" | "name" | "platformRole" | "githubLogin">;
 
 export type Sprint = {
+  updatedAt?: string;
   id: string;
   name: string;
   status: "planning" | "active" | "review" | "closed";

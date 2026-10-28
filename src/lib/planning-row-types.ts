@@ -202,6 +202,7 @@ export type DbPlanningItemRaciAssignment = {
 };
 
 export type DbSprint = {
+  updated_at?: string;
   id: string;
   name: string;
   status: Sprint["status"];

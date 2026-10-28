@@ -42,7 +42,7 @@ import type { Profile, Project, Task } from "@/lib/types";
 const projectId = "findmydoc-founder-execution";
 const profileSelect = "id,name,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color";
 const projectSelect = "id,name,range_label,review_objection_window_hours";
-const sprintSelect = "id,name,status,start_date,end_date,review_due_at,score_locked";
+const sprintSelect = "id,name,status,start_date,end_date,review_due_at,score_locked,updated_at";
 const relationSelect = "id,task_id,related_task_id,relation_type,note,created_by,created_at";
 
 type ProjectRow = {

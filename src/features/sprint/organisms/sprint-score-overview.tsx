@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useState } from "react";
 import { SprintControlsSummary } from "@/features/sprint/molecules/sprint-controls-summary";
 import { SprintMeetingAttendanceSection } from "@/features/sprint/molecules/sprint-meeting-attendance-section";
 import { SprintPlanningSection } from "@/features/sprint/molecules/sprint-planning-section";
@@ -16,19 +16,17 @@ import {
 import { buildSprintScoreViewModel } from "@/features/sprint/model/sprint-score-view-model";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
-import { sprintWorkspaceReducer, type SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 import { findCurrentSprint } from "@/lib/planning-schedule";
-import type { Meeting, MeetingAttendance, PlanningShellState, Profile, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
+import type { Meeting, MeetingAttendance, Profile, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
 
 export function SprintScoreTableOverview({
-  initialModel,
-  data,
+  planningState,
   pending,
   onOpenTask,
   onRequestReview,
   onChangeStatus,
   onLockSprint,
-  onUpdateSprint,
   onUpdateCommitment,
   onUpdateMeetingAttendance,
   onCreateScoreObjection,
@@ -44,14 +42,12 @@ export function SprintScoreTableOverview({
   reviewObjectionWindowHours,
   onSaveReviewObjectionWindow,
 }: {
-  initialModel: SprintWorkspaceModel;
-  data: PlanningShellState;
+  planningState: PlanningState;
   pending: boolean;
   onOpenTask: (taskId: string) => void;
   onRequestReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onChangeStatus: (task: Task, status: TaskStatus) => void;
   onLockSprint: (sprintId: string) => void;
-  onUpdateSprint: (sprint: Sprint, patch: Partial<Sprint>) => void;
   onUpdateCommitment: (commitment: SprintCommitment) => void;
   onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
   onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
@@ -67,27 +63,7 @@ export function SprintScoreTableOverview({
   reviewObjectionWindowHours: number;
   onSaveReviewObjectionWindow: (hours: number) => Promise<void>;
 }) {
-  const [model, dispatch] = useReducer(sprintWorkspaceReducer, initialModel);
-  useEffect(() => {
-    dispatch({
-      type: "modelLoaded",
-      model: {
-        ...initialModel,
-        project: data.project,
-        people: data.profiles,
-        items: data.tasks,
-        sprints: data.sprints,
-        commitments: data.sprintCommitments,
-        scores: data.founderSprintScores,
-        strikeStates: data.founderStrikeStates,
-        strikeEvents: data.strikeEvents,
-        objections: data.scoreObjections,
-        meetings: data.meetings,
-        attendance: data.meetingAttendance,
-      },
-    });
-  }, [data, initialModel]);
-  const sprintData = sprintWorkspaceModelToPlanningShellState(model);
+  const sprintData = sprintWorkspaceModelToPlanningShellState(planningState.sprintWorkspace().model);
   const currentSprint = findCurrentSprint(sprintData.sprints);
   const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
   const [scoreObjectionDraft, setScoreObjectionDraft] = useState("");
@@ -124,7 +100,6 @@ export function SprintScoreTableOverview({
       setReviewEvidenceTask(task);
       return;
     }
-    dispatch({ type: "itemPatched", itemId: task.id, patch: { status: "Review", reviewStatus: "requested", scoreFinal: false } });
     return onRequestReview(task);
   };
 
@@ -147,6 +122,7 @@ export function SprintScoreTableOverview({
         />
       )}
       <SprintControlsSummary
+        key={sprint.id}
         data={sprintData}
         sprint={sprint}
         currentSprint={currentSprint}
@@ -162,12 +138,8 @@ export function SprintScoreTableOverview({
         sprintLockMessage={sprintLockMessage}
         openObjectionsCount={openObjections.length}
         onSelectedSprintChange={setSelectedSprintId}
-        onUpdateSprint={(value, patch) => {
-          dispatch({ type: "sprintPatched", sprintId: value.id, patch });
-          onUpdateSprint(value, patch);
-        }}
+        planningState={planningState}
         onLockSprint={(sprintId) => {
-          dispatch({ type: "sprintLocked", sprintId });
           onLockSprint(sprintId);
         }}
       />
@@ -186,7 +158,6 @@ export function SprintScoreTableOverview({
         scoreRows={scoreRows}
         pending={pending}
         onUpdateCommitment={(commitment) => {
-          dispatch({ type: "commitmentUpserted", commitment });
           onUpdateCommitment(commitment);
         }}
       />
@@ -198,7 +169,6 @@ export function SprintScoreTableOverview({
         currentProfile={currentProfile}
         canManageSprint={canManageSprint}
         onUpdateMeetingAttendance={(meeting, attendance) => {
-          dispatch({ type: "attendanceUpserted", attendance });
           onUpdateMeetingAttendance(meeting, attendance);
         }}
       />
@@ -234,11 +204,9 @@ export function SprintScoreTableOverview({
             requestReview(task);
             return;
           }
-          dispatch({ type: "itemPatched", itemId: task.id, patch: { status } });
           onChangeStatus(task, status);
         }}
         onAssignSprint={(task, sprintId) => {
-          dispatch({ type: "itemPatched", itemId: task.id, patch: { sprintId } });
           onAssignSprint(task, sprintId);
         }}
         onOpenReviewTask={onOpenTask}
@@ -251,17 +219,6 @@ export function SprintScoreTableOverview({
             const task = reviewEvidenceTask;
             const result = await onRequestReview(task, submission);
             if (result === false) return false;
-            dispatch({
-              type: "itemPatched",
-              itemId: task.id,
-              patch: {
-                status: "Review",
-                reviewStatus: "requested",
-                scoreFinal: false,
-                ...(submission.evidenceLink ? { evidenceLinks: [...task.evidenceLinks, submission.evidenceLink] } : {}),
-                reviewEvidenceExceptionNote: submission.evidenceExceptionNote || "",
-              },
-            });
             return true;
           }}
         />

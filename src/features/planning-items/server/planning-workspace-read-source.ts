@@ -135,7 +135,7 @@ export async function loadPlanningWorkspaceModel(
     trackRead(observeRuntimePhase("board.strategy", () => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"))),
     trackRead(observeRuntimePhase("board.raci", () => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order"))),
     trackRead(observeRuntimePhase("board.links", () => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"))),
-    trackRead(observeRuntimePhase("board.sprints", () => supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked").order("start_date").order("id"))),
+    trackRead(observeRuntimePhase("board.sprints", () => supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked,updated_at").order("start_date").order("id"))),
     trackRead(observeRuntimePhase("board.relationships", () => supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).order("id").limit(500))),
     trackRead(observeRuntimePhase("board.preferences", () => supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").order("profile_id"))),
   ]);

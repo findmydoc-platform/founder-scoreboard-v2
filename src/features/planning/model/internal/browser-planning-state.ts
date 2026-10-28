@@ -12,6 +12,7 @@ import { createPlanningState } from "./planning-state-owner";
 import { normalizePlanningShellState } from "../planning-app-model";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { isSupportingWorkspace, supportingWorkspaceModelToPlanningShellState } from "../supporting-planning-shell-projection";
+import { sprintModelCoverage } from "@/features/sprint/model/sprint-read-coverage";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 import { mergePlanningHeaderData, normalizePlanningHeaderData } from "@/lib/planning-header-data";
 import { getProtectedPlanningShellStateCache, setProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";
@@ -33,6 +34,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     initialData: options.initialData,
     initialWorkspace: options.initialWorkspace,
     adapter: {
+      async saveSprint(sprint, patch) {
+        const { response, body } = await planningApi.updateSprintRequest(runtime.apiClient, sprint.id, { ...patch, expectedUpdatedAt: sprint.updatedAt });
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Sprint konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        if (!body?.sprint?.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
+        return { sprint: body.sprint };
+      },
       async createTask(input) {
         const { response, body } = await taskApi.createTaskRequest(runtime.apiClient, input);
         if (!response.ok && !(body?.code === "task_created_approval_failed" && body.task?.updatedAt)) throw Object.assign(new Error(body?.error || "Aufgabe konnte nicht erstellt werden."), { status: response.status, code: body?.code });
@@ -98,7 +105,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (workspace === "sprint") {
           const { response, body } = await planningApi.requestSprintWorkspaceData(runtime.apiClient);
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status });
-          return body?.model ? { data: normalizePlanningShellState(sprintWorkspaceModelToPlanningShellState(body.model)), headerData: body.headerData, currentProfile: body.currentProfile } : null;
+          return body?.model ? { data: normalizePlanningShellState(sprintWorkspaceModelToPlanningShellState(body.model)), coverage: sprintModelCoverage(body.model), headerData: body.headerData, currentProfile: body.currentProfile } : null;
         }
         return null;
       },

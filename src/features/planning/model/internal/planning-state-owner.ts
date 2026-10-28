@@ -6,6 +6,8 @@ import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-comm
 import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
 import { applyTaskDetailModel } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { emptyPlanningShellState } from "../planning-shell-state";
+import { sprintViewCoverage } from "@/features/sprint/model/sprint-read-coverage";
+import { createSprintState } from "./sprint-state";
 import { createTaskLifecycle } from "./task-lifecycle";
 import type { PlanningTaskCreationInput, PlanningTaskCreationConfirmation, PlanningTaskRemovalConfirmation } from "../planning-task-lifecycle";
 import { createProfileApiTokensState } from "./profile-api-tokens-state";
@@ -19,6 +21,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 export type PlanningWorkspaceRead = { data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
 export type PlanningStateAdapter = import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
+  saveSprint?: (sprint: import("@/lib/types").Sprint, patch: import("@/features/sprint/model/sprint-editing").SprintEditPatch) => Promise<{ sprint: import("@/lib/types").Sprint }>;
   now?: () => number;
   removeTask?: (task: Task, action: "withdraw" | "reject", reason: string) => Promise<PlanningTaskRemovalConfirmation>;
   createTask?: (input: PlanningTaskCreationInput) => Promise<PlanningTaskCreationConfirmation>;
@@ -73,6 +76,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, readStatus: () => workspaceStatuses.get("profile") || "not-loaded", save: adapter.saveOwnProfileSettings, acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
+  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   function publish() {
     confirmed = lifecycle.projectConfirmed(confirmed);
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
@@ -82,7 +86,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       return result;
     }) };
-    visible = profileSettings.project(lifecycle.projectVisible(taskView));
+    visible = sprintState.project(profileSettings.project(lifecycle.projectVisible(taskView)));
     if (!isActive()) publishCache?.(null);
     else for (const [workspace, members] of memberships) {
       if (workspaceStatuses.get(workspace) === "forbidden") publishCache?.(null, workspace);
@@ -216,6 +220,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     changed: publish,
   });
   const planning: PlanningState = {
+    checkSprintSave: id => sprintState.check(id),
+    sprintEdits: id => sprintState.views(id),
+    beginSprintEdit: sprint => sprintState.begin(sprint),
+    sprintWorkspace: () => {
+      isActive();
+      const data = sprintState.denied() ? emptyPlanningShellState : visible;
+      return { readStatus: workspaceStatuses.get("sprint") || "not-loaded", model: { coverage: sprintViewCoverage(sprintState.coverage()), revision: "", project: data.project, people: data.profiles, items: sprintState.denied() ? [] : planning.workspace("sprint").tasks, sprints: data.sprints, commitments: data.sprintCommitments, scores: data.founderSprintScores, strikeStates: data.founderStrikeStates, strikeEvents: data.strikeEvents, objections: data.scoreObjections, meetings: data.meetings, attendance: data.meetingAttendance } };
+    },
     createTask: input => lifecycle.createTask(input),
     taskLifecycle: () => lifecycle.views(),
     checkTaskLifecycle: id => lifecycle.check(id),
@@ -303,7 +315,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           return { ok: false, error: error instanceof Error ? error.message : "Task-Details konnten nicht geladen werden." };
         }
         if (!isActive() || generation !== sessionGeneration) return { ok: false };
-        const next = applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {});
+        const next = sprintState.acceptRead(applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {}), { sprints: "partial" }, started);
         if (!result.unavailable?.includes("relationships")) lifecycle.acceptRelationshipRead(next, started, result.model.coverage?.relationships === "complete", taskId);
         deniedTaskReads.delete(taskId);
         detailUnavailable.set(taskId, result.unavailable || []);
@@ -341,6 +353,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       catch (error) {
         if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
         workspaceStatuses.set(workspace, readErrorStatus(error));
+        if (workspace === "sprint") sprintState.readStatus(readErrorStatus(error));
         if (workspace === "profile") profileSettings.readStatus(readErrorStatus(error));
         publish();
         return false;
@@ -362,7 +375,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
       const profileRead = profileSettings.acceptRead(covered, coverage, started);
       confirmed = {
-        ...profileRead.data,
+        ...sprintState.acceptRead(profileRead.data, coverage, started, result.data),
         tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
       };
       if (taskCoverage) {
@@ -376,6 +389,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const stale = profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
       workspaceStatuses.set(workspace, stale ? "stale" : "current");
       if (workspace === "profile") profileSettings.readStatus(stale ? "stale" : "current");
+      if (workspace === "sprint") sprintState.readStatus(stale ? "stale" : "current");
       acceptWorkspaceContext?.(result);
       freshness = stale ? "stale" : "current";
       publish();
@@ -392,6 +406,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     outcomeCheckStatus.clear();
     editing.clear();
     lifecycle.clear();
+    sprintState.clear();
     profileSettings.clear();
     profileTokens.clear();
     pending.clear();
@@ -423,7 +438,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (!isActive()) return;
     const incoming = typeof update === "function" ? update(visible) : update;
     if (incoming.tasks !== visible.tasks) freshness = "stale";
-    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), tasks: confirmed.tasks };
+    confirmed = { ...incoming, ...profileSettings.preserveOwned(confirmed), tasks: confirmed.tasks, sprints: confirmed.sprints };
     publish();
   }
   function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace) {

@@ -88,7 +88,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     syncTaskToGitHub,
     updateFounderEvent,
     updateMeetingAttendance,
-    updateSprint,
     updateSprintCommitment,
     updateTask,
     waitingGitHubCommentCount,
@@ -207,8 +206,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "sprint" && (
         initialSprintModel ? <SprintScoreTableOverview
-          initialModel={initialSprintModel}
-          data={data}
+          planningState={controller.planningState}
           pending={isPending}
           onOpenTask={openTaskPanel}
           onRequestReview={async (task, evidence) => {
@@ -223,7 +221,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
           }}
           onChangeStatus={(task, status) => updateTask(task, { status })}
           onLockSprint={lockSprint}
-          onUpdateSprint={updateSprint}
           onUpdateCommitment={updateSprintCommitment}
           onUpdateMeetingAttendance={updateMeetingAttendance}
           onCreateScoreObjection={createScoreObjection}
