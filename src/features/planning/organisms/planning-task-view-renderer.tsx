@@ -9,6 +9,7 @@ import { PlanningViewLoadBoundary } from "@/features/planning/molecules/planning
 import { taskAssigneeProfile } from "@/features/tasks/model/task-card-presentation";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
+import { TaskSaveNotice } from "@/features/tasks/molecules/task-save-notice";
 import { TaskBoardView } from "@/features/tasks/organisms/task-board-view";
 import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
@@ -31,7 +32,7 @@ const GanttView = dynamic(
 
 export function PlanningTaskViewRenderer({ controller }: { controller: PlanningAppController }) {
   const {
-    canChangeTaskStatus,
+    canChangeTaskStatus: mayChangeTaskStatus,
     canManageFinalTaskStatus,
     canManageTaskMeta,
     data,
@@ -63,6 +64,8 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     visibleTasks,
   } = controller;
 
+  const canChangeTaskStatus = (task: (typeof data.tasks)[number]) => mayChangeTaskStatus(task) && controller.planningState.taskDetail(task.id).saveStatus !== "unconfirmed";
+
   // Table, Gantt and structure stay deliberately delivery-only in V1.  The
   // level selector above is the sole strategic planning surface here.
   const planningBoardTasks = visibleTasks.filter((task) => task.taskType === "deliverable" && isTaskPlanningActive(task));
@@ -90,6 +93,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
   return (
     <>
+      {data.tasks.map(task => <TaskSaveNotice key={task.id} taskTitle={controller.planningState.taskDetail(task.id).task ? task.title : "Aufgabe"} saves={controller.planningState.taskSaves(task.id)} onCheck={() => controller.planningState.checkTaskSave(task.id)} />)}
       {boardTaskEditConflict ? <UiNotice tone="info" role="alert" className="mb-4">
         <p>Die Aufgabe wurde zwischenzeitlich geändert. Deine abgesendete Änderung bleibt erhalten.</p>
         <p className="mt-2">Aktueller Serverstand: {boardTaskEditConflict.serverTask?.title || "Noch nicht verfügbar"}</p>

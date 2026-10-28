@@ -255,6 +255,7 @@ type Props = {
   dirty: boolean;
   saving: boolean;
   error: string;
+  confirmationPending?: boolean;
   conflict?: boolean;
   canResave?: boolean;
   conflictServerDraft?: TaskOverviewDraft | null;
@@ -278,6 +279,7 @@ export function TaskOverviewPanel({
   dirty,
   saving,
   error,
+  confirmationPending = false,
   conflict = false,
   canResave = false,
   conflictServerDraft,
@@ -335,6 +337,7 @@ export function TaskOverviewPanel({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (confirmationPending) return;
     if (evidenceInvalid) {
       document.getElementById(`task-evidence-link-${evidenceInvalidIndex}`)?.focus();
       return;
@@ -564,7 +567,7 @@ export function TaskOverviewPanel({
               <X size={15} aria-hidden="true" />
               Abbrechen
             </UiButton>
-            <UiButton type="submit" variant="primary" size="lg" disabled={!dirty || evidenceInvalid || saving || (conflict && !canResave)}>
+            <UiButton type="submit" variant="primary" size="lg" disabled={!dirty || evidenceInvalid || saving || confirmationPending || (conflict && !canResave)}>
               <Save size={15} aria-hidden="true" />
               {saving ? "Speichert …" : conflict ? "Erneut speichern" : "Speichern"}
             </UiButton>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { PlanningTaskEditor } from "@/features/planning/model/planning-state";
+import type { PlanningTaskEditor, PlanningTaskSaveView, PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
 import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
 
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
@@ -45,6 +45,7 @@ import { taskDetailAvailableTabs } from "@/features/tasks/model/task-detail-tabs
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
 import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
 import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
+import { TaskSaveNotice } from "@/features/tasks/molecules/task-save-notice";
 import { TaskOverviewPanel } from "@/features/tasks/organisms/task-overview-panel";
 import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
 import { normalizeStatus } from "@/lib/status";
@@ -68,6 +69,8 @@ type TaskDetailSurfaceProps = {
   currentProfile?: Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | null;
   operationalCorrection?: boolean;
   pending: boolean;
+  taskSaves?: readonly PlanningTaskSaveView[];
+  onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;
   error?: string;
   detailDataError?: string;
   requestedCommentTarget?: string;
@@ -145,7 +148,9 @@ function HydratedTaskDetailSurface({
   relations,
   currentProfile = null,
   operationalCorrection = false,
-  pending,
+  pending: requestPending,
+  taskSaves = [],
+  onCheckTaskSave,
   error = "",
   detailDataError = "",
   requestedCommentTarget = "",
@@ -173,6 +178,8 @@ function HydratedTaskDetailSurface({
   onRemoveRelation,
   onDecideApproval,
 }: TaskDetailSurfaceProps) {
+  const confirmationPending = taskSaves.some(save => save.phase === "unconfirmed" || save.phase === "blocked");
+  const pending = requestPending || confirmationPending;
   const [activeTab, setActiveTab] = useState<TaskDetailTabId>(() => {
     if (requestedCommentTarget.startsWith("relation:")) return "relationships";
     if (requestedCommentTarget.startsWith("field:") || requestedCommentTarget.startsWith("blocker:")) return "overview";
@@ -368,7 +375,7 @@ function HydratedTaskDetailSurface({
   };
   const updateInline = (patch: Partial<Task>) => {
     const existing = inlineEditor?.taskId === task.id ? inlineEditor.editor : null;
-    const editor = existing && ["editing", "saving", "conflict", "unconfirmed"].includes(existing.view().phase) ? existing : beginInlineEditing();
+    const editor = existing && ["editing", "saving", "conflict", "unconfirmed", "blocked"].includes(existing.view().phase) ? existing : beginInlineEditing();
     return editor ? onUpdate(patch, { editor }) : onUpdate(patch);
   };
   const inlineConflict = inlineEditor?.taskId === task.id && inlineEditor.editor.view().phase === "conflict" ? inlineEditor.editor.view() : null;
@@ -432,6 +439,7 @@ function HydratedTaskDetailSurface({
           error={controller.overviewError}
           flat={reviewActive}
           onCancel={cancelOverview}
+          confirmationPending={confirmationPending}
           conflict={controller.overviewConflict}
           canResave={controller.overviewCanResave}
           conflictServerDraft={controller.overviewServerDraft}
@@ -646,6 +654,7 @@ function HydratedTaskDetailSurface({
         />
       ) : null}
 
+      <TaskSaveNotice taskTitle={taskSaves[0]?.checkStatus === "forbidden" ? "Aufgabe" : task.title} saves={taskSaves} onCheck={onCheckTaskSave} />
       {inlineConflict ? <UiNotice tone="info" role="alert" className="mt-4">
         <p>Die Aufgabe wurde zwischenzeitlich geändert. Deine abgesendete Änderung bleibt erhalten.</p>
         <p className="mt-2">Aktueller Serverstand: {inlineConflict.serverTask?.title || "Noch nicht verfügbar"} · {inlineConflict.serverTask?.status}</p>
@@ -684,6 +693,10 @@ function HydratedTaskDetailSurface({
       ) : null}
     </>
   );
+
+  if (taskSaves.some(save => save.phase === "unconfirmed") && taskSaves.every(save => save.submitted === null)) {
+    return <TaskSaveNotice taskTitle="Aufgabe" saves={taskSaves} onCheck={onCheckTaskSave} />;
+  }
 
   if (surface === "modal") {
     return (

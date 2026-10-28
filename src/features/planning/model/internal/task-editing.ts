@@ -1,13 +1,15 @@
 import type { Task } from "@/lib/types";
 import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
-import type { PlanningTaskEditor, PlanningTaskEditorView } from "../planning-state";
+import type { PlanningTaskEditor, PlanningTaskEditorView, PlanningTaskSaveCheck } from "../planning-state";
 
 type EditingAdapter = {
   currentTask(taskId: string): Task | null;
   saveTask(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult>;
+  checkOutcome(taskId: string): Promise<PlanningTaskSaveCheck>;
   reload(taskId: string): Promise<{ ok: boolean }>;
   generation(): number;
   isActive(): boolean;
+  canReadTask(taskId: string): boolean;
   changed(): void;
 };
 
@@ -30,10 +32,10 @@ export function createTaskEditing(adapter: EditingAdapter) {
       let saves = 0;
       const sameSession = () => adapter.isActive() && adapter.generation() === generation;
       const current = () => !closed && sameSession();
-      const blocked = (): TaskUpdateResult => ({ ok: false, kind: current() ? phase === "unconfirmed" ? "unconfirmed" : "versionConflict" : "sessionSuperseded", error: current() ? error || "Bitte den aktuellen Stand prüfen und bewusst erneut speichern." : "Die Sitzung wurde ersetzt.", status: 409 });
+      const blocked = (): TaskUpdateResult => ({ ok: false, kind: current() ? (phase === "unconfirmed" || phase === "blocked") ? "unconfirmed" : "versionConflict" : "sessionSuperseded", error: current() ? error || "Bitte den aktuellen Stand prüfen und bewusst erneut speichern." : "Die Sitzung wurde ersetzt.", status: 409 });
       async function save(patch: Partial<Task>): Promise<TaskUpdateResult> {
         if (!current()) return blocked();
-        if (phase === "conflict" || phase === "unconfirmed") return blocked();
+        if (phase === "conflict" || phase === "unconfirmed" || phase === "blocked") return blocked();
         if (!basis) return { ok: false, kind: "rejected", error: "Aufgabe wurde nicht gefunden.", status: 404 };
         submitted = structuredClone(patch);
         retained.set(context, { taskId, editor });
@@ -57,10 +59,12 @@ export function createTaskEditing(adapter: EditingAdapter) {
                 conflictBasis = latest ? { ...latest } : null;
               }
             } catch { /* Keep the draft; resaving needs a successful authorized read. */ }
-          } else if (result.kind === "sessionSuperseded" || result.kind === "authorityEnded") {
+          } else if (result.kind === "sessionSuperseded") {
+            phase = "unconfirmed";
+          } else if (result.kind === "authorityEnded") {
             phase = "ended";
             closed = true;
-          } else phase = result.kind === "unconfirmed" ? "unconfirmed" : "rejected";
+          } else phase = result.kind === "unconfirmed" ? result.code === "predecessor_unconfirmed" ? "blocked" : "unconfirmed" : "rejected";
         }
         if (closed && (phase === "saved" || phase === "rejected")) retained.delete(context);
         adapter.changed();
@@ -68,7 +72,7 @@ export function createTaskEditing(adapter: EditingAdapter) {
       }
       const editor: PlanningTaskEditor = {
         view: () => sameSession()
-          ? { phase, submitted, serverTask: conflictBasis || adapter.currentTask(taskId), error, canResave: current() && phase === "conflict" && Boolean(conflictBasis?.updatedAt) }
+          ? { phase, submitted: adapter.canReadTask(taskId) ? submitted : null, serverTask: adapter.canReadTask(taskId) ? conflictBasis || adapter.currentTask(taskId) : null, error, canResave: current() && adapter.canReadTask(taskId) && phase === "conflict" && Boolean(conflictBasis?.updatedAt) }
           : { phase: "ended", submitted: null, serverTask: null, error: "Die Sitzung wurde ersetzt.", canResave: false },
         save,
         async refreshConflict() {
@@ -82,12 +86,13 @@ export function createTaskEditing(adapter: EditingAdapter) {
           } catch { return false; }
         },
         resave(patch) {
-          if (!current() || phase !== "conflict" || !conflictBasis?.updatedAt) return Promise.resolve(blocked());
+          if (!current() || !adapter.canReadTask(taskId) || phase !== "conflict" || !conflictBasis?.updatedAt) return Promise.resolve(blocked());
           basis = { ...conflictBasis };
           conflictBasis = null;
           phase = "editing";
           return save(patch);
         },
+        checkOutcome: () => sameSession() ? adapter.checkOutcome(taskId) : Promise.resolve({ outcome: "session-ended", readStatus: "not-needed" }),
         close() { closed = true; if (!submitted || phase === "saved" || phase === "rejected") retained.delete(context); },
       };
       return editor;

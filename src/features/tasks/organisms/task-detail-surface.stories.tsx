@@ -440,3 +440,62 @@ export const RetainsOriginalBasisAndResavesDeliberately: Story = {
     await waitFor(() => expect(canvas.queryByRole("textbox", { name: "Titel" })).not.toBeInTheDocument());
   },
 };
+
+
+function UnconfirmedEditingHarness(args: React.ComponentProps<typeof TaskDetailSurface>) {
+  const [writes, setWrites] = useState(0);
+  const [reads, setReads] = useState(0);
+  const [server] = useState(() => {
+    let current = { ...task, updatedAt: "opaque/r1" };
+    return { read: () => current, replace: (next: typeof current) => { current = next; } };
+  });
+  const [owner] = useState(() => createPlanningState({ userId: "outcome-story", initialData: { ...emptyPlanningShellState, tasks: [server.read()] }, adapter: {
+    readWorkspace: async () => ({ data: { ...emptyPlanningShellState, tasks: [server.read()] } }),
+    readTaskDetail: async () => {
+      setReads(count => count + 1);
+      return { model: { revision: "detail", project: emptyPlanningShellState.project, item: server.read(), ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } };
+    },
+    saveTask: async (_, patch) => {
+      setWrites(count => count + 1);
+      server.replace({ ...server.read(), ...patch, updatedAt: "opaque/r2" });
+      throw new Error("Antwort verloren");
+    },
+  } }));
+  const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
+  return <>
+    <output aria-label="Write count">{writes}</output><output aria-label="Read count">{reads}</output>
+    <TaskDetailSurface {...args} task={data.tasks[0]} taskSaves={owner.planning.taskSaves(task.id)} onCheckTaskSave={() => owner.planning.checkTaskSave(task.id)} onBeginEdit={() => owner.planning.beginTaskEdit(data.tasks[0])} onUpdate={(patch, options) => {
+      if (!options) throw new Error("Missing editing context");
+      return options.resave ? options.editor.resave(patch) : options.editor.save(patch);
+    }} />
+  </>;
+}
+
+export const LostResponseKeepsInputAndChecksWithoutReplay: Story = {
+  render: args => <UnconfirmedEditingHarness {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.clear(title);
+    await userEvent.type(title, "Mein abgesendeter Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
+    await expect(await canvas.findByText("Speicherbestätigung ausstehend")).toBeVisible();
+    await expect(title).toHaveValue("Mein abgesendeter Entwurf");
+    await expect(canvas.getByRole("button", { name: "Speichern" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Speicherstand prüfen" }));
+    await expect(await canvas.findByText(/Serverstand geladen.*Speicherung bleibt unbestätigt/)).toBeVisible();
+    await expect(canvas.getByLabelText("Write count")).toHaveTextContent("1");
+    await expect(canvas.getByLabelText("Read count")).toHaveTextContent("1");
+    const serverValues = canvas.getByText("Aktuellen Serverstand anzeigen");
+    await userEvent.click(serverValues);
+    await expect(within(serverValues.closest("details")!).getByText("Mein abgesendeter Entwurf", { selector: "dd" })).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "Erneut speichern" })).not.toBeInTheDocument();
+    await expect(title).toHaveValue("Mein abgesendeter Entwurf");
+    await userEvent.click(canvas.getByRole("button", { name: "Abbrechen" }));
+    await expect(canvas.getByText("Speicherbestätigung ausstehend")).toBeVisible();
+    const submitted = canvas.getByText("Abgesendete Eingaben anzeigen");
+    await userEvent.click(submitted);
+    await expect(within(submitted.closest("details")!).getByText("Mein abgesendeter Entwurf", { selector: "dd" })).toBeVisible();
+  },
+};

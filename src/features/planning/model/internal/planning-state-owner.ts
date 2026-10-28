@@ -1,6 +1,6 @@
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState, Task, TaskActivity } from "@/lib/types";
-import type { PlanningState, PlanningTaskSaveStatus, PlanningReadStatus, PlanningWorkspaceView } from "../planning-state";
+import type { PlanningState, PlanningTaskSaveStatus, PlanningReadStatus, PlanningWorkspaceView, PlanningTaskSaveView } from "../planning-state";
 import type { AppWorkspace } from "../workspace-routes";
 import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
@@ -46,10 +46,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let freshness: "current" | "stale" = "current";
   let ended = false;
   const detailUnavailable = new Map<string, TaskDetailUnavailableArea[]>();
+  const deniedTaskReads = new Set<string>();
   const detailStatuses = new Map<string, PlanningReadStatus>();
   const detailReads = new Map<string, ReturnType<PlanningState["loadTaskDetail"]>>();
   const tails = new Map<string, { context: symbol; result: Promise<TaskUpdateResult> }>();
-  const pending = new Map<symbol, { taskId: string; patch: Partial<Task> }>();
+  const pending = new Map<symbol, { taskId: string; patch: Partial<Task>; submitted: Partial<Task>; phase: PlanningTaskSaveView["phase"] }>();
+  const outcomeChecks = new Map<string, ReturnType<PlanningState["checkTaskSave"]>>();
+  const outcomeCheckStatus = new Map<string, PlanningTaskSaveView["checkStatus"]>();
   const status = new Map<string, PlanningTaskSaveStatus>();
   const listeners = new Set<() => void>();
   function isActive() {
@@ -76,18 +79,27 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function saveTaskWithContext(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult> {
     if (!isActive()) return Promise.resolve({ ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 });
-    if (status.get(task.id) === "unconfirmed") return Promise.resolve({ ok: false, kind: "unconfirmed", error: "Die Speicherung ist noch nicht bestätigt." });
+    if (status.get(task.id) === "unconfirmed") {
+      pending.set(Symbol(task.id), { taskId: task.id, submitted: structuredClone(patch), patch: structuredClone(patch), phase: "blocked" });
+      publish();
+      return Promise.resolve({ ok: false, kind: "unconfirmed", code: "predecessor_unconfirmed", error: "Eine vorherige Speicherung ist noch nicht bestätigt. Diese Änderung wurde noch nicht gesendet." });
+    }
     const generation = sessionGeneration;
     const operation = Symbol(task.id);
-    pending.set(operation, { taskId: task.id, patch: { ...patch, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "", githubIssueSyncPendingSince: "" } });
+    const previous = tails.get(task.id);
+    pending.set(operation, { taskId: task.id, submitted: structuredClone(patch), phase: previous ? "queued" : "saving", patch: { ...patch, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "", githubIssueSyncPendingSince: "" } });
     status.set(task.id, "saving");
     publish();
-    const previous = tails.get(task.id);
     const saved = (async (): Promise<TaskUpdateResult> => {
       if (previous) {
         const predecessor = await previous.result;
-        if (!predecessor.ok && (previous.context === context || predecessor.kind === "unconfirmed")) {
-          if (isActive() && status.get(task.id) !== "unconfirmed") { pending.delete(operation); publish(); }
+        if (!predecessor.ok && (previous.context === context || status.get(task.id) === "unconfirmed")) {
+          if (isActive() && generation === sessionGeneration && status.get(task.id) === "unconfirmed") {
+            pending.get(operation)!.phase = "blocked";
+            publish();
+            return { ok: false, kind: "unconfirmed", code: "predecessor_unconfirmed", error: "Eine vorherige Speicherung ist noch nicht bestätigt. Diese Änderung wurde noch nicht gesendet." };
+          }
+          if (isActive()) { pending.delete(operation); publish(); }
           return predecessor;
         }
         if (predecessor.ok && previous.context === context) task = { ...task, updatedAt: predecessor.task.updatedAt || task.updatedAt };
@@ -96,6 +108,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       try {
         const current = confirmed.tasks.find(item => item.id === task.id);
         if (current?.updatedAt && current.updatedAt !== task.updatedAt) throw Object.assign(new Error("Aufgabe wurde zwischenzeitlich geändert. Bitte den aktuellen Stand prüfen."), { status: 409, kind: "versionConflict" });
+        pending.get(operation)!.phase = "saving";
         const result = await adapter.saveTask(task, patch);
         if (!result.task.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
         if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
@@ -119,10 +132,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           : failure.code === "session_superseded" ? "sessionSuperseded"
           : failure.code === "administrator_access_expired" || failure.code === "administrator_access_required" ? "authorityEnded"
           : statusCode && statusCode < 500 ? "rejected" : "unconfirmed";
-        if (kind !== "unconfirmed") {
+        if (kind !== "unconfirmed" && kind !== "sessionSuperseded") {
           pending.delete(operation);
           status.set(task.id, "rejected");
         } else {
+          pending.get(operation)!.phase = "unconfirmed";
           status.set(task.id, "unconfirmed");
           freshness = "stale";
         }
@@ -138,25 +152,57 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     currentTask: taskId => confirmed.tasks.find(task => task.id === taskId) || null,
     saveTask: saveTaskWithContext,
     reload: taskId => planning.loadTaskDetail(taskId),
+    checkOutcome: taskId => planning.checkTaskSave(taskId),
     generation: () => sessionGeneration,
     isActive,
+    canReadTask: taskId => !deniedTaskReads.has(taskId),
     changed: publish,
   });
   const planning: PlanningState = {
     board: () => ({ tasks: planning.workspace("planning").tasks, freshness }),
     workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id)), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
     taskDetail: taskId => { isActive(); return ({
-      task: detailStatuses.get(taskId) === "forbidden" ? null : visible.tasks.find(task => task.id === taskId) || null,
+      task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
       saveStatus: status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
-      comments: detailStatuses.get(taskId) === "forbidden" ? [] : visible.taskComments.filter(item => item.taskId === taskId),
-      externalComments: detailStatuses.get(taskId) === "forbidden" ? [] : visible.taskExternalComments.filter(item => item.taskId === taskId),
-      blockers: detailStatuses.get(taskId) === "forbidden" ? [] : visible.taskBlockers.filter(item => item.taskId === taskId),
-      relationships: detailStatuses.get(taskId) === "forbidden" ? [] : visible.taskRelations.filter(item => item.taskId === taskId || item.relatedTaskId === taskId),
-      activities: detailStatuses.get(taskId) === "forbidden" ? [] : visible.taskActivity.filter(item => item.taskId === taskId),
-      reviews: detailStatuses.get(taskId) === "forbidden" ? [] : visible.taskReviews.filter(item => item.taskId === taskId),
+      comments: deniedTaskReads.has(taskId) ? [] : visible.taskComments.filter(item => item.taskId === taskId),
+      externalComments: deniedTaskReads.has(taskId) ? [] : visible.taskExternalComments.filter(item => item.taskId === taskId),
+      blockers: deniedTaskReads.has(taskId) ? [] : visible.taskBlockers.filter(item => item.taskId === taskId),
+      relationships: deniedTaskReads.has(taskId) ? [] : visible.taskRelations.filter(item => item.taskId === taskId || item.relatedTaskId === taskId),
+      activities: deniedTaskReads.has(taskId) ? [] : visible.taskActivity.filter(item => item.taskId === taskId),
+      reviews: deniedTaskReads.has(taskId) ? [] : visible.taskReviews.filter(item => item.taskId === taskId),
     }); },
     protectedCache: workspace => isActive() && (!workspace || (memberships.has(workspace) && workspaceStatuses.get(workspace) !== "forbidden")) ? { tasks: workspace ? confirmed.tasks.filter(task => memberships.get(workspace)?.has(task.id)) : confirmed.tasks } : null,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    taskSaves: taskId => {
+      if (!isActive()) return [];
+      const forbidden = deniedTaskReads.has(taskId);
+      return [...pending.values()].filter(operation => operation.taskId === taskId).map(operation => ({
+        phase: operation.phase, submitted: forbidden ? null : operation.submitted,
+        checkStatus: outcomeCheckStatus.get(taskId) || "not-checked",
+        serverTask: forbidden || outcomeCheckStatus.get(taskId) !== "checked" ? null : confirmed.tasks.find(task => task.id === taskId) || null,
+      }));
+    },
+    checkTaskSave(taskId) {
+      if (!isActive()) return Promise.resolve({ outcome: "session-ended", readStatus: "not-needed" });
+      if (status.get(taskId) !== "unconfirmed") return Promise.resolve({ outcome: "not-pending", readStatus: "not-needed" });
+      const existing = outcomeChecks.get(taskId);
+      if (existing) return existing;
+      const generation = sessionGeneration;
+      outcomeCheckStatus.set(taskId, "checking");
+      publish();
+      const checked = (async (): ReturnType<PlanningState["checkTaskSave"]> => {
+        const read = await planning.loadTaskDetail(taskId);
+        if (!isActive() || generation !== sessionGeneration) return { outcome: "session-ended", readStatus: "not-needed" };
+        const readStatus = detailStatuses.get(taskId) || "unavailable";
+        outcomeCheckStatus.set(taskId, read.ok ? "checked" : readStatus === "forbidden" ? "forbidden" : "unavailable");
+        publish();
+        // A current record does not prove that this write and its side effects completed.
+        return { outcome: "unconfirmed", readStatus };
+      })();
+      outcomeChecks.set(taskId, checked);
+      void checked.finally(() => { if (outcomeChecks.get(taskId) === checked) outcomeChecks.delete(taskId); });
+      return checked;
+    },
     taskEdits: taskId => { isActive(); return editing.views(taskId); },
     beginTaskEdit: taskId => editing.begin(taskId),
     saveTask: (task, patch) => saveTaskWithContext(task, patch, Symbol(task.id)),
@@ -176,12 +222,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           if (result.model.item.id !== taskId) throw new Error("Die Detailantwort gehört zu einer anderen Aufgabe.");
         } catch (error) {
           if (!isActive() || generation !== sessionGeneration) return { ok: false };
-          detailStatuses.set(taskId, readErrorStatus(error));
+          const failedStatus = readErrorStatus(error);
+          if (failedStatus === "forbidden") deniedTaskReads.add(taskId);
+          detailStatuses.set(taskId, failedStatus);
           publish();
           return { ok: false, error: error instanceof Error ? error.message : "Task-Details konnten nicht geladen werden." };
         }
         if (!isActive() || generation !== sessionGeneration) return { ok: false };
         const next = applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {});
+        deniedTaskReads.delete(taskId);
         detailUnavailable.set(taskId, result.unavailable || []);
         detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
         const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
@@ -259,6 +308,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     initialized = false;
     tails.clear();
     detailReads.clear();
+    outcomeChecks.clear();
+    outcomeCheckStatus.clear();
     editing.clear();
     pending.clear();
     status.clear();
@@ -266,6 +317,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     workspaceStatuses.clear();
     completeness.clear();
     detailStatuses.clear();
+    deniedTaskReads.clear();
     confirmed = emptyPlanningShellState;
     publish();
   }

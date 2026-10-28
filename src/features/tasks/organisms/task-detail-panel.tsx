@@ -1,6 +1,6 @@
 "use client";
 
-import type { PlanningTaskEditor } from "@/features/planning/model/planning-state";
+import type { PlanningTaskEditor, PlanningTaskSaveView, PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
 import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
 
 import { useRouter } from "next/navigation";
@@ -37,6 +37,8 @@ type Props = {
   operationalCorrection?: boolean;
   source: "supabase";
   pending: boolean;
+  taskSaves?: readonly PlanningTaskSaveView[];
+  onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;
   error?: string;
   githubInstallationAvailable: boolean;
   previousTask?: Task | null;

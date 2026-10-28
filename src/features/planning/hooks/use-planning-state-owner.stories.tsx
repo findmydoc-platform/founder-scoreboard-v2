@@ -78,17 +78,19 @@ export const ConfirmedTaskSurvivesRefreshAndLegacyRollback: Story = {
   },
 };
 
-function BoardEditingStory() {
+function BoardEditingStory({ loseResponse = false }: { loseResponse?: boolean }) {
   const [attempts, setAttempts] = useState(0);
   const [server] = useState(() => {
     let current = taskDetailStoryTask({ id: "board-conflict", title: "Board-Konflikt", status: "Offen", approvalStatus: "approved", updatedAt: "opaque/r1" });
     return { read: () => current, replace: (next: typeof current) => { current = next; } };
   });
-  const [owner] = useState(() => createPlanningState({ userId: "board-story", initialData: { ...emptyPlanningShellState, tasks: [server.read()] }, adapter: {
+  const [owner] = useState(() => createPlanningState({ userId: "board-story", initialData: { ...emptyPlanningShellState, tasks: [server.read(), ...(loseResponse ? [{ ...server.read(), id: "independent", title: "Andere Aufgabe" }] : [])] }, adapter: {
     readWorkspace: async () => ({ data: { ...emptyPlanningShellState, tasks: [server.read()] } }),
     readTaskDetail: async () => ({ model: { revision: "detail", project: initial.project, item: server.read(), ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } }),
     async saveTask(basis, patch) {
       setAttempts(count => count + 1);
+      if (basis.id === "independent") return { task: { ...patch, updatedAt: "opaque/independent" } };
+      if (loseResponse) { server.replace({ ...server.read(), ...patch, updatedAt: "opaque/r2" }); throw new Error("Antwort verloren"); }
       if (basis.updatedAt !== server.read().updatedAt) throw Object.assign(new Error("Andere Version"), { status: 409, kind: "versionConflict" });
       server.replace({ ...server.read(), ...patch, updatedAt: "opaque/r3" });
       return { task: server.read() };
@@ -103,7 +105,7 @@ function BoardEditingStory() {
   const [, setError] = useState("");
   const { updateTask } = useTaskUpdateCommand({ planningState: owner.planning, data, currentProfile: null, canChangeTaskStatus: () => true, canCorrectOperationally: true, canManageFinalTaskStatus: true, canManageTaskMeta: true, githubInstallationAvailable: false, setSaveError: setError, setStatusGuardNotice: () => {}, setStatusGuardTaskId: () => {}, refreshCurrentWorkspaceModel: async () => {}, syncTaskToGitHub: () => {}, startTransition: action => action() });
   const board = usePlanningBoardState({ planningState: owner.planning, data, canChangeTaskStatus: () => true, updateTask, setStatusGuardNotice: () => {}, setStatusGuardTaskId: () => {} });
-  const controller = { ...board, data, visibleTasks: data.tasks, canChangeTaskStatus: () => true, canManageFinalTaskStatus: true, canManageTaskMeta: true, filters: { initiativeId: "Alle" }, filtersAvailable: true, openTaskPanel: () => {}, planningLevel: "deliverable", planningParentFilterId: "all", selectedTaskId: null, setFilters: () => {}, setTaskDialogDefaults: () => {}, setView: () => {}, viewerOpenSubIssueIdsByDeliverableId: {}, view: "board" } as unknown as PlanningAppController;
+  const controller = { ...board, planningState: owner.planning, data, visibleTasks: data.tasks, canChangeTaskStatus: () => true, canManageFinalTaskStatus: true, canManageTaskMeta: true, filters: { initiativeId: "Alle" }, filtersAvailable: true, openTaskPanel: () => {}, planningLevel: "deliverable", planningParentFilterId: "all", selectedTaskId: null, setFilters: () => {}, setTaskDialogDefaults: () => {}, setView: () => {}, viewerOpenSubIssueIdsByDeliverableId: {}, view: "board" } as unknown as PlanningAppController;
   return <><output aria-label="Board write attempts">{attempts}</output><PlanningTaskViewRenderer controller={controller} /></>;
 }
 export const BoardMenuKeepsItsOpeningBasis: Story = {
@@ -134,5 +136,25 @@ export const UntrustedHydrationRequestsFreshWorkspace: Story = {
     await expect(canvas.getByText("Cache: Saved task")).toBeVisible();
     await expect(canvas.getByText("Discussion: Loaded discussion")).toBeVisible();
     await expect(canvas.getByText("Workspace: loading")).toBeVisible();
+  },
+};
+
+
+export const BoardChecksUnconfirmedTaskAndAllowsIndependentEdit: Story = {
+  render: () => <BoardEditingStory loseResponse />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Status für Board-Konflikt ändern" }));
+    await userEvent.click(within(document.body).getByRole("menuitem", { name: "Blockiert" }));
+    await expect(await canvas.findByText("Speicherbestätigung ausstehend")).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "Status für Board-Konflikt ändern" })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Speicherstand prüfen" }));
+    await expect(await canvas.findByText(/Serverstand geladen.*Speicherung bleibt unbestätigt/)).toBeVisible();
+    await expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("1");
+    await userEvent.click(canvas.getByRole("button", { name: "Status für Andere Aufgabe ändern" }));
+    await userEvent.click(within(document.body).getByRole("menuitem", { name: "In Arbeit" }));
+    await expect(canvas.getByRole("button", { name: "Status für Andere Aufgabe ändern" })).toHaveTextContent("In Arbeit");
+    await expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("2");
+    await expect(canvas.getByText("Speicherbestätigung ausstehend")).toBeVisible();
   },
 };
