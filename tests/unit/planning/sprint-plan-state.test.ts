@@ -16,7 +16,7 @@ test("a generated plan distinguishes provisional Sprints from confirmed changed-
   const editor = planning.beginSprintPlan();
   const save = editor.create(options);
   expect(planning.sprintPlan().provisionalSprintIds).toEqual(["sprint-2"]);
-  expect(planning.sprintWorkspace().model.sprints.find(sprint => sprint.id === "sprint-2")).toMatchObject({ name: "Sprint 2", updatedAt: undefined });
+  expect(planning.sprintWorkspace().model.sprints.find(sprint => sprint.id === "sprint-2")).toMatchObject({ name: "Sprint 2", startDate: "2099-01-15", endDate: "2099-01-28", updatedAt: undefined });
   expect(planning.protectedCache()?.sprints).toHaveLength(2);
   receipt.resolve({ sprints: [created] });
   await expect(save).resolves.toMatchObject({ ok: true, changedCount: 1 });
