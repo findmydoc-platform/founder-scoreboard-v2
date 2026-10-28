@@ -2,6 +2,7 @@
 
 import { readPublishedWorkweekCalendar } from "@/features/team-workweek/model/published-workweek-calendar-api";
 
+import { isProtectedToolPreviewUrl } from "@/lib/tool-preview-image";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
@@ -76,6 +77,33 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         const { response, body } = await runtime.apiClient.requestJson<{ ok?: boolean; error?: string }>(`/api/team/platform-releases/v1/releases/${encodeURIComponent(version)}/seen`, { method: "POST" });
         if (!response.ok) throw Object.assign(new Error(body?.error || "Release konnte nicht bestätigt werden."), { status: response.status });
         if (!body?.ok) throw new Error("Bestätigung unvollständig.");
+      },
+      async readTools() {
+        const { response, body } = await planningApi.requestSupportingWorkspaceData(runtime.apiClient, "tools");
+        if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Links konnten nicht geladen werden."), { status: response.status });
+        const model = body.model as import("@/features/tools/model/tools-read-model").ToolsWorkspaceModel;
+        return { tools: model.tools, completeness: model.coverage || "partial", headerData: body.headerData ? normalizePlanningHeaderData(body.headerData) : undefined };
+      },
+      async createTool(draft) {
+        const { response, body } = await planningApi.createFmdToolRequest(runtime.apiClient, draft);
+        if (!response.ok || !body?.tool) throw Object.assign(new Error(body?.error || "Link konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        return { tool: body.tool, warning: body.warning };
+      },
+      async updateTool(basis, draft) {
+        const { response, body } = await planningApi.updateFmdToolRequest(runtime.apiClient, basis.id, { ...draft, expectedUpdatedAt: basis.updatedAt });
+        if (!response.ok || !body?.tool) throw Object.assign(new Error(body?.error || "Link konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
+        return { tool: body.tool, warning: body.warning };
+      },
+      async uploadToolPreview(file) {
+        const { response, body } = await planningApi.uploadFmdToolPreviewImageRequest(runtime.apiClient, file);
+        if (!response.ok || !body?.imageUrl || body.source !== "manual") throw Object.assign(new Error(body?.error || "Bild-Upload ist noch nicht bestätigt."), { status: response.status, code: body?.code });
+        return { imageUrl: body.imageUrl, source: body.source };
+      },
+      async readToolPreview(imageUrl) {
+        if (!isProtectedToolPreviewUrl(imageUrl)) throw new Error("Der Bildpfad ist nicht verfügbar.");
+        const { response } = await runtime.apiClient.requestBlob(imageUrl);
+        if (!response.ok) throw Object.assign(new Error("Das Vorschaubild konnte nicht geprüft werden."), { status: response.status });
+        return true;
       },
       async readEvents(range) {
         const query = range ? `?${new URLSearchParams(range)}` : "";
@@ -158,7 +186,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (isSupportingWorkspace(workspace)) {
           const { response, body } = await planningApi.requestSupportingWorkspaceData(runtime.apiClient, workspace);
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status });
-          return body?.model ? { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState(workspace, body.model)), eventCoverage: workspace === "events" ? (body.model as import("@/features/events/model/events-read-model").EventsWorkspaceModel).coverage : undefined, notificationCoverage: workspace === "notifications" ? (body.model as import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel).coverage : undefined, taskCoverage: (workspace === "team" || workspace === "profile" || workspace === "notifications" ? "partial" : "none") as "partial" | "none", headerData: body.headerData, currentProfile: body.currentProfile } : null;
+          return body?.model ? { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState(workspace, body.model)), toolCoverage: workspace === "tools" ? (body.model as import("@/features/tools/model/tools-read-model").ToolsWorkspaceModel).coverage : undefined, eventCoverage: workspace === "events" ? (body.model as import("@/features/events/model/events-read-model").EventsWorkspaceModel).coverage : undefined, notificationCoverage: workspace === "notifications" ? (body.model as import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel).coverage : undefined, taskCoverage: (workspace === "team" || workspace === "profile" || workspace === "notifications" ? "partial" : "none") as "partial" | "none", headerData: body.headerData, currentProfile: body.currentProfile } : null;
         }
         if (workspace === "sprint") {
           const { response, body } = await planningApi.requestSprintWorkspaceData(runtime.apiClient);

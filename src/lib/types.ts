@@ -412,6 +412,7 @@ export type ProfileFeatureTourAcknowledgement = {
 };
 
 export type FmdTool = {
+  updatedAt?: string;
   id: string;
   name: string;
   category: "tool" | "repo" | "knowledge" | "asset";

@@ -77,5 +77,5 @@ export async function POST(request: NextRequest) {
 
   invalidateSharedPlanningHeaderCache("quickLinks");
 
-  return NextResponse.json({ ok: true, tool: mapFmdTool(result.tool as DbFmdTool) });
+  return NextResponse.json({ ok: true, tool: mapFmdTool(result.tool as DbFmdTool), ...(result.auditUnconfirmed ? { code: "tool_saved_audit_unconfirmed", warning: "Link gespeichert. Die Protokollierung konnte nicht bestätigt werden." } : {}) });
 }

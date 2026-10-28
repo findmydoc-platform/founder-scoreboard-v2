@@ -9,6 +9,7 @@ import type { FmdTool } from "@/lib/types";
 import { invalidateSharedPlanningHeaderCache } from "@/lib/planning-header-cache";
 
 type FmdToolPayload = {
+  expectedUpdatedAt?: string;
   name?: string;
   category?: string;
   kind?: string;
@@ -76,13 +77,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const previewImageSource = normalizedPreviewImageUrl && previewImageSources.has(payload.previewImageSource as FmdTool["previewImageSource"])
     ? payload.previewImageSource as FmdTool["previewImageSource"]
     : "none";
+  if (payload.expectedUpdatedAt !== undefined && (typeof payload.expectedUpdatedAt !== "string" || !payload.expectedUpdatedAt)) return apiError("Die Ausgangsversion des Links fehlt.", 400);
   const result = await permission.resource.saveTool({
     name, category, kind, description, url: normalizedUrl || null, owner, status,
     is_curated: isCurated, preview_image_url: normalizedPreviewImageUrl || null, preview_image_source: previewImageSource,
-  }, auditRequestMetadata(request));
-  if (!result.ok) return apiError(result.error, result.status);
+  }, auditRequestMetadata(request), payload.expectedUpdatedAt);
+  if (!result.ok) return NextResponse.json({ error: result.error, ...("code" in result && result.code ? { code: result.code } : {}) }, { status: result.status });
 
   invalidateSharedPlanningHeaderCache("quickLinks");
 
-  return NextResponse.json({ ok: true, tool: mapFmdTool(result.tool as DbFmdTool) });
+  return NextResponse.json({ ok: true, tool: mapFmdTool(result.tool as DbFmdTool), ...(result.auditUnconfirmed ? { code: "tool_saved_audit_unconfirmed", warning: "Link gespeichert. Die Protokollierung konnte nicht bestätigt werden." } : {}) });
 }

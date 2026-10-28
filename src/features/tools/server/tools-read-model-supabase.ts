@@ -13,7 +13,7 @@ export function createSupabaseToolsReadModel(supabase: SupabaseClient): ToolsRea
       if (!context.authorized) return { status: "forbidden" };
       const [profileResult, toolResult] = await Promise.all([
         supabase.from("profiles").select(planningProfileSelect).order("name"),
-        supabase.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order").order("sort_order"),
+        supabase.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order,updated_at", { count: "exact" }).order("sort_order").limit(1000),
       ]);
       if (profileResult.error || toolResult.error) return { status: "unavailable" };
       const tools = ((toolResult.data || []) as DbFmdTool[]).map(mapFmdTool);
@@ -22,6 +22,7 @@ export function createSupabaseToolsReadModel(supabase: SupabaseClient): ToolsRea
         model: {
           revision: tools.map((tool) => `${tool.sortOrder}:${tool.id}`).join("|"),
           tools,
+          coverage: typeof toolResult.count === "number" && tools.length >= toolResult.count ? "complete" : "partial",
           people: ((profileResult.data || []) as DbProfile[]).map(mapProfile),
         },
       };

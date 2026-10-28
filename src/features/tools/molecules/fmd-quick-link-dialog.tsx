@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, ImageIcon, Link2, Loader2, Pencil, Plus, Trash2, Upload, X, XCircle } from "lucide-react";
-import { type ClipboardEvent, type DragEvent, type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type ClipboardEvent, type DragEvent, type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import type { FmdTool, Profile } from "@/lib/types";
 import {
@@ -44,6 +44,9 @@ export function FmdQuickLinkDialog({
   mode,
   draft,
   pending,
+  saveBlocked = false,
+  uploadBlocked = false,
+  saveNotice,
   currentProfile,
   curatedLinkCount,
   curatedLimitReached,
@@ -56,8 +59,11 @@ export function FmdQuickLinkDialog({
   mode: FmdQuickLinkDialogMode;
   draft: FmdToolDraft;
   pending: boolean;
+  saveBlocked?: boolean;
+  uploadBlocked?: boolean;
+  saveNotice?: ReactNode;
   currentProfile: Profile | null;
-  curatedLinkCount: number;
+  curatedLinkCount: number | null;
   curatedLimitReached: boolean;
   onClose: () => void;
   onDraftChange: (draft: FmdToolDraft) => void;
@@ -65,7 +71,6 @@ export function FmdQuickLinkDialog({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onUploadPreviewImage: (file: File) => Promise<FmdToolPreviewImageUpload | null>;
 }) {
-  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const draftRef = useRef(draft);
   const metadataDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,6 +78,9 @@ export function FmdQuickLinkDialog({
   const lastLoadedMetadataUrlRef = useRef("");
   const [metadataStatus, setMetadataStatus] = useState<MetadataStatus>("idle");
   const [imagePending, setImagePending] = useState(false);
+  const mounted = useRef(true);
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending || imagePending });
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; metadataRequestIdRef.current++; }; }, []);
   const [dragActive, setDragActive] = useState(false);
   const [dialogNotice, setDialogNotice] = useState<DialogNotice | null>(null);
   const title = mode === "edit" ? "Link bearbeiten" : "Link eintragen";
@@ -114,7 +122,7 @@ export function FmdQuickLinkDialog({
     setDialogNotice(null);
     try {
       const metadata = await onLoadMetadata(normalizedUrl);
-      if (requestId !== metadataRequestIdRef.current || draftRef.current.url.trim() !== normalizedUrl) return;
+      if (!mounted.current || requestId !== metadataRequestIdRef.current || draftRef.current.url.trim() !== normalizedUrl) return;
       if (!metadata) {
         setMetadataStatus("error");
         setDialogNotice({ tone: "danger", message: "Metadaten konnten nicht übernommen werden." });
@@ -138,7 +146,7 @@ export function FmdQuickLinkDialog({
       setMetadataStatus("success");
       setDialogNotice({ tone: "success", message: metadata.title || metadata.description || metadata.imageUrl ? "Metadaten übernommen." : "Metadaten geprüft." });
     } catch {
-      if (requestId !== metadataRequestIdRef.current || draftRef.current.url.trim() !== normalizedUrl) return;
+      if (!mounted.current || requestId !== metadataRequestIdRef.current || draftRef.current.url.trim() !== normalizedUrl) return;
       setMetadataStatus("error");
       setDialogNotice({ tone: "danger", message: "Metadaten konnten nicht übernommen werden." });
     }
@@ -161,14 +169,14 @@ export function FmdQuickLinkDialog({
   }, [draft.url, loadMetadata]);
 
   async function handlePreviewFile(file: File | null | undefined) {
-    if (!file || imagePending) return;
+    if (!file || imagePending || uploadBlocked) return;
     setImagePending(true);
     setDialogNotice(null);
     try {
       const uploaded = await onUploadPreviewImage(file);
-      if (!uploaded) return;
+      if (!uploaded || !mounted.current) return;
       onDraftChange({
-        ...draft,
+        ...draftRef.current,
         previewImageUrl: uploaded.imageUrl,
         previewImageSource: uploaded.source,
       });
@@ -229,6 +237,7 @@ export function FmdQuickLinkDialog({
           <UiField as="div">
             Kategorie
             <CustomSelect
+              aria-label="Kategorie"
               value={draft.category}
               onChange={(value) => patchDraft({ category: value as FmdTool["category"] })}
               className="h-10 text-sm"
@@ -353,7 +362,7 @@ export function FmdQuickLinkDialog({
                   <UiButton
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={pending || imagePending}
+                    disabled={pending || imagePending || uploadBlocked}
                     size="sm"
                   >
                     {imagePending ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
@@ -392,7 +401,7 @@ export function FmdQuickLinkDialog({
                 <Link2 size={16} className="shrink-0" />
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold">In kuratierte Links aufnehmen</span>
-                  <span className="block text-xs text-slate-500">{curatedLinkCount}/{maxCuratedFmdToolLinks} belegt</span>
+                  <span className="block text-xs text-slate-500">{curatedLinkCount === null ? "Belegung wird beim Speichern geprüft" : `${curatedLinkCount}/${maxCuratedFmdToolLinks} belegt`}</span>
                 </span>
               </span>
               <span className={classNames("relative h-5 w-9 rounded-full transition", draft.isCurated ? "bg-blue-600" : "bg-slate-200")}>
@@ -415,6 +424,8 @@ export function FmdQuickLinkDialog({
           </UiField>
         </div>
 
+        {saveNotice ? <div className="mt-4">{saveNotice}</div> : null}
+        {uploadBlocked ? <UiNotice className="mt-4" tone="warning">Bild-Upload unbestätigt. Ohne bestätigten Dateipfad ist kein erneuter Upload möglich; der Link kann separat gespeichert werden.</UiNotice> : null}
         <div className="sticky bottom-0 -mx-4 -mb-4 mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-white px-4 pb-4 pt-4 lg:-mx-5 lg:-mb-5 lg:px-5">
           <div className="min-h-8 min-w-0 flex-1">
             {dialogNotice && (
@@ -424,7 +435,7 @@ export function FmdQuickLinkDialog({
             )}
           </div>
           <UiButton type="button" onClick={onClose} disabled={pending || imagePending} variant="secondary">Abbrechen</UiButton>
-          <UiButton type="submit" variant="primary" disabled={pending || imagePending}>
+          <UiButton type="submit" variant="primary" disabled={pending || imagePending || saveBlocked}>
             {mode === "edit" ? <Pencil size={16} /> : <Plus size={16} />}
             {pending ? "Speichert..." : submitLabel}
           </UiButton>

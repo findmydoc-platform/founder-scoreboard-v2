@@ -12,7 +12,7 @@ import type { PlanningWorkspaceModel } from "@/features/planning-items/model/pla
 import type { SupportingWorkspace, SupportingWorkspaceModel } from "@/features/planning/model/supporting-planning-shell-projection";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 
-type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status">;
+type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status"> & { expectedUpdatedAt?: string };
 
 export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects") {
   const route = workspace === "planning" ? "/api/planning-board-data" : "/api/strategic-planning-data";
@@ -261,14 +261,14 @@ export function updateFounderEventRequest(apiClient: BrowserApiClient, eventId: 
 }
 
 export function createFmdToolRequest(apiClient: BrowserApiClient, payload: FmdToolPayload) {
-  return apiClient.requestJson<{ error?: string; tool?: FmdTool }>("/api/tools", {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; tool?: FmdTool }>("/api/tools", {
     method: "POST",
     json: payload,
   });
 }
 
 export function updateFmdToolRequest(apiClient: BrowserApiClient, toolId: string, payload: FmdToolPayload) {
-  return apiClient.requestJson<{ error?: string; tool?: FmdTool }>(`/api/tools/${encodeURIComponent(toolId)}`, {
+  return apiClient.requestJson<{ error?: string; code?: string; warning?: string; tool?: FmdTool }>(`/api/tools/${encodeURIComponent(toolId)}`, {
     method: "PATCH",
     json: payload,
   });
@@ -284,7 +284,7 @@ export function requestFmdToolMetadata(apiClient: BrowserApiClient, url: string)
 export function uploadFmdToolPreviewImageRequest(apiClient: BrowserApiClient, file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  return apiClient.requestForm<{ error?: string; imageUrl?: string; source?: FmdToolPreviewImageUpload["source"] }>("/api/tools/preview-image", formData);
+  return apiClient.requestForm<{ error?: string; code?: string; imageUrl?: string; source?: FmdToolPreviewImageUpload["source"] }>("/api/tools/preview-image", formData);
 }
 
 export function updateNotificationStatusRequest(apiClient: BrowserApiClient, eventId: number, action: "seen" | "dismiss") {
