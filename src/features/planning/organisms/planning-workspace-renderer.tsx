@@ -47,7 +47,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     authBusy,
     canManageTaskMeta,
     createFounderEvent,
-    createScoreObjection,
     planningState,
     currentProfile,
     data,
@@ -66,7 +65,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
     openNotification,
     openTaskPanel,
     apiClient,
-    reviewScoreObjection,
     saveProfileSettings,
     saveOwnProfileSettings,
     setGithubSyncQueueOpen,
@@ -218,8 +216,6 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
           }}
           onChangeStatus={(task, status) => updateTask(task, { status })}
           onUpdateMeetingAttendance={updateMeetingAttendance}
-          onCreateScoreObjection={createScoreObjection}
-          onReviewScoreObjection={reviewScoreObjection}
           onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
           sprintPlanningOptions={sprintPlanningOptions}
           plannedSprintCount={futureSprintDrafts(

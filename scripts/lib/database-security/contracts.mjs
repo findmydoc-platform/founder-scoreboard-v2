@@ -132,3 +132,7 @@ export const planningContributorWritePolicies = Object.freeze([
   "task_external_comments_update_members",
   "task_focus_items_write_team",
 ]);
+
+export const authenticatedDeniedTablePrivileges = Object.freeze([
+  ["founder_sprint_scores", Object.freeze(["INSERT", "UPDATE", "DELETE"])],
+]);

@@ -11,7 +11,6 @@ import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-
 import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-commands";
 import { useEpicCommands } from "@/features/projects/hooks/use-epic-commands";
 import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
-import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
 import { useWeeklyAttendanceCommands } from "@/features/sprint/hooks/use-weekly-attendance-commands";
 import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
@@ -112,7 +111,6 @@ export function usePlanningCommandRegistry({
     ...commandContext,
     syncTaskToGitHub,
   });
-  const sprintCommands = useSprintCommands(commandContext);
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
   const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
   const fmdToolCommands = useFmdToolCommands(commandContext);
@@ -134,7 +132,6 @@ export function usePlanningCommandRegistry({
     ownProfileSettingsCommands,
     profileSettingsCommands,
     reviewCommands,
-    sprintCommands,
     taskCollaborationCommands,
     taskMutationCommands,
     weeklyAttendanceCommands,

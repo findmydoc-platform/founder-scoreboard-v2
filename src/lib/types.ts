@@ -180,6 +180,7 @@ export type SprintCommitment = {
 };
 
 export type FounderSprintScore = {
+  persistenceBasis?: import("./planning-row-types").DbFounderSprintScore;
   id: number;
   sprintId: string;
   profileId: string;
@@ -216,6 +217,7 @@ export type StrikeEvent = {
 };
 
 export type ScoreObjection = {
+  persistenceBasis?: import("./planning-row-types").DbScoreObjection;
   id: number;
   sprintId: string;
   profileId: string;

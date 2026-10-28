@@ -28,6 +28,7 @@ export function mapSprintCommitment(row: DbSprintCommitment): SprintCommitment {
 
 export function mapFounderSprintScore(row: DbFounderSprintScore): FounderSprintScore {
   return {
+    persistenceBasis: structuredClone(row),
     id: row.id,
     sprintId: row.sprint_id,
     profileId: row.profile_id,
@@ -70,6 +71,7 @@ export function mapStrikeEvent(row: DbStrikeEvent): StrikeEvent {
 
 export function mapScoreObjection(row: DbScoreObjection): ScoreObjection {
   return {
+    persistenceBasis: structuredClone(row),
     id: row.id,
     sprintId: row.sprint_id,
     profileId: row.profile_id,

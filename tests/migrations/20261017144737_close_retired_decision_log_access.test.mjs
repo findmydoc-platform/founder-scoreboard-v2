@@ -10,6 +10,8 @@ import { localSupabaseStatus } from "../helpers/local-supabase-target.mjs";
 // Keep its required helper contract fixed while using the real catalog verifier.
 vi.mock("../../scripts/lib/database-security/contracts.mjs", async (importOriginal) => ({
   ...await importOriginal(),
+  // Score DML was closed on October 28; retain the exact October 17 catalog here.
+  authenticatedDeniedTablePrivileges: Object.freeze([]),
   authenticatedFunctionAllowlist: Object.freeze([
     "public.team_workweek_edit_context(p_week_start date)",
     "public.create_private_selected_team_workweek_version(p_week_start date, p_windows jsonb, p_context_token text)",

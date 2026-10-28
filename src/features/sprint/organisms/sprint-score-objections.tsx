@@ -1,35 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import type { ScoreObjectionCreationEditor } from "../model/score-objection-state";
+import { ScoreObjectionOperationStatus } from "../molecules/score-objection-operation-status";
 import { ScoreObjectionReviewControls } from "@/features/sprint/molecules/score-objection-review-controls";
-import type { FounderSprintScore, PlanningShellState, Profile, ScoreObjectionResolutionInput, Sprint } from "@/lib/types";
+import type { PlanningShellState, Profile, Sprint } from "@/lib/types";
 import { sprintObjectionWindowState } from "@/lib/sprint-review-window";
 import { UiBadge, UiButton, UiEmptyState, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
-export function SprintScoreObjections({
-  data,
-  sprint,
-  currentProfile,
-  pending,
-  scoreObjectionDraft,
-  openObjectionsCount,
-  scores,
-  onScoreObjectionDraftChange,
-  onCreateScoreObjection,
-  onReviewScoreObjection,
-}: {
-  data: Pick<PlanningShellState, "profiles" | "scoreObjections">;
-  sprint: Sprint;
-  currentProfile: Profile | null;
-  pending: boolean;
-  scoreObjectionDraft: string;
-  openObjectionsCount: number;
-  scores: Array<Pick<FounderSprintScore, "profileId" | "deliveryPoints" | "formPoints" | "weeklyPoints">>;
-  onScoreObjectionDraftChange: (value: string) => void;
-  onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
-  onReviewScoreObjection: (sprint: Sprint, objectionId: number, input: ScoreObjectionResolutionInput) => void;
+export function SprintScoreObjections({data,sprint,currentProfile,pending,planningState}:{
+ data:Pick<PlanningShellState,"profiles"|"scoreObjections">;sprint:Sprint;currentProfile:Profile|null;pending:boolean;planningState:PlanningState;
 }) {
+ const operations=planningState.scoreObjectionOperations(sprint.id);
+ const retained=operations.findLast(view=>view.objectionId===null&&view.profileId===currentProfile?.id&&["saving","unconfirmed","blocked"].includes(view.phase));
+ const [editor,setEditor]=useState<ScoreObjectionCreationEditor|null>(()=>retained?planningState.resumeScoreObjectionCreation(retained.id):null);
+ useEffect(()=>()=>editor?.close(),[editor]);
+ const [scoreObjectionDraft,onScoreObjectionDraftChange]=useState(()=>retained?.submitted&&"comment" in retained.submitted?retained.submitted.comment:"");
+ const view=retained||editor?.view();
+ const disabled=pending||Boolean(view&&["saving","unconfirmed","blocked","ended"].includes(view.phase));
+ const openObjectionsCount=data.scoreObjections.filter(item=>item.sprintId===sprint.id&&item.status==="open").length;
+ const complete=planningState.sprintWorkspace().model.coverage.objections==="complete";
   const [renderedAt] = useState(() => Date.now());
+  const shownObjections=[...new Map([...operations.flatMap(view=>view.originalObjection&&["saving","unconfirmed","conflict","blocked"].includes(view.phase)?[view.originalObjection]:[]),...data.scoreObjections].map(row=>[row.id,row])).values()];
   const objectionWindow = sprintObjectionWindowState(sprint.endDate, sprint.reviewDueAt, new Date(renderedAt));
   return (
     <UiPanel className="min-w-0">
@@ -38,16 +31,12 @@ export function SprintScoreObjections({
           <h2 className="text-base font-semibold text-slate-950">Score-Einwände</h2>
           <p className="text-xs text-slate-500">Einwände müssen vor dem Sprint-Lock geprüft sein. Es gibt maximal einen Zweitreview.</p>
         </div>
-        <UiBadge tone="white" size="md">{openObjectionsCount} offen</UiBadge>
+        <UiBadge tone="white" size="md">{openObjectionsCount} {complete?"offen":"offen geladen"}</UiBadge>
       </div>
       <div className="mt-3 grid gap-2">
-        {data.scoreObjections.filter((item) => item.sprintId === sprint.id).map((objection) => {
+        {shownObjections.filter((item) => item.sprintId === sprint.id).map((objection) => {
           const profile = data.profiles.find((item) => item.id === objection.profileId);
-          const score = scores.find((item) => item.profileId === objection.profileId) || {
-            deliveryPoints: 0,
-            formPoints: 0,
-            weeklyPoints: 0,
-          };
+          const scoreBasis=planningState.scoreObjectionScore(sprint.id,objection.profileId);
           const reviewer = data.profiles.find((item) => item.id === objection.reviewedBy);
           const secondReviewer = data.profiles.find((item) => item.id === objection.secondReviewerProfileId);
           return (
@@ -61,7 +50,7 @@ export function SprintScoreObjections({
               )}
               {objection.status === "accepted" && objection.resolvedDeliveryPoints !== null && (
                 <p className="text-xs font-medium text-emerald-700">
-                  Korrigierter Score: {objection.resolvedDeliveryPoints + (objection.resolvedFormPoints || 0) + (objection.resolvedWeeklyPoints || 0)}/20
+                  Bestätigte Punkteentscheidung: {objection.resolvedDeliveryPoints + (objection.resolvedFormPoints || 0) + (objection.resolvedWeeklyPoints || 0)}/20
                   {` · Delivery ${objection.resolvedDeliveryPoints}/12 · Form ${objection.resolvedFormPoints || 0}/4 · Weekly ${objection.resolvedWeeklyPoints || 0}/4`}
                 </p>
               )}
@@ -75,33 +64,38 @@ export function SprintScoreObjections({
                   objection={objection}
                   currentProfile={currentProfile}
                   profiles={data.profiles}
-                  currentScore={score}
+                  planningState={planningState}
+                  scoreComplete={scoreBasis.complete}
+                  currentScore={scoreBasis.score}
                   pending={pending}
-                  onSubmit={(input) => onReviewScoreObjection(sprint, objection.id, input)}
                 />
               )}
             </div>
           );
         })}
-        {!data.scoreObjections.some((item) => item.sprintId === sprint.id) && <UiEmptyState>Noch keine Score-Einwände.</UiEmptyState>}
+        {!shownObjections.some((item) => item.sprintId === sprint.id) && <UiEmptyState>Noch keine Score-Einwände.</UiEmptyState>}
       </div>
-      {!sprint.scoreLocked && currentProfile && objectionWindow.open && (
+      {view&&<ScoreObjectionOperationStatus view={view} check={()=>{void editor?.checkOutcome();}}/>}
+      {!sprint.scoreLocked && currentProfile && (objectionWindow.open||Boolean(retained)) && (
         <form
           className="mt-3 flex flex-col gap-2 sm:flex-row"
-          onSubmit={(event) => {
+          onSubmit={async(event) => {
             event.preventDefault();
             if (!scoreObjectionDraft.trim()) return;
-            onCreateScoreObjection(sprint, scoreObjectionDraft);
-            onScoreObjectionDraftChange("");
+            const next=editor||planningState.beginScoreObjectionCreation(sprint.id,currentProfile.id);setEditor(next);
+            const result=await next.submit(scoreObjectionDraft);
+            if(result.ok){onScoreObjectionDraftChange("");next.close();setEditor(null);}
           }}
         >
           <UiTextInput
+            aria-label="Score-Einwand"
+            disabled={disabled}
             value={scoreObjectionDraft}
             onChange={(event) => onScoreObjectionDraftChange(event.target.value)}
             className="flex-1 px-3"
             placeholder="Sachlich begründeten Score-Einwand einreichen"
           />
-          <UiButton type="submit" disabled={pending || !scoreObjectionDraft.trim()}>Einwand speichern</UiButton>
+          <UiButton type="submit" disabled={disabled || !scoreObjectionDraft.trim()}>Einwand speichern</UiButton>
         </form>
       )}
       {!sprint.scoreLocked && currentProfile && !objectionWindow.open ? (

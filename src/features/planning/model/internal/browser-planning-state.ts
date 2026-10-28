@@ -19,6 +19,8 @@ import * as profileTokenApi from "@/features/profile/model/profile-planning-item
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
 import { createPlanningState } from "./planning-state-owner";
+import { mapScoreObjection, mapFounderSprintScore } from "@/lib/planning-sprint-mappers";
+import type { DbScoreObjection, DbFounderSprintScore } from "@/lib/planning-row-types";
 import { sprintNumber } from "@/lib/planning-schedule";
 import { normalizePlanningShellState } from "../planning-app-model";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
@@ -142,6 +144,19 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok) throw Object.assign(new Error(body?.error || "Blocker konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
         if (!body?.blocker) throw new Error("Die Blocker-Meldung ist noch nicht bestätigt.");
         return { blocker: body.blocker };
+      },
+      async createScoreObjection(sprintId, comment) {
+        const {response,body}=await runtime.apiClient.requestJson<{objection?:DbScoreObjection;error?:string;code?:string}>(`/api/sprints/${sprintId}/score-objections`,{method:"POST",json:{comment},useDevProfileOverride:false});
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Einwand konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
+        if(!body?.objection)throw new Error("Der Einwand ist noch nicht bestätigt.");
+        return {objection:mapScoreObjection(body.objection)};
+      },
+      async processScoreObjection(objection,score,input) {
+        if(!objection.persistenceBasis || input.action==="resolve"&&input.status==="accepted"&&score&&!score.persistenceBasis)throw Object.assign(new Error("Die ursprüngliche Entscheidungsgrundlage fehlt. Bitte neu laden."),{status:400});
+        const {response,body}=await runtime.apiClient.requestJson<{objection?:DbScoreObjection;score?:DbFounderSprintScore|null;error?:string;code?:string}>(`/api/sprints/${objection.sprintId}/score-objections`,{method:"PATCH",json:{...input,objectionId:objection.id,expectedObjection:objection.persistenceBasis,expectedScore:score?.persistenceBasis||null},useDevProfileOverride:false});
+        if(!response.ok)throw Object.assign(new Error(body?.error||"Einwand konnte nicht geprüft werden."),{status:response.status,code:body?.code});
+        if(!body?.objection)throw new Error("Die Entscheidung ist noch nicht bestätigt.");
+        return {objection:mapScoreObjection(body.objection),score:body.score?mapFounderSprintScore(body.score):null};
       },
       async lockSprint(basis) {
         const {response,body}=await planningApi.lockSprintRequest(runtime.apiClient,basis.sprint.id,{expectedUpdatedAt:basis.sprint.updatedAt,expectedTasks:basis.tasks.map(task=>({id:task.id,updatedAt:task.updatedAt}))});

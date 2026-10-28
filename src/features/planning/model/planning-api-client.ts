@@ -1,7 +1,7 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, Task, TaskFocusItem } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference,  Sprint, Task, TaskFocusItem } from "@/lib/types";
 import type { EpicNotEmptyError, EpicDeleteRequest } from "@/features/projects/model/epic-contract";
 import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
@@ -284,24 +284,6 @@ export function updateNotificationStatusRequest(apiClient: BrowserApiClient, eve
   return apiClient.requestJson<{ ok?: boolean; action?: "seen" | "dismiss"; status?: import("@/lib/types").NotificationEvent["status"]; error?: string; code?: string }>(`/api/notifications/${eventId}`, {
     method: "PATCH",
     json: { action },
-  });
-}
-
-export function createScoreObjectionRequest(apiClient: BrowserApiClient, sprintId: string, comment: string) {
-  return apiClient.requestJson<{ error?: string; objection?: Parameters<typeof import("@/features/planning/model/planning-app-model").mapScoreObjectionResponse>[0] }>(`/api/sprints/${sprintId}/score-objections`, {
-    method: "POST",
-    json: { comment },
-  });
-}
-
-export function reviewScoreObjectionRequest(apiClient: BrowserApiClient, sprintId: string, objectionId: number, input: ScoreObjectionResolutionInput) {
-  return apiClient.requestJson<{
-    error?: string;
-    objection?: Parameters<typeof import("@/features/planning/model/planning-app-model").mapScoreObjectionResponse>[0];
-    score?: Parameters<typeof import("@/lib/planning-sprint-mappers").mapFounderSprintScore>[0] | null;
-  }>(`/api/sprints/${sprintId}/score-objections`, {
-    method: "PATCH",
-    json: { objectionId, ...input },
   });
 }
 

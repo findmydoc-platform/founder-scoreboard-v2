@@ -18,7 +18,7 @@ import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-plann
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 import type { PlanningState } from "@/features/planning/model/planning-state";
 import { findCurrentSprint } from "@/lib/planning-schedule";
-import type { Meeting, MeetingAttendance, Profile, ScoreObjectionResolutionInput, Sprint, Task, TaskStatus } from "@/lib/types";
+import type { Meeting, MeetingAttendance, Profile, Task, TaskStatus } from "@/lib/types";
 
 export function SprintScoreTableOverview({
   planningState,
@@ -27,8 +27,6 @@ export function SprintScoreTableOverview({
   onRequestReview,
   onChangeStatus,
   onUpdateMeetingAttendance,
-  onCreateScoreObjection,
-  onReviewScoreObjection,
   onAssignSprint,
   sprintPlanningOptions,
   plannedSprintCount,
@@ -44,8 +42,6 @@ export function SprintScoreTableOverview({
   onRequestReview: (task: Task, evidence?: ReviewEvidenceSubmission) => Promise<boolean> | boolean | void;
   onChangeStatus: (task: Task, status: TaskStatus) => void;
   onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
-  onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
-  onReviewScoreObjection: (sprint: Sprint, objectionId: number, input: ScoreObjectionResolutionInput) => void;
   onAssignSprint: (task: Task, sprintId: string) => void;
   sprintPlanningOptions: SprintPlanningOptions;
   plannedSprintCount: number;
@@ -58,7 +54,6 @@ export function SprintScoreTableOverview({
   const sprintData = sprintWorkspaceModelToPlanningShellState(sprintView.model);
   const currentSprint = findCurrentSprint(sprintData.sprints);
   const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
-  const [scoreObjectionDraft, setScoreObjectionDraft] = useState("");
   const [reviewEvidenceTask, setReviewEvidenceTask] = useState<Task | null>(null);
   useEffect(() => {
     if (!sprintData.sprints.length) return;
@@ -133,9 +128,10 @@ export function SprintScoreTableOverview({
         sprintHasTasks={sprintHasTasks}
         sprintIsCurrent={sprintIsCurrent}
         sprintControlsDisabled={sprintControlsDisabled}
+        openObjectionsCount={openObjections.length}
+        objectionsComplete={sprintView.model.coverage.objections==="complete"}
         canFinalizeSprintScore={currentProfile?.platformRole === "ceo"}
         sprintPlanningOptions={sprintPlanningOptions}
-        openObjectionsCount={openObjections.length}
         onSelectedSprintChange={setSelectedSprintId}
         planningState={planningState}
       />
@@ -168,16 +164,12 @@ export function SprintScoreTableOverview({
       />
 
       <SprintScoreObjections
+        key={sprint.id}
         data={sprintData}
         sprint={sprint}
         currentProfile={currentProfile}
         pending={sprintPending}
-        scoreObjectionDraft={scoreObjectionDraft}
-        openObjectionsCount={openObjections.length}
-        scores={scoreRows.flatMap(row => row.v21Score ? [row.v21Score] : [])}
-        onScoreObjectionDraftChange={setScoreObjectionDraft}
-        onCreateScoreObjection={onCreateScoreObjection}
-        onReviewScoreObjection={onReviewScoreObjection}
+        planningState={planningState}
       />
 
       <SprintTaskTables
