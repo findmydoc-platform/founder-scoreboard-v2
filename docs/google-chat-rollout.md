@@ -99,25 +99,6 @@ Erzeugte Reminder:
 
 Jeder Reminder wird pro Event-Typ, Entität, Empfänger und Berlin-Kalendertag über `notification_events.dedupe_key` höchstens einmal erzeugt. `task.comment` bleibt weiterhin nur In-App; gezielte Erwähnungen in Kommentaren laufen separat als `task.mention`.
 
-Sebastian-/Rresta-Übergabepaket:
-
-```text
-GitHub Release Workflow:
-Secret: GOOGLE_CHAT_WEBHOOK_URL=<Webhook des FounderOps-Gruppenbereichs>
-
-Vercel Production Runtime:
-APP_URL=https://founder-ops.findmydoc.eu
-GOOGLE_CHAT_WEBHOOK_URL=<neuer oder sicher übergebener FounderOps-Bot Webhook>
-GOOGLE_CHAT_DELIVERY_ENABLED=true
-FOUNDEROPS_DELIVERY_SECRET=<random secret für operative Delivery-API, nicht für Release-Chat>
-
-Workflow:
-.github/workflows/send-release-google-chat.yml
-Manual run: workflow_dispatch mit `message_payload_json` und optionalem `release_tag`
-Step 1: JSON-Payload und `GOOGLE_CHAT_WEBHOOK_URL` prüfen
-Step 2: Payload an Google Chat senden
-```
-
 ## Sicherheitsmodell
 
 Die Zustellung ist zweifach gesperrt:
@@ -183,27 +164,6 @@ Empfohlene Google-Chat-App-Felder:
 8. Erst danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` setzen.
 9. Einen einzelnen Digest oder eine persönliche Test-DM senden und `notification_deliveries` prüfen.
 10. Danach erst die regelmäßige Zustellung planen.
-
-Sebastian-/Rresta-Paket für Phase 4:
-
-```text
-Google Cloud:
-- Google Chat API aktivieren
-- FounderOps Chat-App mit Endpoint https://founder-ops.findmydoc.eu/api/google-chat/events konfigurieren
-- Service Account für Chat API bereitstellen
-
-Vercel Production Runtime:
-GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=<service-account-email>
-GOOGLE_CHAT_PRIVATE_KEY=<service-account-private-key mit \n>
-GOOGLE_CHAT_DELIVERY_ENABLED=true
-
-Supabase:
-profiles.google_chat_dm_space je Person im Format spaces/...
-
-Smoke:
-POST /api/notifications/deliver mit x-founderops-delivery-secret
-Erwartung: notification_deliveries.status=sent und payload.deliveryMode=direct_dm
-```
 
 ## Profile und Präferenzen
 

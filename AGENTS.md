@@ -15,6 +15,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - When the user asks for Localhost or the dev server without naming another project, start this Next.js app. Use a free port such as `3002` when `3000` or `3001` is occupied, and verify the page title is `findmydoc Planning` before reporting the URL.
 - Keep repository-wide rules here and domain-specific rules near their code.
 - Do not commit one-off operator artifacts such as cutover, repair, backup, backfill, inspection, or task-specific mapping scripts, workflows, tests, and runbooks. Keep them outside the repository and remove the temporary local artifacts after the approved operation. Track only durable, generally reusable operator infrastructure.
+- Keep repository documentation limited to current behavior, architecture, supported operating procedures, and ADRs. Store one-off plans, research, review reports, test-run results, performance reports, and their supporting assets outside the repository; Git retains history.
 - Deployments must use the repository's GitHub Actions workflows, never a direct local Vercel deployment.
 - Auth and roles are security boundaries. Changes to OAuth, sessions, `profiles.platform_role`, deputy handling, API guards, grants, or RLS require focused tests.
 - Decision Log entries are CEO-editable only. Deputies may operate sprint and task workflows but must not edit CEO decisions.

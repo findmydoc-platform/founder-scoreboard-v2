@@ -96,8 +96,6 @@ The header must not contain duplicate Save, Create, or Approval actions.
 
 ## 4. Screen specification: New Deliverable
 
-Visual reference: `mockups/01-new-deliverable.png`
-
 ### 4.1 Container and hierarchy
 
 - Use the large right-side creation drawer aligned with the Item Detail surface.
@@ -168,8 +166,6 @@ Only the existing invalid date-range rule blocks creation. Defaulted planning va
 
 ## 5. Screen specification: New Sub-Issue
 
-Visual reference: `mockups/02-new-sub-issue.png`
-
 ### 5.1 Container and hierarchy
 
 Use the same large creation drawer, with a shorter and more direct information hierarchy than Deliverable creation.
@@ -205,11 +201,6 @@ The selected parent Deliverable is the primary structural choice. Separate edita
 Sub-Issue creation retains the existing optional authored brief, assignee, priority, status, effort, workstream, date, deadline, dependency, and quality fields. They use the same labels and validation rules as Deliverable creation unless the existing domain behavior differs.
 
 ## 6. Screen specification: New Initiative
-
-Visual references:
-
-- `mockups/03-new-initiative-constrained.png`
-- `mockups/03b-new-initiative-constrained-scrolled.png`
 
 ### 6.1 Container and scroll correction
 
@@ -265,8 +256,6 @@ The shared `InitiativeDialog` edit mode remains supported. It retains its edit t
 
 ## 7. Screen specification: New Epic / Milestone
 
-Visual reference: `mockups/04-new-milestone.png`
-
 ### 7.1 Container
 
 Use a compact centered modal from the shared creation family. The compact form still follows the same fixed header, bounded body, fixed footer, background lock, focus, and responsive rules.
@@ -321,7 +310,7 @@ At every size, the body is the only scroll owner and the fixed footer retains a 
 
 ## 11. Initial implementation acceptance
 
-Implementation may start only after the visual references and this field contract agree on:
+Implementation must satisfy this field contract for:
 
 1. required markers;
 2. approval and GitHub controls;
@@ -333,4 +322,4 @@ Implementation may start only after the visual references and this field contrac
 8. Initiative create-error and edit-mode preservation;
 9. Sub-Issue inheritance parity between Supabase and local/seed mode.
 
-The reviewed visual references and field contract resolve the known mismatches listed in the QA and reviewer reports. Interaction behavior still requires implementation and browser QA.
+Interaction behavior still requires implementation and browser QA.

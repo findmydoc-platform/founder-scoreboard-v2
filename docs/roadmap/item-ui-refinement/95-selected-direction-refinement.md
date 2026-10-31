@@ -103,9 +103,3 @@ Preserve the selected view while correcting visible ambiguity:
 6. The downstream impact exposes count, first affected item, and `+N weitere`.
 7. The dependency group does not push the text-labelled tabs below the first 1024-pixel viewport.
 8. Everything outside the dependency band remains materially faithful to the refined Variant 1 source image and semantic placement contract.
-
-## Generated Preview
-
-- Refined preview: `/Users/razorspoint/.codex/generated_images/019f603e-092f-7e61-80dc-16362dd518aa/exec-365b6a3a-8fb8-427b-a997-0917db24395d.png`
-- Placement refinement: `/Users/razorspoint/.codex/generated_images/019f603e-092f-7e61-80dc-16362dd518aa/exec-6ab9f9dc-298f-4680-85ff-efad07545581.png`
-- Visual review: both dependency directions remain visible in one grouped band; incoming waiting remains primary; Planning, workflow, GitHub, and history now use semantic inline placement without a generic secondary rail.

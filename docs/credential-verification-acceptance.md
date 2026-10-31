@@ -101,32 +101,6 @@ The portable-target regression was observed before the helper existed, then all 
 
 An earlier ticket-local cleanup found two detached lifecycle jobs after the Planning fixture deleted its tasks. The fixture now deletes only task/root IDs in its generated UUID namespace after task cleanup, including API-created derived IDs. The actual creation/approval/trash regression passed again; the original cleanup failure remains retained. This changes test cleanup only and preserves production queue behavior.
 
-## Completed initial verification cycle
-
-The root-owned gates used the guarded disposable project. The database gates ran on `307d8745fc0a537310ae3df7cc4425d0ea044ee7`. The corrected full suite and final source gates ran on clean `ae655c595a9e15641beaaae4eb12c9c2e773709d`. Only two test files changed between those candidates; runtime source, migrations and workflows remained identical. Administrative environment values were supplied only to the explicit schema/Auth verifiers, not to ordinary `pnpm test`.
-
-| Gate | Executed result | Duration | Retained evidence |
-| --- | --- | --- | --- |
-| Static migration metadata | 29 migrations, 28 migration-test files; latest `20261017144737`, CLI 2.115.0 | Filesystem-only check | `final-migration-static-proof.json` |
-| Migration/preservation tests | 30 passed across 28 files | 808.69 s | `final-migrations.log` |
-| Fresh disposable reset | Passed without seed | 27.59 s | `final-fresh-reset.log` |
-| Database security and ledger | All 29 migrations; 67 public tables and 32 authenticated RPCs verified | 1.66 s | `final-database-security.log` |
-| Synthetic Auth verifier | Required synthetic Auth/profile binding passed; fixture removed afterward | 1.84 s | `final-synthetic-auth.log` |
-| Database lint | Zero errors; 15 unused-variable/parameter warnings across 11 functions | 2.59 s | `final-database-lint.log` |
-| Corrected ordinary full test | 1,999 passed across 308 files, one worker, no ambient admin/database variables | 245.04 s | `503-repaired-full-test.log` |
-| Final read-only cleanup proof | All 11 fixture tables zero; full 29-entry ledger; configuration `legacy`/`false`; no copied environment files | 2.23 s | `final-fixture-cleanup.log` |
-| Full lint | Zero errors; five known Next navigation warnings | 11.71 s | `final-lint.log` |
-| Production build | TypeScript and source boundary passed; actual emitted client scan passed: 63 chunks/maps, 2,231,432 bytes | 9.08 s | `final-build.log` |
-| Credential architecture | All 37 fixtures passed and actual source dependency boundary verified | 1.68 s | `final-credentials.log` |
-
-The initial ordinary full run is retained as `final-full-test.log`: 1,997 passed and two fixture failures across 308 files, with Vitest duration 252.06 seconds. The missing-session unit fixture did not configure Supabase, so the application correctly returned configuration-unavailable 501 before the expected missing-session 401. The fixture now uses the existing synthetic protocol helper to override every Supabase alias. The empty request, real public entry and exact 401 assertion are unchanged; `503-missing-session-red.log` retains the observed RED.
-
-The Maintenance test correctly rejected its nonempty database. The residue was two exact `concurrent-blocked`/`concurrent-blocking` task IDs from the concurrent dependency fixture, not a production queue failure. That fixture swallowed a DELETE error from the existing lifecycle guard. The new exact-ID cleanup assertion reproduced the failure in `503-concurrent-cleanup-red.log`. The repair enables the existing cleanup guard only on its setup connection, deletes those same two IDs without swallowing the error, closes the connection and asserts zero. Maintenance eligibility, the 25-root limit, claim/lease assertions and the global empty-dataset precondition remain unchanged. The focused three-file proof passed 11/11 before the corrected complete suite. No blanket task/queue deletion, production repair or timeout increase was introduced.
-
-The three complete production-client scans are distinct: ticket 502 inspected 63 chunks/maps and 2,231,293 bytes; the instrumented measurement build inspected 183 and 2,390,345; the final global build inspected 63 and 2,231,432. Each scan passed independently. Artifact counts are not pooled or used as a claim of byte-identical builds.
-
-Ticket 503 acceptance is complete for the approved 23-ticket scope, including the documented absent/read-only cases. ADR0002 remains Draft for review. No reviewer run, deployment, main merge, hosted-provider performance guarantee, parent-story revision or product news is implied by these results.
-
 ## Post-acceptance session lifecycle and module coverage
 
 The current executable checkpoint is `2abdb66054ce83fd038ae0b7165becaa80b2c388`, based on accepted integration `c853443d992035ae218a26e494029fda5b0d2e7b`. A byte comparison verified all 776 files under `src` against the uninstrumented tested snapshot; its runtime digest is `c5ca060826b8b401581a5e1d59ca14d7267c5ed522e17a5eacac482e18cd6d2f`. This is a new runtime checkpoint. The historical 32-state measurements, source hashes and sample values above remain unchanged and were not remeasured for this bounded correction.
@@ -136,17 +110,3 @@ A permanent Auth rejection no longer prevents the exact cookie session from loca
 Actual production HTTPS Chromium verifies that the existing Planning header poll clears loaded protected state after terminal Auth failure, without focus or document reload. Delayed local clears cannot revoke a newer login for either the same or a different user; their provider scope remains local. All previous cookie-generation, delayed-response, login, recovery and logout browser assertions remain present.
 
 The credential boundary now covers `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs`. It follows compiler-resolved local imports beyond the initial source roots, including the `.mjs`→`.mts` and `.cjs`→`.cts` mappings. Executable graph fixtures reject hidden SDK/private-entry/transport access, preserve legitimate public-seam imports and terminate on valid cyclic local graphs. No plugin framework or dependency was added.
-
-| Check on the new checkpoint | Executed result | Retained evidence |
-| --- | --- | --- |
-| Focused public session and browser API protocols | 56 passed across three files | `review-auth-final-focused.log` |
-| Actual production HTTPS Chromium | 20 passed, including passive poll cleanup and two delayed-clear replacement cases | `review-browser-final-focused.log` |
-| Focused import-graph fixtures | 46 passed | `review-boundary-final-focused.log` |
-| Ordinary full suite, one worker, no admin/database variables | 2,008 passed across 308 files in 249.63 s | `review-fixes-full-test.log` |
-| Full lint | Zero errors; five unchanged Next navigation warnings | `review-fixes-lint.log` |
-| Production build and actual client scan | TypeScript/boundary passed; 63 chunks/maps, 2,231,432 bytes verified | `review-fixes-build.log` |
-| Credential verification | 56/56 architecture fixtures and actual source dependency boundary passed | `review-fixes-credentials.log` |
-| Auth verifier | `pnpm run verify:auth` passed with one synthetic disposable identity; identity removed | `review-fixes-auth.log` |
-| Final cleanup | All 11 fixture tables zero; 29 migrations/latest `20261017144737`; configuration `legacy`/`false`; no copied environment files | `review-fixes-cleanup.log` |
-
-Public-session, production-browser and executable-graph REDs were observed before the corresponding changes. A first browser GREEN attempt retained all 17 earlier successes but exposed an unnecessary news-modal handler racing the passive cleanup; that fixture handler was removed without increasing timeouts. The corrected complete browser run passed 20/20. These logs are retained outside the repository. The schema and migrations did not change, so the completed migration/security evidence above was retained rather than repeated. No reviewer rerun, deployment or hosted-provider request was performed during this correction.
