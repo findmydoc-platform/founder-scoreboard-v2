@@ -12,7 +12,7 @@ function fixture() {
   for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:"https://calendar-auth.example.test",SUPABASE_URL:"https://calendar-auth.example.test",NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",SUPABASE_SECRET_KEY:"synthetic-service",SUPABASE_ANON_KEY:"synthetic-anon",SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",REQUIRE_SUPABASE_AUTH:"true",GOOGLE_WORKSPACE_CLIENT_ID:"synthetic-calendar-client",GOOGLE_WORKSPACE_CLIENT_SECRET:"synthetic-secret",GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,1).toString("base64")})) vi.stubEnv(name,value);
   const row={connection_id:"connection-1",credential_version:0,refresh_claim_id:null,encrypted_access_token:encrypted("synthetic-calendar"),encrypted_refresh_token:encrypted("synthetic-refresh"),access_token_expires_at:new Date(Date.now()+3600000).toISOString(),refresh_token_expires_at:new Date(Date.now()+7200000).toISOString(),oauth_scopes:["https://www.googleapis.com/auth/calendar.events.owned"],token_type:"Bearer",primary_calendar_id:"primary",revoked_at:null};
   const provider=[],removed=[];
-  const control={onVault:async()=>{},onUse:async()=>{},onClaim:async()=>{},onFinalize:async()=>{},tokenPosts:[],dispatches:[],dispatchAllowed:true};
+  const control={onVault:async()=>{},onUse:async()=>{},onClaim:async()=>{},onFinalize:async()=>{},tokenPosts:[],dispatches:[],dispatchAllowed:true,onDispatch:async()=>{},ownerMapped:true};
   vi.stubGlobal("fetch",async(input,options)=>{
     const request=new Request(input,options),url=new URL(request.url);
     if(url.href==="https://oauth2.googleapis.com/token") {control.tokenPosts.push(await request.text());return Response.json({access_token:"synthetic-rotated",refresh_token:"synthetic-rotated-refresh",expires_in:3600,token_type:"Bearer"});}
@@ -21,13 +21,13 @@ function fixture() {
     if(url.hostname==="www.googleapis.com") {provider.push(request);expect(request.headers.get("authorization")).toBe("Bearer synthetic-calendar");return Response.json({id:"event-1"});}
     if(url.pathname==="/auth/v1/user") return Response.json({id:"user-1",aud:"authenticated",user_metadata:{}});
     if(url.pathname.endsWith("/rpc/workspace_access_context")) return Response.json({mode:"legacy",linkingEnforced:false,userId:"user-1",profileId:"owner-1",linked:false,identity:null});
-    if(url.pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json({id:"owner-1",name:"Synthetic owner",platform_role:"viewer"});
+    if(url.pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json(control.ownerMapped ? {id:"owner-1",name:"Synthetic owner",platform_role:"viewer"} : null);
     if(url.pathname.endsWith("/rpc/administrator_access_snapshot")) return Response.json({eligible:false,active:false});
     if(url.pathname==="/rest/v1/google_workspace_disconnect_operations") return Response.json([]);
     if(url.pathname==="/rest/v1/google_workspace_connections") {if(request.method==="PATCH"){Object.assign(row,await request.json());return new Response(null,{status:204});}await control.onVault();return Response.json(row);}
     if(url.pathname.endsWith("/rpc/remove_google_calendar_connection")) {removed.push(await request.json());return Response.json(true);}
     if(url.pathname.endsWith("/rpc/use_google_calendar_connection")) {await control.onUse();return Response.json(true);}
-    if(url.pathname.endsWith("/rpc/dispatch_google_calendar_mutation")) {control.dispatches.push(await request.json());return control.dispatchAllowed ? Response.json(true) : Response.json({code:"42501",message:"Dispatch denied"},{status:403});}
+    if(url.pathname.endsWith("/rpc/dispatch_google_calendar_mutation")) {control.dispatches.push(await request.json());await control.onDispatch();return control.dispatchAllowed ? Response.json(true) : Response.json({code:"42501",message:"Dispatch denied"},{status:403});}
     throw new Error(`Unexpected synthetic protocol ${url.pathname}`);
   });
   const encode=value=>Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -63,6 +63,13 @@ test("a Calendar mutation requires durable owner-bound dispatch before contactin
   const state=await ownerAccess();state.control.dispatchAllowed=false;
   await expect(state.write()).rejects.toThrow();
   expect(state.control.dispatches).toEqual([expect.objectContaining({p_owner_profile_id:"owner-1",p_kind:"publication",p_operation_id:"operation-1",p_target_id:"effect-1",p_event_id:"event-1",p_method:"POST"})]);
+  expect(state.provider).toHaveLength(0);
+});
+test.each(["owner","connection"])("a changed %s during journal persistence prevents the Calendar mutation",async kind=>{
+  const state=await ownerAccess();
+  state.control.onDispatch=async()=>{if(kind==="owner")state.control.ownerMapped=false;else state.row.revoked_at=new Date().toISOString();};
+  await expect(state.write()).rejects.toThrow();
+  expect(state.control.dispatches).toHaveLength(1);
   expect(state.provider).toHaveLength(0);
 });
 test.each(["acquisition","final-binding"])("a Calendar session deadline crossed during %s prevents mutation",async phase=>{

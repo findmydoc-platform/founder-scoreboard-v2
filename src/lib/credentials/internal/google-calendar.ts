@@ -93,7 +93,8 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
         p_target_id: binding.targetId, p_event_id: eventId, p_method: method, p_replay: Boolean(binding.replay),
       });
       if (prepared.error || prepared.data !== true) throw denied();
-      assertCurrent();
+      const assertAfterJournal = await authorizeDispatch(connectionId,access,configuration);
+      assertAfterJournal();
     }
     // Every resource attempt re-enters this transport. Credential renewal never replays a mutation.
     const allowedStatuses = ["GET", "DELETE"].includes(method) && /^\/calendar\/v3\/calendars\/primary\/events\/[^/]+$/.test(url.pathname) ? absenceStatuses : undefined;
