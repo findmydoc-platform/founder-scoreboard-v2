@@ -1,3 +1,4 @@
+import { asService, confirmObservedCleanup, confirmObservedEffect } from "./helpers/workweek-provider";
 import { expect, it } from "vitest";
 import {
   asAuthenticated,
@@ -95,7 +96,7 @@ it("publishes first immediate workweeks only after service confirmation for ever
         const forged = await captureDatabaseError(client, () => asAuthenticated(client, member.authUserId, () => client.query("select public.confirm_team_workweek_effect($1,$2,$3,$4)", [effect.id,1,'\"etag\"',effect.payload])));
         expect(forged).toMatchObject({code:"42501"});
         await client.query("set local role service_role");
-        await client.query("select public.confirm_team_workweek_effect($1,$2,$3,$4)", [effect.id,1,'\"etag\"',effect.payload]);
+        await confirmObservedEffect(client, effect.id, 1, '\"etag\"', effect.payload);
         await client.query("reset role");
       }
       const confirmed = await asAuthenticated(client,member.authUserId,()=>client.query("select public.finalize_team_workweek_publication($1) as publication",[publication.id]));
@@ -130,14 +131,15 @@ it("expired attempts require observed cleanup and a new generation, never retros
     const notReplanned=await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1,1) as publication",[id]));
     expect(notReplanned.rows[0].publication.attemptGeneration).toBe(1);
     await client.query("set local role service_role");
-    for(const effect of first.effects)await client.query("select public.confirm_team_workweek_effect_cleanup($1,1)",[effect.id]);
+    const cleanupPlan=(await asService(client,()=>client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as value",[first.id]))).rows[0].value;
+      for(const effect of cleanupPlan.effects) if(effect.state!=="cleaned") await confirmObservedCleanup(client,effect.id,effect.generation,"absent",false);
     await client.query("reset role");
     const replanned=await asAuthenticated(client,owner,()=>client.query("select public.prepare_team_workweek_publication($1,1) as publication",[id]));
     const next=replanned.rows[0].publication;
     expect(next.attemptGeneration).toBe(2);
     expect(new Date(next.effectiveAt).getTime()).toBeGreaterThan(Date.now());
     expect(next.effects[0].googleEventId).not.toBe(first.effects[0].googleEventId);
-    const stale=await captureDatabaseError(client,async()=>{await client.query("set local role service_role");await client.query("select public.confirm_team_workweek_effect($1,1,'etag',$2)",[first.effects[0].id,first.effects[0].payload]);});
+    const stale=await captureDatabaseError(client,()=>asService(client,()=>client.query("select public.confirm_team_workweek_effect($1,1,'etag',$2)",[first.effects[0].id,first.effects[0].payload])));
     expect(stale).toMatchObject({code:"P0003"});
     const direct=await captureDatabaseError(client,()=>asAuthenticated(client,owner,()=>client.query("update public.team_workweek_publications set effective_at=clock_timestamp() where id=$1",[first.id])));
     expect(direct).toMatchObject({code:"42501"});

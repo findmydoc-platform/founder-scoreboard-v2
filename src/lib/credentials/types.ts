@@ -126,8 +126,15 @@ export type PersonalPlanningTokenManagementInput = {
 };
 export type PersonalPlanningTokenManagementResult = Awaited<ReturnType<typeof import("./internal/personal-planning").authorizePersonalPlanningTokenManagement>>;
 
+export type GoogleCalendarMutation = Readonly<{
+  kind: "publication" | "disconnect";
+  operationId: string;
+  targetId: string;
+  replay?: boolean;
+}>;
 export type GoogleCalendarCapability = Readonly<{
   request(url: string | URL, init?: RequestInit & { allowedStatuses?: readonly (404 | 410)[] }): Promise<Response>;
+  mutate(binding: GoogleCalendarMutation, url: string | URL, init: RequestInit & { allowedStatuses?: readonly (404 | 410)[] }): Promise<Response>;
 }>;
 export type GoogleCalendarInput =
   | {credential:{kind:"session-request";request:NextRequest};action:"google-calendar.workweek" | "google-calendar.connection.status";target:{ownerProfileId:string}}

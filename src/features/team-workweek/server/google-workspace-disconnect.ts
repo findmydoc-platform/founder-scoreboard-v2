@@ -7,12 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nextMondayIso } from "../model/team-workweek-draft";
 import { GoogleWorkspaceOAuthContractError } from "@/lib/google-calendar-errors";
 import { calendarForWorkweekOwner, removeWorkweekCalendarConnection } from "./team-workweek-calendar";
-import {
-  ensureGoogleWorkweekSeriesAbsent,
-  observeGoogleWorkweekSeriesForDisconnect,
-} from "./google-workspace-disconnect-core";
-import { ensureGoogleWorkweekSeriesTransition } from "./team-workweek-publication-core";
-import { cleanupGoogleWorkweekEffect, type PreparedWorkweekEffect } from "./team-workweek-immediate-effects";
+import { cleanupGoogleWorkweekEffect, type PreparedWorkweekEffect, type WorkweekGooglePayload, type WorkweekProviderWriteJournal } from "./team-workweek-immediate-effects";
 import { compensateTeamWorkweekGeneration } from "./team-workweek-execution";
 
 export type DisconnectOperationRow = Readonly<{
@@ -43,6 +38,7 @@ export type DisconnectTargetRow = Readonly<{
 type DisconnectRpcResult = { data: unknown; error: { code?: string; message: string } | null };
 export type DisconnectOperationBookkeeping = {
   delay(targetId: string, errorClass: string, observedAt: string): Promise<void>;
+  recordWrite(targetId: string, state: "settled" | "uncertain" | "observed"): Promise<DisconnectRpcResult>;
   confirm(targetId: string, expectedEtag: string, confirmedEtag: string, observedAt: string): Promise<DisconnectRpcResult>;
   finalize(observedAt: string): Promise<DisconnectRpcResult>;
   readFinalized(): Promise<DisconnectOperationRow | null>;
@@ -185,96 +181,66 @@ async function recordDelay(
   }
 }
 
-async function cleanupOperation({
-  accessToken,
-  operationTargets: preparedTargets,
-  journal,
-  ensureAbsent,
-  ensureTransition,
-  now,
-  observe,
-  operation,
-  serviceSupabase,
-}: {
+async function cleanupOperation({ accessToken, operationTargets: preparedTargets, journal, now, operation, serviceSupabase }: {
   accessToken: GoogleCalendarCapability;
   operationTargets?: readonly DisconnectTargetRow[];
   journal?: DisconnectOperationBookkeeping;
-  ensureAbsent: typeof ensureGoogleWorkweekSeriesAbsent;
-  ensureTransition: typeof ensureGoogleWorkweekSeriesTransition;
   now: () => Date;
-  observe: typeof observeGoogleWorkweekSeriesForDisconnect;
   operation: DisconnectOperationRow;
   serviceSupabase: SupabaseClient;
 }) {
   const operationTargets = preparedTargets || await targets(serviceSupabase, operation.id);
-  const delay = (targetId: string, errorClass: string, observedAt: string) => journal ? journal.delay(targetId, errorClass, observedAt) : recordDelay(serviceSupabase, operation.id, targetId, errorClass, observedAt);
-  const confirm = (targetId: string, expectedEtag: string, confirmedEtag: string, observedAt: string) => journal ? journal.confirm(targetId, expectedEtag, confirmedEtag, observedAt) : serviceSupabase.rpc("confirm_google_workspace_disconnect_series", { p_target_id: targetId, p_expected_etag: expectedEtag, p_confirmed_etag: confirmedEtag, p_observed_at: observedAt });
   for (const target of operationTargets) {
     if (target.state === "confirmed") continue;
-    if(target.effect_plan){
-      const result=await cleanupGoogleWorkweekEffect({accessToken,effect:target.effect_plan,now});
-      if(result.state==="delayed"){
-        await delay(target.id,result.errorClass,now().toISOString());
-        return result.errorClass;
+    const writeJournal: WorkweekProviderWriteJournal = {
+      target: {kind: "disconnect", operationId: operation.id, targetId: target.id},
+      async outcome(state) {
+        const result = journal ? await journal.recordWrite(target.id, state) : await serviceSupabase.rpc("record_google_workspace_disconnect_write", {p_target_id: target.id, p_state: state});
+        if (result.error) throw new GoogleWorkspaceDisconnectError("unavailable", "Kalendernachweis konnte nicht gespeichert werden.");
+      },
+    };
+    let effect = target.effect_plan;
+    let result: Awaited<ReturnType<typeof cleanupGoogleWorkweekEffect>>;
+    if (!effect) {
+      const response = await accessToken.request(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(target.google_event_id)}`, {allowedStatuses: [404, 410], signal: AbortSignal.timeout(8_000)});
+      if (response.status === 404 || response.status === 410) {
+        await writeJournal.outcome("observed");
+        result = {state: "confirmed", etag: "absent", observedAt: now().toISOString()};
+      } else {
+        if (!response.ok) return response.status === 401 || response.status === 403 ? "oauth_reconnect_required" : "provider_unavailable";
+        const observed = await response.json() as WorkweekGooglePayload & {etag?: string};
+        const properties = observed.extendedProperties?.private;
+        if (observed.id !== target.google_event_id || !observed.etag || properties?.founderopsWorkweekSeriesId !== target.series_id || properties?.founderopsWorkweekRevision !== String(target.expected_founderops_revision)) return "provider_identity_mismatch";
+        if (observed.start?.timeZone !== "Europe/Berlin" || observed.end?.timeZone !== "Europe/Berlin"
+          || !Number.isFinite(Date.parse(observed.start.dateTime)) || !Number.isFinite(Date.parse(observed.end.dateTime))
+          || target.cleanup_action === "truncate" && (!Number.isInteger(target.recurrence_count) || Number(target.recurrence_count) < 1)) return "provider_identity_mismatch";
+        if (observed.etag !== target.expected_etag) {
+          const rebased = await serviceSupabase.rpc("rebase_google_workspace_disconnect_series", {p_target_id: target.id, p_expected_etag: target.expected_etag, p_observed_etag: observed.etag, p_observed_at: now().toISOString()});
+          if (rebased.error) throw new GoogleWorkspaceDisconnectError("conflict", "Kalenderserie wurde während der Trennung erneut geändert.");
+          return "provider_rebased";
+        }
+        const payload: WorkweekGooglePayload = {id: observed.id, start: observed.start, end: observed.end, extendedProperties: observed.extendedProperties,
+          ...(observed.recurrence ? {recurrence: observed.recurrence} : {}),
+          ...(observed.summary ? {summary: observed.summary} : {}), ...(observed.description ? {description: observed.description} : {}),
+          ...(observed.transparency ? {transparency: observed.transparency} : {}), ...(observed.visibility ? {visibility: observed.visibility} : {}),
+          ...(observed.reminders ? {reminders: observed.reminders} : {}),
+        };
+        effect = {id: target.id, calendarId: "primary", googleEventId: target.google_event_id, generation: 1,
+          operation: "create", state: "pending", confirmedEtag: null, payload,
+          cleanupDisposition: target.cleanup_action === "delete" ? "delete" : "preserve",
+          ...(target.cleanup_action === "truncate" ? {cleanupPayload: {...payload, recurrence: [`RRULE:FREQ=WEEKLY;COUNT=${target.recurrence_count}`]}} : {}),
+        };
+        result = await cleanupGoogleWorkweekEffect({accessToken, effect, now, writeJournal});
       }
-      const confirmation=await confirm(target.id,target.expected_etag,result.etag,result.observedAt);
-      if(confirmation.error)throw new GoogleWorkspaceDisconnectError("conflict","Physische Kalenderbereinigung konnte nicht bestätigt werden.");
-      continue;
-    }
-    const identity = {
-      calendarId: target.calendar_id,
-      googleEventId: target.google_event_id,
-      seriesId: target.series_id,
-      expectedEtag: target.expected_etag,
-      expectedFounderopsRevision: target.expected_founderops_revision,
-    } as const;
-    const observed = await observe({ accessToken, target: identity });
-    if (observed.state === "delayed") {
-      await delay(target.id, observed.errorClass, now().toISOString());
-      return observed.errorClass;
-    }
-    if (observed.state === "present" && observed.etag !== target.expected_etag) {
-      const rebased = await serviceSupabase.rpc("rebase_google_workspace_disconnect_series", {
-        p_target_id: target.id,
-        p_expected_etag: target.expected_etag,
-        p_observed_etag: observed.etag,
-        p_observed_at: now().toISOString(),
-      });
-      if (rebased.error) throw new GoogleWorkspaceDisconnectError("conflict", "Kalenderserie wurde während der Trennung erneut geändert.");
-      return "provider_rebased";
-    }
-    if (observed.state === "absent") {
-      const confirmed = await confirm(target.id, target.expected_etag, "", now().toISOString());
-      if (confirmed.error) throw new GoogleWorkspaceDisconnectError("conflict", "Kalenderserie wurde während der Trennung geändert.");
-      continue;
-    }
-    const result = target.cleanup_action === "delete"
-      ? await ensureAbsent({
-        accessToken,
-        now,
-        target: identity,
-      })
-      : await ensureTransition({
-        accessToken,
-        now,
-        transition: {
-          id: target.id,
-          calendarId: target.calendar_id,
-          googleEventId: target.google_event_id,
-          predecessorSeriesId: target.series_id,
-          state: "pending",
-          expectedEtag: target.expected_etag,
-          expectedFounderopsRevision: target.expected_founderops_revision,
-          recurrenceCount: target.recurrence_count || 1,
-          confirmedEtag: null,
-        },
-      });
+    } else result = await cleanupGoogleWorkweekEffect({accessToken, effect, now, writeJournal});
     if (result.state === "delayed") {
-      await delay(target.id, result.errorClass, now().toISOString());
+      if (journal) await journal.delay(target.id, result.errorClass, now().toISOString());
+      else await recordDelay(serviceSupabase, operation.id, target.id, result.errorClass, now().toISOString());
       return result.errorClass;
     }
-    const confirmed = await confirm(target.id, target.expected_etag, target.cleanup_action === "delete" ? "" : result.etag, result.observedAt);
-    if (confirmed.error) throw new GoogleWorkspaceDisconnectError("conflict", "Kalenderserie wurde während der Trennung geändert.");
+    const confirmation = journal ? await journal.confirm(target.id, target.expected_etag, result.etag, result.observedAt)
+      : await serviceSupabase.rpc("confirm_google_workspace_disconnect_series", {p_target_id: target.id, p_expected_etag: target.expected_etag, p_confirmed_etag: result.etag, p_observed_at: result.observedAt});
+    if (confirmation.error) throw new GoogleWorkspaceDisconnectError("conflict", "Kalenderbereinigung konnte nicht bestätigt werden.");
   }
   return null;
 }
@@ -282,22 +248,16 @@ async function cleanupOperation({
 export async function disconnectGoogleWorkspace({
   request,
   bookkeeping,
-  ensureAbsent = ensureGoogleWorkweekSeriesAbsent,
-  ensureTransition = ensureGoogleWorkweekSeriesTransition,
   getAccessToken = calendarForWorkweekOwner,
   now = () => new Date(),
-  observe = observeGoogleWorkweekSeriesForDisconnect,
   ownerProfileId,
   removeConnection = removeWorkweekCalendarConnection,
   serviceSupabase,
 }: {
   bookkeeping?: DisconnectBookkeeping;
-  ensureAbsent?: typeof ensureGoogleWorkweekSeriesAbsent;
-  ensureTransition?: typeof ensureGoogleWorkweekSeriesTransition;
   request?: NextRequest;
   getAccessToken?: typeof calendarForWorkweekOwner;
   now?: () => Date;
-  observe?: typeof observeGoogleWorkweekSeriesForDisconnect;
   ownerProfileId: string;
   removeConnection?: typeof removeWorkweekCalendarConnection;
   serviceSupabase: SupabaseClient;
@@ -346,7 +306,7 @@ export async function disconnectGoogleWorkspace({
       }
       return { state: operation.state, recovery: "retry" as const };
     }
-    const delayed = await cleanupOperation({ accessToken, operationTargets, journal, ensureAbsent, ensureTransition, now, observe, operation, serviceSupabase });
+    const delayed = await cleanupOperation({ accessToken, operationTargets, journal, now, operation, serviceSupabase });
     if (delayed === "oauth_reconnect_required") {
       return { state: operation.state, recovery: "reconnect" as const };
     }

@@ -59,9 +59,7 @@ function recoveryNotice(state: PrivateWorkweekView, refreshRequired: boolean) {
   if (state.resume.phase === "unconfirmed" && state.currentContextReady) return "Ob die frühere Veröffentlichung abgeschlossen ist, bleibt unklar. Die aktuellen Daten sind geladen. Deine neuen Eingaben bleiben getrennt erhalten.";
   if (state.resume.phase === "unconfirmed") return "Ob die frühere Veröffentlichung abgeschlossen ist, bleibt unklar. Lade den aktuellen Stand. Dabei wird nichts erneut veröffentlicht.";
   const restart = state.restart.result?.restart;
-  if (state.restart.phase === "delayed") return restart?.reason === "legacy_untracked"
-    ? "Dieser ältere Versuch kann noch nicht sicher abgebrochen werden. Deine neuen Eingaben bleiben hier im Editor erhalten; der gespeicherte Versuch wird nicht automatisch verworfen."
-    : restart?.reason === "in_progress" ? "Neustart verzögert. Eine Google-Anfrage läuft noch. Deine Eingaben bleiben hier im Editor erhalten. Prüfe den Neustart später erneut."
+  if (state.restart.phase === "delayed") return restart?.reason === "in_progress" ? "Neustart verzögert. Eine Google-Anfrage läuft noch. Deine Eingaben bleiben hier im Editor erhalten. Prüfe den Neustart später erneut."
     : restart?.reason === "uncertain" ? "Neustart verzögert. Google hat die letzte Anfrage noch nicht eindeutig bestätigt. Deine Eingaben bleiben hier im Editor erhalten. Prüfe den Neustart später erneut."
     : restart?.recovery === "reconnect" ? "Neustart verzögert. Verbinde Google erneut. Deine Eingaben und der bestätigte Teamstand bleiben erhalten."
     : restart?.recovery === "identity_conflict" ? "Ein Google-Eintrag wurde geändert. Der Neustart ist noch nicht bestätigt. Deine Eingaben und der bestätigte Teamstand bleiben erhalten."

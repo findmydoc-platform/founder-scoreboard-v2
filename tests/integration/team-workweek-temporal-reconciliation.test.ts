@@ -1,3 +1,4 @@
+import { confirmObservedCleanup, confirmObservedEffect } from "./helpers/workweek-provider";
 import { expect, it } from "vitest";
 import { asAuthenticated, captureDatabaseError, withIsolatedLocalDatabase } from "./helpers/local-database";
 
@@ -34,7 +35,7 @@ it("publishes a managed Google correction through current activation while retai
         expect(observedEffect.payload.start).toEqual(original.start);
         expect(new Date(observedEffect.payload.end.dateTime).toISOString()).toBe(new Date(publication.effectiveAt).toISOString());
       }
-      await client.query("select public.confirm_team_workweek_effect($1,$2,'etag',$3)",[observedEffect.id,observedEffect.generation,observedEffect.payload]);
+      await confirmObservedEffect(client, observedEffect.id, observedEffect.generation, "etag", observedEffect.payload);
       await client.query("reset role");
     }
     expect((await asAuthenticated(client,user,()=>client.query("select public.finalize_team_workweek_publication($1) as publication",[publication.id]))).rows[0].publication.status).toBe("published");
@@ -69,7 +70,7 @@ it.each(["ceo", "founder", "deputy", "viewer"])("lets the mapped %s owner restar
     await client.query("select set_config('request.jwt.claim.role','service_role',true)");await client.query("set local role service_role");
     const cleanup=(await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result",[pending.id])).rows[0].result;
     expect(cleanup.effects[0].cleanupDisposition).toBe("delete");
-    await client.query("select public.confirm_team_workweek_planned_cleanup($1,1,'absent',false)",[cleanup.effects[0].id]);
+    await confirmObservedCleanup(client, cleanup.effects[0].id, 1, "absent", false);
     await client.query("reset role");
     const restart=(await asAuthenticated(client,owner,()=>client.query("select public.restart_private_team_workweek_version($1) as result",[privateDraft.id]))).rows[0].result;
     expect((await client.query("select status,deactivation_reason from public.team_workweek_publications where id=$1",[pending.id])).rows[0]).toEqual({status:"inactive",deactivation_reason:"private_restart"});

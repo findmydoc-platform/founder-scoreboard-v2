@@ -78,9 +78,8 @@ export async function workweekReadFixture(database, owner, weeks) {
     if (name === "draft") { await draft(); return; }
     if (name.startsWith("preparing") || name.startsWith("recovery")) {
       const v = await draft();
-      const generation = name === "preparing" ? 0 : 1;
-      await publication("pending", v, weeks.future, { attempt_generation: generation, write_journal_version: !generation || name === "recovery-no-journal" ? 0 : 1,
-        effective_at: generation ? new Date(clock() + (name === "recovery-expired" ? -60_000 : 600_000)) : null,
+      await publication("pending", v, weeks.future, { attempt_generation: 1, write_journal_version: 1,
+        effective_at: new Date(clock() + (name === "recovery-expired" ? -60_000 : 600_000)),
         ...(name === "recovery-restarted" ? { restart_requested_at: new Date(clock()) } : {}),
         ...(name === "recovery-identity" ? { last_error_class: "provider_identity_mismatch", sync_state: "delayed" } : {}) });
       return;

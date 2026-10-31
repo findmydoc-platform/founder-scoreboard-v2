@@ -17,7 +17,7 @@ function clients({foreign=false,failure=null,replayed=false,journalVersion,futur
 }
 it("compensates the associated resolution, then returns a fresh private draft without publishing",async()=>{
   const {input,calls}=clients();const result=await restart.restartPrivateTeamWorkweek(input);
-  expect(calls).toEqual([["token"],["compensate","operation",2],["restart_private_team_workweek_version",{p_version_id:"old"}]]);
+  expect(calls).toEqual([["request_team_workweek_publication_restart",{p_publication_id:"operation",p_owner_profile_id:"owner"}],["token"],["compensate","operation",2],["restart_private_team_workweek_version",{p_version_id:"old"}]]);
   expect(result.restart).toEqual({state:"ready",recovery:null});expect(result.version.windows.monday).toEqual([{start:"09:00",end:"17:00"}]);expect(result.version.basePublicationId).toBe("current");
 });
 it.each([["provider_unavailable","retry"],["oauth_reconnect_required","reconnect"],["provider_identity_mismatch","identity_conflict"]])("keeps the private state recoverable after %s",async(failure,recovery)=>{
@@ -36,8 +36,8 @@ it("cancels a journaled future attempt before compensating and returning a priva
   expect(calls.map(([name])=>name)).toEqual(["request_team_workweek_publication_restart","token","compensate","restart_private_team_workweek_version"]);
 });
 
-it.each(["in_progress","legacy_untracked"])("keeps a future attempt and all inputs intact while recovery is %s",async reason=>{
-  const {input,calls}=clients({journalVersion:reason==="legacy_untracked"?0:1,future:true,cancellation:{state:"delayed",reason}});
+it.each(["in_progress"])("keeps a future attempt and all inputs intact while recovery is %s",async reason=>{
+  const {input,calls}=clients({journalVersion:1,future:true,cancellation:{state:"delayed",reason}});
   expect(await restart.restartPrivateTeamWorkweek(input)).toEqual({restart:{state:"delayed",recovery:"retry",reason}});
   expect(calls.map(([name])=>name)).toEqual(["request_team_workweek_publication_restart"]);
 });

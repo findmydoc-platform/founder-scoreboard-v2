@@ -1,3 +1,4 @@
+import { confirmObservedEffect } from "./helpers/workweek-provider";
 import { expect, it } from "vitest";
 import { asAuthenticated, captureDatabaseError, withIsolatedLocalDatabase } from "./helpers/local-database";
 
@@ -30,7 +31,7 @@ it("replaces a confirmed future week while preserving the later plan and refusin
     expect(prepared.effects).toHaveLength(2);
     expect(prepared.effects.find((effect:{operation:string})=>effect.operation==="cancel")).toMatchObject({operation:"cancel",googleEventId:"fopsselectedtarget"});
     await db.query("set local role service_role");
-    for (const effect of prepared.effects) await db.query("select public.confirm_team_workweek_effect($1,1,$2,$3)",[effect.id,effect.operation==='cancel'?'cancelled-etag':'new-etag',effect.payload]);
+    for (const effect of prepared.effects) await confirmObservedEffect(db, effect.id, 1, effect.operation==='cancel'?'cancelled-etag':'new-etag', effect.payload);
     await db.query("reset role");
     await asAuthenticated(db,user,()=>db.query("select public.finalize_team_workweek_publication($1)",[prepared.id]));
     expect((await db.query("select windows from public.team_workweek_publications where id=$1",[prepared.id])).rows[0].windows).toEqual([{weekday:1,startMinute:600,endMinute:1020}]);
@@ -144,7 +145,7 @@ it.each([{decision:"founderops",deleted:false},{decision:"google",deleted:false}
     const first=(await asAuthenticated(db,user,()=>db.query("select public.prepare_team_workweek_publication($1,1) as value",[original.id]))).rows[0].value;
     await db.query("select set_config('request.jwt.claim.role','service_role',true)");
     await db.query("set local role service_role");
-    for(const effect of first.effects)await db.query("select public.confirm_team_workweek_effect($1,1,'first-etag',$2)",[effect.id,effect.payload]);
+    for(const effect of first.effects)await confirmObservedEffect(db, effect.id, 1, "first-etag", effect.payload);
     await db.query("reset role");
     await asAuthenticated(db,user,()=>db.query("select public.finalize_team_workweek_publication($1)",[first.id]));
     const draft=await save([{weekday:2,startMinute:600,endMinute:900}]);
@@ -169,7 +170,7 @@ it.each([{decision:"founderops",deleted:false},{decision:"google",deleted:false}
     if(deleted)expect(prepared.effects.every((effect:{operation:string})=>effect.operation==="create")).toBe(true);
     else expect(prepared.effects.find((effect:{operation:string})=>effect.operation!=="create")).toMatchObject({expectedEtag:"external-etag",expectedPayload:observedPayload});
     await db.query("set local role service_role");
-    for(const effect of prepared.effects)await db.query("select public.confirm_team_workweek_effect($1,1,'resolved-etag',$2)",[effect.id,effect.payload]);
+    for(const effect of prepared.effects)await confirmObservedEffect(db, effect.id, 1, "resolved-etag", effect.payload);
     await db.query("reset role");
     await asAuthenticated(db,user,()=>db.query("select public.finalize_team_workweek_publication($1)",[prepared.id]));
     await db.query("select set_config('request.jwt.claim.role','service_role',true)");

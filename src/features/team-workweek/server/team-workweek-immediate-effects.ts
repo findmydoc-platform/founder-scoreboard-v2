@@ -1,4 +1,4 @@
-import type { GoogleCalendarCapability } from "@/lib/credentials";
+import type { GoogleCalendarCapability, GoogleCalendarMutation } from "@/lib/credentials";
 import type { GoogleWorkweekSeriesResult } from "./team-workweek-publication-core";
 
 export type WorkweekGooglePayload = Readonly<{
@@ -40,18 +40,17 @@ export type PreparedWorkweekEffect = Readonly<{
 type ObservedEvent = Partial<WorkweekGooglePayload> & { etag?: string };
 
 export type WorkweekProviderWriteJournal = Readonly<{
-  beforeWrite: () => Promise<void>;
-  outcome: (state: "settled" | "uncertain") => Promise<void>;
+  target: GoogleCalendarMutation;
+  outcome: (state: "settled" | "uncertain" | "observed") => Promise<void>;
 }>;
 
-async function mutate(fetchImpl: GoogleCalendarCapability["request"], url: string, init: NonNullable<Parameters<GoogleCalendarCapability["request"]>[1]>, journal?: WorkweekProviderWriteJournal) {
-  await journal?.beforeWrite();
+async function mutate(accessToken: GoogleCalendarCapability, url: string, init: NonNullable<Parameters<GoogleCalendarCapability["request"]>[1]>, journal: WorkweekProviderWriteJournal) {
   try {
-    const response = await fetchImpl(url, init);
-    await journal?.outcome(response.status < 500 ? "settled" : "uncertain");
+    const response = await accessToken.mutate(journal.target, url, init);
+    await journal.outcome(response.status < 500 ? "settled" : "uncertain");
     return response;
   } catch (error) {
-    await journal?.outcome("uncertain");
+    await journal.outcome("uncertain");
     throw error;
   }
 }
@@ -108,12 +107,12 @@ async function observe(fetchImpl: GoogleCalendarCapability["request"], accessTok
 }
 
 export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImpl = accessToken.request, now = () => new Date(), writeJournal, readOnly = false, cancellationFence = false }: {
-  accessToken: GoogleCalendarCapability; effect: PreparedWorkweekEffect; fetchImpl?: GoogleCalendarCapability["request"]; now?: () => Date; writeJournal?: WorkweekProviderWriteJournal; readOnly?: boolean; cancellationFence?: boolean;
+  accessToken: GoogleCalendarCapability; effect: PreparedWorkweekEffect; fetchImpl?: GoogleCalendarCapability["request"]; now?: () => Date; writeJournal: WorkweekProviderWriteJournal; readOnly?: boolean; cancellationFence?: boolean;
 }): Promise<GoogleWorkweekSeriesResult> {
   const observed = await observe(fetchImpl, accessToken, effect, false, cancellationFence);
   if (observed.state === "cleaned") return {state:"delayed",errorClass:"provider_identity_mismatch"};
   if (observed.state === "confirmed") {
-    await writeJournal?.outcome("settled");
+    await writeJournal.outcome("observed");
     return { ...observed, observedAt: now().toISOString() };
   }
   if (observed.state === "delayed") return observed;
@@ -121,7 +120,7 @@ export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImp
   const updating = effect.operation && effect.operation !== "create";
   if (updating && observed.state === "absent") return { state: "delayed", errorClass: "provider_identity_mismatch" };
   try {
-    const response = await mutate(fetchImpl, updating ? `${endpoint(effect)}?sendUpdates=none` : endpoint(effect, true), {
+    const response = await mutate(accessToken, updating ? `${endpoint(effect)}?sendUpdates=none` : endpoint(effect, true), {
       method: updating ? "PUT" : "POST", headers: { "content-type": "application/json", ...(updating ? { "if-match": effect.expectedEtag! } : {}) },
       body: JSON.stringify(effect.payload), cache: "no-store", signal: AbortSignal.timeout(8_000),
     }, writeJournal);
@@ -137,58 +136,24 @@ export async function ensureGoogleWorkweekEffect({ accessToken, effect, fetchImp
     // A lost response does not prove that Google rejected the immutable mutation.
   }
   const recovered = await observe(fetchImpl, accessToken, effect, false, cancellationFence);
-  if (recovered.state === "confirmed") await writeJournal?.outcome("settled");
+  if (recovered.state === "confirmed") await writeJournal.outcome("observed");
   return recovered.state === "confirmed" ? { ...recovered, observedAt: now().toISOString() }
     : recovered.state === "delayed" ? recovered : { state: "delayed", errorClass: "provider_unavailable" };
 }
 
 export async function cleanupGoogleWorkweekEffect({ accessToken, effect, fetchImpl = accessToken.request, now = () => new Date(), writeJournal, readOnly = false }: {
-  accessToken: GoogleCalendarCapability; effect: PreparedWorkweekEffect; fetchImpl?: GoogleCalendarCapability["request"]; now?: () => Date; writeJournal?: WorkweekProviderWriteJournal; readOnly?: boolean;
+  accessToken: GoogleCalendarCapability; effect: PreparedWorkweekEffect; fetchImpl?: GoogleCalendarCapability["request"]; now?: () => Date; writeJournal: WorkweekProviderWriteJournal; readOnly?: boolean;
 }): Promise<GoogleWorkweekSeriesResult & { preserved?: boolean }> {
-  if (effect.cleanupDisposition) return cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJournal,readOnly});
-  if (effect.instanceOf && !effect.expectedEtag) return {state:"confirmed",etag:"unbound",observedAt:now().toISOString()};
-  const observed = await observe(fetchImpl, accessToken, effect, true);
-  const updating = effect.operation && effect.operation !== "create";
-  if (observed.state === "baseline") return {state:"confirmed",etag:observed.etag,observedAt:now().toISOString()};
-  if (observed.state === "absent") return updating
-    ? {state:"delayed",errorClass:"provider_identity_mismatch"}
-    : { state: "confirmed", etag: "absent", observedAt: now().toISOString() };
-  if (observed.state === "delayed") return observed;
-  if (observed.state === "cleaned") return {state:"confirmed",etag:observed.etag,observedAt:now().toISOString()};
-  try {
-    if (readOnly) return { state: "delayed", errorClass: "provider_unavailable" };
-    const response = await mutate(fetchImpl, `${endpoint(effect)}?sendUpdates=none`, {
-      allowedStatuses: updating ? undefined : [404, 410],
-      method: updating ? "PUT" : "DELETE", headers: { "if-match": observed.etag,
-        ...(updating ? {"content-type":"application/json"} : {}) },
-      ...(updating ? {body:JSON.stringify({...effect.expectedPayload,status:"confirmed"})} : {}),
-      cache: "no-store", signal: AbortSignal.timeout(8_000),
-    }, writeJournal);
-    if (response.ok) {
-      if (!updating) return {state:"confirmed",etag:observed.etag,observedAt:now().toISOString()};
-      const restored = await response.json().catch(()=>null) as ObservedEvent | null;
-      return effect.expectedPayload && matchesPayload(restored,effect.expectedPayload)
-        ? {state:"confirmed",etag:restored!.etag!,observedAt:now().toISOString()}
-        : {state:"delayed",errorClass:"provider_identity_mismatch"};
-    }
-    if (!updating && (response.status === 404 || response.status === 410)) return {state:"confirmed",etag:observed.etag,observedAt:now().toISOString()};
-    if (response.status === 412) return { state: "delayed", errorClass: "provider_identity_mismatch" };
-    if (response.status < 500) return errorFor(response);
-  } catch {
-    // Observe before replaying a DELETE whose response was lost.
-  }
-  const recovered = await observe(fetchImpl, accessToken, effect, true);
-  if (recovered.state === "baseline") return {state:"confirmed",etag:recovered.etag,observedAt:now().toISOString()};
-  return !updating && recovered.state === "absent" ? { state: "confirmed", etag: "absent", observedAt: now().toISOString() }
-    : recovered.state === "delayed" ? recovered : { state: "delayed", errorClass: "provider_unavailable" };
+  return cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJournal,readOnly});
 }
 
-async function cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJournal,readOnly}:{accessToken:GoogleCalendarCapability;effect:PreparedWorkweekEffect;fetchImpl:GoogleCalendarCapability["request"];now:()=>Date;writeJournal?:WorkweekProviderWriteJournal;readOnly?:boolean}):Promise<GoogleWorkweekSeriesResult & {preserved?:boolean}> {
-  if(effect.instanceOf && !effect.expectedEtag && effect.kind!=="cleanup_crossing")return {state:"confirmed",etag:"unbound",observedAt:now().toISOString(),preserved:false};
+async function cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJournal,readOnly}:{accessToken:GoogleCalendarCapability;effect:PreparedWorkweekEffect;fetchImpl:GoogleCalendarCapability["request"];now:()=>Date;writeJournal:WorkweekProviderWriteJournal;readOnly?:boolean}):Promise<GoogleWorkweekSeriesResult & {preserved?:boolean}> {
+  if(!effect.cleanupDisposition)return {state:"delayed",errorClass:"provider_identity_mismatch"};
+  if(effect.instanceOf && !effect.expectedEtag && effect.kind!=="cleanup_crossing"){await writeJournal.outcome("observed");return {state:"confirmed",etag:"unbound",observedAt:now().toISOString(),preserved:false};}
   const observed=await observe(fetchImpl,accessToken,effect,true);
   const preservation=effect.cleanupDisposition==="preserve" || effect.cleanupDisposition==="retain";
   const confirmed=async(etag:string,preserved=preservation)=>{
-    await writeJournal?.outcome("settled");
+    await writeJournal.outcome("observed");
     return {state:"confirmed" as const,etag,observedAt:now().toISOString(),preserved};
   };
   if(observed.state==="cleaned") return confirmed(observed.etag);
@@ -204,7 +169,7 @@ async function cleanupPlannedEffect({accessToken,effect,fetchImpl,now,writeJourn
   if(effect.cleanupDisposition==="delete" && now().getTime()>=new Date(effect.payload.start.dateTime).getTime()) return {state:"delayed",errorClass:"provider_identity_mismatch"};
   const deleting=effect.cleanupDisposition==="delete";
   try {
-    const response=await mutate(fetchImpl,`${endpoint(effect)}?sendUpdates=none`,{method:deleting?"DELETE":"PUT",headers:{"if-match":observed.etag,...(!deleting?{"content-type":"application/json"}:{})},...(!deleting?{body:JSON.stringify(effect.cleanupPayload)}:{}),cache:"no-store",signal:AbortSignal.timeout(8_000)},writeJournal);
+    const response=await mutate(accessToken,`${endpoint(effect)}?sendUpdates=none`,{method:deleting?"DELETE":"PUT",headers:{"if-match":observed.etag,...(!deleting?{"content-type":"application/json"}:{})},...(!deleting?{body:JSON.stringify(effect.cleanupPayload)}:{}),cache:"no-store",signal:AbortSignal.timeout(8_000)},writeJournal);
     if(response.ok){
       if(deleting)return confirmed(observed.etag,false);
       const event=await response.json().catch(()=>null) as ObservedEvent|null;
@@ -261,7 +226,7 @@ export async function recoverGoogleWorkweekWrite({accessToken,effect,purpose,aba
   }
   if(observed.state!=="baseline" || !effect.expectedPayload || !effect.expectedEtag)return observed.state==="delayed"?observed:{state:"delayed",errorClass:"provider_identity_mismatch"};
   try{
-    const response=await mutate(fetchImpl,`${endpoint(effect)}?sendUpdates=none`,{
+    const response=await mutate(accessToken,`${endpoint(effect)}?sendUpdates=none`,{
       method:"PUT",headers:{"content-type":"application/json","if-match":effect.expectedEtag},
       body:JSON.stringify({...effect.expectedPayload,extendedProperties:{private:{...effect.expectedPayload.extendedProperties.private,founderopsWorkweekRecoveryFence:effect.id}}}),cache:"no-store",signal:AbortSignal.timeout(8_000),
     },writeJournal);

@@ -1,3 +1,4 @@
+import { confirmObservedCleanup } from "./helpers/workweek-provider";
 import { expect, it } from "vitest";
 import { asAuthenticated, captureDatabaseError, withIsolatedLocalDatabase } from "./helpers/local-database";
 
@@ -31,11 +32,11 @@ it("pins one cleanup cutoff, retains actual elapsed history, and restarts withou
       expect(new Date(occurrence.cleanupPayload.end.dateTime).toISOString()).toBe(new Date(plan.cleanupAt).toISOString());
     }
     expect((await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result",[pub.id])).rows[0].result).toEqual(plan);
-    for(const effect of plan.effects)await client.query("select public.confirm_team_workweek_planned_cleanup($1,1,'history',true)",[effect.id]);
+    for(const effect of plan.effects)await confirmObservedCleanup(client, effect.id, 1, "history", true);
     const final=(await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result",[pub.id])).rows[0].result;
     const previous=final.effects.find((effect:{kind:string})=>effect.kind==="predecessor_cutoff");
     expect(previous.cleanupDisposition).toBe("retain");expect(previous.cleanupPayload).toEqual(cutoff);
-    await client.query("select public.confirm_team_workweek_planned_cleanup($1,1,'retained',true)",[previous.id]);await client.query("reset role");
+    await confirmObservedCleanup(client, previous.id, 1, "retained", true);await client.query("reset role");
     const oldEffects=(await client.query("select * from public.team_workweek_publication_effects where publication_id=$1 order by id",[pub.id])).rows;
     const restarted=(await asAuthenticated(client,user,()=>client.query("select public.restart_private_team_workweek_version($1) as result",[version.id]))).rows[0].result;
     expect(restarted.versionId).not.toBe(version.id);

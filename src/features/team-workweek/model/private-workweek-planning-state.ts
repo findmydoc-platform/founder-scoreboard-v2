@@ -57,7 +57,7 @@ export type WorkweekConflictDecisionView = Readonly<{
   checked: boolean;
 }>;
 export type WorkweekRestartInput = Readonly<{ versionId: string; pendingPublicationId: string | null }>;
-export type WorkweekRestartConfirmation = { version?: PrivateTeamWorkweekVersion; restart: { state: "ready" | "delayed"; recovery: "retry" | "reconnect" | "identity_conflict" | null; reason?: "in_progress" | "uncertain" | "legacy_untracked" } };
+export type WorkweekRestartConfirmation = { version?: PrivateTeamWorkweekVersion; restart: { state: "ready" | "delayed"; recovery: "retry" | "reconnect" | "identity_conflict" | null; reason?: "in_progress" | "uncertain" } };
 export type WorkweekRestartView = Readonly<{
   phase: "idle" | "restarting" | "ready" | "delayed" | "rejected" | "unconfirmed";
   submitted: WorkweekRestartInput | null; result: WorkweekRestartConfirmation | null; error: string; checked: boolean;

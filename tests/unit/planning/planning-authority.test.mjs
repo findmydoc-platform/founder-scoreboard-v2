@@ -772,11 +772,12 @@ test("confirmed workweek writes retain bound journal accounting after profile lo
     payload: { id: "fopssynthetic", summary: "Workweek", start: { dateTime: "2099-01-12T09:00:00Z", timeZone: "Europe/Berlin" },
       end: { dateTime: "2099-01-12T17:00:00Z", timeZone: "Europe/Berlin" }, extendedProperties: { private: { founderopsWorkweekEffectId: "effect-one" } } } };
   const publication = { id: "publication-one", sourceVersionId: "bound-version", ownerProfileId: "synthetic-profile", effectiveFrom: "2099-01-12", timezone: "Europe/Berlin",
-    status: "preparing", syncState: "pending", publicationRevision: 1, publishedAt: null, lastSyncAt: null, series: [], transitions: [], effects: [effect],
+    status: "preparing", syncState: "pending", publicationRevision: 1, publishedAt: null, lastSyncAt: null, effects: [effect],
     activationMode: "immediate", effectiveAt: "2099-01-12T09:00:00Z", attemptGeneration: 1, writeJournalVersion: 1 };
   const protocol = administratorProtocol({ role: "viewer", responses: {
     prepare_team_workweek_publication: body => { expect(body.p_version_id).toBe("bound-version"); return Response.json(publication); },
     claim_team_workweek_provider_operation: body => { expect(body).toMatchObject({ p_publication_id: publication.id, p_generation: 1 }); return Response.json({ state: "claimed", id: "claim-one" }); },
+    dispatch_google_calendar_mutation: body => { expect(body).toMatchObject({p_owner_profile_id:"synthetic-profile",p_operation_id:"claim-one",p_target_id:effect.id,p_event_id:effect.googleEventId,p_method:"POST"});return Response.json(true); },
     record_team_workweek_provider_write: body => { expect(body).toMatchObject({ p_operation_id: "claim-one", p_effect_id: effect.id }); return Response.json(null); },
     confirm_team_workweek_effect: body => { expect(body).toMatchObject({ p_effect_id: effect.id, p_generation: 1 }); return Response.json(null); },
     finish_team_workweek_provider_operation: body => { expect(body.p_operation_id).toBe("claim-one"); return Response.json({ state: "settled" }); },
@@ -809,7 +810,8 @@ test("confirmed workweek writes retain bound journal accounting after profile lo
   expect(await grant.planning.detectWorkweekConflict()).toMatchObject({ state: "clear" });
   await expect(grant.planning.publishWorkweek()).rejects.toMatchObject({ completionPending: true });
   expect(providerWrites).toBe(1);
-  expect(protocol.calls.filter(call => call.name === "record_team_workweek_provider_write").map(call => call.body.p_state)).toEqual(["dispatched", "settled"]);
+  expect(protocol.calls.filter(call => call.name === "record_team_workweek_provider_write").map(call => call.body.p_state)).toEqual(["settled"]);
+  expect(protocol.calls.some(call=>call.name==="dispatch_google_calendar_mutation")).toBe(true);
   expect(protocol.calls.some(call => call.name === "confirm_team_workweek_effect")).toBe(true);
   expect(protocol.calls.some(call => call.name === "finish_team_workweek_provider_operation")).toBe(true);
   await expect(grant.planning.publishWorkweek()).rejects.toMatchObject({ code: "forbidden" });

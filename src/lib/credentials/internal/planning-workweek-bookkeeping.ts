@@ -10,12 +10,10 @@ export function workweekBookkeeping({ guarded, followup, ownerProfileId, conflic
   return {
     forPublication(value) {
       const publication = structuredClone(value);
-      const bound = publication.ownerProfileId === ownerProfileId;
+      const bound = publication.ownerProfileId === ownerProfileId && publication.writeJournalVersion === 1 && publication.attemptGeneration > 0;
       if (bound) accepted.add(publication.id);
       const operations = new Set<string>();
-      const effects = new Map((publication.effects || []).map(effect => [effect.id, structuredClone(effect)]));
-      const series = new Set(publication.series.map(row => row.id));
-      const transitions = new Map(publication.transitions.map(row => [row.id, row.expectedFounderopsRevision]));
+      const effects = new Map(publication.effects.map(effect => [effect.id, structuredClone(effect)]));
       return {
         async claim(purpose) {
           if (!bound || !publication.attemptGeneration) return denied();
@@ -32,23 +30,15 @@ export function workweekBookkeeping({ guarded, followup, ownerProfileId, conflic
           return await followup.rpc("finish_team_workweek_provider_operation", { p_operation_id: operationId });
         },
         async confirmEffect(effectId, generation, etag) {
-          if (!bound || (publication.writeJournalVersion !== undefined && !operations.size) || effects.get(effectId)?.generation !== generation) return denied();
+          if (!bound || !operations.size || effects.get(effectId)?.generation !== generation) return denied();
           return await followup.rpc("confirm_team_workweek_effect", { p_effect_id: effectId, p_generation: generation, p_etag: etag, p_payload: effects.get(effectId)!.payload });
-        },
-        async confirmSeries(seriesId, etag, observedAt) {
-          if (!bound || !series.has(seriesId)) return denied();
-          return await followup.rpc("confirm_team_workweek_google_series", { p_series_id: seriesId, p_etag: etag, p_founderops_revision: publication.publicationRevision, p_observed_at: observedAt });
-        },
-        async confirmTransition(transitionId, etag, expectedRevision, observedAt) {
-          if (!bound || transitions.get(transitionId) !== expectedRevision) return denied();
-          return await followup.rpc("confirm_team_workweek_google_series_transition", { p_transition_id: transitionId, p_etag: etag, p_expected_founderops_revision: expectedRevision, p_observed_at: observedAt });
         },
         preparedEffects(rows) {
           if (!bound) return;
           for (const effect of rows) effects.set(effect.id, structuredClone(effect));
         },
         async confirmCleanup(effectId, generation, etag, preserved) {
-          if (!bound || (publication.writeJournalVersion !== undefined && !operations.size) || effects.get(effectId)?.generation !== generation) return denied();
+          if (!bound || !operations.size || effects.get(effectId)?.generation !== generation) return denied();
           return await followup.rpc("confirm_team_workweek_planned_cleanup", { p_effect_id: effectId, p_generation: generation, p_etag: etag, p_preserved: preserved });
         },
         async delay(errorClass, observedAt) {

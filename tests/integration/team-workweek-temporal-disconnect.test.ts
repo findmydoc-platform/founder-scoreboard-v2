@@ -24,7 +24,7 @@ it("disconnect pins cohort selectors and actual UNTIL, includes remainders, and 
       expect(target.effect_plan.cleanupPayload.recurrence[0].split(";UNTIL=")[0]).toBe(target.effect_plan.payload.recurrence[0]);
     }
     expect((await client.query("select public.prepare_google_workspace_disconnect('disconnect-owner') as result")).rows[0].result.id).toBe(operation.id);
-    for(const target of targets)await client.query("select public.confirm_google_workspace_disconnect_series($1,$2,'clean',clock_timestamp())",[target.id,target.expected_etag]);
+    for(const target of targets){await client.query("select public.record_google_workspace_disconnect_write($1,'observed')",[target.id]);await client.query("select public.confirm_google_workspace_disconnect_series($1,$2,'clean',clock_timestamp())",[target.id,target.expected_etag]);}
     const result=(await client.query("select public.finalize_google_workspace_disconnect($1,'disconnect-owner',clock_timestamp()) as result",[operation.id])).rows[0].result;
     expect(result.state).toBe("revoke_pending");expect(result.retainedVersionId).not.toBe(source.id);
     expect((await client.query("select weekday,start_minute,end_minute from public.team_workweek_windows where version_id=$1",[result.retainedVersionId])).rows).toEqual([{weekday:7,start_minute:60,end_minute:240}]);

@@ -1,3 +1,4 @@
+import type { WorkweekProviderWriteJournal } from "../../src/features/team-workweek/server/team-workweek-immediate-effects";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
@@ -45,6 +46,7 @@ async function fixture(run:(f:Fixture)=>Promise<void>) {
   } finally {
     vi.unstubAllGlobals();vi.unstubAllEnvs();vi.resetModules();
     await db.query("delete from public.google_workspace_disconnect_operations where owner_profile_id=$1",[id]);
+    await db.query("delete from public.team_workweek_provider_operations where owner_profile_id=$1",[id]);
     await db.query("delete from public.profiles where id=$1",[id]);await db.query("delete from auth.users where id=$1",[userId]);
     await db.query("update workspace_private.configuration set mode=$1,linking_enforced=$2",[previousConfiguration.mode,previousConfiguration.linking_enforced]);await db.end();
   }
@@ -61,15 +63,17 @@ it("real owner/status entry retains primary scope, encrypted usage and immediate
   const operation=(await f.db.query("insert into public.google_workspace_disconnect_operations(owner_profile_id,requested_by,revoke_connection,cutoff_date,state,deactivated_at) values($1,'owner',true,current_date,'cleaning',null) returning id,connection_id",[f.id])).rows[0];
   expect(operation.connection_id).toBe((await f.row()).connection_id);
   await f.store();await expect(access.request("https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1")).rejects.toThrow();
-  const target={calendarId:"primary",googleEventId:"fopsboundcleanup",seriesId:"series-1",expectedEtag:"expected-etag",expectedFounderopsRevision:1} as const;
+  const row=(await f.db.query("insert into public.google_workspace_disconnect_series(operation_id,google_event_id,expected_etag,expected_founderops_revision,cleanup_action) values($1,'fopsboundcleanup','expected-etag',1,'delete') returning id",[operation.id])).rows[0];
+  const payload={id:"fopsboundcleanup",start:{dateTime:"2099-01-12T09:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2099-01-12T10:00:00Z",timeZone:"Europe/Berlin"},extendedProperties:{private:{founderopsWorkweekEffectId:row.id}}} as const;
   let deleted=0;
   f.setProvider(async request=>{
     expect(request.headers.get("authorization")).toBe("Bearer synthetic-reconnected");
     if(request.method==="DELETE"){expect(request.headers.get("if-match")).toBe("expected-etag");deleted++;return new Response(null,{status:204});}
-    return Response.json({id:target.googleEventId,etag:target.expectedEtag,extendedProperties:{private:{founderopsWorkweekSeriesId:target.seriesId,founderopsWorkweekRevision:"1"}}});
+    return Response.json({...payload,etag:"expected-etag"});
   });
-  const {ensureGoogleWorkweekSeriesAbsent}=await importTestModule("src/features/team-workweek/server/google-workspace-disconnect-core.ts");
-  expect(await ensureGoogleWorkweekSeriesAbsent({accessToken:await f.authorize(),target})).toMatchObject({state:"confirmed"});
+  const {cleanupGoogleWorkweekEffect}=await importTestModule("src/features/team-workweek/server/team-workweek-immediate-effects.ts");
+  const writeJournal:WorkweekProviderWriteJournal={target:{kind:"disconnect",operationId:operation.id,targetId:row.id},async outcome(state){const response=await f.rpc("record_google_workspace_disconnect_write",{p_target_id:row.id,p_state:state});expect(response.ok).toBe(true);}};
+  expect(await cleanupGoogleWorkweekEffect({accessToken:await f.authorize(),effect:{id:row.id,calendarId:"primary",googleEventId:payload.id,generation:1,state:"pending",confirmedEtag:null,payload,cleanupDisposition:"delete"},writeJournal})).toMatchObject({state:"confirmed"});
   expect(deleted).toBe(1);
   await f.db.query("update public.google_workspace_disconnect_operations set state='revoke_pending',deactivated_at=now() where id=$1",[operation.id]);
   const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
@@ -90,7 +94,14 @@ it.each(["success","failure"])("separate instances claim one rotating refresh an
 }),30000);
 it("successful refresh preserves rotation and independent expiry while uncertain writes are observed before another mutation",()=>fixture(async f=>{
   let existing=false,writes=0;
-  const effect={id:"effect-1",calendarId:"primary",googleEventId:"fopscontrolled",generation:1,kind:"master",operation:"create",state:"pending",confirmedEtag:null,payload:{id:"fopscontrolled",start:{dateTime:"2099-01-12T09:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2099-01-12T17:00:00Z",timeZone:"Europe/Berlin"},extendedProperties:{private:{founderopsWorkweekEffectId:"effect-1"}}}} as const;
+  const version=(await f.db.query("insert into public.team_workweek_versions(owner_profile_id,effective_from) values($1,'2099-01-12') returning id",[f.id])).rows[0];
+  const publication=(await f.db.query("insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,effective_at) values($1,$2,'2099-01-12','[]','2099-01-12T09:00:00Z') returning id",[version.id,f.id])).rows[0];
+  const effectId=randomUUID();
+  const effect={id:effectId,calendarId:"primary",googleEventId:"fopscontrolled",generation:1,kind:"weekly",operation:"create",state:"pending",confirmedEtag:null,payload:{id:"fopscontrolled",start:{dateTime:"2099-01-12T09:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2099-01-12T17:00:00Z",timeZone:"Europe/Berlin"},extendedProperties:{private:{founderopsWorkweekEffectId:effectId}}}} as const;
+  await f.db.query("insert into public.team_workweek_publication_effects(id,publication_id,owner_profile_id,generation,kind,google_event_id,payload) values($1,$2,$3,1,'weekly',$4,$5)",[effectId,publication.id,f.id,effect.googleEventId,effect.payload]);
+  const claim=await (await f.rpc("claim_team_workweek_provider_operation",{p_publication_id:publication.id,p_generation:1,p_purpose:"publish"})).json();
+  const writeJournal:WorkweekProviderWriteJournal={target:{kind:"publication",operationId:claim.id,targetId:effectId},async outcome(state){const response=await f.rpc("record_team_workweek_provider_write",{p_operation_id:claim.id,p_effect_id:effectId,p_state:state});expect(response.ok).toBe(true);}};
+
   f.setProvider(async request=>{
     if(request.url==="https://oauth2.googleapis.com/token") {expect((await request.text())).toContain("refresh_token=synthetic-calendar-refresh");return Response.json({access_token:"synthetic-rotated",refresh_token:"synthetic-rotated-refresh",expires_in:3600,refresh_token_expires_in:9000,token_type:"Bearer"});}
     if(request.method==="POST"){writes++;existing=true;throw Error("lost Calendar success response");}
@@ -98,9 +109,9 @@ it("successful refresh preserves rotation and independent expiry while uncertain
   });
   const {ensureGoogleWorkweekEffect}=await importTestModule("src/features/team-workweek/server/team-workweek-immediate-effects.ts");
   const calendar=await f.authorize();
-  expect(await ensureGoogleWorkweekEffect({accessToken:calendar,effect})).toMatchObject({state:"confirmed"});
+  expect(await ensureGoogleWorkweekEffect({accessToken:calendar,effect,writeJournal})).toMatchObject({state:"confirmed"});
   await f.db.query("update public.google_workspace_connections set access_token_expires_at=now()-interval '1 second' where profile_id=$1",[f.id]);
-  expect(await ensureGoogleWorkweekEffect({accessToken:calendar,effect})).toMatchObject({state:"confirmed"});
+  expect(await ensureGoogleWorkweekEffect({accessToken:calendar,effect,writeJournal})).toMatchObject({state:"confirmed"});
   expect(writes).toBe(1);const row=await f.row();expect(row.encrypted_refresh_token).not.toContain("synthetic-rotated-refresh");expect(Number(row.credential_version)).toBe(1);expect(row.refresh_claim_id).toBeNull();
   expect(new Date(row.refresh_token_expires_at).getTime()).toBeGreaterThan(Date.now()+8500000);
   await f.db.query("update public.google_workspace_connections set access_token_expires_at=now()-interval '1 second' where profile_id=$1",[f.id]);

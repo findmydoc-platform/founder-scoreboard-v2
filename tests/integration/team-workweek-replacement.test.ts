@@ -1,3 +1,4 @@
+import { confirmObservedEffect } from "./helpers/workweek-provider";
 import {expect,it} from "vitest";
 import {asAuthenticated,captureDatabaseError,withIsolatedLocalDatabase} from "./helpers/local-database";
 
@@ -16,7 +17,7 @@ it("pins an active owner's revision and prepares a same-week replacement without
     await client.query(`insert into public.team_workweek_google_series(publication_id,source_window_id,owner_profile_id,google_event_id,state,confirmed_etag,confirmed_founderops_revision,last_confirmed_at)
       values($1,$2,'replacement-viewer','fopsabc123','confirmed','old-etag',1,clock_timestamp())`,[oldId,window.rows[0].id]);
     const created=await asAuthenticated(client,user,()=>client.query("select public.create_private_current_team_workweek_version('[]',$1,1) as version",[oldId]));
-    const prepared=await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1) as publication",[created.rows[0].version.id]));
+    const prepared=await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1,1) as publication",[created.rows[0].version.id]));
     const publication=prepared.rows[0].publication;
     expect(publication.predecessorPublicationId).toBe(oldId);
     expect(publication.effects.map((effect:{kind:string})=>effect.kind)).toEqual(expect.arrayContaining(["predecessor_cutoff","crossing_instance"]));
@@ -32,7 +33,7 @@ it("pins an active owner's revision and prepares a same-week replacement without
     expect(new Date(bound.rows[0].effect.payload.end.dateTime).toISOString()).toBe(new Date(publication.effectiveAt).toISOString());
     for(const effect of publication.effects){
       const observed=effect.id===crossing.id?bound.rows[0].effect:effect;
-      await client.query("select public.confirm_team_workweek_effect($1,$2,'confirmed-etag',$3)",[observed.id,observed.generation,observed.payload]);
+      await confirmObservedEffect(client, observed.id, observed.generation, "confirmed-etag", observed.payload);
     }
     await client.query("reset role");
     await asAuthenticated(client,user,()=>client.query("select public.finalize_team_workweek_publication($1)",[publication.id]));
@@ -55,10 +56,10 @@ it("keeps mapped roles owner-only and installs half-open bounds after all effect
       const stale=await captureDatabaseError(client,()=>asAuthenticated(client,user,()=>client.query("select public.create_private_current_team_workweek_version('[]',$1,2)",[old.rows[0].id])));
       expect(stale).toMatchObject({code:"P0004"});
       const draft=await asAuthenticated(client,user,()=>client.query("select public.create_private_current_team_workweek_version('[{\"weekday\":3,\"startMinute\":0,\"endMinute\":1439}]',$1,1) as version",[old.rows[0].id]));
-      const prepared=await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1) as publication",[draft.rows[0].version.id]));
+      const prepared=await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1,1) as publication",[draft.rows[0].version.id]));
       const publication=prepared.rows[0].publication;
       for(const effect of publication.effects){
-        await client.query("set local role service_role");await client.query("select public.confirm_team_workweek_effect($1,$2,'etag',$3)",[effect.id,effect.generation,effect.payload]);await client.query("reset role");
+        await client.query("set local role service_role");await confirmObservedEffect(client, effect.id, effect.generation, "etag", effect.payload);await client.query("reset role");
       }
       const confirmed=await asAuthenticated(client,user,()=>client.query("select public.finalize_team_workweek_publication($1) as publication",[publication.id]));
       expect(confirmed.rows[0].publication.status).toBe("published");
@@ -88,7 +89,7 @@ it.each(["immediate","future_monday"])("uses actual future DTSTART for zero-occu
     const draft=await asAuthenticated(client,user,()=>mode==="immediate"
       ?client.query("select public.create_private_current_team_workweek_version('[]',$1,1) as version",[old.rows[0].id])
       :client.query("select public.create_private_monday_team_workweek_version(date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date+7,'[]',$1,1) as version",[old.rows[0].id]));
-    const prepared=await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1) as publication",[draft.rows[0].version.id]));
+    const prepared=await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1,1) as publication",[draft.rows[0].version.id]));
     const publication=prepared.rows[0].publication;
     const cutoff=publication.effects.find((effect:{kind:string})=>effect.kind==="predecessor_cutoff");expect(cutoff.operation).toBe("cancel");expect(cutoff.payload.status).toBe("cancelled");
     const remainder=publication.effects.find((effect:{kind:string})=>effect.kind==="predecessor_remainder");

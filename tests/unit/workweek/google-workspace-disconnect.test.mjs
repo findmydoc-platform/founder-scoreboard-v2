@@ -1,3 +1,4 @@
+import { calendarProvider } from "../../helpers/calendar-provider";
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
@@ -5,88 +6,6 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 const publicationCore = await import("../../../src/features/team-workweek/server/team-workweek-publication-core.ts");
 const oauthCore = await import("../../../src/lib/credentials/internal/google-calendar-protocol.ts");
 const draftModel = await import("../../../src/features/team-workweek/model/team-workweek-draft.ts");
-const disconnectCore = await importTestModule(
-  "src/features/team-workweek/server/google-workspace-disconnect-core.ts",
-  { "./team-workweek-publication-core": publicationCore },
-);
-
-const target = {
-  calendarId: "primary",
-  googleEventId: "fops22222222222242228222222222222222",
-  seriesId: "22222222-2222-4222-8222-222222222222",
-  expectedEtag: '"etag-1"',
-  expectedFounderopsRevision: 1,
-};
-
-function response(status, body = null) {
-  return new Response(body === null ? null : JSON.stringify(body), {
-    status,
-    headers: body === null ? undefined : { "content-type": "application/json" },
-  });
-}
-
-function event(etag = target.expectedEtag, seriesId = target.seriesId) {
-  return {
-    id: target.googleEventId,
-    etag,
-    extendedProperties: {
-      private: {
-        founderopsWorkweekSeriesId: seriesId,
-        founderopsWorkweekRevision: String(target.expectedFounderopsRevision),
-      },
-    },
-  };
-}
-
-test("future-only series deletion observes exact identity and uses ETag CAS", async () => {
-  const calls = [];
-  const result = await disconnectCore.ensureGoogleWorkweekSeriesAbsent({
-    accessToken: { request: (url, init) => fetch(url, init) },
-    target,
-    fetchImpl: async (input, init = {}) => {
-      calls.push({ input: String(input), init });
-      return init.method === "DELETE" ? response(204) : response(200, event());
-    },
-    now: () => new Date("2026-08-25T12:00:00.000Z"),
-  });
-  assert.equal(result.state, "confirmed");
-  assert.equal(calls.length, 2);
-  assert.match(calls[0].input, /fields=id%2Cetag%2CextendedProperties%2Fprivate/);
-  assert.equal(calls[1].init.headers["if-match"], target.expectedEtag);
-});
-
-test("lost delete success is observed before any retry and an unrelated event is never deleted", async () => {
-  let attempts = 0;
-  let deletes = 0;
-  const lost = await disconnectCore.ensureGoogleWorkweekSeriesAbsent({
-    accessToken: { request: (url, init) => fetch(url, init) },
-    target,
-    fetchImpl: async (_input, init = {}) => {
-      attempts += 1;
-      if (attempts === 1) return response(200, event());
-      if (init.method === "DELETE") {
-        deletes += 1;
-        throw new Error("lost response");
-      }
-      return response(404);
-    },
-  });
-  assert.equal(lost.state, "confirmed");
-  assert.equal(deletes, 1);
-
-  deletes = 0;
-  const unrelated = await disconnectCore.ensureGoogleWorkweekSeriesAbsent({
-    accessToken: { request: (url, init) => fetch(url, init) },
-    target,
-    fetchImpl: async (_input, init = {}) => {
-      if (init.method === "DELETE") deletes += 1;
-      return response(200, event(target.expectedEtag, "different-series"));
-    },
-  });
-  assert.deepEqual(unrelated, { state: "delayed", errorClass: "provider_identity_mismatch" });
-  assert.equal(deletes, 0);
-});
-
 function fakeState() {
   return {
     operation: null,
@@ -189,6 +108,7 @@ function fakeClients(state) {
           state.targets = operationTargets();
           return { data: { id: state.operation.id, state: "cleaning" }, error: null };
         }
+        if (name === "record_google_workspace_disconnect_write") { return {data:null,error:null}; }
         if (name === "confirm_google_workspace_disconnect_series") {
           const row = state.targets.find((candidate) => candidate.id === args.p_target_id);
           row.state = "confirmed";
@@ -234,51 +154,46 @@ const disconnectServer = await importTestModule(
       calendarForWorkweekOwner: async () => ({request:(url,init)=>fetch(url,init)}),
       removeWorkweekCalendarConnection: async () => undefined,
     },
-    "./google-workspace-disconnect-core": disconnectCore,
     "./team-workweek-publication-core": publicationCore,
     "../model/team-workweek-draft": draftModel,
   },
 );
 
-test("manual disconnect resumes partial cleanup, deactivates before revoke, and replays completion", async () => {
-  const state = fakeState();
-  const clients = fakeClients(state);
-  let truncateAttempts = 0;
-  let revokes = 0;
-  const input = {
-    ...clients,
-    ownerProfileId: "profile-1",
-    getAccessToken: async () => "token",
-    observe: async ({ target: observedTarget }) => ({ state: "present", etag: observedTarget.expectedEtag }),
-    ensureAbsent: async () => ({ state: "confirmed", etag: '"etag-a"', observedAt: "2026-08-25T12:00:00.000Z" }),
-    ensureTransition: async () => {
-      truncateAttempts += 1;
-      return truncateAttempts === 1
-        ? { state: "delayed", errorClass: "provider_unavailable" }
-        : { state: "confirmed", etag: '"etag-b2"', observedAt: "2026-08-25T12:01:00.000Z" };
-    },
-    removeConnection: async () => {
-      assert.equal(state.operation.state, "revoke_pending");
-      revokes += 1;
-    },
-    now: () => new Date("2026-08-25T12:02:00.000Z"),
+function scriptedCalendar(state, {failTruncate = false, changed = false} = {}) {
+  const events = new Map(operationTargets().map(target => [target.google_event_id, {
+    id:target.google_event_id,etag:changed ? '"changed"' : target.expected_etag,
+    start:{dateTime:target.cleanup_action === "delete" ? "2099-01-12T09:00:00Z" : "2026-08-03T07:00:00Z",timeZone:"Europe/Berlin"},
+    end:{dateTime:target.cleanup_action === "delete" ? "2099-01-12T17:00:00Z" : "2026-08-03T15:00:00Z",timeZone:"Europe/Berlin"},
+    recurrence:["RRULE:FREQ=WEEKLY"],
+    extendedProperties:{private:{founderopsWorkweekSeriesId:target.series_id,founderopsWorkweekRevision:"1"}},
+  }]));
+  const writes=[];
+  let fail=failTruncate;
+  const provider=async(url,init={})=>{
+    const id=new URL(url).pathname.split("/").at(-1);
+    if(init.method === "DELETE") {writes.push("DELETE");events.delete(id);return new Response(null,{status:204});}
+    if(init.method === "PUT") {
+      writes.push("PUT");
+      if(fail){fail=false;return new Response(null,{status:503});}
+      events.set(id,{...JSON.parse(init.body),etag:'"cleaned"'});
+    }
+    return events.has(id) ? Response.json(events.get(id)) : new Response(null,{status:404});
   };
+  return {writes,events,calendar:calendarProvider(provider,async()=>{state.events.push("dispatch");})};
+}
 
-  const partial = await disconnectServer.disconnectGoogleWorkspace(input);
-  assert.deepEqual(partial, { state: "cleaning", recovery: "retry" });
-  assert.equal(state.targets[0].state, "confirmed");
-  assert.equal(state.targets[1].state, "pending");
-  assert.equal(revokes, 0);
-
-  const completed = await disconnectServer.disconnectGoogleWorkspace(input);
-  assert.deepEqual(completed, { state: "completed", recovery: null });
-  assert.equal(state.targets.every((row) => row.state === "confirmed"), true);
-  assert.equal(revokes, 1);
-  assert.ok(state.events.indexOf("finalize_google_workspace_disconnect") < state.events.indexOf("complete_google_workspace_disconnect"));
-
-  const replayed = await disconnectServer.disconnectGoogleWorkspace(input);
-  assert.deepEqual(replayed, { state: "completed", recovery: null });
-  assert.equal(revokes, 1);
+test("manual disconnect journals partial cleanup, deactivates before local removal and replays completion",async()=>{
+  const state=fakeState(), clients=fakeClients(state),google=scriptedCalendar(state,{failTruncate:true});
+  let removals=0;
+  const input={...clients,ownerProfileId:"profile-1",getAccessToken:async()=>google.calendar,now:()=>new Date("2026-08-25T12:00:00Z"),
+    removeConnection:async()=>{assert.equal(state.operation.state,"revoke_pending");removals++;}};
+  assert.deepEqual(await disconnectServer.disconnectGoogleWorkspace(input),{state:"cleaning",recovery:"retry"});
+  assert.equal(state.targets[0].state,"confirmed");assert.equal(state.targets[1].state,"pending");assert.equal(removals,0);
+  assert.deepEqual(await disconnectServer.disconnectGoogleWorkspace(input),{state:"completed",recovery:null});
+  assert.equal(removals,1);assert.deepEqual(google.writes,["DELETE","PUT","PUT"]);
+  assert.ok(state.events.indexOf("dispatch")<state.events.indexOf("confirm_google_workspace_disconnect_series"));
+  assert.deepEqual(await disconnectServer.disconnectGoogleWorkspace(input),{state:"completed",recovery:null});
+  assert.equal(removals,1);
 });
 
 test("local removal retries without calendar writes or provider revocation", async () => {
@@ -289,7 +204,6 @@ test("local removal retries without calendar writes or provider revocation", asy
   const first = await disconnectServer.disconnectGoogleWorkspace({
     ...clients,
     ownerProfileId: "profile-1",
-    observe: async ({ target: observedTarget }) => ({ state: "present", etag: observedTarget.expectedEtag }),
     removeConnection: async () => {
       revokeAttempts += 1;
       if (revokeAttempts === 1) throw new Error("lost response");
@@ -299,19 +213,10 @@ test("local removal retries without calendar writes or provider revocation", asy
   const second = await disconnectServer.disconnectGoogleWorkspace({
     ...clients,
     ownerProfileId: "profile-1",
-    observe: async ({ target: observedTarget }) => ({ state: "present", etag: observedTarget.expectedEtag }),
     removeConnection: async () => { revokeAttempts += 1; },
   });
   assert.deepEqual(second, { state: "completed", recovery: null });
   assert.equal(revokeAttempts, 2);
-});
-
-test("legacy persisted state exposes only the local removal contract", async () => {
-  const state = fakeState();
-  state.operation = { ...operation(), state: "revoke_pending" };
-  const view = await disconnectServer.getGoogleWorkspaceDisconnectView(fakeClients(state).serviceSupabase, "profile-1");
-  assert.equal(view.state, "remove_pending");
-  assert.equal("connectionWillBeRevoked" in view, false);
 });
 
 test("an already revoked connection deactivates the team week and leaves cleanup pending", async () => {
@@ -327,14 +232,6 @@ test("an already revoked connection deactivates the team week and leaves cleanup
         "provider_revoked",
         "stored token is revoked",
       );
-    },
-    ensureAbsent: async () => {
-      providerWrites += 1;
-      return { state: "confirmed" };
-    },
-    ensureTransition: async () => {
-      providerWrites += 1;
-      return { state: "confirmed" };
     },
     removeConnection: async () => {
       revokes += 1;
@@ -373,46 +270,20 @@ test("a provider authorization response requests reconnect without automatic dea
   const result = await disconnectServer.disconnectGoogleWorkspace({
     ...clients,
     ownerProfileId: "profile-1",
-    getAccessToken: async () => "token",
-    observe: async () => ({ state: "delayed", errorClass: "oauth_reconnect_required" }),
+    getAccessToken: async () => calendarProvider(async()=>new Response(null,{status:401})),
   });
   assert.deepEqual(result, { state: "cleaning", recovery: "reconnect" });
   assert.equal(state.operation.state, "cleaning");
   assert.equal(state.events.includes("external_revocation_confirmed"), false);
 });
 
-test("a marker-stable ETag change rebases once before cleanup resumes", async () => {
-  const state = fakeState();
-  const clients = fakeClients(state);
-  let observed = 0;
-  let providerWrites = 0;
-  const input = {
-    ...clients,
-    ownerProfileId: "profile-1",
-    getAccessToken: async () => "token",
-    observe: async ({ target: observedTarget }) => {
-      observed += 1;
-      return {
-        state: "present",
-        etag: observed === 1 ? '"etag-a2"' : observedTarget.expectedEtag,
-      };
-    },
-    ensureAbsent: async () => {
-      providerWrites += 1;
-      return { state: "confirmed", etag: '"etag-a2"', observedAt: "2026-08-25T12:04:00.000Z" };
-    },
-    ensureTransition: async () => {
-      providerWrites += 1;
-      return { state: "confirmed", etag: '"etag-b"', observedAt: "2026-08-25T12:04:00.000Z" };
-    },
-    removeConnection: async () => undefined,
-    now: () => new Date("2026-08-25T12:04:00.000Z"),
-  };
-  const rebased = await disconnectServer.disconnectGoogleWorkspace(input);
-  assert.deepEqual(rebased, { state: "cleaning", recovery: "retry" });
-  assert.equal(state.targets[0].expected_etag, '"etag-a2"');
-  assert.equal(providerWrites, 0);
-  const completed = await disconnectServer.disconnectGoogleWorkspace(input);
-  assert.deepEqual(completed, { state: "completed", recovery: null });
-  assert.equal(providerWrites, 2);
+test("a marker-stable historical series rebases before a journaled cleanup",async()=>{
+  const state=fakeState(), clients=fakeClients(state),google=scriptedCalendar(state,{changed:true});
+  const input={...clients,ownerProfileId:"profile-1",getAccessToken:async()=>google.calendar,removeConnection:async()=>{},now:()=>new Date("2026-08-25T12:00:00Z")};
+  assert.deepEqual(await disconnectServer.disconnectGoogleWorkspace(input),{state:"cleaning",recovery:"retry"});
+  assert.equal(state.targets[0].expected_etag,'"changed"');assert.deepEqual(google.writes,[]);
+  // The second target needs its own explicit rebase before its next cleanup attempt.
+  await disconnectServer.disconnectGoogleWorkspace(input);
+  assert.deepEqual(await disconnectServer.disconnectGoogleWorkspace(input),{state:"completed",recovery:null});
+  assert.deepEqual(google.writes,["DELETE","PUT"]);
 });

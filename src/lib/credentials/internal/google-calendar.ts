@@ -12,7 +12,7 @@ import {
 } from "./google-calendar-vault";
 import { GOOGLE_WORKSPACE_CALENDAR_SCOPE } from "./google-calendar-protocol";
 import type { NextRequest } from "next/server";
-import type { GoogleCalendarInput, GoogleCalendarCapability, GoogleCalendarConnectionInput } from "../types";
+import type { GoogleCalendarInput, GoogleCalendarCapability, GoogleCalendarConnectionInput, GoogleCalendarMutation } from "../types";
 
 function denied() { return new GoogleWorkspaceOAuthContractError("reconnect_required", "Gebundene Google-Verbindung ist erforderlich."); }
 function calendarOwner(request: NextRequest, ownerProfileId: string) {
@@ -66,10 +66,11 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
   const configuration = calendarConfiguration();
   const snapshot = await calendarSnapshot(profileId);
   if (!snapshot || snapshot.revoked_at) throw denied();
-  const initial = await calendarAccess(profileId,snapshot.connection_id,configuration);
-  const assertInitial = await authorizeDispatch(snapshot.connection_id,initial,configuration);
+  const connectionId = snapshot.connection_id;
+  const initial = await calendarAccess(profileId,connectionId,configuration);
+  const assertInitial = await authorizeDispatch(connectionId,initial,configuration);
   assertInitial();
-  const calendar: GoogleCalendarCapability = Object.freeze({ async request(value: string | URL, init: NonNullable<Parameters<GoogleCalendarCapability["request"]>[1]> = {}) {
+  async function dispatch(value: string | URL, init: NonNullable<Parameters<GoogleCalendarCapability["request"]>[1]> = {}, binding?: GoogleCalendarMutation) {
     const url = new URL(value);
     const { allowedStatuses: requestedStatuses, ...options } = init;
     const absenceStatuses = requestedStatuses?.filter(status => status === 404 || status === 410);
@@ -77,16 +78,31 @@ export async function authorizeGoogleCalendar(input: GoogleCalendarInput) {
     const method = options.method || "GET";
     if (url.protocol !== "https:" || url.hostname !== "www.googleapis.com" || url.port || url.username || url.password || url.hash
       || !/^\/calendar\/v3\/calendars\/primary\/events(?:\/[^/]+(?:\/instances)?)?$/.test(url.pathname)
-      || !["GET","POST","PUT","PATCH","DELETE"].includes(method) || headers.has("authorization")) throw denied();
+      || !(binding ? ["POST","PUT","DELETE"] : ["GET"]).includes(method) || headers.has("authorization")) throw denied();
     await owner();
-    const access = await calendarAccess(profileId,snapshot.connection_id,configuration);
+    const access = await calendarAccess(profileId,connectionId,configuration);
     headers.set("authorization",`Bearer ${access.token}`);
-    const assertCurrent = await authorizeDispatch(snapshot.connection_id,access,configuration);
+    const assertCurrent = await authorizeDispatch(connectionId,access,configuration);
     assertCurrent();
+    if (binding) {
+      const eventId = method === "POST" ? JSON.parse(String(options.body || "null"))?.id : decodeURIComponent(url.pathname.split("/").at(-1)!);
+      if (typeof eventId !== "string" || !eventId || (method === "POST" && !url.pathname.endsWith("/events"))) throw denied();
+      if (method !== "POST" && !/^\/calendar\/v3\/calendars\/primary\/events\/[^/]+$/.test(url.pathname)) throw denied();
+      const prepared = await calendarVault().rpc("dispatch_google_calendar_mutation", {
+        p_owner_profile_id: profileId, p_kind: binding.kind, p_operation_id: binding.operationId,
+        p_target_id: binding.targetId, p_event_id: eventId, p_method: method, p_replay: Boolean(binding.replay),
+      });
+      if (prepared.error || prepared.data !== true) throw denied();
+      assertCurrent();
+    }
     // Every resource attempt re-enters this transport. Credential renewal never replays a mutation.
     const allowedStatuses = ["GET", "DELETE"].includes(method) && /^\/calendar\/v3\/calendars\/primary\/events\/[^/]+$/.test(url.pathname) ? absenceStatuses : undefined;
     return observedProviderFetch(method === "GET" ? "google.calendar.read" : "google.calendar.mutation", url,{...options,method,headers,cache:"no-store",redirect:"manual"}, allowedStatuses);
-  }});
+  }
+  const calendar: GoogleCalendarCapability = Object.freeze({
+    request: (url, init) => dispatch(url, init),
+    mutate: (binding, url, init) => dispatch(url, init, binding),
+  });
   assertInitial();
   return {ok:true as const,calendar};
 }
