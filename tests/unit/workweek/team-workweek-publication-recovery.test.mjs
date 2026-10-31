@@ -21,7 +21,7 @@ const publicationServer = await importTestModule(
     "server-only": {},
     "./team-workweek-publication-core": publicationCore,
     "@/lib/google-calendar-errors": { GoogleWorkspaceOAuthContractError: MockGoogleWorkspaceOAuthContractError },
-    "./team-workweek-calendar": { calendarForWorkweekOwner: async () => ({request:(url,init)=>fetch(url,init)}) },
+    "./team-workweek-calendar": { calendarForWorkweekOwner: async () => ({request:(url,init)=>fetch(url,init),mutate:(_binding,url,init)=>fetch(url,init)}) },
   },
 );
 
@@ -36,31 +36,10 @@ const publication = {
   publicationRevision: 1,
   publishedAt: null,
   lastSyncAt: null,
-  series: [],
-  transitions: [],
-};
-
-const series = {
-  id: "22222222-2222-4222-8222-222222222222",
-  calendarId: "primary",
-  googleEventId: "fops22222222222242228222222222222222",
-  state: "pending",
-  confirmedEtag: null,
-  weekday: 1,
-  startMinute: 9 * 60,
-  endMinute: 17 * 60,
-};
-
-const transition = {
-  id: "44444444-4444-4444-8444-444444444444",
-  calendarId: "primary",
-  googleEventId: series.googleEventId,
-  predecessorSeriesId: series.id,
-  state: "pending",
-  expectedEtag: '"etag-1"',
-  expectedFounderopsRevision: 1,
-  recurrenceCount: 2,
-  confirmedEtag: null,
+  attemptGeneration: 1,
+  writeJournalVersion: 1,
+  effectiveAt: "2099-01-12T09:00:00Z",
+  effects: [],
 };
 
 test("keeps the provider claim until a late batch request settles even when another effect throws", async () => {
@@ -97,190 +76,6 @@ test("keeps the provider claim until a late batch request settles even when anot
     assert.equal((await result).syncState, "delayed");
     assert.equal(finished, true);
   } finally { fetchSpy.mockRestore(); }
-});
-
-test("publication resumes pending transitions only after every replacement series is confirmed", async () => {
-  let seriesConfirmed = false;
-  let transitionConfirmed = false;
-  let transitionAttempts = 0;
-  const userCalls = [];
-  const serviceCalls = [];
-  const prepared = {
-    ...publication,
-    publicationRevision: 2,
-    syncState: "pending",
-    series: [{ ...series, state: "pending" }],
-    transitions: [transition],
-  };
-  const userSupabase = {
-    async rpc(name, args) {
-      userCalls.push({ name, args });
-      if (name === "prepare_team_workweek_publication") {
-        return {
-          data: {
-            ...prepared,
-            syncState: seriesConfirmed ? "delayed" : "pending",
-            series: prepared.series.map((item) => ({ ...item, state: seriesConfirmed ? "confirmed" : "pending" })),
-            transitions: prepared.transitions.map((item) => ({ ...item, state: transitionConfirmed ? "confirmed" : "pending" })),
-          },
-          error: null,
-        };
-      }
-      if (name === "finalize_team_workweek_publication") {
-        assert.equal(seriesConfirmed, true);
-        assert.equal(transitionConfirmed, true);
-        return {
-          data: {
-            id: publication.id,
-            status: "published",
-            syncState: "confirmed",
-            publishedAt: "2026-08-25T12:30:00.000Z",
-            lastSyncAt: "2026-08-25T12:30:00.000Z",
-            publicationRevision: 2,
-          },
-          error: null,
-        };
-      }
-      throw new Error(`Unexpected user RPC ${name}`);
-    },
-  };
-  const serviceSupabase = {
-    async rpc(name, args) {
-      serviceCalls.push({ name, args });
-      if (name === "confirm_team_workweek_google_series") {
-        seriesConfirmed = true;
-        return { data: null, error: null };
-      }
-      if (name === "confirm_team_workweek_google_series_transition") {
-        transitionConfirmed = true;
-        return { data: null, error: null };
-      }
-      if (name === "delay_team_workweek_publication") {
-        return {
-          data: {
-            id: publication.id,
-            status: "preparing",
-            syncState: "delayed",
-            publishedAt: null,
-            lastSyncAt: null,
-            publicationRevision: 2,
-          },
-          error: null,
-        };
-      }
-      throw new Error(`Unexpected service RPC ${name}`);
-    },
-  };
-  const ensureSeries = async () => ({ state: "confirmed", etag: '"new"', observedAt: "2026-08-25T12:10:00.000Z" });
-  const ensureTransition = async () => {
-    transitionAttempts += 1;
-    return transitionAttempts === 1
-      ? { state: "delayed", errorClass: "provider_identity_mismatch" }
-      : { state: "confirmed", etag: '"transition"', observedAt: "2026-08-25T12:20:00.000Z" };
-  };
-
-  const delayed = await publicationServer.publishTeamWorkweek({
-    serviceSupabase,
-    userSupabase,
-    versionId: publication.sourceVersionId,
-    ensureSeries,
-    ensureTransition,
-  });
-  assert.equal(delayed.recovery, "identity_conflict");
-  assert.equal(userCalls.some((call) => call.name === "finalize_team_workweek_publication"), false);
-  assert.equal(serviceCalls.filter((call) => call.name === "confirm_team_workweek_google_series").length, 1);
-
-  const published = await publicationServer.publishTeamWorkweek({
-    serviceSupabase,
-    userSupabase,
-    versionId: publication.sourceVersionId,
-    ensureSeries: async () => {
-      throw new Error("confirmed replacement series must not be replayed");
-    },
-    ensureTransition,
-  });
-  assert.equal(published.status, "published");
-  assert.equal(serviceCalls.at(-1).args.p_expected_founderops_revision, transition.expectedFounderopsRevision);
-  assert.equal(userCalls.at(-1).name, "finalize_team_workweek_publication");
-});
-
-test("a failed replacement series prevents every predecessor transition in that attempt", async () => {
-  let transitionCalls = 0;
-  const prepared = {
-    ...publication,
-    publicationRevision: 2,
-    series: [{ ...series, state: "pending" }],
-    transitions: [transition],
-  };
-  const userSupabase = {
-    async rpc(name) {
-      if (name === "prepare_team_workweek_publication") return { data: prepared, error: null };
-      throw new Error(`Unexpected user RPC ${name}`);
-    },
-  };
-  const serviceSupabase = {
-    async rpc(name) {
-      if (name === "delay_team_workweek_publication") {
-        return {
-          data: { id: publication.id, status: "preparing", syncState: "delayed", publishedAt: null, lastSyncAt: null, publicationRevision: 2 },
-          error: null,
-        };
-      }
-      throw new Error(`Unexpected service RPC ${name}`);
-    },
-  };
-  const result = await publicationServer.publishTeamWorkweek({
-    serviceSupabase,
-    userSupabase,
-    versionId: publication.sourceVersionId,
-    ensureSeries: async () => ({ state: "delayed", errorClass: "provider_identity_mismatch" }),
-    ensureTransition: async () => {
-      transitionCalls += 1;
-      return { state: "confirmed", etag: '"never"', observedAt: "2026-08-25T12:00:00.000Z" };
-    },
-  });
-  assert.equal(result.recovery, "identity_conflict");
-  assert.equal(transitionCalls, 0);
-});
-
-test("conflict resolution checks predecessor transitions before creating replacement series", async () => {
-  let seriesCalls = 0;
-  const prepared = {
-    ...publication,
-    publicationRevision: 2,
-    series: [{ ...series, state: "pending" }],
-    transitions: [transition],
-  };
-  const userSupabase = {
-    async rpc(name) {
-      if (name === "prepare_team_workweek_publication") return { data: prepared, error: null };
-      throw new Error(`Unexpected user RPC ${name}`);
-    },
-  };
-  const serviceSupabase = {
-    async rpc(name) {
-      if (name === "delay_team_workweek_publication") {
-        return {
-          data: { id: publication.id, status: "preparing", syncState: "delayed", publishedAt: null, lastSyncAt: null, publicationRevision: 2 },
-          error: null,
-        };
-      }
-      throw new Error(`Unexpected service RPC ${name}`);
-    },
-  };
-  const result = await publicationServer.publishTeamWorkweek({
-    serviceSupabase,
-    userSupabase,
-    versionId: publication.sourceVersionId,
-    transitionsFirst: true,
-    ensureSeries: async () => {
-      seriesCalls += 1;
-      return { state: "confirmed", etag: '"new"', observedAt: "2026-08-25T12:00:00.000Z" };
-    },
-    ensureTransition: async () => ({ state: "delayed", errorClass: "provider_identity_mismatch" }),
-  });
-  assert.equal(result.recovery, "identity_conflict");
-  assert.equal(seriesCalls, 0);
 });
 
 test("a preflight delay persists the existing reconnect contract without provider writes", async () => {
@@ -330,7 +125,7 @@ test("a provider confirmation arriving after the candidate never finalizes and r
   const prepared={...publication,activationMode:"immediate",effectiveAt:"2026-10-14T10:03:00Z",attemptGeneration:1,effects:[effect]};
   let cleaned=false;const calls=[];
   const userSupabase={async rpc(name){calls.push(name);if(name==="prepare_team_workweek_publication")return {data:cleaned?{...prepared,effectiveAt:"2026-10-14T10:07:00Z",attemptGeneration:2,effects:[]}:prepared,error:null};if(name==="finalize_team_workweek_publication")return {data:{...prepared,status:"published",syncState:"confirmed",effectiveAt:"2026-10-14T10:07:00Z"},error:null};throw new Error(name);}};
-  const serviceSupabase={async rpc(name){calls.push(name);if(name==="prepare_team_workweek_effect_cleanup")return {data:{effects:[{...effect,operation:"create",state:cleaned?"cleaned":"pending",cleanupDisposition:"preserve",cleanupPayload:effect.payload}]},error:null};if(name==="confirm_team_workweek_planned_cleanup"){cleaned=true;return {data:null,error:null};}if(name==="delay_team_workweek_publication")return {data:{...prepared,syncState:"delayed"},error:null};throw new Error(name);}};
+  const serviceSupabase={async rpc(name){calls.push(name);if(name==="claim_team_workweek_provider_operation")return {data:{state:"claimed",id:"op"},error:null};if(name==="finish_team_workweek_provider_operation")return {data:{state:"settled"},error:null};if(name==="prepare_team_workweek_effect_cleanup")return {data:{effects:[{...effect,operation:"create",state:cleaned?"cleaned":"pending",cleanupDisposition:"preserve",cleanupPayload:effect.payload}]},error:null};if(name==="confirm_team_workweek_planned_cleanup"){cleaned=true;return {data:null,error:null};}if(name==="delay_team_workweek_publication")return {data:{...prepared,syncState:"delayed"},error:null};throw new Error(name);}};
   const delayed=await publicationServer.publishTeamWorkweek({userSupabase,serviceSupabase,versionId:publication.sourceVersionId,now:()=>clock,ensureEffect:async()=>{clock=new Date("2026-10-14T10:04:00Z");return {state:"confirmed",etag:'"late"',observedAt:clock.toISOString()};}});
   assert.equal(delayed.status,"preparing");assert.equal(calls.includes("finalize_team_workweek_publication"),false);
   const recovered=await publicationServer.publishTeamWorkweek({userSupabase,serviceSupabase,versionId:publication.sourceVersionId,now:()=>clock,cleanupEffect:async()=>({state:"confirmed",etag:"absent",observedAt:clock.toISOString()})});
@@ -360,13 +155,13 @@ test("lost partial predecessor updates are restored before a later candidate res
   const effect={id:"cutoff",calendarId:"primary",googleEventId:"fopsabc123",generation:1,state:"confirmed",confirmedEtag:'"cut"',operation:"update",kind:"predecessor_cutoff",expectedEtag:'"old"',expectedPayload:{id:"fopsabc123"},payload:{id:"fopsabc123"}};
   const first={...publication,activationMode:"immediate",effectiveAt:"2026-10-14T10:03:00Z",attemptGeneration:1,effects:[effect]};let restored=false;
   const userSupabase={async rpc(name){events.push(name);if(name==="prepare_team_workweek_publication")return {data:restored?{...first,effectiveAt:"2026-10-14T10:07:00Z",attemptGeneration:2,effects:[]}:first,error:null};if(name==="finalize_team_workweek_publication")return {data:{...first,status:"published",syncState:"confirmed",effectiveAt:"2026-10-14T10:07:00Z"},error:null};throw new Error(name);}};
-  const serviceSupabase={async rpc(name,args){events.push(name);if(name==="prepare_team_workweek_effect_cleanup")return {data:{effects:[{...effect,state:restored?"cleaned":"confirmed",cleanupDisposition:"restore",cleanupPayload:effect.expectedPayload}]},error:null};assert.equal(name,"confirm_team_workweek_planned_cleanup");assert.equal(args.p_etag,'"restored"');assert.equal(args.p_preserved,false);restored=true;return {data:null,error:null};}};
+  const serviceSupabase={async rpc(name,args){events.push(name);if(name==="claim_team_workweek_provider_operation")return {data:{state:"claimed",id:"op"},error:null};if(name==="finish_team_workweek_provider_operation")return {data:{state:"settled"},error:null};if(name==="prepare_team_workweek_effect_cleanup")return {data:{effects:[{...effect,state:restored?"cleaned":"confirmed",cleanupDisposition:"restore",cleanupPayload:effect.expectedPayload}]},error:null};assert.equal(name,"confirm_team_workweek_planned_cleanup");assert.equal(args.p_etag,'"restored"');assert.equal(args.p_preserved,false);restored=true;return {data:null,error:null};}};
   const result=await publicationServer.publishTeamWorkweek({versionId:publication.sourceVersionId,userSupabase,serviceSupabase,now:()=>clock,cleanupEffect:async()=>({state:"confirmed",etag:'"restored"',observedAt:clock.toISOString()})});
-  assert.equal(result.status,"published");assert.deepEqual(events,["prepare_team_workweek_publication","prepare_team_workweek_effect_cleanup","prepare_team_workweek_effect_cleanup","prepare_team_workweek_effect_cleanup","confirm_team_workweek_planned_cleanup","prepare_team_workweek_publication","finalize_team_workweek_publication"]);
+  assert.equal(result.status,"published");assert.deepEqual(events.filter(name=>!["claim_team_workweek_provider_operation","finish_team_workweek_provider_operation"].includes(name)),["prepare_team_workweek_publication","prepare_team_workweek_effect_cleanup","prepare_team_workweek_effect_cleanup","prepare_team_workweek_effect_cleanup","confirm_team_workweek_planned_cleanup","prepare_team_workweek_publication","finalize_team_workweek_publication"]);
 });
 
 test("a failed database completion resumes confirmed effects without another Google write", async () => {
-  const prepared={...publication,activationMode:"future_monday",effectiveAt:"2099-01-11T23:00:00Z",attemptGeneration:1,effects:[{id:"confirmed-effect",calendarId:"primary",googleEventId:"managed",generation:1,state:"confirmed",confirmedEtag:"confirmed",operation:"create",kind:"weekly",payload:{}}]};
+  const prepared={...publication,activationMode:"future_monday",effectiveAt:"2099-01-11T23:00:00Z",attemptGeneration:1,effects:[{id:"confirmed-effect",calendarId:"primary",googleEventId:"managed",generation:1,state:"confirmed",confirmedEtag:"confirmed",operation:"create",kind:"weekly",payload:{id:"managed"}}]};
   let finalizations=0;
   const userSupabase={async rpc(name){
     if(name==="prepare_team_workweek_publication")return {data:prepared,error:null};
@@ -377,7 +172,7 @@ test("a failed database completion resumes confirmed effects without another Goo
     throw new Error(name);
   }};
   const ensureEffect=vi.fn(()=>{throw new Error("confirmed Google writes must not repeat");});
-  const args={userSupabase,serviceSupabase:{},versionId:publication.sourceVersionId,ensureEffect};
+  const args={userSupabase,serviceSupabase:{async rpc(name){return {data:name==="claim_team_workweek_provider_operation"?{state:"claimed",id:"op"}:{state:"settled"},error:null};}},versionId:publication.sourceVersionId,ensureEffect};
   await assert.rejects(publicationServer.publishTeamWorkweek(args),error=>error.code==="completion_pending");
   const result=await publicationServer.publishTeamWorkweek(args);
   assert.equal(result.id,prepared.id);assert.equal(result.status,"published");assert.equal(ensureEffect.mock.calls.length,0);

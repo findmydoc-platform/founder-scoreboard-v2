@@ -306,7 +306,6 @@ test("a changed provider CAS refreshes the resolving conflict before an explicit
     google_observations: changedObservations,
     google_fingerprint: googleFingerprint(changedObservations),
   };
-  let publicationInput = null;
   const publication = await conflicts.resolveTeamWorkweekConflict({
     conflictId: refreshedConflict.id,
     conflictRevision: 2,
@@ -314,9 +313,8 @@ test("a changed provider CAS refreshes the resolving conflict before an explicit
     ownerProfileId: "profile-1",
     serviceSupabase: resolvingService(refreshedConflict),
     userSupabase: {},
-    publish: async (input) => {
+    publish: async () => {
       publishes += 1;
-      publicationInput = input;
       return {
         id: "66666666-6666-4666-8666-666666666666",
         status: "preparing",
@@ -332,7 +330,6 @@ test("a changed provider CAS refreshes the resolving conflict before an explicit
   });
   assert.equal(publication.status, "preparing");
   assert.equal(publishes, 1);
-  assert.equal(publicationInput.transitionsFirst, true);
 });
 
 

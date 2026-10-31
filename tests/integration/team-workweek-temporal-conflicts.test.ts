@@ -1,3 +1,4 @@
+import { confirmObservedCleanup, confirmObservedEffect } from "./helpers/workweek-provider";
 import { expect,it } from "vitest";
 import { asAuthenticated,captureDatabaseError,withIsolatedLocalDatabase } from "./helpers/local-database";
 
@@ -17,7 +18,7 @@ it.each([["founderops","immediate"],["google","immediate"],["founderops","future
     const prepared=(await prepare()).rows[0].result;expect((await prepare()).rows[0].result).toEqual({...prepared,replayed:true});await client.query("reset role");
     const publication=(await asAuthenticated(client,user,()=>client.query("select public.prepare_team_workweek_publication($1,1) as result",[prepared.versionId]))).rows[0].result;
     expect(publication.activationMode).toBe(mode);expect(publication.attemptGeneration).toBe(1);expect((await client.query("select windows from public.team_workweek_publications where id=$1",[publication.id])).rows[0].windows).toEqual([{weekday:1,startMinute:decision==="founderops"?600:660,endMinute:decision==="founderops"?1080:1140}]);
-    for(const effect of publication.effects){await client.query("set local role service_role");await client.query("select public.confirm_team_workweek_effect($1,1,'confirmed',$2)",[effect.id,effect.payload]);await client.query("reset role");}
+    for(const effect of publication.effects){await client.query("set local role service_role");await confirmObservedEffect(client, effect.id, 1, "confirmed", effect.payload);await client.query("reset role");}
     await asAuthenticated(client,user,()=>client.query("select public.finalize_team_workweek_publication($1)",[publication.id]));
     await client.query("select set_config('request.jwt.claim.role','service_role',true)");await client.query("set local role service_role");await client.query("select public.complete_team_workweek_google_conflict_resolution($1,'conflict-owner',$2,clock_timestamp())",[captured.id,conflict.conflict_revision]);await client.query("reset role");
     expect((await client.query("select retired_at from public.team_workweek_versions where id=$1",[privateDraft.id])).rows[0].retired_at).toBeTruthy();
@@ -62,7 +63,7 @@ it("explicitly restarts an expired resolving conflict from its original private 
     await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '1 minute' where id=$1",[publication.id]);
     await client.query("select set_config('request.jwt.claim.role','service_role',true)");await client.query("set local role service_role");
     const plan=(await client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result",[publication.id])).rows[0].result;
-    for(const effect of plan.effects)await client.query("select public.confirm_team_workweek_planned_cleanup($1,1,'absent',false)",[effect.id]);await client.query("reset role");
+    for(const effect of plan.effects)await confirmObservedCleanup(client, effect.id, 1, "absent", false);await client.query("reset role");
     const restarted=(await asAuthenticated(client,user,()=>client.query("select public.restart_private_team_workweek_version($1) as result",[privateDraft.id]))).rows[0].result;
     expect(restarted.versionId).not.toBe(privateDraft.id);
     expect((await client.query("select status,deactivation_reason from public.team_workweek_publications where id=$1",[publication.id])).rows[0]).toEqual({status:"inactive",deactivation_reason:"private_restart"});

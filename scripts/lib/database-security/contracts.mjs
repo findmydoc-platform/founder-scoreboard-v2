@@ -20,7 +20,6 @@ export const authenticatedFunctionAllowlist = Object.freeze([
   "public.finalize_team_workweek_publication(p_publication_id uuid)",
   "public.mutate_administrator_planning_relationship_transaction(p_operation text, p_task_id text, p_related_task_id text, p_relation_type text, p_relation_id bigint, p_note text, p_expected_updated_at timestamp with time zone, p_actor_profile_id text, p_request_ip text, p_user_agent text)",
   "public.mutate_administrator_planning_relationship_transaction_v2(p_operation text, p_task_id text, p_related_task_id text, p_relation_type text, p_relation_id bigint, p_note text, p_expected_updated_at timestamp with time zone, p_actor_profile_id text, p_mention_recipient_profile_ids text[], p_request_ip text, p_user_agent text)",
-  "public.prepare_team_workweek_publication(p_version_id uuid)",
   "public.prepare_team_workweek_publication(p_version_id uuid, p_write_journal_version integer)",
   "public.set_administrator_eligibility(p_profile_id text, p_eligible boolean)",
   "public.set_administrator_eligibility_if_current(p_profile_id text, p_expected_eligible boolean, p_eligible boolean)",

@@ -774,30 +774,6 @@ export const WaitsForTheActiveGoogleRequestBeforeRestarting: Story = {
   },
 };
 
-export const KeepsAnUntrackedOlderAttemptBlocked: Story = {
-  args: { profile, apiClient: client({
-    googleConnected: true, immediateAllowed: true, restartAvailable: true,
-    version: { ...expiredDraft, activationMode: "future_monday", effectiveFrom: nextMondayIso() },
-    publication: { ...latestPublished, status: "preparing", syncState: "delayed", activationMode: "future_monday", effectiveAt: "2099-01-11T23:00:00Z" },
-    restart: { status: 202, after: {}, result: { restart: { state: "delayed", recovery: "retry", reason: "legacy_untracked" } } },
-  }) },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeitung fortsetzen" }));
-    await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toBeDisabled();
-    await userEvent.clear(canvas.getByLabelText("Montag, Fenster 1, Ende"));
-    await userEvent.type(canvas.getByLabelText("Montag, Fenster 1, Ende"), "18:00");
-    await userEvent.click(canvas.getByRole("button", { name: "Mit aktuellem Stand neu beginnen" }));
-    await expect(await canvas.findByText(/Dieser ältere Versuch kann noch nicht sicher abgebrochen werden/)).toBeVisible();
-    await expect(canvas.getByLabelText("Montag, Fenster 1, Ende")).toHaveValue("18:00");
-    await expect(canvas.getByRole("combobox", { name: "Arbeitswoche auswählen" })).toBeInTheDocument();
-    await expect(canvas.getByRole("button", { name: "Entwurf speichern" })).toBeDisabled();
-    await expect(canvas.getByRole("button", { name: "Änderung in Google & Team veröffentlichen" })).toBeDisabled();
-    await expect(canvas.queryByText(/Neustart vorbereitet/)).not.toBeInTheDocument();
-    await expect(canvas.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" })).toBeVisible();
-  },
-};
-
 
 export const BlocksPublicationUntilRestartContextCanBeReloaded: Story = {
   args: { profile, apiClient: client({ immediateAllowed: true, restartAvailable: true, failRestartContextOnce: true, version: expiredDraft,

@@ -1,3 +1,4 @@
+import { confirmObservedCleanup, confirmObservedEffect, localCalendar, localWriteJournal, asService } from "./helpers/workweek-provider";
 import { expect, it } from "vitest";
 import { asAuthenticated, captureDatabaseError, withIsolatedLocalDatabase } from "./helpers/local-database";
 import { cleanupGoogleWorkweekEffect, ensureGoogleWorkweekEffect, type PreparedWorkweekEffect } from "../../src/features/team-workweek/server/team-workweek-immediate-effects";
@@ -53,15 +54,17 @@ it("inserts a current correction before the prepared Monday without changing tha
       if (init.method === "POST" && loseCreateResponse) { loseCreateResponse = false; throw new Error("Lost provider response"); }
       return Response.json(providerEvents.get(payload.id));
     }) as typeof fetch;
+    let claim=(await asService(client,()=>client.query("select public.claim_team_workweek_provider_operation($1,$2,'publish') as value",[publication.id,publication.attemptGeneration]))).rows[0].value;
     for (const effect of publication.effects as PreparedWorkweekEffect[]) {
-      const result = await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider });
+      const result = await ensureGoogleWorkweekEffect({ accessToken: localCalendar(client,provider), writeJournal:localWriteJournal(client,claim.id,effect.id), effect, fetchImpl: provider });
       expect(result.state).toBe("confirmed");
       if (result.state !== "confirmed") throw new Error("Provider confirmation required");
       await client.query("set local role service_role");
-      await client.query("select public.confirm_team_workweek_effect($1,$2,$3,$4)", [effect.id, effect.generation, result.etag, effect.payload]);
+      await asService(client,()=>client.query("select public.confirm_team_workweek_effect($1,$2,$3,$4)",[effect.id,effect.generation,result.etag,effect.payload]));
       await client.query("reset role");
     }
     await asAuthenticated(client, user, () => client.query("select public.finalize_team_workweek_publication($1)", [publication.id]));
+    await asService(client,()=>client.query("select public.finish_team_workweek_provider_operation($1)",[claim.id]));
     expect((await client.query("select * from public.team_workweek_publications where id=$1", [successor.rows[0].id])).rows[0]).toEqual(successor.rows[0]);
     const bounds = await client.query("select effective_at,effective_until,superseded_by_publication_id from public.team_workweek_publications where id=$1", [publication.id]);
     expect(bounds.rows[0].effective_until.toISOString()).toBe(new Date(publication.effectiveUntil).toISOString());
@@ -80,24 +83,27 @@ it("inserts a current correction before the prepared Monday without changing tha
     await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '1 minute' where id=$1", [repeated.id]);
     const expired = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [repeatedDraft.rows[0].version.id]))).rows[0].publication;
     expect(expired.attemptGeneration).toBe(1);
-    await client.query("set local role service_role");
-    for (const effect of expired.effects as PreparedWorkweekEffect[]) {
-      const restored = await cleanupGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider });
+    claim=(await asService(client,()=>client.query("select public.claim_team_workweek_provider_operation($1,1,'cleanup') as value",[expired.id]))).rows[0].value;
+    const cleanup=(await asService(client,()=>client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as value",[expired.id]))).rows[0].value;
+    for (const effect of cleanup.effects as PreparedWorkweekEffect[]) {
+      if(effect.state==="cleaned")continue;
+      const restored=await cleanupGoogleWorkweekEffect({accessToken:localCalendar(client,provider),effect,writeJournal:localWriteJournal(client,claim.id,effect.id)});
       expect(restored.state).toBe("confirmed");
-      if (restored.state !== "confirmed") throw new Error("Restoration confirmation required");
-      await client.query("select public.confirm_team_workweek_effect_restoration($1,$2,$3)", [effect.id, effect.generation, restored.etag]);
+      if(restored.state!=="confirmed")throw new Error("Cleanup confirmation required");
+      await asService(client,()=>client.query("select public.confirm_team_workweek_planned_cleanup($1,1,$2,$3)",[effect.id,restored.etag,restored.preserved ?? false]));
     }
-    await client.query("reset role");
+    await asService(client,()=>client.query("select public.finish_team_workweek_provider_operation($1)",[claim.id]));
     const resumed = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [repeatedDraft.rows[0].version.id]))).rows[0].publication;
     expect(resumed.attemptGeneration).toBe(2);
     expect(new Date(resumed.effectiveAt).getTime()).toBeGreaterThan(Date.now());
     expect(resumed.successorPublicationId).toBe(successor.rows[0].id);
+    claim=(await asService(client,()=>client.query("select public.claim_team_workweek_provider_operation($1,$2,'publish') as value",[resumed.id,resumed.attemptGeneration]))).rows[0].value;
     for (const effect of resumed.effects as PreparedWorkweekEffect[]) {
-      const result = await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider });
+      const result = await ensureGoogleWorkweekEffect({ accessToken: localCalendar(client,provider), writeJournal:localWriteJournal(client,claim.id,effect.id), effect, fetchImpl: provider });
       expect(result.state).toBe("confirmed");
       if (result.state !== "confirmed") throw new Error("Provider confirmation required");
       await client.query("set local role service_role");
-      await client.query("select public.confirm_team_workweek_effect($1,$2,$3,$4)", [effect.id, effect.generation, result.etag, effect.payload]);
+      await asService(client,()=>client.query("select public.confirm_team_workweek_effect($1,$2,$3,$4)",[effect.id,effect.generation,result.etag,effect.payload]));
       await client.query("reset role");
     }
     await asAuthenticated(client, user, () => client.query("select public.finalize_team_workweek_publication($1)", [resumed.id]));
@@ -151,7 +157,7 @@ it.each(["before preparation", "before finalization", "unchanged"])("preserves a
       const before = (await client.query("select * from public.team_workweek_publications where id=$1", [future.rows[0].id])).rows[0];
       for (const effect of prepared.effects) {
         await client.query("set local role service_role");
-        await client.query("select public.confirm_team_workweek_effect($1,$2,'etag',$3)", [effect.id, effect.generation, effect.payload]);
+        await confirmObservedEffect(client, effect.id, effect.generation, "etag", effect.payload);
         await client.query("reset role");
       }
       const finalized = (await asAuthenticated(client, user, () => client.query("select public.finalize_team_workweek_publication($1) as publication", [prepared.id]))).rows[0].publication;
@@ -172,7 +178,8 @@ it.each(["before preparation", "before finalization", "unchanged"])("preserves a
       expect(cleanupOnly.effects).toEqual(prepared.effects);
       expect(cleanupOnly.attemptGeneration).toBe(1);
       await client.query("set local role service_role");
-      for (const effect of cleanupOnly.effects) await client.query("select public.confirm_team_workweek_effect_cleanup($1,$2)", [effect.id, effect.generation]);
+      const cleanupPlan=(await asService(client,()=>client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as value",[cleanupOnly.id]))).rows[0].value;
+      for(const effect of cleanupPlan.effects) if(effect.state!=="cleaned") await confirmObservedCleanup(client,effect.id,effect.generation,"absent",false);
       await client.query("reset role");
       const noSilentReplan = await captureDatabaseError(client, () => asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1)", [draft.id])));
       expect(noSilentReplan).toMatchObject({ code: "P0004" });

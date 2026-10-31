@@ -5,8 +5,6 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  ensureGoogleWorkweekSeries,
-  ensureGoogleWorkweekSeriesTransition,
   googleWorkweekRecovery,
   type PreparedWorkweekPublication,
 } from "./team-workweek-publication-core";
@@ -79,36 +77,13 @@ function isPreparedPublication(value: unknown): value is PreparedWorkweekPublica
     && Number.isInteger(input.publicationRevision)
     && (input.publishedAt === null || typeof input.publishedAt === "string")
     && (input.lastSyncAt === null || typeof input.lastSyncAt === "string")
-    && (input.activationMode !== "immediate" || (
-      typeof input.effectiveAt === "string" && Number.isFinite(new Date(input.effectiveAt).getTime())
-      && Number.isInteger(input.attemptGeneration) && Array.isArray(input.effects)
-      && input.effects.every((effect) => effect && typeof effect.id === "string"
-        && effect.generation === input.attemptGeneration && effect.calendarId === "primary"
-        && typeof effect.googleEventId === "string" && effect.payload?.id === effect.googleEventId)
-    ))
-    && Array.isArray(input.series)
-    && input.series.every((series) => Boolean(
-      series
-      && typeof series.id === "string"
-      && series.calendarId === "primary"
-      && typeof series.googleEventId === "string"
-      && (series.state === "pending" || series.state === "confirmed")
-      && Number.isInteger(series.weekday)
-      && Number.isInteger(series.startMinute)
-      && Number.isInteger(series.endMinute),
-    ))
-    && Array.isArray(input.transitions)
-    && input.transitions.every((transition) => Boolean(
-      transition
-      && typeof transition.id === "string"
-      && transition.calendarId === "primary"
-      && typeof transition.googleEventId === "string"
-      && typeof transition.predecessorSeriesId === "string"
-      && (transition.state === "pending" || transition.state === "confirmed")
-      && typeof transition.expectedEtag === "string"
-      && Number.isInteger(transition.expectedFounderopsRevision)
-      && Number.isInteger(transition.recurrenceCount),
-    ));
+    && input.writeJournalVersion === 1
+    && Number.isInteger(input.attemptGeneration) && Number(input.attemptGeneration) > 0
+    && typeof input.effectiveAt === "string" && Number.isFinite(Date.parse(input.effectiveAt))
+    && Array.isArray(input.effects)
+    && input.effects.every(effect => effect && typeof effect.id === "string"
+      && effect.generation === input.attemptGeneration && effect.calendarId === "primary"
+      && typeof effect.googleEventId === "string" && effect.payload?.id === effect.googleEventId);
 }
 
 function isPublicationResult(value: unknown): value is TeamWorkweekPublicationResult {
@@ -153,27 +128,21 @@ export async function publishTeamWorkweek({
   serviceSupabase,
   userSupabase,
   versionId,
-  ensureSeries = ensureGoogleWorkweekSeries,
-  ensureTransition = ensureGoogleWorkweekSeriesTransition,
   ensureEffect = ensureGoogleWorkweekEffect,
   cleanupEffect = cleanupGoogleWorkweekEffect,
   discoverInstance = discoverGoogleWorkweekInstance,
   recoverWrite = recoverGoogleWorkweekWrite,
   now = () => new Date(),
-  transitionsFirst = false,
 }: {
   bookkeeping?: WorkweekBookkeeping;
   serviceSupabase: SupabaseClient;
   userSupabase: SupabaseClient;
   versionId: string;
-  ensureSeries?: typeof ensureGoogleWorkweekSeries;
-  ensureTransition?: typeof ensureGoogleWorkweekSeriesTransition;
   ensureEffect?: typeof ensureGoogleWorkweekEffect;
   cleanupEffect?: typeof cleanupGoogleWorkweekEffect;
   discoverInstance?: typeof discoverGoogleWorkweekInstance;
   recoverWrite?: typeof recoverGoogleWorkweekWrite;
   now?: () => Date;
-  transitionsFirst?: boolean;
   request?: NextRequest;
 }): Promise<TeamWorkweekPublicationResult> {
   const preparedResponse = await userSupabase.rpc("prepare_team_workweek_publication", {
@@ -214,64 +183,46 @@ export async function publishTeamWorkweek({
     };
   }
 
-  if (publication.effects !== undefined) {
-    const delayed = async (errorClass: TeamWorkweekPublicationDelayClass) => ({
-      ...await markDelayed(serviceSupabase, publication.id, errorClass, now().toISOString(), publicationBookkeeping),
-      activationMode: publication.activationMode, effectiveAt: publication.effectiveAt,
-    });
-    const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
-    if (expired()) {
-      const compensation = await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attemptGeneration!,serviceSupabase,bookkeeping:publicationBookkeeping,now,cleanupEffect,discoverInstance,recoverWrite,journaled:publication.writeJournalVersion!==undefined});
-      if(compensation)return await delayed(compensation);
-      const replanned = await userSupabase.rpc("prepare_team_workweek_publication", { p_version_id: versionId, p_write_journal_version: 1 });
-      if (replanned.error) throw publicationError(replanned.error);
-      if (!isPreparedPublication(replanned.data) || replanned.data.status !== "preparing") {
-        // A concurrent/lost finalization is never compensated or overwritten by a new attempt.
-        if (isPreparedPublication(replanned.data) && replanned.data.status === "published") {
-          bookkeeping?.forPublication(replanned.data);
-          bookkeeping?.published(replanned.data);
-          return {
-            id: replanned.data.id, status: "published", syncState: "confirmed", recovery: null,
-            publishedAt: replanned.data.publishedAt, lastSyncAt: replanned.data.lastSyncAt,
-            publicationRevision: replanned.data.publicationRevision,
-            activationMode: replanned.data.activationMode, effectiveAt: replanned.data.effectiveAt,
-          };
-        }
-        throw new TeamWorkweekPublicationError("unavailable", "Neuer Veröffentlichungsbeginn konnte nicht bestätigt werden.");
+  const delayed = async (errorClass: TeamWorkweekPublicationDelayClass) => ({
+    ...await markDelayed(serviceSupabase, publication.id, errorClass, now().toISOString(), publicationBookkeeping),
+    activationMode: publication.activationMode, effectiveAt: publication.effectiveAt,
+  });
+  const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
+  if (expired()) {
+    const compensation = await compensateTeamWorkweekGeneration({accessToken,publicationId:publication.id,generation:publication.attemptGeneration,serviceSupabase,bookkeeping:publicationBookkeeping,now,cleanupEffect,discoverInstance,recoverWrite});
+    if(compensation)return await delayed(compensation);
+    const replanned = await userSupabase.rpc("prepare_team_workweek_publication", { p_version_id: versionId, p_write_journal_version: 1 });
+    if (replanned.error) throw publicationError(replanned.error);
+    if (!isPreparedPublication(replanned.data) || replanned.data.status !== "preparing") {
+      // A concurrent/lost finalization is never compensated or overwritten by a new attempt.
+      if (isPreparedPublication(replanned.data) && replanned.data.status === "published") {
+        bookkeeping?.forPublication(replanned.data);
+        bookkeeping?.published(replanned.data);
+        return {
+          id: replanned.data.id, status: "published", syncState: "confirmed", recovery: null,
+          publishedAt: replanned.data.publishedAt, lastSyncAt: replanned.data.lastSyncAt,
+          publicationRevision: replanned.data.publicationRevision,
+          activationMode: replanned.data.activationMode, effectiveAt: replanned.data.effectiveAt,
+        };
       }
-      publication = replanned.data;
-      publicationBookkeeping = bookkeeping?.forPublication(publication);
-      if (expired()) return await delayed("provider_unavailable");
+      throw new TeamWorkweekPublicationError("unavailable", "Neuer Veröffentlichungsbeginn konnte nicht bestätigt werden.");
     }
-    return await executeTeamWorkweekPublication({
-      serviceSupabase, bookkeeping: publicationBookkeeping, publication, accessToken, ensureEffect, discoverInstance, recoverWrite, now, delayed,
-      complete: async () => {
-        const finalized = await userSupabase.rpc("finalize_team_workweek_publication", { p_publication_id: publication.id });
-        if (finalized.error?.code === "P0005") return await delayed("provider_unavailable");
-        if (finalized.error) {
-          const failure = publicationError(finalized.error);
-          if (failure.code === "unavailable") throw new TeamWorkweekPublicationError("completion_pending", "Google hat die Änderungen bestätigt. Der Abschluss in FounderOps ist noch offen. Setze die Veröffentlichung fort.", true);
-          throw new TeamWorkweekPublicationError(failure.code, failure.message, true);
-        }
-        if (!isPublicationResult(finalized.data) || finalized.data.status !== "published") {
-          throw new TeamWorkweekPublicationError("unavailable", "Veröffentlichungsstatus konnte nicht bestätigt werden.");
-        }
-        bookkeeping?.published(finalized.data);
-      return { ...finalized.data, recovery: null };
-      },
-    });
+    publication = replanned.data;
+    publicationBookkeeping = bookkeeping?.forPublication(publication);
+    if (expired()) return await delayed("provider_unavailable");
   }
-
   return await executeTeamWorkweekPublication({
-    serviceSupabase, bookkeeping: publicationBookkeeping, publication, accessToken, ensureSeries, ensureTransition, transitionsFirst, now,
-    delayed: (errorClass) => markDelayed(serviceSupabase, publication.id, errorClass, now().toISOString(), publicationBookkeeping),
+    serviceSupabase, bookkeeping: publicationBookkeeping, publication, accessToken, ensureEffect, discoverInstance, recoverWrite, now, delayed,
     complete: async () => {
-      const finalized = await userSupabase.rpc("finalize_team_workweek_publication", {
-        p_publication_id: publication.id,
-      });
-      if (finalized.error) throw publicationError(finalized.error);
+      const finalized = await userSupabase.rpc("finalize_team_workweek_publication", { p_publication_id: publication.id });
+      if (finalized.error?.code === "P0005") return await delayed("provider_unavailable");
+      if (finalized.error) {
+        const failure = publicationError(finalized.error);
+        if (failure.code === "unavailable") throw new TeamWorkweekPublicationError("completion_pending", "Google hat die Änderungen bestätigt. Der Abschluss in FounderOps ist noch offen. Setze die Veröffentlichung fort.", true);
+        throw new TeamWorkweekPublicationError(failure.code, failure.message, true);
+      }
       if (!isPublicationResult(finalized.data) || finalized.data.status !== "published") {
-        throw new TeamWorkweekPublicationError("unavailable", "Grundwoche konnte nicht veröffentlicht werden.");
+        throw new TeamWorkweekPublicationError("unavailable", "Veröffentlichungsstatus konnte nicht bestätigt werden.");
       }
       bookkeeping?.published(finalized.data);
       return { ...finalized.data, recovery: null };

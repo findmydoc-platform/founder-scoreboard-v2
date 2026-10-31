@@ -55,7 +55,7 @@ it("Workweek HTTP read states retain owner isolation, temporal projections and s
     await otherFixture.seed("draft");
     const route = await importTestModule("src/app/api/team-workweek/private-draft/route.ts", { "server-only": {} });
     const request = (week?: string) => ({ headers: new Headers({ authorization: `Bearer ${token}` }), nextUrl: new URL(`https://application.example.test/api/team-workweek/private-draft${week ? `?week=${week}` : ""}`) }) as NextRequest;
-    for (const name of ["initial", "draft", "preparing", "published", "current-future", "selected-future", "pinned", "pinned-current", "conflict", "automatic", "automatic-private", "automatic-history", "recovery", "recovery-no-journal", "recovery-expired", "recovery-restarted", "recovery-identity"]) {
+    for (const name of ["initial", "draft", "preparing", "published", "current-future", "selected-future", "pinned", "pinned-current", "conflict", "automatic", "automatic-private", "automatic-history", "recovery", "recovery-expired", "recovery-restarted", "recovery-identity"]) {
       const fixture = await workweekReadFixture(database, profileId, weeks);
       try {
         await fixture.seed(name);

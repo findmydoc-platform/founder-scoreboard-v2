@@ -14,7 +14,7 @@ test.each([false,true])("a journaled uncertain create reaches a usable claim aft
       if(name==="claim_team_workweek_provider_operation")return {data:finished?{state:"claimed",id:"next-operation"}:{state:"uncertain",id:"orphan",purpose:"publish",abandon},error:null};
       if(name==="record_team_workweek_provider_write"){
         assert.equal(args.p_operation_id,"orphan");
-        if(args.p_state==="settled")settled=true;
+        if(["settled","observed"].includes(args.p_state))settled=true;
         else assert.equal(args.p_state,"replaying");
         return {data:null,error:null};
       }
@@ -31,7 +31,7 @@ test.each([false,true])("a journaled uncertain create reaches a usable claim aft
     return event?Response.json(event):new Response(null,{status:404});
   });
   try{
-    assert.deepEqual(await provider.claimProviderOperation({serviceSupabase:service,publicationId:"publication",generation:1,purpose:abandon?"cleanup":"publish",accessToken: { request: (url, init) => fetch(url, init) }}),{id:"next-operation"});
+    assert.deepEqual(await provider.claimProviderOperation({serviceSupabase:service,publicationId:"publication",generation:1,purpose:abandon?"cleanup":"publish",accessToken: {request:(url,init)=>fetch(url,init),mutate:async(binding,url,init)=>{await service.rpc("record_team_workweek_provider_write",{p_operation_id:binding.operationId,p_effect_id:binding.targetId,p_state:"replaying"});return fetch(url,init);}}}),{id:"next-operation"});
     assert.equal(event.status,abandon?"cancelled":undefined);
   }finally{spy.mockRestore();}
 });

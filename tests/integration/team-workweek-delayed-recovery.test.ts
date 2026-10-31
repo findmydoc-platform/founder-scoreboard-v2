@@ -1,3 +1,4 @@
+import { confirmObservedCleanup, localCalendar, confirmObservedEffect } from "./helpers/workweek-provider";
 import { expect, it } from "vitest";
 import pg from "pg";
 import { asAuthenticated, captureDatabaseError, localDatabaseUrl, withIsolatedLocalDatabase } from "./helpers/local-database";
@@ -19,7 +20,7 @@ async function prepare(client: Parameters<Parameters<typeof withIsolatedLocalDat
 
 function journal(client: Parameters<Parameters<typeof withIsolatedLocalDatabase>[0]>[0], operationId: string, effectId: string) {
   const record = (state: string) => service(client, () => client.query("select public.record_team_workweek_provider_write($1,$2,$3)", [operationId, effectId, state])).then(() => undefined);
-  return { beforeWrite: () => record("dispatched"), outcome: record };
+  return { target: {kind: "publication" as const, operationId, targetId: effectId}, outcome: record };
 }
 
 it("fences a delayed Monday before cleanup and keeps the original generation immutable", async () => {
@@ -38,7 +39,7 @@ it("fences a delayed Monday before cleanup and keeps the original generation imm
     await service(client, () => client.query("select public.finish_team_workweek_provider_operation($1)", [claim.id]));
     const cleanup = (await service(client, () => client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result", [publication.id]))).rows[0].result;
     expect(cleanup.effects.length).toBeGreaterThan(0);
-    for (const effect of cleanup.effects) await service(client, () => client.query("select public.confirm_team_workweek_planned_cleanup($1,1,'absent',false)", [effect.id]));
+    for (const effect of cleanup.effects) await service(client, () => confirmObservedCleanup(client, effect.id, 1, "absent", false));
     const fresh = (await asAuthenticated(client, ownerUser, () => client.query("select public.restart_private_team_workweek_version($1) as result", [draft.id]))).rows[0].result;
     expect(fresh.versionId).not.toBe(draft.id);
     const old = (await client.query("select status,effective_at,attempt_generation from public.team_workweek_publications where id=$1", [publication.id])).rows[0];
@@ -80,7 +81,7 @@ it("waits for an actual late Google response before compensating a cancelled gen
       if (init?.method === "DELETE") { event = null; return new Response(null, { status: 204 }); }
       return event ? Response.json(event) : new Response(null, { status: 404 });
     };
-    const writing = ensureGoogleWorkweekEffect({ accessToken: { request: (url: string | URL, init?: RequestInit) => fetch(url, init) }, effect, fetchImpl: provider, writeJournal: journal(client, claim.id, effect.id) });
+    const writing = ensureGoogleWorkweekEffect({ accessToken: localCalendar(client, provider), effect, fetchImpl: provider, writeJournal: journal(client, claim.id, effect.id) });
     await started;
     expect((await service(client, () => client.query("select public.request_team_workweek_publication_restart($1,'delayed-owner') as result", [publication.id]))).rows[0].result.reason).toBe("in_progress");
     expect((await service(client, () => client.query("select public.claim_team_workweek_provider_operation($1,1,'publish') as result", [publication.id]))).rows[0].result.state).toBe("in_progress");
@@ -92,7 +93,7 @@ it("waits for an actual late Google response before compensating a cancelled gen
     const cleanupClaim = (await service(client, () => client.query("select public.claim_team_workweek_provider_operation($1,1,'cleanup') as result", [publication.id]))).rows[0].result;
     const plan = (await service(client, () => client.query("select public.prepare_team_workweek_effect_cleanup($1,1) as result", [publication.id]))).rows[0].result;
     for (const target of plan.effects) {
-      const result = await cleanupGoogleWorkweekEffect({ accessToken: { request: (url: string | URL, init?: RequestInit) => fetch(url, init) }, effect: target, fetchImpl: provider, writeJournal: journal(client, cleanupClaim.id, target.id) });
+      const result = await cleanupGoogleWorkweekEffect({ accessToken: localCalendar(client, provider), effect: target, fetchImpl: provider, writeJournal: journal(client, cleanupClaim.id, target.id) });
       expect(result.state).toBe("confirmed");
     }
     expect(event).toBeNull();
@@ -109,7 +110,7 @@ it("keeps a timed-out dispatch uncertain across 404 observations and aging until
       if (init?.method === "POST") throw new DOMException("Response lost", "TimeoutError");
       return event ? Response.json(event) : new Response(null, { status: 404 });
     };
-    const input = { accessToken: { request: (url: string | URL, init?: RequestInit) => fetch(url, init) }, effect, fetchImpl: provider, writeJournal: journal(client, claim.id, effect.id) };
+    const input = { accessToken: localCalendar(client, provider), effect, fetchImpl: provider, writeJournal: journal(client, claim.id, effect.id) };
     expect((await ensureGoogleWorkweekEffect(input)).state).toBe("delayed");
     expect((await service(client, () => client.query("select public.finish_team_workweek_provider_operation($1) as result", [claim.id]))).rows[0].result.state).toBe("uncertain");
     await client.query("update public.team_workweek_provider_operations set created_at=clock_timestamp()-interval '100 years' where id=$1", [claim.id]);
@@ -140,37 +141,6 @@ it.each(["ceo", "deputy", "founder", "viewer"])("keeps cancellation and provider
   });
 }, 30_000);
 
-it.each(["future", "expired"])("does not infer that an unjournaled %s attempt has never dispatched a Google write", async timing => {
-  await withIsolatedLocalDatabase(async client => {
-    const { publication } = await prepare(client);
-    await client.query("update public.team_workweek_publications set write_journal_version=0 where id=$1", [publication.id]);
-    if (timing === "expired") await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '100 years' where id=$1", [publication.id]);
-    expect((await service(client, () => client.query("select public.request_team_workweek_publication_restart($1,'delayed-owner') as result", [publication.id]))).rows[0].result).toEqual({ state: "delayed", reason: "legacy_untracked" });
-    expect((await client.query("select restart_requested_at from public.team_workweek_publications where id=$1", [publication.id])).rows[0].restart_requested_at).toBeNull();
-    expect(await captureDatabaseError(client, () => service(client, () => client.query("select public.prepare_team_workweek_effect_cleanup($1,1)", [publication.id])))).toMatchObject({ code: "P0003" });
-  });
-}, 30_000);
-
-it("keeps a publication created by an old runtime untracked when the new runtime retries it", async () => {
-  await withIsolatedLocalDatabase(async client => {
-    await client.query("insert into auth.users(id) values($1)", [ownerUser]);
-    await client.query("insert into public.profiles(id,auth_user_id,name,platform_role) values('delayed-owner',$1,'Owner','viewer')", [ownerUser]);
-    const draft = (await asAuthenticated(client, ownerUser, () => client.query("select public.create_private_team_workweek_version(date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date+7,'[]') as result"))).rows[0].result;
-    const old = (await asAuthenticated(client, ownerUser, () => client.query("select public.prepare_team_workweek_publication($1) as result", [draft.id]))).rows[0].result;
-    expect(old.writeJournalVersion).toBe(0);
-    expect((await asAuthenticated(client, ownerUser, () => client.query("select public.prepare_team_workweek_publication($1,1) as result", [draft.id]))).rows[0].result.writeJournalVersion).toBe(0);
-    expect((await service(client, () => client.query("select public.request_team_workweek_publication_restart($1,'delayed-owner') as result", [old.id]))).rows[0].result.reason).toBe("legacy_untracked");
-  });
-}, 30_000);
-
-it("prevents an old runtime from obtaining a journaled generation for unrecorded provider writes", async () => {
-  await withIsolatedLocalDatabase(async client => {
-    const { draft, publication } = await prepare(client);
-    expect(publication.writeJournalVersion).toBe(1);
-    expect(await captureDatabaseError(client, () => asAuthenticated(client, ownerUser, () => client.query("select public.prepare_team_workweek_publication($1)", [draft.id])))).toMatchObject({ code: "P0003" });
-  });
-}, 30_000);
-
 it("does not replan an expired empty generation while a publisher still owns it", async () => {
   await withIsolatedLocalDatabase(async client => {
     const { draft, publication } = await prepare(client);
@@ -189,7 +159,7 @@ it.each(["cancellation", "finalization"])("serializes %s winning against a concu
   try {
     await first.query("begin");
     const { publication } = await prepare(first);
-    for (const effect of publication.effects) await service(first, () => first.query("select public.confirm_team_workweek_effect($1,1,'observed',$2)", [effect.id, effect.payload]));
+    for (const effect of publication.effects) await service(first, () => confirmObservedEffect(first, effect.id, 1, "observed", effect.payload));
     await first.query("commit");
     await first.query("begin");
     await second.query("begin");

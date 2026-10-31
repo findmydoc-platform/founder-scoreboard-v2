@@ -1,3 +1,4 @@
+import { confirmObservedEffect } from "./helpers/workweek-provider";
 import { expect, it } from "vitest";
 import { asAuthenticated, captureDatabaseError, withIsolatedLocalDatabase } from "./helpers/local-database";
 import { verifyDatabaseSecurity } from "../../scripts/lib/database-security.mjs";
@@ -17,7 +18,7 @@ it("lets the server confirm unchanged Google times before the owner's next publi
     await client.query("select set_config('request.jwt.claim.role','service_role',true)");
     await client.query("set local role service_role");
     for (const effect of publication.effects) {
-      await client.query("select public.confirm_team_workweek_effect($1,$2,'confirmed-etag',$3)", [effect.id, effect.generation, effect.payload]);
+      await confirmObservedEffect(client, effect.id, effect.generation, "confirmed-etag", effect.payload);
     }
     await client.query("reset role");
     await asAuthenticated(client, owner, () => client.query("select public.finalize_team_workweek_publication($1)", [publication.id]));

@@ -4,8 +4,6 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  ensureGoogleWorkweekSeries,
-  ensureGoogleWorkweekSeriesTransition,
   type GoogleWorkweekSeriesResult,
   type PreparedWorkweekPublication,
 } from "./team-workweek-publication-core";
@@ -22,23 +20,22 @@ type ExecutionContext = Readonly<{
 }>;
 
 async function withProviderOperation<Result>({
-  bookkeeping, serviceSupabase, accessToken, now, publicationId, generation, purpose, journaled, recoverWrite,
+  bookkeeping, serviceSupabase, accessToken, now, publicationId, generation, purpose, recoverWrite,
 }: ExecutionContext & {
   publicationId: string;
   generation: number;
   purpose: "publish" | "cleanup";
-  journaled: boolean;
   recoverWrite: typeof recoverGoogleWorkweekWrite;
-}, execute: (operationId?: string) => Promise<Result>,
+}, execute: (operationId: string) => Promise<Result>,
 blocked: (errorClass: WorkweekExecutionDelayClass, reason: WorkweekRecoveryReason) => Promise<Result>): Promise<Result> {
-  const claim = journaled ? await claimProviderOperation({
+  const claim = await claimProviderOperation({
     bookkeeping, serviceSupabase, accessToken, now, publicationId, generation, purpose, recoverWrite,
-  }) : null;
-  if (claim?.reason) return await blocked(claim.errorClass || "provider_unavailable", claim.reason);
+  });
+  if (claim.reason) return await blocked(claim.errorClass || "provider_unavailable", claim.reason);
   try {
-    return await execute(claim?.id);
+    return await execute(claim.id);
   } finally {
-    if (claim?.id) await finishProviderOperation(serviceSupabase, claim.id, bookkeeping);
+    await finishProviderOperation(serviceSupabase, claim.id, bookkeeping);
   }
 }
 
@@ -62,13 +59,13 @@ type ConfirmedEffect = Extract<GoogleWorkweekSeriesResult, { state: "confirmed" 
 async function mutateAndConfirmEffect({
   bookkeeping, serviceSupabase, accessToken, now, operationId, effect, mutate, confirm,
 }: ExecutionContext & {
-  operationId?: string;
+  operationId: string;
   effect: PreparedWorkweekEffect;
   mutate: typeof ensureGoogleWorkweekEffect;
   confirm: (result: ConfirmedEffect) => Promise<WorkweekExecutionDelayClass | null>;
 }): Promise<WorkweekExecutionDelayClass | null> {
   const result = await mutate({ accessToken, effect, now,
-    ...(operationId ? { writeJournal: providerWriteJournal(serviceSupabase, operationId, effect.id, false, bookkeeping) } : {}),
+    writeJournal: providerWriteJournal(serviceSupabase, operationId, effect.id, false, bookkeeping),
   });
   return result.state === "delayed" ? result.errorClass : await confirm(result);
 }
@@ -80,10 +77,7 @@ export async function executeTeamWorkweekPublication<Result>({
   ensureEffect = ensureGoogleWorkweekEffect,
   discoverInstance = discoverGoogleWorkweekInstance,
   recoverWrite = recoverGoogleWorkweekWrite,
-  ensureSeries = ensureGoogleWorkweekSeries,
-  ensureTransition = ensureGoogleWorkweekSeriesTransition,
   now = () => new Date(),
-  transitionsFirst = false,
 }: {
   bookkeeping?: WorkweekPublicationBookkeeping;
   serviceSupabase: SupabaseClient;
@@ -94,110 +88,48 @@ export async function executeTeamWorkweekPublication<Result>({
   ensureEffect?: typeof ensureGoogleWorkweekEffect;
   discoverInstance?: typeof discoverGoogleWorkweekInstance;
   recoverWrite?: typeof recoverGoogleWorkweekWrite;
-  ensureSeries?: typeof ensureGoogleWorkweekSeries;
-  ensureTransition?: typeof ensureGoogleWorkweekSeriesTransition;
   now?: () => Date;
-  transitionsFirst?: boolean;
 }): Promise<Result> {
-  if (publication.effects !== undefined) {
-    const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
-    return await withProviderOperation({
-      accessToken, publicationId: publication.id, generation: publication.attemptGeneration!, serviceSupabase, bookkeeping, now,
-      purpose: "publish", journaled: publication.writeJournalVersion !== undefined, recoverWrite,
-    }, async operationId => {
-      const syncEffect = async (effect: NonNullable<PreparedWorkweekPublication["effects"]>[number]): Promise<WorkweekExecutionDelayClass | null> => {
-        if (expired()) return "provider_unavailable";
-        if (effect.state === "confirmed") return null;
-        if (effect.instanceOf && !effect.expectedEtag) {
-          const bound = await bindCrossingInstance({ serviceSupabase, accessToken, discoverInstance }, effect);
-          if (typeof bound === "string") return bound;
-          effect = bound;
-        }
-        return await mutateAndConfirmEffect({ bookkeeping, serviceSupabase, accessToken, now, operationId, effect,
-          mutate: ensureEffect,
-          confirm: async result => {
-            if (expired()) return "provider_unavailable";
-            const confirmation = bookkeeping ? await bookkeeping.confirmEffect(effect.id, effect.generation, result.etag, effect.payload) : await serviceSupabase.rpc("confirm_team_workweek_effect", {
-              p_effect_id: effect.id, p_generation: effect.generation, p_etag: result.etag, p_payload: effect.payload,
-            });
-            return confirmation.error ? "storage_failed" : null;
-          },
-        });
-      };
-      const effects = publication.effects || [];
-      const stages = [effects.filter((effect) => !effect.operation || effect.operation === "create"),
-        effects.filter((effect) => effect.kind === "crossing_instance"),
-        effects.filter((effect) => effect.operation && effect.operation !== "create" && effect.kind !== "crossing_instance")];
-      for (const stage of stages) {
-        for (let offset = 0; offset < stage.length; offset += 6) {
-          const settled = await Promise.allSettled(stage.slice(offset, offset + 6).map(syncEffect));
-          const results = settled.map((result) => result.status === "fulfilled" ? result.value : "storage_failed" as const);
-          const failure = results.find((result) => result !== null);
-          if (failure) return await delayed(failure);
-        }
+  const expired = () => !publication.effectiveAt || now().getTime() >= new Date(publication.effectiveAt).getTime();
+  return await withProviderOperation({
+    accessToken, publicationId: publication.id, generation: publication.attemptGeneration, serviceSupabase, bookkeeping, now,
+    purpose: "publish", recoverWrite,
+  }, async operationId => {
+    const syncEffect = async (effect: PreparedWorkweekEffect): Promise<WorkweekExecutionDelayClass | null> => {
+      if (expired()) return "provider_unavailable";
+      if (effect.state === "confirmed") return null;
+      if (effect.instanceOf && !effect.expectedEtag) {
+        const bound = await bindCrossingInstance({ serviceSupabase, accessToken, discoverInstance }, effect);
+        if (typeof bound === "string") return bound;
+        effect = bound;
       }
-      if (expired()) return await delayed("provider_unavailable");
-      return await complete();
-    }, async errorClass => await delayed(errorClass));
-  }
-
-  const syncSeries = async () => {
-    let delayed: Extract<GoogleWorkweekSeriesResult, { state: "delayed" }> | null = null;
-    for (const series of publication.series) {
-      if (series.state === "confirmed") continue;
-      let result: GoogleWorkweekSeriesResult;
-      try {
-        result = await ensureSeries({ accessToken, publication, series, now });
-      } catch {
-        result = { state: "delayed", errorClass: "provider_unavailable" };
-      }
-      if (result.state === "delayed") {
-        delayed ??= result;
-        continue;
-      }
-      const confirmation = bookkeeping ? await bookkeeping.confirmSeries(series.id, result.etag, result.observedAt) : await serviceSupabase.rpc("confirm_team_workweek_google_series", {
-        p_series_id: series.id,
-        p_etag: result.etag,
-        p_founderops_revision: publication.publicationRevision,
-        p_observed_at: result.observedAt,
+      return await mutateAndConfirmEffect({ bookkeeping, serviceSupabase, accessToken, now, operationId, effect,
+        mutate: ensureEffect,
+        confirm: async result => {
+          if (expired()) return "provider_unavailable";
+          const confirmation = bookkeeping ? await bookkeeping.confirmEffect(effect.id, effect.generation, result.etag, effect.payload) : await serviceSupabase.rpc("confirm_team_workweek_effect", {
+            p_effect_id: effect.id, p_generation: effect.generation, p_etag: result.etag, p_payload: effect.payload,
+          });
+          return confirmation.error ? "storage_failed" : null;
+        },
       });
-      if (confirmation.error) return "storage_failed" as const;
-    }
-    return delayed?.errorClass || null;
-  };
-
-  const syncTransitions = async () => {
-    let delayed: Extract<GoogleWorkweekSeriesResult, { state: "delayed" }> | null = null;
-    for (const transition of publication.transitions) {
-      if (transition.state === "confirmed") continue;
-      let result: GoogleWorkweekSeriesResult;
-      try {
-        result = await ensureTransition({ accessToken, transition, now });
-      } catch {
-        result = { state: "delayed", errorClass: "provider_unavailable" };
+    };
+    const effects = publication.effects;
+    const stages = [effects.filter((effect) => !effect.operation || effect.operation === "create"),
+      effects.filter((effect) => effect.kind === "crossing_instance"),
+      effects.filter((effect) => effect.operation && effect.operation !== "create" && effect.kind !== "crossing_instance")];
+    for (const stage of stages) {
+      for (let offset = 0; offset < stage.length; offset += 6) {
+        const settled = await Promise.allSettled(stage.slice(offset, offset + 6).map(syncEffect));
+        const results = settled.map((result) => result.status === "fulfilled" ? result.value : "storage_failed" as const);
+        const failure = results.find((result) => result !== null);
+        if (failure) return await delayed(failure);
       }
-      if (result.state === "delayed") {
-        delayed ??= result;
-        continue;
-      }
-      const confirmation = bookkeeping ? await bookkeeping.confirmTransition(transition.id, result.etag, transition.expectedFounderopsRevision, result.observedAt) : await serviceSupabase.rpc("confirm_team_workweek_google_series_transition", {
-        p_transition_id: transition.id,
-        p_etag: result.etag,
-        p_expected_founderops_revision: transition.expectedFounderopsRevision,
-        p_observed_at: result.observedAt,
-      });
-      if (confirmation.error) return "storage_failed" as const;
     }
-    return delayed?.errorClass || null;
-  };
+    if (expired()) return await delayed("provider_unavailable");
+    return await complete();
+  }, async errorClass => await delayed(errorClass));
 
-  const stages = transitionsFirst ? [syncTransitions, syncSeries] : [syncSeries, syncTransitions];
-  for (const sync of stages) {
-    const errorClass = await sync();
-    if (errorClass) return await delayed(errorClass);
-  }
-
-  return await complete();
 }
 
 
@@ -208,7 +140,6 @@ export async function compensateTeamWorkweekGeneration({
   cleanupEffect = cleanupGoogleWorkweekEffect,
   discoverInstance = discoverGoogleWorkweekInstance,
   recoverWrite = recoverGoogleWorkweekWrite,
-  journaled = false,
   onRecoveryReason,
 }: {
   accessToken: GoogleCalendarCapability;
@@ -220,11 +151,10 @@ export async function compensateTeamWorkweekGeneration({
   cleanupEffect?: typeof cleanupGoogleWorkweekEffect;
   discoverInstance?: typeof discoverGoogleWorkweekInstance;
   recoverWrite?: typeof recoverGoogleWorkweekWrite;
-  journaled?: boolean;
   onRecoveryReason?: (reason: WorkweekRecoveryReason) => void;
 }): Promise<WorkweekExecutionDelayClass | null> {
   return await withProviderOperation<WorkweekExecutionDelayClass | null>({
-    accessToken, publicationId, generation, serviceSupabase, bookkeeping, now, purpose: "cleanup", journaled, recoverWrite,
+    accessToken, publicationId, generation, serviceSupabase, bookkeeping, now, purpose: "cleanup", recoverWrite,
   }, async operationId => {
     const prepare = async () => {
       const result = await serviceSupabase.rpc("prepare_team_workweek_effect_cleanup", {
@@ -251,6 +181,7 @@ export async function compensateTeamWorkweekGeneration({
           const parent = effects.find(item => item.id === effect.cleanupParentId);
           if (!parent || parent.state !== "cleaned") return "storage_failed";
           if (!parent.cleanupPreserved) {
+            await providerWriteJournal(serviceSupabase, operationId, effect.id, false, bookkeeping).outcome("observed");
             const error = await confirm(effect, "absent", false);
             if (error) return error;
             continue;

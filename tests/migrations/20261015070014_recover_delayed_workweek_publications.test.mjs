@@ -20,15 +20,11 @@ it("preserves historical attempts and keeps cancellation evidence inaccessible t
     await applyMigration(client, resolve("supabase/migrations/20261015070014_recover_delayed_workweek_publications.sql"));
     for (const [index, contract] of contracts.entries()) assertRowsPreserved(before[index], await snapshotRows(client, contract));
     expect((await client.query("select write_journal_version,restart_requested_at from public.team_workweek_publications where id=$1", [publication.id])).rows[0]).toEqual({ write_journal_version: 0, restart_requested_at: null });
-    await client.query("select set_config('request.jwt.claim.role','service_role',false)");
-    await client.query("set role service_role");
-    expect((await client.query("select public.request_team_workweek_publication_restart($1,'journal-upgrade-owner') as result", [publication.id])).rows[0].result).toEqual({ state: "delayed", reason: "legacy_untracked" });
-    await client.query("reset role");
     for (const role of ["anon", "authenticated"]) {
       for (const table of ["team_workweek_provider_operations", "team_workweek_provider_writes"]) {
         expect((await client.query("select has_table_privilege($1,$2,'SELECT') as allowed", [role, `public.${table}`])).rows[0].allowed).toBe(false);
       }
-      for (const signature of ["claim_team_workweek_provider_operation(uuid,integer,text)", "record_team_workweek_provider_write(uuid,uuid,text)", "finish_team_workweek_provider_operation(uuid)", "request_team_workweek_publication_restart(uuid,text)", "prepare_team_workweek_publication_with_protocol(uuid,integer)", "prepare_team_workweek_publication_before_recovery(uuid)", "finalize_team_workweek_publication_before_recovery(uuid)", "confirm_team_workweek_effect_before_recovery(uuid,integer,text,jsonb)"]) {
+      for (const signature of ["claim_team_workweek_provider_operation(uuid,integer,text)", "record_team_workweek_provider_write(uuid,uuid,text)", "finish_team_workweek_provider_operation(uuid)", "request_team_workweek_publication_restart(uuid,text)"]) {
         expect((await client.query("select has_function_privilege($1,$2,'EXECUTE') as allowed", [role, `public.${signature}`])).rows[0].allowed).toBe(false);
       }
     }

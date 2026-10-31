@@ -55,12 +55,9 @@ export async function restartPrivateTeamWorkweek({
 
     if(publication.data){
       if(publication.data.status!=="preparing" || !publication.data.attempt_generation || !publication.data.effective_at)throw new TeamWorkweekPublicationError("conflict","Die Veröffentlichung läuft noch. Lade ihren aktuellen Stand erneut.");
-      const journaled=publication.data.write_journal_version!==undefined;
-      if(journaled){
-        const cancellation=await serviceSupabase.rpc("request_team_workweek_publication_restart",{p_publication_id:publication.data.id,p_owner_profile_id:ownerProfileId});
-        if(cancellation.error)throw new TeamWorkweekPublicationError("conflict","Der Veröffentlichungsversuch konnte noch nicht angehalten werden.");
-        if(cancellation.data?.state!=="ready" && cancellation.data?.reason!=="uncertain")return {restart:{state:"delayed",recovery:"retry",reason:cancellation.data?.reason||"in_progress"}};
-      }else if(new Date(publication.data.effective_at)>now())throw new TeamWorkweekPublicationError("conflict","Die Veröffentlichung läuft noch. Lade ihren aktuellen Stand erneut.");
+      const cancellation=await serviceSupabase.rpc("request_team_workweek_publication_restart",{p_publication_id:publication.data.id,p_owner_profile_id:ownerProfileId});
+      if(cancellation.error)throw new TeamWorkweekPublicationError("conflict","Der Veröffentlichungsversuch konnte noch nicht angehalten werden.");
+      if(cancellation.data?.state!=="ready" && cancellation.data?.reason!=="uncertain")return {restart:{state:"delayed",recovery:"retry",reason:cancellation.data?.reason||"in_progress"}};
       let token:GoogleCalendarCapability;
       try{token=await accessTokenForOwner(serviceSupabase,ownerProfileId,request);}catch(error){
         if(error instanceof GoogleWorkspaceOAuthContractError)return {restart:{state:"delayed",recovery:error.code==="provider_revoked" || error.code==="reconnect_required"?"reconnect":"retry"}};
@@ -68,9 +65,9 @@ export async function restartPrivateTeamWorkweek({
       }
       let reason:WorkweekRecoveryReason|undefined;
       const publicationBookkeeping = bookkeeping?.forPublication({ id: publication.data.id, sourceVersionId: versionId, ownerProfileId,
-        attemptGeneration: publication.data.attempt_generation, writeJournalVersion: publication.data.write_journal_version, effectiveAt: publication.data.effective_at,
-        status: "preparing", syncState: "pending", effectiveFrom: "", timezone: "Europe/Berlin", publicationRevision: 0, publishedAt: null, lastSyncAt: null, series: [], transitions: [], effects: [] });
-      const failure=await compensate({accessToken:token,publicationId:publication.data.id,generation:publication.data.attempt_generation,serviceSupabase,bookkeeping:publicationBookkeeping,now,journaled,cleanupEffect,discoverInstance,recoverWrite,onRecoveryReason:value=>{reason=value;}});
+        attemptGeneration: publication.data.attempt_generation, writeJournalVersion: 1, effectiveAt: publication.data.effective_at,
+        status: "preparing", syncState: "pending", effectiveFrom: "", timezone: "Europe/Berlin", publicationRevision: 0, publishedAt: null, lastSyncAt: null, effects: [] });
+      const failure=await compensate({accessToken:token,publicationId:publication.data.id,generation:publication.data.attempt_generation,serviceSupabase,bookkeeping:publicationBookkeeping,now,cleanupEffect,discoverInstance,recoverWrite,onRecoveryReason:value=>{reason=value;}});
       if(failure)return {restart:{state:"delayed",recovery:failure==="oauth_reconnect_required"?"reconnect":failure==="provider_identity_mismatch"?"identity_conflict":"retry",...(reason?{reason}:{})}};
     }
   }

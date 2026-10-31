@@ -1,3 +1,4 @@
+import { localCalendar, localWriteJournal, asService, confirmObservedEffect } from "./helpers/workweek-provider";
 import { expect, it } from "vitest";
 import { asAuthenticated, withIsolatedLocalDatabase } from "./helpers/local-database";
 import { cleanupGoogleWorkweekEffect, ensureGoogleWorkweekEffect, type PreparedWorkweekEffect } from "@/features/team-workweek/server/team-workweek-immediate-effects";
@@ -10,7 +11,7 @@ it("publishes the entered Sunday endpoints through disjoint seasonal masters and
     const draft = await asAuthenticated(client, user, () => client.query(
       "select public.create_private_team_workweek_version('2027-03-01','[{\"weekday\":7,\"startMinute\":60,\"endMinute\":240}]') as version",
     ));
-    const prepare = () => asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [draft.rows[0].version.id]));
+    const prepare = () => asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [draft.rows[0].version.id]));
     const publication = (await prepare()).rows[0].publication;
     expect(publication.effects).toHaveLength(4);
     const elapsed = publication.effects.map((effect: { payload: { start: { dateTime: string }; end: { dateTime: string } } }) =>
@@ -42,7 +43,7 @@ it("publishes the entered Sunday endpoints through disjoint seasonal masters and
     expect((await prepare()).rows[0].publication.effects).toEqual(publication.effects);
     for (const effect of publication.effects) {
       await client.query("set local role service_role");
-      await client.query("select public.confirm_team_workweek_effect($1,$2,'confirmed-etag',$3)", [effect.id, effect.generation, effect.payload]);
+      await confirmObservedEffect(client, effect.id, effect.generation, "confirmed-etag", effect.payload);
       await client.query("reset role");
     }
     const result = await asAuthenticated(client, user, () => client.query("select public.finalize_team_workweek_publication($1) as publication", [publication.id]));
@@ -58,7 +59,7 @@ it("keeps source windows while merging spring duplicates and omitting nonpositiv
     const draft = await asAuthenticated(client, user, () => client.query(
       "select public.create_private_team_workweek_version('2027-03-01','[{\"weekday\":7,\"startMinute\":120,\"endMinute\":150},{\"weekday\":7,\"startMinute\":150,\"endMinute\":180},{\"weekday\":7,\"startMinute\":180,\"endMinute\":210}]') as version",
     ));
-    const publication = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [draft.rows[0].version.id]))).rows[0].publication;
+    const publication = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [draft.rows[0].version.id]))).rows[0].publication;
     expect(publication.effects).toHaveLength(10);
     const spring = publication.effects.filter((effect: { payload: { extendedProperties: { private: Record<string, string> } } }) => effect.payload.extendedProperties.private.founderopsWorkweekProjectionPart === "spring");
     expect(spring).toHaveLength(1);
@@ -78,15 +79,18 @@ it("keeps source windows while merging spring duplicates and omitting nonpositiv
       }
       return observed ? Response.json(observed) : new Response(null, { status: 404 });
     }) as typeof fetch;
-    expect((await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider })).state).toBe("confirmed");
-    expect((await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: provider })).state).toBe("confirmed");
+    const claim=(await asService(client,()=>client.query("select public.claim_team_workweek_provider_operation($1,1,'publish') as value",[publication.id]))).rows[0].value;
+    const writeJournal=localWriteJournal(client,claim.id,effect.id);
+    expect((await ensureGoogleWorkweekEffect({ accessToken: localCalendar(client, provider), writeJournal, effect, fetchImpl: provider })).state).toBe("confirmed");
+    expect((await ensureGoogleWorkweekEffect({ accessToken: localCalendar(client, provider), writeJournal, effect, fetchImpl: provider })).state).toBe("confirmed");
     expect(writes).toEqual([JSON.stringify(effect.payload)]);
     const foreign = { ...effect.payload, etag: "foreign-etag", end: { ...effect.payload.end, dateTime: "2027-03-28T02:00:00Z" } };
     const methods: string[] = [];
-    const cleanup = await cleanupGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, fetchImpl: (async (_input, init) => {
+    const foreignProvider:typeof fetch=async(_input,init)=>{
       methods.push(init?.method || "GET");
       return Response.json(foreign);
-    }) as typeof fetch });
+    };
+    const cleanup=await cleanupGoogleWorkweekEffect({accessToken:localCalendar(client,foreignProvider),writeJournal,effect:{...effect,cleanupDisposition:"delete"}});
     expect(cleanup).toMatchObject({ state: "delayed", errorClass: "provider_identity_mismatch" });
     expect(methods).toEqual(["GET"]);
   });
@@ -100,7 +104,7 @@ it("clips the autumn activation remainder and starts each full cohort on its own
     const draft = await asAuthenticated(client, user, () => client.query("select public.create_private_immediate_team_workweek_version('[{\"weekday\":7,\"startMinute\":60,\"endMinute\":240}]') as version"));
     await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,publication_revision,activation_mode,effective_at,attempt_generation)
       select id,owner_profile_id,effective_from,'[{"weekday":7,"startMinute":60,"endMinute":240}]',1,'immediate','2027-10-31T01:30:00Z',1 from public.team_workweek_versions where id=$1`, [draft.rows[0].version.id]);
-    const publication = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [draft.rows[0].version.id]))).rows[0].publication;
+    const publication = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [draft.rows[0].version.id]))).rows[0].publication;
     expect(publication.effects).toHaveLength(5);
     const remainder = publication.effects.find((effect: { kind: string }) => effect.kind === "activation_remainder");
     expect(new Date(remainder.payload.start.dateTime).toISOString()).toBe("2027-10-31T01:30:00.000Z");
@@ -109,11 +113,11 @@ it("clips the autumn activation remainder and starts each full cohort on its own
     expect(new Date(autumn.payload.start.dateTime).toISOString()).toBe("2028-10-28T23:00:00.000Z");
     for (const effect of publication.effects.slice(1)) {
       await client.query("set local role service_role");
-      await client.query("select public.confirm_team_workweek_effect($1,$2,'etag',$3)", [effect.id, effect.generation, effect.payload]);
+      await confirmObservedEffect(client, effect.id, effect.generation, "etag", effect.payload);
       await client.query("reset role");
     }
     await client.query("delete from public.team_workweek_publication_effects where id=$1", [publication.effects[0].id]);
-    await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1)", [draft.rows[0].version.id]));
+    await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1)", [draft.rows[0].version.id]));
     await client.query("savepoint missing_effect");
     await expect(asAuthenticated(client, user, () => client.query("select public.finalize_team_workweek_publication($1)", [publication.id]))).rejects.toMatchObject({ code: "P0003" });
     await client.query("rollback to savepoint missing_effect");
@@ -127,10 +131,10 @@ it("cuts off every stored seasonal rule and binds a crossing occurrence only to 
     await client.query("insert into auth.users(id) values($1)", [user]);
     await client.query("insert into public.profiles(id,auth_user_id,name,platform_role) values($1,$2,'Cohort','ceo')", [owner, user]);
     const draft = await asAuthenticated(client, user, () => client.query("select public.create_private_immediate_team_workweek_version('[{\"weekday\":7,\"startMinute\":60,\"endMinute\":240}]') as version"));
-    const old = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [draft.rows[0].version.id]))).rows[0].publication;
+    const old = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [draft.rows[0].version.id]))).rows[0].publication;
     for (const effect of old.effects) {
       await client.query("set local role service_role");
-      await client.query("select public.confirm_team_workweek_effect($1,$2,'original-etag',$3)", [effect.id, effect.generation, effect.payload]);
+      await confirmObservedEffect(client, effect.id, effect.generation, "original-etag", effect.payload);
       await client.query("reset role");
     }
     await asAuthenticated(client, user, () => client.query("select public.finalize_team_workweek_publication($1)", [old.id]));
@@ -139,7 +143,7 @@ it("cuts off every stored seasonal rule and binds a crossing occurrence only to 
     const replacement = await asAuthenticated(client, user, () => client.query("select public.create_private_current_team_workweek_version('[]',$1,1) as version", [old.id]));
     await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,publication_revision,activation_mode,effective_at,attempt_generation,predecessor_publication_id,expected_predecessor_revision)
       select id,owner_profile_id,effective_from,'[]',2,'immediate','2027-10-31T01:30:00Z',1,$2,1 from public.team_workweek_versions where id=$1`, [replacement.rows[0].version.id, old.id]);
-    const prepared = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [replacement.rows[0].version.id]))).rows[0].publication;
+    const prepared = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [replacement.rows[0].version.id]))).rows[0].publication;
     const cutoffs = prepared.effects.filter((effect: { kind: string }) => effect.kind === "predecessor_cutoff");
     expect(cutoffs).toHaveLength(4);
     for (const cutoff of cutoffs) {
@@ -161,16 +165,16 @@ it("cancels cohorts with no occurrence before replacement instead of manufacturi
     await client.query("insert into auth.users(id) values($1)", [user]);
     await client.query("insert into public.profiles(id,auth_user_id,name,platform_role) values($1,$2,'Future cohorts','viewer')", [owner, user]);
     const draft = await asAuthenticated(client, user, () => client.query("select public.create_private_team_workweek_version('2027-03-01','[{\"weekday\":7,\"startMinute\":60,\"endMinute\":240}]') as version"));
-    const old = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [draft.rows[0].version.id]))).rows[0].publication;
+    const old = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [draft.rows[0].version.id]))).rows[0].publication;
     for (const effect of old.effects) {
       await client.query("set local role service_role");
-      await client.query("select public.confirm_team_workweek_effect($1,$2,'original-etag',$3)", [effect.id, effect.generation, effect.payload]);
+      await confirmObservedEffect(client, effect.id, effect.generation, "original-etag", effect.payload);
       await client.query("reset role");
     }
     await asAuthenticated(client, user, () => client.query("select public.finalize_team_workweek_publication($1)", [old.id]));
     await client.query("update public.team_workweek_publications set effective_at=clock_timestamp()-interval '1 minute' where id=$1", [old.id]);
     const replacement = await asAuthenticated(client, user, () => client.query("select public.create_private_current_team_workweek_version('[]',$1,1) as version", [old.id]));
-    const prepared = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1) as publication", [replacement.rows[0].version.id]))).rows[0].publication;
+    const prepared = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [replacement.rows[0].version.id]))).rows[0].publication;
     expect(prepared.effects).toHaveLength(4);
     for (const effect of prepared.effects) {
       expect(effect).toMatchObject({ operation: "cancel", kind: "predecessor_cutoff", payload: { status: "cancelled" } });

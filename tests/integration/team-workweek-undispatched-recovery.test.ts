@@ -1,3 +1,4 @@
+import { localCalendar, confirmObservedEffect } from "./helpers/workweek-provider";
 import { expect, it } from "vitest";
 import type pg from "pg";
 import { asAuthenticated, captureDatabaseError, withIsolatedLocalDatabase } from "./helpers/local-database";
@@ -20,7 +21,7 @@ async function replacement(db: pg.Client) {
   };
   const original = await save([{weekday:1,startMinute:540,endMinute:960}]);
   const first = (await asAuthenticated(db,user,()=>db.query("select public.prepare_team_workweek_publication($1,1) as value",[original.id]))).rows[0].value;
-  for (const effect of first.effects) await service(db,()=>db.query("select public.confirm_team_workweek_effect($1,1,'first-etag',$2)",[effect.id,effect.payload]));
+  for (const effect of first.effects) await service(db,()=>confirmObservedEffect(db, effect.id, 1, "first-etag", effect.payload));
   await asAuthenticated(db,user,()=>db.query("select public.finalize_team_workweek_publication($1)",[first.id]));
   const windows = [{weekday:2,startMinute:600,endMinute:900}];
   const draft = await save(windows);
@@ -31,7 +32,7 @@ async function replacement(db: pg.Client) {
 }
 const record = (db: pg.Client, operationId: string, effectId: string) => {
   const outcome = (state: string) => service(db,()=>db.query("select public.record_team_workweek_provider_write($1,$2,$3)",[operationId,effectId,state])).then(()=>undefined);
-  return {beforeWrite:()=>outcome("dispatched"),outcome};
+  return {target:{kind:"publication" as const,operationId,targetId:effectId},outcome};
 };
 
 // The application-orchestration suite covers future attempts; retain the expired SQL-invariant cases.
@@ -61,11 +62,11 @@ it.each([{deleted:false,expired:true},{deleted:true,expired:true}])(
       };
       const claim = (await service(db,()=>db.query("select public.claim_team_workweek_provider_operation($1,1,'publish') as value",[publication.id]))).rows[0].value;
       for (const effect of publication.effects.filter((effect: PreparedWorkweekEffect)=>effect.operation==="create")) {
-        const result = await ensureGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect,fetchImpl:provider,writeJournal:record(db,claim.id,effect.id)});
+        const result = await ensureGoogleWorkweekEffect({accessToken: localCalendar(db, provider),effect,fetchImpl:provider,writeJournal:record(db,claim.id,effect.id)});
         expect(result.state).toBe("confirmed");
-        if (result.state==="confirmed") await service(db,()=>db.query("select public.confirm_team_workweek_effect($1,1,$2,$3)",[effect.id,result.etag,effect.payload]));
+        if (result.state==="confirmed") await service(db,()=>service(db,()=>db.query("select public.confirm_team_workweek_effect($1,1,$2,$3)",[effect.id,result.etag,effect.payload])));
       }
-      expect(await ensureGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect:predecessor,fetchImpl:provider,writeJournal:record(db,claim.id,predecessor.id)})).toMatchObject({state:"delayed",errorClass:"provider_identity_mismatch"});
+      expect(await ensureGoogleWorkweekEffect({accessToken: localCalendar(db, provider),effect:predecessor,fetchImpl:provider,writeJournal:record(db,claim.id,predecessor.id)})).toMatchObject({state:"delayed",errorClass:"provider_identity_mismatch"});
       await service(db,()=>db.query("select public.finish_team_workweek_provider_operation($1)",[claim.id]));
       await service(db,()=>db.query("select public.delay_team_workweek_publication($1,'provider_identity_mismatch')",[publication.id]));
       expect((await db.query("select last_error_class from public.team_workweek_publications where id=$1",[publication.id])).rows[0].last_error_class).toBe("provider_identity_mismatch");
@@ -77,7 +78,7 @@ it.each([{deleted:false,expired:true},{deleted:true,expired:true}])(
         const plan = (await service(db,()=>db.query("select public.prepare_team_workweek_effect_cleanup($1,1) as value",[publication.id]))).rows[0].value;
         for (const effect of plan.effects as PreparedWorkweekEffect[]) {
           if (effect.state==="cleaned") { if (effect.id===predecessor.id) skipped=true; continue; }
-          const result = await cleanupGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect,fetchImpl:provider,writeJournal:record(db,cleanup.id,effect.id)});
+          const result = await cleanupGoogleWorkweekEffect({accessToken: localCalendar(db, provider),effect,fetchImpl:provider,writeJournal:record(db,cleanup.id,effect.id)});
           expect(result.state).toBe("confirmed");
           if (result.state==="confirmed") await service(db,()=>db.query("select public.confirm_team_workweek_planned_cleanup($1,1,$2,false)",[effect.id,result.etag]));
         }
@@ -106,7 +107,7 @@ it.each([{deleted:false,expired:true},{deleted:true,expired:true}])(
 it.each(["dispatched","uncertain","settled","confirmed"])("does not skip predecessor evidence already %s",async state=>{
   await withIsolatedLocalDatabase(async db=>{
     const {publication,predecessor}=await replacement(db);
-    if(state==="confirmed") await service(db,()=>db.query("select public.confirm_team_workweek_effect($1,1,'confirmed-etag',$2)",[predecessor.id,predecessor.payload]));
+    if(state==="confirmed") await service(db,()=>confirmObservedEffect(db, predecessor.id, 1, "confirmed-etag", predecessor.payload));
     else {
       const claim=(await service(db,()=>db.query("select public.claim_team_workweek_provider_operation($1,1,'publish') as value",[publication.id]))).rows[0].value;
       await service(db,()=>db.query("select public.record_team_workweek_provider_write($1,$2,'dispatched')",[claim.id,predecessor.id]));

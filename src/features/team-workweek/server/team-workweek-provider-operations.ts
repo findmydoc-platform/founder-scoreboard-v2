@@ -5,17 +5,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { recoverGoogleWorkweekWrite, type PreparedWorkweekEffect, type WorkweekProviderWriteJournal } from "./team-workweek-immediate-effects";
 import type { GoogleWorkweekSeriesResult } from "./team-workweek-publication-core";
 
-export type WorkweekRecoveryReason = "in_progress" | "uncertain" | "legacy_untracked";
+export type WorkweekRecoveryReason = "in_progress" | "uncertain";
 type ProviderFailure = Extract<GoogleWorkweekSeriesResult, { state: "delayed" }>["errorClass"];
 
 export function providerWriteJournal(serviceSupabase: SupabaseClient, operationId: string, effectId: string, replay = false, bookkeeping?: WorkweekPublicationBookkeeping): WorkweekProviderWriteJournal {
-  const record = async (state: "dispatched" | "settled" | "uncertain") => {
-    const response = bookkeeping ? await bookkeeping.recordWrite(operationId, effectId, state === "dispatched" && replay ? "replaying" : state) : await serviceSupabase.rpc("record_team_workweek_provider_write", {
-      p_operation_id: operationId, p_effect_id: effectId, p_state: state === "dispatched" && replay ? "replaying" : state,
+  const record = async (state: "settled" | "uncertain" | "observed") => {
+    const response = bookkeeping ? await bookkeeping.recordWrite(operationId, effectId, state) : await serviceSupabase.rpc("record_team_workweek_provider_write", {
+      p_operation_id: operationId, p_effect_id: effectId, p_state: state,
     });
     if (response.error) throw new Error("Provider write evidence could not be recorded.");
   };
-  return { beforeWrite: () => record("dispatched"), outcome: record };
+  return { target: {kind: "publication", operationId, targetId: effectId, replay}, outcome: record };
 }
 
 export async function finishProviderOperation(serviceSupabase: SupabaseClient, operationId: string, bookkeeping?: WorkweekPublicationBookkeeping) {
@@ -70,5 +70,5 @@ export async function claimProviderOperation({ bookkeeping, serviceSupabase, pub
     if (response.error) return { reason: "in_progress" };
   }
   return response.data?.state === "claimed" && typeof response.data.id === "string"
-    ? { id: response.data.id } : { reason: response.data?.state === "legacy_untracked" ? "legacy_untracked" : response.data?.state === "uncertain" ? "uncertain" : "in_progress" };
+    ? { id: response.data.id } : { reason: response.data?.state === "uncertain" ? "uncertain" : "in_progress" };
 }

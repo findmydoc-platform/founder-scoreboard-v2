@@ -1,3 +1,4 @@
+import { localCalendar, observeEffect } from "./helpers/workweek-provider";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
@@ -50,7 +51,10 @@ async function fixture() {
   const prepare = (version: {
     id: string;
   }) => rpc(user, 'prepare_team_workweek_publication', { p_version_id: version.id, p_write_journal_version: 1 });
-  const confirm = (effect: PreparedWorkweekEffect, etag: string) => rpc(service, 'confirm_team_workweek_effect', { p_effect_id: effect.id, p_generation: 1, p_etag: etag, p_payload: effect.payload });
+  const confirm = async (effect: PreparedWorkweekEffect, etag: string) => {
+    await observeEffect(db,effect.id);
+    return rpc(service,'confirm_team_workweek_effect',{p_effect_id:effect.id,p_generation:1,p_etag:etag,p_payload:effect.payload});
+  };
   // Establish confirmed plans through owner and service RPCs; recovery below uses the application boundary.
   const first = await prepare(await save(weeks.first, [{ weekday: 1, startMinute: 540, endMinute: 960 }]));
   for (const effect of first.effects)
@@ -67,7 +71,7 @@ async function fixture() {
   expect(predecessor).toBeTruthy();
   const before = (await db.query('select * from public.team_workweek_publications where id=any($1::uuid[]) order by id', [[first.id, later.id]])).rows;
   const mappings = (await db.query('select * from public.team_workweek_google_series where publication_id=$1', [first.id])).rows;
-  const restart = () => restartPrivateTeamWorkweek({ ownerProfileId: owner, versionId: draft.id, userSupabase: user, serviceSupabase: service, accessTokenForOwner: async () => ({request: (url, init) => fetch(url, init)}) });
+  const restart = () => restartPrivateTeamWorkweek({ ownerProfileId: owner, versionId: draft.id, userSupabase: user, serviceSupabase: service, accessTokenForOwner: async () => (localCalendar(db)) });
   const checkPreserved = async () => {
     expect((await db.query('select * from public.team_workweek_publications where id=any($1::uuid[]) order by id', [[first.id, later.id]])).rows).toEqual(before);
     expect((await db.query('select * from public.team_workweek_google_series where publication_id=$1', [first.id])).rows).toEqual(mappings);
@@ -135,12 +139,12 @@ it.each([false, true])('restarts the actual replacement workflow after an extern
       google.events.set(scenario.predecessor.googleEventId, external);
     const claim = await rpc(scenario.service, 'claim_team_workweek_provider_operation', { p_publication_id: scenario.publication.id, p_generation: 1, p_purpose: 'publish' });
     for (const effect of scenario.publication.effects.filter((item: PreparedWorkweekEffect) => item.operation === 'create')) {
-      const result = await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, writeJournal: providerWriteJournal(scenario.service, claim.id, effect.id) });
+      const result = await ensureGoogleWorkweekEffect({ accessToken: localCalendar(scenario.db), effect, writeJournal: providerWriteJournal(scenario.service, claim.id, effect.id) });
       expect(result.state).toBe('confirmed');
       if (result.state === 'confirmed')
         await scenario.confirm(effect, result.etag);
     }
-    expect(await ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect: scenario.predecessor, writeJournal: providerWriteJournal(scenario.service, claim.id, scenario.predecessor.id) })).toMatchObject({ state: 'delayed', errorClass: 'provider_identity_mismatch' });
+    expect(await ensureGoogleWorkweekEffect({ accessToken: localCalendar(scenario.db), effect: scenario.predecessor, writeJournal: providerWriteJournal(scenario.service, claim.id, scenario.predecessor.id) })).toMatchObject({ state: 'delayed', errorClass: 'provider_identity_mismatch' });
     await rpc(scenario.service, 'finish_team_workweek_provider_operation', { p_operation_id: claim.id });
     const result = await scenario.restart();
     expect(result.restart).toEqual({ state: 'ready', recovery: null });
@@ -179,7 +183,7 @@ it.each(['outstanding', 'uncertain'])('keeps an %s Google write blocked until it
         throw new DOMException('Response lost', 'TimeoutError');
       return new Promise<Response>(resolve => { release = () => { const event = { ...payload, etag: 'late-etag' }; google.events.set(payload.id as string, event); resolve(Response.json(event)); }; });
     });
-    const writing = ensureGoogleWorkweekEffect({ accessToken: { request: (url, init) => fetch(url, init) }, effect, writeJournal: providerWriteJournal(scenario.service, claim.id, effect.id) });
+    const writing = ensureGoogleWorkweekEffect({ accessToken: localCalendar(scenario.db), effect, writeJournal: providerWriteJournal(scenario.service, claim.id, effect.id) });
     await dispatched;
     if (state === 'outstanding')
       expect((await scenario.restart()).restart).toMatchObject({ state: 'delayed', reason: 'in_progress' });

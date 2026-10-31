@@ -10,7 +10,7 @@ export function disconnectBookkeeping(guarded: SupabaseClient, followup: Supabas
   return {
     forCompensation(publicationId, generation) {
       return {
-        publication: workweek.forPublication({ id: publicationId, ownerProfileId, attemptGeneration: generation, publicationRevision: 0, series: [], transitions: [] }),
+        publication: workweek.forPublication({ id: publicationId, ownerProfileId, attemptGeneration: generation, publicationRevision: 0, writeJournalVersion: 1, effects: [] }),
         async retire() { return followup.rpc("retire_compensated_workweek_for_disconnect", { p_owner_profile_id: ownerProfileId, p_publication_id: publicationId, p_generation: generation }); },
       };
     },
@@ -28,6 +28,10 @@ export function disconnectBookkeeping(guarded: SupabaseClient, followup: Supabas
           followup.from("google_workspace_disconnect_operations").update({ last_error_class: errorClass, updated_at: observedAt }).eq("id", operation.id).eq("owner_profile_id", ownerProfileId),
         ]);
         if (results.some(result => result.error)) throw new GoogleWorkspaceDisconnectError("unavailable", "Verzögerte Kalenderbereinigung konnte nicht gespeichert werden.");
+      },
+      async recordWrite(targetId, state) {
+        if (!bound || !targets.has(targetId)) return denied();
+        return followup.rpc("record_google_workspace_disconnect_write", {p_target_id: targetId, p_state: state});
       },
       async confirm(targetId, expectedEtag, confirmedEtag, observedAt) {
         if (!bound || targets.get(targetId)?.expected_etag !== expectedEtag) return denied();

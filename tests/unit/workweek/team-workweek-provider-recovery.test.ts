@@ -1,4 +1,5 @@
-import { expect, it } from "vitest";
+import { calendarProvider, observedJournal } from "../../helpers/calendar-provider";
+import { expect, it, vi } from "vitest";
 import { cleanupGoogleWorkweekEffect, recoverGoogleWorkweekWrite, type PreparedWorkweekEffect } from "../../../src/features/team-workweek/server/team-workweek-immediate-effects";
 
 const payload = {
@@ -21,8 +22,8 @@ it("recovers a lost create using the original ID and a duplicate arriving later 
     return event?Response.json(event):new Response(null,{status:404});
   };
   const journal:string[]=[];
-  const result=await recoverGoogleWorkweekWrite({accessToken: { request: (url, init) => fetch(url, init) },effect,purpose:"publish",fetchImpl,
-    writeJournal:{beforeWrite:async()=>{journal.push("dispatch");},outcome:async state=>{journal.push(state);}}});
+  const result=await recoverGoogleWorkweekWrite({accessToken: calendarProvider(fetchImpl),effect,purpose:"publish",fetchImpl,
+    writeJournal:{...observedJournal,outcome:async state=>{journal.push(state);}}});
   expect(result.state).toBe("confirmed");
   expect(writes).toEqual([payload.id]);
   expect((await fetchImpl("",{method:"POST",body:JSON.stringify(payload)})).status).toBe(409);
@@ -42,10 +43,10 @@ it("reserves an expired absent create as cancelled without adding elapsed workin
     }
     return event?Response.json(event):new Response(null,{status:404});
   };
-  const journal={beforeWrite:async()=>{},outcome:async()=>{}};
-  const recovered=await recoverGoogleWorkweekWrite({accessToken: { request: (url, init) => fetch(url, init) },effect,purpose:"publish",abandon:true,fetchImpl,writeJournal:journal});
+  const journal={...observedJournal,outcome:async()=>{}};
+  const recovered=await recoverGoogleWorkweekWrite({accessToken: calendarProvider(fetchImpl),effect,purpose:"publish",abandon:true,fetchImpl,writeJournal:journal});
   expect(recovered.state).toBe("confirmed");
-  const cleaned=await cleanupGoogleWorkweekEffect({accessToken: { request: (url, init) => fetch(url, init) },effect:{...effect,cleanupDisposition:"delete"},fetchImpl,writeJournal:journal});
+  const cleaned=await cleanupGoogleWorkweekEffect({accessToken: calendarProvider(fetchImpl),effect:{...effect,cleanupDisposition:"delete"},fetchImpl,writeJournal:journal});
   expect(cleaned).toMatchObject({state:"confirmed",preserved:false});
   expect((await fetchImpl("",{method:"POST",body:JSON.stringify(payload)})).status).toBe(409);
   expect(event).toEqual({id:payload.id,status:"cancelled",etag:"tombstone"});
@@ -62,10 +63,12 @@ it("fences a lost conditional update by rotating the baseline ETag before cleanu
     }
     return Response.json(event);
   };
-  const result=await recoverGoogleWorkweekWrite({accessToken: { request: (url, init) => fetch(url, init) },effect:{...effect,operation:"update",payload:replacement,expectedPayload:baseline,expectedEtag:"before"},purpose:"publish",abandon:true,fetchImpl,writeJournal:{beforeWrite:async()=>{},outcome:async()=>{}}});
+  const result=await recoverGoogleWorkweekWrite({accessToken: calendarProvider(fetchImpl),effect:{...effect,operation:"update",payload:replacement,expectedPayload:baseline,expectedEtag:"before"},purpose:"publish",abandon:true,fetchImpl,writeJournal:{...observedJournal,outcome:async()=>{}}});
   expect(result.state).toBe("confirmed");
   expect((await fetchImpl("",{method:"PUT",headers:{"if-match":"before"},body:JSON.stringify(replacement)})).status).toBe(412);
   expect(event).toEqual({...baseline,extendedProperties:{private:{...baseline.extendedProperties.private,founderopsWorkweekRecoveryFence:effect.id}},etag:"fenced"});
   // A crash after the baseline PUT must also be recoverable on the next request.
-  expect((await recoverGoogleWorkweekWrite({accessToken: { request: (url, init) => fetch(url, init) },effect:{...effect,operation:"update",payload:replacement,expectedPayload:baseline,expectedEtag:"before"},purpose:"publish",abandon:true,fetchImpl,writeJournal:{beforeWrite:async()=>{throw new Error("must not replay a fenced write");},outcome:async()=>{}}})).state).toBe("confirmed");
+  const redispatch=vi.fn(async()=>{});
+  expect((await recoverGoogleWorkweekWrite({accessToken: calendarProvider(fetchImpl,redispatch),effect:{...effect,operation:"update",payload:replacement,expectedPayload:baseline,expectedEtag:"before"},purpose:"publish",abandon:true,fetchImpl,writeJournal:{...observedJournal,outcome:async()=>{}}})).state).toBe("confirmed");
+  expect(redispatch).not.toHaveBeenCalled();
 });

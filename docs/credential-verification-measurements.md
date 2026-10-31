@@ -87,7 +87,6 @@ Every summary below is median / nearest-rank p95 / maximum in milliseconds. Ever
 | `private-automatic-private` | 50.13 / 56.86 / 58.91 | 43.53 / 54.32 / 58.26 | 50.21 / 56.98 / 58.97 | 43.66 / 54.44 / 58.38 |
 | `private-automatic-history` | 58.15 / 71.82 / 72.84 | 42.63 / 49.34 / 52.53 | 58.23 / 71.91 / 72.93 | 42.75 / 49.46 / 52.67 |
 | `private-recovery` | 49.17 / 59.20 / 71.98 | 35.32 / 41.74 / 45.52 | 49.25 / 59.25 / 72.06 | 35.41 / 41.83 / 45.64 |
-| `private-recovery-no-journal` | 49.07 / 54.63 / 55.02 | 34.83 / 43.87 / 44.12 | 49.18 / 54.68 / 55.10 | 34.91 / 43.96 / 44.25 |
 | `private-recovery-expired` | 51.19 / 58.00 / 59.13 | 35.75 / 66.26 / 106.64 | 51.27 / 58.06 / 59.21 | 35.84 / 66.37 / 106.76 |
 | `private-recovery-restarted` | 49.58 / 71.29 / 78.64 | 33.19 / 39.49 / 41.01 | 49.66 / 71.35 / 78.73 | 33.27 / 39.59 / 41.12 |
 | `private-recovery-identity` | 47.63 / 55.73 / 69.40 | 34.19 / 41.23 / 41.32 | 47.72 / 55.82 / 69.51 | 34.32 / 41.36 / 41.40 |
@@ -126,7 +125,6 @@ Auth means Auth user/session transport. EvidenceStore means profile, identity bi
 | `private-automatic-private` | Auth 17, Data 7, Directory 8, EvidenceStore 25, Permit 14 | Auth 11, Data 7, EvidenceStore 12, Permit 16 |
 | `private-automatic-history` | Auth 19, Data 7, Directory 9, EvidenceStore 28, Permit 16 | Auth 11, Data 7, EvidenceStore 11, Permit 16 |
 | `private-recovery` | Auth 17, Data 6, Directory 8, EvidenceStore 25, Permit 14 | Auth 10, Data 6, EvidenceStore 10, Permit 14 |
-| `private-recovery-no-journal` | Auth 17, Data 6, Directory 8, EvidenceStore 25, Permit 14 | Auth 10, Data 6, EvidenceStore 10, Permit 14 |
 | `private-recovery-expired` | Auth 17, Data 6, Directory 8, EvidenceStore 25, Permit 14 | Auth 10, Data 6, EvidenceStore 10, Permit 14 |
 | `private-recovery-restarted` | Auth 17, Data 6, Directory 8, EvidenceStore 25, Permit 14 | Auth 10, Data 6, EvidenceStore 10, Permit 14 |
 | `private-recovery-identity` | Auth 17, Data 6, Directory 8, EvidenceStore 25, Permit 14 | Auth 10, Data 6, EvidenceStore 10, Permit 14 |
@@ -188,8 +186,6 @@ The phase columns retain Proxy, entry authority and route separately. Each cell 
 | `private-automatic-history` After | 0.61 / 0.69 / 0.71 | 9.78 / 14.38 / 15.12 | 37.13 / 44.13 / 47.64 |
 | `private-recovery` Before | 0.44 / 0.56 / 0.56 | 13.88 / 20.09 / 21.02 | 44.81 / 55.57 / 67.86 |
 | `private-recovery` After | 0.58 / 0.77 / 1.19 | 9.91 / 15.04 / 15.61 | 30.72 / 37.75 / 40.66 |
-| `private-recovery-no-journal` Before | 0.45 / 0.52 / 0.52 | 13.76 / 19.06 / 19.97 | 44.39 / 50.68 / 50.82 |
-| `private-recovery-no-journal` After | 0.57 / 0.70 / 0.70 | 9.72 / 16.67 / 16.73 | 30.56 / 39.66 / 39.85 |
 | `private-recovery-expired` Before | 0.46 / 0.56 / 0.73 | 14.51 / 20.89 / 21.16 | 47.25 / 54.30 / 54.40 |
 | `private-recovery-expired` After | 0.57 / 0.70 / 0.77 | 9.71 / 14.89 / 16.37 | 30.72 / 47.19 / 62.21 |
 | `private-recovery-restarted` Before | 0.44 / 0.55 / 0.67 | 14.19 / 20.46 / 41.37 | 45.01 / 67.55 / 73.98 |

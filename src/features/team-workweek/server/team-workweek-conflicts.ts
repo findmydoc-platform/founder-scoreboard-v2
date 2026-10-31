@@ -390,7 +390,7 @@ export async function resolveTeamWorkweekConflict({
   }
 
   if (!versionId) throw new TeamWorkweekConflictError("unavailable", "Konfliktauflösung ist unvollständig.");
-  const publication = await publish({ request, bookkeeping, serviceSupabase, userSupabase, versionId, now, transitionsFirst: true });
+  const publication = await publish({ request, bookkeeping, serviceSupabase, userSupabase, versionId, now });
   if (publication.status === "published") {
     const completed = bookkeeping ? await bookkeeping.completeConflict({ publicationId: publication.id, conflictId, ownerProfileId, revision: conflictRevision, resolvedAt: publication.lastSyncAt || now().toISOString() }) : await serviceSupabase.rpc("complete_team_workweek_google_conflict_resolution", {
       p_conflict_id: conflictId,

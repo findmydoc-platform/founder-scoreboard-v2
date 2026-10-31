@@ -12,7 +12,7 @@ function fixture() {
   for(const [name,value] of Object.entries({NEXT_PUBLIC_SUPABASE_URL:"https://calendar-auth.example.test",SUPABASE_URL:"https://calendar-auth.example.test",NEXT_PUBLIC_SUPABASE_ANON_KEY:"synthetic-anon",NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",SUPABASE_SERVICE_ROLE_KEY:"synthetic-service",SUPABASE_SECRET_KEY:"synthetic-service",SUPABASE_ANON_KEY:"synthetic-anon",SUPABASE_PUBLISHABLE_KEY:"synthetic-anon",REQUIRE_SUPABASE_AUTH:"true",GOOGLE_WORKSPACE_CLIENT_ID:"synthetic-calendar-client",GOOGLE_WORKSPACE_CLIENT_SECRET:"synthetic-secret",GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,1).toString("base64")})) vi.stubEnv(name,value);
   const row={connection_id:"connection-1",credential_version:0,refresh_claim_id:null,encrypted_access_token:encrypted("synthetic-calendar"),encrypted_refresh_token:encrypted("synthetic-refresh"),access_token_expires_at:new Date(Date.now()+3600000).toISOString(),refresh_token_expires_at:new Date(Date.now()+7200000).toISOString(),oauth_scopes:["https://www.googleapis.com/auth/calendar.events.owned"],token_type:"Bearer",primary_calendar_id:"primary",revoked_at:null};
   const provider=[],removed=[];
-  const control={onVault:async()=>{},onUse:async()=>{},onClaim:async()=>{},onFinalize:async()=>{},tokenPosts:[]};
+  const control={onVault:async()=>{},onUse:async()=>{},onClaim:async()=>{},onFinalize:async()=>{},tokenPosts:[],dispatches:[],dispatchAllowed:true,onDispatch:async()=>{},ownerMapped:true};
   vi.stubGlobal("fetch",async(input,options)=>{
     const request=new Request(input,options),url=new URL(request.url);
     if(url.href==="https://oauth2.googleapis.com/token") {control.tokenPosts.push(await request.text());return Response.json({access_token:"synthetic-rotated",refresh_token:"synthetic-rotated-refresh",expires_in:3600,token_type:"Bearer"});}
@@ -21,12 +21,13 @@ function fixture() {
     if(url.hostname==="www.googleapis.com") {provider.push(request);expect(request.headers.get("authorization")).toBe("Bearer synthetic-calendar");return Response.json({id:"event-1"});}
     if(url.pathname==="/auth/v1/user") return Response.json({id:"user-1",aud:"authenticated",user_metadata:{}});
     if(url.pathname.endsWith("/rpc/workspace_access_context")) return Response.json({mode:"legacy",linkingEnforced:false,userId:"user-1",profileId:"owner-1",linked:false,identity:null});
-    if(url.pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json({id:"owner-1",name:"Synthetic owner",platform_role:"viewer"});
+    if(url.pathname.endsWith("/rpc/current_authenticated_profile")) return Response.json(control.ownerMapped ? {id:"owner-1",name:"Synthetic owner",platform_role:"viewer"} : null);
     if(url.pathname.endsWith("/rpc/administrator_access_snapshot")) return Response.json({eligible:false,active:false});
     if(url.pathname==="/rest/v1/google_workspace_disconnect_operations") return Response.json([]);
     if(url.pathname==="/rest/v1/google_workspace_connections") {if(request.method==="PATCH"){Object.assign(row,await request.json());return new Response(null,{status:204});}await control.onVault();return Response.json(row);}
     if(url.pathname.endsWith("/rpc/remove_google_calendar_connection")) {removed.push(await request.json());return Response.json(true);}
     if(url.pathname.endsWith("/rpc/use_google_calendar_connection")) {await control.onUse();return Response.json(true);}
+    if(url.pathname.endsWith("/rpc/dispatch_google_calendar_mutation")) {control.dispatches.push(await request.json());await control.onDispatch();return control.dispatchAllowed ? Response.json(true) : Response.json({code:"42501",message:"Dispatch denied"},{status:403});}
     throw new Error(`Unexpected synthetic protocol ${url.pathname}`);
   });
   const encode=value=>Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -56,8 +57,21 @@ test("completed owner cleanup removes its bound local Calendar connection withou
 async function ownerAccess() {
   const state=fixture();const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
   const {calendar}=await authorizeCredentialAction({credential:{kind:"session-request",request:state.request},action:"google-calendar.workweek",target:{ownerProfileId:"owner-1"}});
-  return {...state,write:()=>calendar.request("https://www.googleapis.com/calendar/v3/calendars/primary/events",{method:"POST",body:JSON.stringify({id:"event-1"})})};
+  return {...state,write:()=>calendar.mutate({kind:"publication",operationId:"operation-1",targetId:"effect-1"},"https://www.googleapis.com/calendar/v3/calendars/primary/events",{method:"POST",body:JSON.stringify({id:"event-1"})})};
 }
+test("a Calendar mutation requires durable owner-bound dispatch before contacting Google",async()=>{
+  const state=await ownerAccess();state.control.dispatchAllowed=false;
+  await expect(state.write()).rejects.toThrow();
+  expect(state.control.dispatches).toEqual([expect.objectContaining({p_owner_profile_id:"owner-1",p_kind:"publication",p_operation_id:"operation-1",p_target_id:"effect-1",p_event_id:"event-1",p_method:"POST"})]);
+  expect(state.provider).toHaveLength(0);
+});
+test.each(["owner","connection"])("a changed %s during journal persistence prevents the Calendar mutation",async kind=>{
+  const state=await ownerAccess();
+  state.control.onDispatch=async()=>{if(kind==="owner")state.control.ownerMapped=false;else state.row.revoked_at=new Date().toISOString();};
+  await expect(state.write()).rejects.toThrow();
+  expect(state.control.dispatches).toHaveLength(1);
+  expect(state.provider).toHaveLength(0);
+});
 test.each(["acquisition","final-binding"])("a Calendar session deadline crossed during %s prevents mutation",async phase=>{
   const state=await ownerAccess();let acquired=false,crossed=false;
   const expire=()=>{crossed=true;vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(state.sessionExpires*1000);};
@@ -132,11 +146,12 @@ test("disconnect confirms an observed provider effect after the initiating owner
     if (url.pathname === "/rest/v1/google_workspace_disconnect_operations") return Response.json(operation());
     if (url.pathname === "/rest/v1/team_workweek_publications") return Response.json([]);
     if (url.pathname === "/rest/v1/google_workspace_disconnect_series") return Response.json([target]);
+    if (url.pathname.endsWith("/rpc/record_google_workspace_disconnect_write")) return new Response(null,{status:204});
     if (url.pathname.endsWith("/rpc/confirm_google_workspace_disconnect_series")) { confirmed++; return new Response(null, { status: 204 }); }
     if (url.pathname.endsWith("/rpc/finalize_google_workspace_disconnect")) { finalized++; phase = "revoke_pending"; return Response.json({ state: phase }); }
     if (url.hostname === "www.googleapis.com") {
       if (request.method === "DELETE") { deleted++; ownerMapped = false; return new Response(null, { status: 204 }); }
-      return Response.json({ id: "event-1", etag: '"etag-1"', extendedProperties: { private: { founderopsWorkweekSeriesId: "series-1", founderopsWorkweekRevision: "1" } } });
+      return Response.json({ id: "event-1", start:{dateTime:"2099-01-12T09:00:00Z",timeZone:"Europe/Berlin"},end:{dateTime:"2099-01-12T17:00:00Z",timeZone:"Europe/Berlin"},etag: '"etag-1"', extendedProperties: { private: { founderopsWorkweekSeriesId: "series-1", founderopsWorkweekRevision: "1" } } });
     }
     return transport(request);
   });
@@ -200,15 +215,15 @@ test.each([
   try {
     const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
     const { observeRuntimeRoute } = await import("../../../src/lib/runtime-logging");
-    const { ensureGoogleWorkweekSeriesAbsent } = await importTestModule("src/features/team-workweek/server/google-workspace-disconnect-core.ts");
     await observeRuntimeRoute("google.disconnect", state.request, async () => {
       const { calendar } = await authorizeCredentialAction({ credential: { kind: "session-request", request: state.request }, action: "google-calendar.workweek", target: { ownerProfileId: "owner-1" } });
       if (phase === "ordinary" || phase === "collection") {
         const suffix = phase === "ordinary" ? "/event-1" : "";
         await calendar.request(`https://www.googleapis.com/calendar/v3/calendars/primary/events${suffix}`, phase === "collection" ? { allowedStatuses: [404] } : {});
       } else {
-        const result = await ensureGoogleWorkweekSeriesAbsent({ accessToken: calendar, target: { calendarId: "primary", googleEventId: "event-1", seriesId: "series-1", expectedEtag: "etag-1", expectedFounderopsRevision: 1 } });
-        expect(result.state).toBe(status === 404 || status === 410 ? "confirmed" : "delayed");
+        const url="https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1";
+        const read=await calendar.request(url,{allowedStatuses:[404,410]});
+        if(read.ok)await calendar.mutate({kind:"disconnect",operationId:"operation-1",targetId:"target-1"},url,{method:"DELETE",allowedStatuses:[404,410],headers:{"if-match":"etag-1"}});
       }
       return Response.json({ ok: true });
     });

@@ -17,7 +17,7 @@ it("preserves existing plans and restricts selected-week helpers to their intend
     await applyMigration(db,resolve('supabase/migrations/20261015132520_select_workweek_and_replace_future_plans.sql'));
     for(const [index,contract] of contracts.entries())assertRowsPreserved(before[index],await snapshotRows(db,contract));
     for(const role of ['anon','authenticated','service_role']){
-      for(const signature of ['team_workweek_selected_binding(text,date)','team_workweek_selected_snapshot(text,uuid)','prepare_team_workweek_publication_before_week_selection(uuid)','finalize_team_workweek_publication_before_week_selection(uuid)']){
+      for(const signature of ['team_workweek_selected_binding(text,date)','team_workweek_selected_snapshot(text,uuid)']){
         expect((await db.query("select has_function_privilege($1,$2,'EXECUTE') as allowed",[role,`public.${signature}`])).rows[0].allowed).toBe(false);
       }
       for(const signature of ['team_workweek_edit_context(date)','create_private_selected_team_workweek_version(date,jsonb,text)']){
