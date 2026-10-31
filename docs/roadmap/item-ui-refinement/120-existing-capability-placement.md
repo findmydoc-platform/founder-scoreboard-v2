@@ -565,17 +565,6 @@ The full-page and modal wrappers may provide different chrome, but they must not
 - Use the same inline Planning and workflow placement as the full page; do not add a generic details collection.
 - Preserve active tab and dirty edit state when using `Große Ansicht` only if an existing safe routing/state mechanism is implemented; otherwise require an explicit unsaved-change decision before leaving.
 
-## Screen Artifacts That Must Not Drive Implementation
-
-- `Zieltermin: Sprint 1` — use the actual deadline date; Sprint remains a separate planning value.
-- `Beziehungen 2` alongside three unique linked items — the count must use the finalized unique-visible-relationship contract.
-- `Aktivität 3` without a defined count source — use the finalized relevant-system-activity count; comments remain separate timeline entries unless the normative count contract is changed.
-- `Archivieren` and `Löschen` — replace with the existing eligible `Deliverable zurückziehen` action.
-- `Antworten` — omit because there is no reply/thread capability.
-- Initiative as a relationship target — omit because current relationship edges connect Tasks only.
-- Row kebab menus — render only after their exact existing actions and permission predicates are defined; a decorative menu is not allowed.
-- Remote Evidence document title — use a safe local fallback instead of invented metadata.
-
 ## Implementation Acceptance Gate
 
 The capability placement is preserved only if all statements are true:

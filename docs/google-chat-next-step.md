@@ -46,34 +46,6 @@ https://founder-ops.findmydoc.eu/api/google-chat/events
 
 Vorherige Namen wie `Founder Scoreboard Bot` oder `Founders CoreBot` gelten als Altbezeichnungen und sollen bei neuen Konfigurations- oder Codeänderungen nicht weiterverwendet werden.
 
-## Aktueller Umsetzungsschritt
-
-Erledigt:
-
-1. Task-Kommentare und Blocker-Meldungen erzeugen Events.
-2. Review-Deadline ist am Sprint modelliert.
-3. Notification-Outbox Tabellen/API sind ergänzt.
-4. Events beim Review-Anfragen, Review-Abschluss, Task-Kommentar, Blocker, Task-Vorschlag und Weekly-Rückmeldung werden erzeugt.
-5. Die Kopfzeile zeigt eine In-App-Notification-Inbox für persönliche Hinweise.
-6. Einstellungen zeigen Google Chat, Zustellstatus, Fehler und persönliche Event-Präferenzen.
-7. `/api/google-chat/events` ist als sichere Vorschau-Route vorbereitet.
-8. `/api/notifications/deliver` kann bei aktivierter Chat API persönliche FounderOps-DMs an `profiles.google_chat_dm_space` senden.
-9. Ohne DM-Space wird sauber in `notification_deliveries` protokolliert; es gibt keinen Gruppenchat-Fallback für persönliche Action-Items.
-
-Noch offen:
-
-1. `GOOGLE_CHAT_WEBHOOK_URL` lokal und später in Deployment-ENV setzen.
-2. `GOOGLE_CHAT_DELIVERY_ENABLED=false` als sicheren Standard beibehalten.
-3. In den Einstellungen die Versandbereitschaft prüfen und im deaktivierten Zustand einen Delivery-Aufruf ohne Versand bestätigen.
-4. Danach genau eine kontrollierte Test-Sammelmeldung oder persönliche Test-DM senden und den gespeicherten Zustellstatus prüfen.
-5. Optional: private DM-Zustellung mit Google Chat App/Bot später ergänzen.
-
-## Offene Punkte für persönliche DMs
-
-1. Von jedem Teammitglied die `FounderOps`-Direktchat-URL einsammeln und als `spaces/...` in `profiles.google_chat_dm_space` speichern.
-2. `founder-ops.findmydoc.eu/api/google-chat/events` im Deployment testen.
-3. Private DM-Zustellung über Google Chat API an `spaces/{dmSpace}/messages` ergänzen; der operative Webhook-Digest sendet nicht automatisch in persönliche DMs.
-
 ## Nicht vergessen
 
 In-App bleibt der Hauptkanal für individuelle Arbeit. Google Chat ist nur für wichtige Sammelmeldungen gedacht.

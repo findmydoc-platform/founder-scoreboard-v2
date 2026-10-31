@@ -53,27 +53,6 @@ Mockup text, counts, or actions that conflict with this contract are superseded.
 
 See `110-deferred-capability-register.md` for the future contract of every excluded capability.
 
-## Canonical Example Data
-
-All mockup states represent the same Item. Implementation fixtures and visual tests must use one internally consistent dataset.
-
-| Property | Canonical example |
-|---|---|
-| Type | `Deliverable` |
-| Title | `CEO-Briefing für Pitchdeck v2 liefern` |
-| Initiative | `Investor Readiness & Funding` |
-| Status | `Offen` |
-| Primary owner | `Volkan` |
-| Priority | `P1` |
-| Target date | `18.07.2026` |
-| Sub-Issues | `2 von 4 erledigt` |
-| Active prerequisites | one unresolved `Wartet auf` Item |
-| Downstream dependents | two `Andere warten hierauf` Items |
-| Relationship tab count | `3` unique visible linked Items |
-| Activity tab count | `4` visible timeline entries after filtering |
-
-The inline Planning section must not repeat the target date. The visible mockup value `Zieltermin · Sprint 1` is invalid and must not be implemented.
-
 ## Shared Visual Invariants
 
 Every surface preserves:
@@ -368,30 +347,6 @@ The Item action menu contains low-frequency direct actions, including GitHub syn
 - title wraps naturally and is never the only ellipsized title representation.
 
 See `130-interaction-responsive-accessibility-contract.md` for the complete state and interaction matrix.
-
-## Screen Inventory
-
-| ID | Screen | State | Artifact status |
-|---|---|---|---|
-| 01 | Overview upper | Read | visual layout reference; counts and Evidence copy corrected by this specification |
-| 02 | Overview lower/end | Read, scrolled | visual layout reference; unsupported actions and field content corrected by this specification |
-| 03 | Overview | Edit | visual layout reference; field set and single action bar corrected by this specification |
-| 04 | Sub-Issues | Read | visual layout reference |
-| 05 | Sub-Issues | Add | visual layout reference; duplicate trigger and row menus must not render |
-| 06 | Relationships | Read | visual layout reference; canonical relationship count is 3 |
-| 07 | Relationships | Add | visual layout reference; target scope and row actions corrected by this specification |
-| 08 | Activity | Read plus composer | visual layout reference; canonical count is 4 and Reply must not render |
-
-### Raster references
-
-- [01 Overview upper](development-screens/01-overview-upper-read.png)
-- [02 Overview lower/end](development-screens/02-overview-lower-end.png)
-- [03 Overview edit](development-screens/03-overview-edit.png)
-- [04 Sub-Issues read](development-screens/04-sub-issues-read.png)
-- [05 Sub-Issues add](development-screens/05-sub-issues-manage.png)
-- [06 Relationships read](development-screens/06-relationships-read.png)
-- [07 Relationships add](development-screens/07-relationships-manage.png)
-- [08 Activity](development-screens/08-activity-composer.png)
 
 ## Implementation Acceptance Gate
 

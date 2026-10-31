@@ -1,6 +1,6 @@
 # Credential verification inventory
 
-This inventory records the implemented credential boundaries for spec #487, including contract closeout #502. It applies Parnas's Information-Hiding Criterion and Robert C. Martin's Dependency Rule. Tests follow Freeman and Pryce's Outside-In TDD and Kent Beck's Test Desiderata. It records actual callers and credentials, including supported public and development contracts. It does not claim production deployment or the separate #503 measurements. The production acceptance documented in `docs/logging.md` predates the calendar snapshot implementation and remains historical evidence for that deployed commit.
+This inventory records the implemented credential boundaries for spec #487, including contract closeout #502. It applies Parnas's Information-Hiding Criterion and Robert C. Martin's Dependency Rule. Tests follow Freeman and Pryce's Outside-In TDD and Kent Beck's Test Desiderata. It records actual callers and credentials, including supported public and development contracts. It does not claim production deployment or the separate #503 measurements.
 
 ## Ownership and migration
 
@@ -205,7 +205,6 @@ A private `AsyncLocalStorage.run()` restriction follows reconciliation into exis
 
 Controlled external Auth, database and Chat protocols exercise the actual delivery, digest and reconciliation routes. A separate guarded disposable test crosses the actual notification route and real claims/storage: it verifies successful and duplicate delivery, foreign tokens, expired leases and exact finalization that preserves another reservation. Chat is scripted and unrelated providers are denied; the fixture deletes only its own generated events, claims and delivery records. The GitHub Actions release publisher remains the separate external release control plane documented under #498.
 
-
 #509 moves the two manual planning-trash maintenance routes to the public `maintenance.planning-trash.lifecycle` and `maintenance.planning-trash.purge` actions. Their dedicated header secret remains separate from Cron, delivery, release and human credentials. The private adapter snapshots the action and effective configuration, retains the existing strict service-key aliases, and exposes only fixed operations. Purge retains the existing eligibility RPC, limit 25, non-dry-run mode and result parser. Lifecycle retains the existing domain loops, claim limits, queue filters and error contracts. Each provider capability binds one concrete claimed job; an unrelated lost job cannot invalidate another job's authority. New work checks the original claim deadline and current ownership. Exact claim finalization may survive maintenance-secret replacement, but never database credential replacement. Protocol checks and real disposable database acceptance separately cover the existing claim and finalization contracts.
 
 ## Scheduled webhook drain
@@ -246,7 +245,6 @@ The same action exposes only the existing specific header load operation. Its pr
 
 The Decision Log application is read-only. Its detail view offers external Notion, form, source and archive links; no application edit route, write RPC consumer, mutation control or Notion write transport was found. This migration adds none and changes no external Notion permissions. CEO-only decision governance remains a separate human-policy constraint.
 
-
 ## Planning browser action inventory (#504)
 
 The public planning actions reuse the shared session policy. The feature owns request parsing, workflow decisions, response mapping and notification payloads. Internal adapters bind the real actor, intended action and selected resource before asynchronous authorization. They return fixed operations and safe metadata. They do not return clients, query builders or provider credentials.
@@ -273,7 +271,6 @@ The server-rendered Planning, Backlog, Sprint and task-detail entries use the sa
 Owner Workweek publication, restart, conflict reads/resolution and reconciliation use fixed `workweek.*` operations. New reads, preflight, preparation and claims use the live guarded service transport. The existing domain state machines and Calendar transport remain authoritative. Only confirmed prepared publications, acquired claims and committed results admit their exact journal, failure, completion or reconciliation bookkeeping. These internal ports bind owner, publication, generation, effect and conflict revision; they expose neither arbitrary IDs nor a service client to application callers. A later session denial cannot strand accounting for an already confirmed effect. Provider attempts still require their own current Calendar capability.
 
 The private service transport captures the existing URL/key/fallback selection and rechecks it after live authority checks immediately before dispatch. It preserves strict service-only operations and the existing anonymous fallback for other reads. SDK database retries are disabled on this transport so a terminal authorization or configuration denial is not retried. Ordinary service GET failures also become fail-fast; the established safe route-facing error and explicit domain/provider recovery remain observable.
-
 
 Planning database acceptance uses actual HTTP entries and the public action seam with isolated Auth sessions, signed JWTs and real PostgREST. The role/owner matrix checks ordinary creation, proposal approval and withdrawal, restoration, task revisions, relationship ownership, review requests/withdrawal, comments, sprint assignment and lock authority, commitments, Focus and Weekly attendance. Legacy and enforced-linking runs preserve named administrator expiry, optimistic revisions and user-bound permit/RLS enforcement. Fixture setup supplies the required Epic/Initiative hierarchy; it does not disable hierarchy checks. Already approved proposals remain outside the proposed-item decision transaction.
 
@@ -304,15 +301,6 @@ The credential module now owns the live Workspace verification, provider proof, 
 
 The executable dependency policy has no legacy edge or transport section. Its remaining resource transports are the browser session/HTTP adapters, their story fixture and the domain metadata fetch. The resolved client graph rejects server entry and SDK dependencies. The production build additionally scans every emitted static JavaScript chunk and source map for server adapters and credential markers; source checks and emitted-bundle results are separate evidence.
 
-## Final acceptance evidence
-
-[Ticket 503 acceptance](credential-verification-acceptance.md) reconciles all 23 ticket boundaries and 20 parent criteria, including the approved absent/read-only actions, inert incoming Chat, development-only simulation and separate externally dispatched release publisher. The actual production browser, public protocol, real database and [matched measurement](credential-verification-measurements.md) evidence is complete. Acceptance used scripted external-provider protocols and contacted no production provider.
-
-The final isolated cycle passed: 30 migration/preservation tests across 28 files; full 29-entry ledger and security verification for 67 tables/32 authenticated RPCs; synthetic Auth and cleanup; database lint with zero errors; corrected ordinary full suite 1,999/308; lint with zero errors/five known warnings; TypeScript/production build; 37 architecture fixtures and actual source-boundary validation. The final emitted-client scan passed across 63 chunks/maps and 2,231,432 bytes. The measured 183-artifact scan and ticket 502’s earlier 63-artifact scan remain separate evidence.
-
-The two failed initial full-suite fixtures are retained and explained in the acceptance record. Synthetic configuration and exact-ID test cleanup were repaired without changing runtime code, app response contracts, schema, workflow settings or Maintenance assertions. Final read-only cleanup verified all 11 fixture tables empty, configuration restored and no copied environment files. ADR0002 remains Draft for review; these results authorize neither deployment nor reviewer execution.
-
-
 ## Calendar dispatch preparation
 
 Issue #525 groups live database binding validation and request-permit issuance for `calendar.read` only. After each unchanged live Auth-user check, the private transport invokes `workspace_calendar_prepare` with the captured user/profile, Workspace mode, linking enforcement and applicable Google subject/email. The operation acquires the configuration ShareLock before reading the current context. It rejects changed bindings before calling the existing session-aware permit issuer, which retains that lock and the current access generation. Enforced linking and Google modes receive a permit; legacy and unenforced linking validate their binding without issuing one. Direct anonymous and authenticated execution is denied. Its server-only grant, fixed empty search path and qualified references preserve the existing user-access boundary.
@@ -325,8 +313,7 @@ Together with grouped entry, this removes three HTTP attempts from the ordinary 
 
 Real local Auth and PostgREST acceptance covers all four supported roles, Cookie and Bearer transport, exact original JWT dispatch, complete 101-publication history, date filtering, session loss between pages, banned/deleted accounts and removed profile binding. The separate database tests retain configuration-lock interleavings, strict identity types, grants, RLS and permit boundaries. OAuth session state is prepared synthetically before real Auth refresh; Google WIF and Directory remain simulated. This does not establish behavior of a real Google login.
 
-The [integrated comparison](credential-verification-measurements.md#grouped-calendar-authorization-comparison) identifies both executable revisions, actual request accounting and three matched local latency batches. Each batch has a lower combined median, with overlap and individual regressions retained. These observations are limited to the controlled local environment. Historical production acceptance above remains attributed to its original implementation.
-
+The [integrated comparison](credential-verification-measurements.md#grouped-calendar-authorization-comparison) identifies both executable revisions, actual request accounting and three matched local latency batches. Each batch has a lower combined median, with overlap and individual regressions retained. These observations are limited to the controlled local environment.
 
 ## Planning revision dispatch preparation
 
@@ -337,7 +324,6 @@ The additive generalization migration keeps `workspace_calendar_prepare` as a co
 The revision capability retains its initial profile read, its `readRevision` current-profile check and the guarded service read's current-profile check. Each profile RPC still uses the original user JWT, a separate permit and a live Auth user check. Only each profile dispatch's separate context read and permit issuance become one atomic preparation. The final active-task read keeps its existing service authority, filters and response contract.
 
 `tests/integration/planning-revision-dispatch.test.ts` verifies real local Auth and PostgREST through the public credential interface and revision capability, including the cookie proxy. Its warm linking budget is 17 HTTP requests, comprising one proxy Auth request and 16 route requests. `tests/unit/auth/calendar-dispatch-preparation.test.mjs` separately covers a warm Google route's 17-request budget, including its Google-only settings request. These are different request boundaries. Neither result establishes production latency or a real Google login. The real database contract suite exercises both preparation RPC names, configuration-lock interleavings, grants, ownership, search path and permit bindings.
-
 
 ## Planning board dispatch preparation
 

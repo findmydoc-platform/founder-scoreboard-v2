@@ -397,19 +397,6 @@ Rules:
 - Item-specific permission limitations never use the global application banner.
 - Restricted linked items expose no private title, owner, status, body, activity, or relationship context.
 
-## Superseded Screenshot Text Data
-
-The following screenshot values are illustrative data errors and are superseded by this contract. Correcting them is not a new feature.
-
-| Screenshot data | Normative value | Reason |
-|---|---|---|
-| `Beziehungen 2` across the development screens | `Beziehungen 3` for the current mock item | The complete relationship view contains one waits-on row and two downstream rows |
-| `Aktivität 3` across the development screens | `Aktivität 4` for the current mock item | The visible feed contains one comment and three system/history entries |
-| `Evidence` and generic file-style presentation in Screen 01 | `Nachweis` using the existing link-object presentation defined in the development specification | Screen 01 predates the approved Evidence Contract |
-| Any screenshot-only field label or value not backed by the current Item data contract | Existing canonical field and value only | A generated screenshot does not authorize a new field or data source |
-
-The selected layout, spacing, hierarchy, relationship direction, and visual style remain the reference. Only the conflicting illustrative text and counts above are superseded.
-
 ## Implementation Acceptance Gate
 
 Implementation is ready for visual and interaction QA only when all of the following are true:

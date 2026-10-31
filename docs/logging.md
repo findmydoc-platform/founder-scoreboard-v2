@@ -1,12 +1,6 @@
 # Runtime logging contract
 
-Status: the calendar pilot passed bounded production acceptance on 2026-10-20. The current implementation extends its central measurement to the registered routes below; that historical acceptance does not validate the extension.
-
 The central module covers 25 registered method/route pairs, their existing session proxy, and the private Supabase Auth, Supabase database, Google Workspace and GitHub transports they reach. One route completion links the response ID to the safe proxy summary, membership evidence, actual HTTP-attempt counts, and bounded local phase intervals. It preserves the credential and cookie chain.
-
-The original pilot completed the scope of [#518](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/518) and [#519](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/519). The production acceptance below records real-request correlation, observed Vercel log classification, and the existing retention entitlement. Its results apply to the inspected deployment and bounded sample.
-
-The production acceptance and serialized example below predate the calendar snapshot implementation in PR #522. They remain evidence for the deployment and commit inspected on 2026-10-20; they do not establish production behavior or performance for the new read path.
 
 ## Registered HTTP scope
 
@@ -99,7 +93,7 @@ For example, distinguish failure of `supabase.user`, `workspace.context`, `works
 
 Calendar entry now reports the fixed `workspace.entry` operation for its grouped Workspace-context and session-admission request. Count its HTTP attempt once. Its logical checks do not add `workspace.context` or `workspace.session` attempts. Separate context requests by other actions retain their existing identifiers. A malformed grouped response is an `invalid_response`; an admission-provider failure becomes observable only after the existing identity and OAuth checks have passed. Request arguments and provider details remain excluded.
 
-The combined Calendar entry and dispatch operations use 11 observed attempts rather than 14 for an ordinary warm enforced-linking Cookie load, including all four live `supabase.user` attempts. Google-only mode retains its settings attempt and uses 12 rather than 15. These budgets require warm asymmetric signing keys, a membership hit, one snapshot request and no refresh or retry. Legacy and unenforced linking retain their totals. The [controlled local comparison](credential-verification-measurements.md#grouped-calendar-authorization-comparison) records actual transport counts and separate elapsed times. Historical production measurements below retain their original implementation context.
+The combined Calendar entry and dispatch operations use 11 observed attempts rather than 14 for an ordinary warm enforced-linking Cookie load, including all four live `supabase.user` attempts. Google-only mode retains its settings attempt and uses 12 rather than 15. These budgets require warm asymmetric signing keys, a membership hit, one snapshot request and no refresh or retry. Legacy and unenforced linking retain their totals. The [controlled local comparison](credential-verification-measurements.md#grouped-calendar-authorization-comparison) records actual transport counts and separate elapsed times.
 
 Expected authorization denials remain denied outcomes with the existing safe code. They are not automatically unexpected application errors. An internal error code does not change the public error body or status. Any future change to that public contract requires its own decision and focused tests.
 
@@ -165,6 +159,13 @@ Application severity and Vercel's displayed log level are separate. Verify the s
 
 Sampling controls emission, not storage lifetime. Use the existing Vercel retention window without a new archive. The pilot requires no additional minimum retention period. Verify and record the project's actual window before later production acceptance so that operators know how long a request remains available. Longer retrospective diagnosis requires a separate retention decision before introducing storage or changing configuration.
 
+Platform observations from 2026-10-20 and their limits:
+
+| Check | Result and evidence | Remaining gap |
+| --- | --- | --- |
+| Detail selection and Vercel level | All 34 selection decisions matched the contract: eight slow, two sampled, two non-success, and 22 compact completions. Application `info` and `warn` both appeared as Vercel log-line `info`, consistent with stdout delivery. Search the structured `severity` field to find slow application warnings. | No application error or sampled fast-hit route detail occurred; their production classification was not exercised. No faults were injected. |
+| Existing retention | Read-only team configuration confirmed active Pro billing, enabled `observabilityBase` with quantity 1 and its Observability entitlement. The Observability Plus disabled-project list was empty. This establishes the existing **30-day runtime-log retention** under the [published limits](https://vercel.com/docs/logs/runtime#limits) and [project inclusion rules](https://vercel.com/docs/observability/observability-plus#managing-projects). | Entitlement evidence, not a 30-day aging experiment. Recheck after plan or project-inclusion changes. |
+
 ## Server-controlled measurement detail
 
 `RUNTIME_LOG_DETAIL_PERCENT` optionally selects a whole percentage from `0` through `100` for successful fast-request detail. Only that server environment variable is read. Incoming headers, request bodies and query parameters cannot select detail, skip authorization or force a provider operation. Omitted, empty or invalid values retain the existing deterministic one-in-ten request-ID selection. Configured values use the same request ID across proxy and route and report `retentionReason: configured_sample` when selected. Errors, slow requests and membership misses/expiry retain detail independently of this percentage, including when it is zero.
@@ -189,93 +190,6 @@ Use Freeman and Pryce's Outside-In TDD and Kent Beck's Test Desiderata when impl
 6. Exercise late failures, both sides of the slow threshold, deterministic sampling, and truncation. Compact completions and required detailed observations must survive the production logger level.
 7. After a separately authorized deployment, inspect real calendar requests. Verify one completion record explains the proxy and route work, cache outcome, safe failures, and declared external-call coverage; verify severity classification and actual retention. Synthetic local timings do not replace production evidence.
 
-## Production acceptance on 2026-10-20
-
-Result: **passed for the bounded production sample**. The active `founder-ops` production deployment was `dpl_7Ss9nCMomXPAw6WdZ4YJSAQk1BXV`, built from commit `9546c8db60085973b2a61fc2bd7cf30ebc9547d5`. The successful [production workflow](https://github.com/findmydoc-platform/founder-scoreboard-v2/actions/runs/39426408444) recorded the same deployment URL that Vercel reported as READY and assigned to the production domain.
-
-Checks ran from 13:17:29 to 13:24:33 UTC. There were 18 targeted calendar GETs: one calendar UI load, ten sequential calls, three parallel calls, one invalid range, one anonymous navigation plus a header-observed anonymous GET in a separate browser context, and one authenticated call after the anonymous check. Response headers were captured for 17 requests. Full application log messages were read through the verified `vercel-findmydoc` CLI profile because the connector shortened longer messages. Queries used the exact deployment, test window, and captured request IDs.
-
-| Check | Result and evidence | Remaining gap |
-| --- | --- | --- |
-| Success and correlation | All 15 header-observed successful calls returned 200. Each of the 17 captured response IDs matched exactly one proxy completion and one route completion, with complete proxy-to-route correlation. IDs were distinct; no internal diagnostic headers were exposed. | None in the inspected sample. |
-| Cache behavior | Two misses and 14 hits across two opaque cache owners. Hits dispatched no Directory membership verification. Observed evidence age plus remaining lifetime stayed at 900,000 ms. | Expiry, eviction, bypass, and coalesced verification did not occur. Cache-owner changes alone do not establish a physical instance change or a miss cause. |
-| Parallel isolation | Three concurrent calls returned 200 with separate IDs and matching summaries; all used existing membership evidence. | No shared in-flight verification occurred in this warm sample. |
-| Invalid input and missing session | Invalid range returned 400 with `invalid_input` at `info`. The separate anonymous context returned 401 with `denied` at `info`, unavailable membership evidence, and zero scoped outbound attempts. The existing authenticated context subsequently returned 200. | No role or credential changes were made to generate other denials. |
-| Output bounds and privacy | All 34 inspected events parsed as JSON and matched the approved field sets. Largest event: 8,325 UTF-8 bytes; maximum 46 phases and 6,774 phase-detail bytes. No disallowed fields or credential, identity, URL, or private-host patterns were found in those events. | This sample does not establish absence of sensitive data in all application logs. |
-| Timing and outbound attempts | Durations were finite and nonnegative; observed processing matched route duration plus observed proxy duration. Scoped attempt totals matched operation counts and retained complete HTTP phases. OIDC internals remained explicitly excluded. | Browser elapsed time is not the application's observed processing time. |
-| Detail selection and Vercel level | All 34 selection decisions matched the contract: eight slow, two sampled, two non-success, and 22 compact completions. Application `info` and `warn` both appeared as Vercel log-line `info`, consistent with stdout delivery. Search the structured `severity` field to find slow application warnings. | No application error or sampled fast-hit route detail occurred; their production classification was not exercised. No faults were injected. |
-| Existing retention | Read-only team configuration confirmed active Pro billing, enabled `observabilityBase` with quantity 1 and its Observability entitlement. The Observability Plus disabled-project list was empty. This establishes the existing **30-day runtime-log retention** under the [published limits](https://vercel.com/docs/logs/runtime#limits) and [project inclusion rules](https://vercel.com/docs/observability/observability-plus#managing-projects). | Entitlement evidence, not a 30-day aging experiment. Recheck after plan or project-inclusion changes. |
-
-The run used calendar GETs and read-only platform inspection. It changed no planning data, roles, credentials, Supabase settings, retention settings, or deployment configuration, performed no cache purge or lifetime change, and triggered no deployment. Raw logs stayed in memory; only these aggregate results are retained. Automated controlled tests remain the evidence for the unobserved cache boundaries, provider failures, logger failures, and backpressure. This acceptance found no confirmed application defect; #517, #518, and #519 remain closed.
-
-## Synthetic output example
-
-This compact warm-hit record comes from the real serialized adapter with synthetic inputs and reflects the pre-snapshot production path. Its 19 attempts include one proxy user check and 18 route attempts. OIDC internals remain excluded. The empty phase array is deliberate detail sampling, not zero application work.
-
-```json
-{
-  "level": 30,
-  "schemaVersion": 1,
-  "scope": "calendar",
-  "timestamp": "2026-10-20T10:31:45.274Z",
-  "severity": "info",
-  "requestId": "8ea34e08-8cc2-42ad-a562-87b700000001",
-  "instanceId": "2f281f12-aaed-4f75-8b2f-1b69a5c6645c",
-  "stage": "route",
-  "operation": "calendar.request",
-  "method": "GET",
-  "route": "/api/team-workweek/team",
-  "status": 200,
-  "outcome": "success",
-  "durationMs": 80,
-  "observedProcessingMs": 92,
-  "proxy": {
-    "requestId": "8ea34e08-8cc2-42ad-a562-87b700000001",
-    "instanceId": "3390a311-7f40-49c6-9b71-95c56ebeddbf",
-    "durationMs": 12,
-    "status": 200,
-    "outcome": "success"
-  },
-  "externalCalls": {
-    "total": 19,
-    "operations": {
-      "calendar.publications": 2,
-      "calendar.profile": 1,
-      "supabase.user": 5,
-      "workspace.context": 4,
-      "workspace.session": 1,
-      "workspace.permit.issue": 3,
-      "workspace.permit.release": 3
-    }
-  },
-  "phases": [],
-  "detailRetained": false,
-  "retentionReason": "compact",
-  "membership": {
-    "result": "hit",
-    "reason": "cached",
-    "cacheOwnerId": "0ddece05-8547-49e8-ac53-597f17c15d83",
-    "evidenceAgeMs": 30000,
-    "remainingLifetimeMs": 870000,
-    "expired": false
-  },
-  "completeness": {
-    "correlation": "complete",
-    "externalCallsScope": "private_supabase_and_explicit_directory_http",
-    "externalCallsComplete": true,
-    "uninstrumented": [
-      "vercel_oidc_internal"
-    ],
-    "proxyObserved": true,
-    "cache": "observed",
-    "phasesComplete": false,
-    "phasesTruncated": false
-  },
-  "event": "request.completed",
-  "msg": "Calendar request completed"
-}
-```
-
 ## Sources
 
 - [Pino API](https://github.com/pinojs/pino/blob/main/docs/api.md) and [default Error serializer](https://github.com/pinojs/pino-std-serializers/blob/master/lib/err.js).
@@ -284,7 +198,6 @@ This compact warm-hit record comes from the real serialized adapter with synthet
 - [Vercel runtime logs](https://vercel.com/docs/logs/runtime) and [request headers](https://vercel.com/docs/headers/request-headers).
 
 Private production diagnosis, request samples, and operator artifacts are not part of this contract and must remain outside the repository.
-
 
 ## Grouped dispatch preparation
 
