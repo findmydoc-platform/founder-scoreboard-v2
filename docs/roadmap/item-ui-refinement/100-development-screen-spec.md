@@ -9,7 +9,7 @@ Date anchor: 2026-07-14
 
 ## Purpose
 
-This document is the implementation source for the Item Detail presentation. It consolidates the selected mockups, the three design workstreams, and the current product capabilities into one conflict-free contract.
+This document is the implementation source for the Item Detail presentation.
 
 The implementation reorganizes existing Item information and existing actions. It does not add a database field, API capability, permission, relationship target type, workflow transition, or collaboration model.
 
@@ -20,10 +20,9 @@ When artifacts disagree, use this order:
 1. this specification;
 2. `120-existing-capability-placement.md` for current feature placement and permissions;
 3. `130-interaction-responsive-accessibility-contract.md` for state, responsive, modal, focus, and accessibility behavior;
-4. `95-selected-direction-refinement.md` for visual weighting of the dependency band;
-5. raster mockups in `development-screens/` for composition and visual character.
+4. `95-selected-direction-refinement.md` for visual weighting of the dependency band.
 
-Mockup text, counts, or actions that conflict with this contract are superseded. `110-deferred-capability-register.md` documents future ideas only and must not be implemented in the current Item UI.
+`110-deferred-capability-register.md` documents future ideas only and must not be implemented in the current Item UI.
 
 ## Scope Boundary
 

@@ -7,13 +7,13 @@ Scope: presentation and interaction behavior only
 
 ## Authority and Normative Language
 
-This document closes the interaction, responsive, state, and accessibility gaps that cannot be proven by the static development screens.
+This document defines the interaction, responsive, state, and accessibility requirements.
 
 - **MUST** and **MUST NOT** are implementation gates.
 - **SHOULD** is the default unless an existing verified product constraint requires another accessible behavior.
 - **MAY** is optional polish and does not block implementation.
 
-Where screenshot text or example counts conflict with this document, this document is authoritative. Those corrections supersede illustrative screenshot data only. They do not authorize new fields, workflows, permissions, relationship types, or product capabilities.
+This document is authoritative for presentation and interaction. It does not authorize new fields, workflows, permissions, relationship types, or product capabilities.
 
 ## Shared Information and DOM Order
 
@@ -215,7 +215,7 @@ The numbers above are the current mock-data values. The formulas below, not hard
 ### Save
 
 - The single visible `Speichern` control submits the Overview form and owns its disabled, pending, and error state.
-- Use exactly one persistent Overview action group with `Abbrechen` and `Speichern` on every surface. It may become a sticky footer in the 920-pixel modal and below 768 pixels. The duplicate header and end-of-form action groups in the raster mockup are superseded.
+- Use exactly one persistent Overview action group with `Abbrechen` and `Speichern` on every surface. It may become a sticky footer in the 920-pixel modal and below 768 pixels.
 - During submission, the form is `aria-busy="true"`, repeated submits are blocked, and the primary action shows a visible pending label such as `Speichert …`.
 - On success, return to reading mode, focus the existing `Bearbeiten` control or the edited section heading, and announce `Änderungen gespeichert.`
 - Do not show a success toast when the updated read content is immediately visible.

@@ -7,13 +7,12 @@ Applies to: active Deliverable and Sub-Issue detail, full page and modal
 
 > **Every capability in this register is NOT PART OF THE CURRENT UI IMPLEMENTATION.**
 >
-> The mockups are visual evidence of possible future intent, not authorization to add a control, mutation, field, permission, or provider integration. The current implementation must follow `120-existing-capability-placement.md`: omit unsupported controls, preserve existing capabilities, and use safe local fallbacks.
+> The current implementation must follow `120-existing-capability-placement.md`: omit unsupported controls, preserve existing capabilities, and use safe local fallbacks.
 
 ## Purpose and release discipline
 
-This register prevents visually plausible mockup details from becoming accidental product scope. Each entry records:
+This register lists capabilities excluded from the current Item UI. Each entry records:
 
-- where the future affordance appears in the development screens;
 - what the current product actually supports;
 - why the affordance is excluded now;
 - the minimum data, API, permission, UI, and failure contract required before it can be approved;
@@ -23,23 +22,18 @@ No entry may move into the Item UI through presentation work alone. It requires 
 
 ## Summary
 
-| Deferred capability | Visible mockup origin | Current supported behavior | Current implementation rule |
-|---|---|---|---|
-| Generic archive | `02-overview-lower-end.png`, rail action `Archivieren` | Eligible Deliverables can be withdrawn to the planning trash | Omit `Archivieren`; retain `Deliverable zurückziehen` only when currently permitted |
-| Direct delete | `02-overview-lower-end.png`, destructive action `Löschen` | Direct Task DELETE returns `410`; expired trash is purged by protected maintenance | Omit `Löschen` |
-| Activity replies | `08-activity-composer.png`, `Antworten` below a comment | Flat local and imported comments in one Activity timeline | Omit `Antworten` |
-| Row kebab menus | `05-sub-issues-manage.png` and `07-relationships-manage.png`, trailing ellipsis controls | Rows open Items; removable relationships use the current explicit remove control | Omit menus until every action is defined and permission-backed |
-| Initiative relationship target | `07-relationships-manage.png`, target placeholder naming Initiative | Relationship edges connect Task records only; the current picker offers Deliverables | Omit Initiative targets |
-| Document title and provider metadata | `02-overview-lower-end.png`, Evidence card title and `Google Slides · drive.google.com` | One `evidenceLink` string, rendered through a safe local link preview | Use hostname or shortened URL fallback; do not fetch or invent a title |
+| Deferred capability | Current supported behavior | Current implementation rule |
+|---|---|---|
+| Generic archive | Eligible Deliverables can be withdrawn to the planning trash | Omit `Archivieren`; retain `Deliverable zurückziehen` only when currently permitted |
+| Direct delete | Direct Task DELETE returns `410`; expired trash is purged by protected maintenance | Omit `Löschen` |
+| Activity replies | Flat local and imported comments in one Activity timeline | Omit `Antworten` |
+| Row kebab menus | Rows open Items; removable relationships use the current explicit remove control | Omit menus until every action is defined and permission-backed |
+| Initiative relationship target | Relationship edges connect Task records only; the current picker offers Deliverables | Omit Initiative targets |
+| Document title and provider metadata | One `evidenceLink` string, rendered through a safe local link preview | Use hostname or shortened URL fallback; do not fetch or invent a title |
 
 ## 1. Generic archive
 
 **Status: DEFERRED — NOT PART OF THE CURRENT UI IMPLEMENTATION.**
-
-### Visible mockup origin
-
-- `development-screens/02-overview-lower-end.png`
-- Right rail, `Weitere Aktionen`, neutral action labelled `Archivieren`.
 
 ### Current product state
 
@@ -60,11 +54,6 @@ There is no generic archived state for planning Items.
 
 **Status: DEFERRED — NOT PART OF THE CURRENT UI IMPLEMENTATION.**
 
-### Visible mockup origin
-
-- `development-screens/02-overview-lower-end.png`
-- Right rail, `Weitere Aktionen`, red destructive action labelled `Löschen`.
-
 ### Current product state
 
 Direct deletion is intentionally unavailable from an active Item.
@@ -83,11 +72,6 @@ Immediate deletion would bypass the approved recovery window and can cascade acr
 ## 3. Activity replies
 
 **Status: DEFERRED — NOT PART OF THE CURRENT UI IMPLEMENTATION.**
-
-### Visible mockup origin
-
-- `development-screens/08-activity-composer.png`
-- Inline `Antworten` affordance below Volkan's comment.
 
 ### Current product state
 
@@ -109,11 +93,6 @@ The mockup does not decide whether a reply is visual indentation only, a persist
 
 **Status: DEFERRED — NOT PART OF THE CURRENT UI IMPLEMENTATION.**
 
-### Visible mockup origin
-
-- `development-screens/05-sub-issues-manage.png`: trailing ellipsis on each Sub-Issue row.
-- `development-screens/07-relationships-manage.png`: trailing ellipsis on each relationship row.
-
 ### Current product state
 
 The current Item rows do not have a generic action menu.
@@ -131,13 +110,6 @@ An ellipsis communicates that meaningful actions exist. The mockups do not defin
 ## 5. Initiative as a relationship target
 
 **Status: DEFERRED — NOT PART OF THE CURRENT UI IMPLEMENTATION.**
-
-### Visible mockup origin
-
-- `development-screens/07-relationships-manage.png`
-- Target placeholder: `Initiative, Deliverable oder Sub-Issue suchen`.
-
-The same placeholder also promises Sub-Issue targets. That is a separate mismatch: the current picker explicitly excludes Sub-Issues.
 
 ### Current product state
 
@@ -157,12 +129,6 @@ Initiative relationships require a cross-entity graph, not a picker-label change
 ## 6. Document title and provider metadata
 
 **Status: DEFERRED — NOT PART OF THE CURRENT UI IMPLEMENTATION.**
-
-### Visible mockup origin
-
-- `development-screens/02-overview-lower-end.png`
-- Evidence card displaying `Pitchdeck v2 – CEO-Briefing` and `Google Slides · drive.google.com` with a provider-specific icon.
-- The early raster direction visually implies a document title and provider/host line. The current `100-development-screen-spec.md` explicitly supersedes that implication and permits only locally derivable provider/hostname information.
 
 ### Current product state
 

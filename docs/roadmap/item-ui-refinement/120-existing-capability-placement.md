@@ -577,5 +577,5 @@ The capability placement is preserved only if all statements are true:
 6. GitHub comment import stays in Activity; GitHub Issue sync stays in the Item action menu.
 7. Withdraw uses the existing trash workflow, wording, confirmation, permission, and rollback behavior.
 8. Full page and modal expose the same capabilities and error truth.
-9. No current capability disappears merely because it is absent from the eight mockups.
-10. No unsupported mockup action is implemented as a placeholder or inert control.
+9. Every current capability remains available.
+10. No unsupported action is implemented as a placeholder or inert control.
