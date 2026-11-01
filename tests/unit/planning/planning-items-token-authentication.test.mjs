@@ -1,9 +1,10 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { NextRequest } from "next/server";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
-async function fixture({ error, receipt = {}, workspace = { mode: "legacy" }, onData } = {}) {
+async function fixture({ error, receipt = {}, workspace = { mode: "legacy" }, onData, onAuthenticate } = {}) {
   for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL"]) vi.stubEnv(name, "https://personal-planning.example.test");
   for (const name of ["NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY"]) vi.stubEnv(name, "synthetic-anon");
   for (const name of ["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY"]) vi.stubEnv(name, "synthetic-service");
@@ -12,6 +13,8 @@ async function fixture({ error, receipt = {}, workspace = { mode: "legacy" }, on
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname === "/rest/v1/rpc/authenticate_team_planning_items_token") {
       authenticationRequests++;
+      const currentError = onAuthenticate?.();
+      if (currentError) return Response.json(currentError, { status: 400 });
       if (error) return Response.json(error, { status: 400 });
       return Response.json({ tokenId: "token-1", tokenHint: "…a8F31x", scopes: ["read:planning-context"], scopeGranted: true,
         expiresAt: new Date(Date.now() + 3600000).toISOString(), evaluatedAt: new Date().toISOString(), remainingSeconds: 12.9,
@@ -81,13 +84,97 @@ test("a context read capability cannot commit or dispatch a foreign projection",
   await expect(result.planningItems.dispatchGitHubProjection("foreign-operation")).rejects.toMatchObject({ code: "P0007" });
 });
 
-test("a preview capability cannot commit, change target or borrow browser activation", async () => {
+test("a preview capability cannot commit or borrow browser activation", async () => {
   const token = await fixture({ receipt: { scopes: ["write:planning-items:update"], profile: { id: "profile-1", platformRole: "founder" }, authority: { capabilities: { operationalCorrection: true } } } });
   const result = await token.authorize(undefined, "planningItems.update", "preview");
   expect(result.ok).toBe(true);
   expect("authority" in result).toBe(false);
   await expect(result.planningItems.commitUpdate({ parsed: {} }, () => {})).rejects.toMatchObject({ code: "P0007" });
-  await expect(result.planningItems.revise({ parsed: {} }, { command: { kind: "reviseItem", itemId: "foreign-item" } })).rejects.toMatchObject({ code: "P0007" });
+});
+
+function planningReadResponse(request, target) {
+  const url = new URL(request.url);
+  if (request.method !== "GET") throw new Error("Unexpected planning mutation");
+  if (url.pathname === "/rest/v1/active_tasks") {
+    if (url.searchParams.get("select").includes("problem_statement")) {
+      expect(url.searchParams.get("id")).toBe("eq.bound-item");
+      return Response.json(target);
+    }
+    return Response.json([]);
+  }
+  if (url.pathname === "/rest/v1/profiles") return Response.json([{ id: "profile-1", platform_role: "ceo" }]);
+  if (url.pathname === "/rest/v1/team_planning_item_update_requests") return Response.json(null);
+  if (["/rest/v1/sprints", "/rest/v1/planning_item_raci_assignments"].includes(url.pathname)) return Response.json([]);
+  throw new Error("Unexpected planning read");
+}
+
+const planningTarget = () => ({ id: "bound-item", task_type: "epic", title: "Current", status: "Offen", owner: "profile-1", updated_at: "2026-07-22T09:30:00.000Z" });
+
+test.each(["token", "role", "scope"])("prepared preview rejects %s loss after preparation even with invalid fields", async (loss) => {
+  let revoked = false;
+  const receipt = { scopes: ["write:planning-items:update"], profile: { id: "profile-1", platformRole: "ceo" } };
+  const updatedAt = "2026-07-22T09:30:00.000Z";
+  const token = await fixture({ receipt, onAuthenticate: () => revoked ? { code: "P0004" } : null, onData: request => planningReadResponse(request, planningTarget()) });
+  const permission = await token.authorize(undefined, "planningItems.update", "preview");
+  const { parsePlanningItemPatchPayload } = await importTestModule("src/features/planning-items/model/planning-item-update.ts", { "server-only": {} });
+  const prepared = await permission.planningItems.buildUpdatePreview({ parsed: parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, title: "" }) });
+  expect(prepared.ok).toBe(true);
+  expect(prepared.preview.errors.length).toBeGreaterThan(0);
+  if (loss === "token") revoked = true;
+  if (loss === "role") receipt.profile = { id: "profile-1", platformRole: "founder" };
+  if (loss === "scope") { receipt.scopes = ["read:planning-context"]; receipt.scopeGranted = false; }
+  await expect(prepared.validate()).rejects.toMatchObject({ code: loss === "token" ? "P0004" : "P0007" });
+});
+
+test("HTTP preview preserves existing profile-name assignment matching", async () => {
+  const target = { ...planningTarget(), task_type: "deliverable", owner: "Synthetic Owner", assignee: "Synthetic Owner" };
+  await fixture({ receipt: { scopes: ["write:planning-items:update"], profile: { id: "profile-1", name: "Synthetic Owner", platformRole: "founder" } }, onData: request => {
+    if (new URL(request.url).pathname === "/rest/v1/rpc/has_valid_planning_review_evidence") return Response.json(false);
+    return planningReadResponse(request, target);
+  } });
+  const { POST } = await importTestModule("src/app/api/team/planning-items/v2/items/[id]/preview/route.ts", { "server-only": {} });
+  const response = await POST(new NextRequest("https://app.example.test/api/team/planning-items/v2/items/bound-item/preview", {
+    method: "POST", headers: { authorization: "Bearer fmd_ti_synthetic", "content-type": "application/json" },
+    body: JSON.stringify({ expectedUpdatedAt: target.updated_at, title: "Updated" }),
+  }), { params: Promise.resolve({ id: "bound-item" }) });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ valid: true, errors: [], resultingItem: { title: "Updated" } });
+});
+
+test("HTTP preview rechecks authority even when the requested fields are invalid", async () => {
+  let revoked = false;
+  await fixture({ receipt: { scopes: ["write:planning-items:update"] }, onAuthenticate: () => revoked ? { code: "P0004" } : null, onData: request => {
+    const response = planningReadResponse(request, planningTarget());
+    if (new URL(request.url).pathname === "/rest/v1/profiles") revoked = true;
+    return response;
+  } });
+  const { POST } = await importTestModule("src/app/api/team/planning-items/v2/items/[id]/preview/route.ts", { "server-only": {} });
+  const response = await POST(new NextRequest("https://app.example.test/api/team/planning-items/v2/items/bound-item/preview", {
+    method: "POST", headers: { authorization: "Bearer fmd_ti_synthetic", "content-type": "application/json" },
+    body: JSON.stringify({ expectedUpdatedAt: planningTarget().updated_at, title: "" }),
+  }), { params: Promise.resolve({ id: "bound-item" }) });
+  expect(response.status).toBe(401);
+  expect(await response.json()).toMatchObject({ ok: false, code: "TOKEN_INACTIVE" });
+});
+
+test("HTTP save rebuilds the preview from a new request and rejects intervening changes", async () => {
+  const target = planningTarget();
+  await fixture({ receipt: { scopes: ["write:planning-items:update"] }, onData: request => planningReadResponse(request, target) });
+  const previewRoute = await importTestModule("src/app/api/team/planning-items/v2/items/[id]/preview/route.ts", { "server-only": {} });
+  const updateRoute = await importTestModule("src/app/api/team/planning-items/v2/items/[id]/route.ts", { "server-only": {} });
+  const body = JSON.stringify({ expectedUpdatedAt: target.updated_at, title: "Updated" });
+  const headers = { authorization: "Bearer fmd_ti_synthetic", "content-type": "application/json", "idempotency-key": "00000000-0000-4000-8000-000000000307" };
+  const context = { params: Promise.resolve({ id: "bound-item" }) };
+  const preview = await previewRoute.POST(new NextRequest("https://app.example.test/api/team/planning-items/v2/items/bound-item/preview", { method: "POST", headers, body }), context);
+  expect(preview.status).toBe(200);
+  const previewBody = await preview.json();
+  expect(previewBody).toMatchObject({ valid: true, normalizedPatch: { title: "Updated" }, resultingItem: { title: "Updated" } });
+  expect(previewBody).not.toHaveProperty("dbPatch");
+  expect(previewBody).not.toHaveProperty("validate");
+  target.updated_at = "2026-07-22T10:00:00.000Z";
+  const saved = await updateRoute.PATCH(new NextRequest("https://app.example.test/api/team/planning-items/v2/items/bound-item", { method: "PATCH", headers, body }), context);
+  expect(saved.status).toBe(409);
+  expect(await saved.json()).toMatchObject({ ok: false, error: expect.stringContaining("zwischenzeitlich") });
 });
 
 test("scope metadata cannot be mutated to grant a GitHub-sync capability", async () => {

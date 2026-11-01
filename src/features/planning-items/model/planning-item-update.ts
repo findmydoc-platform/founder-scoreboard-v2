@@ -43,8 +43,7 @@ import {
   normalizePatchTaskStatus,
   normalizePatchText,
 } from "@/features/planning-items/model/planning-item-normalization";
-import type { ActorContext } from "./actor-context";
-import type { PlanningError, PlanningItems, PlanningItemChanges, PlanningResult, ReviseItem } from "./planning-items";
+import type { PlanningError, PlanningInvocation, PlanningResult } from "./planning-items";
 import { parseTeamPlanningDependency } from "./planning-items-team-dependency-contract";
 
 type SupabaseServer = SupabaseClient;
@@ -824,87 +823,6 @@ export async function buildPlanningItemUpdatePreview({
   };
 }
 
-export function planningItemReviseCommand(
-  itemId: string,
-  itemType: TeamPlanningItemType,
-  expectedRevision: string,
-  patch: UnknownRecord,
-): ReviseItem {
-  const brief: UnknownRecord = {};
-  for (const field of ["description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "evidenceRequired", "definitionOfDone"]) {
-    if (hasOwn(patch, field)) brief[field] = patch[field];
-  }
-  const ownerPresent = ["ownerId", "owner", "assignee"].some((field) => hasOwn(patch, field));
-  const ownerValue = patch.ownerId ?? patch.owner ?? patch.assignee;
-  const statusValue = itemType === "epic" || itemType === "initiative"
-    ? ({ planned: "Offen", active: "In Arbeit", paused: "Pausiert", done: "Erledigt" }[String(patch.status)] || patch.status)
-    : patch.status;
-  const common = {
-    itemKind: itemType,
-    ...(hasOwn(patch, "title") ? { title: String(patch.title || "") } : {}),
-    ...(ownerPresent ? { ownerId: String(ownerValue || "") || null } : {}),
-    ...(hasOwn(patch, "status") ? { status: statusValue } : {}),
-  };
-  let changes: PlanningItemChanges;
-  if (itemType === "epic") {
-    changes = {
-      ...common,
-      itemKind: "epic",
-      ...(hasOwn(patch, "description") ? { description: String(patch.description || "") } : {}),
-      ...(hasOwn(patch, "targetDate") ? { targetDate: String(patch.targetDate || "") || null } : {}),
-    } as PlanningItemChanges;
-  } else if (itemType === "initiative") {
-    const nestedStrategy = patch.strategy && typeof patch.strategy === "object" && !Array.isArray(patch.strategy)
-      ? patch.strategy as UnknownRecord
-      : null;
-    const strategy = {
-      ...(hasOwn(patch, "intendedOutcome") || hasOwn(patch, "goal") || nestedStrategy && hasOwn(nestedStrategy, "goal")
-        ? { goal: String(patch.intendedOutcome ?? patch.goal ?? nestedStrategy?.goal ?? "") } : {}),
-      ...(hasOwn(patch, "acceptanceCriteria") || hasOwn(patch, "successCriteria") || nestedStrategy && hasOwn(nestedStrategy, "successCriteria")
-        ? { successCriteria: String(patch.acceptanceCriteria ?? patch.successCriteria ?? nestedStrategy?.successCriteria ?? "") } : {}),
-      ...(hasOwn(patch, "scopeConstraints") || nestedStrategy && hasOwn(nestedStrategy, "scopeConstraints")
-        ? { scopeConstraints: String(patch.scopeConstraints ?? nestedStrategy?.scopeConstraints ?? "") } : {}),
-    };
-    const raciChanged = hasOwn(patch, "raciAssignments")
-      || ["accountableProfileId", "responsibleProfileIds", "consultedProfileIds", "informedProfileIds"].some((field) => hasOwn(patch, field));
-    const raciAssignments = Array.isArray(patch.raciAssignments)
-      ? patch.raciAssignments.filter((entry): entry is UnknownRecord => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry)).map((entry, index) => ({
-        profileId: String(entry.profileId || ""),
-        role: String(entry.role || ""),
-        sortOrder: Number.isInteger(entry.sortOrder) ? Number(entry.sortOrder) : index,
-      }))
-      : buildRaciAssignments(patch);
-    changes = {
-      ...common,
-      itemKind: "initiative",
-      ...(hasOwn(patch, "description") ? { description: String(patch.description || "") } : {}),
-      ...(Object.keys(strategy).length ? { strategy } : {}),
-      ...(raciChanged ? { raciAssignments } : {}),
-      ...(hasOwn(patch, "targetDate") ? { targetDate: String(patch.targetDate || "") || null } : {}),
-      ...(hasOwn(patch, "priority") ? { priority: String(patch.priority || "") } : {}),
-    } as PlanningItemChanges;
-  } else if (itemType === "sub_issue") {
-    changes = {
-      ...common,
-      itemKind: "sub_issue",
-      ...(Object.keys(brief).length ? { brief } : {}),
-      ...(hasOwn(patch, "githubRepo") ? { githubRepository: String(patch.githubRepo || "") } : {}),
-    } as PlanningItemChanges;
-  } else {
-    changes = {
-      ...common,
-      itemKind: "deliverable",
-      ...(Object.keys(brief).length ? { brief } : {}),
-      ...(hasOwn(patch, "priority") ? { priority: String(patch.priority || "") } : {}),
-      ...(hasOwn(patch, "workstream") ? { workstream: String(patch.workstream || "") } : {}),
-      ...(hasOwn(patch, "fixedDate") ? { fixedDate: normalizeFixedDate(patch.fixedDate) } : {}),
-      ...(hasOwn(patch, "hours") ? { hours: Number(patch.hours || 0) } : {}),
-      ...(hasOwn(patch, "evidenceLink") ? { evidenceLink: String(patch.evidenceLink || "") || null } : {}),
-    } as PlanningItemChanges;
-  }
-  return { kind: "reviseItem", itemId, expectedRevision, changes };
-}
-
 export type TeamReviseTransaction = Readonly<{
   replayed?: boolean;
   itemType?: PlanningItemReplayType;
@@ -915,14 +833,12 @@ export type TeamReviseTransaction = Readonly<{
   projectionOperationId?: string;
 }>;
 
-type TeamReviseDependencies = Readonly<{
+type TeamRevisionDependencies = Readonly<{
   supabase: SupabaseServer;
-  actor: ActorContext;
+  actor: AuthenticatedProfile;
   tokenId: string;
   itemId: string;
   parsed: Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
-  preparedPreview?: PlanningItemUpdatePreview;
-  onPreview?: (preview: PlanningItemUpdatePreview) => void;
 }>;
 
 function teamReviseChange(transaction: TeamReviseTransaction) {
@@ -957,32 +873,28 @@ function teamReviseEffects(preview: PlanningItemUpdatePreview) {
   ];
 }
 
-export function createTeamRevisePlanningItems(dependencies: TeamReviseDependencies): PlanningItems {
-  return {
+export type PreparedTeamRevision = Readonly<{
+  preview: PlanningItemUpdatePreview;
+  run(invocation: Omit<PlanningInvocation, "command">): Promise<PlanningResult>;
+}>;
+
+export async function prepareTeamPlanningItemRevision(dependencies: TeamRevisionDependencies) {
+  const prepared = await buildPlanningItemUpdatePreview({
+    actor: dependencies.actor,
+    itemId: dependencies.itemId,
+    parsed: dependencies.parsed,
+    supabase: dependencies.supabase,
+  });
+  if (!prepared.ok) return prepared;
+  const preview = prepared.preview;
+  const revision: PreparedTeamRevision = {
+    preview,
     async run(invocation) {
-      if (invocation.actor.profileId !== dependencies.actor.profileId) return { ok: false, error: { code: "forbidden", reason: "actorMismatch" } };
-      if (invocation.command.kind !== "reviseItem") return { ok: false, error: { code: "invalidCommand", issues: [{ path: "command.kind", reason: "reviseItemRequired" }] } };
-      if (invocation.command.itemId !== dependencies.itemId || invocation.command.expectedRevision !== dependencies.parsed.expectedUpdatedAt) {
-        return { ok: false, error: { code: "invalidCommand", issues: [{ path: "command", reason: "transportMismatch" }] } };
-      }
+      if (invocation.actor.profileId !== dependencies.actor.id) return { ok: false, error: { code: "forbidden", reason: "actorMismatch" } };
       if (invocation.mode === "commit" && !invocation.idempotencyKey) {
         return { ok: false, error: { code: "invalidCommand", issues: [{ path: "idempotencyKey", reason: "idempotencyKeyRequired" }] } };
       }
       const idempotencyKey = invocation.idempotencyKey || "";
-
-      const prepared = dependencies.preparedPreview ? { ok: true as const, preview: dependencies.preparedPreview } : await buildPlanningItemUpdatePreview({
-          actor: { id: invocation.actor.profileId, platformRole: invocation.actor.platformRole } as AuthenticatedProfile,
-          itemId: dependencies.itemId,
-          parsed: dependencies.parsed,
-          supabase: dependencies.supabase,
-        });
-      if (!prepared.ok) {
-        if (prepared.status === 404) return { ok: false, error: { code: "notFound", entity: { kind: "deliverable", id: dependencies.itemId } } };
-        if (prepared.status === 403) return { ok: false, error: { code: "forbidden", reason: "reviseNotAllowed" } };
-        return { ok: false, error: { code: "conflict", reason: "revision" } };
-      }
-      const preview = prepared.preview;
-      dependencies.onPreview?.(preview);
       if (preview.errors.length) {
         return { ok: false, error: { code: "invalidCommand", issues: preview.errors.map((reason: string) => ({ path: "command.changes", reason })) } };
       }
@@ -1027,4 +939,5 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
       };
     },
   };
+  return { ok: true as const, revision };
 }

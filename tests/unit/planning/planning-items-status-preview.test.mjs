@@ -58,56 +58,6 @@ const updates = await importTestModule(
 
 const updatedAt = "2026-07-22T09:30:00.000Z";
 
-test("ReviseItem maps every item type and keeps omitted fields absent", () => {
-  const epic = updates.planningItemReviseCommand("epic-1", "epic", updatedAt, {
-    title: "Updated Epic",
-    status: "active",
-    owner: "ceo",
-    targetDate: "2026-12-31",
-    parentTaskId: "must-not-leak",
-  });
-  assert.deepEqual(epic.changes, {
-    itemKind: "epic",
-    title: "Updated Epic",
-    ownerId: "ceo",
-    status: "In Arbeit",
-    targetDate: "2026-12-31",
-  });
-
-  const initiative = updates.planningItemReviseCommand("initiative-1", "initiative", updatedAt, {
-    goal: "Outcome",
-    successCriteria: "Evidence",
-    scopeConstraints: "Boundary",
-    accountableProfileId: "ceo",
-    responsibleProfileIds: ["owner"],
-    priority: "P1",
-  });
-  assert.deepEqual(initiative.changes.strategy, { goal: "Outcome", successCriteria: "Evidence", scopeConstraints: "Boundary" });
-  assert.deepEqual(initiative.changes.raciAssignments, [
-    { profileId: "ceo", role: "accountable", sortOrder: 0 },
-    { profileId: "owner", role: "responsible", sortOrder: 0 },
-  ]);
-  assert.equal(initiative.changes.priority, "P1");
-
-  const deliverable = updates.planningItemReviseCommand("deliverable-1", "deliverable", updatedAt, {
-    problemStatement: "Problem",
-    intendedOutcome: "Outcome",
-    ownerId: "owner",
-    hours: 8,
-  });
-  assert.deepEqual(deliverable.changes.brief, { problemStatement: "Problem", intendedOutcome: "Outcome" });
-  assert.equal(deliverable.changes.ownerId, "owner");
-  assert.equal(deliverable.changes.hours, 8);
-
-  const subIssue = updates.planningItemReviseCommand("sub-1", "sub_issue", updatedAt, {
-    description: "Context",
-    githubRepo: "findmydoc-platform/website",
-  });
-  assert.deepEqual(subIssue.changes.brief, { description: "Context" });
-  assert.equal(subIssue.changes.githubRepository, "findmydoc-platform/website");
-  assert.equal(Object.hasOwn(subIssue.changes, "ownerId"), false);
-});
-
 function taskRow(overrides = {}) {
   return {
     id: "task-1",
@@ -173,7 +123,10 @@ function supabaseFor(target, overrides = {}) {
   };
 
   return {
-    async rpc(name) {
+    async rpc(name, parameters) {
+      if (name === "update_team_planning_item_with_review_evidence_transaction_v1" && overrides.commit) {
+        return overrides.commit(parameters);
+      }
       assert.equal(name, "has_valid_planning_review_evidence");
       return { data: overrides.hasValidReviewEvidence ?? Boolean(target.evidence_link || rows.task_links.length), error: null };
     },
@@ -184,6 +137,8 @@ function supabaseFor(target, overrides = {}) {
           const builder = {
             eq(column, value) { filters.push([column, value]); return this; },
             in(column, values) { filters.push([column, values]); return this; },
+            order() { return this; },
+            returns() { return this; },
             limit(count) { this.limitCount = count; return this; },
             async maybeSingle() {
               if (table === "active_tasks" && columns.includes("problem_statement")) {
@@ -215,6 +170,114 @@ async function preview(actor, target, nextStatus, options = {}) {
     supabase: supabaseFor(target, options),
   });
 }
+
+test.each(["epic", "initiative", "deliverable", "sub_issue"])("prepared %s revision previews and saves the same normalized change", async (itemType) => {
+  const writes = [];
+  const target = taskRow({ task_type: itemType, parent_task_id: itemType === "epic" ? null : "parent-one" });
+  const parentType = { initiative: "epic", deliverable: "initiative", sub_issue: "deliverable" }[itemType];
+  const actor = {
+    profileId: "ceo", platformRole: "ceo",
+    credential: { kind: "planningToken", tokenId: "token-one", scopes: ["write:planning-items:update"] },
+  };
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, title: "  Updated title  " });
+  assert.equal(parsed.ok, true);
+  const prepared = await updates.prepareTeamPlanningItemRevision({
+    actor: { id: actor.profileId, platformRole: actor.platformRole }, tokenId: "token-one", itemId: target.id, parsed,
+    supabase: supabaseFor(target, { parents: [taskRow({ id: "parent-one", task_type: parentType })], commit: async (parameters) => {
+      writes.push(parameters);
+      return { data: { itemType, item: { ...target, title: parameters.p_patch.title } }, error: null };
+    } }),
+  });
+  assert.equal(prepared.ok, true);
+  const previewed = await prepared.revision.run({ actor, mode: "preview" });
+  assert.equal(previewed.status, "previewed");
+  assert.equal(prepared.revision.preview.resultingItem.title, "Updated title");
+  assert.deepEqual(writes, []);
+  const committed = await prepared.revision.run({ actor, mode: "commit", idempotencyKey: "00000000-0000-4000-8000-000000000307" });
+  assert.equal(committed.status, "committed");
+  assert.deepEqual(writes[0].p_patch, { title: "Updated title" });
+  if (itemType === "deliverable") {
+    assert.equal(writes[0].p_request_hash, "b6c5c003b2675f54fb3b4f4de11e20cec57ec545eedfcaaacb44abbf25c6a9e6");
+  }
+  assert.equal(updates.teamReviseTransactionFromResult(committed).item.title, "Updated title");
+});
+
+test.each([
+  ["P0004", { code: "forbidden", reason: "planningTokenInactive" }],
+  ["P0017", { code: "conflict", reason: "state", details: { planningReviewReason: "evidenceRequired" } }],
+])("prepared revision preserves late persistence failure %s", async (code, expectedError) => {
+  const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "planningToken", tokenId: "token-one", scopes: ["write:planning-items:update"] } };
+  const prepared = await updates.prepareTeamPlanningItemRevision({
+    actor: { id: actor.profileId, platformRole: actor.platformRole }, tokenId: "token-one", itemId: "task-1",
+    parsed: updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, status: "Review", evidenceExceptionNote: "Accepted without a link." }),
+    supabase: supabaseFor(taskRow(), { commit: async (parameters) => {
+      assert.equal(parameters.p_evidence_exception_note, "Accepted without a link.");
+      return { data: null, error: { code } };
+    } }),
+  });
+  assert.equal(prepared.ok, true);
+  assert.deepEqual(prepared.revision.preview.errors, []);
+  const result = await prepared.revision.run({ actor, mode: "commit", idempotencyKey: "00000000-0000-4000-8000-000000000307" });
+  assert.deepEqual(result, { ok: false, error: expectedError });
+});
+
+test("prepared initiative revision preserves omitted RACI roles and clears only requested text", async () => {
+  const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "planningToken", tokenId: "token-one", scopes: ["write:planning-items:update"] } };
+  let savedPatch;
+  const prepared = await updates.prepareTeamPlanningItemRevision({
+    actor: { id: actor.profileId, platformRole: actor.platformRole }, tokenId: "token-one", itemId: "task-1",
+    parsed: updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, description: null, responsibleProfileIds: ["other"] }),
+    supabase: supabaseFor(taskRow({ task_type: "initiative", description: "Previous", parent_task_id: "epic-1" }), {
+      parents: [taskRow({ id: "epic-1", task_type: "epic" })],
+      raciAssignments: [
+        { task_id: "task-1", profile_id: "ceo", role: "accountable", sort_order: 0 },
+        { task_id: "task-1", profile_id: "owner", role: "responsible", sort_order: 0 },
+        { task_id: "task-1", profile_id: "reviewer", role: "consulted", sort_order: 0 },
+      ],
+      commit: async (parameters) => {
+        savedPatch = parameters.p_patch;
+        return { data: { itemType: "initiative", item: { id: "task-1" } }, error: null };
+      },
+    }),
+  });
+  assert.equal(prepared.ok, true);
+  assert.deepEqual(prepared.revision.preview.errors, []);
+  assert.equal(prepared.revision.preview.resultingItem.description, null);
+  assert.equal(prepared.revision.preview.resultingItem.accountableProfileId, "ceo");
+  assert.deepEqual(prepared.revision.preview.resultingItem.consultedProfileIds, ["reviewer"]);
+  assert.deepEqual(prepared.revision.preview.resultingItem.responsibleProfileIds, ["other"]);
+  const result = await prepared.revision.run({ actor, mode: "commit", idempotencyKey: "00000000-0000-4000-8000-000000000307" });
+  assert.equal(result.status, "committed");
+  assert.equal(savedPatch.description, null);
+  assert.equal(Object.hasOwn(savedPatch, "title"), false);
+});
+
+test("prepared revision keeps its preview while a later request observes the changed revision", async () => {
+  const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "planningToken", tokenId: "token-one", scopes: ["write:planning-items:update"] } };
+  const target = taskRow();
+  const input = { actor: { id: actor.profileId, platformRole: actor.platformRole }, tokenId: "token-one", itemId: target.id, parsed: updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, title: "Updated" }), supabase: supabaseFor(target) };
+  const prepared = await updates.prepareTeamPlanningItemRevision(input);
+  assert.equal(prepared.ok, true);
+  target.updated_at = "2026-07-22T10:00:00.000Z";
+  assert.equal((await prepared.revision.run({ actor, mode: "preview" })).status, "previewed");
+  const later = await updates.prepareTeamPlanningItemRevision(input);
+  assert.equal(later.ok, false);
+  assert.equal(later.status, 409);
+});
+
+test.each(["actor", "idempotencyKey"])("prepared revision rejects an invalid %s before writing", async (invalidField) => {
+  const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "planningToken", tokenId: "token-one", scopes: ["write:planning-items:update"] } };
+  const prepared = await updates.prepareTeamPlanningItemRevision({
+    actor: { id: actor.profileId, platformRole: actor.platformRole }, tokenId: "token-one", itemId: "task-1",
+    parsed: updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, title: "Updated" }),
+    supabase: supabaseFor(taskRow()),
+  });
+  assert.equal(prepared.ok, true);
+  const result = await prepared.revision.run({ actor: invalidField === "actor" ? { ...actor, profileId: "other" } : actor, mode: "commit" });
+  assert.deepEqual(result, { ok: false, error: invalidField === "actor"
+    ? { code: "forbidden", reason: "actorMismatch" }
+    : { code: "invalidCommand", issues: [{ path: "idempotencyKey", reason: "idempotencyKeyRequired" }] } });
+});
 
 test("Planning Item previews compare equivalent timestamp representations semantically", async () => {
   const target = taskRow();

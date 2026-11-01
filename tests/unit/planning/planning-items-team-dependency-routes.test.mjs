@@ -94,12 +94,10 @@ function commonMocks(dependencyModel, supabase = { from: () => queryResult() }, 
       isUuid: () => true,
     },
     "@/features/planning-items/model/planning-item-update": {
-      buildPlanningItemUpdatePreview: async () => ({ ok: false }),
-      createTeamRevisePlanningItems: () => ({ run: async () => ({ ok: false }) }),
+      prepareTeamPlanningItemRevision: async () => ({ ok: false }),
       mapPlanningItemDatabaseRow: (_itemType, item) => item,
       parsePlanningItemPatchPayload: () => parsedPayload,
       planningItemUpdateHash: () => "a".repeat(64),
-      planningItemReviseCommand: () => ({}),
       teamReviseTransactionFromResult: () => null,
     },
     "@/features/planning-items/model/planning-items-team-dependency": {
@@ -302,21 +300,20 @@ test("late review-evidence conflicts remain actionable on the update route", asy
   };
   const mocks = commonMocks({}, undefined, parsedReview);
   mocks["@/features/planning-items/model/planning-item-update"] = {
-    buildPlanningItemUpdatePreview: async () => ({ ok: true, preview: reviewPreview }),
-    createTeamRevisePlanningItems: () => ({
-      run: async () => ({
+    prepareTeamPlanningItemRevision: async () => ({
+      ok: true,
+      revision: { preview: reviewPreview, run: async () => ({
         ok: false,
         error: {
           code: "conflict",
           reason: "state",
           details: { planningReviewReason: "evidenceRequired" },
         },
-      }),
+      }) },
     }),
     mapPlanningItemDatabaseRow: (_itemType, item) => item,
     parsePlanningItemPatchPayload: () => parsedReview,
     planningItemUpdateHash: () => "a".repeat(64),
-    planningItemReviseCommand: () => ({}),
     teamReviseTransactionFromResult: () => null,
   };
   const route = await importTestModule(
