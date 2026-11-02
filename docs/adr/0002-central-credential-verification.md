@@ -43,7 +43,7 @@ Calendar loading and the private workweek draft are the first end-to-end proof c
 
 ## Technical Debt
 
-The contract closeout removes the legacy guards, client-argument delegation, unrestricted server/browser acquisition helpers and public verification-only action variants. Live session, Workspace, permit, provider-proof and service-client implementations are private to the credential module. The inventory in `docs/credential-verification-inventory.md` records actual application actions and deliberately public contracts.
+The contract closeout removes the legacy guards, client-argument delegation, unrestricted server/browser acquisition helpers and public verification-only action variants. Live session, Workspace, permit, provider-proof and service-client implementations are private to the credential module. The [credential contract](../credential-verification.md) records actual application actions and deliberately public contracts.
 
 The resolved dependency verifier rejects SDK acquisition, private imports, computed loaders and independent transport outside the declared resource boundaries. The browser dependency graph and production static-bundle verifier provide separate source and emitted-artifact checks. The remaining transport declarations are resource protocols, not transitional verification exceptions.
 

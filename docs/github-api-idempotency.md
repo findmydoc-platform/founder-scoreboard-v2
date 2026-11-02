@@ -13,7 +13,7 @@ FounderOps treats GitHub mutations as resource-specific reconciliation, not as b
 | Ensure absent | Validated repository and resource identity | Delete once. A resource-specific `404` may mean success; authentication and target errors must still fail. |
 | Webhook projection | GitHub delivery ID | Deduplicate `X-GitHub-Delivery`, persist the event, and project it without triggering a blind write-back loop. |
 
-The active receipt contract and the staged event scope are documented in [`github-webhook-intake.md`](github-webhook-intake.md). Receipt is durable but does not currently project inbound values into FounderOps.
+The [webhook write contract](github-webhook-intake.md) defines durable receipt and active event scope. After receipt, processing reloads current GitHub state, maps the human actor and runs the normal authorized FounderOps command for an existing projected item. Accepted and denied managed changes trigger desired-state projection. Receipt acknowledgement is not processing completion; FounderOps remains authoritative.
 
 ## Transport and GraphQL adapters
 

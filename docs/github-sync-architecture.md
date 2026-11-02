@@ -1,6 +1,6 @@
 # GitHub Projection Architecture
 
-FounderOps and Supabase are authoritative. GitHub is a one-way projection used for collaboration and technical history. The HTTP endpoint accepts an explicit command; it does not make GitHub a source of truth.
+FounderOps and Supabase are authoritative. GitHub receives the Issue projection for collaboration and technical history. Authorized human edits to existing projected Issues enter through the [webhook write contract](github-webhook-intake.md), run normal FounderOps commands and project the resulting desired state back. They do not make GitHub an independent planning source of truth.
 
 ## Modules
 
@@ -37,7 +37,9 @@ Route --> Task["Task projection"]
 
 ## Command and sequence
 
-The external command is:
+The browser route authorizes `planning.github-sync.apply` for the captured item, validates the explicit `createIfMissing` Boolean and item kind, then calls the returned fixed `projectToGitHub(createIfMissing)` operation. It receives no database client or raw provider token. Epics and Initiatives are rejected before projection.
+
+The internal projection module accepts:
 
 ```ts
 projectTaskToGitHub({
@@ -48,6 +50,8 @@ projectTaskToGitHub({
   createIfMissing,
 })
 ```
+
+Here `supabase` is the privately guarded domain data transport, and the existing parameter name `installationToken` carries an authorized `GitHubResourceCredential`, not a raw token string. A `preflightOnly: true` call accepts no installation capability and returns eligibility/target without provider writes. The credential module owns acquisition and live dispatch checks; the projection owns the domain sequence. See [Credential verification](credential-verification.md#github-credentials-and-resource-authority).
 
 Planning API commits store the Planning mutation, idempotency receipt, and one
 projection request per eligible item in the same database transaction. `async`

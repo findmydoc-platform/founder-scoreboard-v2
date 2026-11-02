@@ -1,13 +1,13 @@
-# Authentication Flow
+# Authentication flow
 
-This document is the source of truth for the FounderOps web authentication flow. It covers the Supabase session, role authorization, reload-stable GitHub App connections, and the UI states shown during reconnects.
+This document owns the FounderOps web session lifecycle, browser transport and reconnect states. [Credential verification](credential-verification.md) owns action authorization, provider rotation, evidence deadlines and data permits.
 
 The staged Google migration and its operational prerequisites are specified in [Google Workspace access](google-workspace-access.md). The private database mode controls the login provider. GitHub sign-in remains available only during the legacy/linking stages; after cutover it is an integration only.
 
 ## Principles
 
-- Supabase owns the user session and refresh token through SSR-compatible auth cookies.
-- `profiles.platform_role` is the application authorization boundary.
+- Supabase owns the user session. The credential module manages its server-owned HttpOnly cookie transport and SDK refresh.
+- The verified Auth user maps through `profiles.auth_user_id`; `profiles.platform_role` authorizes the application action.
 - Planning data is never rendered or serialized in strict auth mode until the request has a verified Supabase user and a mapped profile role.
 - GitHub issue sync, dependencies, GitHub comment import, private asset proxying, and issue archival use server-side GitHub App installation tokens.
 - User-authored GitHub comments and attachments use the original author's encrypted server-side GitHub App user token with refresh rotation.
@@ -16,12 +16,12 @@ The staged Google migration and its operational prerequisites are specified in [
 - GitHub App user tokens are never exposed to the browser, logs, GitHub issues, API responses, or documentation.
 - GitHub reconnect UI is centralized in the header/notification area. GitHub-dependent cards may show disabled actions, but they must not repeat their own reconnect button or start OAuth automatically.
 
-## Production Boot
+## Page entry
 
 ```mermaid
 flowchart TD
-  A["Browser requests page"] --> B["Next proxy refreshes Supabase auth cookies"]
-  B --> C["Server component reads Supabase cookies"]
+  A["Browser requests page"] --> B["Credential module maintains active cookie generation in Proxy"]
+  B --> C["Server component authorizes its cookie session action"]
   C --> D{"Valid Supabase user?"}
   D -- "No" --> E["Render login gate without planning data"]
   D -- "Yes" --> F["Check Workspace access, then map profiles.auth_user_id"]
@@ -30,7 +30,7 @@ flowchart TD
   G -- "Yes" --> I["Load planning data on the server"]
   I --> J["Render app with initial data and current profile"]
   J --> K["Client hook adopts SSR auth state"]
-  K --> L["Client checks /api/github-app/status with Supabase bearer token"]
+  K --> L["Browser adapter checks session and GitHub status using same-origin cookies"]
 ```
 
 ## Supabase application login
@@ -42,22 +42,24 @@ sequenceDiagram
   participant U as User
   participant UI as Browser UI
   participant SB as Supabase Auth
-  participant GH as Configured OAuth provider
+  participant OP as Configured OAuth provider
   participant CB as /auth/callback
   participant APP as FounderOps App
 
   U->>UI: Click configured sign-in action
-  UI->>SB: Server starts OAuth with operation-specific scopes
-  SB->>GH: Redirect to GitHub OAuth
-  GH->>SB: OAuth code
+  UI->>APP: Serialize same-origin login start across tabs
+  APP->>SB: Start OAuth with configured provider and operation-specific scopes
+  SB->>OP: Redirect to configured provider
+  OP->>SB: OAuth code
   SB->>CB: Redirect with code and next path
   CB->>SB: exchangeCodeForSession(code)
-  SB-->>CB: Set Supabase auth cookies
+  CB->>APP: Validate provider proof and consume required nonce
+  APP-->>CB: Adopt session into its HttpOnly cookie generation
   CB->>APP: Redirect to safe relative next path
   APP->>APP: Verify Workspace access, profile and role before data
 ```
 
-## GitHub App Connect: Author Connection
+## GitHub App author connection
 
 ```mermaid
 sequenceDiagram
@@ -83,7 +85,7 @@ sequenceDiagram
   CB-->>UI: Redirect to safe relative next path
 ```
 
-## Runtime UI States
+## Runtime UI states
 
 ```mermaid
 stateDiagram-v2
@@ -102,7 +104,7 @@ stateDiagram-v2
   LoggedOut --> LoginGate
 ```
 
-## GitHub API Credential Rules
+## GitHub API credentials
 
 ```mermaid
 sequenceDiagram
@@ -139,24 +141,36 @@ sequenceDiagram
   API-->>UI: Return non-secret response
 ```
 
-## Scenario Expectations
+## Scenario expectations
 
 - Page reload with a valid session: the server verifies the cookie session, loads planning data, and the client checks `/api/github-app/status`. It must not flash the login gate.
 - Browser closed and reopened: Supabase cookies restore the app session when still valid; the saved encrypted GitHub App user token keeps GitHub comments and attachments usable without another manual reconnect.
-- Laptop standby then resume: the proxy and client refresh paths refresh the Supabase session. `/api/github-app/status` refreshes a soon-expiring GitHub App user access token when possible.
+- Laptop standby then resume: Proxy maintenance and browser recovery request server-owned session renewal. `/api/github-app/status` refreshes a soon-expiring GitHub App user access token when possible.
 - Missing, revoked, expired, or mismatched GitHub App user connection: issue sync remains available. A locally saved comment waits for its original author's connection and is retried after OAuth reconnect or a later task/bulk sync. It must not start OAuth only because a task was opened.
 - Expired or revoked Supabase session: the app clears protected client state and returns to the login gate.
 
-## Browser Session Recovery
+## Cookie generations and browser coordination
 
-- Supabase owns proactive access-token refresh. The browser API client asks the Supabase session adapter for the current session immediately before each app request.
+The browser imports `createBrowserSessionAdapter` from `@/lib/credentials/browser`. It receives safe identity, expiry and an opaque credential revision, never an access/refresh token. Requests use same-origin cookies; the adapter has no Auth SDK, token introspection or independent provider refresh. Explicit Bearer callers retain their supplied Authorization. Its presence takes precedence over cookies, including malformed credentials.
+
+Each replacement login creates a random cookie generation. Refresh and callback responses write only their own generation and never replace the active-generation pointer. Logout revokes that generation so delayed Set-Cookie cannot restore it. Pointerless legacy cookies use a fixed compatibility generation and cannot overwrite a newer login pointer. Canonical SDK cookies are adopted into scoped HttpOnly storage and removed; browser code does not maintain a second mirror.
+
+Proxy constructs its response after awaited renewal and forwards updated cookies to both the downstream request and browser response. SSR authorizes before loading protected data and retains the verification start preceding cookie-session work.
+
+Explicit login starts use a cross-tab Web Lock through the actual same-origin POST response and cookie application, then navigate to the server-selected provider. Unsupported locking fails visibly without starting login. The adapter coalesces equivalent reads/recovery, rejects obsolete responses and coordinates account changes across tabs. Logout clears protected subscribers/data before navigation; delayed protected bodies cannot repopulate another account's state.
+
+## Browser session recovery
+
+- The browser API client asks the public session adapter for its current verified view. Only the server performs SDK refresh.
 - An API guard may return `session_invalid_before_effect` only when authentication failed before the route parsed its payload or started an effect.
-- The browser may refresh and replay exactly once when it attached the rejected bearer token itself and the request is `GET`, `HEAD`, or a JSON request with an already serialized body.
+- The browser may request recovery and replay exactly once for its own cookie-session request when the request is `GET`, `HEAD`, or JSON with an already serialized body.
 - Form data, streams, bodyless mutations, caller-provided authorization, unmarked `401` responses, and failures after an effect are never replayed automatically.
 - A replay may use only a refreshed session for the same Supabase user. If login state changes to another user while recovery is running, the old request is abandoned.
 - Retryable refresh failures preserve the local session. Permanent failures and a second marked `401` clear it only when the rejected session is still current, so a newer session is never signed out by stale work.
 
-## Token Handling
+Recovery, local clearing and global logout send the expected user ID and opaque revision, and require same-origin JSON with the approved Origin. Local clear may revoke the exact cookie generation after permanent Auth rejection without requiring that rejected access token to remain valid. Recovery can attempt renewal in that state but returns a verified view only after authoritative validation of the new token and the same expected actor. Wrong actors/revisions cannot clear or renew another session. Temporary Auth failure returns 503 without local revocation. Normal logout is global; local clear is deliberately separate. Background session/header polling can clear loaded protected state after terminal rejection without a page reload or focus event.
+
+## Token handling
 
 Allowed:
 

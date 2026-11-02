@@ -1,133 +1,57 @@
-# Founder Scoreboard v2 - Abnahmecheckliste
+# Manual acceptance checklist
 
-Stand: 2026-05-25
+Use these repeatable checks against an identified commit/environment with controlled accounts and disposable planning data. Record results outside the repository. External sends, provider changes, production data changes and Sprint closure require their existing operator authorization. A source merge or successful build is not live acceptance.
 
-## Vorab
+## Prerequisites and session lifecycle
 
-Diese Checks sollen bewusst mit echter CEO-Session im Browser laufen. Automatische Read-only-Prüfungen laufen über:
+- Validate migrations, ordinary tests, lint and build through the supported development/CI procedure. Use `verify:auth` for configured profile/role mappings; it does not prove live Directory membership.
+- Confirm the environment's actual legacy/linking/Google mode. Use the configured sign-in action; local development creates the seeded session without contacting a provider.
+- Reload, reopen the browser and resume after standby. Protected data must not appear before authorization and a valid reload must not flash an incorrect login gate.
+- Check `GET /api/health` for base readiness. It is not an integration or full authorization test.
+- Exercise session refresh, local clear, account replacement and normal global logout with suitable test accounts. Delayed responses must not restore old cookies or protected data. Temporary failures must not clear a usable local session.
+- Inspect an unmapped account and Viewer/Founder/Deputy/CEO access. Temporary administrator correction must expire and must not grant CEO or Review governance.
 
-```bash
-pnpm run verify:auth
-pnpm test
-pnpm run lint
-pnpm run build
-```
+See [Authentication flow](auth-flow.md) and [Workspace acceptance/recovery](google-workspace-access.md#acceptance-and-recovery) for linking, epoch, membership-deadline and explicit Bearer checks. Do not use global logout for a shared-backend smoke account with an active production session.
 
-## Login und Basiszustand
+## Planning creation and editing
 
-1. App unter `http://localhost:3000` öffnen.
-2. Mit GitHub anmelden.
-3. Seite neu laden.
-4. Unten links muss der Teamzugriff die angemeldete Session zeigen.
-5. `/api/health` muss `status: "ready"` für die Basis-Readiness melden.
+1. Create each permitted item type using the current hierarchy. Check parentless Initiative/Deliverable proposals, approval parent requirements and mandatory approved Deliverable parent for Sub-Issues.
+2. Submit invalid content and simulate a definite server rejection. Keep entered values, visible error/focus and the original creation request ID. Correct and retry.
+3. Exercise an unconfirmed creation result. Check the existing operation instead of creating a duplicate. If creation succeeds but approval fails, preserve the created item and explain that partial result.
+4. Open the same item from Planning and as a full page. Verify three local tabs, direct children in Overview and type-specific actions. Sub-Issues are not independent board cards.
+5. Save Overview content, a direct status/owner/planning change and multiple Evidence links under the applicable permissions. Cancel Overview and verify that confirmed direct changes remain.
+6. Change the item from another test session. Verify revision conflict, preserved draft, current-server comparison and explicit permitted resave. An uncertain save must not be blindly repeated.
+7. Navigate, switch tabs, close or reopen full view with a dirty draft. Verify discard/stay behavior and focus restoration.
+8. Change Kanban status through direct control and drag/drop where allowed, then reload. Check lock reasons and the authorized completed-item reopen flow.
 
-Erwartung:
-- Datenquelle ist Supabase.
-- Ein Reload mit gültiger Session zeigt höchstens einen Ladezustand, aber keinen falschen Login-Screen.
-- `pnpm run verify:auth` bestätigt Profile und Rollen.
-- Navigation zeigt Planung, Sprint & Score, Team, Einstellungen und Mein Profil über das Account-Menü.
+Use the [Planning Item UI contract](planning-item-ui.md) for exact counts, error placement, unsupported controls, keyboard behavior, scroll ownership and responsive parity. Inspect the relevant repository viewport sizes, focus visibility, modal background lock and absence of page-level horizontal scrolling.
 
-## Planung und Task-Erstellung
+## Comments, blockers, relationships and Review
 
-1. In `Planung` auf `Neu` klicken.
-2. Als CEO ein Deliverable erstellen.
-3. Prüfen, dass es im Board bei `Offen` erscheint.
-4. Task öffnen und Status per Select ändern.
-5. Task per Drag and Drop in eine andere Spalte verschieben.
+- Post a comment with an attachment and mention; reload and verify persisted content. On failure retain text/input, and distinguish uncertain delivery from definite rejection.
+- Report reason, impact and requested help for a blocker. Keep the report distinct from a `blocked_by` relationship and verify the existing status effect.
+- Add/remove an authorized dependency. Check direction, inverse deduplication, neutral duplicate suppression, counts, protected endpoints and local rollback after rejection.
+- Request Review with valid Evidence or an explicit allowed exception note. A linked GitHub Issue alone is not Review evidence. Verify owner/reviewer/state restrictions and the content/parent/relationship locks.
+- Exercise acceptance and both rework outcomes. Acceptance finalizes completion/score; rework returns work to `Nacharbeit`. Check withdrawal/reopening and current revision handling. Comments remain available through their independent permission while protected content stays locked.
 
-Erwartung:
-- Statuswechsel persistiert nach Reload.
-- Deliverable ist score-relevant.
-- Sub-Issues erscheinen nur im Detailpanel, nicht als eigene Board-Karte.
+## Sprint, trash and compatibility
 
-## Comments, blockers, and review
+- Set owner commitments and Weekly attendance under self/operational-lead permissions, reload and verify task/Weekly scoring separately.
+- Close a disposable Sprint with unfinished blocked work. Inspect carry-over origin, accepted blocker state, score and notification effects. Do not close an active business Sprint as a smoke test.
+- Withdraw an eligible Deliverable with a reason, verify its children leave active planning, then inspect permitted restoration and rejection rollback. Direct Deliverable deletion is not an available replacement.
+- Delete only an empty Epic with authorized operational-lead access and a current revision. Reject non-empty, stale and unauthorized deletion.
+- Check historical Initiative URLs and retired Execution/Review redirects. Legacy Focus storage/API compatibility must not restore visible Execution UI.
 
-1. Open a task.
-2. Add a comment.
-3. Report a blocker.
-4. Request a review.
-5. As CEO, choose `Accepted`, `Minor rework`, or `Fundamental rework` from the review checklist.
+## GitHub and Google Chat
 
-Expected:
-- Comments and blockers remain visible after a reload.
-- A blocker sets the task status to `Blockiert`.
-- A review request sets the task status to `Review`.
-- Both rework decisions set the task status to `Nacharbeit` and keep the score open.
-- Only `Accepted` completes the task and finalizes its score.
+- Confirm installation availability separately from the personal author connection. A missing author connection must not block Issue projection.
+- Run explicit single/bulk sync on eligible Deliverables/Sub-Issues. Check parent-first processing, explicit creation intent, stable markers, queue/error state and duplicate prevention. Strategic items have no projection.
+- Use a Viewer to verify allowed sync/import reads and denied field/comment writes. Deliver authored comments with the original author's connection, even when another actor triggers synchronization. Reconnect and reconcile waiting comments without duplication.
+- For separately approved webhook acceptance, verify an authorized structured edit, rejected/locked edit correction, comment refresh, dependency/Sub-Issue change and managed Project field. Inspect durable receipt, final state and Cron recovery under the [webhook contract](github-webhook-intake.md).
+- Verify Chat disabled mode, readiness, one controlled digest/DM, missing-DM failure without group fallback, preference opt-out and explicit retry using [Google Chat operations](google-chat-rollout.md). Keep operational messages separate from release publishing.
 
-## Sprint & Score
+## Workweek and Decision Log
 
-1. `Sprint & Score` öffnen.
-2. Sprint-Daten prüfen: Start, Ende, Review bis, Status.
-3. Commitment pro Founder setzen: Lite, Standard, Heavy oder Away.
-4. Wochenstunden erfassen.
-5. Weekly Updates testen: Anwesenheit, schriftliches Update, akzeptierter Grund und Punkte.
+Check owner-private draft isolation, selected-week/context behavior, stale-context 409, published-only team calendar, range/history completeness and reconnect/refresh/disconnect. Under controlled provider faults, preserve journal-based reconciliation and avoid repeating uncertain mutations. The [credential contract](credential-verification.md) defines owner, permit and provider boundaries.
 
-Erwartung:
-- Scoreboard ist tabellarisch.
-- Commitments bleiben nach Reload erhalten.
-- Weekly-Punkte sind separat von Task-Punkten sichtbar.
-
-## Sprintabschluss und Carry-over
-
-Nur ausführen, wenn Testdaten oder ein bewusst abschließbarer Sprint genutzt wird.
-
-1. Offene Aufgabe mit Blocker anlegen oder bestehende Testaufgabe nutzen.
-2. Sprint abschließen.
-3. Neue Carry-over-Aufgabe im nächsten Sprint prüfen.
-
-Erwartung:
-- Ursprüngliche Aufgabe bekommt `score_final=true` und 0 offene Punkte.
-- Kommunizierter Blocker wird als `accepted_carryover` markiert.
-- Carry-over-Aufgabe zeigt Ursprung und Grund im Detailpanel.
-- Notification-Event `sprint.task_carried_over` entsteht.
-
-## GitHub Sync
-
-Voraussetzung:
-- GitHub OAuth Login ist aktiv.
-- Die GitHub App ist auf `findmydoc-platform/management` installiert.
-- Für Issue-Sync ist nur die technische GitHub-App-Installation erforderlich. Die persönliche Autorenverbindung wird nur für eigene Kommentare und Anhänge benötigt.
-
-Check:
-1. Planning öffnen und die GitHub-Sync-Queue im Header öffnen.
-2. Die GitHub-Autorenverbindung im Header prüfen; sie darf den Issue-Sync nicht sperren.
-3. `Offene GitHub Issues syncen` klicken; fehlende Parent-Deliverables werden vor ihren Sub-Issues angelegt.
-4. Link zum GitHub Issue prüfen.
-
-Erwartung:
-- GitHub-Reconnect erscheint nicht mehrfach in einzelnen Karten, sondern zentral im Header/Benachrichtigungsbereich.
-- Issue wird im Management-Repo über die GitHub-App-Installation erstellt oder aktualisiert.
-- Der Sammel-Sync verarbeitet freigegebene Deliverables und ihre Sub-Issues Parent-first. Bei einem fehlgeschlagenen Parent wird das Kind übersprungen und bleibt in der Queue sichtbar.
-- CEO, Founder, Deputy und Viewer können den Issue-Sync mit einer gültigen Team-Session auslösen.
-- Viewer können weiterhin weder Task-Felder ändern noch neue Kommentare schreiben.
-- Kommentare auf verknüpften Issues werden mit dem persönlichen Token ihres ursprünglichen Autors erstellt, auch wenn ein anderer Benutzer den Sync auslöst.
-- Ohne gültige Autorenverbindung bleibt der Kommentar informativ wartend; der lokale Kommentar-Request und der Issue-Sync bleiben erfolgreich.
-- OAuth-Reconnect sowie spätere Task- und Bulk-Syncs liefern wartende Kommentare idempotent nach.
-- Body enthält den Aufgabenbrief mit Problem, Zielbild, Scope, Abnahmekriterien, Nachweis und Definition of Done.
-- Parallele Syncs derselben Aufgabe oder desselben GitHub Issues werden als laufender Sync angezeigt, nicht als Fehler.
-- GitHub Issues sind die native Arbeitsfläche für Issue-Inhalte; FounderOps ergänzt Planung, Review und Score-Kontext.
-
-## Google Chat
-
-Voraussetzung:
-- `GOOGLE_CHAT_WEBHOOK_URL` ist gesetzt.
-
-Check:
-1. Event erzeugen, z. B. Kommentar oder Review-Anfrage.
-2. Einstellungen öffnen.
-3. Eine kontrollierte Test-Sammelmeldung oder persönliche Test-DM senden.
-4. Für Release-Kommunikation den Dry Run `node .agents/skills/release-publish/scripts/publish-release.mjs --dry-run` prüfen und danach `.github/workflows/send-release-google-chat.yml` verwenden.
-
-Erwartung:
-- Wichtige Events werden als Digest gesendet und je Event als `sent` Delivery gespeichert.
-- Persönliche Einzelhinweise bleiben in der In-App-Notification-Inbox, bis sie geschlossen werden.
-- Ohne Webhook bleibt der Digest sichtbar, aber Versand scheitert kontrolliert.
-- GitHub Actions sendet keine operativen Event-Digests mehr, sondern nur Release-Details oder Deployment-Zusammenfassungen.
-
-## Offene V1-Grenzen
-
-- Private 1:1-Google-Chat-DMs brauchen später eine Google Chat App/Bot-Konfiguration.
-- GitHub-Sync ist V1 one-way App zu GitHub.
-- Drag/Resize im Gantt ist noch nicht Teil von V1.
-- Andere Founder-Logins müssen noch real getestet werden, sobald sie sich einmal angemeldet haben.
+Decision Log is a mapped-reader Notion view with external source/form/archive links. Check safe unavailable configuration/provider states and reader access. Do not expect an application edit/confirmation action or mutate retired local Decision Log tables.

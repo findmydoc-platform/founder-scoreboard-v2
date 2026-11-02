@@ -1,100 +1,49 @@
 # findmydoc Planning
 
-Factro-inspirierte Planungs-App für das interne findmydoc Founder-Board.
+Internal findmydoc planning, Review, Sprint scoring and collaboration application. Supabase owns planning state. GitHub receives the Issue projection; authorized edits to existing projected Issues pass through the same FounderOps domain permissions before writeback.
 
-## Entwicklung
+## Local development
 
 ```bash
 pnpm run local:reset
 pnpm run dev:local
 ```
 
-The first command starts the disposable local Supabase stack, rebuilds its database from the tracked migrations, loads `src/lib/seed/source.json`, and creates the local CEO Auth identity. The app then runs on `http://localhost:3000`.
+The reset starts the disposable local Supabase stack, applies tracked migrations, loads `src/lib/seed/source.json` and creates the local CEO Auth identity. The app runs on `http://localhost:3000`. The local sign-in action creates a real cookie session without contacting GitHub. Use the development profile switch to inspect Founder, Deputy and Viewer access. External integrations remain disabled locally.
 
-On the login screen, click **Mit GitHub anmelden**. In local development this button creates a real Supabase cookie session for the seeded CEO profile without contacting GitHub. Use the existing development profile switch to verify Founder, Deputy, and Viewer permissions. GitHub sync and other external integrations stay disabled locally; they are not mocked.
+`local:start`, `local:seed` and `local:stop` manage the same stack. Reset and seed refuse remote database targets. Generated credentials stay in ignored `.env.local` and are not printed. Planning reads Supabase; missing configuration or unavailable core data produces a data-unavailable state, not a browser seed fallback.
 
-Useful local commands:
+## Identity and planning
 
-```bash
-pnpm run local:start
-pnpm run local:seed
-pnpm run local:reset
-pnpm run local:stop
-```
+Application authorization binds the verified Auth user through `profiles.auth_user_id` and `profiles.platform_role`. CEO, Founder, Deputy and Viewer have distinct rights. Temporary administrator access is a separate, expiring capability. The configured Workspace mode selects legacy GitHub login, account linking or enforced Google access; this README does not establish the currently deployed mode.
 
-## Supabase
+Normal browser requests use server-owned HttpOnly session cookies. GitHub Issue projection uses installation credentials; authored comments and attachments use encrypted server-side GitHub App user connections with refresh rotation. Raw provider tokens never belong in browser state.
 
-The repository uses the pinned Supabase CLI and timestamp migrations under `supabase/migrations/`. There is no separate schema file or direct SQL apply path. `pnpm run local:start` writes the local stack credentials to the ignored `.env.local` file without printing secrets. `pnpm run local:seed` replaces the loopback stack's source-managed planning rows so the database converges to `src/lib/seed/source.json`. `pnpm run local:reset` additionally rebuilds the schema from all tracked migrations. Both mutation commands refuse remote database targets.
+The hierarchy is Epic → Initiative → Deliverable → Sub-Issue. All four types are stored in `tasks`; Sprint is a time container. Deliverables own Review and scoring. The Decision Log reads Notion and links to external sources; the app provides no Decision Log edit/confirmation workflow.
 
-Create a new migration with `pnpm run db:migration:new <clear_name>`. Validate migration structure with `pnpm run verify:migrations`. Production applies only pending migrations through the protected GitHub Actions workflow.
+## Documentation
 
-Planning data is always read from Supabase. Missing configuration, missing core rows, or an unavailable database produce the normal data-unavailable state instead of a browser-local seed fallback.
+| Topic | Reference |
+| --- | --- |
+| Domain terms and hierarchy | [Context](CONTEXT.md), [Planning hierarchy](docs/planning-hierarchy.md) |
+| Item creation, detail and interaction | [Planning Item UI](docs/planning-item-ui.md), [Task template](docs/task-template-v2.md) |
+| Authentication and credential ownership | [Authentication flow](docs/auth-flow.md), [Credential verification](docs/credential-verification.md) |
+| Login modes and Workspace operations | [Google Workspace access](docs/google-workspace-access.md) |
+| Personal Planning API | [Planning Items API](docs/team-planning-items-api.md) |
+| GitHub projection and incoming edits | [Projection architecture](docs/github-sync-architecture.md), [Webhook contract](docs/github-webhook-intake.md) |
+| Notification delivery | [Google Chat operations](docs/google-chat-rollout.md) |
+| Deployment and diagnostics | [GitHub Actions deployment](docs/vercel-deployment.md), [Runtime logging](docs/logging.md) |
+| Repeatable manual checks | [Acceptance checklist](docs/acceptance-checklist.md) |
 
-## Rollen und Zugriff
-
-Das Schema enthält eine vorbereitete Supabase-Auth-Zuordnung über `profiles.github_login`. Nach dem Aktivieren des GitHub Providers in Supabase werden die Teamprofile über den GitHub-Login gemappt. `profiles.auth_user_id` kann später zusätzlich gesetzt werden, ist für V1 aber nicht der führende Schlüssel.
-
-Rollen:
-
-- `ceo`: volle operative Rechte und Decision-Log-Edit.
-- `founder`: eigene operative Arbeit, Reviews und Bestätigungen.
-- `deputy`: temporäre operative Vertretung ohne Decision-Log-Edit.
-- `viewer`: liest nur.
-
-With `REQUIRE_SUPABASE_AUTH=true`, all protected API access requires a valid Supabase session and a mapped `platform_role`. The generated local environment keeps this boundary enabled.
-
-## Login-Ablauf
-
-Sobald `NEXT_PUBLIC_SUPABASE_URL` und `NEXT_PUBLIC_SUPABASE_ANON_KEY` gesetzt sind, nutzt die App Supabase GitHub OAuth. Mit `REQUIRE_SUPABASE_AUTH=true` prüft der Server die Supabase-Session und `profiles.platform_role`, bevor Planungsdaten geladen oder gerendert werden. Ein Reload mit gültiger Session zeigt deshalb nur einen Ladezustand oder direkt die App, nicht zuerst den Login-Screen.
-
-GitHub-Schreibaktionen verwenden weiterhin den eingeloggten GitHub-User-Token aus der aktiven Supabase OAuth Session. Dieser Provider-Token bleibt nur im Browser-Speicher und wird nicht persistiert. Wenn GitHub-Rechte erneut benötigt werden, erscheint die Aktion zentral im Header/Benachrichtigungsbereich statt in jeder einzelnen GitHub-Karte.
-
-Der technische Ablauf mit Mermaid-Diagrammen steht in `docs/auth-flow.md`.
-
-Für produktiven Teamzugriff:
-
-1. GitHub Provider in Supabase Auth aktivieren.
-2. Die jeweiligen GitHub-Logins in `profiles.github_login` eintragen.
-3. Die Rolle in `profiles.platform_role` auf `ceo`, `founder`, `deputy` oder `viewer` setzen.
-4. `REQUIRE_SUPABASE_AUTH=true` aktivieren.
-5. Supabase Redirect URLs für `/auth/callback` und die Produktionsdomain freigeben.
-
-Maintain `profiles.github_login` and `profiles.platform_role` through the Team profile management UI; there is no checked-in profile mapping SQL file.
-
-## Founder Scoreboard v2 Module
-
-- Rollenmodell: `CEO`, `Founder`, `Deputy`, `Viewer` über `profiles.platform_role` und `profiles.github_login`.
-- Planungshierarchie: Epic / Meilenstein -> Group Commitment -> Deliverable -> Sub-Issue. Sprints sind Zeitcontainer für Deliverables.
-- Sprint/Scoring: Aufgaben haben `sprint_id`, Review-Status, Punkte und Score-Lock-Felder.
-- GitHub Sync: One-way App zu `findmydoc-platform/management` mit dem eingeloggten GitHub-User-Token aus Supabase OAuth.
-- Decision Log: CEO erstellt/ändert, Founder bestätigen, vollständige Bestätigung lockt den Eintrag.
-- Meeting Finder: V1 nutzt manuelle Arbeitszeiten und Abwesenheiten in Supabase.
-
-## Google Chat
-
-Google Chat ist als Outbox-basierter Benachrichtigungskanal vorbereitet. Der Versand ist standardmäßig deaktiviert und braucht beide ENV-Werte:
+## Validation and deployment
 
 ```bash
-GOOGLE_CHAT_WEBHOOK_URL=
-GOOGLE_CHAT_DELIVERY_ENABLED=false
+pnpm run verify:migrations
+pnpm test
+pnpm run lint
+pnpm run build
 ```
 
-Der sichere Rollout steht in `docs/google-chat-rollout.md`. Vor der Aktivierung werden der deaktivierte Versandpfad und eine einzelne kontrollierte Testzustellung geprüft.
+`pnpm run verify:auth` checks configured Auth/profile mappings and roles; it does not prove live Workspace membership or every provider flow. `GET /api/health` reports basic readiness from configuration and fixed `profiles`/`tasks` probes, without credentials.
 
-## Auth-Zuordnung prüfen
-
-Nach dem Eintragen der `.env.local` prüft dieser Befehl die Auth-Zuordnung:
-
-```bash
-pnpm run verify:auth
-```
-
-Er meldet fehlende GitHub-Logins, fehlende Rollen oder veraltete `auth_user_id`-Verknüpfungen, bevor `REQUIRE_SUPABASE_AUTH=true` aktiviert wird.
-
-GitHub-Sync-Verhalten wie Issue-Body, Parent-Beziehung, Abhängigkeiten, Projektfelder und Pull-Request-Projektion wird in der regulären Testsuite geprüft. Die echte GitHub-App-Installation, Sync Queue und Schreibrechte werden mit einer angemeldeten Team-Session nach der manuellen Abnahmecheckliste geprüft.
-
-Die manuelle Browser-Abnahme steht in `docs/acceptance-checklist.md`.
-
-## Health Check
-
-Die Route `/api/health` liefert eine kleine Basis-Readiness-Prüfung ohne Secrets. Sie prüft nur, ob Supabase konfiguriert ist, die App Supabase-Daten nutzt und die Core-Tabellen `profiles`, `packages` und `tasks` erreichbar sind. Auth-Verhalten wird über `verify:auth` geprüft; Integrationen werden durch fokussierte Verhaltenstests und kontrollierte manuelle Abnahme abgesichert.
+Schema changes use timestamp migrations under `supabase/migrations/`. Create one with `pnpm run db:migration:new <clear_name>`. Production applies pending migrations only through the protected GitHub Actions workflow. Deployment, provider cutover and live acceptance follow their documented operator procedures.

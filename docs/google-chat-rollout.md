@@ -1,116 +1,13 @@
-# Google Chat Rollout
+# Google Chat operations
 
-Stand: 2026-05-29
+FounderOps uses Google Chat for filtered operational digests and personal action items. Supabase remains authoritative for notification events, preferences and delivery state. In-app notifications remain the main individual work channel. The separate GitHub Actions release channel sends only release details or deployment summaries.
 
-## Ziel
+## Configuration and channels
 
-Google Chat ist ein Benachrichtigungskanal, nicht das führende System. Aufgaben, Reviews, Kommentare und Benachrichtigungseinstellungen bleiben in Supabase. Google Chat bekommt nur bewusst gefilterte Hinweise, damit das Team nicht mit Einzelmeldungen überflutet wird.
-
-Operative Event Messages bleiben in der Applikation. Der GitHub-Actions-Google-Chat-Pfad ist nur für Release-Details oder Deployment-Zusammenfassungen gedacht, nicht für den laufenden Event-Stream.
-
-## Phase 1: FounderOps-Gruppendigest
-
-Phase 1 aktiviert nur den Gruppenbereich-Digest. Der alte Google-Chat-Bereich `Founder Scoreboard` wird in Google Chat manuell zu `FounderOps` umbenannt. Der Incoming Webhook muss zu genau diesem `FounderOps`-Gruppenbereich gehören.
-
-Für Production/Pipeline werden in Phase 1 gesetzt:
-
-```bash
-APP_URL=https://founder-ops.findmydoc.eu
-GOOGLE_CHAT_WEBHOOK_URL=<Webhook des FounderOps-Gruppenbereichs>
-GOOGLE_CHAT_DELIVERY_ENABLED=true
-```
-
-Die Chat-API-Service-Account-Werte bleiben in Phase 1 leer. Private DMs und Chat-Kommandos sind spätere Phasen.
-
-## Phase 2: Operative Delivery-API
-
-Phase 2 hält den Gruppenbereich-Digest als kontrollierten App-Endpunkt bereit. Er darf manuell oder durch eine bewusst betriebene externe Pipeline ausgelöst werden, ist aber nicht mehr die GitHub-Actions-Chat-Pipeline des Repositories.
-
-Pipeline-Request:
-
-```http
-POST https://founder-ops.findmydoc.eu/api/notifications/deliver
-x-founderops-delivery-secret: <FOUNDEROPS_DELIVERY_SECRET>
-content-type: application/json
-
-{ "limit": 20 }
-```
-
-Zusätzlicher Production-/Pipeline-Wert:
-
-```bash
-FOUNDEROPS_DELIVERY_SECRET=<random secret>
-```
-
-Der Header-Secret ist nur für operative Delivery-API-Aufrufe gedacht. Der manuelle Button in den Einstellungen nutzt weiter die normale Operational-Lead-Session. Wenn der Header fehlt, ungültig ist oder `GOOGLE_CHAT_DELIVERY_ENABLED=false` bleibt, wird kein Google-Chat-Versand ausgeführt.
-
-GitHub Actions nutzt diesen operativen Delivery-Endpunkt nicht. Das Repository verwendet für Google Chat stattdessen den separaten Release-Workflow `.github/workflows/send-release-google-chat.yml`.
-
-## Phase 2b: Release-Kanal über GitHub Actions
-
-Release-Details und Deployment-Zusammenfassungen laufen über den GitHub-Actions-Workflow `.github/workflows/send-release-google-chat.yml`.
-
-Workflow:
+Runtime configuration:
 
 ```text
-.github/workflows/send-release-google-chat.yml
-Trigger: workflow_dispatch
-Input: message_payload_json
-Secret: GOOGLE_CHAT_WEBHOOK_URL
-Zweck: Release-Details oder Deployment-Zusammenfassungen an den FounderOps-Google-Chat senden
-```
-
-Der Release-Workflow darf keine operativen Events erzeugen oder zustellen. Er ruft weder `/api/notifications/generate-digest` noch `/api/notifications/deliver` auf.
-
-## Phase 3: Automatische Fokus-Reminder
-
-Phase 3 erzeugt vor dem Versand automatisch wichtige Business-Hinweise als `notification_events`. Der Gruppenchat bekommt weiterhin nur den bestehenden FounderOps-Digest; es gibt keine freien Bot-Antworten und keine privaten DMs.
-
-Pipeline-Reihenfolge:
-
-```http
-POST https://founder-ops.findmydoc.eu/api/notifications/generate-digest
-x-founderops-delivery-secret: <FOUNDEROPS_DELIVERY_SECRET>
-content-type: application/json
-
-{ "limit": 20 }
-```
-
-Danach:
-
-```http
-POST https://founder-ops.findmydoc.eu/api/notifications/deliver
-x-founderops-delivery-secret: <FOUNDEROPS_DELIVERY_SECRET>
-content-type: application/json
-
-{ "limit": 20 }
-```
-
-Der Generator unterstützt für trockene Tests zusätzlich `{ "limit": 20, "dryRun": true }`. Dann werden Kandidaten und Dedupe-Keys zurückgegeben, aber keine `notification_events` geschrieben.
-
-Erzeugte Reminder:
-
-- offene Reviews
-- Nacharbeit
-- offene Blocker
-- offene Aufgabenvorschläge
-- fällige oder überfällige Sprint-Reviews
-- überfällige Deliverables
-
-Jeder Reminder wird pro Event-Typ, Entität, Empfänger und Berlin-Kalendertag über `notification_events.dedupe_key` höchstens einmal erzeugt. `task.comment` bleibt weiterhin nur In-App; gezielte Erwähnungen in Kommentaren laufen separat als `task.mention`.
-
-## Sicherheitsmodell
-
-Die Zustellung ist zweifach gesperrt:
-
-1. Entweder `GOOGLE_CHAT_WEBHOOK_URL` oder die Chat-API-Service-Account-Werte müssen gesetzt sein.
-2. `GOOGLE_CHAT_DELIVERY_ENABLED=true` muss gesetzt sein.
-
-Solange `GOOGLE_CHAT_DELIVERY_ENABLED=false` ist, sammelt die App Benachrichtigungen weiter in Supabase und zeigt sie in der App an. Der Versand an Google Chat bleibt aus.
-
-## Benötigte ENV-Werte
-
-```bash
+APP_URL=https://founder-ops.findmydoc.eu
 GOOGLE_CHAT_WEBHOOK_URL=
 GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
 GOOGLE_CHAT_PRIVATE_KEY=
@@ -118,99 +15,68 @@ GOOGLE_CHAT_DELIVERY_ENABLED=false
 FOUNDEROPS_DELIVERY_SECRET=
 ```
 
-Für den lokalen Trockenlauf bleibt `GOOGLE_CHAT_DELIVERY_ENABLED=false`. Für echte persönliche FounderOps-DMs werden `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, die Chat-API und pro Profil ein `profiles.google_chat_dm_space` im Format `spaces/...` benötigt. Der Webhook bleibt als Space-Digest-Fallback möglich.
+The webhook targets the configured FounderOps group space. Personal DMs require the Chat API, the bot service account/key and each recipient's `profiles.google_chat_dm_space` in `spaces/...` format. `profiles.google_chat_user_id`, `profiles.notifications_enabled` and per-event `notification_preferences` retain their existing roles. Never publish webhook URLs, keys or recipient mappings.
 
-## Phase 4: Persönliche FounderOps-DMs
+Actual sending requires `GOOGLE_CHAT_DELIVERY_ENABLED=true` and credentials appropriate for the selected channel. With delivery disabled, the application still records and displays notifications. Missing DM configuration cannot redirect a private action item into the group webhook.
 
-Phase 4 aktiviert nur ausgehende persönliche Google-Chat-DMs für klare Action-Items. Es gibt weiterhin keine Google-Chat-Kommandos, keine Dialoge und keine LLM-generierten Antworten.
-
-Persönliche DMs sind erlaubt für:
-
-- `task.review_requested`
-- `task.review_rework`
-- `task.mention`
-- `task.blocker_reported`
-- `task.deadline_overdue`
-
-Normale `task.comment`-Events, allgemeine Gruppenhinweise und unklare Events ohne eindeutigen Empfänger bleiben In-App oder im Gruppen-Digest. Gezielte Kommentar-Erwähnungen erzeugen `task.mention` und dürfen persönlich per DM zugestellt werden. Wenn ein persönliches Action-Item keinen gültigen `profiles.google_chat_dm_space` hat, wird der Zustellversuch als `failed` mit `deliveryMode=direct_dm` protokolliert; es gibt keinen Gruppenchat-Fallback.
-
-## Bot-Branding und geplanter Endpoint
-
-Die Google-Chat-App heißt `FounderOps`. Frühere Namen wie `Founder Scoreboard`, `Founder Scoreboard Bot` oder `Founders CoreBot` sind Altbezeichnungen und sollen bei neuen Google-Cloud-, Google-Chat-, GitHub-Actions- und Dokumentationsänderungen nicht weitergeführt werden.
-
-Für die Chat-App-Konfiguration in Google Cloud ist nach dem erfolgreichen GitHub-Actions-Deployment dieser öffentliche HTTPS-Endpunkt vorgesehen:
+The bot application name is `FounderOps`. Its public configured endpoint is:
 
 ```text
 https://founder-ops.findmydoc.eu/api/google-chat/events
 ```
 
-Dieser Endpoint ist im Code als sichere Empfangsroute vorbereitet. In Phase 4 bestätigt er Erreichbarkeit und nimmt Google-Chat-Events an, aktiviert aber keine Chat-Kommandos.
+The receiver is deliberately inert: reachability is not a signed incoming-command protocol. Chat commands, dialogs and generated conversational answers are unsupported. Use the FounderOps name for new configuration; old bot names are not current branding.
 
-Empfohlene Google-Chat-App-Felder:
+## Outbox and selection
 
-- Anwendungsname: `FounderOps`
-- Beschreibung: `FounderOps Updates`
-- Avatar-URL: `https://github.com/findmydoc-platform.png`
+Events include assignment/status changes, comments/mentions, blocker reports, Review requests/outcomes and Weekly feedback. They are not all sent individually to Chat.
 
-## Rollout-Schritte
+- `notification_events` stores the domain event and in-app notification.
+- `notification_deliveries` stores channel, attempt, result, target and safe failure state.
+- `notification_preferences` and profile enablement govern delivery selection.
+- Durable delivery claims prevent two workers from independently sending the same accepted event.
 
-1. FounderOps in Google Cloud/Google Chat konfigurieren und die Chat API aktivieren.
-2. Service Account für die Chat-App bereitstellen und `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL` sowie `GOOGLE_CHAT_PRIVATE_KEY` setzen.
-3. FounderOps-Direktchat mit jedem Teammitglied öffnen und die DM-Spaces als `spaces/...` in `profiles.google_chat_dm_space` eintragen.
-4. `GOOGLE_CHAT_DELIVERY_ENABLED=false` lassen.
-5. App starten und in den Einstellungen prüfen, dass Google Chat als gesammelt, aber nicht versandbereit angezeigt wird.
-6. Benachrichtigung erzeugen, zum Beispiel Review anfragen oder Kommentar schreiben.
-7. `POST /api/notifications/deliver` im deaktivierten Zustand testen. Erwartet ist kein Versand.
-8. Erst danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` setzen.
-9. Einen einzelnen Digest oder eine persönliche Test-DM senden und `notification_deliveries` prüfen.
-10. Danach erst die regelmäßige Zustellung planen.
+Personal action-item types are `task.review_requested`, `task.review_rework`, `task.mention`, `task.blocker_reported` and `task.deadline_overdue`. They use the recipient's DM space. A missing/invalid space records `failed` with `deliveryMode=direct_dm`, with no group fallback. Ordinary `task.comment` remains in-app; targeted mentions create their separate `task.mention` event. General eligible notifications use the group digest rather than becoming private commands.
 
-## Profile und Präferenzen
+Digest generation can create reminders for open Reviews, rework, blockers, proposals, due Sprint Reviews and overdue Deliverables. Dedupe binds type, entity, recipient and Berlin calendar day. It does not restore the retired Execution/Focus UI.
 
-Die Profile enthalten Felder für persönliche Zustellung:
+## Admission and API operations
 
-- `profiles.google_chat_user_id`
-- `profiles.google_chat_dm_space`
-- `profiles.notifications_enabled`
+`POST /api/notifications/generate-digest` accepts the delivery secret or a CEO/deputy session. `{ "limit": 20, "dryRun": true }` reports candidates/dedupe keys without writing events. A subsequent delivery request processes the outbox; generation does not itself send a message.
 
-Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein Event in Google Chat gesendet werden darf. Beispiele sind Review-Anfragen, Review-Ergebnisse, Blocker, Weekly-Rückmeldungen und Feedback.
+`POST /api/notifications/deliver` accepts the delivery secret or an active administrator session. `GET` inspection requires active administrator access. An ordinary operational-lead role alone is not delivery-administration authority. A supplied invalid technical secret cannot fall back to the user session.
 
-## Zustelllogik
+```http
+POST https://founder-ops.findmydoc.eu/api/notifications/deliver
+x-founderops-delivery-secret: <configured delivery secret>
+content-type: application/json
 
-Die App erzeugt automatische Fokus-Reminder in `/api/notifications/generate-digest` und verarbeitet `notification_events` anschließend in `/api/notifications/deliver`.
+{ "limit": 20 }
+```
 
-- Wenn Chat API konfiguriert ist und ein Profil `google_chat_dm_space` im Format `spaces/...` hat, sendet FounderOps persönlich an diesen DM-Space.
-- Wenn ein persönliches Action-Item keinen gültigen DM-Space hat, wird der Zustellversuch als fehlgeschlagen in `notification_deliveries` protokolliert.
-- Der Webhook bleibt nur für Gruppen-Digests und wird nicht als Fallback für fehlende persönliche DM-Spaces genutzt.
-- User- und Event-Präferenzen werden vor dem Versand ausgewertet.
+Supported controlled selections include:
 
-## Phase 5: Betrieb und Kontrolle
+- `eventIds`, at most 20 IDs, for explicit pending-event retry; already delivered events are not sent again.
+- `testDelivery=webhook_digest` for one controlled group test.
+- `testDelivery=direct_dm` with `profileId` for a configured recipient.
 
-Phase 5 ergänzt kein Chat-Kommando und keine LLM-Antwort. Die Einstellungen zeigen ein Delivery-Monitoring mit Readiness, `direct_dm`/`webhook_digest`, Ziel, Attempts, Fehlertext und Retry.
+Settings provides readiness, delivery mode, target, attempts, failure and retry controls under its current administrator policy. Inspect the result before repeating an uncertain send. Claims, original leases, live target/preference checks and exact finalization are defined in [Credential verification](credential-verification.md#technical-admission-claims-and-exact-completion). No built-in recurring operational delivery is implied; external scheduling is an explicit operating choice.
 
-- `POST /api/notifications/deliver` akzeptiert optional `eventIds` für kontrollierten Retry einzelner pending Events.
-- `eventIds` ist auf maximal 20 IDs begrenzt; bereits erfolgreich gesendete Events werden nicht doppelt gesendet.
-- `testDelivery=webhook_digest` erzeugt eine kontrollierte FounderOps-Testnachricht für den Gruppenbereich.
-- `testDelivery=direct_dm` benötigt `profileId` und sendet nur an ein Profil mit gültigem `profiles.google_chat_dm_space`.
-- Fehlende DM-Spaces bleiben `failed/direct_dm`; es gibt weiterhin keinen Gruppenchat-Fallback.
+## Activation and repeatable checks
 
-Smoke nach Sebastian/Rresta-Secret-Setzung:
+1. Configure the FounderOps Chat app/API and appropriate service account or group webhook in the approved environment. Establish intended DM spaces privately.
+2. Keep delivery disabled and inspect Settings readiness. Create a controlled notification and verify in-app/outbox visibility.
+3. Call delivery while disabled and confirm no external message was sent.
+4. Enable delivery only for the approved test. Send one group digest or one personal test DM and inspect both the destination and stored delivery result.
+5. Test a missing DM space. Expect `failed/direct_dm` and no group message. Correct the recipient mapping and use the explicit retry control.
+6. Verify profile/event opt-out and already-delivered deduplication before relying on recurring delivery.
 
-1. Settings öffnen und Readiness prüfen.
-2. `Test-Digest senden` klicken und den FounderOps-Gruppenbereich prüfen.
-3. `Test-DM` für ein Profil mit `spaces/...` senden.
-4. Eine fehlende DM-Space-Konfiguration kontrolliert prüfen: `failed`, `deliveryMode=direct_dm`, kein Gruppenchat-Fallback.
-5. Profil korrigieren und `Erneut senden` nutzen.
+After configuration changes or deployment, repeat the relevant readiness and controlled channel checks. These are operator procedures, not evidence that a production test has already run.
+
+## Separate release channel
+
+`.github/workflows/send-release-google-chat.yml` is an externally dispatched release control plane. It accepts `message_payload_json` and uses the repository-level `GOOGLE_CHAT_WEBHOOK_URL` secret. It must not generate operational notification events or call the digest/delivery endpoints. Its secret and lifecycle are separate from Vercel runtime delivery configuration. Use the repository's release-publish workflow for authorized release communication.
 
 ## Rollback
 
-Bei falscher Zustellung, zu vielen Meldungen oder Konfigurationsfehlern:
-
-1. `GOOGLE_CHAT_DELIVERY_ENABLED=false` setzen.
-2. App neu starten oder Deployment-ENV aktualisieren.
-3. In den Einstellungen prüfen, dass Google Chat wieder als deaktiviert angezeigt wird.
-4. Die Outbox bleibt erhalten; fehlerhafte Zustellungen können später kontrolliert geprüft werden.
-
-## Späterer Ausbau
-
-Incoming Webhooks senden nur in einen Space. Echte 1:1-Direktnachrichten laufen über die Google Chat API an die gespeicherten DM-Spaces. Google-Chat-Kommandos in `/api/google-chat/events` bleiben ein späterer Ausbau.
+For incorrect destinations, excessive messages or broken configuration, set `GOOGLE_CHAT_DELIVERY_ENABLED=false`, apply the environment change through the supported deployment procedure and verify disabled readiness. Preserve the outbox and delivery history. Inspect failed/uncertain attempts before any later explicit retry. Disabling application delivery does not disable the independent GitHub Actions release publisher.

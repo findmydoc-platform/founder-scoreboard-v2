@@ -12,7 +12,7 @@ This project deploys only through GitHub Actions workflows. Operators do not run
 - GitHub Environments: `preview` and `production`
 - Do not assign or move a domain before the user explicitly confirms the final cutover.
 
-## GitHub Environment Secrets
+## GitHub Environment secrets
 
 Configure these secrets on GitHub Environments, not as repository-level secrets. Production deployment requires them on `production`; the existing preview workflow requires the same set on `preview` if preview deployments are enabled.
 
@@ -30,11 +30,11 @@ SUPABASE_DB_USER=
 SUPABASE_DB_PASSWORD=
 ```
 
-Use the Supabase shared session pooler on port `5432`: `SUPABASE_DB_HOST` is the pooler host and `SUPABASE_DB_USER` is the pooler user shown under **Connect > Session pooler** in Supabase. GitHub Actions cannot reach the IPv6-only direct database host. These database values are not Vercel runtime environment variables. Keep them only in the GitHub `production` Environment and in local `.env.local` for operator repair work.
+Use the Supabase shared session pooler on port `5432`: `SUPABASE_DB_HOST` is the pooler host and `SUPABASE_DB_USER` is the pooler user shown under **Connect > Session pooler** in Supabase. The supported pipeline uses this pooler rather than depending on direct-database IPv6 connectivity. These database values are not Vercel runtime environment variables. Keep them only in the GitHub `production` Environment and in local `.env.local` for operator repair work.
 
 The workflows intentionally do not pre-validate these secrets. If a required secret is missing, the workflow step fails naturally.
 
-## Runtime Environment
+## Runtime environment
 
 Runtime app environment variables stay in the Vercel project environment and are pulled by the workflow with `vercel pull`.
 
@@ -73,21 +73,13 @@ FOUNDEROPS_DELIVERY_SECRET=
 
 Configure Google Workspace OAuth values only for the environments explicitly approved for their purpose. An isolated Preview may use the approved client after its provider callback and application return URLs are registered. Calendar connections require separately approved Preview configuration. `GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY` is a dedicated base64 value that decodes to exactly 32 bytes and must not reuse `GITHUB_TOKEN_ENCRYPTION_KEY`. Personal Google access and refresh tokens stay encrypted in the service-role-only Supabase vault and never belong in Vercel or Keeper.
 
-For operational in-app delivery, set `GOOGLE_CHAT_WEBHOOK_URL` to the incoming webhook of the renamed `FounderOps` Google Chat space and set `GOOGLE_CHAT_DELIVERY_ENABLED=true` only after a controlled test. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase, and stay out of the release channel.
+Configure operational Chat credentials and activation through [Google Chat operations](google-chat-rollout.md). Runtime notification delivery and the externally dispatched GitHub Actions release publisher use separate admission, secrets and operating procedures. Missing personal DM configuration never falls back to the group webhook.
 
-The GitHub Actions release channel uses `.github/workflows/send-release-google-chat.yml`. It accepts `message_payload_json`, reads the `GOOGLE_CHAT_WEBHOOK_URL` repository secret, and posts release details or deployment summaries only.
-
-For Phase 4, private FounderOps DMs use the Google Chat API and are limited to personal action items. Missing or invalid `profiles.google_chat_dm_space` values are logged as failed `direct_dm` deliveries and are not redirected into the group webhook.
-
-For Phase 5, use the Settings delivery cockpit after every secret change or deployment. Check readiness, send `testDelivery=webhook_digest`, send `testDelivery=direct_dm` to one profile with a valid `spaces/...`, and use `eventIds` retry only for failed pending events. Rollback remains `GOOGLE_CHAT_DELIVERY_ENABLED=false`.
-
-Operational delivery endpoints still accept `FOUNDEROPS_DELIVERY_SECRET`, but the GitHub Actions release workflow must not call `/api/notifications/generate-digest` or `/api/notifications/deliver`.
-
-Operational event messages stay inside the application. The Google Chat release channel stays separate and may only carry release details or deployment summaries.
+Application Google login and Workspace reader configuration follow [Google Workspace access](google-workspace-access.md); Calendar OAuth is a separate connection.
 
 Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync, dependency sync, GitHub comment import, private asset proxying, and issue archival use the configured GitHub App installation token. User-authored comments use the original author's encrypted GitHub App user token; attachments use the uploader's token. Both are stored server-side in Supabase with refresh rotation. Raw GitHub tokens must never be sent to the browser, logged, or returned from API responses.
 
-## GitHub Actions Workflow Shape
+## GitHub Actions workflow
 
 Workflow: `.github/workflows/dependency-validation.yml`
 
@@ -97,8 +89,7 @@ Workflow: `.github/workflows/deploy-preview.yml`
 
 Preview deploys run for internal pull requests targeting `main` and for manual `workflow_dispatch` runs.
 
-The preview workflow remains in the repository, but preview is not part of the first `founder-ops` rollout unless the `preview` GitHub Environment and Vercel Preview runtime variables are configured separately.
-If those preview secrets are missing, the pull request job stays skipped instead of failing the branch.
+Preview is optional and requires its own `preview` GitHub Environment secrets and Vercel runtime variables. Missing optional Preview configuration skips the job; partial or inconsistent configuration remains an error under the isolation guard.
 
 GitHub Actions executes the preview flow in this order:
 
@@ -143,7 +134,7 @@ Configure all three production database secrets from the values shown under **Co
 node --input-type=module -e 'import { readFile } from "node:fs/promises"; import { parseEnvLine } from "./scripts/lib/env.mjs"; const rows = (await readFile(".env.local", "utf8")).split(/\r?\n/).map(parseEnvLine).filter(Boolean); const pair = rows.find(([key]) => key === "SUPABASE_DB_PASSWORD"); if (!pair?.[1]) process.exit(1); process.stdout.write(pair[1]);' | gh secret set SUPABASE_DB_PASSWORD --env production --repo findmydoc-platform/founder-scoreboard-v2
 ```
 
-## Vercel Hobby Private Repository Author Block
+## Commit-author deployment errors
 
 For private repositories on the Vercel Hobby plan, Vercel can block deployments when it attributes the deployment to a Git commit author who does not have access to the Vercel team. If this happens, do not rotate `VERCEL_TOKEN`, do not rewrite Git history, and do not introduce a local deploy workaround. The pipeline must keep using GitHub Actions and deploy from the temporary prebuilt artifact directory that intentionally excludes Git metadata.
 
@@ -155,20 +146,15 @@ Use GitHub Actions job logs and the deployment summary to inspect deployment sta
 
 The shared runtime logging contract is documented in [Runtime logging](logging.md). Registered Planning, Task, Workweek, GitHub and notification routes use the same request context and safe proxy/route summaries. Their private transports record actual Supabase Auth, Supabase database, Google Workspace and GitHub HTTP attempts with bounded local phase intervals. Missing proxy data, unknown operations and uninstrumented adapters remain explicit. `RUNTIME_LOG_DETAIL_PERCENT` controls detailed phase retention on the server; the default remains 10 percent. Raising it for a performance measurement series requires a separately approved run. The instrumentation deployment itself does not start such a series.
 
-## Supabase Auth
+## Supabase Auth configuration
 
-Before production login works, configure Supabase Auth:
+Configure the provider allowed by the current private Workspace mode. Legacy GitHub login, linking and enforced Google access have different provider/admission requirements; follow [Google Workspace access](google-workspace-access.md) for exact callbacks, verified claims, roster verification, epoch changes and approved cutover/recovery. Do not enable GitHub login unconditionally in Google mode.
 
-- Enable GitHub provider.
-- Add the production app URL as Site URL.
-- Add the production app URL and `/auth/callback` as allowed redirect URLs.
-- Keep the GitHub OAuth App owned by `findmydoc-platform`, not a personal account.
-- The GitHub OAuth App callback remains the Supabase callback URL, for example `https://<supabase-project-ref>.supabase.co/auth/v1/callback`.
-- Ensure every team profile has `github_login`.
-- Ensure `profiles.platform_role` is one of `ceo`, `founder`, `deputy`, or `viewer`.
-- Keep the runtime aligned with `docs/auth-flow.md`: Supabase session cookies are SSR-managed, planning data is loaded only after server-side role authorization, and GitHub API credentials come from the GitHub App layer, not browser-provided provider tokens.
+Maintain the authoritative `profiles.auth_user_id` binding and valid `profiles.platform_role`. Keep Site URL and return URLs aligned with the approved application origin. [Authentication flow](auth-flow.md) owns server cookie generations, browser recovery and protected-state clearing. GitHub API credentials come from the separate App layer, never browser-supplied OAuth provider tokens.
 
-## GitHub App Runtime
+For supported legacy/linking GitHub sign-in, keep the OAuth App owned by `findmydoc-platform`, not a personal account. Its provider callback is Supabase's `/auth/v1/callback`; the application's `/auth/callback` is a separate allowed return URL. Keep the configured `profiles.github_login` association for GitHub integration identity, not as a substitute for the Auth-user binding. Platform roles remain `ceo`, `founder`, `deputy` and `viewer`.
+
+## GitHub App runtime
 
 Before production GitHub features work, configure the GitHub App owned by `findmydoc-platform`:
 
@@ -183,9 +169,9 @@ Before production GitHub features work, configure the GitHub App owned by `findm
 - Add a platform firewall or rate-limit rule for `/api/github/webhooks` before enabling public delivery.
 - The webhook endpoint stores only normalized trigger metadata plus a payload hash. Authorized human changes run through FounderOps permissions and are projected back immediately through the GitHub App; denied changes are restored from FounderOps desired state. See `docs/github-webhook-intake.md` for the ownership matrix, locks, activation, and failed-delivery recovery.
 - Configure a high-entropy `CRON_SECRET` in Vercel Production. The Vercel Cron Job invokes `GET /api/maintenance/github-webhooks` every five minutes with that bearer credential, recovering retryable and stale post-receipt processing without a manual sync or GitHub Actions workflow.
-- Run the additive Supabase migration that creates `github_app_user_tokens` before enabling the connect button for users.
+- Verify that all pending tracked migrations are applied before enabling connection features; vault schema and refresh coordination must match the deployed runtime.
 
-## Planning Trash Maintenance
+## Planning trash maintenance
 
 Expired planning trash is never purged by a schedule or automatic workflow. The protected `/api/maintenance/planning-trash/github-lifecycle` and `/api/maintenance/planning-trash/purge` endpoints remain available for an explicit operator action.
 
@@ -212,14 +198,14 @@ If production Supabase env is present locally, also run:
 pnpm run verify:auth
 ```
 
-## Post-Deploy Checks
+## Post-deploy checks
 
 Check after a successful deployment:
 
 - Deployment URL opens.
 - `/api/health` returns `200` and `status: "ready"` for base Supabase readiness.
 - The production workflow reports successful database-security and Auth-mapping verification.
-- GitHub login works.
+- The configured login provider, linking/admission state and intended mapped accounts work in the actual Workspace mode.
 - Reload with a valid session shows either the app or a loading shell, not the login gate.
 - GitHub App status stays connected after reload and the central header action reconnects when the encrypted user token is missing, revoked, expired beyond refresh, or mapped to a different GitHub login.
 - CEO user can edit tasks.

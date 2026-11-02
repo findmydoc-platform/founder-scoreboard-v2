@@ -55,9 +55,9 @@ Use `request.completed` for segment/request summaries and `operation.failed` whe
 | Envelope | `schemaVersion`, `event`, `severity`, `scope`, `operation`, `timestamp`. Names and messages come from reviewed constants. |
 | Request | Server-generated UUID `requestId`; optional validated `vercelId`; fixed `method` and route template. Never copy a complete request URL, query, or arbitrary incoming correlation ID. |
 | Deployment | `deploymentEnv`, `deploymentId`, public region code, opaque random `instanceId` for the observed runtime lifetime. Omit hostname and process ID. |
-| Segment | `stage: proxy | route`, local `durationMs`, outbound-attempt counts grouped by approved operation. A route summary may embed the safe proxy summary. |
-| Phase | `id`, optional `parentId`, fixed `operation`, `kind: operation | http`, local `offsetMs`, `durationMs`, and outcome. IDs carry their `proxy:` or `route:` segment prefix. Offsets are relative to their own segment. |
-| Cache | `membership.result: hit | miss | expired | coalesced | bypass`, observed `reason`, `evidenceAgeMs`, `remainingLifetimeMs`, `expired`, opaque `cacheOwnerId`, optional `waitMs` and directly observed `capacityEvictions`. Unknown age or lifetime is null. `directoryCredential.result` separately records `reused` or `renewed`. |
+| Segment | `stage: proxy \| route`, local `durationMs`, outbound-attempt counts grouped by approved operation. A route summary may embed the safe proxy summary. |
+| Phase | `id`, optional `parentId`, fixed `operation`, `kind: operation \| http`, local `offsetMs`, `durationMs`, and outcome. IDs carry their `proxy:` or `route:` segment prefix. Offsets are relative to their own segment. |
+| Cache | `membership.result: hit \| miss \| expired \| coalesced \| bypass`, observed `reason`, `evidenceAgeMs`, `remainingLifetimeMs`, `expired`, opaque `cacheOwnerId`, optional `waitMs` and directly observed `capacityEvictions`. Unknown age or lifetime is null. `directoryCredential.result` separately records `reused` or `renewed`. |
 | Error | Approved `errorCode`, `errorCategory`, optional integer `providerStatus`, and fixed message. Existing public auth codes remain authoritative for responses. |
 | Completeness | `completeness` records correlation, declared transport scope, external-call completeness, uninstrumented adapters, proxy presence, cache availability and phase completeness/truncation. `detailRetained` and `retentionReason` explain detail selection. |
 
@@ -93,8 +93,6 @@ For example, distinguish failure of `supabase.user`, `workspace.context`, `works
 
 Calendar entry now reports the fixed `workspace.entry` operation for its grouped Workspace-context and session-admission request. Count its HTTP attempt once. Its logical checks do not add `workspace.context` or `workspace.session` attempts. Separate context requests by other actions retain their existing identifiers. A malformed grouped response is an `invalid_response`; an admission-provider failure becomes observable only after the existing identity and OAuth checks have passed. Request arguments and provider details remain excluded.
 
-The combined Calendar entry and dispatch operations use 11 observed attempts rather than 14 for an ordinary warm enforced-linking Cookie load, including all four live `supabase.user` attempts. Google-only mode retains its settings attempt and uses 12 rather than 15. These budgets require warm asymmetric signing keys, a membership hit, one snapshot request and no refresh or retry. Legacy and unenforced linking retain their totals. The [controlled local comparison](credential-verification-measurements.md#grouped-calendar-authorization-comparison) records actual transport counts and separate elapsed times.
-
 Expected authorization denials remain denied outcomes with the existing safe code. They are not automatically unexpected application errors. An internal error code does not change the public error body or status. Any future change to that public contract requires its own decision and focused tests.
 
 Use Pino redaction as additional protection after the approved-field projection. Never pass raw `Error` objects to Pino's default serializer or a fallback logger.
@@ -123,7 +121,7 @@ The membership-evidence store and the Directory reader credential are different 
 
 Membership age starts at the original verification start stored as `verifiedAt`, not at Directory completion or the latest hit. Expiry remains the earlier of that start plus 900 seconds and JWT expiry. Logging must not refresh it. Record capacity eviction only when directly observed. An absent entry alone cannot establish eviction, a changed credential, or a new instance. Do not add credential hashes or a diagnostic history of keys to explain misses.
 
-The pilot records Directory credential reuse/renewal as a safe outcome and measures the existing STS, impersonation, and membership operations. Token values, account/audience binding values, and group/member addresses stay private.
+The adapter records Directory credential reuse/renewal as a safe outcome and measures the existing STS, impersonation, and membership operations. Token values, account/audience binding values, and group/member addresses stay private.
 
 ## Timing and outbound attempts
 
@@ -143,11 +141,11 @@ Calendar reads use the fixed operation `calendar.snapshot` for the profile-root 
 
 ## Production emission and retention
 
-The dedicated pilot logger must allow `info`; copying the website's production `warn` threshold would discard normal performance summaries. Apply selection before emitting:
+The dedicated runtime logger must allow `info`; copying the website's production `warn` threshold would discard normal performance summaries. Apply selection before emitting:
 
 | Observation | Emission rule |
 | --- | --- |
-| Compact proxy and route completion | Keep every pilot request, including fast successes. |
+| Compact proxy and route completion | Keep every registered request, including fast successes. |
 | Unexpected operation failure | Keep every failure at `error`, with approved safe fields. |
 | Slow successful request | Keep at `warn` when observed proxy plus route processing time reaches 2,000 ms. This is an initial diagnostic threshold, not an SLO. |
 | Detailed phases for a failed request, slow request, or membership miss/expiry | Keep all bounded detail available at completion. |
@@ -157,7 +155,7 @@ Buffer only bounded phase detail until completion so that a late failure or slow
 
 Application severity and Vercel's displayed log level are separate. Verify the selected sink and its platform classification. Do not assume that a Pino numeric level on stdout produces the corresponding Vercel badge. Keep explicit application `severity` searchable.
 
-Sampling controls emission, not storage lifetime. Use the existing Vercel retention window without a new archive. The pilot requires no additional minimum retention period. Verify and record the project's actual window before later production acceptance so that operators know how long a request remains available. Longer retrospective diagnosis requires a separate retention decision before introducing storage or changing configuration.
+Sampling controls emission, not storage lifetime. Use the existing Vercel retention window without a new archive. The runtime logger requires no additional minimum retention period. Verify and record the project's actual window before later production acceptance so that operators know how long a request remains available. Longer retrospective diagnosis requires a separate retention decision before introducing storage or changing configuration.
 
 Platform observations from 2026-10-20 and their limits:
 
@@ -201,10 +199,14 @@ Private production diagnosis, request samples, and operator artifacts are not pa
 
 ## Grouped dispatch preparation
 
-Calendar loads and `planning.revision.read` use the fixed operation identifier `workspace.dispatch.prepare` for the private `workspace_dispatch_prepare` request. The existing `workspace_calendar_prepare` RPC remains a compatible wrapper around the shared implementation. One HTTP attempt performs current binding validation, mode-dependent session admission and permit issuance where required. Its enclosing operation phase adds no external-call count. `workspace.permit.release` continues to count the separate cleanup request. Other session actions retain `workspace.context` and `workspace.permit.issue`. Planning revision session entry remains separate.
+Calendar loads, `planning.revision.read` and `planning.board.read` use the fixed operation identifier `workspace.dispatch.prepare` for the private `workspace_dispatch_prepare` request. The existing `workspace_calendar_prepare` RPC remains a compatible wrapper around the shared implementation. One HTTP attempt performs current binding validation, mode-dependent session admission and permit issuance where required. Its enclosing operation phase adds no external-call count. `workspace.permit.release` continues to count the separate cleanup request. Other session actions retain `workspace.context` and `workspace.permit.issue`. The [credential contract](credential-verification.md#user-data-permits-and-dispatch-preparation) owns authorization and permit semantics. Planning revision session entry remains separate.
 
-A PostgreSQL `42501` preparation result is an authority denial. A transport failure, timeout, unexpected provider status or invalid result remains a provider failure, even where the existing protected profile error contract returns HTTP 403. Preparation responses and arguments never enter logs. An uncertain outcome may add a cleanup attempt but never a replay of the writing preparation operation. A private terminal transport failure prevents the enclosing GET retry loop from repeating uncertain preparation. Logging failure cannot change the Calendar or Planning revision result.
+A PostgreSQL `42501` preparation result is an authority denial. A transport failure, timeout, unexpected provider status or invalid result remains a provider failure, even where the existing protected profile error contract returns HTTP 403. Preparation responses and arguments never enter logs. An uncertain outcome may add a cleanup attempt but never a replay of the writing preparation operation. A private terminal transport failure prevents the enclosing GET retry loop from repeating uncertain preparation. Logging failure cannot change the Calendar, Planning revision or board result.
 
-For the defined warm enforced-linking path with the original entry flow, dispatch grouping saves two attempts (14 to 12 including Cookie proxy); each additional Calendar request saves one more. Grouped entry additionally reduces the one-page total to 11. Google-only mode retains its settings request. Cold keys, membership misses, refresh, retries and legacy/unenforced modes require separate accounting. Historical examples in this document describe their original deployed implementation and must not be read as measurements of grouped preparation.
+## Controlled measurements
 
-The controlled warm enforced-linking Planning revision comparison counts the Cookie proxy and route together. Grouping reduces 20 HTTP requests to 17 by replacing three separate context-validation and permit-issuance pairs with three preparation requests. The three protected profile RPCs, their live Auth checks and releases remain separate. The proxy contributes one Auth request; the route contributes 16 requests. This request budget does not establish production latency or a real Google login.
+For an authorized comparison, use `tests/helpers/local-supabase-target.mjs` before any integration reset; a worktree alone does not isolate a database. It compares the cwd-scoped CLI result with the configured local project and API/database ports. An omitted optional database binding is allowed; an explicitly empty or mismatched binding is denied. Keep baseline code and temporary drivers outside the implementation checkout. Use matching dependencies, synthetic identities and data, real local Auth/PostgREST where required, and explicitly scripted external providers. Deny unexpected external hosts.
+
+Observe actual attempts without retaining URLs, headers, bodies, credentials or identities. Separate Cookie Proxy from Bearer-only paths, cold keys/membership from warm evidence, and expiry, refresh, retries and pagination from the ordinary case. Warm independent workers, alternate paired ordering such as ABBA and time the same complete operation with a monotonic clock. Assert full result equality and attempt categories in every sample. Preserve outliers, adverse results, sample size, quantile definitions, exclusions and environment/source metadata privately. Inclusive phase totals are not wall time; HTTP response-header completion is not body/browser completion. Local synthetic timings establish no hosted-provider latency guarantee.
+
+Production observation, detail-percentage changes and retention changes require their own approved operating window. Verify current platform entitlements before relying on a retention period. Historical platform observations above remain dated evidence with their stated gaps.
