@@ -75,7 +75,15 @@ export function ProductUpdatesProvider({
     );
     if (!unseen.length) return;
     const frame = window.requestAnimationFrame(() => showUpdates(unseen));
-    return () => window.cancelAnimationFrame(frame);
+    const prioritizeFeatureTour = () => {
+      window.cancelAnimationFrame(frame);
+      setOpen(false);
+    };
+    window.addEventListener("fmd:start-feature-tour", prioritizeFeatureTour);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("fmd:start-feature-tour", prioritizeFeatureTour);
+    };
   }, [profileId, showUpdates]);
 
   useEffect(() => {

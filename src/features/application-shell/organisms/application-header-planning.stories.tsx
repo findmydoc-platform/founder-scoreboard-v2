@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { User } from "@supabase/supabase-js";
+import type { PlanningHeaderData } from "@/lib/types";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
 import { PlanningApp } from "@/features/planning/PlanningApp";
@@ -12,7 +13,7 @@ import { mockAccountLifecycle } from "../../../../tests/helpers/account-lifecycl
 const profile = { id: "phone-planning-profile", name: "Mara", platformRole: "ceo" as const, orgRole: "CEO", githubLogin: "phone-planning", weeklyCapacity: 20 };
 const user = { id: "phone-planning-user", email: "mara@example.test", app_metadata: {}, user_metadata: { name: "Mara" }, aud: "authenticated", created_at: "2026-01-01T00:00:00Z" } satisfies User;
 const data = { ...emptyPlanningShellState, project: { ...emptyPlanningShellState.project, name: "findmydoc", range: "November 2026" }, profiles: [profile] };
-const headerData = { ...emptyPlanningHeaderData, quickLinks: readyHeaderSlot([{ id: "guide", name: "Team guide", category: "knowledge", url: "https://example.com/guide", previewImageUrl: "" }]), notifications: readyHeaderSlot({ unreadCount: 0, items: [] }), calendarEvents: readyHeaderSlot([]) };
+const headerData: PlanningHeaderData = { ...emptyPlanningHeaderData, quickLinks: readyHeaderSlot([{ id: "guide", name: "Team guide", category: "knowledge", url: "https://example.com/guide", previewImageUrl: "" }]), notifications: readyHeaderSlot({ unreadCount: 0, items: [] }), calendarEvents: readyHeaderSlot([]) };
 
 function ActivePlanningComposition() {
   return <PlanningApp initialData={data} initialHeaderData={headerData} initialWorkspace="planning" source="supabase" authRequired initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded initialAdministratorAccess={inactiveAdministratorAccess} />;
