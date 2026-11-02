@@ -20,7 +20,7 @@ export function ApplicationHeader({ area, lifecycle, navigation, context, focus,
   const phone = usePhoneHeader();
   const returnFocusRef = useRef<HTMLButtonElement>(null);
   const runtime = useApplicationHeaderRuntime(lifecycle, navigation);
-  useApplicationHelpNavigation(navigation);
+  useApplicationHelpNavigation(runtime.navigate);
   const account = lifecycle.account ? (
     <AuthControl
       {...lifecycle.account}

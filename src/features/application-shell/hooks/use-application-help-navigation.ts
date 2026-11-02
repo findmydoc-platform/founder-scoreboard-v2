@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useEffectEvent } from "react";
-import type { ApplicationNavigation } from "../model/application-header";
 
-export function useApplicationHelpNavigation(navigation: ApplicationNavigation) {
-  const navigate = useEffectEvent(navigation.navigate);
+export function useApplicationHelpNavigation(onNavigate: (href: string) => void) {
+  const navigate = useEffectEvent(onNavigate);
   useEffect(() => {
     let active = true;
     const continueInPlanning = (event: Event) => {

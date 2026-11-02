@@ -3,6 +3,9 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { getRouter } from "@storybook/nextjs-vite/navigation.mock";
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
+import { PlatformReleasesShell } from "@/features/platform-releases/templates/platform-releases-shell";
+import { PlatformReleaseArchive } from "@/features/platform-releases/organisms/platform-release-archive";
+import { releaseStoryFixture } from "@/features/platform-releases/organisms/platform-release-story-fixture";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { taskDetailModelToPlanningShellState } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { readyHeaderSlot } from "@/lib/planning-header-data";
@@ -22,10 +25,14 @@ function notificationHeader(targetPath = "") {
 
 let completeNotificationResponse: (() => void) | undefined;
 
-function NotificationPlanningPage({ host = "planning", targetPath = "", outcome, loaded = true }: { host?: "planning" | "item"; targetPath?: string; outcome?: "saved" | "rejected" | "unconfirmed" | "delayed"; loaded?: boolean }) {
+function NotificationPlanningPage({ host = "planning", targetPath = "", outcome, loaded = true }: { host?: "planning" | "item" | "releases"; targetPath?: string; outcome?: "saved" | "rejected" | "unconfirmed" | "delayed"; loaded?: boolean }) {
   const pageHeader = notificationHeader(targetPath);
   if (host === "item") return <TaskDetailPage taskId="item-page-task" initialModel={itemPageModel()} headerData={pageHeader}
     source="supabase" authRequired initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} />;
+  if (host === "releases") return <PlatformReleasesShell authUser={itemPageUser} currentPlatformRole={itemPageProfile.platformRole}
+    initialCurrentProfile={itemPageProfile} headerData={pageHeader} calendarProfiles={readyHeaderSlot([itemPageProfile])}>
+    <PlatformReleaseArchive releases={[releaseStoryFixture()]} />
+  </PlatformReleasesShell>;
   const data = taskDetailModelToPlanningShellState(itemPageModel());
   return <><PlanningApp
     initialData={loaded ? data : { ...data, tasks: [] }} initialHeaderData={pageHeader}
@@ -133,6 +140,11 @@ export const ExplicitTargetKeepsQueryAndAnchor: Story = {
     await expect(getRouter().push).toHaveBeenCalledWith(anchoredTarget);
     await expect(statusActions).toEqual(["seen"]);
   },
+};
+
+export const ReleaseHeaderUsesTheSameFullDestination: Story = {
+  args: { host: "releases", targetPath: anchoredTarget },
+  play: ExplicitTargetKeepsQueryAndAnchor.play,
 };
 
 export const UnconfirmedSeenDoesNotNavigateOrReplay: Story = {
