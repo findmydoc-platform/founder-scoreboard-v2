@@ -80,7 +80,7 @@ export const ArchiveGlobalActions: Story = {
     await userEvent.click(canvas.getByRole("button", { name: /GitHub öffnen/ }));
     await expect(canvas.getByRole("dialog", { name: "GitHub-Sync" })).toBeVisible();
     await expect(await within(canvas.getByRole("dialog", { name: "GitHub-Sync" })).findByRole("button", { name: isLocalLoginSimulationEnabled() ? /GitHub App lokal nicht verfügbar/ : /Vollständig verbunden/ })).toBeVisible();
-    await userEvent.click(canvas.getByRole("button", { name: "GitHub schließen", exact: true }));
+    await userEvent.click(canvas.getByRole("button", { name: "GitHub schließen" }));
     await userEvent.click(canvas.getByRole("button", { name: "Kuratierte Links" }));
     await expect(canvas.getByRole("link", { name: /Team guide/ })).toBeVisible();
     await userEvent.keyboard("{Escape}");
@@ -140,7 +140,7 @@ export const ActiveAdministratorCanEndAccess: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
-    await expect(canvas.getByRole("button", { name: "Öffnen", exact: true })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Öffnen" })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Adminzugang beenden" }));
     await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
     await expect(await canvas.findByRole("button", { name: "Adminzugang für 60 Minuten aktivieren" })).toBeVisible();
@@ -169,7 +169,7 @@ export const GithubConnectionRecoversAfterServiceReturns: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: /GitHub öffnen/ }));
     await expect(canvas.getByRole("dialog", { name: "GitHub-Sync" })).toBeVisible();
-    await userEvent.click(canvas.getByRole("button", { name: "GitHub schließen", exact: true }));
+    await userEvent.click(canvas.getByRole("button", { name: "GitHub schließen" }));
     await userEvent.click(canvas.getByRole("button", { name: "Restore GitHub service" }));
     await userEvent.click(canvas.getByRole("button", { name: /GitHub öffnen/ }));
     const dialog = within(canvas.getByRole("dialog", { name: "GitHub-Sync" }));
