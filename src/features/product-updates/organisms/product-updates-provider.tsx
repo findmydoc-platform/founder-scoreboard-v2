@@ -79,9 +79,10 @@ export function ProductUpdatesProvider({
   }, [profileId, showUpdates]);
 
   useEffect(() => {
-    const openProductUpdates = () => showUpdates(
-      selectActiveProductUpdates(productUpdates, new Date()),
-    );
+    const openProductUpdates = (event: Event) => {
+      event.preventDefault();
+      showUpdates(selectActiveProductUpdates(productUpdates, new Date()));
+    };
     window.addEventListener("fmd:open-product-updates", openProductUpdates);
     return () => window.removeEventListener("fmd:open-product-updates", openProductUpdates);
   }, [showUpdates]);
@@ -95,7 +96,7 @@ export function ProductUpdatesProvider({
     const tourId = activeSlide.featureTourId;
     close();
     window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent("fmd:start-feature-tour", { detail: { tourId } }));
+      window.dispatchEvent(new CustomEvent("fmd:start-feature-tour", { cancelable: true, detail: { tourId } }));
     }, 0);
   };
 

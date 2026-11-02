@@ -26,7 +26,7 @@ export type ApplicationHeaderLifecycle = {
 };
 
 export type ApplicationHeaderProps = {
-  area: { title: string; description?: string; supportingContext?: string };
+  area: { title: string; description?: string; supportingContext?: string; heading?: boolean };
   lifecycle: ApplicationHeaderLifecycle;
   navigation: ApplicationNavigation;
   context?: ReactNode;
