@@ -1,37 +1,24 @@
-# Design System Primitives
+# Design system primitives
 
-Issue #21 consolidates repeated Planning UI styling without changing behavior or redesigning screens.
+`src/shared/atoms/ui-primitives.tsx` owns domain-neutral visual controls. Feature components compose them without moving workflow or permission decisions into shared styling.
 
-## Shared primitives
+## Shared controls
 
-The shared primitive layer lives in `src/shared/atoms/ui-primitives.tsx` and is intentionally domain-neutral:
+| Export | Purpose |
+| --- | --- |
+| `UiPanel` | Bordered panel/card with shared surface and spacing variants |
+| `UiButton`, `UiLinkButton`, `UiAnchorButton` | Button, application-link and anchor action presentation |
+| `UiBadge` | Compact status/count presentation |
+| `UiNotice` | Inline information, success, warning and error presentation |
+| `UiEmptyState` | Empty or loading placeholder presentation |
+| `UiField`, `UiTextInput`, `UiTextArea` | Field labels and text-input presentation |
 
-- `UiPanel` for the standard white bordered panel/card surface.
-- `UiButton`, `UiLinkButton`, and `UiAnchorButton` for repeated action button variants.
-- `UiBadge` for rounded status/count labels.
-- `UiNotice` for inline info, success, warning, and error messages.
-- `UiEmptyState` for dashed empty/loading placeholders.
-- `UiField`, `UiTextInput`, and `UiTextArea` for repeated form label and text field styling.
+Use supported variants rather than repeating the same Tailwind recipes. Preserve visible language, accessible names and feature behavior when replacing a repeated visual pattern.
 
-## Migration policy
+## Ownership boundaries
 
-- Preserve the existing visual language. Do not use this layer for redesign work.
-- Keep task, sprint, meeting, decision, founder, milestone, review, and planning workflow semantics inside their owning feature.
-- Put only globally reusable visual primitives in `src/shared`.
-- Prefer migrating exact repeated Tailwind recipes first.
-- Leave feature-specific composites local when the class mix expresses workflow state, density, drag/drop behavior, calendar positioning, or table layout.
+`src/shared` contains reusable presentation and generic interaction controls. Tasks, Sprints, Review, meetings, hierarchy and notifications keep their domain rules, status/tone mapping, permissions and mutations in their owning features.
 
-## Migrated coverage
+Table rows, calendar grids, Gantt geometry and board layouts remain feature-owned. Shared select/date controls retain their existing portal and focus behavior. Authenticated images and GitHub action composites keep their own loading/error behavior; a shared panel does not own provider acquisition or connection policy.
 
-The first consolidation pass covers repeated panels, buttons, badges, notices, empty states, field labels, text inputs, and text areas across tools, projects, reviews, settings, execution, decisions, sprint controls, meetings, events, team profiles, intake, task detail sections, task relationships, and the new-task dialog.
-
-## Feature-specific exceptions
-
-The following patterns are intentionally left feature-local:
-
-- Table row, calendar grid, Gantt, and task board geometry, because their utility classes define feature layout rather than global tokens.
-- Relationship, review, status, and notification mapping functions, because their tone decisions are domain model behavior.
-- Custom select and date picker internals, because they are already shared controls and include portal/focus behavior beyond token drift.
-- Auth, Supabase, GitHub Sync, and controller code, because Issue #21 must not merge with the infra or workflow-logic scopes from Issues #19 and #20.
-- `TaskGitHubSyncCard` is left feature-local because its surface is tied to GitHub App connection state and sync state; that belongs with the later infra-boundary work, not the neutral primitive pass.
-- `GitHubCommentImage` keeps its local loading/error placeholders because the component owns authenticated GitHub asset proxy behavior through the server-side GitHub App layer.
+See [Planning Item UI](planning-item-ui.md) for item-specific interaction and [Table filtering](table-filtering.md) for operational table composition. Follow repository responsive and accessibility rules when using these controls.
