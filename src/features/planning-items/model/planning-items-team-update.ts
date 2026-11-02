@@ -5,10 +5,8 @@ import type { ActorContext } from "./actor-context";
 import type { PlanningInvocation, PlanningError } from "./planning-items";
 import type { PlanningItemGitHubSyncResult } from "./planning-items-contract";
 import {
-  buildPlanningItemUpdatePreview,
-  createTeamRevisePlanningItems,
+  prepareTeamPlanningItemRevision,
   planningItemUpdateHash,
-  planningItemReviseCommand,
   teamReviseTransactionFromResult,
   type PlanningItemReplayType,
   type PlanningItemUpdatePreview,
@@ -197,8 +195,9 @@ export async function commitTeamPlanningItemUpdate(
   if (reparentField && parsed.presentFields.length !== 1) {
     return failure("Ändere die übergeordnete Planungsebene separat von weiteren Feldern.", 409);
   }
-  const prepared = await buildPlanningItemUpdatePreview({
+  const prepared = await prepareTeamPlanningItemRevision({
     actor: { id: actor.profileId, platformRole: actor.platformRole } as AuthenticatedProfile,
+    tokenId,
     itemId,
     parsed,
     supabase,
@@ -210,7 +209,7 @@ export async function commitTeamPlanningItemUpdate(
     }
     return failure(prepared.error, prepared.status);
   }
-  const { preview } = prepared;
+  const { preview } = prepared.revision;
   if (preview.errors.length) return invalidPreview(preview);
 
   if (reparentField) {
@@ -239,10 +238,9 @@ export async function commitTeamPlanningItemUpdate(
       : completed(saved);
   }
 
-  const result = await createTeamRevisePlanningItems({ supabase, actor, tokenId, itemId, parsed, preparedPreview: preview }).run({
+  const result = await prepared.revision.run({
     actor,
     mode: "commit",
-    command: planningItemReviseCommand(itemId, preview.itemType, parsed.expectedUpdatedAt, parsed.raw),
     idempotencyKey,
     requestMetadata,
   });

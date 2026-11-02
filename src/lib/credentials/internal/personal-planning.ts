@@ -8,7 +8,7 @@ import { actorContextFromPlanningTokenAuth } from "@/features/planning-items/mod
 import { TEAM_PLANNING_ITEM_SCOPES, TEAM_PLANNING_ITEMS_TOKEN_HISTORY_LIMIT, type TeamPlanningItemScope } from "@/features/planning-items/model/planning-items-contract";
 import { buildPlanningItemsContext } from "@/features/planning-items/model/planning-items-context";
 import { createTeamCreatePlanningItems } from "@/features/planning-items/model/planning-items-create";
-import { buildPlanningItemUpdatePreview, createTeamRevisePlanningItems } from "@/features/planning-items/model/planning-item-update";
+import { prepareTeamPlanningItemRevision } from "@/features/planning-items/model/planning-item-update";
 import { buildTeamPlanningDependencyPreview } from "@/features/planning-items/model/planning-items-team-dependency";
 import { commitTeamPlanningItemUpdate } from "@/features/planning-items/model/planning-items-team-update";
 import { createEmptyEpicDeletePlanningItems } from "@/features/planning-items/model/planning-items-empty-epic-delete";
@@ -74,18 +74,22 @@ export async function authorizePersonalPlanning(input: PersonalPlanningCredentia
         await authorizeOperation("planningItems.create", mode, Boolean(options.githubSyncMode));
         return createTeamCreatePlanningItems({ ...options, supabase, actor, tokenId: permission.tokenId, dispatchGitHubProjections: dispatchAndLoadPlanningGitHubProjections }).run(invocation(call));
       },
-      async buildUpdatePreview(options: Omit<Parameters<typeof buildPlanningItemUpdatePreview>[0], "supabase" | "actor" | "itemId">) {
+      async buildUpdatePreview(options: Omit<Parameters<typeof prepareTeamPlanningItemRevision>[0], "supabase" | "actor" | "tokenId" | "itemId">) {
         await authorizeOperation("planningItems.update", "preview", Boolean(options.parsed.githubSyncMode));
-        return buildPlanningItemUpdatePreview({ ...options, supabase, actor: permission.profile, itemId });
+        const prepared = await prepareTeamPlanningItemRevision({ ...options, supabase, actor: permission.profile, tokenId: permission.tokenId, itemId });
+        if (!prepared.ok) return prepared;
+        return {
+          ok: true as const,
+          preview: prepared.revision.preview,
+          async validate() {
+            await authorizeOperation("planningItems.update", "preview", Boolean(options.parsed.githubSyncMode));
+            return prepared.revision.run({ actor, mode: "preview" });
+          },
+        };
       },
       async buildDependencyPreview(options: Omit<Parameters<typeof buildTeamPlanningDependencyPreview>[0], "supabase" | "actor" | "itemId">) {
         await authorizeOperation("planningItems.update", "preview");
         return buildTeamPlanningDependencyPreview({ ...options, supabase, actor, itemId });
-      },
-      async revise(options: Omit<Parameters<typeof createTeamRevisePlanningItems>[0], "supabase" | "actor" | "tokenId" | "itemId">, call: Omit<PlanningInvocation, "actor" | "mode">) {
-        await authorizeOperation("planningItems.update", "preview", Boolean(options.parsed.githubSyncMode));
-        if (call.command.kind !== "reviseItem" || call.command.itemId !== itemId) forbidden();
-        return createTeamRevisePlanningItems({ ...options, supabase, actor, tokenId: permission.tokenId, itemId }).run(invocation(call));
       },
       async commitUpdate(options: Omit<Parameters<typeof commitTeamPlanningItemUpdate>[0], "actor" | "itemId">, scheduleAfter: Parameters<typeof commitTeamPlanningItemUpdate>[1]["scheduleAfter"]) {
         await authorizeOperation("planningItems.update", "commit", Boolean(options.parsed.githubSyncMode));

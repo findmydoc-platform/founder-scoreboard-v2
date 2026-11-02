@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 import {
   parsePlanningItemPatchPayload,
-  planningItemReviseCommand,
 } from "@/features/planning-items/model/planning-item-update";
 import {
   handlePlanningItemsRequest,
@@ -50,12 +49,7 @@ export async function handleTeamPlanningItemUpdatePreview(
     if (!result.ok) return planningItemsError(result.error, result.status);
 
     const { preview } = result;
-    const reviseResult = await permission.planningItems.revise({
-      parsed,
-      preparedPreview: preview,
-    }, {
-      command: planningItemReviseCommand(itemId, preview.itemType, parsed.expectedUpdatedAt, parsed.raw),
-    });
+    const reviseResult = await result.validate();
     if (!reviseResult.ok && reviseResult.error.code !== "invalidCommand") {
       return planningItemsError("Planning-Items-Update konnte nicht geprüft werden.", 500);
     }

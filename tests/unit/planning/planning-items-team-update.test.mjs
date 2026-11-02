@@ -80,22 +80,22 @@ async function fixture({ stored = receipt(), parsed = parsedUpdate(), role = "ce
       parsePlanningItemPatchPayload: () => parsed,
       planningItemUpdateHash: () => updateHash,
       mapPlanningItemDatabaseRow: (_type, item) => item,
-      buildPlanningItemUpdatePreview: async () => {
+      prepareTeamPlanningItemRevision: async () => {
         if (receiptAfterPreview) currentReceipt = receiptAfterPreview;
-        return previewError || {
+        if (previewError) return previewError;
+        return {
           ok: true,
-          preview: { itemId: "item-one", itemType: "deliverable", changedFields: ["title"], systemEffects: [], warnings: [], errors: [] },
+          revision: {
+            preview: { itemId: "item-one", itemType: "deliverable", changedFields: ["title"], systemEffects: [], warnings: [], errors: [] },
+            run: async () => {
+              writes.push("revise");
+              if (commitError) return commitError;
+              currentReceipt = receipt({ response: saved });
+              return { ok: true, status: "committed", replayed: false, changes: [{ after: saved }] };
+            },
+          },
         };
       },
-      planningItemReviseCommand: () => ({ kind: "reviseItem" }),
-      createTeamRevisePlanningItems: () => ({
-        run: async () => {
-          writes.push("revise");
-          if (commitError) return commitError;
-          currentReceipt = receipt({ response: saved });
-          return { ok: true, status: "committed", replayed: false, changes: [{ after: saved }] };
-        },
-      }),
       teamReviseTransactionFromResult: (result) => result.changes[0].after,
     },
     "@/features/planning-items/model/planning-items-reparent": {
