@@ -1,164 +1,63 @@
-import { Maximize2, Minimize2, Plus, RefreshCw, SlidersHorizontal, UserRound, X } from "lucide-react";
+"use client";
+
+import { RefreshCw, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
-import { AppHeader } from "@/features/planning/organisms/app-header";
+import { ApplicationHeader } from "@/features/application-shell/organisms/application-header";
+import { PlanningContextControls } from "@/features/planning/molecules/planning-context-controls";
 import { TestProfileBanner } from "@/features/planning/molecules/test-profile-banner";
-import { PlanningHeaderDataActions } from "@/features/planning/molecules/planning-header-data-actions";
-import { DEFAULT_PLANNING_FILTERS } from "@/features/planning/hooks/use-planning-view-state";
-import { viewTabs, workspaceDescriptions, workspaceLabels } from "@/features/planning/model/planning-app-model";
-import { planningLevels, type PlanningLevel } from "@/features/planning/model/planning-level";
+import { workspaceDescriptions, workspaceLabels } from "@/features/planning/model/planning-app-model";
 import { testProfilePersona, testProfilePersonas } from "@/features/planning/model/test-profile-personas";
-import { AuthControl } from "@/features/settings/organisms/auth-control";
-import { GitHubSyncTrigger } from "@/features/tasks/molecules/github-sync-trigger";
 import { projectGitHubSyncQueue } from "@/features/tasks/model/github-sync-queue";
-import { PlanningHelpMenu } from "@/features/planning/molecules/planning-help-menu";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
-import type { ViewMode } from "@/lib/types";
-import { CustomSelect } from "@/shared/atoms/custom-select";
 import type { AdministratorAccessController } from "@/features/administrator-access/hooks/use-administrator-access-controller";
 import { AdministratorModeIndicator } from "@/features/administrator-access/molecules/administrator-mode-indicator";
 
 export function PlanningHeader({ controller, administratorAccessController }: { controller: PlanningAppController; administratorAccessController: AdministratorAccessController }) {
+  const router = useRouter();
   const {
-    actualProfile,
-    authAvailable,
-    authBusy,
-    authNotice,
-    authUser,
-    data,
-    devProfileId,
-    devRoleSwitchAvailable,
-    dismissNotification,
-    filters,
-    filtersAvailable,
-    focusModeActive,
-    githubConnectionState,
-    githubInstallationAvailable,
-    githubSyncQueueOpen,
-    headerData,
-    headerActions,
-    mobileNavOpen,
-    openNotification,
-    openNotificationInbox,
-    planningRemoteChangesAvailable,
-    planningRemoteChangesRefreshing,
-    planningLevel,
-    planningParentFilterId,
-    refreshPlanningRemoteChanges,
-    saveError,
-    setDevProfileId,
-    setFilters,
-    setGithubSyncQueueOpen,
-    setMobileNavOpen,
-    setPlanningLevel,
-    setShowNotifications,
-    setShowFilters,
-    setStatusGuardNotice,
-    setStatusGuardTaskId,
-    setView,
-    setWorkspace,
-    showNotifications,
-    showFilters,
-    signIn,
-    signOut,
-    statusGuardNotice,
-    toggleFocusMode,
-    view,
-    workspace,
+    authAvailable, authBusy, authNotice, authUser, data, devProfileId, devRoleSwitchAvailable,
+    dismissNotification, focusModeActive, githubConnectionState, githubInstallationAvailable,
+    githubSyncQueueOpen, mobileNavOpen, openNotification, openNotificationInbox,
+    planningRemoteChangesAvailable, planningRemoteChangesRefreshing, refreshPlanningRemoteChanges,
+    saveError, setDevProfileId, setGithubSyncQueueOpen, setMobileNavOpen, setShowNotifications,
+    setStatusGuardNotice, setStatusGuardTaskId, showNotifications, signIn, signOut,
+    statusGuardNotice, toggleFocusMode, workspace,
   } = controller;
   const githubSyncQueue = projectGitHubSyncQueue(data.tasks, data.taskComments);
-  const title = workspace === "planning" ? data.project.name : workspaceLabels[workspace];
-  const description = workspace === "planning"
-    ? `${workspaceDescriptions.planning} Zeitraum: ${data.project.range}.`
-    : workspaceDescriptions[workspace];
   const availableTestProfiles = devRoleSwitchAvailable ? testProfilePersonas(data.profiles, devProfileId) : [];
-  const activeTestProfile = devProfileId
-    ? data.profiles.find((profile) => profile.id === devProfileId) || null
-    : null;
+  const activeTestProfile = devProfileId ? data.profiles.find(profile => profile.id === devProfileId) || null : null;
   const activeTestPersona = activeTestProfile ? testProfilePersona(activeTestProfile) : null;
-  const planningFiltersDirty = JSON.stringify(filters) !== JSON.stringify(DEFAULT_PLANNING_FILTERS)
-    || planningParentFilterId !== "all";
-  const mineActive = filters.quick.includes("mine");
   const openAccountMenu = () => window.dispatchEvent(new Event("fmd:open-account-menu"));
-  const focusModeAvailable = workspace === "planning" || workspace === "backlog";
-  const focusModeButton = focusModeAvailable ? (
-    <button
-      type="button"
-      onClick={toggleFocusMode}
-      aria-pressed={focusModeActive}
-      title={focusModeActive ? "Fokusmodus beenden" : "Fokusmodus im Vollbild starten"}
-      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-    >
-      {focusModeActive ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
-      <span className={focusModeActive ? "inline" : "sr-only"}>{focusModeActive ? "Fokusmodus beenden" : "Fokusmodus"}</span>
-    </button>
-  ) : null;
-  const actionButtons = headerActions.map((action) => (
-    <button
-      key={action.id}
-      type="button"
-      onClick={() => {
-        if (!action.disabled) action.onClick();
-      }}
-      aria-disabled={action.disabled || undefined}
-      title={action.disabledReason}
-      aria-label={action.disabledReason ? `${action.label}. ${action.disabledReason}` : action.label}
-      className={`inline-flex h-9 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-semibold transition ${
-        action.disabled
-          ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
-          : action.variant === "primary"
-          ? "border border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
-          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-      }`}
-    >
-      <Plus size={16} aria-hidden="true" />
-      <span className="truncate">{action.label}</span>
-    </button>
-  ));
-  const accountControl = authAvailable ? (
-    <AuthControl
-      user={authUser}
-      busy={authBusy}
-      onSignIn={signIn}
-      onSignOut={signOut}
-      onOpenProfile={() => setWorkspace("profile")}
-      administratorAccess={administratorAccessController.administratorAccess}
-      administratorAccessBusy={administratorAccessController.busy}
-      administratorRemainingSeconds={administratorAccessController.remainingSeconds}
-      canOpenAdministration={administratorAccessController.authority.capabilities.manageAdministratorEligibility}
-      onActivateAdministrator={() => void administratorAccessController.activate()}
-      onEndAdministrator={() => void administratorAccessController.end()}
-      onOpenAdministration={() => setWorkspace("administration")}
-      testProfileOptions={availableTestProfiles.map((profile) => ({
-        id: profile.profileId,
-        initials: profile.initials,
-        label: profile.label,
-      }))}
-      activeTestProfileId={devProfileId}
-      onTestProfileChange={setDevProfileId}
-    />
-  ) : null;
   const administratorModeActive = administratorAccessController.administratorAccess.active;
-  const administratorModeIndicator = administratorModeActive ? (
-    <AdministratorModeIndicator
-      busy={administratorAccessController.busy}
-      remainingSeconds={administratorAccessController.remainingSeconds}
-      onEnd={() => void administratorAccessController.end()}
-    />
-  ) : null;
-  let mobilePlanningToolbarTopClass = "top-0";
-  if (administratorModeActive && activeTestPersona) mobilePlanningToolbarTopClass = "top-[5.5rem]";
-  else if (administratorModeActive) mobilePlanningToolbarTopClass = "top-12";
-  else if (activeTestPersona) mobilePlanningToolbarTopClass = "top-10";
+  const administratorModeIndicator = administratorModeActive ? <AdministratorModeIndicator busy={administratorAccessController.busy} remainingSeconds={administratorAccessController.remainingSeconds} onEnd={() => void administratorAccessController.end()} /> : null;
+  const focusModeAvailable = workspace === "planning" || workspace === "backlog";
 
-  return (
-    <>
-      <AppHeader
-      compact={focusModeActive}
-      mobileNavOpen={mobileNavOpen}
-      onOpenMobileNav={() => setMobileNavOpen(true)}
-      eyebrow="FounderOps"
-      description={description}
-      title={title}
+  return <>
+    <ApplicationHeader
+      area={{ title: workspace === "planning" ? "Planung" : workspaceLabels[workspace], description: workspaceDescriptions[workspace], supportingContext: workspace === "planning" ? `${data.project.name} · ${data.project.range}` : undefined }}
+      navigation={{ mobileNavOpen, openMobileNav: () => setMobileNavOpen(true), navigate: href => router.push(href) }}
+      lifecycle={{
+        planningState: controller.planningState,
+        enabled: Boolean(authUser) && controller.protectedDataLoaded,
+        notificationsWorkspace: workspace === "notifications",
+        profiles: data.profiles,
+        account: authAvailable ? {
+          user: authUser, busy: authBusy, onSignIn: signIn, onSignOut: signOut,
+          administratorAccess: administratorAccessController.administratorAccess,
+          administratorAccessBusy: administratorAccessController.busy,
+          administratorRemainingSeconds: administratorAccessController.remainingSeconds,
+          canOpenAdministration: administratorAccessController.authority.capabilities.manageAdministratorEligibility,
+          onActivateAdministrator: () => void administratorAccessController.activate(),
+          onEndAdministrator: () => void administratorAccessController.end(),
+          testProfileOptions: availableTestProfiles.map(profile => ({ id: profile.profileId, initials: profile.initials, label: profile.label })),
+          activeTestProfileId: devProfileId, onTestProfileChange: setDevProfileId,
+        } : undefined,
+        github: { count: githubSyncQueue.count, failedCount: githubSyncQueue.failedCount, installationAvailable: githubInstallationAvailable, localMode: isLocalLoginSimulationEnabled(), connectionState: githubConnectionState, open: githubSyncQueueOpen, onOpen: () => setGithubSyncQueueOpen(true) },
+        notifications: { open: showNotifications, toggle: () => showNotifications ? setShowNotifications(false) : openNotificationInbox(), openNotification, dismissNotification },
+      }}
+      focus={focusModeAvailable ? { active: focusModeActive, toggle: toggleFocusMode } : undefined}
+      context={controller.filtersAvailable || (controller.headerActions.length > 0 && workspace !== "notifications") ? <PlanningContextControls {...controller} /> : undefined}
       notices={(
         <>
           {administratorModeIndicator ? (
@@ -210,104 +109,7 @@ export function PlanningHeader({ controller, administratorAccessController }: { 
           )}
         </>
       )}
-      actions={(
-        focusModeActive ? <>{focusModeButton}{accountControl}</> : <>
-          {focusModeButton}
-          <PlanningHeaderDataActions
-            headerData={headerData}
-            notificationsOpen={showNotifications}
-            onToggleNotifications={() => showNotifications ? setShowNotifications(false) : openNotificationInbox()}
-            onOpenNotification={openNotification}
-            onDismissNotification={dismissNotification}
-            calendar={{
-              apiClient: actualProfile ? controller.apiClient : undefined,
-              onOpenTeam: (editWorkweek, week) => setWorkspace("team", { editWorkweek, week }),
-              profiles: data.profiles,
-            }}
-          />
-          <PlanningHelpMenu />
-          <GitHubSyncTrigger
-            count={githubSyncQueue.count}
-            failedCount={githubSyncQueue.failedCount}
-            installationAvailable={githubInstallationAvailable}
-            localMode={isLocalLoginSimulationEnabled()}
-            connectionState={githubConnectionState}
-            open={githubSyncQueueOpen}
-            onOpen={() => setGithubSyncQueueOpen(true)}
-          />
-          {accountControl}
-        </>
-      )}
-    >
-      {filtersAvailable && (
-        <div className="hidden gap-2 border-t border-slate-100 px-8 py-3 min-[1200px]:grid">
-          <div className="grid gap-3 md:flex md:flex-wrap md:items-center md:justify-between">
-            <div className="grid min-w-0 flex-1 gap-2">
-              <div className="grid max-w-full grid-cols-[74px_minmax(0,1fr)] items-center gap-2" data-tour-id="planning-task-scope">
-                <div className="text-xs font-semibold uppercase text-slate-500">Aufgaben</div>
-                <div className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto pb-1 [contain:inline-size] sm:flex-wrap sm:overflow-visible sm:pb-0 sm:[contain:none]">
-                  {[
-                    { id: "", label: "Alle" },
-                    { id: "mine", label: "Meine" },
-                  ].map((scope) => {
-                    const active = scope.id ? filters.quick.includes(scope.id) : !filters.quick.includes("mine");
-                    return (
-                      <button
-                        key={scope.label}
-                        type="button"
-                        onClick={() => setFilters({
-                          ...filters,
-                          assignee: "Alle",
-                          quick: scope.id
-                            ? Array.from(new Set([scope.id, ...filters.quick.filter((item) => item !== "mine")]))
-                            : filters.quick.filter((item) => item !== "mine"),
-                        })}
-                        className={`inline-flex h-8 shrink-0 items-center border-b-2 px-1 text-sm font-semibold ${
-                          active ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
-                        }`}
-                        aria-pressed={active}
-                      >
-                        {scope.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="grid max-w-full grid-cols-[74px_minmax(0,1fr)] items-center gap-2">
-                <div className="text-xs font-semibold uppercase text-slate-500">Ansicht</div>
-                <div className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto pb-1 [contain:inline-size] sm:flex-wrap sm:overflow-visible sm:pb-0 sm:[contain:none]">
-                  {viewTabs.map((tab) => {
-                    const Icon = tab.icon;
-                    const active = view === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setView(tab.id)}
-                        className={`inline-flex h-8 shrink-0 items-center gap-2 border-b-2 px-1 text-sm font-semibold ${
-                          active ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        <Icon size={16} />
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-            <div className={`grid items-center gap-2 sm:flex sm:flex-wrap md:shrink-0 md:justify-end ${headerActions.length > 1 ? "grid-cols-2" : "grid-cols-[max-content]"}`}>
-              {actionButtons}
-            </div>
-          </div>
-        </div>
-      )}
-      {!filtersAvailable && headerActions.length > 0 && workspace !== "notifications" && (
-        <div className="flex justify-end border-t border-slate-100 px-4 py-3 lg:px-6">
-          <div className={`grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap ${headerActions.length > 1 ? "grid-cols-2" : "grid-cols-[max-content]"}`}>{actionButtons}</div>
-        </div>
-      )}
-      </AppHeader>
+    />
       {administratorModeIndicator ? (
         <div className="sticky top-0 z-50 flex min-h-12 items-center justify-center border-b border-slate-200 bg-white/95 px-3 py-1 backdrop-blur min-[1200px]:hidden">
           {administratorModeIndicator}
@@ -323,71 +125,5 @@ export function PlanningHeader({ controller, administratorAccessController }: { 
           />
         </div>
       ) : null}
-      {filtersAvailable ? (
-        <div
-          data-mobile-planning-toolbar
-          className={`sticky z-30 border-b border-slate-200 bg-white/95 backdrop-blur min-[1200px]:hidden ${mobilePlanningToolbarTopClass}`}
-        >
-          <div className="flex h-12 min-w-0 items-center gap-2 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              type="button"
-              data-tour-id="planning-task-scope"
-              aria-pressed={mineActive}
-              onClick={() => setFilters({
-                ...filters,
-                assignee: "Alle",
-                quick: mineActive
-                  ? filters.quick.filter((item) => item !== "mine")
-                  : Array.from(new Set(["mine", ...filters.quick])),
-              })}
-              className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                mineActive ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              <UserRound size={16} aria-hidden="true" />
-              {mineActive ? "Meine" : "Alle"}
-            </button>
-            <CustomSelect
-              aria-label="Planungsansicht wechseln"
-              value={view}
-              onChange={(nextView) => setView(nextView as ViewMode)}
-              options={viewTabs.map((tab) => ({ value: tab.id, label: tab.label }))}
-              className="h-10 w-24 shrink-0 text-sm"
-              menuClassName="min-w-36"
-            />
-            <button
-              type="button"
-              data-tour-id="planning-mobile-filter-trigger"
-              onClick={() => setShowFilters(true)}
-              aria-expanded={showFilters}
-              aria-controls="planning-mobile-filter-sheet"
-              className={`relative inline-flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                planningFiltersDirty ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              <SlidersHorizontal size={16} aria-hidden="true" />
-              Filter
-              {planningFiltersDirty ? <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Filter aktiv" /> : null}
-            </button>
-            {view === "board" ? (
-              <div data-tour-id="planning-kanban-level-switch" className="w-36 shrink-0">
-                <CustomSelect
-                  aria-label="Planungsebene im Kanban wechseln"
-                  value={planningLevel}
-                  onChange={(level) => setPlanningLevel(level as PlanningLevel)}
-                  options={planningLevels.map((level) => ({
-                    value: level.value,
-                    label: `${level.label} · ${data.tasks.filter((task) => task.taskType === level.value).length}`,
-                  }))}
-                  className="h-10 text-sm"
-                  menuClassName="min-w-44"
-                />
-              </div>
-            ) : null}
-            {actionButtons.length > 0 ? <div className="flex shrink-0 items-center gap-2">{actionButtons}</div> : null}
-          </div>
-        </div>
-      ) : null}
-    </>
-  );
+  </>;
 }

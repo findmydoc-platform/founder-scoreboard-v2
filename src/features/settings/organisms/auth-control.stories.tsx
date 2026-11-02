@@ -2,16 +2,10 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { AuthControl } from "./auth-control";
 import type { User } from "@supabase/supabase-js";
+import { mockAccountLifecycle as loginMode } from "../../../../tests/helpers/account-lifecycle-browser-fixture";
 
 const sampleWorkspaceAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect width='96' height='96' fill='%23dbeafe'/%3E%3Ccircle cx='48' cy='36' r='18' fill='%233b82f6'/%3E%3Cpath d='M13 96c2-23 15-35 35-35s33 12 35 35' fill='%231d4ed8'/%3E%3C/svg%3E";
 
-function loginMode(mode: string, account?: { linked: boolean; workspaceEmail?: string; workspaceAvatarUrl?: string }) {
-  const previous = globalThis.fetch;
-  globalThis.fetch = async (input, init) => String(input).includes("/api/auth/login-mode")
-    ? Response.json({ mode }) : String(input).includes("/api/auth/account-state")
-      ? Response.json(account || { linked: false }) : previous(input, init);
-  return () => { globalThis.fetch = previous; };
-}
 const meta = {
   title: "Settings/Authentication",
   component: AuthControl,
