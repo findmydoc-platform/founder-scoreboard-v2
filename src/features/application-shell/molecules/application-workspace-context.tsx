@@ -28,8 +28,8 @@ export function useApplicationWorkspaceContextAvailable() {
 }
 
 export function ApplicationWorkspaceContextOutlet() {
-  const context = useContext(Context);
-  return context?.available ? <div ref={context.setTarget} className="flex min-w-0 max-w-full flex-wrap items-end gap-3" /> : null;
+  const { available, setTarget } = useContext(Context) || {};
+  return available ? <div ref={setTarget} className="flex min-w-0 max-w-full flex-wrap items-end gap-3" /> : null;
 }
 
 export function ApplicationWorkspaceControls({ children }: { children: ReactNode }) {
