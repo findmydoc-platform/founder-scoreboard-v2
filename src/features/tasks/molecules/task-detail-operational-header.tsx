@@ -311,7 +311,7 @@ export function TaskDetailOperationalHeader({
     <header aria-labelledby={resolvedTitleId} className={classNames("bg-white", className)}>
       <div className="grid min-w-0 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:col-start-1 sm:row-start-1">
-          <TaskTypeIndicator taskType={task.taskType} className={taskTypeColorClassName(task.taskType)} />
+          <TaskTypeIndicator taskType={task.taskType} className={task.taskType === "epic" ? "text-orange-700" : task.taskType === "sub_issue" ? "text-yellow-700" : taskTypeColorClassName(task.taskType)} />
           {task.taskType !== "epic" && (view.hierarchyTask || view.hierarchyFallback) && (
             <span className="inline-flex min-w-0 max-w-full items-center gap-2 normal-case tracking-normal">
               <span className="hidden sm:inline" aria-hidden="true">·</span>

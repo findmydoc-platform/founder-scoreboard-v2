@@ -7,16 +7,19 @@ import { TaskReviewOperationNotice } from "@/features/reviews/molecules/task-rev
 
 import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState, type MouseEvent } from "react";
 import { usePlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
+import { PlanningBusinessStateContext } from "@/features/planning/hooks/use-planning-business-state";
 import { useAdministratorAccessController } from "@/features/administrator-access/hooks/use-administrator-access-controller";
 import type { AdministratorAccessSnapshot } from "@/features/administrator-access/model/administrator-access";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { useTaskDiscardGuard } from "@/features/tasks/hooks/use-task-discard-guard";
 import { projectGitHubSyncQueue } from "@/features/tasks/model/github-sync-queue";
-import { GitHubSyncTrigger } from "@/features/tasks/molecules/github-sync-trigger";
-import { TaskDetailHeader } from "@/features/tasks/molecules/task-detail-header";
+import { ApplicationHeader } from "@/features/application-shell/organisms/application-header";
+import { safeTaskDetailReturnTo } from "@/features/tasks/model/task-detail-return-navigation";
 import { TaskDiscardChangesDialog } from "@/features/tasks/molecules/task-discard-changes-dialog";
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
@@ -77,7 +80,19 @@ export function TaskDetailPage({
   });
   const task = controller.data.tasks.find((item) => item.id === taskId) || null;
 
-  if (!task) return <div className="min-h-screen bg-slate-50" aria-label="Aufgabendetails werden geladen" />;
+  const navigate = (href: string) => discardGuard.request(() => {
+    controller.setMobileNavOpen(false);
+    router.push(href);
+  });
+  const safeReturnHref = safeTaskDetailReturnTo(returnHref) || "/planning";
+  const safeReturnLabel = safeReturnHref === "/planning" ? "Zur Planung" : returnLabel;
+  const requestReturnNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigate(safeReturnHref);
+  };
+
+  if (!task) return <div role="status" className="min-h-screen bg-slate-50" aria-label="Aufgabendetails werden geladen" />;
 
   const currentInitiative = initiativeForPlanningItem(controller.data.tasks, task);
   const selectedRelations = controller.data.taskRelations.filter((relation) => relation.taskId === task.id || relation.relatedTaskId === task.id);
@@ -90,33 +105,39 @@ export function TaskDetailPage({
   };
 
   return (
-    <main className="app-sidebar-main min-h-screen bg-white text-slate-950">
+    <PlanningBusinessStateContext.Provider value={controller.planningState}><main className="app-sidebar-main min-h-screen bg-white text-slate-950">
       <AppSidebar
         activeWorkspace="planning"
         source={source}
         currentPlatformRole={controller.currentProfile?.platformRole || ""}
         canAccessAdministration={administratorAccessController.authority.capabilities.manageAdministratorEligibility}
-        onRequestNavigation={(href) => discardGuard.request(() => router.push(href))}
+        mobileOpen={controller.mobileNavOpen}
+        onMobileClose={() => controller.setMobileNavOpen(false)}
+        onRequestNavigation={navigate}
       />
-      <TaskDetailHeader
-        title={task.title}
-        headerData={controller.headerData}
-        backLabel={returnLabel}
-        notificationsOpen={controller.showNotifications}
-        onToggleNotifications={() => controller.showNotifications ? controller.setShowNotifications(false) : controller.openNotificationInbox()}
-        onOpenNotification={controller.openNotification}
-        onDismissNotification={controller.dismissNotification}
-        onBack={() => discardGuard.request(() => window.location.assign(returnHref))}
-        actions={(
-          <GitHubSyncTrigger
-            count={githubSyncQueue.count}
-            failedCount={githubSyncQueue.failedCount}
-            installationAvailable={controller.githubInstallationAvailable}
-            localMode={isLocalLoginSimulationEnabled()}
-            connectionState={controller.githubConnectionState}
-            open={controller.githubSyncQueueOpen}
-            onOpen={() => controller.setGithubSyncQueueOpen(true)}
-          />
+      <ApplicationHeader
+        area={{ title: "Planung", heading: false }}
+        navigation={{ mobileNavOpen: controller.mobileNavOpen, openMobileNav: () => controller.setMobileNavOpen(true), navigate }}
+        lifecycle={{
+          planningState: controller.planningState,
+          enabled: Boolean(controller.authUser) && controller.protectedDataLoaded,
+          profiles: controller.data.profiles,
+          account: controller.authAvailable ? {
+            user: controller.authUser, busy: controller.authBusy, onSignIn: () => discardGuard.request(() => { void controller.signIn(); }), onSignOut: controller.signOut,
+            administratorAccess: administratorAccessController.administratorAccess,
+            administratorAccessBusy: administratorAccessController.busy,
+            administratorRemainingSeconds: administratorAccessController.remainingSeconds,
+            canOpenAdministration: administratorAccessController.authority.capabilities.manageAdministratorEligibility,
+            onActivateAdministrator: () => void administratorAccessController.activate(),
+            onEndAdministrator: () => void administratorAccessController.end(),
+          } : undefined,
+          github: { count: githubSyncQueue.count, failedCount: githubSyncQueue.failedCount, installationAvailable: controller.githubInstallationAvailable, localMode: isLocalLoginSimulationEnabled(), connectionState: controller.githubConnectionState, open: controller.githubSyncQueueOpen, onOpen: () => controller.setGithubSyncQueueOpen(true) },
+          notifications: { open: controller.showNotifications, toggle: () => controller.showNotifications ? controller.setShowNotifications(false) : controller.openNotificationInbox(), openNotification: event => discardGuard.request(() => controller.openNotification(event)), dismissNotification: controller.dismissNotification },
+        }}
+        context={(
+          <Link href={safeReturnHref} onClick={requestReturnNavigation} className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500">
+            <ArrowLeft size={16} aria-hidden="true" />{safeReturnLabel}
+          </Link>
         )}
       />
 
@@ -208,7 +229,7 @@ export function TaskDetailPage({
         notice={controller.githubSyncNotice}
         onClose={() => controller.setGithubSyncQueueOpen(false)}
         onOpenTask={controller.openTaskPanel}
-        onReconnect={() => controller.signIn({ githubReconnect: true, clearReconnectGuard: true })}
+        onReconnect={() => discardGuard.request(() => { void controller.signIn({ githubReconnect: true, clearReconnectGuard: true }); })}
         syncOperations={controller.planningState.taskGitHubSyncs()}
         onCheckSync={id=>{void controller.planningState.checkTaskGitHubSync(id);}}
         onSyncLinkedGitHubTasks={controller.syncLinkedGitHubTasks}
@@ -220,6 +241,6 @@ export function TaskDetailPage({
         onDiscard={discardChanges}
         onKeepEditing={discardGuard.keepEditing}
       />
-    </main>
+    </main></PlanningBusinessStateContext.Provider>
   );
 }
