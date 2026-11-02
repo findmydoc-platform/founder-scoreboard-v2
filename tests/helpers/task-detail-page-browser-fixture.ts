@@ -26,13 +26,19 @@ export function itemPageModel(taskType: Task["taskType"] = "deliverable"): TaskD
   };
 }
 
-export async function mockItemPageBrowser({ administrator = false } = {}) {
-  const restore = mockAccountLifecycle("google", { linked: true, workspaceEmail: itemPageUser.email }, input => {
+export async function mockItemPageBrowser({ administrator = false, headerData = itemPageHeaderData, respond }: {
+  administrator?: boolean;
+  headerData?: PlanningHeaderData;
+  respond?: (input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response> | undefined;
+} = {}) {
+  const restore = mockAccountLifecycle("google", { linked: true, workspaceEmail: itemPageUser.email }, (input, init) => {
+    const response = respond?.(input, init);
+    if (response) return response;
     const path = new URL(String(input), window.location.origin).pathname;
     if (path === "/api/auth/session") return Response.json({ session: { userId: itemPageUser.id, user: itemPageUser, revision: "item-page-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 } });
     if (path === "/api/auth/session/logout") return Response.json({ outcome: "cleared" });
     if (path === "/api/administrator-access") return Response.json({ administratorAccess: administrator ? { eligible: true, active: true, expiresAt: new Date(Date.now() + 600_000).toISOString() } : inactiveAdministratorAccess });
-    if (path === "/api/planning-header-data") return Response.json({ headerData: itemPageHeaderData });
+    if (path === "/api/planning-header-data") return Response.json({ headerData });
     if (path === "/api/github-app/status") return Response.json({ installation: { available: true }, user: { connected: true } });
     if (path === "/api/team-workweek/team") return Response.json({ currentWorkweeks: [], calendarWorkweeks: [], calendarCoverage: "complete", referenceDate: "2026-11-02" });
     if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()] });

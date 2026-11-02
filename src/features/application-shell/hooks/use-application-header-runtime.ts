@@ -29,10 +29,10 @@ export function useApplicationHeaderRuntime(lifecycle: ApplicationHeaderLifecycl
     headerData,
     quickLinksOpen,
     toggleQuickLinks: () => setQuickLinksOpen(value => !value),
-    notificationsOpen: lifecycle.notifications?.open ?? notificationsOpen,
-    toggleNotifications: lifecycle.notifications?.toggle || (() => setNotificationsOpen(value => !value)),
-    openNotification: lifecycle.notifications?.openNotification || openNotification,
-    dismissNotification: lifecycle.notifications?.dismissNotification || ((id: number) => { void planningState.updateNotificationStatus(id, "dismiss"); }),
+    notificationsOpen,
+    toggleNotifications: () => setNotificationsOpen(value => !value),
+    openNotification,
+    dismissNotification: (id: number) => { void planningState.updateNotificationStatus(id, "dismiss"); },
     openTeam,
   };
 }

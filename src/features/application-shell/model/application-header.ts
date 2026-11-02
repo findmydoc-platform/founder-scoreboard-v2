@@ -2,7 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import type { AuthControl } from "@/features/settings/organisms/auth-control";
 import type { GitHubSyncTrigger } from "@/features/tasks/molecules/github-sync-trigger";
 import type { PlanningState } from "@/features/planning/model/planning-state";
-import type { HeaderNotification, Profile } from "@/lib/types";
+import type { Profile } from "@/lib/types";
 
 export type ApplicationNavigation = {
   mobileNavOpen: boolean;
@@ -17,12 +17,6 @@ export type ApplicationHeaderLifecycle = {
   profiles: Profile[];
   account?: Omit<ComponentProps<typeof AuthControl>, "onOpenProfile" | "onOpenAdministration" | "variant">;
   github: ComponentProps<typeof GitHubSyncTrigger>;
-  notifications?: {
-    open: boolean;
-    toggle: () => void;
-    openNotification: (event: HeaderNotification) => void;
-    dismissNotification: (eventId: number) => void;
-  };
 };
 
 export type ApplicationHeaderProps = {

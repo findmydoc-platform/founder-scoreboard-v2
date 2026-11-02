@@ -132,7 +132,6 @@ export function TaskDetailPage({
             onEndAdministrator: () => void administratorAccessController.end(),
           } : undefined,
           github: { count: githubSyncQueue.count, failedCount: githubSyncQueue.failedCount, installationAvailable: controller.githubInstallationAvailable, localMode: isLocalLoginSimulationEnabled(), connectionState: controller.githubConnectionState, open: controller.githubSyncQueueOpen, onOpen: () => controller.setGithubSyncQueueOpen(true) },
-          notifications: { open: controller.showNotifications, toggle: () => controller.showNotifications ? controller.setShowNotifications(false) : controller.openNotificationInbox(), openNotification: event => discardGuard.request(() => controller.openNotification(event)), dismissNotification: controller.dismissNotification },
         }}
         context={(
           <Link href={safeReturnHref} onClick={requestReturnNavigation} className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500">

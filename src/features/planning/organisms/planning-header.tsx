@@ -17,11 +17,11 @@ export function PlanningHeader({ controller, administratorAccessController }: { 
   const router = useRouter();
   const {
     authAvailable, authBusy, authNotice, authUser, data, devProfileId, devRoleSwitchAvailable,
-    dismissNotification, focusModeActive, githubConnectionState, githubInstallationAvailable,
-    githubSyncQueueOpen, mobileNavOpen, openNotification, openNotificationInbox,
+    focusModeActive, githubConnectionState, githubInstallationAvailable,
+    githubSyncQueueOpen, mobileNavOpen,
     planningRemoteChangesAvailable, planningRemoteChangesRefreshing, refreshPlanningRemoteChanges,
-    saveError, setDevProfileId, setGithubSyncQueueOpen, setMobileNavOpen, setShowNotifications,
-    setStatusGuardNotice, setStatusGuardTaskId, showNotifications, signIn, signOut,
+    saveError, setDevProfileId, setGithubSyncQueueOpen, setMobileNavOpen,
+    setStatusGuardNotice, setStatusGuardTaskId, signIn, signOut,
     statusGuardNotice, toggleFocusMode, workspace,
   } = controller;
   const githubSyncQueue = projectGitHubSyncQueue(data.tasks, data.taskComments);
@@ -54,7 +54,6 @@ export function PlanningHeader({ controller, administratorAccessController }: { 
           activeTestProfileId: devProfileId, onTestProfileChange: setDevProfileId,
         } : undefined,
         github: { count: githubSyncQueue.count, failedCount: githubSyncQueue.failedCount, installationAvailable: githubInstallationAvailable, localMode: isLocalLoginSimulationEnabled(), connectionState: githubConnectionState, open: githubSyncQueueOpen, onOpen: () => setGithubSyncQueueOpen(true) },
-        notifications: { open: showNotifications, toggle: () => showNotifications ? setShowNotifications(false) : openNotificationInbox(), openNotification, dismissNotification },
       }}
       focus={focusModeAvailable ? { active: focusModeActive, toggle: toggleFocusMode } : undefined}
       context={controller.filtersAvailable || (controller.headerActions.length > 0 && workspace !== "notifications") ? <PlanningContextControls {...controller} /> : undefined}
