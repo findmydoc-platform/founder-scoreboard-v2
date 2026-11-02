@@ -18,8 +18,8 @@ export function ApplicationHeader({ area, lifecycle, navigation, context, focus,
   const account = lifecycle.account ? (
     <AuthControl
       {...lifecycle.account}
-      onOpenProfile={() => navigation.navigate("/profile")}
-      onOpenAdministration={() => navigation.navigate("/administration")}
+      onOpenProfile={() => runtime.navigate("/profile")}
+      onOpenAdministration={() => runtime.navigate("/administration")}
     />
   ) : null;
   const standardActions = (

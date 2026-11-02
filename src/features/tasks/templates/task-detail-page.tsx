@@ -80,10 +80,11 @@ export function TaskDetailPage({
   });
   const task = controller.data.tasks.find((item) => item.id === taskId) || null;
 
-  const navigate = (href: string) => discardGuard.request(() => {
+  const navigateApproved = (href: string) => {
     controller.setMobileNavOpen(false);
     router.push(href);
-  });
+  };
+  const navigate = (href: string) => discardGuard.request(() => navigateApproved(href));
   const safeReturnHref = safeTaskDetailReturnTo(returnHref) || "/planning";
   const safeReturnLabel = safeReturnHref === "/planning" ? "Zur Planung" : returnLabel;
   const requestReturnNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -117,7 +118,7 @@ export function TaskDetailPage({
       />
       <ApplicationHeader
         area={{ title: "Planung", heading: false }}
-        navigation={{ mobileNavOpen: controller.mobileNavOpen, openMobileNav: () => controller.setMobileNavOpen(true), navigate }}
+        navigation={{ mobileNavOpen: controller.mobileNavOpen, openMobileNav: () => controller.setMobileNavOpen(true), navigate: navigateApproved, requestNavigation: discardGuard.request }}
         lifecycle={{
           planningState: controller.planningState,
           enabled: Boolean(controller.authUser) && controller.protectedDataLoaded,

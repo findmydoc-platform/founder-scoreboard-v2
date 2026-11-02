@@ -3,7 +3,6 @@
 import { Bell, LoaderCircle, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { notificationTarget } from "@/features/notifications/model/notification-target";
 import { formatDate } from "@/lib/display";
@@ -95,9 +94,6 @@ export function NotificationInbox({
                 {notifications.error || "Benachrichtigungen konnten nicht geladen werden."}
               </UiEmptyState>
             ) : items.length ? items.map((event) => {
-              const taskReference = event.entityType.trim().toLowerCase() === "task" && event.entityId
-                ? { id: event.entityId, title: event.title }
-                : null;
               const content = (
                 <>
                   <UiBadge tone={notificationBadgeTone(event.type)} size="xs" className="text-[11px]">
@@ -112,21 +108,17 @@ export function NotificationInbox({
               return (
                 <article key={event.id} className="group rounded-md border border-transparent p-2 hover:border-slate-100 hover:bg-slate-50">
                   <div className="flex items-start justify-between gap-2">
-                    {taskReference ? (
-                      <TaskReferenceLink
-                        task={taskReference}
-                        onOpenTask={onOpen ? () => onOpen(event) : undefined}
-                        showIcon={false}
-                        layout="block"
-                        className="min-w-0 flex-1 text-left hover:no-underline"
-                      >
-                        {content}
-                      </TaskReferenceLink>
-                    ) : (
-                      <button type="button" onClick={() => (onOpen || openHeaderNotificationTarget)(event)} className="min-w-0 flex-1 cursor-pointer text-left">
-                        {content}
-                      </button>
-                    )}
+                    <Link
+                      href={notificationTarget(event).href}
+                      onClick={click => {
+                        if (!onOpen || click.defaultPrevented || click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
+                        click.preventDefault();
+                        onOpen(event);
+                      }}
+                      className="block min-h-11 min-w-0 flex-1 cursor-pointer text-left hover:no-underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:min-h-0"
+                    >
+                      {content}
+                    </Link>
                     {onDismiss && (
                       <button
                         type="button"
@@ -150,9 +142,4 @@ export function NotificationInbox({
       )}
     </div>
   );
-}
-
-function openHeaderNotificationTarget(event: HeaderNotification) {
-  if (typeof window === "undefined") return;
-  window.location.assign(notificationTarget(event).href);
 }
