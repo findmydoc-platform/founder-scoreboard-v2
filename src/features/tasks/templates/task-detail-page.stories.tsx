@@ -211,3 +211,23 @@ export const ActiveAdministratorKeepsAuthorizedAccess: Story = {
     await expect(getRouter().push).toHaveBeenCalledWith("/administration");
   },
 };
+
+export const TabletRailKeepsReleaseNavigationCompact: Story = {
+  globals: { viewport: { value: "tabletRail" } },
+  parameters: { viewport: { options: { tabletRail: { name: "Tablet rail", styles: { width: "1024px", height: "768px" } } } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const release = await canvas.findByRole("link", { name: /Neu auf der Plattform/ });
+    await expect(release).toBeVisible();
+    await expect(release.getBoundingClientRect().width).toBeGreaterThanOrEqual(24);
+    await expect(release.getBoundingClientRect().height).toBeLessThanOrEqual(48);
+    await expect(release).toHaveAttribute("href", "/team/platform-releases/v0.50.0");
+    await userEvent.click(release);
+    await expect(getRouter().push).toHaveBeenCalledTimes(1);
+    await expect(getRouter().push).toHaveBeenCalledWith("/team/platform-releases/v0.50.0");
+  },
+};
+
+export const EpicTabletRailKeepsReleaseNavigationCompact: Story = { ...TabletRailKeepsReleaseNavigationCompact, args: { initialModel: itemPageModel("epic") } };
+export const InitiativeTabletRailKeepsReleaseNavigationCompact: Story = { ...TabletRailKeepsReleaseNavigationCompact, args: { initialModel: itemPageModel("initiative") } };
+export const SubIssueTabletRailKeepsReleaseNavigationCompact: Story = { ...TabletRailKeepsReleaseNavigationCompact, args: { initialModel: itemPageModel("sub_issue") } };

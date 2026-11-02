@@ -43,6 +43,7 @@ function releaseBrowserFixture({ administrator = "denied", calendarFailed = fals
     const path = new URL(String(input), window.location.origin).pathname;
     if (path === "/api/auth/session") return Response.json({ session: { userId: user.id, user: { id: user.id, displayName: "Mara" }, revision: "release-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 } });
     if (path === "/api/planning-header-data") return Response.json({ headerData });
+    if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()] });
     if (path === "/api/administrator-access") {
       if (init?.method === "DELETE") access = accessFor("eligible");
       return Response.json({ administratorAccess: access });
@@ -179,3 +180,18 @@ export const GithubConnectionRecoversAfterServiceReturns: Story = {
     await expect(await dialog.findByRole("button", { name: isLocalLoginSimulationEnabled() ? /GitHub App lokal nicht verfügbar/ : /Vollständig verbunden/ })).toBeVisible();
   },
 };
+
+export const TabletRailKeepsReleaseNavigationCompact: Story = {
+  globals: { viewport: { value: "tabletRail" } },
+  parameters: { viewport: { options: { tabletRail: { name: "Tablet rail", styles: { width: "1024px", height: "768px" } } } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const release = await canvas.findByRole("link", { name: "Neu auf der Plattform: Klinikgruppen im Dashboard vorbereitet" });
+    await expect(release).toBeVisible();
+    await expect(release.getBoundingClientRect().height).toBeLessThanOrEqual(48);
+    await expect(release.getBoundingClientRect().width).toBeGreaterThanOrEqual(24);
+    await expect(release).toHaveAttribute("href", "/team/platform-releases/v0.50.0");
+  },
+};
+
+export const DetailTabletRailKeepsReleaseNavigationCompact: Story = { ...TabletRailKeepsReleaseNavigationCompact, args: { detail: true } };
