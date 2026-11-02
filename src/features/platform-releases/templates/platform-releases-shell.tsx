@@ -31,7 +31,7 @@ type Props = {
 };
 
 export function PlatformReleasesShell({ authUser = null, children, currentPlatformRole, initialCurrentProfile = null, initialAdministratorAccess, headerData, calendarProfiles, returnToArchive = false }: Props) {
-  const owner = usePlanningStateOwner({ initialData: { ...emptyPlanningShellState, profiles: calendarProfiles?.state === "ready" ? calendarProfiles.data : [] }, initialHeaderData: headerData, initialCurrentProfile, initialAdministratorAccess, initialUserId: authUser?.id || "", initialWorkspace: "decision-log" });
+  const owner = usePlanningStateOwner({ initialData: emptyPlanningShellState, initialHeaderData: headerData, initialCurrentProfile, initialAdministratorAccess, initialUserId: authUser?.id || "", initialWorkspace: "decision-log" });
   const { planningState, data } = owner;
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
