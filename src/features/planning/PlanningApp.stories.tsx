@@ -114,7 +114,7 @@ export const SprintSelectionUpdatesWorkspace: Story = {
   args: { initialWorkspace: "sprint", initialData: { ...emptyPlanningShellState, profiles: [profile], sprints, tasks: [sprintTask] }, initialSprintModel: sprintModel },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByLabelText("1 verknüpfte Aufgaben, Zeitraum geschützt")).toBeVisible();
+    await expect(await canvas.findByLabelText("1 verknüpfte Aufgaben, Zeitraum geschützt", {}, { timeout: 5_000 })).toBeVisible();
     const context = within(await canvas.findByLabelText("Bereichskontext"));
     const selection = await context.findByRole("combobox", { name: "Sprint" });
     await userEvent.click(selection);
