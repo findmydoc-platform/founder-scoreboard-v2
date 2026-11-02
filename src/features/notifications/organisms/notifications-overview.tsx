@@ -10,6 +10,7 @@ import { isOperationalLeadRole } from "@/lib/platform";
 import type { NotificationEvent, PlanningShellState, Profile } from "@/lib/types";
 import { UiBadge, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterSegmentedControl } from "@/shared/molecules/filter-toolbar";
+import { ApplicationWorkspaceControls } from "@/features/application-shell/molecules/application-workspace-context";
 
 type PersonalNotificationFilter = "pending" | "done" | "all";
 
@@ -94,7 +95,7 @@ export function NotificationsOverview({
       {readStatus === "unavailable" ? <p role="status" className="text-sm text-slate-600">Benachrichtigungen konnten nicht aktualisiert werden. Der letzte verfügbare Stand bleibt sichtbar.</p> : null}
       {readStatus === "stale" || readStatus === "loading" ? <p role="status" className="text-sm text-slate-600">Der Stand der Benachrichtigungen wird geprüft.</p> : null}
       {completeness === "partial" ? <p className="text-sm text-slate-600">Gezählt werden nur die geladenen Benachrichtigungen.</p> : null}
-      <section className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
+      <section className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
         <span><strong className="text-slate-900">{personalNewCount}</strong> neu</span>
         <span><strong className="text-slate-900">{personalOpenCount}</strong> offen</span>
       </section>
@@ -108,7 +109,9 @@ export function NotificationsOverview({
                 {personalNewCount} neu · {personalOpenCount} offen · {personalDoneCount} erledigt · {personalTodayCount} heute
               </p>
             </div>
+            <ApplicationWorkspaceControls>
             <FilterSegmentedControl
+              className="[&_button]:min-h-11"
               label="Persönliche Hinweise filtern"
               value={personalFilter}
               options={(["pending", "done", "all"] as PersonalNotificationFilter[]).map((filter) => ({
@@ -118,6 +121,7 @@ export function NotificationsOverview({
               }))}
               onChange={setPersonalFilter}
             />
+            </ApplicationWorkspaceControls>
           </div>
 
           <div className="max-h-[calc(100dvh-18rem)] overflow-auto overscroll-contain">

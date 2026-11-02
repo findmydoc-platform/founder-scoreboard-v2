@@ -201,7 +201,7 @@ function DecisionLogLoadedOverview({ entries, fetchedAt }: { entries: NotionDeci
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
         <span>Direkt aus Notion · keine Speicherung</span>
         <span>Zuletzt geladen: {formatFetchedAt(fetchedAt)}</span>
       </div>

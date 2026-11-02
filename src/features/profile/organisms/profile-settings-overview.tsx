@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ApplicationWorkspaceControls } from "@/features/application-shell/molecules/application-workspace-context";
 import { initiativePlanningItems, quickFilters, viewTabs } from "@/features/planning/model/planning-app-model";
 import {
   isPersistedWorkspace,
@@ -179,7 +180,8 @@ function ProfileSettingsForm({
 
   return (
     <div className="min-w-0 pb-24">
-      <div className="mb-4 flex gap-2 overflow-x-auto lg:hidden" aria-label="Profilbereiche">
+      <ApplicationWorkspaceControls>
+      <nav className="flex min-w-0 max-w-full gap-2 overflow-x-auto pb-1" aria-label="Profilbereiche">
         {visibleSections.map((section) => (
           <ProfileSettingsNavButton
             key={section.id}
@@ -189,22 +191,10 @@ function ProfileSettingsForm({
             onClick={() => setActiveSection(section.id)}
           />
         ))}
-      </div>
+      </nav>
+      </ApplicationWorkspaceControls>
 
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="hidden min-w-0 lg:block">
-          <nav className="sticky top-4 rounded-lg border border-slate-200 bg-white p-2 shadow-sm" aria-label="Profileinstellungen">
-            {visibleSections.map((section) => (
-              <ProfileSettingsNavButton
-                key={section.id}
-                active={activeSection === section.id}
-                section={section}
-                onClick={() => setActiveSection(section.id)}
-              />
-            ))}
-          </nav>
-        </aside>
-
+      <div className="grid min-w-0 gap-5">
         <div className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm" data-profile-settings-section={activeSection}>
           {activeSection === "profile" && (
             <ProfileIdentitySection

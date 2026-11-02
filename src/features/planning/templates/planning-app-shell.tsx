@@ -9,6 +9,7 @@ import { PlanningAuthGate } from "@/features/planning/molecules/planning-auth-ga
 import { initiativePlanningItems, quickFilters } from "@/features/planning/model/planning-app-model";
 import { PlanningFilters } from "@/features/planning/organisms/planning-filters";
 import { PlanningHeader } from "@/features/planning/organisms/planning-header";
+import { ApplicationWorkspaceContext } from "@/features/application-shell/molecules/application-workspace-context";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { PlanningWorkspaceRenderer } from "@/features/planning/organisms/planning-workspace-renderer";
 import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
@@ -145,6 +146,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
       ) : null}
 
       <main className={focusModeActive ? "min-w-0" : "app-sidebar-main"}>
+        <ApplicationWorkspaceContext>
         <PlanningHeader controller={controller} administratorAccessController={administratorAccessController} />
 
         <FeatureTourProvider
@@ -195,6 +197,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
           initialBacklogModel={initialBacklogModel}
           initialSprintModel={initialSprintModel}
         />
+        </ApplicationWorkspaceContext>
       </main>
 
       <PlanningOverlayLayer controller={controller} />
