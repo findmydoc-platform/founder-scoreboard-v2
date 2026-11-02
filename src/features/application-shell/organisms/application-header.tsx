@@ -26,7 +26,7 @@ export function ApplicationHeader({ area, lifecycle, navigation, context, focus,
     <>
       <PlanningNotificationFeedback />
       <FmdToolQuickLinks quickLinks={runtime.headerData.quickLinks} open={runtime.quickLinksOpen} onToggle={runtime.toggleQuickLinks} />
-      <HeaderCalendarAction planningState={lifecycle.enabled ? lifecycle.planningState : undefined} events={runtime.headerData.calendarEvents} onOpenTeam={runtime.openTeam} profiles={lifecycle.profiles} />
+      <HeaderCalendarAction planningState={lifecycle.enabled ? lifecycle.planningState : undefined} events={runtime.headerData.calendarEvents} onOpenTeam={runtime.openTeam} profiles={lifecycle.profiles} profilesSlot={lifecycle.calendarProfiles} />
       <NotificationInbox notifications={runtime.headerData.notifications} open={runtime.notificationsOpen} onToggle={runtime.toggleNotifications} onOpen={runtime.openNotification} onDismiss={runtime.dismissNotification} />
       <PlanningHelpMenu />
       <GitHubSyncTrigger {...lifecycle.github} />
