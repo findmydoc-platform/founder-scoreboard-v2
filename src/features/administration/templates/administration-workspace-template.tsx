@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useRef } from "react";
+import { ApplicationWorkspaceControls } from "@/features/application-shell/molecules/application-workspace-context";
 
 export type AdministrationTab = "overview" | "people" | "integrations";
 
@@ -37,7 +38,8 @@ export function AdministrationWorkspaceTemplate({
   };
   return (
     <div className="grid min-w-0" data-tour-id="administration-workspace">
-      <div className="-mx-4 overflow-x-auto border-b border-slate-200 px-4 lg:-mx-6 lg:px-6" role="tablist" aria-label="Administrationsbereiche">
+      <ApplicationWorkspaceControls>
+      <div className="min-w-0 max-w-full overflow-x-auto" role="tablist" aria-label="Administrationsbereiche">
         <div className="flex min-w-max gap-8">
         {tabs.map((tab, index) => {
           const active = tab.id === activeTab;
@@ -49,6 +51,7 @@ export function AdministrationWorkspaceTemplate({
         })}
         </div>
       </div>
+      </ApplicationWorkspaceControls>
       <div id={`administration-panel-${activeTab}`} role="tabpanel" aria-labelledby={`administration-tab-${activeTab}`} className="pt-4" tabIndex={0}>{children}</div>
     </div>
   );

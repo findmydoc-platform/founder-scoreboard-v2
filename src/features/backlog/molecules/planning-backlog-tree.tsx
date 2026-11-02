@@ -382,7 +382,7 @@ export function PlanningBacklogTree({
   return (
     <div className="grid gap-4" data-tour-id="backlog-level-tree">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-600">
           {level === "deliverable"
             ? "Deliverables in einen Sprint ziehen. Ein Klick auf das Item öffnet sein Detail."
             : "Der Pfeil öffnet nur direkte Kinder. Ein Klick auf das Item öffnet sein Detail."}

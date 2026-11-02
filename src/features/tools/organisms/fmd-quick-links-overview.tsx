@@ -32,6 +32,7 @@ import {
   UiPanel,
 } from "@/shared/atoms/ui-primitives";
 import { FilterToolbar, FilterSegmentedControl, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
+import { ApplicationWorkspaceControls } from "@/features/application-shell/molecules/application-workspace-context";
 
 type FmdQuickLinksOverviewProps = {
   planningState: PlanningState;
@@ -151,21 +152,21 @@ export function FmdQuickLinksOverview({
         {view.previews.filter(item => item.phase === "unconfirmed").map(item => <UiNotice key={item.id} tone="warning">{item.fileName}: Ob das Bild hochgeladen wurde, ist noch unklar. Nicht erneut hochladen. <UiButton className="min-h-11" onClick={() => void planningState.checkToolPreview(item.id)}>Upload-Ergebnis prüfen</UiButton>{item.verification === "no-reference" ? <p>Die Prüfung hat nichts erneut hochgeladen. Der Upload bleibt unklar.</p> : null}</UiNotice>)}
         {view.previews.filter(item => item.phase === "uploaded" && item.image && !tools.some(tool => tool.previewImageUrl === item.image!.imageUrl)).map(item => <UiNotice key={item.id}>Vorschaubild hochgeladen: {item.fileName}. Der Link ist damit noch nicht gespeichert.{dialogMode ? <UiButton className="min-h-11" onClick={() => setDraft(current => ({ ...current, previewImageUrl: item.image!.imageUrl, previewImageSource: "manual" }))}>Bild für diesen Entwurf übernehmen</UiButton> : null}</UiNotice>)}
       </div>
-      <UiPanel padding="none" className="overflow-hidden">
-        <h2 className="sr-only">Links und Tools</h2>
-        <div className="grid gap-4 p-4 lg:p-5">
-          <div className="flex justify-end">
+      <ApplicationWorkspaceControls>
             <UiButton
               onClick={openCreateDialog}
               disabled={!createAllowed || pending}
               variant="primary"
               size="md"
+              className="min-h-11"
             >
               <Plus size={16} />
               Link eintragen
             </UiButton>
-          </div>
-
+      </ApplicationWorkspaceControls>
+      <UiPanel padding="none" className="overflow-hidden">
+        <h2 className="sr-only">Links und Tools</h2>
+        {message || !createAllowed ? <div className="grid gap-4 p-4 lg:p-5">
           {message && <UiNotice tone="success" className="font-medium">{message}</UiNotice>}
           {!createAllowed && (
             <UiNotice tone="warning" className="font-medium">
@@ -174,7 +175,7 @@ export function FmdQuickLinksOverview({
                 : "Link-Eintragung braucht ein angemeldetes Teamprofil."}
             </UiNotice>
           )}
-        </div>
+        </div> : null}
 
         <FilterToolbar
           resetLabel="Filter zurücksetzen"

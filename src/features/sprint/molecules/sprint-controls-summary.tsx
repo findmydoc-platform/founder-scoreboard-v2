@@ -4,6 +4,7 @@ import { SprintLockControls } from "./sprint-lock-controls";
 import { Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { ApplicationWorkspaceControls } from "@/features/application-shell/molecules/application-workspace-context";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 import { sprintStatusLabels } from "../model/sprint-editing";
 import { formatDate } from "@/lib/display";
@@ -78,12 +79,13 @@ export function SprintControlsSummary({
     <UiPanel padding="none" className="min-w-0">
       <div className="flex flex-wrap items-end justify-between gap-3 p-4">
         <div className="flex min-w-0 flex-wrap items-end gap-2">
-          <label className="grid min-w-56 gap-1 text-xs font-semibold text-slate-500">
+          <ApplicationWorkspaceControls>
+          <label className="grid w-56 min-w-0 max-w-full gap-1 text-xs font-semibold text-slate-500">
             Sprint
             <CustomSelect
               value={sprint.id}
               onChange={onSelectedSprintChange}
-              className="h-9 text-sm"
+              className="h-11 text-sm"
               options={data.sprints.map((item) => ({
                 value: item.id,
                 label: `${item.name}${provisionalIds.includes(item.id) ? " (unbestätigt)" : ""}`,
@@ -92,6 +94,7 @@ export function SprintControlsSummary({
               }))}
             />
           </label>
+          </ApplicationWorkspaceControls>
           {sprintIsCurrent && (
             <span
               className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600"

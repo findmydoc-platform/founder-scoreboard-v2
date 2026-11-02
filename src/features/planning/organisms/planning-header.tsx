@@ -4,6 +4,7 @@ import { RefreshCw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { ApplicationHeader } from "@/features/application-shell/organisms/application-header";
+import { ApplicationWorkspaceContextOutlet, useApplicationWorkspaceContextAvailable } from "@/features/application-shell/molecules/application-workspace-context";
 import { PlanningContextControls } from "@/features/planning/molecules/planning-context-controls";
 import { TestProfileBanner } from "@/features/planning/molecules/test-profile-banner";
 import { workspaceDescriptions, workspaceLabels } from "@/features/planning/model/planning-app-model";
@@ -15,6 +16,7 @@ import { AdministratorModeIndicator } from "@/features/administrator-access/mole
 
 export function PlanningHeader({ controller, administratorAccessController }: { controller: PlanningAppController; administratorAccessController: AdministratorAccessController }) {
   const router = useRouter();
+  const workspaceContextAvailable = useApplicationWorkspaceContextAvailable();
   const {
     authAvailable, authBusy, authNotice, authUser, data, devProfileId, devRoleSwitchAvailable,
     focusModeActive, githubConnectionState, githubInstallationAvailable,
@@ -56,7 +58,12 @@ export function PlanningHeader({ controller, administratorAccessController }: { 
         github: { count: githubSyncQueue.count, failedCount: githubSyncQueue.failedCount, installationAvailable: githubInstallationAvailable, localMode: isLocalLoginSimulationEnabled(), connectionState: githubConnectionState, open: githubSyncQueueOpen, onOpen: () => setGithubSyncQueueOpen(true) },
       }}
       focus={focusModeAvailable ? { active: focusModeActive, toggle: toggleFocusMode } : undefined}
-      context={controller.filtersAvailable || (controller.headerActions.length > 0 && workspace !== "notifications") ? <PlanningContextControls {...controller} /> : undefined}
+      context={controller.filtersAvailable || controller.headerActions.length > 0 || workspaceContextAvailable ? (
+        <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
+          <ApplicationWorkspaceContextOutlet />
+          {controller.filtersAvailable || controller.headerActions.length > 0 ? <div className={controller.filtersAvailable ? "min-w-0 w-full" : "ml-auto min-w-0 max-w-full"}><PlanningContextControls {...controller} /></div> : null}
+        </div>
+      ) : undefined}
       notices={(
         <>
           {administratorModeIndicator ? (
