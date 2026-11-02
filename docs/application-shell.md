@@ -6,7 +6,7 @@ The application-shell feature owns one global composition for Planning workspace
 
 ## Navigation
 
-`ApplicationNavigation.navigate` performs an already approved departure. Hosts with a dirty editor also supply `requestNavigation(continueNavigation)`, using their existing discard decision. The common runtime requests that decision once and then calls the raw continuation once. Account, Team, Help and Notification Center departures use this runtime.
+`ApplicationNavigation.navigate` performs an already approved departure. Hosts with a dirty editor also supply `requestNavigation(continueNavigation)`, using their existing discard decision. The common runtime requests that decision once. If the host approves, the runtime calls raw navigation once. Staying does not run the continuation. Account, Team, Help and Notification Center departures use this runtime.
 
 Header notifications always resolve through `notificationTarget` to a full page. The discard decision precedes the seen command. Only a saved command continues navigation; rejected, unconfirmed or superseded results do not navigate or replay. Actual links preserve supported queries, anchors and native modified targets. Item cards and lists retain their own detail-panel workflow. Safe detail return handling remains with the host.
 
