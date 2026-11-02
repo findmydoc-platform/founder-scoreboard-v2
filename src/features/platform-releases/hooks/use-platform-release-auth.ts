@@ -29,5 +29,12 @@ export function usePlatformReleaseAuth(initialUserId = "") {
     if (success) window.location.assign("/");
   };
 
-  return { busy, signOut, signedOut };
+  const reconnectGitHub = () => {
+    setBusy(true);
+    const destination = new URL("/api/github-app/connect", window.location.origin);
+    destination.searchParams.set("next", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+    window.location.assign(destination.href);
+  };
+
+  return { busy, reconnectGitHub, signOut, signedOut };
 }

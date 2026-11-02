@@ -15,6 +15,20 @@ const config: StorybookConfig = {
       "@": path.resolve(dirname, "../src"),
       "next/link": fileURLToPath(import.meta.resolve("@storybook/nextjs-vite/link.mock")),
     };
+    viteConfig.plugins ??= [];
+    viteConfig.plugins.push({
+      name: "storybook-public-auth-fixture",
+      enforce: "post",
+      config(configuration) {
+        const authUrl = configuration.define?.["process.env.NEXT_PUBLIC_SUPABASE_URL"];
+        if (authUrl !== undefined && authUrl !== JSON.stringify("")) return;
+        return {
+          define: {
+            "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify("https://supabase.example.test"),
+          },
+        };
+      },
+    });
     viteConfig.optimizeDeps ??= {};
     viteConfig.optimizeDeps.include = [
       ...(viteConfig.optimizeDeps.include || []),

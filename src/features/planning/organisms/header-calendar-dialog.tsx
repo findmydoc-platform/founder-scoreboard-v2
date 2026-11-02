@@ -324,7 +324,7 @@ export function HeaderCalendarDialog({
                   <div className="mt-5 border-t border-slate-100 pt-4">
                     <div className="flex items-center justify-between gap-3">
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Arbeitszeiten</h4>
-                      <span className="text-xs text-slate-400">geplant · keine Live-Präsenz</span>
+                      <span className="text-xs text-slate-500">geplant · keine Live-Präsenz</span>
                     </div>
                     {message ? <UiNotice className="mt-2" tone="warning" size="xs">{calendarWorkweeks.length ? "Aktualisierung verzögert. Zuletzt bestätigte Arbeitszeiten bleiben sichtbar." : message}</UiNotice> : null}
                     {pending && !calendarWorkweeks.length ? <UiEmptyState className="mt-2 px-3 py-4" tone="muted">Arbeitszeiten werden geladen.</UiEmptyState> : null}

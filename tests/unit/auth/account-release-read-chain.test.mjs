@@ -25,6 +25,7 @@ beforeEach(() => {
       if (protocol.state.queryFailure === table) return Response.json({ code: "42P01", message: "Synthetic query failure" }, { status: 400 });
       if (table === "platform_releases") return Response.json([{ version: release.version, summary: release.summary, published_at: release.publishedAt, manifest_digest: release.manifestDigest, manifest: release.manifest }]);
       if (table === "notification_events") return request.method === "PATCH" ? new Response(null, { status: 204 }) : Response.json(url.searchParams.get("entity_type") === "eq.platform_release" ? [{ id: 17, entity_id: release.version, seen_at: null }] : []);
+      if (table === "profiles") return Response.json([{ id: "calendar-profile", name: "Mara", platform_role: "founder", org_role: "Founder", github_login: "mara", weekly_capacity: 40, profile_color: "#2563eb" }], { headers: { "content-range": "0-0/1" } });
       if (["active_tasks", "task_links", "fmd_tools", "founder_events"].includes(table)) return Response.json([]);
       throw new Error("Unexpected synthetic release resource");
     }
@@ -48,6 +49,30 @@ it("admits an existing viewer to bounded human release reads with the original r
   expect(notifications.query.get("recipient_profile_id")).toBe("eq.synthetic-profile");
   expect(notifications.query.get("entity_type")).toBe("eq.platform_release");
   expect(resources.every(resource => resource.credential === "Bearer synthetic-service")).toBe(true);
+});
+
+it("supplies authorized calendar identities without hydrating a Planning workspace", async () => {
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "next/cache": { unstable_cache: load => load } });
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "releases.read" });
+  const header = await permission.account.loadReleaseHeader();
+  expect(header.calendarProfiles).toMatchObject({ state: "ready", data: [{ id: "calendar-profile", name: "Mara", platformRole: "founder", color: "#2563eb" }] });
+});
+
+it("keeps failed calendar identity reads separate from accepted appointment data", async () => {
+  protocol.state.queryFailure = "profiles";
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "next/cache": { unstable_cache: load => load } });
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "releases.read" });
+  const header = await permission.account.loadReleaseHeader();
+  expect(header.calendarProfiles).toEqual({ state: "error", data: [], error: "Kalenderprofile konnten nicht geladen werden." });
+  expect(header.headerData.calendarEvents.state).toBe("ready");
+});
+
+it("withholds calendar identities when the admitted release account is rebound", async () => {
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "releases.read" });
+  protocol.state.rebound = true;
+  expect((await permission.account.loadReleaseHeader()).calendarProfiles).toEqual({ state: "error", data: [], error: "Kein Zugriff auf Kalenderprofile." });
+  expect(resources).toHaveLength(0);
 });
 
 
@@ -123,7 +148,10 @@ it("keeps release headers behind live admission on cache hits and the original t
   expect(resources.filter(resource => resource.table === "fmd_tools")).toHaveLength(1);
   const token = protocol.request().headers.get("authorization").slice(7);
   protocol.state.expireOnCacheHit = JSON.parse(Buffer.from(token.split(".")[1], "base64url")).exp * 1000;
-  expect((await permission.account.loadReleaseHeader()).available).toBe(false);
+  const expired = await permission.account.loadReleaseHeader();
+  expect(expired.available).toBe(false);
+  expect(expired.calendarProfiles.state).toBe("error");
+  expect(expired.calendarProfiles.data).toEqual([]);
 });
 
 

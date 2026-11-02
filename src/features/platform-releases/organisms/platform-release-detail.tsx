@@ -1,7 +1,7 @@
 "use client";
 
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Code2, Download, ExternalLink, MinusCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Code2, Download, ExternalLink, MinusCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
@@ -159,9 +159,8 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
 
   return (
     <div className="mx-auto max-w-[1190px] px-4 py-6 sm:px-8 lg:py-8">
-      <Link href="/team/platform-releases" className="hidden items-center gap-2 text-sm font-semibold text-blue-700 hover:underline sm:inline-flex"><ArrowLeft size={16} aria-hidden="true" />Zurück zu Releases</Link>
-      <div className="mt-7 grid gap-10 lg:grid-cols-[215px_minmax(0,1fr)]">
-        <aside className="hidden border-r border-slate-200 pr-6 lg:block">
+      <div className="grid gap-10 lg:grid-cols-[215px_minmax(0,1fr)]">
+        <aside aria-label="Release-Metadaten" className="hidden border-r border-slate-200 pr-6 lg:block">
           <div className="text-xs font-medium text-slate-500">Version</div>
           <div className="mt-1 text-xl font-semibold text-slate-950">{release.version}</div>
           <div className="mt-7 text-xs font-medium text-slate-500">Veröffentlicht am</div>
