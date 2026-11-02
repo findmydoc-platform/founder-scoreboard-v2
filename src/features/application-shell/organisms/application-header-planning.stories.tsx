@@ -8,6 +8,7 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import { planningTaskRevision } from "@/features/planning/model/planning-revision";
 import { inactiveAdministratorAccess } from "@/features/administrator-access/model/administrator-access";
 import { emptyPlanningHeaderData, readyHeaderSlot } from "@/lib/planning-header-data";
+import { expectApplicationHeader } from "../../../../tests/helpers/application-header-browser-contract";
 import { mockAccountLifecycle } from "../../../../tests/helpers/account-lifecycle-browser-fixture";
 
 const profile = { id: "phone-planning-profile", name: "Mara", platformRole: "ceo" as const, orgRole: "CEO", githubLogin: "phone-planning", weeklyCapacity: 20 };
@@ -77,4 +78,4 @@ export const PhonePlanningKeepsGlobalActions: Story = {
   },
 };
 
-export const ResponsivePlanning: Story = {};
+export const ResponsivePlanning: Story = { play: async ({ canvasElement }) => { await expectApplicationHeader(canvasElement, "Planung"); } };

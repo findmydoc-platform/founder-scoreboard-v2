@@ -16,6 +16,7 @@ import { inactiveAdministratorAccess, sessionAuthority } from "@/features/admini
 import { administrationStoryModel } from "@/features/administration/organisms/administration-workspace.stories";
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
 import { workspaceRoutes } from "./model/workspace-routes";
+import { expectApplicationHeader } from "../../../tests/helpers/application-header-browser-contract";
 
 const profile: Profile = { id: "workspace-member", name: "Mara Beispiel", platformRole: "ceo", orgRole: "CEO", githubLogin: "workspace-member", weeklyCapacity: 40, color: "#2563eb" };
 const user = { id: "workspace-user", email: "mara@example.com" } as User;
@@ -99,6 +100,7 @@ type Story = StoryObj<typeof meta>;
 export const EventCreationFromContext: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Termine & Erinnerungen");
     await expect(await canvas.findByRole("heading", { name: "Termine & Erinnerungen", level: 1 })).toBeVisible();
     await expect(await canvas.findByRole("heading", { name: "Teamtermin" }, { timeout: 5_000 })).toBeVisible();
     const context = within(await canvas.findByLabelText("Bereichskontext"));
@@ -114,6 +116,7 @@ export const SprintSelectionUpdatesWorkspace: Story = {
   args: { initialWorkspace: "sprint", initialData: { ...emptyPlanningShellState, profiles: [profile], sprints, tasks: [sprintTask] }, initialSprintModel: sprintModel },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Sprint & Score");
     await expect(await canvas.findByLabelText("1 verknüpfte Aufgaben, Zeitraum geschützt", {}, { timeout: 5_000 })).toBeVisible();
     const context = within(await canvas.findByLabelText("Bereichskontext"));
     const selection = await context.findByRole("combobox", { name: "Sprint" });
@@ -131,6 +134,7 @@ export const ProfileSectionsKeepDraft: Story = {
   args: { initialWorkspace: "profile", initialData: { ...emptyPlanningShellState, profiles: [profile] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Mein Profil");
     const focus = await canvas.findByRole("textbox", { name: "Fokus" }, { timeout: 5_000 });
     const context = within(await canvas.findByLabelText("Bereichskontext"));
     await userEvent.type(focus, "Mein lokaler Entwurf");
@@ -148,6 +152,7 @@ export const ToolsCreationFromContext: Story = {
   args: { initialWorkspace: "tools", initialData: { ...emptyPlanningShellState, profiles: [profile], fmdTools: [tool] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Links & Tools");
     const context = within(await canvas.findByLabelText("Bereichskontext", {}, { timeout: 5_000 }));
     await userEvent.click(await context.findByRole("button", { name: "Link eintragen" }));
     const dialog = within(await within(document.body).findByRole("dialog", { name: "Link eintragen" }));
@@ -165,6 +170,7 @@ export const NotificationViewSurvivesHeaderRefresh: Story = {
   args: { initialWorkspace: "notifications", initialData: { ...emptyPlanningShellState, profiles: [profile], notificationEvents: [pendingNotification, doneNotification] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Benachrichtigungen");
     const context = within(await canvas.findByLabelText("Bereichskontext", {}, { timeout: 5_000 }));
     await userEvent.click(await context.findByRole("button", { name: /^Erledigt/ }));
     await expect(canvas.getByText("Abgeschlossener Hinweis")).toBeVisible();
@@ -182,6 +188,7 @@ export const DecisionLogRefreshFromContext: Story = {
   args: { initialWorkspace: "decision-log", initialData: { ...emptyPlanningShellState, profiles: [profile] }, initialDecisionLogResult: decisionLog },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Decision Log");
     const context = within(await canvas.findByLabelText("Bereichskontext", {}, { timeout: 5_000 }));
     await userEvent.click(await context.findByRole("button", { name: "Decision Log aktualisieren" }));
     await expect(await canvas.findByText(/Zuletzt geladen: 02\.01\.2099/)).toBeVisible();
@@ -194,6 +201,7 @@ export const AuthorizedAdministrationContext: Story = {
   args: { initialWorkspace: "administration", initialData: { ...emptyPlanningShellState, profiles: [administratorProfile] }, initialCurrentProfile: administratorProfile, initialAdministratorAccess: activeAdministratorAccess },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Administration");
     const context = within(await canvas.findByLabelText("Bereichskontext", {}, { timeout: 5_000 }));
     const tabs = within(await context.findByRole("tablist", { name: "Administrationsbereiche" }));
     await userEvent.click(tabs.getByRole("tab", { name: "Personen & Zugänge" }));
@@ -209,6 +217,7 @@ export const DeniedAdministrationKeepsGlobalHeader: Story = {
   args: { initialWorkspace: "administration", initialData: { ...emptyPlanningShellState, profiles: [administratorProfile] }, initialCurrentProfile: administratorProfile },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Administration");
     await expect(await canvas.findByText("Für Administration ist eine CEO-Sitzung oder ein aktiver Adminzugang erforderlich.", {}, { timeout: 5_000 })).toBeVisible();
     await expect(canvas.queryByLabelText("Bereichskontext")).not.toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "Kalender öffnen" })).toBeVisible();
@@ -246,6 +255,7 @@ export const BacklogFocusPreservesContentFilters: Story = {
   args: { initialWorkspace: "backlog", initialData: { ...emptyPlanningShellState, profiles: [profile], tasks: [sprintTask], sprints }, initialBacklogModel: { revision: "backlog", people: [profile], items: [sprintTask], sprints, commitments: [] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Backlog");
     const search = await canvas.findByRole("searchbox", { name: "Backlog durchsuchen" }, { timeout: 5_000 });
     await userEvent.type(search, "Sprint");
     await expect(within(canvas.getByLabelText("Bereichskontext")).queryByRole("searchbox")).not.toBeInTheDocument();
@@ -264,6 +274,7 @@ export const TeamKeepsContentControlsWithoutEmptyContext: Story = {
   args: { initialWorkspace: "team", initialData: { ...emptyPlanningShellState, profiles: [profile] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Team");
     await expect(await canvas.findByRole("heading", { name: "Team", level: 1 })).toBeVisible();
     await expect(await canvas.findByRole("heading", { name: "Rollen & Vertretung" }, { timeout: 5_000 })).toBeVisible();
     await expect(canvas.queryByLabelText("Bereichskontext")).not.toBeInTheDocument();

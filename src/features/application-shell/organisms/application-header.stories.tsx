@@ -263,6 +263,7 @@ export const PhoneMenusAndFocusRestore: Story = {
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(canvas.getByRole("button", { name: "Account-Menü öffnen" })).toHaveFocus());
     await userEvent.click(more);
+    await waitFor(() => expect(canvas.getByRole("menuitem", { name: "Kuratierte Links" })).toHaveFocus());
     await userEvent.keyboard("{End}");
     await expect(canvas.getByRole("menuitem", { name: /GitHub öffnen/ })).toHaveFocus();
     await userEvent.keyboard("{Home}{Escape}");

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { getRouter } from "@storybook/nextjs-vite/navigation.mock";
 import { TaskDetailPage } from "./task-detail-page";
+import { expectApplicationHeader } from "../../../../tests/helpers/application-header-browser-contract";
 import { itemPageHeaderData, itemPageModel, itemPageProfile, itemPageUser, mockItemPageBrowser } from "../../../../tests/helpers/task-detail-page-browser-fixture";
 
 const meta = {
@@ -21,6 +22,7 @@ type Story = StoryObj<typeof meta>;
 export const GlobalActionsAndItemHeading: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Planung");
     await expect(within(canvas.getByLabelText("Anwendung")).getByText("Planung")).toBeVisible();
     await expect(canvas.getByRole("heading", { name: "Reliable planning", level: 1 })).toBeVisible();
     await expect(canvas.getAllByRole("heading", { level: 1 })).toHaveLength(1);
@@ -43,6 +45,7 @@ export const EpicKeepsStrategicContent: Story = {
   args: { initialModel: itemPageModel("epic") },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Planung");
     await expect(within(canvas.getByLabelText("Anwendung")).getByText("Planung")).toBeVisible();
     await expect(canvas.getByRole("heading", { name: "Reliable planning", level: 1 })).toBeVisible();
     await expect(canvas.getByText("Strategic context")).toBeVisible();
@@ -61,6 +64,7 @@ export const SubIssueKeepsItemProjection: Story = {
   args: { initialModel: itemPageModel("sub_issue") },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Planung");
     await expect(within(canvas.getByLabelText("Anwendung")).getByText("Planung")).toBeVisible();
     await expect(canvas.getByRole("heading", { name: "Reliable planning", level: 1 })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Weitere Item-Aktionen" }));

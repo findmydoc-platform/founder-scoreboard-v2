@@ -2,7 +2,6 @@ import { googleChatDigestEventTypes, notificationEventLabel } from "@/lib/notifi
 import type { ProfileSettingsDraft } from "@/features/profile/model/profile-settings-view-model";
 import { SettingsPane, SettingsRow } from "@/features/profile/molecules/profile-settings-layout";
 import { ToggleSwitch } from "@/shared/atoms/toggle-switch";
-import { classNames } from "@/shared/atoms/ui-primitives";
 
 export function NotificationSettingsSection({
   draft,
@@ -23,7 +22,7 @@ export function NotificationSettingsSection({
         <ToggleSwitch checked={draft.notificationsEnabled} disabled={pending} label="Google-Chat-Hinweise aktiv" onChange={onMasterChange} />
       </SettingsRow>
       <SettingsRow label="Google-Chat-Ereignisse" description="Wähle aus, welche Ereignisse zusätzlich in Google Chat erscheinen." align="start">
-        <div className={classNames("grid gap-2 text-left md:min-w-96", !draft.notificationsEnabled && "opacity-50")}>
+        <div className="grid gap-2 text-left md:min-w-96">
           {googleChatDigestEventTypes.map((eventType) => (
             <div key={eventType} className="flex min-h-10 items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3">
               <span className="min-w-0 truncate text-sm font-semibold text-slate-700">{notificationEventLabel(eventType)}</span>

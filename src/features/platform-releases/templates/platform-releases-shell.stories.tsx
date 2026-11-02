@@ -11,6 +11,7 @@ import { PlatformReleaseArchive } from "../organisms/platform-release-archive";
 import { PlatformReleaseDetail } from "../organisms/platform-release-detail";
 import { releaseStoryFixture } from "../organisms/platform-release-story-fixture";
 import { PlatformReleasesShell } from "./platform-releases-shell";
+import { expectApplicationHeader } from "../../../../tests/helpers/application-header-browser-contract";
 import { mockAccountLifecycle } from "../../../../tests/helpers/account-lifecycle-browser-fixture";
 
 const user: User = { id: "release-user", email: "mara@example.com", user_metadata: { full_name: "Mara" }, app_metadata: {}, aud: "authenticated", created_at: "2026-11-01T00:00:00Z" };
@@ -74,6 +75,7 @@ type Story = StoryObj<typeof meta>;
 export const ArchiveGlobalActions: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Releases");
     await expect(canvas.getByRole("heading", { name: "Releases", level: 1 })).toBeVisible();
     const actions = ["Kuratierte Links", "Kalender öffnen", "Benachrichtigungen", "Hilfe öffnen", /GitHub öffnen/, "Account-Menü öffnen"].map(name => canvas.getByRole("button", { name }));
     for (let index = 1; index < actions.length; index++) await expect(actions[index - 1].compareDocumentPosition(actions[index]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -98,6 +100,7 @@ export const DetailIdentityAndReturn: Story = {
   args: { detail: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectApplicationHeader(canvasElement, "Releases");
     await expect(canvas.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     await expect(within(canvas.getByLabelText("Anwendung")).getByText("Releases", { exact: true })).toBeVisible();
     await expect(canvas.getByRole("heading", { name: "Klinikgruppen im Dashboard vorbereitet", level: 1 })).toBeVisible();
