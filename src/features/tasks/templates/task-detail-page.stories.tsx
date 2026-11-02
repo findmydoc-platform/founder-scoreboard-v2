@@ -185,8 +185,9 @@ export const OrdinaryAccountHasNoAdministratorActions: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
-    await expect(canvas.queryByRole("button", { name: /Adminzugang aktivieren/ })).not.toBeInTheDocument();
-    await expect(canvas.queryByRole("button", { name: "Administration" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("button", { name: "Adminzugang für 60 Minuten aktivieren" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("button", { name: "Adminzugang beenden" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("button", { name: "Personen & Zugänge öffnen" })).not.toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: /Profil/ })).toBeVisible();
   },
 };
