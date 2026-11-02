@@ -28,10 +28,10 @@ export const GlobalActionsAndItemHeading: Story = {
       await expect(canvas.getByRole("button", { name })).toBeVisible();
     }
     await userEvent.click(canvas.getByRole("button", { name: "Kuratierte Links" }));
-    await expect(canvas.getByRole("link", { name: /Team guide/ })).toBeVisible();
+    await expect(within(document.body).getByRole("link", { name: /Team guide/ })).toBeVisible();
     await userEvent.keyboard("{Escape}");
     await userEvent.click(canvas.getByRole("button", { name: "Hilfe öffnen" }));
-    await expect(canvas.getByRole("button", { name: /Geführte Hilfe/ })).toBeVisible();
+    await expect(within(document.body).getByRole("button", { name: /Geführte Hilfe/ })).toBeVisible();
     await userEvent.keyboard("{Escape}");
     await userEvent.click(canvas.getByRole("button", { name: /GitHub öffnen/ }));
     await expect(canvas.getByRole("dialog", { name: "GitHub-Sync" })).toBeVisible();

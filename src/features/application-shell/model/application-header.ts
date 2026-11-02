@@ -2,7 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import type { AuthControl } from "@/features/settings/organisms/auth-control";
 import type { GitHubSyncTrigger } from "@/features/tasks/molecules/github-sync-trigger";
 import type { PlanningState } from "@/features/planning/model/planning-state";
-import type { Profile } from "@/lib/types";
+import type { HeaderDataSlot, Profile } from "@/lib/types";
 
 export type ApplicationNavigation = {
   mobileNavOpen: boolean;
@@ -16,6 +16,7 @@ export type ApplicationHeaderLifecycle = {
   enabled: boolean;
   notificationsWorkspace?: boolean;
   profiles: Profile[];
+  calendarProfiles?: HeaderDataSlot<Profile[]>;
   account?: Omit<ComponentProps<typeof AuthControl>, "onOpenProfile" | "onOpenAdministration" | "variant">;
   github: ComponentProps<typeof GitHubSyncTrigger>;
 };

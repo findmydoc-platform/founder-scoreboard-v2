@@ -296,7 +296,7 @@ test("login error remains usable at supported phone, tablet and desktop viewport
   } finally { await context.close(); }
 }, 120_000);
 
-test.each(["/planning", "/team/platform-releases", `/tasks/${itemPageTaskId}`])("%s consumes server session views, navigates and clears protected UI on global logout", async workspace => {
+test.each(["/planning", "/team/platform-releases", "/team/platform-releases/v1.0.0", `/tasks/${itemPageTaskId}`])("%s consumes server session views, navigates and clears protected UI on global logout", async workspace => {
   itemPageFixture = workspace.startsWith("/tasks/");
   const context = await newBrowserContext();
   const requests: Array<{ path: string; authorization: string | undefined }> = [];
@@ -312,6 +312,14 @@ test.each(["/planning", "/team/platform-releases", `/tasks/${itemPageTaskId}`])(
     expect(await authorizedSession.json()).toMatchObject({ session: { userId: userB, revision: expect.any(String) } });
     const updates = page.getByRole("button", { name: "Was ist neu schließen" });
     await page.addLocatorHandler(updates, async () => { await updates.click(); });
+    if (workspace === "/team/platform-releases/v1.0.0") {
+      await page.getByRole("heading", { name: "findmydoc v1.0.0", level: 1 }).waitFor();
+      await page.getByRole("link", { name: "Zurück zu Releases", exact: true }).click();
+      await page.waitForURL(`${appOrigin}/team/platform-releases`);
+      await page.getByRole("textbox", { name: "Releases durchsuchen" }).waitFor();
+      await page.getByText("Synthetic replacement release", { exact: true }).first().click();
+      await page.waitForURL(`${appOrigin}${workspace}`);
+    }
     await page.getByRole("button", { name: /Account-Menü öffnen/ }).click();
     holdLogout = true;
     const startedLogout = new Promise<void>(resolve => { logoutEntered = resolve; });
@@ -331,6 +339,8 @@ test.each(["/planning", "/team/platform-releases", `/tasks/${itemPageTaskId}`])(
     } else {
       await page.getByRole("status").filter({ hasText: "Zugriff auf die Releases ist gesperrt" }).waitFor();
       expect(await page.getByRole("textbox", { name: "Releases durchsuchen" }).count()).toBe(0);
+      expect(await page.getByText("Synthetic replacement release", { exact: true }).count()).toBe(0);
+      expect(await page.getByRole("link", { name: "Zurück zu Releases", exact: true }).count()).toBe(0);
       expect(await page.getByRole("button", { name: /Account-Menü öffnen/ }).count()).toBe(0);
     }
     // Protected UI clears immediately; server logout is not complete while its response is held.
@@ -339,7 +349,7 @@ test.each(["/planning", "/team/platform-releases", `/tasks/${itemPageTaskId}`])(
     const logout = await checkpoint("global logout HTTP response", completedLogout);
     expect(logout.status()).toBe(200);
     await expect.poll(async () => (await current(context)).status, { timeout: 10_000 }).toBe(401);
-    if (workspace === "/team/platform-releases") await page.waitForURL(`${appOrigin}/planning`);
+    if (workspace.startsWith("/team/platform-releases")) await page.waitForURL(`${appOrigin}/planning`);
     expect(requests.filter(request => request.path.startsWith("/api/")).every(request => !request.authorization)).toBe(true);
     expect(requests.some(request => request.path === "/auth/v1/token" || request.path === "/auth/v1/user")).toBe(false);
   } finally { releaseLogout?.(); holdLogout = false; await context.close(); }
@@ -371,6 +381,49 @@ test("Item mobile main navigation and safe release return preserve or discard th
     await page.waitForURL(`${appOrigin}${returnTo}`);
     expect(await page.getByRole("textbox", { name: "Titel", exact: true }).count()).toBe(0);
     expect(navigations.filter(path => path === "/team/platform-releases/v1.0.0")).toHaveLength(1);
+  } finally { await context.close(); }
+}, 120_000);
+
+test("Item phone help keeps the draft and resumes an explicit tour after approved Planning navigation", async () => {
+  itemPageFixture = true;
+  role = "ceo";
+  const context = await newBrowserContext();
+  try {
+    const page = await context.newPage();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const updates = page.getByRole("button", { name: "Was ist neu schließen" });
+    const destination = `/tasks/${itemPageTaskId}`;
+    await page.goto(`${appOrigin}/auth/login?next=${encodeURIComponent(destination)}`);
+    await page.waitForURL(`${appOrigin}${destination}`);
+    await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+    await page.getByRole("textbox", { name: "Titel", exact: true }).fill("Private help draft");
+    await page.getByRole("button", { name: "Mehr", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Hilfe öffnen" }).click();
+    await page.getByRole("button", { name: /Geführte Hilfe/ }).click();
+    await page.getByRole("button", { name: "Weiter bearbeiten" }).click();
+    expect(await page.getByRole("textbox", { name: "Titel", exact: true }).inputValue()).toBe("Private help draft");
+    expect(page.url()).toBe(`${appOrigin}${destination}`);
+
+    const tourNavigations: string[] = [];
+    page.on("framenavigated", frame => {
+      if (frame !== page.mainFrame()) return;
+      const target = new URL(frame.url());
+      if (target.pathname === "/planning" && target.searchParams.get("help") === "tour") tourNavigations.push(target.searchParams.get("tourId") || "");
+    });
+    // The existing gallery requests its selected tour through this public event.
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("fmd:start-feature-tour", { cancelable: true, detail: { tourId: "team-workweek-v1" } })));
+    await page.getByRole("button", { name: "Änderungen verwerfen" }).click();
+    await page.waitForURL(`${appOrigin}/planning`);
+    await page.getByText("Gemeinsamen Kalender öffnen", { exact: true }).waitFor();
+    expect(await updates.isVisible()).toBe(false);
+    expect(await page.getByRole("button", { name: "Mehr", exact: true, includeHidden: true }).getAttribute("aria-expanded")).toBe("true");
+    expect(tourNavigations).toEqual(["team-workweek-v1"]);
+    expect(await page.getByRole("textbox", { name: "Titel", exact: true }).count()).toBe(0);
+    await page.getByRole("menuitem", { name: "Kalender öffnen" }).waitFor();
+    await page.getByRole("button", { name: "Weiter", exact: true }).click();
+    await page.getByText("Arbeitswoche vergleichen", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Verstanden", exact: true }).click();
+    await expect.poll(() => page.getByRole("button", { name: "Mehr", exact: true }).getAttribute("aria-expanded")).toBe("false");
   } finally { await context.close(); }
 }, 120_000);
 
@@ -473,14 +526,14 @@ test("real browser API transport recovers one marked pre-effect rejection and re
 }, 120_000);
 
 
-test("release workspace clears the previous account before its replacement document or delayed data arrives", async () => {
+test.each(["/team/platform-releases", "/team/platform-releases/v1.0.0"])("release workspace %s clears the previous account before its replacement document or delayed data arrives", async workspace => {
   loginUser = userA;
   const context = await newBrowserContext();
   let releaseDocument: (() => void) | undefined, releaseData: (() => void) | undefined;
   try {
     const page = await context.newPage();
-    await page.goto(`${appOrigin}/auth/login?next=/team/platform-releases`);
-    await page.waitForURL(`${appOrigin}/team/platform-releases`);
+    await page.goto(`${appOrigin}/auth/login?next=${encodeURIComponent(workspace)}`);
+    await page.waitForURL(`${appOrigin}${workspace}`);
     await page.getByText("Synthetic previous account release", { exact: true }).first().waitFor();
     await context.request.get(`${appOrigin}/auth/error`);
     await page.waitForLoadState("networkidle");
@@ -505,7 +558,7 @@ test("release workspace clears the previous account before its replacement docum
     await checkpoint("previous account data request started", dataStarted);
     let documentEntered: () => void;
     const documentStarted = new Promise<void>(resolve => { documentEntered = resolve; });
-    await page.route("**/team/platform-releases", async route => {
+    await page.route(`${appOrigin}${workspace}`, async route => {
       documentEntered(); await heldResponse(release => { releaseDocument = release; }); await route.continue();
     });
     loginUser = userB;

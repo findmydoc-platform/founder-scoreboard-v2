@@ -3,6 +3,7 @@
 import { Bell, LoaderCircle, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { notificationTarget } from "@/features/notifications/model/notification-target";
 import { formatDate } from "@/lib/display";
@@ -25,6 +26,8 @@ export function NotificationInbox({
   onDismiss?: (eventId: number) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useModalDialog<HTMLElement>({ open, onClose: onToggle, manageEnvironment: false, restoreFocusRef: triggerRef });
   const stale = notifications.freshness === "stale";
   const unreadCount = notifications.data.unreadCount;
   const items = notifications.data.items;
@@ -37,21 +40,17 @@ export function NotificationInbox({
       const target = event.target as Node;
       if (!rootRef.current?.contains(target)) onToggle();
     };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onToggle();
-    };
 
     window.addEventListener("pointerdown", closeOnOutside);
-    window.addEventListener("keydown", closeOnEscape);
     return () => {
       window.removeEventListener("pointerdown", closeOnOutside);
-      window.removeEventListener("keydown", closeOnEscape);
     };
   }, [open, onToggle]);
 
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={onToggle}
         aria-expanded={open}
@@ -69,7 +68,7 @@ export function NotificationInbox({
       </button>
 
       {open && (
-        <section className="fixed inset-x-4 top-20 z-50 max-h-[calc(100dvh-6rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-[min(92vw,380px)]">
+        <section ref={dialogRef} tabIndex={-1} role="dialog" aria-label="Benachrichtigungen" className="fixed inset-x-4 top-20 z-50 max-h-[calc(100dvh-6rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-[min(92vw,380px)]">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>

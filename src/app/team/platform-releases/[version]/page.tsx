@@ -32,11 +32,11 @@ export default async function PlatformReleaseDetailPage({ params, searchParams }
     && (permission.profile?.platformRole || null) === (profile?.platformRole || null);
   const [result, header] = permission.ok && sameActor ? await Promise.all([
     permission.account.readReleases(), permission.account.loadReleaseHeader(),
-  ]) : [{ available: false, releases: [] }, { available: false, headerData: emptyPlanningHeaderData }];
+  ]) : [{ available: false, releases: [] }, { available: false, headerData: emptyPlanningHeaderData, calendarProfiles: { state: "error" as const, data: [], error: "Kein Zugriff auf Kalenderprofile." } }];
   const releases = result.releases;
   const headerData = header.headerData;
   const release = releases.find(item => item.version === version) || null;
   if (!release) notFound();
   const { technical } = await searchParams;
-  return <PlatformReleasesShell authUser={auth?.ok ? auth.user : null} currentPlatformRole={profile?.platformRole} headerData={headerData}><PlatformReleaseDetail release={release} technicalInitiallyOpen={technical === "open"} /></PlatformReleasesShell>;
+  return <PlatformReleasesShell authUser={auth?.ok ? auth.user : null} currentPlatformRole={profile?.platformRole} initialCurrentProfile={profile} initialAdministratorAccess={auth?.ok ? auth.authority?.administratorAccess : undefined} headerData={headerData} calendarProfiles={header.calendarProfiles} returnToArchive><PlatformReleaseDetail release={release} technicalInitiallyOpen={technical === "open"} /></PlatformReleasesShell>;
 }
