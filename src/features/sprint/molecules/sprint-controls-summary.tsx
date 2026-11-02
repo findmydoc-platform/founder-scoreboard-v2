@@ -83,7 +83,6 @@ export function SprintControlsSummary({
           <label className="grid w-56 min-w-0 max-w-full gap-1 text-xs font-semibold text-slate-500">
             Sprint
             <CustomSelect
-              aria-label="Sprint auswählen"
               value={sprint.id}
               onChange={onSelectedSprintChange}
               className="h-11 text-sm"

@@ -44,12 +44,13 @@ function WorkspaceNavigation(props: ComponentProps<typeof PlanningApp>) {
     });
     return () => { push.mockReset(); };
   }, []);
-  return <PlanningStateProvider><PlanningApp key={workspace} {...props} initialWorkspace={workspace} /></PlanningStateProvider>;
+  return <PlanningApp key={workspace} {...props} initialWorkspace={workspace} />;
 }
 
 const meta = {
   title: "Planning/Application workspaces",
   component: PlanningApp,
+  decorators: [Story => <PlanningStateProvider><Story /></PlanningStateProvider>],
   parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/events" } } },
   args: {
     initialData: { ...emptyPlanningShellState, profiles: [profile], events: [event] },
@@ -99,6 +100,7 @@ export const EventCreationFromContext: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole("heading", { name: "Termine & Erinnerungen", level: 1 })).toBeVisible();
+    await expect(await canvas.findByRole("heading", { name: "Teamtermin" })).toBeVisible();
     const context = within(await canvas.findByLabelText("Bereichskontext"));
     await userEvent.click(await context.findByRole("button", { name: "Event eintragen" }));
     await userEvent.type(canvas.getByRole("textbox", { name: "Titel" }), "Planungsrunde");
@@ -112,13 +114,13 @@ export const SprintSelectionUpdatesWorkspace: Story = {
   args: { initialWorkspace: "sprint", initialData: { ...emptyPlanningShellState, profiles: [profile], sprints, tasks: [sprintTask] }, initialSprintModel: sprintModel },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expect(await canvas.findByLabelText("1 verknüpfte Aufgaben, Zeitraum geschützt")).toBeVisible();
     const context = within(await canvas.findByLabelText("Bereichskontext"));
-    const selection = await context.findByRole("combobox", { name: "Sprint auswählen" });
-    await expect(canvas.getByLabelText("1 verknüpfte Aufgaben, Zeitraum geschützt")).toBeVisible();
+    const selection = await context.findByRole("combobox", { name: "Sprint" });
     await userEvent.click(selection);
     await userEvent.click(within(document.body).getByRole("option", { name: "Sprint 2" }));
-    await waitFor(() => expect(context.getAllByRole("combobox", { name: "Sprint auswählen" })).toHaveLength(1));
-    await expect(context.getByRole("combobox", { name: "Sprint auswählen" })).toHaveTextContent("Sprint 2");
+    await waitFor(() => expect(context.getAllByRole("combobox", { name: "Sprint" })).toHaveLength(1));
+    await expect(context.getByRole("combobox", { name: "Sprint" })).toHaveTextContent("Sprint 2");
     await expect(canvas.getByText("15. Jan. - 28. Jan.")).toBeVisible();
     await expect(canvas.queryByLabelText("1 verknüpfte Aufgaben, Zeitraum geschützt")).not.toBeInTheDocument();
     await expect(context.queryByRole("combobox", { name: "Status" })).not.toBeInTheDocument();
@@ -129,14 +131,15 @@ export const ProfileSectionsKeepDraft: Story = {
   args: { initialWorkspace: "profile", initialData: { ...emptyPlanningShellState, profiles: [profile] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const focus = await canvas.findByRole("textbox", { name: "Fokus" });
     const context = within(await canvas.findByLabelText("Bereichskontext"));
-    await userEvent.type(await canvas.findByRole("textbox", { name: "Fokus" }), "Mein lokaler Entwurf");
-    await userEvent.click(context.getByRole("button", { name: "Planung", exact: true }));
+    await userEvent.type(focus, "Mein lokaler Entwurf");
+    await userEvent.click(context.getByRole("button", { name: "Planung" }));
     await expect(canvas.getByRole("heading", { name: "Planungs-Defaults" })).toBeVisible();
-    await userEvent.click(context.getByRole("button", { name: "Profil", exact: true }));
+    await userEvent.click(context.getByRole("button", { name: "Profil" }));
     await expect(canvas.getByRole("textbox", { name: "Fokus" })).toHaveValue("Mein lokaler Entwurf");
     await expect(canvas.getByText("Ungespeicherte Änderungen")).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "Speichern", exact: true })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Speichern" })).toBeVisible();
     await expect(context.queryByRole("button", { name: "Speichern" })).not.toBeInTheDocument();
   },
 };
@@ -168,7 +171,7 @@ export const NotificationViewSurvivesHeaderRefresh: Story = {
     await expect(canvas.queryByText("Offener Hinweis")).not.toBeInTheDocument();
     document.dispatchEvent(new Event("visibilitychange"));
     await userEvent.click(canvas.getByRole("button", { name: "Kuratierte Links" }));
-    await expect(await canvas.findByRole("link", { name: /Aktueller Teamleitfaden/ })).toBeVisible();
+    await expect(await within(document.body).findByRole("link", { name: /Aktueller Teamleitfaden/ })).toBeVisible();
     await userEvent.keyboard("{Escape}");
     await expect(context.getByRole("button", { name: /^Erledigt/ })).toHaveAttribute("aria-pressed", "true");
     await expect(canvas.getByText("Abgeschlossener Hinweis")).toBeVisible();
@@ -213,8 +216,8 @@ export const DeniedAdministrationKeepsGlobalHeader: Story = {
     await expect(canvas.queryByRole("button", { name: "Adminzugang für 60 Minuten aktivieren" })).not.toBeInTheDocument();
     await expect(canvas.queryByRole("button", { name: "Adminzugang beenden" })).not.toBeInTheDocument();
     await expect(canvas.queryByRole("button", { name: "Personen & Zugänge öffnen" })).not.toBeInTheDocument();
-    await expect(canvas.queryByRole("button", { name: "Öffnen", exact: true })).not.toBeInTheDocument();
-    await expect(canvas.getByRole("button", { name: "Mein Profil", exact: true })).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "Öffnen" })).not.toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Mein Profil" })).toBeVisible();
   },
 };
 
@@ -224,10 +227,10 @@ export const AccountNavigationReplacesWorkspaceContext: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole("button", { name: "Event eintragen" })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
-    await userEvent.click(canvas.getByRole("button", { name: "Mein Profil", exact: true }));
+    await userEvent.click(canvas.getByRole("button", { name: "Mein Profil" }));
     await expect(await canvas.findByRole("heading", { name: "Mein Profil", level: 1 })).toBeVisible();
     const profileContext = within(await canvas.findByLabelText("Bereichskontext"));
-    await expect(profileContext.getAllByRole("button", { name: "Profil", exact: true })).toHaveLength(1);
+    await expect(profileContext.getAllByRole("button", { name: "Profil" })).toHaveLength(1);
     await expect(canvas.queryByRole("button", { name: "Event eintragen" })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
     await userEvent.click(canvas.getByRole("button", { name: "Personen & Zugänge öffnen" }));
@@ -235,7 +238,7 @@ export const AccountNavigationReplacesWorkspaceContext: Story = {
     await expect(await canvas.findByRole("tabpanel", { name: "Personen & Zugänge" })).toBeVisible();
     const administrationContext = within(await canvas.findByLabelText("Bereichskontext"));
     await expect(administrationContext.getByRole("tablist", { name: "Administrationsbereiche" })).toBeVisible();
-    await expect(administrationContext.queryByRole("button", { name: "Profil", exact: true })).not.toBeInTheDocument();
+    await expect(administrationContext.queryByRole("button", { name: "Profil" })).not.toBeInTheDocument();
   },
 };
 
@@ -246,14 +249,14 @@ export const BacklogFocusPreservesContentFilters: Story = {
     const search = await canvas.findByRole("searchbox", { name: "Backlog durchsuchen" });
     await userEvent.type(search, "Sprint");
     await expect(within(canvas.getByLabelText("Bereichskontext")).queryByRole("searchbox")).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole("button", { name: "Fokusmodus", exact: true }));
+    await userEvent.click(canvas.getByRole("button", { name: "Fokusmodus" }));
     await expect(canvas.getByRole("button", { name: "Account-Menü öffnen" })).toBeVisible();
     await expect(canvas.queryByLabelText("Bereichskontext")).not.toBeInTheDocument();
     await expect(search).toHaveValue("Sprint");
     await userEvent.click(canvas.getByRole("button", { name: "Fokusmodus beenden" }));
     await expect(canvas.getByRole("heading", { name: "Backlog", level: 1 })).toBeVisible();
     await expect(canvas.getByRole("searchbox", { name: "Backlog durchsuchen" })).toHaveValue("Sprint");
-    await expect(canvas.getByRole("button", { name: "Fokusmodus", exact: true })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Fokusmodus" })).toBeVisible();
   },
 };
 
