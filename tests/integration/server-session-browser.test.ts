@@ -48,6 +48,8 @@ async function checkpoint<T>(name: string, operation: Promise<T>): Promise<T> {
   finally { clearTimeout(timer!); }
 }
 let role = "founder", mapped = true, activeAdministrator = false;
+let itemPageFixture = false;
+const itemPageTaskId = "c3333333-3333-4333-8333-333333333333";
 let browserClientCode = "", userCalls = 0, rejectUserAt = 0;
 let permanentAuthDenial = false;
 const cookieBase = "sb-localhost-auth-token";
@@ -57,7 +59,7 @@ let loginUser = userB;
 let sessionSequence = 0;
 let workspaceMode = "legacy", linkingEnforced = false, workspaceLinked = false, loginRecorded = false;
 let linkNonce: string | null = null;
-beforeEach(() => { permanentAuthDenial = false; role = "founder"; mapped = true; activeAdministrator = false; workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
+beforeEach(() => { permanentAuthDenial = false; role = "founder"; mapped = true; activeAdministrator = false; itemPageFixture = false; workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
 function token(userId: string) {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", amr: [{ method: "oauth" }], iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
@@ -126,7 +128,14 @@ beforeAll(async () => {
       const manifest = { schemaVersion: 2, version: "v1.0.0", summary, highlights: [], changes: [], components: [], visuals: [], publishedAt: "2026-10-01T00:00:00Z" };
       send([{ version: "v1.0.0", summary, published_at: manifest.publishedAt, manifest_digest: "synthetic", manifest }]); return;
     }
+    if (itemPageFixture && url.pathname === "/rest/v1/active_tasks") {
+      send(url.searchParams.get("id") === `eq.${itemPageTaskId}` ? { id: itemPageTaskId, title: "Synthetic planning item", task_type: "deliverable", status: "Offen", priority: "P2", assignee: "synthetic-profile", owner: "synthetic-profile", approval_status: "approved", problem_statement: "Preserve local drafts", updated_at: "2026-11-01T12:00:00Z" } : []); return;
+    }
+    if (itemPageFixture && url.pathname === "/rest/v1/projects") {
+      send({ id: "findmydoc-founder-execution", name: "Synthetic project", range_label: "November 2026", review_objection_window_hours: 24 }); return;
+    }
     if (url.pathname === "/rest/v1/profiles") {
+      if (itemPageFixture) { send([{ id: "synthetic-profile", auth_user_id: loginUser, name: "Synthetic Founder", platform_role: role, github_login: "synthetic", weekly_capacity: 40 }]); return; }
       response.writeHead(200, { "content-type": "application/json", "content-range": "*/0" }); response.end("[]"); return;
     }
     if (url.pathname.startsWith("/rest/v1/")) { send([]); return; }
@@ -287,7 +296,8 @@ test("login error remains usable at supported phone, tablet and desktop viewport
   } finally { await context.close(); }
 }, 120_000);
 
-test.each(["/planning", "/team/platform-releases", "/team/platform-releases/v1.0.0"])("%s consumes server session views, navigates and clears protected UI on global logout", async workspace => {
+test.each(["/planning", "/team/platform-releases", "/team/platform-releases/v1.0.0", `/tasks/${itemPageTaskId}`])("%s consumes server session views, navigates and clears protected UI on global logout", async workspace => {
+  itemPageFixture = workspace.startsWith("/tasks/");
   const context = await newBrowserContext();
   const requests: Array<{ path: string; authorization: string | undefined }> = [];
   context.on("request", request => requests.push({ path: new URL(request.url()).pathname, authorization: request.headers().authorization }));
@@ -322,7 +332,11 @@ test.each(["/planning", "/team/platform-releases", "/team/platform-releases/v1.0
       await page.getByRole("heading", { name: "Willkommen zurück" }).waitFor();
       expect(await page.getByRole("button", { name: /Account-Menü öffnen/ }).count()).toBe(0);
     }
-    else {
+    else if (itemPageFixture) {
+      await page.getByLabel("Aufgabendetails werden geladen").waitFor();
+      expect(await page.getByRole("heading", { name: "Synthetic planning item" }).count()).toBe(0);
+      expect(await page.getByRole("button", { name: /Account-Menü öffnen/ }).count()).toBe(0);
+    } else {
       await page.getByRole("status").filter({ hasText: "Zugriff auf die Releases ist gesperrt" }).waitFor();
       expect(await page.getByRole("textbox", { name: "Releases durchsuchen" }).count()).toBe(0);
       expect(await page.getByText("Synthetic replacement release", { exact: true }).count()).toBe(0);
@@ -335,10 +349,39 @@ test.each(["/planning", "/team/platform-releases", "/team/platform-releases/v1.0
     const logout = await checkpoint("global logout HTTP response", completedLogout);
     expect(logout.status()).toBe(200);
     await expect.poll(async () => (await current(context)).status, { timeout: 10_000 }).toBe(401);
-    if (workspace !== "/planning") await page.waitForURL(`${appOrigin}/planning`);
+    if (workspace.startsWith("/team/platform-releases")) await page.waitForURL(`${appOrigin}/planning`);
     expect(requests.filter(request => request.path.startsWith("/api/")).every(request => !request.authorization)).toBe(true);
     expect(requests.some(request => request.path === "/auth/v1/token" || request.path === "/auth/v1/user")).toBe(false);
   } finally { releaseLogout?.(); holdLogout = false; await context.close(); }
+}, 120_000);
+
+test("Item mobile main navigation and safe release return preserve or discard the real editor draft", async () => {
+  itemPageFixture = true;
+  const context = await newBrowserContext();
+  try {
+    const page = await context.newPage();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const returnTo = "/team/platform-releases/v1.0.0?section=planning#release-heading";
+    const destination = `/tasks/${itemPageTaskId}?returnTo=${encodeURIComponent(returnTo)}`;
+    await page.goto(`${appOrigin}/auth/login?next=${encodeURIComponent(destination)}`);
+    await page.waitForURL(`${appOrigin}${destination}`);
+    await page.getByRole("heading", { name: "Synthetic planning item", level: 1 }).waitFor();
+    await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+    await page.getByRole("textbox", { name: "Titel", exact: true }).fill("Unsaved mobile item draft");
+    await page.getByRole("button", { name: "Navigation öffnen" }).click();
+    await page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true }).getByRole("link", { name: "Backlog", exact: true }).click();
+    await page.getByRole("button", { name: "Weiter bearbeiten" }).click();
+    expect(await page.getByRole("textbox", { name: "Titel", exact: true }).inputValue()).toBe("Unsaved mobile item draft");
+    expect(page.url()).toBe(`${appOrigin}${destination}`);
+    await page.getByRole("dialog", { name: "Mobile Navigation", exact: true }).getByRole("button", { name: "Navigation schließen", exact: true }).last().click();
+    await page.getByRole("link", { name: "Zurück zum Release" }).click();
+    const navigations: string[] = [];
+    page.on("framenavigated", frame => { if (frame === page.mainFrame()) navigations.push(new URL(frame.url()).pathname); });
+    await page.getByRole("button", { name: "Änderungen verwerfen" }).click();
+    await page.waitForURL(`${appOrigin}${returnTo}`);
+    expect(await page.getByRole("textbox", { name: "Titel", exact: true }).count()).toBe(0);
+    expect(navigations.filter(path => path === "/team/platform-releases/v1.0.0")).toHaveLength(1);
+  } finally { await context.close(); }
 }, 120_000);
 
 test("Planning polling clears loaded protected state after permanent Auth denial without focus or reload", async () => {

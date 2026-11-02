@@ -13,6 +13,7 @@ const config: StorybookConfig = {
     viteConfig.resolve.alias = {
       ...(viteConfig.resolve.alias as Record<string, string>),
       "@": path.resolve(dirname, "../src"),
+      "next/link": fileURLToPath(import.meta.resolve("@storybook/nextjs-vite/link.mock")),
     };
     viteConfig.optimizeDeps ??= {};
     viteConfig.optimizeDeps.include = [

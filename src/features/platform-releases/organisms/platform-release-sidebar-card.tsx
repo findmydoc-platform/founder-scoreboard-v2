@@ -2,7 +2,7 @@
 
 import { ChevronRight, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore, type MouseEvent } from "react";
 import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
 import { formatReleaseDate, releaseTitle, type PlatformReleaseRecord } from "../model/platform-release-model";
 
@@ -10,26 +10,35 @@ type Props = {
   compact?: boolean;
   mobile?: boolean;
   onNavigate?: () => void;
+  onRequestNavigation?: (href: string) => void;
 };
 
-export function PlatformReleaseSidebarCard({ compact = false, mobile = false, onNavigate }: Props) {
+export function PlatformReleaseSidebarCard({ compact = false, mobile = false, onNavigate, onRequestNavigation }: Props) {
   const planning = usePlanningBusinessState();
   useSyncExternalStore(planning?.subscribe || (() => () => {}), () => planning?.platformReleases().releases || null, () => null);
   const release = planning?.platformReleases().releases[0];
   useEffect(() => { if (planning && !["current", "loading"].includes(planning.platformReleases().readStatus)) void planning.loadPlatformReleases(); }, [planning]);
 
   if (!release) return null;
-  return <PlatformReleaseSidebarCardView release={release} compact={compact} mobile={mobile} onNavigate={onNavigate} />;
+  return <PlatformReleaseSidebarCardView release={release} compact={compact} mobile={mobile} onNavigate={onNavigate} onRequestNavigation={onRequestNavigation} />;
 }
 
-export function PlatformReleaseSidebarCardView({ release, compact = false, mobile = false, onNavigate }: Props & { release: PlatformReleaseRecord }) {
+export function PlatformReleaseSidebarCardView({ release, compact = false, mobile = false, onNavigate, onRequestNavigation }: Props & { release: PlatformReleaseRecord }) {
   const unread = !release.seenAt;
   const href = `/team/platform-releases/${encodeURIComponent(release.version)}`;
+  const requestNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (onRequestNavigation) {
+      event.preventDefault();
+      onRequestNavigation(href);
+    } else if (mobile) onNavigate?.();
+  };
 
   if (compact) {
     return (
       <Link
         href={href}
+        onClick={requestNavigation}
         data-tour-id="current-platform-release"
         title={`Neu auf der Plattform · ${release.version}`}
         aria-label={`Neu auf der Plattform: ${releaseTitle(release)}`}
@@ -45,7 +54,7 @@ export function PlatformReleaseSidebarCardView({ release, compact = false, mobil
     <Link
       href={href}
       data-tour-id="current-platform-release"
-      onClick={mobile ? onNavigate : undefined}
+      onClick={requestNavigation}
       className={mobile
         ? "block rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 text-slate-900"
         : "block rounded-xl border border-blue-100 bg-gradient-to-br from-white to-blue-50 p-3 text-slate-900 shadow-sm transition hover:border-blue-200 hover:shadow"}
