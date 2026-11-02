@@ -100,11 +100,15 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
         title={item.label}
         className={className}
         data-tour-id={`workspace-nav-${item.id}`}
-        onNavigate={onRequestNavigation ? (event) => {
+        onClick={(event) => {
+          if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          if (!onRequestNavigation) {
+            if (variant === "mobile") onMobileClose?.();
+            return;
+          }
           event.preventDefault();
           onRequestNavigation(item.href);
-        } : undefined}
-        onClick={variant === "mobile" && !onRequestNavigation ? onMobileClose : undefined}
+        }}
       >
         {content}
       </Link>
@@ -156,7 +160,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
           {renderNavigationSections("desktop")}
         </nav>
         <div className={`border-t border-slate-100 py-3 ${desktopSidebarExpanded ? "px-3" : "px-2"}`}>
-          <PlatformReleaseSidebarCard compact={!desktopSidebarExpanded} />
+          <PlatformReleaseSidebarCard compact={!desktopSidebarExpanded} onRequestNavigation={onRequestNavigation} />
         </div>
       </aside>
 
@@ -174,7 +178,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
               {renderNavigationSections("mobile")}
             </nav>
             <div className="border-t border-slate-100 p-3">
-              <PlatformReleaseSidebarCard mobile onNavigate={onMobileClose} />
+              <PlatformReleaseSidebarCard mobile onNavigate={onMobileClose} onRequestNavigation={onRequestNavigation} />
             </div>
           </aside>
         </div>
