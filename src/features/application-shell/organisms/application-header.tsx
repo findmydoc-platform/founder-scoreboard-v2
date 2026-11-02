@@ -14,6 +14,7 @@ import type { ApplicationHeaderProps } from "../model/application-header";
 
 export function ApplicationHeader({ area, lifecycle, navigation, context, focus, notices }: ApplicationHeaderProps) {
   const runtime = useApplicationHeaderRuntime(lifecycle, navigation);
+  const Title = area.heading === false ? "p" : "h1";
   const account = lifecycle.account ? (
     <AuthControl
       {...lifecycle.account}
@@ -25,7 +26,7 @@ export function ApplicationHeader({ area, lifecycle, navigation, context, focus,
     <>
       <PlanningNotificationFeedback />
       <FmdToolQuickLinks quickLinks={runtime.headerData.quickLinks} open={runtime.quickLinksOpen} onToggle={runtime.toggleQuickLinks} />
-      <HeaderCalendarAction planningState={lifecycle.enabled ? lifecycle.planningState : undefined} events={runtime.headerData.calendarEvents} onOpenTeam={runtime.openTeam} profiles={lifecycle.profiles} />
+      <HeaderCalendarAction planningState={lifecycle.enabled ? lifecycle.planningState : undefined} events={runtime.headerData.calendarEvents} onOpenTeam={runtime.openTeam} profiles={lifecycle.profiles} profilesSlot={lifecycle.calendarProfiles} />
       <NotificationInbox notifications={runtime.headerData.notifications} open={runtime.notificationsOpen} onToggle={runtime.toggleNotifications} onOpen={runtime.openNotification} onDismiss={runtime.dismissNotification} />
       <PlanningHelpMenu />
       <GitHubSyncTrigger {...lifecycle.github} />
@@ -51,7 +52,7 @@ export function ApplicationHeader({ area, lifecycle, navigation, context, focus,
             ) : null}
             <div className="min-w-0">
               <div className="text-xs font-medium text-slate-500">{focus?.active ? "Fokusmodus" : "FounderOps"}</div>
-              <h1 className={focus?.active ? "truncate text-sm font-semibold text-slate-800" : "truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl"}>{area.title}</h1>
+              <Title className={focus?.active ? "truncate text-sm font-semibold text-slate-800" : "truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl"}>{area.title}</Title>
               {!focus?.active && area.supportingContext ? <p className="mt-1 truncate text-sm font-medium text-slate-600">{area.supportingContext}</p> : null}
               {!focus?.active && area.description ? <p className="mt-1.5 hidden max-w-2xl text-sm leading-6 text-slate-500 sm:block">{area.description}</p> : null}
             </div>

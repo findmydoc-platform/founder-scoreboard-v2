@@ -24,8 +24,8 @@ export default async function PlatformReleasesPage() {
     && (permission.profile?.platformRole || null) === (profile?.platformRole || null);
   const [result, header] = permission.ok && sameActor ? await Promise.all([
     permission.account.readReleases(), permission.account.loadReleaseHeader(),
-  ]) : [{ available: false, releases: [] }, { available: false, headerData: emptyPlanningHeaderData }];
+  ]) : [{ available: false, releases: [] }, { available: false, headerData: emptyPlanningHeaderData, calendarProfiles: { state: "error" as const, data: [], error: "Kein Zugriff auf Kalenderprofile." } }];
   const releases = result.releases;
   const headerData = header.headerData;
-  return <PlatformReleasesShell authUser={auth?.ok ? auth.user : null} currentPlatformRole={profile?.platformRole} headerData={headerData}><PlatformReleaseArchive releases={releases} /></PlatformReleasesShell>;
+  return <PlatformReleasesShell authUser={auth?.ok ? auth.user : null} currentPlatformRole={profile?.platformRole} initialCurrentProfile={profile} initialAdministratorAccess={auth?.ok ? auth.authority?.administratorAccess : undefined} headerData={headerData} calendarProfiles={header.calendarProfiles}><PlatformReleaseArchive releases={releases} /></PlatformReleasesShell>;
 }

@@ -17,13 +17,16 @@ export function HeaderCalendarAction({
   events,
   onOpenTeam,
   profiles,
+  profilesSlot,
 }: {
   planningState?: PlanningState;
   events: HeaderDataSlot<HeaderCalendarEvent[]>;
   onOpenTeam: (editWorkweek?: boolean, week?: string) => void;
   profiles: Profile[];
+  profilesSlot?: HeaderDataSlot<Profile[]>;
 }) {
   const state = useHeaderCalendar({ planningState, onOpenTeam });
+  const identitiesUnavailable = Boolean(profilesSlot && profilesSlot.state !== "ready");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [anchor, setAnchor] = useState<{ right: number; top: number } | null>(null);
   const [desktopPopover, setDesktopPopover] = useState(false);
@@ -75,26 +78,26 @@ export function HeaderCalendarAction({
         <HeaderCalendarDialog
           activeTab={state.activeTab}
           anchor={anchor}
-          calendarWorkweeks={state.calendarWorkweeks}
-          workweeksByDay={state.workweeksByDay}
-          workweekCoverage={state.workweekCoverage}
+          calendarWorkweeks={identitiesUnavailable ? [] : state.calendarWorkweeks}
+          workweeksByDay={identitiesUnavailable ? undefined : state.workweeksByDay}
+          workweekCoverage={identitiesUnavailable ? "none" : state.workweekCoverage}
           desktopPopover={desktopPopover}
           eventSlot={events}
-          message={state.message}
+          message={profilesSlot?.state === "error" ? profilesSlot.error || "Kalenderprofile konnten nicht geladen werden." : state.message}
           now={state.now}
           onActiveTabChange={state.setActiveTab}
           onClose={state.closeCalendar}
           onOpenTeam={state.openTeamWorkspace}
           onSelectedDateChange={state.setSelectedDate}
           onViewMonthChange={state.setViewMonth}
-          pending={state.pending}
-          profiles={profiles}
+          pending={state.pending || profilesSlot?.state === "loading" || profilesSlot?.state === "idle"}
+          profiles={profilesSlot?.state === "ready" ? profilesSlot.data : identitiesUnavailable ? [] : profiles}
           restoreFocusRef={triggerRef}
           selectedDate={state.selectedDate}
           showWorkweek={Boolean(planningState)}
           viewMonth={state.viewMonth}
           workweekDateKey={state.workweekReferenceDate}
-          workweeks={state.workweeks}
+          workweeks={identitiesUnavailable ? [] : state.workweeks}
         />,
         document.body,
       ) : null}
