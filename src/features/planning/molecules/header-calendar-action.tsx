@@ -1,16 +1,12 @@
 "use client";
 
 import { CalendarDays } from "lucide-react";
-import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { HeaderCalendarDialog } from "../organisms/header-calendar-dialog";
 import { useHeaderCalendar } from "../hooks/use-header-calendar";
 import type { PlanningState } from "../model/planning-state";
 import type { HeaderCalendarEvent, HeaderDataSlot, Profile } from "@/lib/types";
-
-const HeaderCalendarDialog = dynamic(() =>
-  import("../organisms/header-calendar-dialog").then((module) => module.HeaderCalendarDialog),
-);
 
 export function HeaderCalendarAction({
   planningState,
