@@ -57,7 +57,7 @@ async function create(canvas: ReturnType<typeof within>) {
 }
 export const ConfirmedCreateUpdatesRealHeaderQuicklinks: Story = { args: { scenario: "saved" }, play: async ({ canvasElement }) => {
   const canvas = within(canvasElement), dialog = await create(canvas); await userEvent.click(dialog.getByRole("switch", { name: /In kuratierte Links aufnehmen/ })); await userEvent.click(dialog.getByRole("button", { name: "Eintragen" }));
-  await expect(await canvas.findByRole("heading", { name: "Mein Werkzeug" })).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "Kuratierte Links" })); const header = within(canvas.getByRole("dialog", { name: "Kuratierte Links" })); await expect(header.getByRole("link", { name: /Mein Werkzeug/ })).toBeVisible();
+  await expect(await canvas.findByRole("heading", { name: "Mein Werkzeug" })).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "Kuratierte Links" })); const header = within(within(document.body).getByRole("dialog", { name: "Kuratierte Links" })); await expect(header.getByRole("link", { name: /Mein Werkzeug/ })).toBeVisible();
 } };
 export const ConfirmedUploadSurvivesRejectedToolAndKeepsLocalDraft: Story = { args: { scenario: "rejected" }, play: async ({ canvasElement }) => {
   const canvas = within(canvasElement), dialog = await create(canvas); const input = canvasElement.querySelector('input[type="file"]') as HTMLInputElement;
