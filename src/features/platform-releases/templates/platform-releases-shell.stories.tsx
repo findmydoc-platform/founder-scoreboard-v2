@@ -82,10 +82,10 @@ export const ArchiveGlobalActions: Story = {
     await expect(await within(canvas.getByRole("dialog", { name: "GitHub-Sync" })).findByRole("button", { name: isLocalLoginSimulationEnabled() ? /GitHub App lokal nicht verfügbar/ : /Vollständig verbunden/ })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "GitHub schließen" }));
     await userEvent.click(canvas.getByRole("button", { name: "Kuratierte Links" }));
-    await expect(canvas.getByRole("link", { name: /Team guide/ })).toBeVisible();
+    await expect(within(document.body).getByRole("link", { name: /Team guide/ })).toBeVisible();
     await userEvent.keyboard("{Escape}");
     await userEvent.click(canvas.getByRole("button", { name: "Hilfe öffnen" }));
-    await expect(canvas.getByRole("button", { name: /Geführte Hilfe/ })).toBeVisible();
+    await expect(within(document.body).getByRole("button", { name: /Geführte Hilfe/ })).toBeVisible();
     await userEvent.keyboard("{Escape}");
     await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
     await expect(canvas.queryByRole("button", { name: "Adminzugang für 60 Minuten aktivieren" })).not.toBeInTheDocument();

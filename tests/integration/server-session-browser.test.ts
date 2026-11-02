@@ -384,6 +384,49 @@ test("Item mobile main navigation and safe release return preserve or discard th
   } finally { await context.close(); }
 }, 120_000);
 
+test("Item phone help keeps the draft and resumes an explicit tour after approved Planning navigation", async () => {
+  itemPageFixture = true;
+  role = "ceo";
+  const context = await newBrowserContext();
+  try {
+    const page = await context.newPage();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const updates = page.getByRole("button", { name: "Was ist neu schließen" });
+    const destination = `/tasks/${itemPageTaskId}`;
+    await page.goto(`${appOrigin}/auth/login?next=${encodeURIComponent(destination)}`);
+    await page.waitForURL(`${appOrigin}${destination}`);
+    await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+    await page.getByRole("textbox", { name: "Titel", exact: true }).fill("Private help draft");
+    await page.getByRole("button", { name: "Mehr", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Hilfe öffnen" }).click();
+    await page.getByRole("button", { name: /Geführte Hilfe/ }).click();
+    await page.getByRole("button", { name: "Weiter bearbeiten" }).click();
+    expect(await page.getByRole("textbox", { name: "Titel", exact: true }).inputValue()).toBe("Private help draft");
+    expect(page.url()).toBe(`${appOrigin}${destination}`);
+
+    const tourNavigations: string[] = [];
+    page.on("framenavigated", frame => {
+      if (frame !== page.mainFrame()) return;
+      const target = new URL(frame.url());
+      if (target.pathname === "/planning" && target.searchParams.get("help") === "tour") tourNavigations.push(target.searchParams.get("tourId") || "");
+    });
+    // The existing gallery requests its selected tour through this public event.
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("fmd:start-feature-tour", { cancelable: true, detail: { tourId: "team-workweek-v1" } })));
+    await page.getByRole("button", { name: "Änderungen verwerfen" }).click();
+    await page.waitForURL(`${appOrigin}/planning`);
+    await page.getByText("Gemeinsamen Kalender öffnen", { exact: true }).waitFor();
+    expect(await updates.isVisible()).toBe(false);
+    expect(await page.getByRole("button", { name: "Mehr", exact: true, includeHidden: true }).getAttribute("aria-expanded")).toBe("true");
+    expect(tourNavigations).toEqual(["team-workweek-v1"]);
+    expect(await page.getByRole("textbox", { name: "Titel", exact: true }).count()).toBe(0);
+    await page.getByRole("menuitem", { name: "Kalender öffnen" }).waitFor();
+    await page.getByRole("button", { name: "Weiter", exact: true }).click();
+    await page.getByText("Arbeitswoche vergleichen", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Verstanden", exact: true }).click();
+    await expect.poll(() => page.getByRole("button", { name: "Mehr", exact: true }).getAttribute("aria-expanded")).toBe("false");
+  } finally { await context.close(); }
+}, 120_000);
+
 test("Planning polling clears loaded protected state after permanent Auth denial without focus or reload", async () => {
   const context = await newBrowserContext();
   try {

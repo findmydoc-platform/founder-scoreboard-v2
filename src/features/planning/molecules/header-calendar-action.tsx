@@ -1,24 +1,24 @@
 "use client";
 
 import { CalendarDays } from "lucide-react";
-import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { HeaderCalendarDialog } from "../organisms/header-calendar-dialog";
 import { useHeaderCalendar } from "../hooks/use-header-calendar";
 import type { PlanningState } from "../model/planning-state";
 import type { HeaderCalendarEvent, HeaderDataSlot, Profile } from "@/lib/types";
-
-const HeaderCalendarDialog = dynamic(() =>
-  import("../organisms/header-calendar-dialog").then((module) => module.HeaderCalendarDialog),
-);
 
 export function HeaderCalendarAction({
   planningState,
   events,
   onOpenTeam,
   profiles,
+  menuItem = false,
+  restoreFocusRef,
   profilesSlot,
 }: {
+  menuItem?: boolean;
+  restoreFocusRef?: RefObject<HTMLButtonElement | null>;
   planningState?: PlanningState;
   events: HeaderDataSlot<HeaderCalendarEvent[]>;
   onOpenTeam: (editWorkweek?: boolean, week?: string) => void;
@@ -67,12 +67,13 @@ export function HeaderCalendarAction({
           updateAnchor();
           state.openCalendar();
         }}
+        role={menuItem ? "menuitem" : undefined}
         aria-haspopup="dialog"
         aria-expanded={state.open}
         aria-label="Kalender öffnen"
-        className="relative grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
+        className={menuItem ? "flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500" : "relative grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"}
       >
-        <CalendarDays size={16} aria-hidden="true" />
+        <CalendarDays size={16} aria-hidden="true" />{menuItem ? <span>Kalender</span> : null}
       </button>
       {state.open && typeof document !== "undefined" ? createPortal(
         <HeaderCalendarDialog
@@ -92,7 +93,7 @@ export function HeaderCalendarAction({
           onViewMonthChange={state.setViewMonth}
           pending={state.pending || profilesSlot?.state === "loading" || profilesSlot?.state === "idle"}
           profiles={profilesSlot?.state === "ready" ? profilesSlot.data : identitiesUnavailable ? [] : profiles}
-          restoreFocusRef={triggerRef}
+          restoreFocusRef={restoreFocusRef || triggerRef}
           selectedDate={state.selectedDate}
           showWorkweek={Boolean(planningState)}
           viewMonth={state.viewMonth}

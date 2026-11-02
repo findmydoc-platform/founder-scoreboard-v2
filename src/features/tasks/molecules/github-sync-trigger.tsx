@@ -4,6 +4,7 @@ import Image from "next/image";
 import type { GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
 
 export function GitHubSyncTrigger({
+  menuItem = false,
   count,
   failedCount,
   installationAvailable,
@@ -12,6 +13,7 @@ export function GitHubSyncTrigger({
   open,
   onOpen,
 }: {
+  menuItem?: boolean;
   count: number;
   failedCount: number;
   installationAvailable: boolean;
@@ -49,14 +51,17 @@ export function GitHubSyncTrigger({
   return (
     <button
       type="button"
+      role={menuItem ? "menuitem" : undefined}
+      aria-haspopup="dialog"
       data-tour-id="github-sync-trigger"
       onClick={onOpen}
       aria-expanded={open}
       aria-label={`GitHub öffnen, ${count} ${count === 1 ? "Aktion" : "Aktionen"}, ${statusText}`}
       title="GitHub"
-      className="relative grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-950 transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+      className={menuItem ? "relative flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500" : "relative grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-950 transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"}
     >
       <Image src="/github-mark.svg" width={19} height={19} alt="" aria-hidden="true" />
+      {menuItem ? <span>GitHub</span> : null}
       <span className={`absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${statusDotClass}`} aria-hidden="true" />
       {count > 0 && (
         <span className={`absolute -right-2 -top-2 min-w-5 rounded-full border px-1.5 py-0.5 text-[10px] font-bold leading-none shadow-sm ${badgeClass}`} aria-hidden="true">

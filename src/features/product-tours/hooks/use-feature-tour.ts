@@ -78,6 +78,8 @@ function findVisibleTourElement(selector: string) {
 }
 
 function waitForElement(selector: string, timeoutMs = 8000) {
+  window.dispatchEvent(new CustomEvent("fmd:reveal-header-action", { detail: { selector } }));
+  if (selector === "[data-tour-id='product-updates-menu-link']") window.dispatchEvent(new CustomEvent("fmd:open-help-menu"));
   const existing = findVisibleTourElement(selector);
   if (existing) return Promise.resolve(existing);
 
@@ -93,7 +95,7 @@ function waitForElement(selector: string, timeoutMs = 8000) {
       observer.disconnect();
       resolve(element);
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
   });
 }
 
@@ -160,6 +162,7 @@ export function useFeatureTour({
 
   useEffect(() => {
     const startFeatureTour = (event: Event) => {
+      event.preventDefault();
       const detail = event instanceof CustomEvent ? event.detail as { tourId?: unknown } | undefined : undefined;
       const explicitTourId = typeof detail?.tourId === "string" ? detail.tourId : "";
       const selectedTour: FeatureTourDefinition | undefined = explicitTourId
@@ -352,16 +355,6 @@ export function useFeatureTour({
         }
       }
 
-      if (startingStepIndex === 0 && activeTour.openHelpMenu) {
-        window.dispatchEvent(new CustomEvent("fmd:open-help-menu"));
-        const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
-        if (!runIsActive()) return;
-        if (!menuItem) {
-          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
-          return;
-        }
-      }
-
       if (startingStepIndex === 0 && activeTour.openProfileProcessSettings) {
         if (!(trigger instanceof HTMLElement)) {
           failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
@@ -399,6 +392,7 @@ export function useFeatureTour({
       const finishTour = () => {
         if (tourFinished) return;
         tourFinished = true;
+        window.dispatchEvent(new CustomEvent("fmd:close-header-actions"));
         if (guideOwner?.isConnected) {
           guideOwner.removeAttribute("data-active-feature-guide");
           const target = ownerFocus?.isConnected ? ownerFocus : guideOwner.querySelector<HTMLElement>("button:not([disabled]):not([tabindex='-1'])");
@@ -419,10 +413,10 @@ export function useFeatureTour({
         showProgress: true,
         stagePadding: 6,
         stageRadius: 8,
-        onDestroyStarted: activeTour.openWorkweekEditor ? (_element, _step, options) => {
+        onDestroyStarted: (_element, _step, options) => {
           options.driver.destroy();
           finishTour();
-        } : undefined,
+        },
         onDestroyed: finishTour,
         steps: tourSteps.map((step, index) => {
           const stepIndex = startingStepIndex + index;
@@ -452,27 +446,23 @@ export function useFeatureTour({
             },
             onDoneClick: (_element, _step, opts) => {
               opts.driver.destroy();
-              if (activeTour.openWorkweekEditor) finishTour();
+              finishTour();
               if (activeTour.doneWorkspace) {
                 setWorkspace(activeTour.doneWorkspace);
               }
             },
             onNextClick: (_element, _step, opts) => {
               const transition = activeTour.stepTransitions?.[stepIndex];
-              if (!transition) {
-                opts.driver.moveNext();
-                return;
-              }
               if (stepTransitionPending) return;
               stepTransitionPending = true;
               void (async () => {
                 const nextStepIndex = stepIndex + 1;
-                const movesWorkspace = Boolean(transition.workspace && transition.workspace !== workspace);
+                const movesWorkspace = Boolean(transition?.workspace && transition.workspace !== workspace);
                 if (movesWorkspace) {
                   const resumeStored = persistFeatureTourResume({
                     tourId: activeTour.id,
                     stepIndex: nextStepIndex,
-                    ...(transition.view ? { view: transition.view } : {}),
+                    ...(transition?.view ? { view: transition.view } : {}),
                   });
                   if (!resumeStored) {
                     opts.driver.destroy();
@@ -480,14 +470,14 @@ export function useFeatureTour({
                     return;
                   }
                   opts.driver.destroy();
-                  setWorkspace(transition.workspace!);
+                  setWorkspace(transition!.workspace!);
                   return;
                 }
-                if (transition.view) setView(transition.view);
+                if (transition?.view) setView(transition.view);
                 const nextStep = activeTour.steps[nextStepIndex];
                 const nextSelector = typeof nextStep?.element === "string" ? nextStep.element : "";
-                const target = nextSelector ? await waitForElement(nextSelector) : null;
-                if (!runIsActive()) return;
+                const target = nextSelector ? await waitForElement(nextSelector) : true;
+                if (!opts.driver.isActive()) return;
                 if (!target) {
                   opts.driver.destroy();
                   failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
