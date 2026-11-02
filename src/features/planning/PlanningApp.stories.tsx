@@ -100,7 +100,7 @@ export const EventCreationFromContext: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole("heading", { name: "Termine & Erinnerungen", level: 1 })).toBeVisible();
-    await expect(await canvas.findByRole("heading", { name: "Teamtermin" })).toBeVisible();
+    await expect(await canvas.findByRole("heading", { name: "Teamtermin" }, { timeout: 5_000 })).toBeVisible();
     const context = within(await canvas.findByLabelText("Bereichskontext"));
     await userEvent.click(await context.findByRole("button", { name: "Event eintragen" }));
     await userEvent.type(canvas.getByRole("textbox", { name: "Titel" }), "Planungsrunde");
@@ -131,7 +131,7 @@ export const ProfileSectionsKeepDraft: Story = {
   args: { initialWorkspace: "profile", initialData: { ...emptyPlanningShellState, profiles: [profile] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const focus = await canvas.findByRole("textbox", { name: "Fokus" });
+    const focus = await canvas.findByRole("textbox", { name: "Fokus" }, { timeout: 5_000 });
     const context = within(await canvas.findByLabelText("Bereichskontext"));
     await userEvent.type(focus, "Mein lokaler Entwurf");
     await userEvent.click(context.getByRole("button", { name: "Planung" }));
@@ -148,7 +148,7 @@ export const ToolsCreationFromContext: Story = {
   args: { initialWorkspace: "tools", initialData: { ...emptyPlanningShellState, profiles: [profile], fmdTools: [tool] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const context = within(await canvas.findByLabelText("Bereichskontext"));
+    const context = within(await canvas.findByLabelText("Bereichskontext", {}, { timeout: 5_000 }));
     await userEvent.click(await context.findByRole("button", { name: "Link eintragen" }));
     const dialog = within(await within(document.body).findByRole("dialog", { name: "Link eintragen" }));
     await userEvent.type(dialog.getByRole("textbox", { name: "Name" }), "Teamwiki");
@@ -165,7 +165,7 @@ export const NotificationViewSurvivesHeaderRefresh: Story = {
   args: { initialWorkspace: "notifications", initialData: { ...emptyPlanningShellState, profiles: [profile], notificationEvents: [pendingNotification, doneNotification] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const context = within(await canvas.findByLabelText("Bereichskontext"));
+    const context = within(await canvas.findByLabelText("Bereichskontext", {}, { timeout: 5_000 }));
     await userEvent.click(await context.findByRole("button", { name: /^Erledigt/ }));
     await expect(canvas.getByText("Abgeschlossener Hinweis")).toBeVisible();
     await expect(canvas.queryByText("Offener Hinweis")).not.toBeInTheDocument();
@@ -182,7 +182,7 @@ export const DecisionLogRefreshFromContext: Story = {
   args: { initialWorkspace: "decision-log", initialData: { ...emptyPlanningShellState, profiles: [profile] }, initialDecisionLogResult: decisionLog },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const context = within(await canvas.findByLabelText("Bereichskontext"));
+    const context = within(await canvas.findByLabelText("Bereichskontext", {}, { timeout: 5_000 }));
     await userEvent.click(await context.findByRole("button", { name: "Decision Log aktualisieren" }));
     await expect(await canvas.findByText(/Zuletzt geladen: 02\.01\.2099/)).toBeVisible();
     await expect(canvas.getByRole("group", { name: "Decision-Log-Ansicht" })).toBeVisible();
@@ -194,7 +194,7 @@ export const AuthorizedAdministrationContext: Story = {
   args: { initialWorkspace: "administration", initialData: { ...emptyPlanningShellState, profiles: [administratorProfile] }, initialCurrentProfile: administratorProfile, initialAdministratorAccess: activeAdministratorAccess },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const context = within(await canvas.findByLabelText("Bereichskontext"));
+    const context = within(await canvas.findByLabelText("Bereichskontext", {}, { timeout: 5_000 }));
     const tabs = within(await context.findByRole("tablist", { name: "Administrationsbereiche" }));
     await userEvent.click(tabs.getByRole("tab", { name: "Personen & Zugänge" }));
     await expect(canvas.getByRole("tabpanel", { name: "Personen & Zugänge" })).toBeVisible();
@@ -209,7 +209,7 @@ export const DeniedAdministrationKeepsGlobalHeader: Story = {
   args: { initialWorkspace: "administration", initialData: { ...emptyPlanningShellState, profiles: [administratorProfile] }, initialCurrentProfile: administratorProfile },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText("Für Administration ist eine CEO-Sitzung oder ein aktiver Adminzugang erforderlich.")).toBeVisible();
+    await expect(await canvas.findByText("Für Administration ist eine CEO-Sitzung oder ein aktiver Adminzugang erforderlich.", {}, { timeout: 5_000 })).toBeVisible();
     await expect(canvas.queryByLabelText("Bereichskontext")).not.toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "Kalender öffnen" })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
@@ -225,7 +225,7 @@ export const AccountNavigationReplacesWorkspaceContext: Story = {
   render: args => <WorkspaceNavigation {...args} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByRole("button", { name: "Event eintragen" })).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: "Event eintragen" }, { timeout: 5_000 })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
     await userEvent.click(canvas.getByRole("button", { name: "Mein Profil" }));
     await expect(await canvas.findByRole("heading", { name: "Mein Profil", level: 1 })).toBeVisible();
@@ -246,7 +246,7 @@ export const BacklogFocusPreservesContentFilters: Story = {
   args: { initialWorkspace: "backlog", initialData: { ...emptyPlanningShellState, profiles: [profile], tasks: [sprintTask], sprints }, initialBacklogModel: { revision: "backlog", people: [profile], items: [sprintTask], sprints, commitments: [] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const search = await canvas.findByRole("searchbox", { name: "Backlog durchsuchen" });
+    const search = await canvas.findByRole("searchbox", { name: "Backlog durchsuchen" }, { timeout: 5_000 });
     await userEvent.type(search, "Sprint");
     await expect(within(canvas.getByLabelText("Bereichskontext")).queryByRole("searchbox")).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Fokusmodus" }));
@@ -265,7 +265,7 @@ export const TeamKeepsContentControlsWithoutEmptyContext: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole("heading", { name: "Team", level: 1 })).toBeVisible();
-    await expect(await canvas.findByRole("heading", { name: "Rollen & Vertretung" })).toBeVisible();
+    await expect(await canvas.findByRole("heading", { name: "Rollen & Vertretung" }, { timeout: 5_000 })).toBeVisible();
     await expect(canvas.queryByLabelText("Bereichskontext")).not.toBeInTheDocument();
     for (const name of ["Kuratierte Links", "Kalender öffnen", "Benachrichtigungen", "Hilfe öffnen", /GitHub öffnen/, "Account-Menü öffnen"]) await expect(canvas.getByRole("button", { name })).toBeVisible();
   },

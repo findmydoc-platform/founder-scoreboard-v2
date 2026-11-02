@@ -83,6 +83,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const Inbox: Story = {};
+
 export const LoadedPlanningItemOpensFullPage: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
