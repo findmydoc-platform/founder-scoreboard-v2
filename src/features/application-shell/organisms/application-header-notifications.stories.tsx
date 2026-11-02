@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { getRouter } from "@storybook/nextjs-vite/navigation.mock";
 import { PlanningApp } from "@/features/planning/PlanningApp";
+import { productUpdates } from "@/features/product-updates/model/product-update-registry";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { taskDetailModelToPlanningShellState } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { readyHeaderSlot } from "@/lib/planning-header-data";
@@ -19,15 +20,18 @@ function notificationHeader(targetPath = "") {
   return { ...headerData, notifications: readyHeaderSlot({ unreadCount: 1, items: [{ ...notification, targetPath }] }) };
 }
 
-function NotificationPlanningPage({ host = "planning", targetPath = "" }: { host?: "planning" | "item"; targetPath?: string; outcome?: "saved" | "unconfirmed" }) {
+let completeNotificationResponse: (() => void) | undefined;
+
+function NotificationPlanningPage({ host = "planning", targetPath = "", outcome, loaded = true }: { host?: "planning" | "item"; targetPath?: string; outcome?: "saved" | "rejected" | "unconfirmed" | "delayed"; loaded?: boolean }) {
   const pageHeader = notificationHeader(targetPath);
   if (host === "item") return <TaskDetailPage taskId="item-page-task" initialModel={itemPageModel()} headerData={pageHeader}
     source="supabase" authRequired initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} />;
-  return <PlanningApp
-    initialData={taskDetailModelToPlanningShellState(itemPageModel())} initialHeaderData={pageHeader}
+  const data = taskDetailModelToPlanningShellState(itemPageModel());
+  return <><PlanningApp
+    initialData={loaded ? data : { ...data, tasks: [] }} initialHeaderData={pageHeader}
     initialWorkspace="planning" source="supabase" authRequired initialAuthUser={itemPageUser}
     initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded
-  />;
+  />{outcome === "delayed" ? <button type="button" onClick={() => completeNotificationResponse?.()}>Complete notification response</button> : null}</>;
 }
 
 let statusActions: string[] = [];
@@ -35,16 +39,38 @@ const meta = {
   title: "Application shell/Notifications",
   component: NotificationPlanningPage,
   parameters: { layout: "fullscreen", nextjs: { appDirectory: true } },
-  beforeEach: ({ args }) => {
+  beforeEach: async ({ args }) => {
     statusActions = [];
-    return mockItemPageBrowser({ headerData: notificationHeader(args.targetPath), respond: (input, init) => {
-      if (new URL(String(input), window.location.origin).pathname === "/api/notifications/597" && init?.method === "PATCH") {
-        statusActions.push(JSON.parse(String(init.body)).action);
+    completeNotificationResponse = undefined;
+    const seenKey = `founderops.product-updates.seen.${itemPageProfile.id}`;
+    const previousSeen = localStorage.getItem(seenKey);
+    localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
+    let currentHeader = notificationHeader(args.targetPath);
+    const restoreBrowser = await mockItemPageBrowser({ headerData: notificationHeader(args.targetPath), respond: (input, init) => {
+      const path = new URL(String(input), window.location.origin).pathname;
+      if (path === "/api/planning-header-data") return Response.json({ headerData: currentHeader });
+      if (path === "/api/tasks/item-page-task/detail-data") return Response.json({ taskDetail: itemPageModel(), unavailable: [] });
+      if (path === "/api/notifications/597" && init?.method === "PATCH") {
+        const action = JSON.parse(String(init.body)).action;
+        statusActions.push(action);
         if (args.outcome === "unconfirmed") return Response.json({ error: "Response was lost" }, { status: 503 });
-        return Response.json({ ok: true, action: "seen", status: "pending" });
+        if (args.outcome === "rejected") return Response.json({ error: "Die Benachrichtigung kann nicht geöffnet werden." }, { status: 422 });
+        const accepted = () => {
+          currentHeader = { ...currentHeader, notifications: readyHeaderSlot({ unreadCount: 7, items: [] }) };
+          return Response.json({ ok: true, action, status: action === "dismiss" ? "dismissed" : "pending" });
+        };
+        if (args.outcome === "delayed") return new Promise<Response>(resolve => {
+          completeNotificationResponse = () => resolve(accepted());
+        });
+        return accepted();
       }
       return undefined;
     } });
+    return () => {
+      restoreBrowser();
+      if (previousSeen === null) localStorage.removeItem(seenKey);
+      else localStorage.setItem(seenKey, previousSeen);
+    };
   },
 } satisfies Meta<typeof NotificationPlanningPage>;
 export default meta;
@@ -58,6 +84,11 @@ export const LoadedPlanningItemOpensFullPage: Story = {
     await waitFor(() => expect(getRouter().push).toHaveBeenCalledTimes(1));
     await expect(getRouter().push).toHaveBeenCalledWith("/tasks/item-page-task");
   },
+};
+
+export const PlanningWithoutLocalItemOpensFullPage: Story = {
+  args: { loaded: false },
+  play: LoadedPlanningItemOpensFullPage.play,
 };
 
 export const DirtyItemKeepsOrDiscardsNotificationNavigation: Story = {
@@ -116,5 +147,123 @@ export const UnconfirmedSeenDoesNotNavigateOrReplay: Story = {
     await expect(await canvas.findByRole("button", { name: "Aktuellen Stand prüfen" })).toBeEnabled();
     await expect(statusActions).toEqual(["seen"]);
     await expect(getRouter().push).not.toHaveBeenCalled();
+  },
+};
+
+export const LogoutDiscardsDelayedNotificationNavigation: Story = {
+  args: { outcome: "delayed" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: /Open planning assignment/ }));
+    await expect(await canvas.findByText("Wird als gesehen markiert.")).toBeVisible();
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Abmelden" }));
+    await waitFor(() => expect(canvas.queryByRole("button", { name: "Account-Menü öffnen" })).not.toBeInTheDocument());
+    await userEvent.click(canvas.getByRole("button", { name: "Complete notification response" }));
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await expect(statusActions).toEqual(["seen"]);
+    await expect(canvas.queryByRole("link", { name: /Open planning assignment/ })).not.toBeInTheDocument();
+  },
+};
+
+export const DirtyItemProtectsNotificationCenter: Story = {
+  args: { host: "item" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.type(title, " with private edits");
+    await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
+    const user = userEvent.setup();
+    await user.keyboard("{Control>}");
+    await user.click(canvas.getByRole("link", { name: "Zum Center" }));
+    await user.keyboard("{/Control}");
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await expect(canvas.queryByRole("alertdialog")).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: "Zum Center" }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Weiter bearbeiten" }));
+    await expect(title).toHaveValue("Reliable planning with private edits");
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: "Zum Center" }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
+    await expect(getRouter().push).toHaveBeenCalledTimes(1);
+    await expect(getRouter().push).toHaveBeenCalledWith("/notifications");
+    await expect(statusActions).toEqual([]);
+  },
+};
+
+export const CardsKeepTheirDirtyPanelWorkflow: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("link", { name: "Reliable planning" }));
+    const panel = within(await canvas.findByRole("dialog", { name: "Reliable planning" }));
+    await userEvent.click(await panel.findByRole("button", { name: "Bearbeiten" }));
+    const title = panel.getByRole("textbox", { name: "Titel" });
+    await userEvent.type(title, " panel draft");
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Weiter bearbeiten" }));
+    await expect(title).toHaveValue("Reliable planning panel draft");
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await expect(statusActions).toEqual([]);
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
+    await waitFor(() => expect(canvas.queryByRole("dialog")).not.toBeInTheDocument());
+    await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: /Open planning assignment/ }));
+    await waitFor(() => expect(getRouter().push).toHaveBeenCalledTimes(1));
+    await expect(getRouter().push).toHaveBeenCalledWith("/tasks/item-page-task");
+    await expect(statusActions).toEqual(["seen"]);
+  },
+};
+
+export const DismissKeepsTheAuthoritativeUnreadCount: Story = {
+  args: { outcome: "delayed" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const inbox = await canvas.findByRole("button", { name: "Benachrichtigungen" });
+    await expect(inbox).toHaveTextContent("1");
+    await userEvent.click(inbox);
+    await userEvent.click(canvas.getByRole("button", { name: "Notification schließen" }));
+    await expect(await canvas.findByText("Benachrichtigung wird geschlossen.")).toBeVisible();
+    await expect(inbox).toHaveTextContent("…");
+    await expect(statusActions).toEqual(["dismiss"]);
+    await userEvent.click(canvas.getByRole("button", { name: "Complete notification response" }));
+    await waitFor(() => expect(inbox).toHaveTextContent("7"));
+    await userEvent.click(inbox);
+    await expect(canvas.getByText("Keine neuen Hinweise.")).toBeVisible();
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await expect(statusActions).toEqual(["dismiss"]);
+  },
+};
+
+export const DelayedSeenWaitsForItsSavedResult: Story = {
+  args: { outcome: "delayed" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: /Open planning assignment/ }));
+    await expect(await canvas.findByText("Wird als gesehen markiert.")).toBeVisible();
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await expect(statusActions).toEqual(["seen"]);
+    await userEvent.click(canvas.getByRole("button", { name: "Complete notification response" }));
+    await waitFor(() => expect(getRouter().push).toHaveBeenCalledTimes(1));
+    await expect(getRouter().push).toHaveBeenCalledWith("/tasks/item-page-task");
+    await expect(statusActions).toEqual(["seen"]);
+  },
+};
+
+export const RejectedSeenKeepsTheCurrentPage: Story = {
+  args: { outcome: "rejected" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: /Open planning assignment/ }));
+    await expect(await canvas.findByText("Die Benachrichtigung kann nicht geöffnet werden.")).toBeVisible();
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await expect(statusActions).toEqual(["seen"]);
   },
 };

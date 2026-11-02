@@ -71,7 +71,6 @@ export function usePlanningViewState({
   const [epicDialogDefaults, setEpicDialogDefaults] = useState<Partial<EpicDraft> | null>(null);
   const [epicDeleteTarget, setEpicDeleteTarget] = useState<EpicDeleteTarget | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sprintPlanningOptions, setSprintPlanningOptions] = useState<SprintPlanningOptions>({
     firstSprintNumber: 2,
@@ -117,12 +116,10 @@ export function usePlanningViewState({
     setPlanningParentFilterId,
     setSelectedTaskId,
     setShowFilters,
-    setShowNotifications,
     setSprintPlanningOptions,
     setTaskDialogDefaults,
     setView,
     showFilters,
-    showNotifications,
     sprintPlanningOptions,
     taskDialogDefaults,
     view,

@@ -34,6 +34,7 @@ export function useApplicationHeaderRuntime(lifecycle: ApplicationHeaderLifecycl
     notificationsOpen,
     toggleNotifications: () => setNotificationsOpen(value => !value),
     openNotification,
+    openNotificationCenter: () => { setNotificationsOpen(false); navigate("/notifications"); },
     dismissNotification: (id: number) => { void planningState.updateNotificationStatus(id, "dismiss"); },
     openTeam,
     navigate,

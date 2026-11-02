@@ -14,12 +14,14 @@ export function NotificationInbox({
   open,
   onToggle,
   onOpen,
+  onOpenCenter,
   onDismiss,
 }: {
   notifications: HeaderDataSlot<HeaderNotificationsData>;
   open: boolean;
   onToggle: () => void;
   onOpen?: (event: HeaderNotification) => void;
+  onOpenCenter?: () => void;
   onDismiss?: (eventId: number) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -77,7 +79,12 @@ export function NotificationInbox({
               <Link
                 href="/notifications"
                 className="rounded-md px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                onClick={onToggle}
+                onClick={click => {
+                  if (onOpenCenter && !click.defaultPrevented && click.button === 0 && !click.metaKey && !click.ctrlKey && !click.shiftKey && !click.altKey) {
+                    click.preventDefault();
+                    onOpenCenter();
+                  } else onToggle();
+                }}
               >
                 Zum Center
               </Link>
