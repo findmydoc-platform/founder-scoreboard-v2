@@ -13,6 +13,7 @@ import { useApplicationHeaderRuntime } from "../hooks/use-application-header-run
 import type { ApplicationHeaderProps } from "../model/application-header";
 
 export function ApplicationHeader({ area, lifecycle, navigation, context, focus, notices }: ApplicationHeaderProps) {
+  const AreaHeading = area.heading === false ? "p" : "h1";
   const runtime = useApplicationHeaderRuntime(lifecycle, navigation);
   const account = lifecycle.account ? (
     <AuthControl
@@ -51,7 +52,7 @@ export function ApplicationHeader({ area, lifecycle, navigation, context, focus,
             ) : null}
             <div className="min-w-0">
               <div className="text-xs font-medium text-slate-500">{focus?.active ? "Fokusmodus" : "FounderOps"}</div>
-              <h1 className={focus?.active ? "truncate text-sm font-semibold text-slate-800" : "truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl"}>{area.title}</h1>
+              <AreaHeading className={focus?.active ? "truncate text-sm font-semibold text-slate-800" : "truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl"}>{area.title}</AreaHeading>
               {!focus?.active && area.supportingContext ? <p className="mt-1 truncate text-sm font-medium text-slate-600">{area.supportingContext}</p> : null}
               {!focus?.active && area.description ? <p className="mt-1.5 hidden max-w-2xl text-sm leading-6 text-slate-500 sm:block">{area.description}</p> : null}
             </div>
