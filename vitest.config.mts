@@ -70,7 +70,15 @@ export default defineConfig({
           browser: {
             enabled: true,
             headless: true,
-            instances: [{ browser: "chromium" }],
+            instances: [
+              { browser: "chromium" },
+              {
+                browser: "chromium",
+                name: "storybook (reduced motion)",
+                include: ["src/features/planning/organisms/app-sidebar.stories.tsx"],
+                provider: playwright({ contextOptions: { reducedMotion: "reduce" } }),
+              },
+            ],
             provider: playwright({}),
           },
           name: "storybook",

@@ -129,7 +129,6 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
       <aside
         ref={ref}
         onMouseLeave={onMouseLeave}
-        data-sidebar-state={desktopSidebarExpanded ? "expanded" : "collapsed"}
         className="app-sidebar-peer fixed inset-y-0 left-0 z-30 hidden w-16 flex-col overflow-hidden border-r border-slate-200 bg-white shadow-none lg:flex"
       >
         <div className="app-sidebar-header flex flex-col items-center gap-3 border-b border-slate-100 px-3 py-4">

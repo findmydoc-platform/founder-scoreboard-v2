@@ -176,7 +176,8 @@ html:not([data-desktop-sidebar-expanded="false"]) .app-sidebar-footer {
     transition: width 200ms ease-out;
   }
 
-  .app-sidebar-peer[data-sidebar-animate="true"] ~ .app-sidebar-main {
+  .app-sidebar-peer[data-sidebar-animate="true"] ~ .app-sidebar-main,
+  .app-sidebar-main:has(> .app-sidebar-peer[data-sidebar-animate="true"]) {
     transition: padding-left 200ms ease-out;
   }
 }

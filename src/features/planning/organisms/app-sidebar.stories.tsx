@@ -5,12 +5,14 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { AppSidebar } from "./app-sidebar";
 import { desktopSidebarBootstrapScript } from "../model/desktop-sidebar-preference";
 
-function SidebarJourney() {
+function SidebarJourney({ sidebarInsideMain = false }: { sidebarInsideMain?: boolean }) {
   const [generation, setGeneration] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const sidebar = <AppSidebar key={generation} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />;
   return <div>
-    <AppSidebar key={generation} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+    {sidebarInsideMain ? null : sidebar}
     <main className="app-sidebar-main">
+      {sidebarInsideMain ? sidebar : null}
       <button className="lg:hidden" onClick={() => setMobileOpen(true)}>Navigation öffnen</button>
       <button onClick={() => setGeneration(value => value + 1)}>Finish loading</button>
     </main>
@@ -58,29 +60,45 @@ export const RemembersBothUserChoices: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const sidebar = canvas.getByRole("navigation", { name: "Hauptnavigation" }).parentElement!;
-    let widthTransitions = 0;
+    const main = canvas.getByRole("main");
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const widthTransitions: string[] = [];
+    const paddingTransitions: string[] = [];
     const countTransitions = (event: Event) => {
-      if (event.target === sidebar && (event as TransitionEvent).propertyName === "width") widthTransitions++;
+      if (event.target === sidebar && (event as TransitionEvent).propertyName === "width") widthTransitions.push(getComputedStyle(sidebar).transitionDuration);
+      if (event.target === main && (event as TransitionEvent).propertyName === "padding-left") paddingTransitions.push(getComputedStyle(main).transitionDuration);
     };
-    sidebar.addEventListener("transitionrun", countTransitions);
+    main.parentElement!.addEventListener("transitionrun", countTransitions);
     try {
       await userEvent.click(canvas.getByRole("button", { name: "Navigation ausklappen" }));
       await waitFor(() => expect(getComputedStyle(sidebar).width).toBe("256px"));
       await expect(getComputedStyle(canvas.getByRole("link", { name: "Planung" }).querySelector("span")!).clipPath).toBe("none");
-      await expect(widthTransitions).toBe(1);
+      await expect(widthTransitions).toEqual(reducedMotion ? [] : ["0.2s"]);
+      await expect(paddingTransitions).toEqual(reducedMotion ? [] : ["0.2s"]);
+      await expect(getComputedStyle(main).paddingLeft).toBe("256px");
+      if (reducedMotion) {
+        await expect(getComputedStyle(sidebar).transitionDuration).toBe("0s");
+        await expect(getComputedStyle(main).transitionDuration).toBe("0s");
+      }
       await expect(localStorage.getItem("founderops.desktop-sidebar-expanded")).toBe("true");
       await userEvent.click(canvas.getByRole("button", { name: "Finish loading" }));
       await expect(canvas.getByRole("button", { name: "Navigation einklappen" })).toBeVisible();
       const replacement = canvas.getByRole("navigation", { name: "Hauptnavigation" }).parentElement!;
       await expect(getComputedStyle(replacement).width).toBe("256px");
       await expect(getComputedStyle(replacement).transitionDuration).toBe("0s");
+      await expect(getComputedStyle(main).transitionDuration).toBe("0s");
       await userEvent.click(canvas.getByRole("button", { name: "Navigation einklappen" }));
       await waitFor(() => expect(getComputedStyle(replacement).width).toBe("64px"));
       await expect(localStorage.getItem("founderops.desktop-sidebar-expanded")).toBe("false");
     } finally {
-      sidebar.removeEventListener("transitionrun", countTransitions);
+      main.parentElement!.removeEventListener("transitionrun", countTransitions);
     }
   },
+};
+
+export const DetailPageSidebarInsideMain: Story = {
+  ...RemembersBothUserChoices,
+  render: () => <SidebarJourney sidebarInsideMain />,
 };
 
 function UnhydratedSidebar({ storageUnavailable = false }: { storageUnavailable?: boolean }) {
