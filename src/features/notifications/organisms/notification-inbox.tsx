@@ -3,7 +3,7 @@
 import { Bell, LoaderCircle, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { notificationTarget } from "@/features/notifications/model/notification-target";
 import { formatDate } from "@/lib/display";
@@ -15,15 +15,19 @@ export function NotificationInbox({
   open,
   onToggle,
   onOpen,
+  onOpenCenter,
   onDismiss,
 }: {
   notifications: HeaderDataSlot<HeaderNotificationsData>;
   open: boolean;
   onToggle: () => void;
   onOpen?: (event: HeaderNotification) => void;
+  onOpenCenter?: () => void;
   onDismiss?: (eventId: number) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useModalDialog<HTMLElement>({ open, onClose: onToggle, manageEnvironment: false, restoreFocusRef: triggerRef });
   const stale = notifications.freshness === "stale";
   const unreadCount = notifications.data.unreadCount;
   const items = notifications.data.items;
@@ -36,21 +40,17 @@ export function NotificationInbox({
       const target = event.target as Node;
       if (!rootRef.current?.contains(target)) onToggle();
     };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onToggle();
-    };
 
     window.addEventListener("pointerdown", closeOnOutside);
-    window.addEventListener("keydown", closeOnEscape);
     return () => {
       window.removeEventListener("pointerdown", closeOnOutside);
-      window.removeEventListener("keydown", closeOnEscape);
     };
   }, [open, onToggle]);
 
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={onToggle}
         aria-expanded={open}
@@ -68,7 +68,7 @@ export function NotificationInbox({
       </button>
 
       {open && (
-        <section className="fixed inset-x-4 top-20 z-50 max-h-[calc(100dvh-6rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-[min(92vw,380px)]">
+        <section ref={dialogRef} tabIndex={-1} role="dialog" aria-label="Benachrichtigungen" className="fixed inset-x-4 top-20 z-50 max-h-[calc(100dvh-6rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-[min(92vw,380px)]">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
@@ -78,7 +78,12 @@ export function NotificationInbox({
               <Link
                 href="/notifications"
                 className="rounded-md px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                onClick={onToggle}
+                onClick={click => {
+                  if (onOpenCenter && !click.defaultPrevented && click.button === 0 && !click.metaKey && !click.ctrlKey && !click.shiftKey && !click.altKey) {
+                    click.preventDefault();
+                    onOpenCenter();
+                  } else onToggle();
+                }}
               >
                 Zum Center
               </Link>
@@ -95,9 +100,6 @@ export function NotificationInbox({
                 {notifications.error || "Benachrichtigungen konnten nicht geladen werden."}
               </UiEmptyState>
             ) : items.length ? items.map((event) => {
-              const taskReference = event.entityType.trim().toLowerCase() === "task" && event.entityId
-                ? { id: event.entityId, title: event.title }
-                : null;
               const content = (
                 <>
                   <UiBadge tone={notificationBadgeTone(event.type)} size="xs" className="text-[11px]">
@@ -112,21 +114,17 @@ export function NotificationInbox({
               return (
                 <article key={event.id} className="group rounded-md border border-transparent p-2 hover:border-slate-100 hover:bg-slate-50">
                   <div className="flex items-start justify-between gap-2">
-                    {taskReference ? (
-                      <TaskReferenceLink
-                        task={taskReference}
-                        onOpenTask={onOpen ? () => onOpen(event) : undefined}
-                        showIcon={false}
-                        layout="block"
-                        className="min-w-0 flex-1 text-left hover:no-underline"
-                      >
-                        {content}
-                      </TaskReferenceLink>
-                    ) : (
-                      <button type="button" onClick={() => (onOpen || openHeaderNotificationTarget)(event)} className="min-w-0 flex-1 cursor-pointer text-left">
-                        {content}
-                      </button>
-                    )}
+                    <Link
+                      href={notificationTarget(event).href}
+                      onClick={click => {
+                        if (!onOpen || click.defaultPrevented || click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
+                        click.preventDefault();
+                        onOpen(event);
+                      }}
+                      className="block min-h-11 min-w-0 flex-1 cursor-pointer text-left hover:no-underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:min-h-0"
+                    >
+                      {content}
+                    </Link>
                     {onDismiss && (
                       <button
                         type="button"
@@ -150,9 +148,4 @@ export function NotificationInbox({
       )}
     </div>
   );
-}
-
-function openHeaderNotificationTarget(event: HeaderNotification) {
-  if (typeof window === "undefined") return;
-  window.location.assign(notificationTarget(event).href);
 }

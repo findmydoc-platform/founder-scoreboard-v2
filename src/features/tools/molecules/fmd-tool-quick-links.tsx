@@ -1,7 +1,9 @@
 "use client";
 
 import { ExternalLink, ImageIcon, Link2, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import { fmdToolCategoryLabel } from "@/features/tools/model/fmd-tools";
 import { maxHeaderQuickLinks } from "@/lib/planning-header-data";
 import type { HeaderDataSlot, HeaderQuickLink } from "@/lib/types";
@@ -11,12 +13,19 @@ export function FmdToolQuickLinks({
   quickLinks,
   open,
   onToggle,
+  menuItem = false,
+  restoreFocusRef,
 }: {
+  menuItem?: boolean;
+  restoreFocusRef?: RefObject<HTMLElement | null>;
   quickLinks: HeaderDataSlot<HeaderQuickLink[]>;
   open: boolean;
   onToggle: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useModalDialog<HTMLElement>({ open, onClose: onToggle, manageEnvironment: false, restoreFocusRef: restoreFocusRef || triggerRef });
+  const [anchor, setAnchor] = useState({ right: 16, top: 80 });
   const links = quickLinks.data;
   const stale = quickLinks.freshness === "stale";
 
@@ -25,36 +34,37 @@ export function FmdToolQuickLinks({
 
     const closeOnOutside = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!rootRef.current?.contains(target)) onToggle();
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onToggle();
+      if (!rootRef.current?.contains(target) && !dialogRef.current?.contains(target)) onToggle();
     };
 
     window.addEventListener("pointerdown", closeOnOutside);
-    window.addEventListener("keydown", closeOnEscape);
     return () => {
       window.removeEventListener("pointerdown", closeOnOutside);
-      window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [open, onToggle]);
+  }, [dialogRef, open, onToggle]);
 
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={onToggle}
+        role={menuItem ? "menuitem" : undefined}
+        onClick={() => {
+          const rect = triggerRef.current?.getBoundingClientRect();
+          if (rect) setAnchor({ right: Math.max(16, window.innerWidth - rect.right), top: rect.bottom + 8 });
+          onToggle();
+        }}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="grid h-9 w-9 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+        className={menuItem ? "flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500" : "grid h-9 w-9 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500"}
         aria-label="Kuratierte Links"
         title="Kuratierte Links"
       >
-        <Link2 size={16} />
+        <Link2 size={16} aria-hidden="true" />{menuItem ? <span>Kuratierte Links</span> : null}
       </button>
 
-      {open && (
-        <section className="fixed inset-x-4 top-20 z-50 max-h-[calc(100dvh-6rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-[min(92vw,340px)]" role="dialog" aria-label="Kuratierte Links">
+      {open && typeof document !== "undefined" ? createPortal(
+        <section ref={dialogRef} tabIndex={-1} style={menuItem ? undefined : { right: anchor.right, top: anchor.top }} className="fixed inset-x-4 top-20 z-50 max-h-[calc(100dvh-6rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:inset-x-auto sm:w-[min(92vw,340px)]" role="dialog" aria-label="Kuratierte Links">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
             <div className="min-w-0">
               <h2 className="truncate text-sm font-semibold text-slate-950">Kuratierte Links</h2>
@@ -122,7 +132,7 @@ export function FmdToolQuickLinks({
             )}
           </div>
         </section>
-      )}
+      , document.body) : null}
     </div>
   );
 }

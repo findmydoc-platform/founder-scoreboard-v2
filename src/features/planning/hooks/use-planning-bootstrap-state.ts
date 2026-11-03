@@ -7,7 +7,6 @@ import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { useCurrentWorkspaceModelRefresh } from "@/features/planning/hooks/use-workspace-model-refresh";
 import { usePlanningFocusMode } from "@/features/planning/hooks/use-planning-focus-mode";
 import { usePlanningRemoteChanges } from "@/features/planning/hooks/use-planning-remote-changes";
-import { usePlanningHeaderData } from "@/features/planning/hooks/use-planning-header-data";
 import { usePlanningRequestContext } from "@/features/planning/hooks/use-planning-request-context";
 import { usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
 import { usePlanningWorkspace } from "@/features/planning/hooks/use-planning-workspace";
@@ -92,7 +91,7 @@ export function usePlanningBootstrapState({
     stateOwner.configure(requestContext.apiClient, workspace, auth.serverCurrentProfile, administratorAccess);
   }, [stateOwner, requestContext.apiClient, workspace, auth.serverCurrentProfile, administratorAccess]);
   const currentProfileId = requestContext.currentProfile?.id || "";
-  const headerData = usePlanningHeaderData({ planningState, enabled: Boolean(auth.authUser) && (!authRequired || auth.protectedDataLoaded), notificationsWorkspace: workspace === "notifications" });
+  const headerData = planningState.header().data;
   const canManageTaskMeta = requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
   const canCorrectOperationally = operationalCorrection;
   const canManageFinalTaskStatus = requestContext.currentProfile?.platformRole === "ceo";

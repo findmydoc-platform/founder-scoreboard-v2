@@ -2,6 +2,7 @@
 
 import { Bell, CalendarClock, Check, MapPin, Pencil, Plus, Users, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ApplicationWorkspaceControls } from "@/features/application-shell/molecules/application-workspace-context";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { eventDateRangeLabel, founderEventAudienceLabel, founderEventCategories, founderEventCategoryLabel, founderEventStatusLabel, founderEventStatuses, normalizeEventDateTimeInput } from "@/lib/founder-events";
@@ -287,20 +288,13 @@ export function EventsOverview({
   if (!events.length) {
     return (
       <div className="grid gap-4">
+        {canManageEvents ? <ApplicationWorkspaceControls><UiButton onClick={openCreate} variant="primary" className="min-h-11"><Plus size={16} />Event eintragen</UiButton></ApplicationWorkspaceControls> : null}
         <UiPanel>
           <div className="grid gap-3 py-6 text-center">
             <div>
               <h2 className="text-base font-semibold text-slate-950">Noch keine Events</h2>
               <p className="mt-1 text-sm text-slate-600">Trage den ersten Gründertermin ein, sobald ein relevanter Termin feststeht.</p>
             </div>
-            {canManageEvents && (
-              <div>
-                <UiButton onClick={openCreate} variant="primary">
-                  <Plus size={16} />
-                  Event eintragen
-                </UiButton>
-              </div>
-            )}
             {message && <UiNotice className="mx-auto max-w-2xl font-medium leading-normal">{message}</UiNotice>}
           </div>
         </UiPanel>
@@ -312,21 +306,13 @@ export function EventsOverview({
 
   return (
     <div className="grid gap-4">
+      {canManageEvents ? <ApplicationWorkspaceControls><UiButton onClick={openCreate} variant="primary" className="min-h-11"><Plus size={16} />Event eintragen</UiButton></ApplicationWorkspaceControls> : null}
       <UiPanel>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Event-Zentrale</h2>
             <p className="mt-1 text-sm text-slate-600">Wichtige Gründertermine, Messen, Reisen und rechtliche Termine an einem Ort.</p>
           </div>
-          {canManageEvents && (
-            <UiButton
-              onClick={openCreate}
-              variant="primary"
-            >
-              <Plus size={16} />
-              Event eintragen
-            </UiButton>
-          )}
         </div>
         <div className="mt-4 grid gap-2 text-sm sm:grid-cols-4">
           <EventMetric label="Bevorstehend" value={metrics.upcoming} />

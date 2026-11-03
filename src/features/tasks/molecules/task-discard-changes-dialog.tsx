@@ -6,14 +6,16 @@ import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 export function TaskDiscardChangesDialog({
   open,
+  busy = false,
   onDiscard,
   onKeepEditing,
 }: {
   open: boolean;
+  busy?: boolean;
   onDiscard: () => void;
   onKeepEditing: () => void;
 }) {
-  const dialogRef = useModalDialog<HTMLDivElement>({ open, onClose: onKeepEditing });
+  const dialogRef = useModalDialog<HTMLDivElement>({ open, onClose: onKeepEditing, closeDisabled: busy });
   if (!open) return null;
 
   return (
@@ -33,18 +35,18 @@ export function TaskDiscardChangesDialog({
           </span>
           <div className="min-w-0">
             <h2 id="task-discard-changes-title" className="text-lg font-semibold text-slate-950">
-              Ungespeicherte Änderungen verwerfen?
+              {busy ? "Seite wird geöffnet" : "Ungespeicherte Änderungen verwerfen?"}
             </h2>
-            <p id="task-discard-changes-description" className="mt-2 text-sm leading-6 text-slate-600">
+            {busy ? <p id="task-discard-changes-description" role="status" className="mt-2 text-sm leading-6 text-slate-600">Die gewählte Seite wird geöffnet.</p> : <p id="task-discard-changes-description" className="mt-2 text-sm leading-6 text-slate-600">
               Deine Eingaben in diesem Issue wurden noch nicht gespeichert.
-            </p>
+            </p>}
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <UiButton type="button" variant="red" size="lg" onClick={onDiscard}>
+          <UiButton type="button" variant="red" size="lg" disabled={busy} onClick={onDiscard}>
             Änderungen verwerfen
           </UiButton>
-          <UiButton type="button" variant="primary" size="lg" data-autofocus onClick={onKeepEditing}>
+          <UiButton type="button" variant="primary" size="lg" disabled={busy} data-autofocus onClick={onKeepEditing}>
             Weiter bearbeiten
           </UiButton>
         </div>

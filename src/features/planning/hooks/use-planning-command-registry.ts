@@ -31,7 +31,6 @@ type UsePlanningCommandRegistryOptions = {
   selectedTask: Task | null;
   setFilters: PlanningViewState["setFilters"];
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
-  setShowNotifications: PlanningViewState["setShowNotifications"];
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
@@ -52,7 +51,6 @@ export function usePlanningCommandRegistry({
   selectedTask,
   setFilters,
   setInitiativeDialogDefaults,
-  setShowNotifications,
   setStatusGuardNotice,
   setStatusGuardTaskId,
   setTaskDialogDefaults,
@@ -102,8 +100,6 @@ export function usePlanningCommandRegistry({
   const notificationCommands = useNotificationCommands({
     ...commandContext,
     openTaskPanel,
-    refreshCurrentWorkspaceModel,
-      setShowNotifications,
     setWorkspace,
     workspace,
   });

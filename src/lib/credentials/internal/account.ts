@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import type { AccountCredentialInput, AccountSettingsUpdate, AccountGitHubProjectUpdate, AccountNotificationPreferenceUpdate, AccountPreviewUpload } from "../account-types";
 import { randomUUID } from "node:crypto";
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
-import type { DbNotificationPreference, DbProfileFeatureTourAcknowledgement } from "../../planning-row-types";
+import type { DbNotificationPreference, DbProfile, DbProfileFeatureTourAcknowledgement } from "../../planning-row-types";
 import { googleChatDigestEventTypes } from "../../notification-policy";
 import { authorizeSessionPolicy, currentAdministratorAccess, administratorAccessFailure } from "./session-policy";
 import { accountService, accountServiceConfiguration } from "./account-service";
@@ -14,7 +14,9 @@ import { getServerAuthSupabase } from "./cookie-client";
 import { authorizeSessionData } from "./session";
 import { resolveSessionRequest } from "./session-request";
 import { createSupabaseProfileReadModel } from "@/features/profile/server/profile-read-model-supabase";
-import { emptyPlanningHeaderData, loadPlanningHeaderData } from "../../planning-header-data";
+import { emptyPlanningHeaderData, loadPlanningHeaderData, readyHeaderSlot } from "../../planning-header-data";
+import { mapProfile } from "../../planning-profile-mappers";
+import type { HeaderDataSlot, Profile } from "../../types";
 import { planningHeaderSlotLoaders } from "./planning-header-cache";
 import { platformReleaseSeed } from "@/features/platform-releases/model/platform-release-seed";
 import { loadPlatformReleases } from "@/features/platform-releases/server/platform-release-read-model-supabase";
@@ -103,15 +105,25 @@ export async function authorizeAccount(input: AccountCredentialInput) {
       return error ? { error: { status: 500, message: "Lesestatus konnte nicht gespeichert werden." } } : { error: null };
     },
     async loadReleaseHeader() {
-      if (action !== "releases.read" || !strictService) return { available: false as const, headerData: emptyPlanningHeaderData };
+      const unavailableProfiles: HeaderDataSlot<Profile[]> = { state: "error", data: [], error: "Kalenderprofile konnten nicht geladen werden." };
+      if (action !== "releases.read" || !strictService) return { available: false as const, headerData: emptyPlanningHeaderData, calendarProfiles: unavailableProfiles };
       try {
         assertCurrent();
         await current();
         assertCurrent();
-        const headerData = await loadPlanningHeaderData(strictService, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, sharedSlotLoaders: planningHeaderSlotLoaders(strictService) });
+        const [headerData, people] = await Promise.all([
+          loadPlanningHeaderData(strictService, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, sharedSlotLoaders: planningHeaderSlotLoaders(strictService) }),
+          strictService.from("profiles").select("id,name,platform_role,org_role,github_login,weekly_capacity,profile_color", { count: "exact" }).order("id").limit(1000),
+        ]);
         assertCurrent();
-        return { available: true as const, headerData };
-      } catch { return { available: false as const, headerData: emptyPlanningHeaderData }; }
+        const calendarProfiles = people.error || !Array.isArray(people.data) || people.count !== people.data.length
+          ? { ...unavailableProfiles, error: people.error?.code === "42501" ? "Kein Zugriff auf Kalenderprofile." : unavailableProfiles.error }
+          : readyHeaderSlot((people.data as DbProfile[]).map(person => mapProfile({ ...person, deputy_for: null, deputy_active_from: null, deputy_active_until: null, focus: null })));
+        return { available: true as const, headerData, calendarProfiles };
+      } catch (error) {
+        const status = error && typeof error === "object" && "status" in error ? error.status : null;
+        return { available: false as const, headerData: emptyPlanningHeaderData, calendarProfiles: { ...unavailableProfiles, error: status === 401 || status === 403 ? "Kein Zugriff auf Kalenderprofile." : unavailableProfiles.error } };
+      }
     },
     async readReleases() {
       if (action !== "releases.read") return { available: false as const, releases: [] };

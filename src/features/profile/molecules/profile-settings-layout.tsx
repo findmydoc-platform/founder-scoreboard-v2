@@ -28,7 +28,7 @@ export function ProfileSettingsNavButton({
       onClick={onClick}
       className={classNames(
         "flex min-w-0 items-center gap-3 rounded-md border text-left transition",
-        compact ? "h-10 shrink-0 px-3 text-sm" : "mb-1 w-full px-3 py-2",
+        compact ? "h-11 shrink-0 px-3 text-sm" : "mb-1 w-full px-3 py-2",
         active ? "border-blue-200 bg-blue-50 text-blue-800" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900",
       )}
       aria-current={active ? "page" : undefined}

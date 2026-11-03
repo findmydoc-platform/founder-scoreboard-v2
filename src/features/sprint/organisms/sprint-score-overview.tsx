@@ -114,7 +114,7 @@ export function SprintScoreTableOverview({
         />
       )}
       <SprintControlsSummary
-        key={sprint.id}
+        key={`summary:${sprint.id}`}
         data={sprintData}
         sprint={sprint}
         currentSprint={currentSprint}
@@ -160,7 +160,7 @@ export function SprintScoreTableOverview({
       />
 
       <SprintScoreObjections
-        key={sprint.id}
+        key={`objections:${sprint.id}`}
         data={sprintData}
         sprint={sprint}
         currentProfile={currentProfile}
