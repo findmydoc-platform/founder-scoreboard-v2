@@ -35,12 +35,11 @@ export function TaskDiscardChangesDialog({
           </span>
           <div className="min-w-0">
             <h2 id="task-discard-changes-title" className="text-lg font-semibold text-slate-950">
-              Ungespeicherte Änderungen verwerfen?
+              {busy ? "Seite wird geöffnet" : "Ungespeicherte Änderungen verwerfen?"}
             </h2>
-            <p id="task-discard-changes-description" className="mt-2 text-sm leading-6 text-slate-600">
+            {busy ? <p id="task-discard-changes-description" role="status" className="mt-2 text-sm leading-6 text-slate-600">Die gewählte Seite wird geöffnet.</p> : <p id="task-discard-changes-description" className="mt-2 text-sm leading-6 text-slate-600">
               Deine Eingaben in diesem Issue wurden noch nicht gespeichert.
-            </p>
-            {busy ? <p role="status" className="mt-2 text-sm leading-6 text-slate-600">Die gewählte Seite wird geöffnet.</p> : null}
+            </p>}
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4">

@@ -10,16 +10,38 @@ export function useTaskDiscardGuard(dirty: boolean) {
   const busyRef = useRef(false);
   const pendingActionRef = useRef<PendingAction | null>(null);
 
+  const continueAction = useCallback((action: PendingAction) => {
+    let completion: void | Promise<void>;
+    try {
+      completion = action();
+    } catch (error) {
+      setOpen(false);
+      throw error;
+    }
+    if (!completion) {
+      setOpen(false);
+      return;
+    }
+    busyRef.current = true;
+    setBusy(true);
+    setOpen(true);
+    return completion.finally(() => {
+      busyRef.current = false;
+      setBusy(false);
+      setOpen(false);
+    });
+  }, []);
+
   const request = useCallback((action: PendingAction, force = false) => {
     if (busyRef.current) return;
     if (!dirty && !force) {
-      action();
+      void continueAction(action);
       return;
     }
 
     pendingActionRef.current = action;
     setOpen(true);
-  }, [dirty]);
+  }, [continueAction, dirty]);
 
   const keepEditing = useCallback(() => {
     if (busyRef.current) return;
@@ -27,20 +49,13 @@ export function useTaskDiscardGuard(dirty: boolean) {
     setOpen(false);
   }, []);
 
-  const discard = useCallback(async () => {
+  const discard = useCallback(() => {
     if (busyRef.current) return;
     const action = pendingActionRef.current;
     pendingActionRef.current = null;
-    busyRef.current = true;
-    setBusy(true);
-    try {
-      await action?.();
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-      setOpen(false);
-    }
-  }, []);
+    if (action) void continueAction(action);
+    else setOpen(false);
+  }, [continueAction]);
 
   return {
     busy,

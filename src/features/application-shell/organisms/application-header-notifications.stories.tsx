@@ -317,6 +317,41 @@ export const DirtyItemWaitsForApprovedNotificationDeparture: Story = {
   },
 };
 
+export const CleanItemWaitsForNotificationDeparture: Story = {
+  args: { host: "item", outcome: "delayed" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: /Open planning assignment/ }));
+    await expect(statusActions).toEqual(["seen"]);
+    await expect(canvas.getByRole("alertdialog")).toHaveAccessibleName("Seite wird geöffnet");
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    title.focus();
+    await userEvent.keyboard("new draft after departure started");
+    completeNotificationResponse?.();
+    await waitFor(() => expect(getRouter().push).toHaveBeenCalledTimes(1));
+    await expect(title).toHaveValue("Reliable planning");
+    await expect(getRouter().push).toHaveBeenCalledWith("/tasks/item-page-task");
+    await expect(statusActions).toEqual(["seen"]);
+  },
+};
+
+export const CleanItemProfileNavigationRemainsImmediate: Story = {
+  args: { host: "item" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeiten" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
+    await userEvent.click(canvas.getByRole("button", { name: /Profil/ }));
+    await expect(getRouter().push).toHaveBeenCalledTimes(1);
+    await expect(getRouter().push).toHaveBeenCalledWith("/profile");
+    await expect(canvas.queryByRole("alertdialog")).not.toBeInTheDocument();
+    await expect(statusActions).toEqual([]);
+  },
+};
+
 async function expectDirtyItemDepartureRecovery(canvasElement: HTMLElement, message: string | RegExp) {
   const canvas = within(canvasElement);
   await userEvent.click(await canvas.findByRole("button", { name: "Bearbeiten" }));
