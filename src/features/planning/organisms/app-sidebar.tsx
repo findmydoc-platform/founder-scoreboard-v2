@@ -2,11 +2,12 @@
 
 import { ChevronsLeft, ChevronsRight, Sparkles, X } from "lucide-react";
 import Link from "next/link";
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useRef, useSyncExternalStore, type MouseEvent } from "react";
 import { appNavigationSections, appNavItems, appWorkspaceIds, hiddenWorkspaceIds, type AppWorkspace, type VisibleAppWorkspace } from "@/features/planning/model/workspace-routes";
 import { PlatformReleaseSidebarCard } from "@/features/platform-releases/organisms/platform-release-sidebar-card";
 import { AppBrand } from "@/shared/atoms/app-brand";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
+import { desktopSidebarExpandedSnapshot, subscribeToDesktopSidebar, toggleDesktopSidebarPreference } from "@/features/planning/model/desktop-sidebar-preference";
 
 export { appNavItems, appWorkspaceIds, hiddenWorkspaceIds };
 export type { AppWorkspace, VisibleAppWorkspace };
@@ -24,7 +25,7 @@ type AppSidebarProps = {
   onRequestNavigation?: (href: string) => void;
 };
 
-const DESKTOP_SIDEBAR_EXPANDED_STORAGE_KEY = "founderops.desktop-sidebar-expanded";
+const expandedServerSnapshot = () => true;
 
 export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppSidebar({
   activeWorkspace = "planning",
@@ -35,19 +36,15 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
   onMouseLeave,
   onRequestNavigation,
 }, ref) {
-  const [desktopSidebarExpanded, setDesktopSidebarExpanded] = useState(true);
+  const desktopSidebarExpanded = useSyncExternalStore(subscribeToDesktopSidebar, desktopSidebarExpandedSnapshot, expandedServerSnapshot);
+  const animationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mobileDialogRef = useModalDialog<HTMLDivElement>({
     open: mobileOpen,
     onClose: () => onMobileClose?.(),
   });
 
-  useEffect(() => {
-    try {
-      const storedValue = window.localStorage.getItem(DESKTOP_SIDEBAR_EXPANDED_STORAGE_KEY);
-      if (storedValue === "false") setDesktopSidebarExpanded(false);
-    } catch {
-      // The default expanded state remains usable when storage is unavailable.
-    }
+  useEffect(() => () => {
+    if (animationTimer.current !== null) clearTimeout(animationTimer.current);
   }, []);
 
   const visibleNavItems = appNavItems.filter((item) => (
@@ -63,24 +60,20 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
     ],
   })).filter((section) => section.items.length > 0);
 
-  const toggleDesktopSidebar = () => {
-    setDesktopSidebarExpanded((expanded) => {
-      const nextExpanded = !expanded;
-      try {
-        window.localStorage.setItem(DESKTOP_SIDEBAR_EXPANDED_STORAGE_KEY, String(nextExpanded));
-      } catch {
-        // The current session still reflects the requested sidebar state.
-      }
-      return nextExpanded;
-    });
+  const toggleDesktopSidebar = (event: MouseEvent<HTMLButtonElement>) => {
+    const sidebar = event.currentTarget.closest("aside")!;
+    sidebar.dataset.sidebarAnimate = "true";
+    // Commit transition styles before changing the shared width.
+    sidebar.getBoundingClientRect();
+    if (animationTimer.current !== null) clearTimeout(animationTimer.current);
+    animationTimer.current = setTimeout(() => { delete sidebar.dataset.sidebarAnimate; }, 250);
+    toggleDesktopSidebarPreference();
   };
 
   const renderNavItem = (item: (typeof appNavItems)[number] | typeof platformReleasesNavItem, variant: "desktop" | "mobile") => {
     const Icon = item.icon;
     const active = activeWorkspace === item.id;
-    const desktopClassName = `flex h-11 w-full items-center rounded-md text-left text-sm font-medium transition-colors min-[1200px]:h-10 ${
-      desktopSidebarExpanded ? "justify-center px-3 min-[1200px]:justify-start min-[1200px]:gap-3" : "justify-center px-3"
-    } ${
+    const desktopClassName = `app-sidebar-link flex h-11 w-full items-center justify-center rounded-md px-3 text-left text-sm font-medium transition-colors min-[1200px]:h-10 ${
       active ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
     }`;
     const mobileClassName = `flex h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-semibold transition-colors ${
@@ -90,7 +83,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
     const content = (
       <>
         <Icon size={18} className="shrink-0" />
-        <span className={variant === "desktop" ? (desktopSidebarExpanded ? "hidden truncate min-[1200px]:block" : "sr-only") : "truncate"}>{item.label}</span>
+        <span className={variant === "desktop" ? "app-sidebar-label sr-only" : "truncate"}>{item.label}</span>
       </>
     );
     return (
@@ -119,13 +112,11 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
     <div
       key={section.id}
       className={variant === "desktop"
-        ? (index === 0 ? "" : desktopSidebarExpanded ? "mt-3 border-t border-slate-100 pt-3 min-[1200px]:mt-5 min-[1200px]:border-t-0 min-[1200px]:pt-0" : "mt-3 border-t border-slate-100 pt-3")
+        ? (index === 0 ? "" : "app-sidebar-section mt-3 border-t border-slate-100 pt-3")
         : (index === 0 ? "" : "mt-5")}
     >
       <div className={variant === "desktop"
-        ? desktopSidebarExpanded
-          ? "sr-only min-[1200px]:not-sr-only min-[1200px]:block min-[1200px]:px-1 min-[1200px]:pb-2 min-[1200px]:text-[11px] min-[1200px]:font-semibold min-[1200px]:uppercase min-[1200px]:tracking-[0.12em] min-[1200px]:text-slate-500"
-          : "sr-only"
+        ? "app-sidebar-label app-sidebar-section-label sr-only"
         : "px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"}>
         {section.label}
       </div>
@@ -138,13 +129,10 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
       <aside
         ref={ref}
         onMouseLeave={onMouseLeave}
-        data-sidebar-state={desktopSidebarExpanded ? "expanded" : "collapsed"}
-        className={`app-sidebar-peer fixed inset-y-0 left-0 z-30 hidden flex-col overflow-hidden border-r border-slate-200 bg-white shadow-none transition-[width] duration-200 ease-out lg:flex ${
-          desktopSidebarExpanded ? "w-16 min-[1200px]:w-64" : "w-16"
-        }`}
+        className="app-sidebar-peer fixed inset-y-0 left-0 z-30 hidden w-16 flex-col overflow-hidden border-r border-slate-200 bg-white shadow-none lg:flex"
       >
-        <div className={`border-b border-slate-100 ${desktopSidebarExpanded ? "flex flex-col items-center gap-3 px-3 py-4 min-[1200px]:flex-row min-[1200px]:items-start min-[1200px]:justify-between min-[1200px]:px-4" : "flex flex-col items-center gap-3 px-3 py-4"}`}>
-          <AppBrand textClassName={desktopSidebarExpanded ? "hidden min-[1200px]:block" : "hidden"} />
+        <div className="app-sidebar-header flex flex-col items-center gap-3 border-b border-slate-100 px-3 py-4">
+          <AppBrand textClassName="app-sidebar-brand-text hidden" />
           <button
             type="button"
             onClick={toggleDesktopSidebar}
@@ -156,10 +144,10 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
             {desktopSidebarExpanded ? <ChevronsLeft size={17} aria-hidden="true" /> : <ChevronsRight size={17} aria-hidden="true" />}
           </button>
         </div>
-        <nav className={`flex-1 overflow-y-auto py-4 ${desktopSidebarExpanded ? "px-2 min-[1200px]:px-3" : "px-2"}`} aria-label="Hauptnavigation">
+        <nav className="app-sidebar-nav flex-1 overflow-y-auto px-2 py-4" aria-label="Hauptnavigation">
           {renderNavigationSections("desktop")}
         </nav>
-        <div className={`border-t border-slate-100 py-3 ${desktopSidebarExpanded ? "px-3" : "px-2"}`}>
+        <div className="app-sidebar-footer border-t border-slate-100 px-2 py-3">
           <PlatformReleaseSidebarCard compact={!desktopSidebarExpanded} onRequestNavigation={onRequestNavigation} />
         </div>
       </aside>
