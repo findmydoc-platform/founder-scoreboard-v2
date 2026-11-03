@@ -1,7 +1,7 @@
 import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent, waitFor, within } from "storybook/test";
+import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -104,7 +104,8 @@ export const KeepsBoundDraftAndTeamBaselineWhileDecisionNeedsReconnection: Story
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole("button", { name: "Arbeitswoche bearbeiten" }));
     const end = await canvas.findByLabelText("Montag, Fenster 1, Ende");
-    await userEvent.clear(end); await userEvent.type(end, "18:00");
+    await fireEvent.change(end, { target: { value: "18:00" } });
+    await expect(end).toHaveValue("18:00");
     const basis = args.value.planning.privateWorkweek().conflict!;
     await args.value.planning.resolveWorkweekConflict(basis, "google"); await args.value.planning.loadPrivateWorkweek();
     await expect(await canvas.findByText(/Verbinde Google erneut/)).toBeVisible();
