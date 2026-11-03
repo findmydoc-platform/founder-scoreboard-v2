@@ -10,6 +10,7 @@ import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { taskDetailModelToPlanningShellState } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { readyHeaderSlot } from "@/lib/planning-header-data";
 import type { HeaderNotification } from "@/lib/types";
+import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
 import { itemPageHeaderData, itemPageModel, itemPageProfile, itemPageUser, mockItemPageBrowser } from "../../../../tests/helpers/task-detail-page-browser-fixture";
 
 const notification: HeaderNotification = {
@@ -25,7 +26,7 @@ function notificationHeader(targetPath = "") {
 
 let completeNotificationResponse: (() => void) | undefined;
 
-function NotificationPlanningPage({ host = "planning", targetPath = "", outcome, loaded = true }: { host?: "planning" | "item" | "releases"; targetPath?: string; outcome?: "saved" | "rejected" | "unconfirmed" | "delayed"; loaded?: boolean }) {
+function NotificationPlanningPage({ host = "planning", targetPath = "", outcome, loaded = true }: { host?: "planning" | "item" | "releases"; targetPath?: string; outcome?: "saved" | "rejected" | "unconfirmed" | "delayed"; delayedResult?: "rejected" | "unconfirmed"; loaded?: boolean }) {
   const pageHeader = notificationHeader(targetPath);
   if (host === "item") return <TaskDetailPage taskId="item-page-task" initialModel={itemPageModel()} headerData={pageHeader}
     source="supabase" authRequired initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} />;
@@ -67,7 +68,10 @@ const meta = {
           return Response.json({ ok: true, action, status: action === "dismiss" ? "dismissed" : "pending" });
         };
         if (args.outcome === "delayed") return new Promise<Response>(resolve => {
-          completeNotificationResponse = () => resolve(accepted());
+          completeNotificationResponse = () => resolve(args.delayedResult === "rejected"
+            ? Response.json({ error: "Die Benachrichtigung kann nicht geöffnet werden." }, { status: 422 })
+            : args.delayedResult === "unconfirmed" ? Response.json({ error: "Response was lost" }, { status: 503 })
+            : accepted());
         });
         return accepted();
       }
@@ -266,6 +270,102 @@ export const DelayedSeenWaitsForItsSavedResult: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Complete notification response" }));
     await waitFor(() => expect(getRouter().push).toHaveBeenCalledTimes(1));
     await expect(getRouter().push).toHaveBeenCalledWith("/tasks/item-page-task");
+    await expect(statusActions).toEqual(["seen"]);
+  },
+};
+
+export const DirtyItemNotificationDeparturePending: Story = {
+  args: { host: "item", outcome: "delayed" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeiten" }));
+    await userEvent.type(canvas.getByRole("textbox", { name: "Titel" }), " with private edits");
+    await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: /Open planning assignment/ }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
+    const departure = within(canvas.getByRole("alertdialog"));
+    await expect(departure.getByRole("status")).toHaveTextContent("Die gewählte Seite wird geöffnet.");
+    await expect(departure.getByRole("button", { name: "Änderungen verwerfen" })).toBeDisabled();
+    await expect(departure.getByRole("button", { name: "Weiter bearbeiten" })).toBeDisabled();
+    await userEvent.keyboard("{Escape}{Tab}");
+    await expect(canvas.getByRole("alertdialog")).toHaveFocus();
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await expect(statusActions).toEqual(["seen"]);
+  },
+};
+
+export const DirtyItemWaitsForApprovedNotificationDeparture: Story = {
+  args: { host: "item", outcome: "delayed" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.type(title, " with private edits");
+    await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: /Open planning assignment/ }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
+    title.focus();
+    await userEvent.keyboard(" new draft after approval");
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await expect(statusActions).toEqual(["seen"]);
+    completeNotificationResponse?.();
+    await waitFor(() => expect(getRouter().push).toHaveBeenCalledTimes(1));
+    await expect(title).toHaveValue("Reliable planning with private edits");
+    await expect(getRouter().push).toHaveBeenCalledWith("/tasks/item-page-task");
+    await expect(canvas.queryByRole("alertdialog")).not.toBeInTheDocument();
+    await expect(statusActions).toEqual(["seen"]);
+  },
+};
+
+async function expectDirtyItemDepartureRecovery(canvasElement: HTMLElement, message: string | RegExp) {
+  const canvas = within(canvasElement);
+  await userEvent.click(await canvas.findByRole("button", { name: "Bearbeiten" }));
+  const title = canvas.getByRole("textbox", { name: "Titel" });
+  await userEvent.type(title, " with private edits");
+  await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
+  await userEvent.click(canvas.getByRole("link", { name: /Open planning assignment/ }));
+  await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
+  await expect(within(canvas.getByRole("alertdialog")).getByRole("status")).toBeVisible();
+  completeNotificationResponse?.();
+  await waitFor(() => expect(canvas.queryByRole("alertdialog")).not.toBeInTheDocument());
+  await expect(await canvas.findByText(message)).toBeVisible();
+  await userEvent.type(title, " recovered");
+  await expect(title).toHaveValue("Reliable planning with private edits recovered");
+  await expect(getRouter().push).not.toHaveBeenCalled();
+  await expect(statusActions).toEqual(["seen"]);
+  await userEvent.click(canvas.getByRole("button", { name: "Account-Menü öffnen" }));
+  await userEvent.click(canvas.getByRole("button", { name: /Profil/ }));
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(canvas.queryByRole("alertdialog")).not.toBeInTheDocument());
+  await expect(title).toHaveValue("Reliable planning with private edits recovered");
+  await expect(getRouter().push).not.toHaveBeenCalled();
+}
+
+export const DirtyItemRecoversAfterRejectedNotificationDeparture: Story = {
+  args: { host: "item", outcome: "delayed", delayedResult: "rejected" },
+  play: ({ canvasElement }) => expectDirtyItemDepartureRecovery(canvasElement, "Die Benachrichtigung kann nicht geöffnet werden."),
+};
+
+export const DirtyItemRecoversAfterUnconfirmedNotificationDeparture: Story = {
+  args: { host: "item", outcome: "delayed", delayedResult: "unconfirmed" },
+  play: ({ canvasElement }) => expectDirtyItemDepartureRecovery(canvasElement, /Ob die Benachrichtigung als gesehen markiert wurde, ist noch unklar/),
+};
+
+export const SessionEndReleasesApprovedItemDeparture: Story = {
+  args: { host: "item", outcome: "delayed" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeiten" }));
+    await userEvent.type(canvas.getByRole("textbox", { name: "Titel" }), " with private edits");
+    await userEvent.click(canvas.getByRole("button", { name: "Benachrichtigungen" }));
+    await userEvent.click(canvas.getByRole("link", { name: /Open planning assignment/ }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
+    await expect(within(canvas.getByRole("alertdialog")).getByRole("status")).toBeVisible();
+    await createBrowserSessionAdapter().logout();
+    await waitFor(() => expect(canvas.queryByRole("textbox", { name: "Titel" })).not.toBeInTheDocument());
+    completeNotificationResponse?.();
+    await waitFor(() => expect(canvas.queryByRole("alertdialog")).not.toBeInTheDocument());
+    await expect(getRouter().push).not.toHaveBeenCalled();
     await expect(statusActions).toEqual(["seen"]);
   },
 };

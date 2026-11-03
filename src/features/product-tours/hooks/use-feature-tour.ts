@@ -451,6 +451,24 @@ export function useFeatureTour({
                 setWorkspace(activeTour.doneWorkspace);
               }
             },
+            onPrevClick: (_element, _step, opts) => {
+              if (stepTransitionPending) return;
+              stepTransitionPending = true;
+              void (async () => {
+                const previousStep = activeTour.steps[stepIndex - 1];
+                const selector = typeof previousStep?.element === "string" ? previousStep.element : "";
+                const target = selector ? await waitForElement(selector) : true;
+                if (!opts.driver.isActive()) return;
+                if (!target) {
+                  opts.driver.destroy();
+                  failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+                  return;
+                }
+                opts.driver.movePrevious();
+              })().finally(() => {
+                stepTransitionPending = false;
+              });
+            },
             onNextClick: (_element, _step, opts) => {
               const transition = activeTour.stepTransitions?.[stepIndex];
               if (stepTransitionPending) return;

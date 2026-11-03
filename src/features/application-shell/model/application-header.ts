@@ -8,7 +8,7 @@ export type ApplicationNavigation = {
   mobileNavOpen: boolean;
   openMobileNav: () => void;
   navigate: (href: string) => void;
-  requestNavigation?: (continueNavigation: () => void) => void;
+  requestNavigation?: (continueNavigation: () => void | Promise<void>) => void;
 };
 
 export type ApplicationHeaderLifecycle = {

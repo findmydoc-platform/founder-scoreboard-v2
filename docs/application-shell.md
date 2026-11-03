@@ -6,7 +6,7 @@ The application-shell feature owns one global composition for Planning workspace
 
 ## Navigation
 
-`ApplicationNavigation.navigate` performs an already approved departure. Hosts with a dirty editor also supply `requestNavigation(continueNavigation)`, using their existing discard decision. The common runtime requests that decision once. If the host approves, the runtime calls raw navigation once. Staying does not run the continuation. Account, Team, Help and Notification Center departures use this runtime.
+`ApplicationNavigation.navigate` performs an already approved departure. Hosts with a dirty editor also supply `requestNavigation(continueNavigation)`, using their existing discard decision. The continuation returns `void` for immediate departures or `Promise<void>` for asynchronous preparation. The Item discard guard retains its modal and blocks further editing until an approved continuation settles. Its pending status is announced, and both decisions and Escape remain disabled during that departure. The common runtime requests the decision once and navigates once after approval. Staying does not run the continuation. Account, Team, Help and Notification Center departures use this runtime.
 
 Header notifications always resolve through `notificationTarget` to a full page. The discard decision precedes the seen command. Only a saved command continues navigation; rejected, unconfirmed or superseded results do not navigate or replay. Actual links preserve supported queries, anchors and native modified targets. Item cards and lists retain their own detail-panel workflow. Safe detail return handling remains with the host.
 
@@ -20,6 +20,6 @@ The root `PlanningStateProvider` retains accepted data and in-flight operations 
 
 Opening `Mehr` focuses its first item on the next animation frame. Keyboard navigation starts after that visible focus has entered the menu. Home, End, arrows and Escape retain their menu behavior. Dialogs opened from the menu receive focus and return it to the visible `Mehr` trigger on close. Account and notification dialogs retain their own focus return.
 
-Help can resume an explicit tour through its supported Planning route. Explicit tour requests take priority over the automatic updates gallery. The existing tour coordinator reveals phone actions through `Mehr` and closes them when the tour ends. This contract does not add product updates or new tour content.
+Help can resume an explicit tour through its supported Planning route. Explicit tour requests take priority over the automatic updates gallery. The existing tour coordinator prepares visible targets for forward and backward movement, reveals phone actions through `Mehr` and closes them when the tour ends. Returning to the Help trigger closes its open dialog so the trigger remains reachable. This contract does not add product updates or new tour content.
 
 Credential verification and per-action authorization remain governed by [the credential contract](credential-verification.md). Item operations and type eligibility remain governed by [the Planning Item UI contract](planning-item-ui.md) and [the Task GitHub projection decision](adr/0001-deep-task-github-projection.md).

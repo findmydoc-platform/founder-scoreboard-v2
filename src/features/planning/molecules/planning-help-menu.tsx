@@ -20,8 +20,15 @@ export function PlanningHelpMenu({ menuItem = false, restoreFocusRef }: { menuIt
 
   useEffect(() => {
     const openHelpMenu = () => setOpen(true);
+    const revealHelpTrigger = (event: Event) => {
+      if ((event as CustomEvent<{ selector?: string }>).detail?.selector === "[data-tour-id='help-menu-trigger']") setOpen(false);
+    };
     window.addEventListener("fmd:open-help-menu", openHelpMenu);
-    return () => window.removeEventListener("fmd:open-help-menu", openHelpMenu);
+    window.addEventListener("fmd:reveal-header-action", revealHelpTrigger);
+    return () => {
+      window.removeEventListener("fmd:open-help-menu", openHelpMenu);
+      window.removeEventListener("fmd:reveal-header-action", revealHelpTrigger);
+    };
   }, []);
 
   useEffect(() => {

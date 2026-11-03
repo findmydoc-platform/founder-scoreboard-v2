@@ -355,6 +355,30 @@ test.each(["/planning", "/team/platform-releases", "/team/platform-releases/v1.0
   } finally { releaseLogout?.(); holdLogout = false; await context.close(); }
 }, 120_000);
 
+test.each(["/team/platform-releases?section=planning#release-heading", "/team/platform-releases/v1.0.0?section=planning#release-heading"])("Release reconnect action preserves the complete supported destination %s", async destination => {
+  const context = await newBrowserContext();
+  try {
+    await context.route("**/api/github-app/status", route => route.fulfill({ json: { installation: { available: true }, user: { connected: false, needsReconnect: true }, waitingCommentCount: 0 } }));
+    await context.route("**/api/github-app/connect?*", route => route.fulfill({ contentType: "text/html", body: "<p>Synthetic reconnect destination</p>" }));
+    const page = await context.newPage();
+    await checkpoint("Release reconnect login", page.goto(`${appOrigin}/auth/login?next=${encodeURIComponent(destination)}`));
+    await checkpoint("Release reconnect source destination", page.waitForURL(`${appOrigin}${destination}`));
+    await checkpoint("Release reconnect opens GitHub", page.getByRole("button", { name: /GitHub öffnen/ }).click());
+    await checkpoint("Release reconnect connection details", page.getByRole("button", { name: "Autorenverbindung erneuern. Verbindungsdetails anzeigen", exact: true }).click());
+    const reconnect = page.getByRole("button", { name: "Verbindung erneuern", exact: true });
+    await checkpoint("Release reconnect control", reconnect.waitFor());
+    const navigation = page.waitForRequest(request => request.isNavigationRequest() && new URL(request.url()).pathname === "/api/github-app/connect");
+    await reconnect.click();
+    const request = await checkpoint("Release reconnect document navigation", navigation);
+    const target = new URL(request.url());
+    expect(request.method()).toBe("GET");
+    expect(target.origin).toBe(appOrigin);
+    expect(target.pathname).toBe("/api/github-app/connect");
+    expect(target.searchParams.get("next")).toBe(destination);
+    await page.getByText("Synthetic reconnect destination", { exact: true }).waitFor();
+  } finally { await context.close(); }
+}, 30_000);
+
 test("Item mobile main navigation and safe release return preserve or discard the real editor draft", async () => {
   itemPageFixture = true;
   const context = await newBrowserContext();

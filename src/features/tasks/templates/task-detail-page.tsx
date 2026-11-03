@@ -238,6 +238,7 @@ export function TaskDetailPage({
       <PlanningOverlayLayer controller={controller} />
       <TaskDiscardChangesDialog
         open={discardGuard.open}
+        busy={discardGuard.busy}
         onDiscard={discardChanges}
         onKeepEditing={discardGuard.keepEditing}
       />

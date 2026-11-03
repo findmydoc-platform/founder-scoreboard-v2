@@ -11,7 +11,7 @@ export function useApplicationHeaderRuntime(lifecycle: ApplicationHeaderLifecycl
   const headerData = usePlanningHeaderData({ planningState, enabled, notificationsWorkspace });
   const [quickLinksOpen, setQuickLinksOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const requestNavigation = navigation.requestNavigation || ((continueNavigation: () => void) => continueNavigation());
+  const requestNavigation = navigation.requestNavigation || ((continueNavigation: () => void | Promise<void>) => { void continueNavigation(); });
   const navigate = (href: string) => requestNavigation(() => navigation.navigate(href));
   const openTeam = (editWorkweek = false, week?: string) => {
     const params = new URLSearchParams();
@@ -22,7 +22,7 @@ export function useApplicationHeaderRuntime(lifecycle: ApplicationHeaderLifecycl
   const openNotification = (event: HeaderNotification) => {
     setNotificationsOpen(false);
     requestNavigation(() => {
-      void planningState.updateNotificationStatus(event.id, "seen").then(result => {
+      return planningState.updateNotificationStatus(event.id, "seen").then(result => {
         if (result.ok && result.phase === "saved") navigation.navigate(notificationTarget(event).href);
       });
     });

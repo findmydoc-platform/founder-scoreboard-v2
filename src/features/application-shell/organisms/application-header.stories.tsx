@@ -305,3 +305,35 @@ export const PhoneTourRevealsGithubAfterAccount: Story = {
     await expect(canvas.getByLabelText("Destination")).toHaveTextContent("");
   },
 };
+
+export const PhoneTourBackRevealsHelpAgain: Story = {
+  args: { tours: true },
+  globals: { viewport: { value: "phone" } },
+  parameters: { viewport: { options: { phone: { name: "Phone", styles: { width: "390px", height: "844px" } } } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const page = within(document.body);
+    window.dispatchEvent(new CustomEvent("fmd:start-feature-tour", { cancelable: true, detail: { tourId: "product-updates-v1" } }));
+    await waitFor(() => expect(page.getByText("Neuigkeiten wiederfinden")).toBeVisible());
+    await expect(canvas.getByRole("menuitem", { name: "Hilfe öffnen" })).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Weiter" }));
+    await expect(await page.findByRole("button", { name: /Was ist neu/ })).toBeVisible();
+    await waitFor(() => expect(page.getByRole("button", { name: "Verstanden" })).toBeVisible());
+    await Promise.all(document.getAnimations().map(animation => animation.finished));
+    await userEvent.keyboard("{ArrowLeft}");
+    await waitFor(() => expect(page.getByText("Neuigkeiten wiederfinden")).toBeVisible());
+    await expect(canvas.getByRole("menuitem", { name: "Hilfe öffnen" })).toBeVisible();
+    await expect(page.queryByRole("dialog", { name: "Hilfe" })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("menuitem", { name: "Hilfe öffnen" }));
+    await expect(page.getByRole("dialog", { name: "Hilfe" })).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Weiter" }));
+    await expect(await page.findByRole("button", { name: /Was ist neu/ })).toBeVisible();
+    await waitFor(() => expect(page.getByRole("button", { name: "Verstanden" })).toBeVisible());
+    await userEvent.click(page.getByRole("button", { name: "Verstanden" }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Mehr" })).toHaveFocus());
+    await expect(canvas.getByRole("button", { name: "Mehr" })).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(canvas.getByRole("button", { name: "Mehr" }));
+    await userEvent.click(canvas.getByRole("menuitem", { name: "Hilfe öffnen" }));
+    await expect(page.getByRole("dialog", { name: "Hilfe" })).toBeVisible();
+  },
+};

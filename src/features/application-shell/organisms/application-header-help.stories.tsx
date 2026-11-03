@@ -42,3 +42,26 @@ export const PhoneHelpProtectsTheItemDraft: Story = {
     await expect(getRouter().push).toHaveBeenCalledWith("/planning?help=tour");
   },
 };
+
+export const PhoneUpdatesProtectTheItemDraft: Story = {
+  parameters: { viewport: { options: { phone: { name: "Phone", styles: { width: "390px", height: "844px" } } } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const page = within(document.body);
+    await userEvent.click(await canvas.findByRole("button", { name: "Bearbeiten" }));
+    const title = canvas.getByRole("textbox", { name: "Titel" });
+    await userEvent.type(title, " with private edits");
+    await userEvent.click(canvas.getByRole("button", { name: "Mehr" }));
+    await userEvent.click(canvas.getByRole("menuitem", { name: "Hilfe öffnen" }));
+    await userEvent.click(page.getByRole("button", { name: /Was ist neu/ }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Weiter bearbeiten" }));
+    await expect(title).toHaveValue("Reliable planning with private edits");
+    await expect(getRouter().push).not.toHaveBeenCalled();
+    await userEvent.click(canvas.getByRole("button", { name: "Mehr" }));
+    await userEvent.click(canvas.getByRole("menuitem", { name: "Hilfe öffnen" }));
+    await userEvent.click(page.getByRole("button", { name: /Was ist neu/ }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
+    await expect(getRouter().push).toHaveBeenCalledTimes(1);
+    await expect(getRouter().push).toHaveBeenCalledWith("/planning?help=updates");
+  },
+};
