@@ -202,6 +202,8 @@ begin
     v_review_requested_at := null;
   end if;
 
+  v_before := to_jsonb(v_task);
+  perform set_config('app.actor_profile_id', p_profile_id, true);
   if p_patch ? 'evidence_link' then
     perform public.replace_task_evidence_links(
       p_item_id,
@@ -217,8 +219,6 @@ begin
     where id = p_item_id;
   end if;
 
-  v_before := to_jsonb(v_task);
-  perform set_config('app.actor_profile_id', p_profile_id, true);
   if p_patch <> '{}'::jsonb then
     update public.tasks
     set title = case when p_patch ? 'title' then nullif(trim(p_patch->>'title'), '') else v_task.title end,
