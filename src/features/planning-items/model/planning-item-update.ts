@@ -430,7 +430,13 @@ function normalizePatch(raw: UnknownRecord, presentFields: PlanningItemPatchFiel
       case "scopeConstraints":
       case "evidenceRequired":
             case "definitionOfDone": result = normalizePatchText(value); break;
-      case "evidenceLink": result = normalizePatchText(value, 4_000); break;
+      case "evidenceLink": {
+        result = normalizePatchText(value, 2_048);
+        if (result.ok && result.value && !validReviewEvidenceUrl(String(result.value))) {
+          result = { ok: false, error: "muss eine gültige HTTP- oder HTTPS-URL sein" };
+        }
+        break;
+      }
       case "evidenceExceptionNote": result = normalizePatchText(value, 2_000); break;
       case "acceptanceCriteria": result = normalizePatchAcceptanceCriteria(value); break;
       case "priority": result = normalizePatchPriority(value); break;
