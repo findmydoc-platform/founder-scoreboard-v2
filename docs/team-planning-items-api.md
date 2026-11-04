@@ -179,6 +179,8 @@ Moving an approved Deliverable to `Review` requires a valid HTTP(S) evidence URL
 }
 ```
 
+`evidenceLink` accepts at most 2,048 characters after trimming, matching manual evidence storage. Setting it replaces the manual evidence list with that URL; `null` or an empty string clears manual evidence. Linked pull requests and evidence on Sub-Issues remain on their source records. Evidence and Review changes commit atomically after authorization and revision checks.
+
 If no link exists, the same request must include a non-empty `evidenceExceptionNote` with at most 2,000 characters. The note is valid for that Review request only and remains visible in the Review area. A later Review request checks the evidence again.
 
 ```json

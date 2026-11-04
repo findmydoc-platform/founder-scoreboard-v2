@@ -430,7 +430,13 @@ function normalizePatch(raw: UnknownRecord, presentFields: PlanningItemPatchFiel
       case "scopeConstraints":
       case "evidenceRequired":
             case "definitionOfDone": result = normalizePatchText(value); break;
-      case "evidenceLink": result = normalizePatchText(value, 4_000); break;
+      case "evidenceLink": {
+        result = normalizePatchText(value, 2_048);
+        if (result.ok && result.value && !validReviewEvidenceUrl(String(result.value))) {
+          result = { ok: false, error: "muss eine gültige HTTP- oder HTTPS-URL sein" };
+        }
+        break;
+      }
       case "evidenceExceptionNote": result = normalizePatchText(value, 2_000); break;
       case "acceptanceCriteria": result = normalizePatchAcceptanceCriteria(value); break;
       case "priority": result = normalizePatchPriority(value); break;
@@ -722,8 +728,16 @@ export async function buildPlanningItemUpdatePreview({
       if (target.row.approval_status !== "approved") errors.push("Nur freigegebene Deliverables können in Review gegeben werden.");
       if (target.row.score_final) errors.push("Final bewertete Aufgaben müssen über „Review erneut öffnen“ zurück in Review gegeben werden.");
       const evidenceExceptionNote = String(normalizedPatch.evidenceExceptionNote || "").trim();
-      const hasValidReviewEvidence = target.hasValidReviewEvidence
+      let hasValidReviewEvidence = target.hasValidReviewEvidence
         || validReviewEvidenceUrl(String(normalizedPatch.evidenceLink || ""));
+      if (hasOwn(normalizedPatch, "evidenceLink") && !normalizedPatch.evidenceLink) {
+        const evidence = await supabase.rpc("has_valid_planning_review_evidence", {
+          p_task_id: itemId,
+          p_evidence_link_override: null,
+        });
+        if (evidence.error) throw new Error(evidence.error.message);
+        hasValidReviewEvidence = evidence.data === true;
+      }
       if (!hasValidReviewEvidence && !evidenceExceptionNote) {
         errors.push("Ergänze vor der Review-Anfrage einen Evidence-Link oder dokumentiere das Ergebnis ohne Link.");
       }
