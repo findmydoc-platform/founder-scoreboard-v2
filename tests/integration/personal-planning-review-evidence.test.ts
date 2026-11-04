@@ -115,8 +115,15 @@ it("personal Planning API cannot remove its sole evidence while entering review"
     const empty = await api.read(id);
     expect((await api.save(id, { expectedUpdatedAt: empty.updatedAt, evidenceLink: "https://example.test/retained" })).status).toBe(200);
     const before = await api.read(id);
-    const rejected = await api.save(id, { expectedUpdatedAt: before.updatedAt, evidenceLink: "", status: "Review" });
-    expect(rejected.status).toBe(409);
+    const patch = { expectedUpdatedAt: before.updatedAt, evidenceLink: "", status: "Review" };
+    expect((await api.preview(id, patch)).status).toBe(400);
+    expect((await api.save(id, patch)).status).toBe(400);
+    const rejected = await fixture.rpc("update_team_planning_item_with_review_evidence_transaction_v1", {
+      p_token_id: api.tokenId, p_profile_id: fixture.actors.deputy.profileId, p_item_type: "deliverable", p_item_id: id,
+      p_expected_updated_at: before.updatedAt, p_idempotency_key: randomUUID(), p_request_hash: "b".repeat(64),
+      p_patch: { evidence_link: "", status: "Review" }, p_changed_fields: ["evidenceLink", "status"],
+    });
+    expect(await rejected.json()).toMatchObject({ code: "P0017" });
     expect(await api.read(id)).toEqual(before);
     expect((await fixture.db.query("select url from public.task_links where task_id=$1 and type='evidence'", [id])).rows).toEqual([{ url: "https://example.test/retained" }]);
   });
@@ -136,6 +143,7 @@ it("personal Planning transaction records one projection on replay and remains s
     const operation = "update_team_planning_item_with_review_evidence_transaction_v1";
     for (const [actor, status] of [["anonymous", 401], ["founder", 403]] as const) {
       expect((await fixture.rpc(operation, command, actor)).status).toBe(status);
+      expect((await fixture.rpc("has_valid_planning_review_evidence", { p_task_id: id, p_evidence_link_override: null }, actor)).status).toBe(status);
     }
     const first = await fixture.rpc(operation, command);
     expect(first.status).toBe(200);
@@ -145,6 +153,29 @@ it("personal Planning transaction records one projection on replay and remains s
     expect(replay.status).toBe(200);
     expect(await replay.json()).toMatchObject({ replayed: true, projectionOperationId: committed.projectionOperationId });
     expect((await fixture.db.query("select count(*)::int as count from public.planning_github_projection_outbox where task_id=$1", [id])).rows).toEqual([{ count: 1 }]);
+  });
+}, 60_000);
+
+it.each(["linked pull request", "Sub-Issue"])("personal Planning API retains %s evidence when clearing a manual link", async mode => {
+  await withPersonalPlanningDatabase(async fixture => {
+    const api = await personalApi(fixture);
+    const id = await api.createTask(mode.replaceAll(" ", "-"));
+    const empty = await api.read(id);
+    expect((await api.save(id, { expectedUpdatedAt: empty.updatedAt, evidenceLink: "https://example.test/replaced" })).status).toBe(200);
+    if (mode === "linked pull request") {
+      await fixture.db.query(`insert into public.task_links(task_id,type,label,url,metadata)
+        values($1,'github_pull_request','Synthetic merged PR','https://github.com/example/project/pull/42',
+        '{"repository":"example/project","number":42,"status":"merged"}'::jsonb)`, [id]);
+    } else {
+      await fixture.db.query(`insert into public.tasks(id,project_id,title,task_type,status,priority,parent_task_id,owner,assignee,evidence_link)
+        values($1,'findmydoc-founder-execution','Synthetic Sub-Issue','sub_issue','Offen','P2',$2,$3,$3,'https://example.test/child-proof')`,
+      [`${id}-child`, id, fixture.actors.founder.profileId]);
+    }
+    const before = await api.read(id);
+    const patch = { expectedUpdatedAt: before.updatedAt, evidenceLink: null, status: "Review" };
+    expect((await api.preview(id, patch)).status).toBe(200);
+    expect((await api.save(id, patch)).status).toBe(200);
+    expect(await api.read(id)).toMatchObject({ evidenceLink: "", status: "Review", reviewStatus: "requested" });
   });
 }, 60_000);
 

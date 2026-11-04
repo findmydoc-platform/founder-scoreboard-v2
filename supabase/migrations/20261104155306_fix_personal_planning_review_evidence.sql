@@ -1,4 +1,54 @@
 -- Keep personal Planning evidence in the same transaction as its task revision.
+create or replace function public.has_valid_planning_review_evidence(
+  p_task_id text,
+  p_evidence_link_override text
+)
+returns boolean
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  with parent as (
+    select id, task_type, project_id
+    from public.tasks
+    where id = p_task_id and trashed_at is null
+  ), evidence_tasks as (
+    select task.id,
+           case when task.id = parent.id then p_evidence_link_override else task.evidence_link end as evidence_link
+    from public.tasks task
+    join parent on task.id = parent.id
+      or (
+        parent.task_type = 'deliverable'
+        and task.task_type = 'sub_issue'
+        and task.parent_task_id = parent.id
+        and task.project_id = parent.project_id
+      )
+    where task.trashed_at is null
+  )
+  select exists (
+    select 1 from evidence_tasks where evidence_link ~* '^https?://'
+  ) or exists (
+    select 1
+    from public.task_links link
+    join evidence_tasks task on task.id = link.task_id
+    where link.type in ('evidence', 'github_pull_request')
+      and not (link.task_id = p_task_id and link.type = 'evidence')
+      and link.url ~* '^https?://'
+      and (
+        link.type = 'evidence'
+        or (
+          nullif(trim(link.metadata->>'repository'), '') is not null
+          and link.metadata->>'number' ~ '^[1-9][0-9]*$'
+          and link.metadata->>'status' in ('open', 'merged', 'closed')
+        )
+      )
+  );
+$$;
+
+revoke all on function public.has_valid_planning_review_evidence(text, text) from public;
+grant execute on function public.has_valid_planning_review_evidence(text, text) to service_role;
+
 CREATE OR REPLACE FUNCTION "public"."update_team_planning_item_transaction_without_completed_guard"("p_token_id" "uuid", "p_profile_id" "text", "p_item_type" "text", "p_item_id" "text", "p_expected_updated_at" timestamp with time zone, "p_idempotency_key" "uuid", "p_request_hash" "text", "p_patch" "jsonb" DEFAULT '{}'::"jsonb", "p_changed_fields" "jsonb" DEFAULT '[]'::"jsonb", "p_system_effects" "jsonb" DEFAULT '[]'::"jsonb", "p_request_ip" "text" DEFAULT NULL::"text", "p_user_agent" "text" DEFAULT NULL::"text") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
