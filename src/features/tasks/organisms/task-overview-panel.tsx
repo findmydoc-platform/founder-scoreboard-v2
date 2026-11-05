@@ -18,6 +18,8 @@ import { subIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-eviden
 import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
 import type { LinkedPullRequest, Profile, Task } from "@/lib/types";
 import { formatDate } from "@/lib/display";
+import { TaskBriefText } from "@/features/tasks/atoms/task-brief-text";
+import type { GitHubBriefReferenceContext } from "@/lib/github-brief-references";
 import { LinkifiedText } from "@/shared/atoms/linkified-text";
 import { classNames, UiButton, UiEmptyState, UiField, UiNotice, UiTextInput } from "@/shared/atoms/ui-primitives";
 
@@ -37,18 +39,18 @@ const subIssueBriefFields = overviewFields
     ? { ...field, placeholder: "Optionaler Hinweis zum gewünschten Nachweis oder Verlauf" }
     : field);
 
-function ChecklistReadValue({ value }: { value: string }) {
-  const lines = value.split("\n").map((line) => line.trim()).filter(Boolean);
+function ChecklistReadValue({ value, referenceContext }: { value: string; referenceContext?: GitHubBriefReferenceContext }) {
+  const lines = value.split("\n").map((line, index) => ({ text: line.trim(), index })).filter(({ text }) => text);
   if (!lines.length) return null;
   return (
     <ul className="grid gap-2">
-      {lines.map((line, index) => (
+      {lines.map(({ text: line, index }) => (
         <li key={`${line}-${index}`} className="flex items-start gap-2 text-[15px] leading-7 text-slate-700">
           <span className="mt-1.5 grid h-4 w-4 shrink-0 place-items-center rounded border border-slate-300 bg-white" aria-hidden="true">
             {/^\s*[-*]?\s*\[[xX]\]/.test(line) ? <Check size={11} className="text-emerald-600" /> : null}
           </span>
           <span className="[overflow-wrap:anywhere]">
-            <LinkifiedText value={line.replace(/^\s*[-*]?\s*\[[ xX]\]\s*/, "")} />
+            {referenceContext ? <TaskBriefText value={value} context={referenceContext} checklistLine={index} /> : <LinkifiedText value={line.replace(/^\s*[-*]?\s*\[[ xX]\]\s*/, "")} />}
           </span>
         </li>
       ))}
@@ -62,12 +64,14 @@ function ReadSection({
   checklist = false,
   anchorId,
   emptyValue,
+  referenceContext,
 }: {
   label: string;
   value: string;
   checklist?: boolean;
   anchorId?: string;
   emptyValue?: string;
+  referenceContext?: GitHubBriefReferenceContext;
 }) {
   const hasValue = Boolean(value.trim());
   if (!hasValue && !emptyValue) return anchorId ? <span id={anchorId} className="block scroll-mt-6" /> : null;
@@ -80,7 +84,7 @@ function ReadSection({
       <h3 className="text-sm font-semibold text-slate-950">{label}</h3>
       {hasValue ? (
         <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
-          {checklist ? <ChecklistReadValue value={value} /> : <LinkifiedText value={value} />}
+          {checklist ? <ChecklistReadValue value={value} referenceContext={referenceContext} /> : referenceContext ? <TaskBriefText value={value} context={referenceContext} /> : <LinkifiedText value={value} />}
         </div>
       ) : <p className="mt-2 text-[15px] leading-7 text-slate-500">{emptyValue}</p>}
     </section>
@@ -215,12 +219,14 @@ function EvidenceGroups({
 }
 
 function ReviewEvidenceSection({
+  referenceContext,
   evidenceLinks,
   evidenceRequired,
   linkedPullRequests,
   inherited,
   onOpenTask,
 }: {
+  referenceContext: GitHubBriefReferenceContext;
   evidenceLinks: string[];
   evidenceRequired: string;
   linkedPullRequests: LinkedPullRequest[];
@@ -236,7 +242,7 @@ function ReviewEvidenceSection({
     >
       <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
       <div className="mt-2 text-[15px] leading-7 text-slate-700">
-        <p><LinkifiedText value={evidenceRequired.trim() || "Kein erwarteter Nachweis hinterlegt."} /></p>
+        <p><TaskBriefText value={evidenceRequired.trim() || "Kein erwarteter Nachweis hinterlegt."} context={referenceContext} /></p>
         <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} inherited={inherited} onOpenTask={onOpenTask} />
       </div>
     </section>
@@ -596,13 +602,13 @@ export function TaskOverviewPanel({
                     <span className="font-semibold text-slate-700">Arbeitsbrief.</span>{" "}
                     Diese Angaben sind optionaler Kontext. Für Sub-Issues entstehen daraus weder Review, Score noch verpflichtende Nachweise.
                   </UiNotice>
-                  {hasDistinctSubIssueContext ? <ReadSection label="Kontext" value={draft.description} anchorId={taskMentionFieldTargetIds.description} /> : null}
-                  <ReadSection label="Problem" value={draft.problemStatement} anchorId={taskMentionFieldTargetIds.problem} />
-                  <ReadSection label="Zielbild" value={draft.intendedOutcome} anchorId={taskMentionFieldTargetIds.outcome} />
-                  <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} anchorId={taskMentionFieldTargetIds.scope} />
-                  <ReadSection label="Abnahmekriterien" value={draft.acceptanceCriteria} anchorId={taskMentionFieldTargetIds.acceptance} checklist />
-                  <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId={taskMentionFieldTargetIds["evidence-required"]} />
-                  <ReadSection label="Qualitätsstandard" value={draft.definitionOfDone} anchorId={taskMentionFieldTargetIds["definition-of-done"]} checklist />
+                  {hasDistinctSubIssueContext ? <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Kontext" value={draft.description} anchorId={taskMentionFieldTargetIds.description} /> : null}
+                  <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Problem" value={draft.problemStatement} anchorId={taskMentionFieldTargetIds.problem} />
+                  <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Zielbild" value={draft.intendedOutcome} anchorId={taskMentionFieldTargetIds.outcome} />
+                  <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Umfang & Grenzen" value={draft.scopeConstraints} anchorId={taskMentionFieldTargetIds.scope} />
+                  <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Abnahmekriterien" value={draft.acceptanceCriteria} anchorId={taskMentionFieldTargetIds.acceptance} checklist />
+                  <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId={taskMentionFieldTargetIds["evidence-required"]} />
+                  <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Qualitätsstandard" value={draft.definitionOfDone} anchorId={taskMentionFieldTargetIds["definition-of-done"]} checklist />
                   {riskContent}
                 </>
               ) : (
@@ -610,7 +616,7 @@ export function TaskOverviewPanel({
                   <div>
                     <h3 className="text-sm font-semibold text-slate-950">Kontext</h3>
                     <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
-                      {draft.description.trim() || <span className="text-slate-500">Kein Kontext hinterlegt.</span>}
+                      {draft.description.trim() ? <TaskBriefText value={draft.description} context={{ githubRepo: task.githubRepo }} /> : <span className="text-slate-500">Kein Kontext hinterlegt.</span>}
                     </div>
                   </div>
                   {riskContent}
@@ -624,15 +630,17 @@ export function TaskOverviewPanel({
             </>
           ) : (
             <>
-              <ReadSection label="Problem" value={draft.problemStatement} anchorId={taskMentionFieldTargetIds.problem} />
+              <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Problem" value={draft.problemStatement} anchorId={taskMentionFieldTargetIds.problem} />
               <ReadSection
+                referenceContext={{ githubRepo: task.githubRepo }}
                 label="Zielbild"
                 value={draft.intendedOutcome}
                 anchorId={taskMentionFieldTargetIds.outcome}
                 emptyValue={flatReadOnly ? "Kein Zielbild hinterlegt." : undefined}
               />
-              <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} anchorId={taskMentionFieldTargetIds.scope} />
+              <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Umfang & Grenzen" value={draft.scopeConstraints} anchorId={taskMentionFieldTargetIds.scope} />
               <ReadSection
+                referenceContext={{ githubRepo: task.githubRepo }}
                 label="Abnahmekriterien"
                 value={draft.acceptanceCriteria}
                 checklist
@@ -641,6 +649,7 @@ export function TaskOverviewPanel({
               />
               {flatReadOnly ? (
                 <ReviewEvidenceSection
+                  referenceContext={{ githubRepo: task.githubRepo }}
                   key={task.id}
                   evidenceLinks={evidenceLinks}
                   evidenceRequired={draft.evidenceRequired}
@@ -649,7 +658,7 @@ export function TaskOverviewPanel({
                   onOpenTask={onOpenTask}
                 />
               ) : (
-                <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId={taskMentionFieldTargetIds["evidence-required"]} />
+                <ReadSection referenceContext={{ githubRepo: task.githubRepo }} label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId={taskMentionFieldTargetIds["evidence-required"]} />
               )}
               {!flatReadOnly ? (
                 <section
@@ -662,6 +671,7 @@ export function TaskOverviewPanel({
               ) : null}
               {flatReadOnly ? riskContent : null}
               <ReadSection
+                referenceContext={{ githubRepo: task.githubRepo }}
                 label="Qualitätsstandard"
                 value={draft.definitionOfDone}
                 checklist

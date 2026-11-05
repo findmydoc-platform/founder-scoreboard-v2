@@ -68,5 +68,6 @@ export function planningContentFromRow(row: Record<string, unknown>): IssueConte
     evidenceRequired: String(row.evidence_required || ""),
     definitionOfDone: String(row.definition_of_done || ""),
     evidenceLink: String(row.evidence_link || ""),
+    githubRepo: String(row.github_repo || ""),
   };
 }

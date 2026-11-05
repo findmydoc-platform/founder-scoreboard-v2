@@ -582,3 +582,23 @@ test("an invalid update preview retains the full input and exposes structured le
   assert.equal(result.preview.normalizedPatch.intendedOutcome?.length, 65_537);
   assert.equal(result.preview.lengthErrors.find((error) => error.field === "intendedOutcome").excess, 1);
 });
+
+
+test("update preview derives full linked brief from resulting item without adding stored changes", async () => {
+  const text = "Änderung other-org/outside-repo#123";
+  const target = taskRow({ description: text, problem_statement: text, intended_outcome: "Bestehendes Ziel" });
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, intendedOutcome: "Neues Ziel" });
+  const result = await updates.buildPlanningItemUpdatePreview({
+    actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target),
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.preview.linkedBrief, {
+    description: "Änderung [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    problemStatement: "Änderung [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    intendedOutcome: "Neues Ziel", scopeConstraints: "", acceptanceCriteria: "", evidenceRequired: "", definitionOfDone: "",
+  });
+  assert.equal(result.preview.resultingItem.description, text);
+  assert.deepEqual(result.preview.changedFields, ["intendedOutcome"]);
+  assert.deepEqual(result.preview.dbPatch, { intended_outcome: "Neues Ziel" });
+  assert.equal(result.preview.normalizedPatch.linkedBrief, undefined);
+});

@@ -411,7 +411,7 @@ test("Create request hashes distinguish content beyond the former truncation bou
 
 test("create replay survives changed mention expansion diagnostics", async () => {
   const create = await loadCreate();
-  const rawItems = [{ itemType: "deliverable", title: "Mention replay", description: "x".repeat(65_000) + " @all", ownerId: actor.profileId }];
+  const rawItems = [{ itemType: "deliverable", title: "Mention replay", description: "x".repeat(65_000) + " @all other-org/outside-repo#123", ownerId: actor.profileId }];
   const responseItems = [{ itemType: "deliverable", item: { id: "saved-task" } }];
   let expanded = false;
   let stored = null;
@@ -458,4 +458,63 @@ test("invalid create commit returns per-item structured diagnostics with HTTP 40
   assert.equal(response.status, 400);
   assert.equal(response.body.ok, false);
   assert.deepEqual(response.body.items[0].lengthErrors, lengthErrors);
+});
+
+
+test("create preview links full GitHub references without changing authored fields or commit payloads", async () => {
+  const create = await loadCreate();
+  const text = "Änderung in other-org/outside-repo#123";
+  const query = {
+    select() { return this; }, eq() { return this; },
+    then(resolve) { return Promise.resolve({ data: [{ id: actor.profileId, name: "CEO" }], error: null }).then(resolve); },
+  };
+  const items = await create.buildPlanningItemCreatePreview([
+    { itemType: "deliverable", title: text, description: text, problemStatement: text },
+    { itemType: "epic", title: text, description: text, ownerId: actor.profileId },
+  ], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  assert.deepEqual(items[0].linkedBrief, {
+    description: "Änderung in [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    problemStatement: "Änderung in [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    intendedOutcome: "", scopeConstraints: "", acceptanceCriteria: "", evidenceRequired: "", definitionOfDone: "",
+  });
+  assert.equal(items[0].description, text);
+  assert.equal(items[0].problemStatement, text);
+  assert.equal(items[0].title, text);
+  assert.equal(items[1].linkedBrief, undefined);
+  assert.equal(create.planningItemCreateCommitItem(items[0]).linkedBrief, undefined);
+  const withoutLinks = items.map((item) => { const source = { ...item }; delete source.linkedBrief; return source; });
+  assert.equal(create.planningItemCreateHash(items), create.planningItemCreateHash(withoutLinks));
+});
+
+
+test("create preview preserves Markdown protection and invalid full reference tokens byte for byte", async () => {
+  const create = await loadCreate();
+  const protectedText = [
+    "[other-org/repo#1](https://example.com/fixed?q=other-org/repo#2)",
+    "[other-org/repo#3][target]", "[other-org/repo#4][]", "[other-org/repo#5]",
+    "", "[other-org/repo#4]: https://example.com/collapsed",
+    "[other-org/repo#5]: https://example.com/shortcut",
+    "[multiline]: https://example.com/path\n  \"other-org/repo#24\"",
+    "[target]: https://github.com/other-org/repo/issues/6#issuecomment-7 \"other-org/repo#8\"", "",
+    "https://example.com/path/other-org/repo#9?q=owner/repo#10",
+    "<https://github.com/other-org/repo/issues/11#issuecomment-12>",
+    "`other-org/repo#13`", "``other-org/repo#14 ` still code``",
+    "```md\nother-org/repo#15\n```", "~~~\nother-org/repo#16\n~~~",
+    "    other-org/repo#17", "\tother-org/repo#18",
+    String.raw`\other-org/repo#19 other-org/repo\#20`,
+    "owner/repo#0 owner/repo#-1 owner/repo# owner/repo#1abc owner/repo#1.5",
+    "bad_owner/repo#1 -owner/repo#1 owner-/repo#1 owner/repo/extra#1 owner/../repo#1 ba\u0308d/repo#1",
+    "#123 management#361 unknown#361",
+  ].join("\n");
+  const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const preview = (description) => create.buildPlanningItemCreatePreview([
+    { itemType: "deliverable", title: "Protected references", description },
+  ], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  const text = `Änderung other-org/repo#21.\n${protectedText}\nAuch findmydoc-platform/founder-scoreboard-v2#397`;
+  const expected = `Änderung [other-org/repo#21](https://github.com/other-org/repo/issues/21).\n${protectedText}\nAuch [findmydoc-platform/founder-scoreboard-v2#397](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/397)`;
+  const [item] = await preview(text);
+  assert.equal(item.linkedBrief.description, expected);
+  assert.equal(item.description, text);
+  const [again] = await preview(item.linkedBrief.description);
+  assert.equal(again.linkedBrief.description, expected);
 });

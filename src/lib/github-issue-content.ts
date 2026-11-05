@@ -1,9 +1,10 @@
+import { linkedTaskBrief } from "./github-brief-references";
 import type { Task } from "./types";
 import { canonicalizeProfileMentionsForGitHub, type MentionProfile, type MentionTeam } from "./mentions";
 
 export type IssueContentTask = Pick<Task, "id" | "title" | "taskType"> & Partial<Pick<Task,
   "description" | "problemStatement" | "intendedOutcome" | "scopeConstraints" | "acceptanceCriteria" |
-  "evidenceRequired" | "definitionOfDone" | "evidenceLink">>;
+  "evidenceRequired" | "definitionOfDone" | "evidenceLink" | "githubRepo">>;
 export type IssueContentContext = { appUrl?: string; mentionProfiles?: MentionProfile[]; mentionTeam?: MentionTeam };
 export const GITHUB_ISSUE_BODY_LIMIT = 65_536;
 export const GITHUB_ISSUE_TITLE_LIMIT = 256;
@@ -38,7 +39,8 @@ export function renderGitHubIssueContent(task: IssueContentTask, context: IssueC
   return {
     title: taskIssueTitle(task),
     body: canonicalizeProfileMentionsForGitHub(
-      taskIssueBody(task, context.appUrl), context.mentionProfiles || [], context.mentionTeam,
+      taskIssueBody(task.taskType === "deliverable" || task.taskType === "sub_issue"
+        ? { ...task, ...linkedTaskBrief(task, { githubRepo: task.githubRepo }) } : task, context.appUrl), context.mentionProfiles || [], context.mentionTeam,
     ),
   };
 }

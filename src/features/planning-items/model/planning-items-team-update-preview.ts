@@ -1,3 +1,4 @@
+import { linkedTaskBrief } from "@/lib/github-brief-references";
 import type { NextRequest } from "next/server";
 import {
   parsePlanningItemPatchPayload,
@@ -40,7 +41,12 @@ export async function handleTeamPlanningItemUpdatePreview(
         dependency: parsed.dependency,
       });
       if (!result.ok) return planningItemsError(result.error, result.status);
-      return planningItemsJson({ ok: true, valid: true, ...result.preview });
+      return planningItemsJson({
+        ok: true, valid: true, ...result.preview,
+        ...(!isStrategicPlanningItemType(result.preview.itemType) ? {
+          linkedBrief: linkedTaskBrief(result.preview.resultingItem, { githubRepo: String(result.preview.resultingItem.githubRepo || "") }),
+        } : {}),
+      });
     }
 
     const result = await permission.planningItems.buildUpdatePreview({
@@ -62,6 +68,7 @@ export async function handleTeamPlanningItemUpdatePreview(
       currentItem: preview.currentItem,
       normalizedPatch: preview.normalizedPatch,
       resultingItem: preview.resultingItem,
+      ...(preview.linkedBrief ? { linkedBrief: preview.linkedBrief } : {}),
       changedFields: preview.changedFields,
       systemEffects: preview.systemEffects,
       errors: preview.errors,
