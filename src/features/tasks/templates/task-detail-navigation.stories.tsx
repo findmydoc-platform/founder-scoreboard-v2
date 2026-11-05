@@ -22,6 +22,11 @@ const detailModel = {
   }] },
 };
 const summary = { ...model.item, detailAvailability: "summary" as const, problemStatement: "" };
+const relatedSource = {
+  ...model,
+  item: { ...model.item, id: "related-source-task", title: "Related source task", description: "Source task context." },
+  relatedItems: [model.item],
+};
 const boardData = { ...taskDetailModelToPlanningShellState(model), tasks: [summary] };
 const headerData = {
   ...itemPageHeaderData,
@@ -32,7 +37,7 @@ const headerData = {
   }] }),
 };
 
-function TaskMentionNavigation({ missingTask = false }: { missingTask?: boolean; failFirstRead?: boolean }) {
+function TaskMentionNavigation({ missingTask = false, relatedTaskFirst = false }: { missingTask?: boolean; failFirstRead?: boolean; relatedTaskFirst?: boolean }) {
   const [destination, setDestination] = useState("");
   useEffect(() => {
     getRouter().push.mockImplementation(href => { setDestination(String(href)); });
@@ -44,7 +49,7 @@ function TaskMentionNavigation({ missingTask = false }: { missingTask?: boolean;
       initialCommentTarget={parseTaskCommentTarget(new URL(destination, "https://example.test").searchParams.get("focus"))}
       source="supabase" authRequired initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile}
     /> : <PlanningApp
-      initialData={missingTask ? { ...boardData, tasks: [] } : boardData} initialHeaderData={headerData} initialWorkspace="planning"
+      initialData={missingTask ? { ...boardData, tasks: [] } : relatedTaskFirst ? { ...boardData, tasks: [summary, { ...relatedSource.item, detailAvailability: "summary" }] } : boardData} initialHeaderData={headerData} initialWorkspace="planning"
       source="supabase" authRequired initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile}
       initialProtectedDataLoaded
     />}
@@ -65,6 +70,8 @@ const meta = {
     const restore = await mockItemPageBrowser({ headerData, respond: (input, init) => {
       const path = new URL(String(input), window.location.origin).pathname;
       if (path === "/api/notifications/732" && init?.method === "PATCH") return Response.json({ ok: true, action: "seen", status: "pending" });
+      if (path === `/api/tasks/${relatedSource.item.id}/detail-data`) return Response.json({ taskDetail: relatedSource, unavailable: [] });
+      if (path === "/api/planning-board-data" && args.relatedTaskFirst) return Response.json({ error: "Planning refresh unavailable." }, { status: 503 });
       if (path === "/api/planning-board-data") return Response.json({
         model: { revision: "board", project: boardData.project, items: args.missingTask ? [] : boardData.tasks, people: boardData.profiles, sprints: [], relationships: [], preferences: [] },
         headerData, currentProfile: itemPageProfile,
@@ -132,5 +139,19 @@ export const FailedMentionDetailsCanBeRetried: Story = {
     await expect(canvas.getByText("Aufgabendetails werden geladen …")).toBeVisible();
     await completeAndExpectMention(canvasElement);
     await expect(canvas.queryByText("Aufgabendetails sind vorübergehend nicht erreichbar.")).not.toBeInTheDocument();
+  },
+};
+
+export const RelatedTaskStillLoadsItsOwnMentionDetails: Story = {
+  args: { relatedTaskFirst: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole("link", { name: relatedSource.item.title }));
+    const panel = await canvas.findByRole("dialog", { name: relatedSource.item.title });
+    await expect(await within(panel).findByRole("tab", { name: "Übersicht" })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(canvas.queryByRole("dialog")).not.toBeInTheDocument());
+    await openMention(canvasElement);
+    await completeAndExpectMention(canvasElement);
   },
 };

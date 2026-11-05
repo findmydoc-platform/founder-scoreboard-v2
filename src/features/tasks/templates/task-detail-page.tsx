@@ -86,6 +86,7 @@ export function TaskDetailPage({
     planningState: controller.planningState,
     selectedTask: task,
     taskId: controller.authUser && controller.protectedDataLoaded ? taskId : undefined,
+    initialError: initialDetailDataError,
     source,
     startTransition: startDetailTransition,
   });
@@ -179,7 +180,7 @@ export function TaskDetailPage({
           operationalCorrection={controller.canCorrectOperationally}
           pending={controller.isPending}
           error={controller.saveError}
-          detailDataError={detailLoader.selectedTaskDetailError || initialDetailDataError}
+          detailDataError={detailLoader.selectedTaskDetailError}
           detailDataLoading={detailLoader.selectedTaskDetailLoading}
           onRetryDetailData={detailLoader.retrySelectedTaskDetail}
           requestedCommentTarget={initialCommentTarget}

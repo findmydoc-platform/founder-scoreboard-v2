@@ -9,6 +9,7 @@ type UseTaskDetailDataLoaderOptions = {
   planningState: PlanningState;
   selectedTask: Task | null;
   taskId?: string;
+  initialError?: string;
   source: "supabase";
   startTransition: TransitionStartFunction;
 };
@@ -17,16 +18,15 @@ export function useTaskDetailDataLoader({
   planningState,
   selectedTask,
   taskId,
+  initialError = "",
   source,
   startTransition,
 }: UseTaskDetailDataLoaderOptions) {
   const selectedTaskId = taskId || selectedTask?.id || "";
   const selectedTaskIsSummary = (selectedTask?.detailAvailability === "summary" || selectedTask?.detailAvailability === "stale");
-  const [loadedTaskIds, setLoadedTaskIds] = useState<Set<string>>(() => new Set(
-    taskId && selectedTask && !selectedTaskIsSummary ? [taskId] : [],
-  ));
+  const [loadedTaskIds, setLoadedTaskIds] = useState<Set<string>>(() => new Set());
   const [attempt, setAttempt] = useState(0);
-  const [loadState, setLoadState] = useState({ taskId: "", loading: false, error: "" });
+  const [loadState, setLoadState] = useState({ taskId: selectedTaskId, loading: false, error: initialError });
   const retrySelectedTaskDetail = useCallback(() => {
     setLoadedTaskIds((current) => {
       if (!current.has(selectedTaskId)) return current;
