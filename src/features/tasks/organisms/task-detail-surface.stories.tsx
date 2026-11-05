@@ -527,3 +527,39 @@ export const RetainedDetailNeedsConsciousComparison: Story = {
     await waitFor(() => expect(canvas.getByLabelText("Detail field writes")).toHaveTextContent("1"));
   },
 };
+
+
+export const FullGitHubReferences: Story = {
+  args: {
+    task: { ...task, title: "other-org/title#4", problemStatement: "Änderung other-org/outside-repo#123 und `other-org/code#9`", intendedOutcome: "findmydoc-platform/founder-scoreboard-v2#397", scopeConstraints: "[manual other-org/fixed#7](https://example.com/fixed#comment)", acceptanceCriteria: "- [ ] Prüfe other-org/checklist#22\n```\nother-org/code#23\n```", evidenceRequired: "other-org/evidence#8", definitionOfDone: "other-org/done#9", note: "other-org/note#5" },
+    comments: [], activities: [],
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    await expect(canvas.getByRole("link", { name: "other-org/outside-repo#123 (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://github.com/other-org/outside-repo/issues/123");
+    await expect(canvas.getByRole("link", { name: "findmydoc-platform/founder-scoreboard-v2#397 (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/397");
+    await expect(canvas.getByRole("link", { name: "other-org/checklist#22 (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://github.com/other-org/checklist/issues/22");
+    await expect(canvas.getByRole("link", { name: "other-org/evidence#8 (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://github.com/other-org/evidence/issues/8");
+    await expect(canvas.getByRole("link", { name: "other-org/done#9 (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://github.com/other-org/done/issues/9");
+    for (const excluded of ["other-org/title#4", "other-org/code#9", "other-org/code#23", "other-org/fixed#7", "other-org/note#5"]) {
+      await expect(canvas.queryByRole("link", { name: `${excluded} (öffnet in neuem Tab)` })).not.toBeInTheDocument();
+    }
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
+    await expect(canvas.getByRole("textbox", { name: "Problem" })).toHaveValue(args.task.problemStatement);
+    await expect(canvas.getByRole("textbox", { name: "Abnahmekriterien" })).toHaveValue(args.task.acceptanceCriteria);
+    await userEvent.click(canvas.getByRole("button", { name: "Abbrechen" }));
+    await expect(canvas.getByRole("link", { name: "other-org/outside-repo#123 (öffnet in neuem Tab)" })).toBeVisible();
+  },
+};
+
+
+export const StrategicReferencesRemainText: Story = {
+  args: { task: { ...task, taskType: "epic", description: "other-org/strategy#10" }, comments: [], activities: [] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    await expect(canvas.getByText("other-org/strategy#10")).toBeVisible();
+    await expect(canvas.queryByRole("link", { name: "other-org/strategy#10 (öffnet in neuem Tab)" })).not.toBeInTheDocument();
+  },
+};

@@ -1,3 +1,4 @@
+import { linkedTaskBrief, type LinkedTaskBrief } from "@/lib/github-brief-references";
 import { validateStoredPlanningContent } from "./planning-item-content-server";
 import type { ContentLengthError, IssueContentTask } from "@/lib/github-issue-content";
 import { createHash } from "node:crypto";
@@ -85,6 +86,7 @@ export type PlanningItemUpdatePreview = {
   currentItem: UnknownRecord;
   normalizedPatch: UnknownRecord;
   resultingItem: UnknownRecord;
+  linkedBrief?: LinkedTaskBrief;
   changedFields: string[];
   systemEffects: PlanningItemSystemEffect[];
   warnings: string[];
@@ -827,6 +829,7 @@ export async function buildPlanningItemUpdatePreview({
       normalizedPatch,
       ...(lengthErrors.length ? { lengthErrors } : {}),
       resultingItem,
+      ...(!isStrategicPlanningItemType(target.itemType) ? { linkedBrief: linkedTaskBrief(resultingItem, { githubRepo: String(resultingItem.githubRepo || "") }) } : {}),
       changedFields,
       systemEffects,
       warnings: changedFields.length ? [] : ["Die normalisierte Änderung entspricht dem aktuellen Stand."],
