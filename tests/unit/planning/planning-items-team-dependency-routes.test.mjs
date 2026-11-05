@@ -144,7 +144,7 @@ test("dependency preview stays on the existing update preview route", async () =
       ...commonMocks({
         buildTeamPlanningDependencyPreview: async (input) => {
           calls.push(input);
-          return { ok: true, preview: { ...preview, resultingItem: { ...preview.resultingItem, description: "other-org/outside-repo#123" } } };
+          return { ok: true, preview: { ...preview, resultingItem: { ...preview.resultingItem, description: "#123 und other-org/outside-repo#123" } } };
         },
       }),
       "@/features/planning-items/model/planning-items-github-sync-preview": { previewPlanningItemGitHubSync: () => ({}) },
@@ -157,7 +157,7 @@ test("dependency preview stays on the existing update preview route", async () =
 
   assert.equal(response.status, 200);
   assert.equal(response.body.valid, true);
-  assert.equal(response.body.linkedBrief.description, "[other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)");
+  assert.equal(response.body.linkedBrief.description, "[#123](https://github.com/findmydoc-platform/management/issues/123) und [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)");
   assert.deepEqual(response.body.changedFields, ["dependencies"]);
   assert.deepEqual(response.body.dependencyChange, preview.dependencyChange);
   assert.equal(calls[0].dependency.direction, "blocked_by");

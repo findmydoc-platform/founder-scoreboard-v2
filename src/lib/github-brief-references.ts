@@ -36,15 +36,17 @@ function protectedMarkdownRanges(value: string) {
   return ranges.sort((left, right) => left.start - right.start || right.end - left.end);
 }
 
-function referenceSegments(value: string): GitHubBriefReferenceSegment[] {
+function referenceSegments(value: string, context: GitHubBriefReferenceContext): GitHubBriefReferenceSegment[] {
   const segments: GitHubBriefReferenceSegment[] = [];
   let cursor = 0;
   for (const match of value.matchAll(/[\p{L}\p{M}\p{N}_./@#\\+-]+/gu)) {
     const token = match[0].replace(/\.+$/u, "");
-    const reference = /^(?:([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)\/)?([A-Za-z0-9_.-]{1,100})#([0-9]+)$/u.exec(token);
+    const relative = token.startsWith("#");
+    const qualifiedToken = relative && context.githubRepo ? `${context.githubRepo}${token}` : token;
+    const reference = /^(?:([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)\/)?([A-Za-z0-9_.-]{1,100})#([0-9]+)$/u.exec(qualifiedToken);
     if (!reference || !/[1-9]/u.test(reference[3]) || [".", ".."].includes(reference[2])) continue;
     const matches = reference[1] ? [`${reference[1]}/${reference[2]}`]
-      : [...allowedGitHubRepositories].filter((repository) => repository.split("/")[1] === reference[2]);
+      : relative ? [] : [...allowedGitHubRepositories].filter((repository) => repository.split("/")[1] === reference[2]);
     if (matches.length !== 1) continue;
     const start = match.index;
     if (start > cursor) segments.push({ text: value.slice(cursor, start) });
@@ -55,16 +57,16 @@ function referenceSegments(value: string): GitHubBriefReferenceSegment[] {
   return segments;
 }
 
-export function gitHubBriefReferenceSegments(value: string, _context?: GitHubBriefReferenceContext): GitHubBriefReferenceSegment[] {
+export function gitHubBriefReferenceSegments(value: string, context: GitHubBriefReferenceContext = {}): GitHubBriefReferenceSegment[] {
   const segments: GitHubBriefReferenceSegment[] = [];
   let cursor = 0;
   for (const range of protectedMarkdownRanges(value)) {
     if (range.end <= cursor) continue;
-    if (range.start > cursor) segments.push(...referenceSegments(value.slice(cursor, range.start)));
+    if (range.start > cursor) segments.push(...referenceSegments(value.slice(cursor, range.start), context));
     segments.push({ text: value.slice(Math.max(cursor, range.start), range.end) });
     cursor = range.end;
   }
-  segments.push(...referenceSegments(value.slice(cursor)));
+  segments.push(...referenceSegments(value.slice(cursor), context));
   return segments;
 }
 
