@@ -1,4 +1,5 @@
 import { GitHubContentLengthError } from "../../../src/lib/github-issue-content";
+import { allowedGitHubRepositories } from "../../../src/lib/github-repositories";
 import assert from "node:assert/strict";
 import { test, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
@@ -486,6 +487,33 @@ test("task projection checks final linked body at the existing codepoint limit w
   assert.equal(rejected.code, "github_content_too_long");
   assert.equal(oversized.issuePayloads.length, 0);
   assert.deepEqual(rejected.lengthErrors.map(({ field, actual, maximum, excess }) => ({ field, actual, maximum, excess })), [{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1 }]);
+});
+
+
+test("task projection uses approved repository references and preserves protected or ambiguous tokens", async () => {
+  const protectedText = "`management#9`; [management#10](https://example.com/fixed#comment); https://github.com/findmydoc-platform/management/issues/11#issuecomment-12; " + String.raw`\management#13`;
+  const text = `Änderung management#361 und website#12; unknown#361; other-org/outside-repo#123; ${protectedText}`;
+  const task = baseTask({ title: "management#4", problemStatement: text });
+  const unique = await projectionFixture({ tasks: [task, task], realContent: true });
+  const result = await unique.project();
+  assert.equal(result.ok, true);
+  assert.ok(unique.issuePayloads[0].body.includes("Änderung [management#361](https://github.com/findmydoc-platform/management/issues/361) und [website#12](https://github.com/findmydoc-platform/website/issues/12); unknown#361; [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)"));
+  assert.ok(unique.issuePayloads[0].body.includes(protectedText));
+  assert.equal(unique.issuePayloads[0].title, "[Deliverable] management#4");
+  assert.deepEqual(unique.issueReads, ["https://api.github.com/repos/findmydoc-platform/management/issues/42"]);
+  allowedGitHubRepositories.add("another-owner/management");
+  try {
+    const ambiguous = await projectionFixture({ tasks: [task, task], realContent: true });
+    const ambiguousResult = await ambiguous.project();
+    assert.equal(ambiguousResult.ok, true);
+    assert.deepEqual(ambiguousResult.warnings, result.warnings);
+    assert.ok(ambiguous.issuePayloads[0].body.includes("Änderung management#361 und [website#12](https://github.com/findmydoc-platform/website/issues/12); unknown#361"));
+    assert.ok(ambiguous.issuePayloads[0].body.includes(protectedText));
+    assert.deepEqual(ambiguous.issueReads, ["https://api.github.com/repos/findmydoc-platform/management/issues/42"]);
+  } finally {
+    allowedGitHubRepositories.delete("another-owner/management");
+  }
+  assert.equal(task.problemStatement, text);
 });
 
 test("task projection resolves relative references from the reloaded repository with fixed links unchanged", async () => {

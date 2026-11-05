@@ -1,4 +1,5 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
+import { allowedGitHubRepositories } from "./github-repositories";
 
 export const taskBriefFields = [
   "description", "problemStatement", "intendedOutcome", "scopeConstraints",
@@ -40,12 +41,16 @@ function referenceSegments(value: string, context: GitHubBriefReferenceContext):
   let cursor = 0;
   for (const match of value.matchAll(/[\p{L}\p{M}\p{N}_./@#\\+-]+/gu)) {
     const token = match[0].replace(/\.+$/u, "");
-    const qualifiedToken = token.startsWith("#") && context.githubRepo ? `${context.githubRepo}${token}` : token;
-    const reference = /^([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)\/([A-Za-z0-9_.-]{1,100})#([0-9]+)$/u.exec(qualifiedToken);
+    const relative = token.startsWith("#");
+    const qualifiedToken = relative && context.githubRepo ? `${context.githubRepo}${token}` : token;
+    const reference = /^(?:([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)\/)?([A-Za-z0-9_.-]{1,100})#([0-9]+)$/u.exec(qualifiedToken);
     if (!reference || !/[1-9]/u.test(reference[3]) || [".", ".."].includes(reference[2])) continue;
+    const matches = reference[1] ? [`${reference[1]}/${reference[2]}`]
+      : relative ? [] : [...allowedGitHubRepositories].filter((repository) => repository.split("/")[1] === reference[2]);
+    if (matches.length !== 1) continue;
     const start = match.index;
     if (start > cursor) segments.push({ text: value.slice(cursor, start) });
-    segments.push({ text: token, href: `https://github.com/${reference[1]}/${reference[2]}/issues/${reference[3]}` });
+    segments.push({ text: token, href: `https://github.com/${matches[0]}/issues/${reference[3]}` });
     cursor = start + token.length;
   }
   if (cursor < value.length) segments.push({ text: value.slice(cursor) });
