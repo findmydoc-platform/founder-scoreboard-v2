@@ -3,6 +3,7 @@ import { test } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadCreate() {
+  const repositories = await importTestModule("src/lib/github-repositories.ts");
   const contract = await importTestModule("src/features/planning-items/model/planning-items-contract.ts");
   const deliverableSchedule = await importTestModule(
     "src/features/planning-items/model/deliverable-schedule.ts",
@@ -21,10 +22,7 @@ async function loadCreate() {
     "src/features/planning-items/model/planning-items-create.ts",
     {
       "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
-      "@/lib/github-repositories": {
-        defaultGitHubRepository: "findmydoc-platform/management",
-        resolveTaskGitHubRepository: (_kind, requested) => ({ ok: true, repository: requested || "findmydoc-platform/management" }),
-      },
+      "@/lib/github-repositories": repositories,
       "@/features/planning-items/model/planning-items-contract": contract,
       "@/features/planning-items/model/planning-item-normalization": normalization,
       "@/features/planning-items/model/deliverable-schedule": deliverableSchedule,
@@ -504,7 +502,7 @@ test("create preview preserves Markdown protection and invalid full reference to
     String.raw`\other-org/repo#19 other-org/repo\#20`,
     "owner/repo#0 owner/repo#-1 owner/repo# owner/repo#1abc owner/repo#1.5",
     "bad_owner/repo#1 -owner/repo#1 owner-/repo#1 owner/repo/extra#1 owner/../repo#1 ba\u0308d/repo#1",
-    "#123 management#361 unknown#361",
+    "unknown#361",
   ].join("\n");
   const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
   const preview = (description) => create.buildPlanningItemCreatePreview([
@@ -517,4 +515,40 @@ test("create preview preserves Markdown protection and invalid full reference to
   assert.equal(item.description, text);
   const [again] = await preview(item.linkedBrief.description);
   assert.equal(again.linkedBrief.description, expected);
+});
+
+test("create preview resolves relative references against the task repository without changing authored input", async () => {
+  const create = await loadCreate();
+  const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const [item] = await create.buildPlanningItemCreatePreview([
+    { itemType: "deliverable", title: "Relative #123", problemStatement: "Änderung #123 und other-org/outside-repo#123" },
+  ], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  assert.equal(item.githubRepo, "findmydoc-platform/management");
+  assert.equal(item.linkedBrief.problemStatement, "Änderung [#123](https://github.com/findmydoc-platform/management/issues/123) und [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)");
+  assert.equal(item.problemStatement, "Änderung #123 und other-org/outside-repo#123");
+  assert.equal(item.title, "Relative #123");
+  assert.equal(create.planningItemCreateCommitItem(item).problemStatement, item.problemStatement);
+  const source = { ...item }; delete source.linkedBrief;
+  assert.equal(create.planningItemCreateHash([item]), create.planningItemCreateHash([source]));
+});
+
+test("relative create references preserve protected Markdown and invalid complete tokens", async () => {
+  const create = await loadCreate();
+  const protectedText = [
+    "[fixed #2](https://example.com/fixed#3) [#4][target]", "", "[target]: https://example.com/target#5", "",
+    "https://github.com/owner/repo/issues/6#issuecomment-7 https://example.com/path?q=#8#9",
+    "`#10`", "```\n#11\n```", "", "    #12", "",
+    String.raw`\#13`,
+    "#0 #000 #-1 # #1abc #1.5 ##14 unknown#361 owner/unknown#-1 unknown/name/extra#15 @#16 _#17 ü#18",
+  ].join("\n");
+  const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const preview = (problemStatement) => create.buildPlanningItemCreatePreview([{ itemType: "deliverable", title: "Relative protection", problemStatement }], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  const text = `Änderung #123.\n${protectedText}\nAuch other-org/outside-repo#123`;
+  const expected = `Änderung [#123](https://github.com/findmydoc-platform/management/issues/123).\n${protectedText}\nAuch [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)`;
+  const [item] = await preview(text);
+  assert.equal(item.problemStatement, text);
+  assert.equal(item.linkedBrief.problemStatement, expected);
+  const [again] = await preview(item.linkedBrief.problemStatement);
+  assert.equal(again.linkedBrief.problemStatement, expected);
+  assert.deepEqual(item.warnings, []);
 });

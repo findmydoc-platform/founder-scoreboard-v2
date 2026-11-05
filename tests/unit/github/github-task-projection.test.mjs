@@ -154,7 +154,7 @@ async function projectionFixture(options = {}) {
       },
     },
     "../github-issue-reference": issueReferences,
-    "../github-repositories": {
+    "../github-repositories": options.realContent ? realRepositories : {
       resolveTaskGitHubRepository: () => (
         options.invalidTarget
           ? { ok: false, error: "invalid repository" }
@@ -479,6 +479,38 @@ test("task projection checks final linked body at the existing codepoint limit w
   assert.equal(accepted.ok, true);
   assert.equal(Array.from(exact.issuePayloads[0].body).length, 65_536);
   assert.ok(exact.issuePayloads[0].body.includes("[other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)"));
+  const oversizedTask = { ...task, problemStatement: `ä${task.problemStatement}` };
+  const oversized = await projectionFixture({ tasks: [oversizedTask, oversizedTask], realContent: true });
+  const rejected = await oversized.project();
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.code, "github_content_too_long");
+  assert.equal(oversized.issuePayloads.length, 0);
+  assert.deepEqual(rejected.lengthErrors.map(({ field, actual, maximum, excess }) => ({ field, actual, maximum, excess })), [{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1 }]);
+});
+
+test("task projection resolves relative references from the reloaded repository with fixed links unchanged", async () => {
+  const text = "Änderung #123 und other-org/outside-repo#123; `#9`; [fixed #7](https://github.com/owner/repo/issues/2#issuecomment-3)";
+  const initial = baseTask({ title: "Relative #4", problemStatement: "Alter Brief #5" });
+  const current = baseTask({ title: "Relative #4", problemStatement: text });
+  const fixture = await projectionFixture({ tasks: [initial, current], realContent: true });
+  const result = await fixture.project();
+  assert.equal(result.ok, true);
+  assert.ok(fixture.issuePayloads[0].body.includes("Änderung [#123](https://github.com/findmydoc-platform/management/issues/123) und [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123); `#9`; [fixed #7](https://github.com/owner/repo/issues/2#issuecomment-3)"));
+  assert.equal(fixture.issuePayloads[0].title, "[Deliverable] Relative #4");
+  assert.equal(current.problemStatement, text);
+  assert.deepEqual(fixture.issueReads, ["https://api.github.com/repos/findmydoc-platform/management/issues/42"]);
+});
+
+test("task projection counts expanded relative references at the final body limit", async ({ onTestFinished }) => {
+  vi.stubEnv("APP_URL", "");
+  onTestFinished(() => vi.unstubAllEnvs());
+  // The fixed sections, source and marker add 341 codepoints; the linked reference plus its space add 68.
+  const task = baseTask({ problemStatement: `${"x".repeat(65_536 - 341 - 68)} #123` });
+  const exact = await projectionFixture({ tasks: [task, task], realContent: true });
+  const accepted = await exact.project();
+  assert.equal(accepted.ok, true);
+  assert.equal(Array.from(exact.issuePayloads[0].body).length, 65_536);
+  assert.ok(exact.issuePayloads[0].body.includes("[#123](https://github.com/findmydoc-platform/management/issues/123)"));
   const oversizedTask = { ...task, problemStatement: `ä${task.problemStatement}` };
   const oversized = await projectionFixture({ tasks: [oversizedTask, oversizedTask], realContent: true });
   const rejected = await oversized.project();

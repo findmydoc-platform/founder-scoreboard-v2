@@ -563,3 +563,43 @@ export const StrategicReferencesRemainText: Story = {
     await expect(canvas.queryByRole("link", { name: "other-org/strategy#10 (öffnet in neuem Tab)" })).not.toBeInTheDocument();
   },
 };
+
+export const RelativeGitHubReferences: Story = {
+  args: {
+    task: { ...task, taskType: "sub_issue", githubRepo: "findmydoc-platform/website", title: "Relative #4", description: "Kontext #122", problemStatement: "Änderung #123 und other-org/outside-repo#123; `#9`; unknown#361", intendedOutcome: "Prüfe #124", scopeConstraints: "#125", acceptanceCriteria: "- [ ] Prüfe #126\n```\n#23\n```", evidenceRequired: "#127", definitionOfDone: "#128", note: "#5" },
+    comments: [], activities: [],
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    for (const number of [122, 123, 124, 125, 126, 127, 128]) {
+      await expect(canvas.getByRole("link", { name: `#${number} (öffnet in neuem Tab)` })).toHaveAttribute("href", `https://github.com/findmydoc-platform/website/issues/${number}`);
+    }
+    await expect(canvas.getByRole("link", { name: "other-org/outside-repo#123 (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://github.com/other-org/outside-repo/issues/123");
+    for (const excluded of ["#4", "#9", "#23", "#5", "#361", "unknown#361"]) {
+      await expect(canvas.queryByRole("link", { name: `${excluded} (öffnet in neuem Tab)` })).not.toBeInTheDocument();
+    }
+    await userEvent.click(canvas.getByRole("button", { name: "Bearbeiten" }));
+    await expect(canvas.getByRole("textbox", { name: "Problem" })).toHaveValue(args.task.problemStatement);
+    await expect(canvas.getByRole("textbox", { name: "Abnahmekriterien" })).toHaveValue(args.task.acceptanceCriteria);
+    await userEvent.click(canvas.getByRole("button", { name: "Abbrechen" }));
+    await expect(canvas.getByRole("link", { name: "#123 (öffnet in neuem Tab)" })).toBeVisible();
+  },
+};
+
+export const RelativeGitHubReferencesWithoutContext: Story = {
+  args: { task: { ...task, githubRepo: "", problemStatement: "Änderung #123 unknown#361 other-org/outside-repo#123" }, comments: [], activities: [] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    await expect(canvas.getByText(/Änderung #123 unknown#361/)).toBeVisible();
+    await expect(canvas.queryByRole("link", { name: "#123 (öffnet in neuem Tab)" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("link", { name: "#361 (öffnet in neuem Tab)" })).not.toBeInTheDocument();
+    await expect(canvas.getByRole("link", { name: "other-org/outside-repo#123 (öffnet in neuem Tab)" })).toHaveAttribute("href", "https://github.com/other-org/outside-repo/issues/123");
+  },
+};
+
+export const RelativeGitHubReferencesWithPartialContext: Story = {
+  ...RelativeGitHubReferencesWithoutContext,
+  args: { task: { ...task, githubRepo: "management", githubIssueNumber: null, githubIssueUrl: "", issueNumber: "", issueUrl: "", problemStatement: "Änderung #123 unknown#361 other-org/outside-repo#123" }, comments: [], activities: [] },
+};
