@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import * as repositories from "../../../src/lib/github-repositories";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const contract = await importTestModule("src/features/planning-items/model/planning-items-contract.ts");
@@ -44,7 +45,7 @@ const updates = await importTestModule(
   "src/features/planning-items/model/planning-item-update.ts",
   {
     "@/lib/planning-read-model": { ACTIVE_PACKAGES_TABLE: "active_packages", ACTIVE_TASKS_TABLE: "active_tasks" },
-    "@/lib/github-repositories": { resolveTaskGitHubRepository: () => ({ ok: true }) },
+    "@/lib/github-repositories": repositories,
     "@/features/tasks/model/task-detail-permissions": permissions,
     "@/features/reviews/model/task-review-state": reviewState,
     "@/features/tasks/model/task-route-update-helpers": routeHelpers,
@@ -601,4 +602,20 @@ test("update preview derives full linked brief from resulting item without addin
   assert.deepEqual(result.preview.changedFields, ["intendedOutcome"]);
   assert.deepEqual(result.preview.dbPatch, { intended_outcome: "Neues Ziel" });
   assert.equal(result.preview.normalizedPatch.linkedBrief, undefined);
+});
+
+
+test("update preview resolves approved repository references in the complete resulting brief", async () => {
+  const text = "Prüfe website#12 und unknown#361";
+  const target = taskRow({ github_repo: "findmydoc-platform/management", problem_statement: text });
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, intendedOutcome: "Management management#361" });
+  const result = await updates.buildPlanningItemUpdatePreview({
+    actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.preview.linkedBrief.problemStatement, "Prüfe [website#12](https://github.com/findmydoc-platform/website/issues/12) und unknown#361");
+  assert.equal(result.preview.linkedBrief.intendedOutcome, "Management [management#361](https://github.com/findmydoc-platform/management/issues/361)");
+  assert.equal(result.preview.resultingItem.problemStatement, text);
+  assert.deepEqual(result.preview.changedFields, ["intendedOutcome"]);
+  assert.deepEqual(result.preview.dbPatch, { intended_outcome: "Management management#361" });
 });
