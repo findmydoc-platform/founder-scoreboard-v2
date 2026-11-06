@@ -173,7 +173,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadBlockerTask,
   });
   const commentCreations = createTaskCommentCreations({ actor: userId, initial: active ? initialData.taskComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
-    canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)), removing: task => lifecycle.isRemoving(task), detailStatus: id => detailStatuses.get(id) || "not-loaded", endSession,
+    canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)), removing: id => { const task=confirmed.tasks.find(task=>task.id===id); return !task || lifecycle.isRemoving(task); }, detailStatus: id => detailStatuses.get(id) || "not-loaded", endSession,
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), refresh: reloadCommentDiscussion,
   });
   const githubImports = createTaskGitHubImports({ initial: active ? initialData.taskExternalComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
@@ -577,6 +577,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       };
     },
     createTaskComment: commentCreations.create,
+    retryTaskCommentCreation: commentCreations.retry,
     taskComments: taskId => commentCreations.view(taskId, visible),
     taskCommentCreations: commentCreations.views,
     checkTaskCommentCreation: commentCreations.check,

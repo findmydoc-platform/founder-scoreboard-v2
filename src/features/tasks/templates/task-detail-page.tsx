@@ -201,6 +201,7 @@ export function TaskDetailPage({
           commentCreations={controller.planningState.taskCommentCreations(task.id)}
           commentCompleteness={controller.planningState.taskComments(task.id).completeness}
           onCheckCommentCreation={id => { void controller.planningState.checkTaskCommentCreation(id); }}
+          onRetryCommentCreation={id => { void controller.planningState.retryTaskCommentCreation(id); }}
           blockerReports={controller.planningState.taskBlockerReports(task.id)}
           onCheckBlockerReport={id => { void controller.planningState.checkTaskBlockerReport(id); }}
           onCheckTaskSave={() => controller.planningState.checkTaskSave(task.id)}

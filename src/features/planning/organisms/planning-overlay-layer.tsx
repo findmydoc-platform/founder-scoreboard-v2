@@ -166,6 +166,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           commentCreations={controller.planningState.taskCommentCreations(selectedTask.id)}
           commentCompleteness={controller.planningState.taskComments(selectedTask.id).completeness}
           onCheckCommentCreation={id => { void controller.planningState.checkTaskCommentCreation(id); }}
+          onRetryCommentCreation={id => { void controller.planningState.retryTaskCommentCreation(id); }}
           blockerReports={controller.planningState.taskBlockerReports(selectedTask.id)}
           onCheckBlockerReport={id => { void controller.planningState.checkTaskBlockerReport(id); }}
           onCheckTaskSave={() => controller.planningState.checkTaskSave(selectedTask.id)}

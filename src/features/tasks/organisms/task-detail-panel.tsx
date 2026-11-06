@@ -49,6 +49,7 @@ type Props = {
   commentCreations?: readonly import("@/features/tasks/model/task-comment-creation").TaskCommentCreationView[];
   commentCompleteness?: "complete" | "partial";
   onCheckCommentCreation?: (id: string) => void;
+  onRetryCommentCreation?: (id: string) => void;
   blockerReports?: readonly import("@/features/tasks/model/task-blocker-report").TaskBlockerReportView[];
   onCheckBlockerReport?: (id: string) => void;
   onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;

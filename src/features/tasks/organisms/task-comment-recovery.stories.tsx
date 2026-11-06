@@ -32,7 +32,7 @@ function ReloadRecoveryFixture() {
     <h1>Submitted comment reload recovery</h1>
     <h2>Task discussion</h2>
     <button onClick={() => { void owner.planning.loadTaskDetail(task.id); }}>Diskussion laden</button>
-    <TaskCommentThread comments={[...discussion.comments]} commentCreations={owner.planning.taskCommentCreations(task.id)} commentCompleteness={discussion.completeness} onCheckCommentCreation={id => { void owner.planning.checkTaskCommentCreation(id); }} profiles={[profile]} tasks={[task]} currentProfileId={profile.id} onAddComment={text => owner.planning.createTaskComment(task, text)} />
+    <TaskCommentThread comments={[...discussion.comments]} commentCreations={owner.planning.taskCommentCreations(task.id)} commentCompleteness={discussion.completeness} onRetryCommentCreation={id=>{void owner.planning.retryTaskCommentCreation(id);}} onCheckCommentCreation={id => { void owner.planning.checkTaskCommentCreation(id); }} profiles={[profile]} tasks={[task]} currentProfileId={profile.id} onAddComment={text => owner.planning.createTaskComment(task, text)} />
   </main>;
 }
 

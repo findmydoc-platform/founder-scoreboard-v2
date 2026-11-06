@@ -24,6 +24,7 @@ type Props = {
   commentCreations?: readonly TaskCommentCreationView[];
   commentCompleteness?: "complete" | "partial";
   onCheckCommentCreation?: (id: string) => void;
+  onRetryCommentCreation?: (id: string) => void;
   externalComments?: TaskExternalComment[];
   activities?: TaskActivity[];
   reviews?: TaskReview[];
@@ -127,6 +128,7 @@ export function TaskCommentThread({
   commentCreations = [],
   commentCompleteness = "complete",
   onCheckCommentCreation,
+  onRetryCommentCreation,
   externalComments = [],
   activities = [],
   reviews = [],
@@ -225,6 +227,7 @@ export function TaskCommentThread({
       <TaskCommentTimeline
         items={timeline}
         onCheckCommentCreation={onCheckCommentCreation}
+        onRetryCommentCreation={readOnly ? undefined : onRetryCommentCreation}
         profiles={profiles}
         labelsById={labelsById}
         currentProfileId={currentProfileId}

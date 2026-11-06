@@ -156,6 +156,7 @@ type TaskCommentTimelineProps = {
   error?: string;
   items: TaskCommentTimelineItem[];
   onCheckCommentCreation?: (id: string) => void;
+  onRetryCommentCreation?: (id: string) => void;
   labelsById?: ReadonlyMap<string, string>;
   loading?: boolean;
   profiles: Profile[];
@@ -166,6 +167,7 @@ type TaskCommentTimelineProps = {
 export function TaskCommentTimeline({
   items,
   onCheckCommentCreation,
+  onRetryCommentCreation,
   profiles,
   labelsById,
   currentProfileId = "",
@@ -214,7 +216,7 @@ export function TaskCommentTimeline({
                 <span>{formatDateTime(item.createdAt)}</span>
               </div>
               <CommentBody value={item.comment} />
-              {item.creation ? <TaskCommentCreationNotices creations={[item.creation]} onCheck={onCheckCommentCreation} /> : null}
+              {item.creation ? <TaskCommentCreationNotices creations={[item.creation]} onCheck={onCheckCommentCreation} onRetry={onRetryCommentCreation} /> : null}
               {item.profileId === currentProfileId && deliveryHint(item.githubDeliveryStatus) && (
                 <div className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
                   {deliveryHint(item.githubDeliveryStatus)}
