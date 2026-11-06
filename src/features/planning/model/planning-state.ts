@@ -38,7 +38,7 @@ export type PlanningTaskSaveView = {
   serverTask: Task | null;
 };
 export type PlanningTaskSaveCheck = {
-  outcome: "unconfirmed" | "not-pending" | "session-ended";
+  outcome: "confirmed" | "unconfirmed" | "not-pending" | "session-ended";
   readStatus: PlanningReadStatus | "not-needed";
 };
 export type PlanningTaskSaveStatus = "saved" | "saving" | "rejected" | "unconfirmed";
