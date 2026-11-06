@@ -10,6 +10,8 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
   let createdProject = false;
   let jar: NextRequest["cookies"];
   let attempts: string[] = [];
+  let tamperNextProfile = false, successfulLiveChecks = 0;
+  let rejectedProfileStatus: number | undefined;
   try {
     await fixture.mode("linking");
     const project = await fixture.database.query("insert into public.projects(id,name) values('findmydoc-founder-execution','Synthetic Planning') on conflict(id) do nothing returning id");
@@ -26,12 +28,20 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
       if (url.hostname === "admin.googleapis.com") return Response.json({ isMember: true });
       if (url.origin !== new URL(fixture.local.API_URL).origin) throw new Error("Unexpected external provider");
       attempts.push(url.pathname);
+      const tamperProfile = url.pathname === "/rest/v1/rpc/current_authenticated_profile" && tamperNextProfile;
       if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") {
         // Compare in memory so failure diagnostics never contain a credential.
         expect(request.headers.get("authorization") === `Bearer ${token}`).toBe(true);
         expect(request.headers.has("x-founderops-workspace-permit")).toBe(true);
+        if (tamperProfile) {
+          tamperNextProfile = false;
+          request.headers.set("authorization", `Bearer ${token.slice(0, token.lastIndexOf(".") + 1)}${Buffer.alloc(64).toString("base64url")}`);
+        }
       }
-      return nativeFetch(request);
+      const response = await nativeFetch(request);
+      if (url.pathname === "/auth/v1/user" && response.ok) successfulLiveChecks++;
+      if (tamperProfile) rejectedProfileStatus = response.status;
+      return response;
     });
     const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "next/headers": { cookies: async () => jar } });
     const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
@@ -61,6 +71,14 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_access_context")).toHaveLength(0);
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_calendar_entry")).toHaveLength(1);
       expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
+      expect((await fixture.database.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actor.userId])).rows[0].remaining).toBe(0);
+      attempts = [];
+      const beforeLiveChecks = successfulLiveChecks;
+      tamperNextProfile = true;
+      expect(await authorize()).toMatchObject({ ok: false, status: 403 });
+      expect(successfulLiveChecks - beforeLiveChecks).toBe(2);
+      expect(rejectedProfileStatus).toBe(401);
+      expect(attempts.filter(path => path === "/rest/v1/projects" || path === "/rest/v1/active_tasks")).toHaveLength(0);
       expect((await fixture.database.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actor.userId])).rows[0].remaining).toBe(0);
       await fixture.mode("google");
       attempts = [];
@@ -115,14 +133,18 @@ it("real Board entry rejects profile, mode and session changes before the first 
     });
     const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
     for (const role of ["ceo", "founder", "deputy", "viewer"]) {
-      for (const change of ["binding", "mode", "session"] as const) {
+      for (const change of ["binding", "mode", "session", "session-expiry", "google-identity"] as const) {
         await fixture.mode("linking");
         const actor = await fixture.actor(role);
         paths = [];
-        afterEntry = change === "binding"
-          ? () => fixture.database.query("update public.profiles set auth_user_id=null where id=$1", [actor.profileId])
-          : change === "mode" ? () => fixture.mode("google")
-            : () => fixture.database.query("delete from auth.sessions where id=$1", [actor.sessionId]);
+        const invalidate = {
+          binding: () => fixture.database.query("update public.profiles set auth_user_id=null where id=$1", [actor.profileId]),
+          mode: () => fixture.mode("google"),
+          session: () => fixture.database.query("delete from auth.sessions where id=$1", [actor.sessionId]),
+          "session-expiry": () => fixture.database.query("update auth.sessions set not_after=clock_timestamp()-interval '1 second' where id=$1", [actor.sessionId]),
+          "google-identity": () => fixture.database.query("update auth.identities set identity_data=jsonb_set(identity_data,'{email}','\"changed@findmydoc.eu\"') where user_id=$1 and provider='google'", [actor.userId]),
+        };
+        afterEntry = invalidate[change];
         const result = await authorizeCredentialAction({ credential: { kind: "session-request", request: new NextRequest("https://application.example.test/api/planning-board-data", { headers: { authorization: `Bearer ${actor.session.access_token}` } }) }, action: "planning.board.read" });
         expect(afterEntry).toBeUndefined();
         expect(result.ok).toBe(false);
