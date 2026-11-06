@@ -15,11 +15,13 @@ export function mapAuditEntry(row: DbAuditEntry): AuditEntry {
 }
 
 export function mapTaskComment(row: DbTaskComment): TaskComment {
+  const submission = Array.isArray(row.task_comment_submissions) ? row.task_comment_submissions[0] : row.task_comment_submissions;
   const delivery = Array.isArray(row.task_comment_github_deliveries)
     ? row.task_comment_github_deliveries[0]
     : row.task_comment_github_deliveries;
   return {
     id: row.id,
+    ...(submission ? { submissionId: submission.id, submittedAt: new Date(submission.submitted_at).toISOString() } : {}),
     taskId: row.task_id,
     profileId: row.profile_id || "",
     comment: row.comment,

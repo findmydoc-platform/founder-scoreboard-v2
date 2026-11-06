@@ -5,6 +5,6 @@ export function TaskCommentCreationNotices({ creations, onCheck }: { creations: 
   <p className="font-semibold">{item.phase === "saving" ? "Kommentar wird gespeichert …" : item.phase === "unconfirmed" ? "Ob der Kommentar gespeichert wurde, ist noch unklar. Nicht erneut senden." : item.phase === "rejected" ? "Kommentar wurde nicht gespeichert." : item.notice?.message}</p>
   {item.phase !== "confirmed" ? <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{item.submitted}</p> : null}
   {item.error ? <p>{item.error}</p> : null}
-  {item.phase === "unconfirmed" ? <><p>Prüfen lädt die Diskussion neu und sendet keinen Kommentar.</p>{item.checkStatus === "checked" ? <p>Diskussion geladen. Ob der Kommentar gespeichert wurde, bleibt unklar.</p> : null}{onCheck ? <UiButton className="min-h-11 justify-self-start" disabled={item.checkStatus === "checking"} onClick={() => onCheck(item.id)}>Diskussion prüfen</UiButton> : null}</> : null}
+  {item.phase === "unconfirmed" ? <><p>Prüfen gleicht die Übermittlung ab und sendet keinen Kommentar.</p>{item.checkStatus === "checked" ? <p>Übermittlung geprüft. Ob der Kommentar gespeichert wurde, bleibt unklar.</p> : null}{onCheck ? <UiButton className="min-h-11 justify-self-start" disabled={item.checkStatus === "checking"} onClick={() => onCheck(item.id)}>Diskussion prüfen</UiButton> : null}</> : null}
  </div>)}</>;
 }

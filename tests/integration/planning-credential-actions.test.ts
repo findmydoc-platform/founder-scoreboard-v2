@@ -102,7 +102,8 @@ it("review, relationship and human comment operations preserve the observed acto
   expect((await f.db.query("select review_status from public.tasks where id=$1", [own])).rows[0].review_status).toBe("requested");
   const withdraw = await importTestModule("src/app/api/tasks/[id]/review/withdraw/route.ts", { "server-only": {} });
   expect((await withdraw.POST(f.request("founder", `/api/tasks/${own}/review/withdraw`, "POST", { expectedUpdatedAt: await revision(), reason: "Add the missing isolated evidence." }), context(own))).status).toBe(200);
-  const comments = await importTestModule("src/app/api/tasks/[id]/comments/route.ts", { "server-only": {} });
+  const next = await import("next/server");
+  const comments = await importTestModule("src/app/api/tasks/[id]/comments/route.ts", { "server-only": {}, "next/server": { ...next, after: () => undefined } });
   expect((await comments.POST(f.request("viewer", `/api/tasks/${own}/comments`, "POST", { comment: "Viewer must not publish a comment." }), context(own))).status).toBe(403);
   const comment = await comments.POST(f.request("founder", `/api/tasks/${own}/comments`, "POST", { comment: "Synthetic owner collaboration evidence." }), context(own));
   expect(comment.status).toBe(200);

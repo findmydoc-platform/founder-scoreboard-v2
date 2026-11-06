@@ -114,7 +114,7 @@ export function syncTaskToGitHubRequest(
   });
 }
 
-export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: string, comment: string) {
+export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: string, comment: string, submission: import("./task-comment-creation").TaskCommentSubmission) {
   return apiClient.requestJson<{
     error?: string;
     code?: string;
@@ -122,8 +122,12 @@ export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: st
     comment?: PlanningShellState["taskComments"][number];
   }>(`/api/tasks/${taskId}/comments`, {
     method: "POST",
-    json: { comment },
+    json: { comment, submissionId: submission.id, submittedAt: submission.submittedAt },
   });
+}
+
+export function checkTaskCommentCreationRequest(apiClient: BrowserApiClient, taskId: string, submissionId: string) {
+  return apiClient.requestJson<{ error?: string; code?: string; outcome?: "confirmed" | "unconfirmed"; comment?: PlanningShellState["taskComments"][number] }>(`/api/tasks/${taskId}/comments?submissionId=${encodeURIComponent(submissionId)}`);
 }
 
 const pendingAttachmentOperations = new Map<string, string>();
