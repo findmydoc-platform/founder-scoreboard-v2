@@ -193,3 +193,82 @@ test("a discussion loaded after owner creation seeds ordering when the clock mov
   expect(planning.taskCommentCreations(task.id)[0].submittedAt).toBe("2026-11-07T10:01:00.001Z");
  } finally {time.mockRestore();}
 });
+
+test("repeated inline retries preserve the captured submission and leave newer drafts and comments intact",async()=>{
+ const retryResponse=deferred<{comment:TaskComment}>();
+ const submissions:Array<{taskId:string;text:string;id:string;submittedAt:string}>=[];
+ let failing=true;
+ const {planning}=fixture({createTaskComment:async(taskId,text,submission)=>{
+  submissions.push({taskId,text,...submission});
+  if(text==="Independent comment")return{comment:{...comment,id:8,comment:text,submissionId:submission.id,submittedAt:submission.submittedAt}};
+  if(failing)throw Object.assign(new Error("Storage rejected"),{status:429});
+  return retryResponse.promise;
+ }});
+ await planning.createTaskComment(task,comment.comment).completion;
+ const original=planning.taskCommentCreations(task.id)[0];
+ await planning.retryTaskCommentCreation(original.id).completion;
+ await planning.createTaskComment(task,"Independent comment").completion;
+ planning.taskCommentDraft(task.id).update("Newer draft");
+ failing=false;
+ const retry=planning.retryTaskCommentCreation(original.id);
+ const repeated=planning.retryTaskCommentCreation(original.id);
+ expect(retry.accepted).toBe(true);expect(repeated.accepted).toBe(true);
+ const saved={...comment,submissionId:original.id,submittedAt:original.submittedAt};
+ retryResponse.resolve({comment:saved});
+ expect(await retry.completion).toMatchObject({ok:true});
+ expect(await repeated.completion).toMatchObject({ok:true});
+ expect(submissions.filter(row=>row.text===comment.comment)).toEqual(Array(3).fill({taskId:task.id,text:comment.comment,id:original.id,submittedAt:original.submittedAt}));
+ expect(planning.taskComments(task.id).comments.map(row=>row.comment)).toEqual(["Independent comment",comment.comment]);
+ expect(planning.taskCommentCreations(task.id)).toMatchObject([{id:original.id,phase:"confirmed",submittedAt:original.submittedAt},{phase:"confirmed"}]);
+ expect(planning.taskCommentDraft(task.id).text).toBe("Newer draft");
+ expect(planning.retryTaskCommentCreation(original.id).accepted).toBe(false);
+});
+
+test("pending and unknown submissions cannot be resent even after an empty authorized receipt",async()=>{
+ const pending=deferred<{comment:TaskComment}>();let writes=0;
+ const {planning}=fixture({createTaskComment:()=>{writes++;return pending.promise;},checkTaskCommentCreation:async()=>({outcome:"unconfirmed"})});
+ const capture=planning.createTaskComment(task,comment.comment);
+ const id=planning.taskCommentCreations(task.id)[0].id;
+ planning.retryTaskCommentCreation(id);
+ expect(writes).toBe(1);
+ pending.reject(new Error("Lost response"));await capture.completion;
+ expect(planning.retryTaskCommentCreation(id).accepted).toBe(false);
+ await planning.checkTaskCommentCreation(id);
+ expect(planning.retryTaskCommentCreation(id).accepted).toBe(false);
+ expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({id,phase:"unconfirmed",submitted:comment.comment});
+ expect(writes).toBe(1);
+});
+
+test("a retry is captured before sending and recovered after reload with its original ordering time",async()=>{
+ const storage=browserStorage(), pending=deferred<{comment:TaskComment}>();
+ let attempts=0, submission:{id:string;submittedAt:string}|undefined;
+ const first=fixture({commentSubmissionStorage:storage,createTaskComment:async(_,__,identity)=>{
+  submission=identity;
+  if(++attempts===1)throw Object.assign(new Error("Rejected"),{status:429});
+  return pending.promise;
+ }});
+ await first.planning.createTaskComment(task,comment.comment).completion;
+ const original=first.planning.taskCommentCreations(task.id)[0];
+ const retry=first.planning.retryTaskCommentCreation(original.id);
+ expect(retry.accepted).toBe(true);
+ first.internal.dispose();
+ const restored=fixture({commentSubmissionStorage:storage,checkTaskCommentCreation:async()=>({outcome:"confirmed",comment:{...comment,submissionId:submission!.id,submittedAt:submission!.submittedAt}})});
+ await expect.poll(()=>restored.planning.taskCommentCreations(task.id)).toMatchObject([{id:original.id,phase:"confirmed",submittedAt:original.submittedAt}]);
+ expect(restored.planning.taskComments(task.id).comments).toMatchObject([{id:comment.id,submissionId:original.id,submittedAt:original.submittedAt}]);
+ pending.reject(Object.assign(new Error("Old attempt rejected"),{status:403}));
+ expect(await retry.completion).toMatchObject({kind:"rejected"});
+ expect(restored.planning.taskCommentCreations(task.id)[0].phase).toBe("confirmed");
+});
+
+test("failed retry capture leaves the affected entry and newer identical draft usable without a write",async()=>{
+ const storage=browserStorage();let writes=0;
+ const {planning}=fixture({commentSubmissionStorage:storage,createTaskComment:async()=>{writes++;throw Object.assign(new Error("Rejected"),{status:429});}});
+ await planning.createTaskComment(task,comment.comment).completion;
+ const original=planning.taskCommentCreations(task.id)[0];
+ planning.taskCommentDraft(task.id).update("Intervening edit");planning.taskCommentDraft(task.id).update(comment.comment);
+ storage.setItem=()=>{throw new Error("Storage unavailable");};
+ const retry=planning.retryTaskCommentCreation(original.id);
+ expect(retry.accepted).toBe(false);expect(await retry.completion).toMatchObject({kind:"rejected"});
+ expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({id:original.id,submitted:comment.comment,submittedAt:original.submittedAt,phase:"rejected"});
+ expect(planning.taskCommentDraft(task.id).text).toBe(comment.comment);expect(writes).toBe(1);
+});

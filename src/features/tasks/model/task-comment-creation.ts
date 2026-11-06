@@ -12,6 +12,7 @@ export type TaskCommentCreationAdapter = {
 };
 export interface PlanningTaskComments {
  createTaskComment(task: Task, text: string): TaskCommentCapture;
+ retryTaskCommentCreation(id: string): TaskCommentCapture;
  taskComments(taskId: string): { comments: readonly TaskComment[]; completeness: "complete" | "partial"; readStatus: PlanningReadStatus };
  taskCommentCreations(taskId?: string): readonly TaskCommentCreationView[];
  checkTaskCommentCreation(id: string): Promise<PlanningTaskSaveCheck>;
