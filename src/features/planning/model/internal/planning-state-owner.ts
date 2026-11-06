@@ -171,7 +171,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadBlockerTask,
   });
-  const commentCreations = createTaskCommentCreations({ initial: active ? initialData.taskComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
+  const commentCreations = createTaskCommentCreations({ actor: userId, initial: active ? initialData.taskComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
     canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)), removing: task => lifecycle.isRemoving(task), detailStatus: id => detailStatuses.get(id) || "not-loaded", endSession,
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), refresh: reloadCommentDiscussion,
   });
@@ -742,6 +742,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         };
         if (result.unavailable?.includes("discussion")) commentCreations.failed(taskId, "unavailable");
         else commentCreations.acceptRead(result.model.discussion.comments, started, result.model.coverage?.discussion === "complete", taskId);
+        commentCreations.restore();
         if (result.unavailable?.includes("discussion")) githubImports.failed(taskId, "unavailable");
         else githubImports.acceptRead(result.model.discussion.externalComments, started, result.model.coverage?.discussion === "complete", taskId);
         if (!result.unavailable?.includes("timeline")) attachmentUploads.acceptRead(result.model.activity, started, result.model.coverage?.timeline === "complete", taskId);
@@ -972,6 +973,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     completeness.set(workspace, coverage.tasks || "none");
     publish();
   }
+  queueMicrotask(() => commentCreations.restore());
   return { planning, internal: {
     getSnapshot: () => visible,
     isActive,

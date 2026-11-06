@@ -100,6 +100,13 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     administrationActorProfileId: options.initialCurrentProfile?.id,
     initialAdministrationAuthority: options.initialAdministratorAccess ? sessionAuthority({ platformRole: options.initialCurrentProfile?.platformRole || "viewer", credentialKind: "session", administratorAccess: options.initialAdministratorAccess }) : undefined,
     adapter: {
+      commentSubmissionStorage: {
+        get length() { return window.sessionStorage.length; },
+        key: index => window.sessionStorage.key(index),
+        getItem: key => window.sessionStorage.getItem(key),
+        setItem: (key, value) => window.sessionStorage.setItem(key, value),
+        removeItem: key => window.sessionStorage.removeItem(key),
+      },
       async readDecisionLog() {
         const {response,body}=await ownedApiClient.requestJson<{result?: import("@/lib/notion-decision-log").NotionDecisionLogResult;error?:string}>("/api/decision-log",{useDevProfileOverride:false});
         if(!response.ok || !body?.result) throw Object.assign(new Error(body?.error||"Decision Log konnte nicht geladen werden."),{status:response.status});
