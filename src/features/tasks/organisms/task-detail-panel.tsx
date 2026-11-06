@@ -45,6 +45,7 @@ type Props = {
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
   externalCommentCompleteness?: "complete" | "partial";
   onCheckGitHubImport?: () => void;
+  commentDraft?: import("@/features/tasks/model/task-comment-draft").TaskCommentDraft;
   commentCreations?: readonly import("@/features/tasks/model/task-comment-creation").TaskCommentCreationView[];
   commentCompleteness?: "complete" | "partial";
   onCheckCommentCreation?: (id: string) => void;

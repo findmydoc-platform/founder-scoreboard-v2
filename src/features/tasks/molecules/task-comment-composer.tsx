@@ -3,11 +3,13 @@
 import { Paperclip } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import type { TaskCommentDraft } from "@/features/tasks/model/task-comment-draft";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
 import type { Profile } from "@/lib/types";
 import { UiButton } from "@/shared/atoms/ui-primitives";
 
 type Props = {
+  draft?: TaskCommentDraft;
   pending?: boolean;
   confirmationPending?: boolean;
   attachmentConfirmationPending?: boolean;
@@ -17,9 +19,11 @@ type Props = {
   renderPreview: (value: string) => ReactNode;
 };
 
-export function TaskCommentComposer({ pending = false, confirmationPending = false, attachmentConfirmationPending = false, profiles = [], onAddComment, onUploadAttachment, renderPreview }: Props) {
+export function TaskCommentComposer({ draft, pending = false, confirmationPending = false, attachmentConfirmationPending = false, profiles = [], onAddComment, onUploadAttachment, renderPreview }: Props) {
   const textareaId = useId();
-  const [newComment, setNewComment] = useState("");
+  const [localComment, setLocalComment] = useState("");
+  const newComment = draft?.text ?? localComment;
+  const setNewComment = draft?.update ?? setLocalComment;
   const [uploadPending, setUploadPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -46,7 +50,8 @@ export function TaskCommentComposer({ pending = false, confirmationPending = fal
     setSubmitPending(true);
     try {
       await onAddComment(comment);
-      setNewComment((current) => current === comment ? "" : current);
+      if (draft) draft.clear();
+      else setLocalComment((current) => current === comment ? "" : current);
     } catch {
       // The owning workflow surfaces the error; keep the draft unchanged for retry.
     } finally {
