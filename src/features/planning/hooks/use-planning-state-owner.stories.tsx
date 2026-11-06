@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent, waitFor, within } from "storybook/test";
+import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import { PlanningStateLifetimeContext } from "../model/internal/planning-state-lifetime-context";
 import { createBrowserPlanningLifetime } from "../model/internal/browser-planning-lifetime";
 import { usePlanningStateOwner } from "./use-planning-state-owner";
@@ -160,5 +160,55 @@ export const BoardChecksUnconfirmedTaskAndAllowsIndependentEdit: Story = {
     await expect(canvas.getByRole("button", { name: "Status für Andere Aufgabe ändern" })).toHaveTextContent("In Arbeit");
     await expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("2");
     await expect(canvas.getByText("Speicherung unklar")).toBeVisible();
+  },
+};
+
+export const BoardDragKeepsOneSourceAndMovesTheExistingItemOnce: Story = {
+  render: () => <BoardEditingStory />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const source = canvas.getByRole("article");
+    const transfer = new DataTransfer();
+    fireEvent.dragStart(source, { dataTransfer: transfer, clientX: 150, clientY: 100 });
+    await waitFor(() => expect(source).toHaveStyle({ opacity: "0.55" }));
+    await expect(within(document.body).getAllByRole("link", { name: "Board-Konflikt" })).toHaveLength(1);
+    fireEvent.drop(canvas.getByRole("region", { name: "In Arbeit, 0 Deliverables, eingeklappt" }), { dataTransfer: transfer });
+    fireEvent.dragEnd(source, { dataTransfer: transfer });
+    await waitFor(() => expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("1"));
+    await expect(canvas.getByRole("region", { name: "In Arbeit, 1 Deliverable" })).toContainElement(canvas.getByRole("article"));
+    await expect(canvas.getAllByRole("article")).toHaveLength(1);
+    await expect(canvas.getByRole("article")).toHaveStyle({ opacity: "1" });
+  },
+};
+
+function BoardDragNavigationStory() {
+  const [visible, setVisible] = useState(true);
+  return <>
+    <button onClick={() => setVisible(false)}>Board verlassen</button>
+    {visible ? <BoardEditingStory /> : <p>Board geschlossen</p>}
+  </>;
+}
+
+export const BoardDragCleansUpCancellationRepeatedDragsAndLeaving: Story = {
+  render: () => <BoardDragNavigationStory />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const source = canvas.getByRole("article");
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const transfer = new DataTransfer();
+      fireEvent.dragStart(source, { dataTransfer: transfer, clientX: 150, clientY: 100 });
+      await waitFor(() => expect(source).toHaveStyle({ opacity: "0.55" }));
+      fireEvent.dragLeave(canvas.getByRole("region", { name: "Board nach Status" }), { dataTransfer: transfer, relatedTarget: document.body });
+      fireEvent.dragEnd(source, { dataTransfer: transfer });
+      await waitFor(() => expect(source).toHaveStyle({ opacity: "1" }));
+      await expect(within(document.body).getAllByRole("link", { name: "Board-Konflikt" })).toHaveLength(1);
+      await expect(canvas.getByLabelText("Board write attempts")).toHaveTextContent("0");
+    }
+    const transfer = new DataTransfer();
+    fireEvent.dragStart(source, { dataTransfer: transfer, clientX: 150, clientY: 100 });
+    await waitFor(() => expect(source).toHaveStyle({ opacity: "0.55" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Board verlassen" }));
+    await expect(canvas.getByText("Board geschlossen")).toBeVisible();
+    await expect(within(document.body).queryByRole("link", { name: "Board-Konflikt" })).not.toBeInTheDocument();
   },
 };
