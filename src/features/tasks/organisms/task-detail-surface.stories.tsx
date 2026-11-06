@@ -108,6 +108,34 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const StoredUpdateTimestamp: Story = {
+  args: {
+    task: { ...task, updatedAt: "2026-11-05T14:51:00", fixedDate: "2026-11-19" },
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const title = canvas.getByRole("heading", { name: args.task.title, level: 1 });
+    const timestamp = canvas.getByText(/^Zuletzt aktualisiert am/);
+    const status = canvas.getByRole("combobox", { name: "Status ändern" });
+    await expect(timestamp).toBeVisible();
+    await expect(timestamp).toHaveTextContent("Zuletzt aktualisiert am 05.11.2026, 14:51");
+    await expect(canvas.getAllByText(/^Zuletzt aktualisiert am/)).toHaveLength(1);
+    await expect(timestamp.getBoundingClientRect().top).toBeGreaterThanOrEqual(title.getBoundingClientRect().bottom);
+    await expect(timestamp.getBoundingClientRect().bottom).toBeLessThanOrEqual(status.getBoundingClientRect().top);
+    await expect(timestamp.getBoundingClientRect().left).toBe(title.getBoundingClientRect().left);
+    await userEvent.click(canvas.getByRole("tab", { name: /Aktivität/ }));
+    await expect(timestamp).toBeVisible();
+    await expect(canvas.getByLabelText("Item-Historie")).toHaveTextContent("Erstellt von");
+    await expect(canvas.getByText("Die Prüfkriterien sind abgestimmt. Bitte die GitHub-Zustellung im Review mitprüfen.")).toBeVisible();
+    await expect(timestamp).toHaveTextContent("Zuletzt aktualisiert am 05.11.2026, 14:51");
+  },
+};
+
+export const PanelStoredUpdateTimestamp: Story = {
+  ...StoredUpdateTimestamp,
+  args: { ...StoredUpdateTimestamp.args, surface: "panel" },
+};
+
 export const ActivityMentionPicker: Story = {
   args: {
     activities: [],

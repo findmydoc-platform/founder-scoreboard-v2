@@ -298,6 +298,16 @@ export function TaskDetailOperationalHeader({
 }: TaskDetailOperationalHeaderProps) {
   const generatedTitleId = useId();
   const resolvedTitleId = titleId || generatedTitleId;
+  const updatedAt = task.updatedAt ? new Date(task.updatedAt) : null;
+  const updatedAtLabel = updatedAt && !Number.isNaN(updatedAt.getTime())
+    ? new Intl.DateTimeFormat("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(updatedAt)
+    : task.updatedAt;
   const view = taskDetailOperationalHeaderView({
     task,
     initiative,
@@ -341,6 +351,11 @@ export function TaskDetailOperationalHeader({
         <h1 id={resolvedTitleId} className="mt-2 min-w-0 w-full break-words text-2xl font-semibold leading-tight tracking-tight text-slate-950 sm:col-span-2 sm:row-start-2">
           {task.title}
         </h1>
+        {task.updatedAt ? (
+          <p className="mt-2 text-xs text-slate-500 sm:col-span-2 sm:row-start-3">
+            Zuletzt aktualisiert am <time dateTime={task.updatedAt}>{updatedAtLabel}</time>
+          </p>
+        ) : null}
         {actions ? <div className="mt-4 min-w-0 sm:col-start-2 sm:row-start-1 sm:mt-0 sm:justify-self-end">{actions}</div> : null}
       </div>
 

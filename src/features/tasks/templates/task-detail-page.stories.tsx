@@ -21,6 +21,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const StoredUpdateTimestamp: Story = {
+  args: {
+    initialModel: { ...itemPageModel(), item: { ...itemPageModel().item, updatedAt: "2026-11-05T14:51:00" } },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("heading", { name: "Reliable planning", level: 1 })).toBeVisible();
+    await expect(canvas.getByText(/^Zuletzt aktualisiert am/)).toHaveTextContent("Zuletzt aktualisiert am 05.11.2026, 14:51");
+  },
+};
+
 export const GlobalActionsAndItemHeading: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
