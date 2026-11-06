@@ -27,6 +27,9 @@ it("replayed authenticated submissions retain one comment, notification set and 
   expect(notifications.map(row => row.recipient_profile_id).sort()).toEqual([f.actors.ceo.profileId, f.actors.deputy.profileId].sort());
   const lookup = await route.GET(f.request("founder", `/api/tasks/${taskId}/comments?submissionId=${submitted.submissionId}`), context(taskId));
   expect(await lookup.json()).toMatchObject({ outcome: "confirmed", comment: { id, submissionId: submitted.submissionId } });
+  const details = await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts", { "server-only": {} });
+  const reloaded = await details.GET(f.request("founder", `/api/tasks/${taskId}/detail-data`), context(taskId));
+  expect((await reloaded.json()).taskDetail.discussion.comments).toMatchObject([{ id, submissionId: submitted.submissionId, submittedAt: submitted.submittedAt }]);
   expect((await send({ ...submitted, comment: "Changed immutable content" })).status).toBe(409);
   expect((await send({ ...submitted, submittedAt: "2026-11-06T12:00:01.000Z" })).status).toBe(409);
   const intentional = await send({ ...submitted, submissionId: randomUUID() });
