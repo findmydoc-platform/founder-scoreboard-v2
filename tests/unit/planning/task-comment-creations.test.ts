@@ -90,3 +90,66 @@ test("an unknown stream does not prevent another Task's independent comment",asy
 test("a check for a later unknown create cannot reuse a read started before that outcome boundary",async()=>{
  const one=deferred<{comment:TaskComment}>(),two=deferred<{comment:TaskComment}>(),old=deferred<{model:TaskDetailModel}>(),fresh=deferred<{model:TaskDetailModel}>();let reads=0;const {planning}=fixture({createTaskComment:(_,text)=>text==="First comment"?one.promise:two.promise,readTaskDetail:()=>++reads===1?old.promise:fresh.promise});const firstWrite=planning.createTaskComment(task,"First comment"),secondWrite=planning.createTaskComment(task,"Second comment");one.reject(new Error("Lost first"));await firstWrite;const firstId=planning.taskCommentCreations(task.id)[0].id,secondId=planning.taskCommentCreations(task.id)[1].id;const firstCheck=planning.checkTaskCommentCreation(firstId);two.reject(new Error("Lost second"));await secondWrite;const secondCheck=planning.checkTaskCommentCreation(secondId);old.resolve({model:detail()});await firstCheck;await Promise.resolve();expect(reads).toBe(2);fresh.resolve({model:detail()});expect(await secondCheck).toMatchObject({outcome:"unconfirmed",readStatus:"current"});
 });
+
+function browserStorage(): Storage {
+ const rows = new Map<string, string>();
+ return { get length(){return rows.size;}, key:index=>[...rows.keys()][index]??null, getItem:key=>rows.get(key)??null, setItem:(key,value)=>{rows.set(key,value);}, removeItem:key=>{rows.delete(key);}, clear:()=>rows.clear() };
+}
+test("reload restores a submitted identity only after an authorized check and joins the stored comment once", async()=>{
+ const storage=browserStorage(), pending=deferred<{comment:TaskComment}>();let captured:{id:string;submittedAt:string}|undefined;
+ const first=fixture({commentSubmissionStorage:storage,createTaskComment:(_,__,submission)=>{captured=submission;return pending.promise;}});
+ void first.planning.createTaskComment(task,comment.comment);
+ first.internal.dispose();
+ const lookup=deferred<{outcome:"confirmed";comment:TaskComment}>();
+ const restored=fixture({commentSubmissionStorage:storage,checkTaskCommentCreation:()=>lookup.promise});
+ expect(restored.planning.taskCommentCreations()).toEqual([]);
+ await Promise.resolve();
+ lookup.resolve({outcome:"confirmed",comment:{...comment,submissionId:captured!.id,submittedAt:captured!.submittedAt}});
+ await expect.poll(()=>restored.planning.taskCommentCreations(task.id)).toMatchObject([{id:captured!.id,submittedAt:captured!.submittedAt,phase:"confirmed",submitted:comment.comment}]);
+ expect(restored.planning.taskDetail(task.id).comments).toMatchObject([{id:comment.id}]);
+ expect(storage.length).toBe(0);
+});
+
+test("an authorized empty receipt after reload retains the operation for later checking without posting again", async()=>{
+ const storage=browserStorage();let identity:{id:string;submittedAt:string}|undefined,stored=false;
+ const first=fixture({commentSubmissionStorage:storage,createTaskComment:async(_,__,submission)=>{identity=submission;throw new Error("Response lost before storage");}});
+ await first.planning.createTaskComment(task,comment.comment);first.internal.dispose();
+ const restored=fixture({commentSubmissionStorage:storage,checkTaskCommentCreation:async()=>stored?{outcome:"confirmed",comment:{...comment,submissionId:identity!.id,submittedAt:identity!.submittedAt}}:{outcome:"unconfirmed"},readTaskDetail:async()=>({model:detail()})});
+ await expect.poll(()=>restored.planning.taskCommentCreations(task.id)).toMatchObject([{id:identity!.id,phase:"unconfirmed",submitted:comment.comment,submittedAt:identity!.submittedAt}]);
+ await restored.planning.loadTaskDetail(task.id);
+ expect(restored.planning.taskCommentCreations(task.id)[0].phase).toBe("unconfirmed");expect(storage.length).toBe(1);
+ stored=true;await restored.planning.checkTaskCommentCreation(identity!.id);
+ expect(restored.planning.taskDetail(task.id).comments).toMatchObject([{id:comment.id}]);expect(storage.length).toBe(0);
+});
+
+test("a reload lookup unavailable offline preserves capture and retries when the item is loaded again", async()=>{
+ const storage=browserStorage();let identity:{id:string;submittedAt:string}|undefined,online=false;
+ const first=fixture({commentSubmissionStorage:storage,createTaskComment:async(_,__,submission)=>{identity=submission;throw new Error("Lost response");}});
+ await first.planning.createTaskComment(task,comment.comment);first.internal.dispose();
+ const restored=fixture({commentSubmissionStorage:storage,checkTaskCommentCreation:async()=>{if(!online)throw new Error("Offline");return{outcome:"unconfirmed"};},readTaskDetail:async()=>({model:detail()})});
+ await new Promise(resolve=>setTimeout(resolve,0));
+ expect(restored.planning.taskCommentCreations()).toEqual([]);expect(storage.length).toBe(1);
+ online=true;await restored.planning.loadTaskDetail(task.id);
+ await expect.poll(()=>restored.planning.taskCommentCreations()).toMatchObject([{id:identity!.id,phase:"unconfirmed",submitted:comment.comment}]);
+});
+
+test("browser storage rejection retains submitted text and never starts a network write",async()=>{
+ const storage=browserStorage();storage.setItem=()=>{throw new Error("Storage quota exceeded");};let writes=0;
+ const {planning}=fixture({commentSubmissionStorage:storage,createTaskComment:async()=>{writes++;return{comment};}});
+ expect(await planning.createTaskComment(task,comment.comment)).toMatchObject({kind:"rejected"});
+ expect(planning.taskCommentCreations(task.id)).toMatchObject([{phase:"rejected",submitted:comment.comment,error:expect.stringContaining("Es wurde nichts gesendet")}]);expect(writes).toBe(0);
+});
+test.each([403,404])("reload receipt denial HTTP%s removes protected recovered text",async status=>{
+ const storage=browserStorage();const first=fixture({commentSubmissionStorage:storage,createTaskComment:async()=>{throw new Error("Lost");}});
+ await first.planning.createTaskComment(task,comment.comment);first.internal.dispose();
+ const restored=fixture({commentSubmissionStorage:storage,checkTaskCommentCreation:async()=>{throw Object.assign(new Error("Denied"),{status});}});
+ await expect.poll(()=>storage.length).toBe(0);expect(restored.planning.taskCommentCreations()).toEqual([]);
+});
+test("another account cannot read recovered submissions and logout clears the original account capture",async()=>{
+ const storage=browserStorage(),late=deferred<{comment:TaskComment}>();const first=fixture({commentSubmissionStorage:storage,createTaskComment:()=>late.promise});
+ const submitting=first.planning.createTaskComment(task,comment.comment);
+ const other=createPlanningState({userId:"another-user",initialData:{...emptyPlanningShellState,tasks:[task]},adapter:{commentSubmissionStorage:storage,readWorkspace:async()=>null,saveTask:async()=>({task:{}})}});
+ await Promise.resolve();expect(other.planning.taskCommentCreations()).toEqual([]);expect(storage.length).toBe(1);
+ first.internal.sessionChanged("another-user");late.resolve({comment});expect(await submitting).toMatchObject({kind:"ended"});expect(storage.length).toBe(0);
+ expect(fixture({commentSubmissionStorage:storage}).planning.taskCommentCreations()).toEqual([]);
+});

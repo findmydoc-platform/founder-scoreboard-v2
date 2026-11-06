@@ -1,13 +1,16 @@
 import type { PlanningShellState, Task, TaskComment } from "@/lib/types";
 import type { PlanningReadStatus, PlanningTaskSaveCheck } from "../planning-state";
 import type { TaskCommentCreationAdapter, TaskCommentCreationResult, TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
+import { taskCommentSubmissionStorage } from "./task-comment-submission-storage";
 const deliveryStates = ["not_applicable", "pending", "waiting_for_issue", "waiting_for_author_connection", "processing", "retry_scheduled", "delivered", "failed"];
 export function createTaskCommentCreations(options: {
- initial: readonly TaskComment[]; adapter: TaskCommentCreationAdapter; active(): boolean; generation(): number; changed(): void; nextSequence(): number;
+ actor: string; initial: readonly TaskComment[]; adapter: TaskCommentCreationAdapter; active(): boolean; generation(): number; changed(): void; nextSequence(): number;
  canRead(taskId: string): boolean; removing(task: Task): boolean; detailStatus(taskId: string): PlanningReadStatus; endSession(): void; invalidateNotifications(): void;
  refresh(taskId: string, after: number): Promise<PlanningReadStatus>;
 }) {
- const operations = new Map<string, { view: TaskCommentCreationView; after: number; submittedAt: string }>();
+ const recovery = taskCommentSubmissionStorage(options.adapter.commentSubmissionStorage, options.actor);
+ const operations = new Map<string, { view: TaskCommentCreationView; after: number; submittedAt: string; authorized: boolean; restored: boolean }>();
+ for (const row of recovery.load()) operations.set(row.id, {view:{...row,phase:"unconfirmed",comment:null,notice:null,error:"",checkStatus:"not-checked"},after:0,submittedAt:row.submittedAt,authorized:false,restored:true});
  const checks = new Map<string, Promise<PlanningTaskSaveCheck>>();
  const receipts = new Map(options.initial.map(comment => [comment.id, { taskId: comment.taskId, comment: comment as TaskComment | null, stamp: 0 }]));
  const scopes = new Map<string, { completeness: "complete" | "partial"; readStatus: PlanningReadStatus; stamp: number }>();
@@ -32,19 +35,25 @@ export function createTaskCommentCreations(options: {
   if (submitted.trim().length<2) return {ok:false,kind:"rejected",error:"Kommentar ist erforderlich.",status:400};
   if (!options.adapter.createTaskComment) return {ok:false,kind:"rejected",error:"Kommentieren ist nicht verfügbar."};
   const generation=options.generation(), authority=authorities.get(task.id)||0, id=crypto.randomUUID();
-  const operation={view:{id,taskId:task.id,submitted,phase:"saving",comment:null,notice:null,error:"",checkStatus:"not-checked"} as TaskCommentCreationView,after:0,submittedAt:new Date().toISOString()}; operations.set(id,operation); options.changed();
+  const submittedAt=new Date().toISOString();
+  const operation={view:{id,taskId:task.id,submitted,submittedAt,phase:"saving",comment:null,notice:null,error:"",checkStatus:"not-checked"} as TaskCommentCreationView,after:0,submittedAt,authorized:true,restored:false};
+  try { recovery.capture({id,taskId:task.id,submitted,submittedAt}); } catch {
+   operation.view={...operation.view,phase:"rejected",error:"Der Kommentar konnte nicht für die Wiederherstellung gesichert werden. Es wurde nichts gesendet."};operations.set(id,operation);options.changed();return{ok:false,kind:"rejected",error:operation.view.error};
+  }
+  operations.set(id,operation); options.changed();
   const valid=()=>current(task.id)&&generation===options.generation()&&authority===(authorities.get(task.id)||0);
   try {
    const receipt=await options.adapter.createTaskComment(task.id,submitted,{id,submittedAt:operation.submittedAt}); if(!valid())return{ok:false,kind:"ended",error:"Die Sitzung oder der Zugriff wurde beendet."}; const row=receipt.comment;
    if(!row||row.taskId!==task.id||!Number.isSafeInteger(row.id)||row.id<=0||![row.profileId,row.comment,row.createdAt,row.githubCommentUrl].every(value=>typeof value==="string")||!deliveryStates.includes(row.githubDeliveryStatus))throw new Error("Ob der Kommentar gespeichert wurde, ist noch unklar.");
    const stamp=options.nextSequence(); receipts.set(row.id,{taskId:task.id,comment:structuredClone(row),stamp});
    const notice=receipt.notice&&typeof receipt.notice.message==="string"&&typeof receipt.notice.code==="string"&&receipt.notice.level==="info"?structuredClone(receipt.notice):null;
-   operation.view={...operation.view,phase:"confirmed",comment:structuredClone(row),notice}; const scope=scopes.get(task.id); if(!scope||scope.readStatus!=="loading")scopes.set(task.id,{completeness:scope?.completeness||"partial",readStatus:"current",stamp:scope?.stamp||0});
+   operation.view={...operation.view,phase:"confirmed",comment:structuredClone(row),notice}; recovery.remove(id); const scope=scopes.get(task.id); if(!scope||scope.readStatus!=="loading")scopes.set(task.id,{completeness:scope?.completeness||"partial",readStatus:"current",stamp:scope?.stamp||0});
    options.invalidateNotifications();options.changed();return{ok:true,comment:row,notice};
   } catch(error) {
    if(!valid())return{ok:false,kind:"ended",error:"Die Sitzung oder der Zugriff wurde beendet."}; const failure=error as{status?:number;code?:string;message?:string};
    if(failure.code==="session_superseded"){options.endSession();return{ok:false,kind:"ended",error:"Die Sitzung wurde ersetzt."};}
    const phase=failure.status&&failure.status<500?"rejected":"unconfirmed";operation.view={...operation.view,phase,error:failure.message||"Der Kommentar ist noch nicht bestätigt."};
+   if(phase==="rejected")recovery.remove(id);
    if(phase==="unconfirmed"){operation.after=options.nextSequence();scopes.set(task.id,{completeness:"partial",readStatus:"stale",stamp:scopes.get(task.id)?.stamp||0});options.invalidateNotifications();}
    options.changed();return{ok:false,kind:phase,error:operation.view.error,status:failure.status};
   }
@@ -59,11 +68,12 @@ export function createTaskCommentCreations(options: {
      const result=await options.adapter.checkTaskCommentCreation!(operation.view.taskId,{id,submittedAt:operation.submittedAt});
      if(!options.active()||generation!==options.generation())return{outcome:"session-ended",readStatus:"not-needed"};
      if(!current(operation.view.taskId)||authority!==(authorities.get(operation.view.taskId)||0))return{outcome:"unconfirmed",readStatus:"forbidden"};
+     operation.authorized=true;
      if(result.outcome==="confirmed"){
       const row=result.comment;
       if(row.submissionId!==id||row.taskId!==operation.view.taskId||row.comment!==operation.view.submitted.trim()||row.submittedAt!==operation.submittedAt||!Number.isSafeInteger(row.id)||row.id<=0||!deliveryStates.includes(row.githubDeliveryStatus))throw new Error("Die Kommentarbestätigung ist unvollständig.");
       receipts.set(row.id,{taskId:row.taskId,comment:structuredClone(row),stamp:options.nextSequence()});
-      operation.view={...operation.view,phase:"confirmed",comment:structuredClone(row),error:"",checkStatus:"checked"};options.changed();
+      operation.view={...operation.view,phase:"confirmed",comment:structuredClone(row),error:"",checkStatus:"checked"};recovery.remove(id);options.changed();
       return{outcome:"confirmed",readStatus:"current"};
      }
      operation.view={...operation.view,checkStatus:"checked"};options.changed();return{outcome:"unconfirmed",readStatus:"current"};
@@ -71,7 +81,7 @@ export function createTaskCommentCreations(options: {
      if(!options.active()||generation!==options.generation())return{outcome:"session-ended",readStatus:"not-needed"};
      const failure=error as{status?:number;code?:string};
      if(failure.code==="session_superseded"||failure.status===401){options.endSession();return{outcome:"session-ended",readStatus:"not-needed"};}
-     if(failure.status===403||failure.status===404){denied.add(operation.view.taskId);authorities.set(operation.view.taskId,authority+1);for(const[key,item]of operations)if(item.view.taskId===operation.view.taskId)operations.delete(key);options.changed();return{outcome:"unconfirmed",readStatus:"forbidden"};}
+     if(failure.status===403||failure.status===404){denied.add(operation.view.taskId);authorities.set(operation.view.taskId,authority+1);for(const[key,item]of operations)if(item.view.taskId===operation.view.taskId){operations.delete(key);recovery.remove(key);}options.changed();return{outcome:"unconfirmed",readStatus:"forbidden"};}
      operation.view={...operation.view,checkStatus:"unavailable"};options.changed();return{outcome:"unconfirmed",readStatus:"unavailable"};
     }
    })();checks.set(id,checking);try{return await checking;}finally{if(checks.get(id)===checking)checks.delete(id);}
@@ -80,12 +90,15 @@ export function createTaskCommentCreations(options: {
   const status=await read.promise;if(!options.active()||generation!==options.generation())return{outcome:"session-ended",readStatus:"not-needed"};if(!current(operation.view.taskId)||authority!==(authorities.get(operation.view.taskId)||0))return{outcome:"unconfirmed",readStatus:"forbidden"};
   operation.view={...operation.view,checkStatus:status==="current"?"checked":"unavailable"};options.changed();return{outcome:"unconfirmed",readStatus:status};
  }
- return {create,check,acceptRead,readStatus,readVersion:(id:string)=>scopes.get(id)?.stamp||0,
-  views:(taskId?:string)=>options.active()?[...operations.values()].filter(item=>(!taskId||item.view.taskId===taskId)&&current(item.view.taskId)).map(item=>structuredClone(item.view)):[],
+ function restore() {
+  for(const operation of operations.values()) if(operation.restored && current(operation.view.taskId) && ["not-checked","unavailable"].includes(operation.view.checkStatus) && options.adapter.checkTaskCommentCreation) void check(operation.view.id);
+ }
+ return {create,check,restore,acceptRead,readStatus,readVersion:(id:string)=>scopes.get(id)?.stamp||0,
+  views:(taskId?:string)=>options.active()?[...operations.values()].filter(item=>(!taskId||item.view.taskId===taskId)&&item.authorized&&current(item.view.taskId)).map(item=>structuredClone(item.view)):[],
   view(taskId:string,data:PlanningShellState){const pending=[...operations.values()].some(item=>item.view.taskId===taskId&&["saving","unconfirmed"].includes(item.view.phase));return{comments:current(taskId)?data.taskComments.filter(row=>row.taskId===taskId):[],completeness:pending?"partial" as const:scopes.get(taskId)?.completeness||"partial" as const,readStatus:readStatus(taskId)};},
   beginRead(id:string){scopes.set(id,{completeness:scopes.get(id)?.completeness||"partial",readStatus:"loading",stamp:scopes.get(id)?.stamp||0});},
-  failed(id:string,status:"forbidden"|"unavailable"){scopes.set(id,{completeness:"partial",readStatus:status,stamp:scopes.get(id)?.stamp||0});if(status==="forbidden"){denied.add(id);authorities.set(id,(authorities.get(id)||0)+1);for(const[key,item]of operations)if(item.view.taskId===id)operations.delete(key);}},
+  failed(id:string,status:"forbidden"|"unavailable"){scopes.set(id,{completeness:"partial",readStatus:status,stamp:scopes.get(id)?.stamp||0});if(status==="forbidden"){denied.add(id);authorities.set(id,(authorities.get(id)||0)+1);for(const[key,item]of operations)if(item.view.taskId===id){operations.delete(key);recovery.remove(key);}}},
   projectConfirmed(data:PlanningShellState):PlanningShellState{const known=new Set(data.taskComments.map(row=>row.id));return{...data,taskComments:[...data.taskComments.filter(row=>!denied.has(row.taskId)&&(!receipts.has(row.id)||receipts.get(row.id)!.comment)).map(row=>receipts.get(row.id)?.comment||row),...[...receipts.values()].filter(receipt=>receipt.comment&&!denied.has(receipt.taskId)&&!known.has(receipt.comment.id)).map(receipt=>receipt.comment!)]};},
-  clear(){operations.clear();receipts.clear();scopes.clear();authorities.clear();denied.clear();reads.clear();checks.clear();},
+  clear(){recovery.clear();operations.clear();receipts.clear();scopes.clear();authorities.clear();denied.clear();reads.clear();checks.clear();},
  };
 }
