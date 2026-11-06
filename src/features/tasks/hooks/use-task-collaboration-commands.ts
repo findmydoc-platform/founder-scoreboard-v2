@@ -22,16 +22,15 @@ export function useTaskCollaborationCommands({
   const commentImportNotice = importView?.notice || "";
   const commentImportPendingTaskIds = new Set(importView?.phase === "saving" && selectedTask ? [selectedTask.id] : []);
 
-  const addTaskComment = async (task: Task, comment: string) => {
+  const addTaskComment = (task: Task, comment: string) => {
     if (!currentProfile) {
       setSaveError("GitHub-User ist keinem Teamprofil zugeordnet.");
-      throw new Error("GitHub-User ist keinem Teamprofil zugeordnet.");
+      return {accepted:false as const,error:"GitHub-User ist keinem Teamprofil zugeordnet.",completion:Promise.resolve({ok:false as const,kind:"rejected" as const,error:"GitHub-User ist keinem Teamprofil zugeordnet."})};
     }
 
     setSaveError("");
 
-    const result = await planningState.createTaskComment(task, comment);
-    if (!result.ok) { setSaveError(result.error); throw new Error(result.error); }
+    return planningState.createTaskComment(task, comment);
   };
 
   const uploadTaskAttachment = async (task: Task, file: File) => {
