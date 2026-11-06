@@ -121,6 +121,27 @@ test("SSR uses the shared verified context and returns only the mapped profile w
   expect(await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.home" })).toBe("profile");
 });
 
+test("Planning hydration carries the same verified session revision and expiry as the current browser session", async () => {
+  const original = session();
+  jar.set(cookieBase, encode(original));
+  const previous = network;
+  network = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/auth/v1/user") return Response.json({ id: "user-1", email: "verified@example.test", aud: "authenticated",
+      user_metadata: { full_name: "Verified Founder", avatar_url: "https://images.example.test/founder.png", user_name: "verified-founder" } });
+    return previous(input, init);
+  };
+  const { authorizeCredentialAction } = await publicModule();
+  const planning = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" });
+  expect(planning.ok).toBe(true);
+  const response = await invoke("session.current");
+  const current = (await response.json()).session;
+  expect(planning.session).toEqual(current);
+  expect(planning.session).toMatchObject({ userId: "user-1", expiresAt: original.expires_at,
+    user: { email: "verified@example.test", displayName: "Verified Founder", githubLogin: "verified-founder" } });
+  expect(JSON.stringify(planning.session)).not.toMatch(/access_token|refresh_token|provider_token|refresh-user/);
+});
+
 test("SSR home denies unmapped authorization without reading another profile preference", async () => {
   jar.set(cookieBase, encode(session()));
   const previous = network; let preferences = 0;

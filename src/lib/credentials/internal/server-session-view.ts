@@ -7,6 +7,7 @@ import { assertGoogleSession, requireWorkspaceAccess, workspaceAccessContext } f
 import { authorizeSessionData } from "./session";
 import { getServerAuthSupabase } from "./cookie-client";
 import type { ServerPlanningAuth, SessionLinkPageState } from "../session-types";
+import { projectSessionView } from "./session-view";
 
 async function planningContext(action: "session.planning" | "session.home") {
   const startedAt = Date.now();
@@ -21,7 +22,7 @@ async function planningContext(action: "session.planning" | "session.home") {
     const user = result.status === 403 && !result.code ? (await client.auth.getUser(current.data.session.access_token)).data.user : null;
     return { ...result, user };
   }
-  return result;
+  return { ...result, session: projectSessionView(current.data.session, result.user) };
 }
 
 export function serverPlanningContext() { return planningContext("session.planning"); }
@@ -30,7 +31,7 @@ export async function serverPlanningAuth(): Promise<ServerPlanningAuth> {
   const auth = await serverPlanningContext();
   if (!auth.ok) return auth;
   const authority = await loadSessionAuthority(auth.data, auth.profile);
-  return { ok: true, user: auth.user, profile: auth.profile, authority };
+  return { ok: true, user: auth.user, profile: auth.profile, authority, session: auth.session };
 }
 
 export async function serverHomeWorkspace(): Promise<AppWorkspace> {
