@@ -648,3 +648,41 @@ export const RelativeGitHubReferencesWithPartialContext: Story = {
   ...RelativeGitHubReferencesWithoutContext,
   args: { task: { ...task, githubRepo: "management", githubIssueNumber: null, githubIssueUrl: "", issueNumber: "", issueUrl: "", problemStatement: "Änderung #123 unknown#361 other-org/outside-repo#123" }, comments: [], activities: [] },
 };
+
+
+const navigationChild = taskDetailStoryTask({
+  id: "navigation-child", title: "Supporting child work", taskType: "sub_issue", parentTaskId: task.id,
+});
+
+export const ChildOpeningControls: Story = {
+  args: { subIssues: [navigationChild], allTasks: [task, navigationChild] },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const title = canvas.getByRole("link", { name: navigationChild.title });
+    const row = title.closest("article")!;
+    const open = within(row).getByRole("link", { name: "Öffnen" });
+    await expect(open).toHaveAttribute("href", `/tasks/${navigationChild.id}`);
+    await expect(title).toHaveAttribute("href", `/tasks/${navigationChild.id}`);
+    await userEvent.click(row);
+    await expect(args.onOpenTask).not.toHaveBeenCalled();
+    await userEvent.click(title);
+    await expect(args.onOpenTask).toHaveBeenLastCalledWith(navigationChild.id);
+    await userEvent.click(open);
+    await expect(args.onOpenTask).toHaveBeenCalledTimes(2);
+    await userEvent.tab({ shift: true });
+    await expect(title).toHaveFocus();
+    await expect(window.getComputedStyle(title).boxShadow).not.toBe("none");
+    await userEvent.keyboard("{Enter}");
+    await userEvent.tab();
+    await expect(open).toHaveFocus();
+    await expect(window.getComputedStyle(open).boxShadow).not.toBe("none");
+    await userEvent.keyboard("{Enter}");
+    await expect(args.onOpenTask).toHaveBeenCalledTimes(4);
+    await expect(args.onOpenTask).toHaveBeenLastCalledWith(navigationChild.id);
+  },
+};
+
+export const PanelChildOpeningControls: Story = {
+  ...ChildOpeningControls,
+  args: { ...ChildOpeningControls.args, surface: "panel" },
+};
