@@ -14,7 +14,7 @@ const meta = {
     source: "supabase", authRequired: true, initialAuthUser: itemPageUser,
     initialCurrentProfile: itemPageProfile,
   },
-  beforeEach: () => mockItemPageBrowser(),
+  beforeEach: ({ args }) => mockItemPageBrowser({ detailModel: args.initialModel }),
 } satisfies Meta<typeof TaskDetailPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -38,6 +38,40 @@ export const GlobalActionsAndItemHeading: Story = {
     await userEvent.click(canvas.getByRole("button", { name: /GitHub öffnen/ }));
     await expect(canvas.getByRole("dialog", { name: "GitHub-Sync" })).toBeVisible();
     await userEvent.keyboard("{Escape}");
+  },
+};
+
+export const SuccessfulRetryClearsServerDegradation: Story = {
+  args: {
+    initialDetailDataError: "Diskussion war beim Seitenaufruf nicht verfügbar.",
+  },
+  beforeEach: () => {
+    let reads = 0;
+    return mockItemPageBrowser({ respond: input => {
+      const path = new URL(String(input), window.location.origin).pathname;
+      if (path !== "/api/tasks/item-page-task/detail-data") return undefined;
+      const model = itemPageModel();
+      if (++reads === 1) return Response.json({ taskDetail: model, unavailable: ["discussion"] });
+      return Response.json({ taskDetail: {
+        ...model,
+        coverage: { discussion: "complete", relationships: "complete", timeline: "complete" },
+        discussion: { comments: [{
+          id: 745, taskId: model.item.id, profileId: itemPageProfile.id,
+          comment: "Diskussion nach erneutem Laden verfügbar.", createdAt: "2026-11-05T18:00:00Z",
+          githubDeliveryStatus: "not_applicable", githubCommentUrl: "",
+        }], externalComments: [] },
+      }, unavailable: [] });
+    } });
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.queryAllByText(/Diskussion konnten nicht vollständig geladen werden\./).length).toBeGreaterThan(0));
+    await userEvent.click(canvas.getByRole("button", { name: "Erneut laden" }));
+    await waitFor(() => expect(canvas.queryByRole("button", { name: "Erneut laden" })).not.toBeInTheDocument());
+    await expect(canvas.queryByText(/Diskussion war beim Seitenaufruf nicht verfügbar\./)).not.toBeInTheDocument();
+    await expect(canvas.queryByText(/Diskussion konnten nicht vollständig geladen werden\./)).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("tab", { name: /Aktivität/ }));
+    await expect(await canvas.findByText("Diskussion nach erneutem Laden verfügbar.")).toBeVisible();
   },
 };
 

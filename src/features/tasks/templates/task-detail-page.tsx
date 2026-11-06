@@ -9,7 +9,7 @@ import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, type MouseEvent } from "react";
+import { useMemo, useState, useTransition, type MouseEvent } from "react";
 import { usePlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { PlanningBusinessStateContext } from "@/features/planning/hooks/use-planning-business-state";
 import { useAdministratorAccessController } from "@/features/administrator-access/hooks/use-administrator-access-controller";
@@ -17,6 +17,8 @@ import type { AdministratorAccessSnapshot } from "@/features/administrator-acces
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { useTaskDiscardGuard } from "@/features/tasks/hooks/use-task-discard-guard";
+import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-data-loader";
+import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 import { projectGitHubSyncQueue } from "@/features/tasks/model/github-sync-queue";
 import { ApplicationHeader } from "@/features/application-shell/organisms/application-header";
 import { safeTaskDetailReturnTo } from "@/features/tasks/model/task-detail-return-navigation";
@@ -79,6 +81,15 @@ export function TaskDetailPage({
     operationalCorrection: administratorAccessController.authority.capabilities.operationalCorrection,
   });
   const task = controller.data.tasks.find((item) => item.id === taskId) || null;
+  const [, startDetailTransition] = useTransition();
+  const detailLoader = useTaskDetailDataLoader({
+    planningState: controller.planningState,
+    selectedTask: task,
+    taskId: controller.authUser && controller.protectedDataLoaded ? taskId : undefined,
+    initialError: initialDetailDataError,
+    source,
+    startTransition: startDetailTransition,
+  });
 
   const navigateApproved = (href: string) => {
     controller.setMobileNavOpen(false);
@@ -93,7 +104,14 @@ export function TaskDetailPage({
     navigate(safeReturnHref);
   };
 
-  if (!task) return <div role="status" className="min-h-screen bg-slate-50" aria-label="Aufgabendetails werden geladen" />;
+  if (!task) return (
+    <div role="status" className="min-h-screen bg-slate-50 p-6" aria-live="polite" aria-label={detailLoader.selectedTaskDetailError ? "Aufgabendetails konnten nicht geladen werden" : "Aufgabendetails werden geladen"}>
+      <UiNotice tone={detailLoader.selectedTaskDetailError ? "danger" : "info"}>
+        {detailLoader.selectedTaskDetailError || "Aufgabendetails werden geladen …"}
+      </UiNotice>
+      {detailLoader.selectedTaskDetailError ? <UiButton className="mt-3" onClick={detailLoader.retrySelectedTaskDetail}>Erneut laden</UiButton> : null}
+    </div>
+  );
 
   const currentInitiative = initiativeForPlanningItem(controller.data.tasks, task);
   const selectedRelations = controller.data.taskRelations.filter((relation) => relation.taskId === task.id || relation.relatedTaskId === task.id);
@@ -162,7 +180,9 @@ export function TaskDetailPage({
           operationalCorrection={controller.canCorrectOperationally}
           pending={controller.isPending}
           error={controller.saveError}
-          detailDataError={initialDetailDataError}
+          detailDataError={detailLoader.selectedTaskDetailError}
+          detailDataLoading={detailLoader.selectedTaskDetailLoading}
+          onRetryDetailData={detailLoader.retrySelectedTaskDetail}
           requestedCommentTarget={initialCommentTarget}
           onOverviewDirtyChange={setOverviewDirty}
           onRequestDiscardAction={discardGuard.request}
