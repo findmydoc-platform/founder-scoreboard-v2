@@ -18,6 +18,7 @@ import { normalizeStatus } from "@/lib/status";
 import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData, Task } from "@/lib/types";
 
 export type PlanningBootstrapStateOptions = {
+  initialWorkspaceRead?: import("../model/planning-workspace-hydration").PlanningWorkspaceHydration;
   initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
   initialData: PlanningShellState;
   initialHeaderData: PlanningHeaderData;
@@ -33,6 +34,7 @@ export type PlanningBootstrapStateOptions = {
 };
 
 export function usePlanningBootstrapState({
+  initialWorkspaceRead,
   initialDecisionLogResult,
   initialData,
   initialHeaderData,
@@ -49,9 +51,9 @@ export function usePlanningBootstrapState({
   const safeInitialData = useMemo(() => normalizePlanningShellState(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
-  const stateOwner = usePlanningStateOwner({ initialDecisionLogResult, initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, initialAdministratorAccess: administratorAccess });
+  const stateOwner = usePlanningStateOwner({ initialWorkspaceRead, initialDecisionLogResult, initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, initialAdministratorAccess: administratorAccess });
   const { data, planningState } = stateOwner;
-  const { workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
+  const { workspace, setWorkspace, navigateWorkspaceHref } = usePlanningWorkspace(initialWorkspace, planningState);
   const viewState = usePlanningViewState({
     initialData: safeInitialData,
   });
@@ -150,5 +152,6 @@ export function usePlanningBootstrapState({
     statusGuardNotice,
     statusGuardTaskId,
     workspace,
+    navigateWorkspaceHref,
   };
 }

@@ -14,6 +14,7 @@ import type { AuthenticatedProfile } from "@/lib/types";
 import { redirect } from "next/navigation";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
+import { planningWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
 
 async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.backlog.read" });
@@ -153,6 +154,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       return (
         <PlanningApp
           initialData={planningWorkspaceModelToPlanningShellState(planningWorkspace.model)}
+          initialWorkspaceRead={planningWorkspaceHydration(initialWorkspace, planningWorkspace.model, auth.session)}
           initialHeaderData={planningWorkspace.headerData}
           initialWorkspace={initialWorkspace}
           source="supabase"

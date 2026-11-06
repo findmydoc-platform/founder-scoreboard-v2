@@ -17,6 +17,7 @@ import { useAdministratorAccessController } from "@/features/administrator-acces
 import { createBrowserApiClient } from "@/lib/browser-api-client";
 
 type Props = {
+  initialWorkspaceRead?: import("./model/planning-workspace-hydration").PlanningWorkspaceHydration;
   initialData: PlanningShellState;
   initialHeaderData: PlanningHeaderData;
   initialWorkspace: AppWorkspace;
@@ -34,6 +35,7 @@ type Props = {
 };
 
 export function PlanningApp({
+  initialWorkspaceRead,
   initialData,
   initialHeaderData,
   initialWorkspace,
@@ -56,6 +58,7 @@ export function PlanningApp({
     platformRole: initialCurrentProfile?.platformRole || null,
   });
   const controller = usePlanningAppController({
+    initialWorkspaceRead,
     initialDecisionLogResult,
     initialData,
     initialHeaderData,

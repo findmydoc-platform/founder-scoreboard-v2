@@ -142,6 +142,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
           canAccessAdministration={administratorAccessController.authority.capabilities.manageAdministratorEligibility}
           mobileOpen={mobileNavOpen}
           onMobileClose={() => setMobileNavOpen(false)}
+          onRequestNavigation={controller.navigateWorkspaceHref}
         />
       ) : null}
 

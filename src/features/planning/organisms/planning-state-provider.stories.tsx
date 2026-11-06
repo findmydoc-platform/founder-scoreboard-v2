@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { PlanningStateLifetimeContext } from "../model/internal/planning-state-lifetime-context";
@@ -14,20 +14,24 @@ import { getProtectedPlanningShellStateCache } from "@/features/planning/model/i
 const task = taskDetailStoryTask({ id: "navigation-task", title: "Before navigation", updatedAt: "r1" });
 const initial = { ...emptyPlanningShellState, tasks: [task] };
 function networkFixture() {
+  let reads = 0;
+  const observers = new Set<() => void>();
+  let originalHeader: ((result: BrowserApiJsonResult<unknown>) => void) | undefined;
   let finishHeader: ((result: BrowserApiJsonResult<unknown>) => void) | undefined;
   let finish: ((result: BrowserApiJsonResult<unknown>) => void) | undefined;
   const server = { ...task, title: "Current server task", updatedAt: "foreign-r2" };
   const client: BrowserApiClient = {
     requestJson: <T,>(input: Parameters<BrowserApiClient["requestJson"]>[0], options?: Parameters<BrowserApiClient["requestJson"]>[1]) => options?.method === "PATCH"
       ? new Promise<BrowserApiJsonResult<T>>(resolve => { finish = result => resolve(result as BrowserApiJsonResult<T>); })
-      : String(input).includes("planning-board-data") ? new Promise<BrowserApiJsonResult<T>>(resolve => { finishHeader = result => resolve(result as BrowserApiJsonResult<T>); })
+      : String(input).includes("planning-board-data") ? new Promise<BrowserApiJsonResult<T>>(resolve => { reads++; observers.forEach(listener => listener()); finishHeader = result => resolve(result as BrowserApiJsonResult<T>); originalHeader ||= finishHeader; })
       : Promise.resolve({ response: new Response(null), body: { taskDetail: { revision: "detail", project: initial.project, item: server, ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } } as T }),
     requestForm: async () => { throw new Error("Unexpected upload"); },
     requestBlob: async () => { throw new Error("Unexpected blob"); },
   };
-  return { client, completeHeader: () => finishHeader?.({ response: new Response(null), body: { model: { revision: "header", project: initial.project, items: initial.tasks, people: [], sprints: [], relationships: [], preferences: [] }, headerData: { ...emptyPlanningHeaderData, notifications: { state: "ready", data: { unreadCount: 7, items: [] } } } } }), conflict: () => finish?.({ response: new Response(null, { status: 409 }), body: { error: "Geänderte Aufgabe", conflictReason: "revision" } }), lose: () => finish?.({ response: new Response(null, { status: 503 }), body: null }), confirm: () => finish?.({ response: new Response(null), body: { task: { ...task, title: "Submitted before navigation", updatedAt: "r2" } } }) };
+  return { client, supersedeOriginalRead: () => originalHeader?.({ response: new Response(null, { status: 409 }), body: { code: "session_superseded" } }), subscribe: (listener: () => void) => { observers.add(listener); return () => { observers.delete(listener); }; }, reads: () => reads, completeHeader: () => finishHeader?.({ response: new Response(null), body: { model: { revision: "header", project: initial.project, items: initial.tasks, people: [], sprints: [], relationships: [], preferences: [] }, headerData: { ...emptyPlanningHeaderData, notifications: { state: "ready", data: { unreadCount: 7, items: [] } } } } }), conflict: () => finish?.({ response: new Response(null, { status: 409 }), body: { error: "Geänderte Aufgabe", conflictReason: "revision" } }), lose: () => finish?.({ response: new Response(null, { status: 503 }), body: null }), confirm: () => finish?.({ response: new Response(null), body: { task: { ...task, title: "Submitted before navigation", updatedAt: "r2" } } }) };
 }
 function Page({ workspace, network, account = "navigation-user" }: { workspace: "planning" | "team"; account?: string; network: ReturnType<typeof networkFixture> }) {
+  const requests = useSyncExternalStore(network.subscribe, network.reads, network.reads);
   const header = emptyPlanningHeaderData;
   const owner = usePlanningStateOwner({ initialData: initial, initialHeaderData: header, initialUserId: account, initialCurrentProfile: null, initialWorkspace: workspace });
   useEffect(() => { owner.configure(network.client, workspace, null); }, [owner, network, workspace, header]);
@@ -35,6 +39,7 @@ function Page({ workspace, network, account = "navigation-user" }: { workspace: 
   return <section aria-label={workspace}>
     <label>Local draft<input value={draft} onChange={event => setDraft(event.target.value)} /></label>
     <p>Header count: {owner.planningState.header().data.notifications.data.unreadCount}</p>
+    <p>Workspace requests: {requests}</p>
     <p>Editor: {owner.planningState.taskEdits(task.id)[0]?.phase || "none"}</p>
     <p>Task: {owner.planningState.taskDetail(task.id).task?.title || "cleared"}</p>
     <p>Status: {owner.planningState.taskDetail(task.id).saveStatus}</p>
@@ -115,7 +120,7 @@ function sessionFixture() {
   const listeners = new Set<(value: BrowserSessionSnapshot | null) => void>();
   const publish = (value: BrowserSessionSnapshot | null) => { current = value; listeners.forEach(listener => listener(value)); };
   const source = { current: async () => current, subscribe: (listener: (value: BrowserSessionSnapshot | null) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; } };
-  return { source, logout: () => publish(null), replace: () => publish({ userId: "replacement-user", user: { id: "replacement-user" }, revision: "credential-2", expiresAt: Math.floor(Date.now() / 1000) + 3600 }), expire: () => publish({ userId: "navigation-user", user: { id: "navigation-user" }, revision: "expired", expiresAt: 1 }) };
+  return { source, rotate: () => publish({ userId: "navigation-user", user: { id: "navigation-user" }, revision: "credential-rotated", expiresAt: Math.floor(Date.now() / 1000) + 3600 }), logout: () => publish(null), replace: () => publish({ userId: "replacement-user", user: { id: "replacement-user" }, revision: "credential-2", expiresAt: Math.floor(Date.now() / 1000) + 3600 }), expire: () => publish({ userId: "navigation-user", user: { id: "navigation-user" }, revision: "expired", expiresAt: 1 }) };
 }
 function SessionNavigationStory() {
   const [sessions] = useState(sessionFixture);
@@ -128,6 +133,8 @@ function SessionNavigationStory() {
     <main>
       <button onClick={() => setPage(value => value + 1)}>Navigate same account</button>
       <button onClick={sessions.logout}>Logout</button>
+      <button onClick={sessions.rotate}>Rotate session</button>
+      <button onClick={network.supersedeOriginalRead}>Complete superseded previous read</button>
       <button onClick={() => { sessions.replace(); setAccount("replacement-user"); }}>Replace account</button>
       <button onClick={sessions.expire}>Expire session</button>
       <button onClick={network.confirm}>Confirm old save</button>
@@ -185,5 +192,51 @@ export const LateReadPublishesIntoTheCurrentlyMountedHeader: Story = {
     await expect(canvas.getByText("Header count: 0")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Complete original Header read" }));
     await waitFor(() => expect(canvas.getByText("Header count: 7")).toBeVisible());
+  },
+};
+
+function AuthorityPage({ restricted, network }: { restricted: boolean; network: ReturnType<typeof networkFixture> }) {
+  const owner = usePlanningStateOwner({ initialData: restricted ? emptyPlanningShellState : initial, initialHeaderData: emptyPlanningHeaderData,
+    initialUserId: "navigation-user", initialWorkspace: "planning", initialCurrentProfile: { id: "authority-profile", name: "Authority Person", githubLogin: "authority-person", platformRole: restricted ? "viewer" : "ceo" } });
+  useEffect(() => { owner.configure(network.client, "planning", null); }, [owner, network]);
+  return <><p>Authority task: {owner.data.tasks[0]?.title || "cleared"}</p><p>Authority role: {owner.planningState.currentProfile()?.platformRole}</p>
+    <button onClick={() => { void owner.planningState.refreshWorkspace("planning"); }}>Read before authority change</button></>;
+}
+function AuthorityNavigationStory() {
+  const [restricted, setRestricted] = useState(false);
+  const [sessions] = useState(sessionFixture);
+  const [lifetime] = useState(() => createBrowserPlanningLifetime(sessions.source));
+  const [network] = useState(networkFixture);
+  useEffect(() => lifetime.connect(), [lifetime]);
+  return <PlanningStateLifetimeContext.Provider value={lifetime}>
+    <button onClick={() => setRestricted(true)}>Receive restricted page</button>
+    <button onClick={network.completeHeader}>Complete previous authority read</button>
+    <AuthorityPage key={String(restricted)} restricted={restricted} network={network} />
+  </PlanningStateLifetimeContext.Provider>;
+}
+export const ChangedAuthorityDiscardsPriorProtectedResult: Story = {
+  render: () => <AuthorityNavigationStory />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Read before authority change" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Receive restricted page" }));
+    await expect(canvas.getByText("Authority task: cleared")).toBeVisible();
+    await expect(canvas.getByText("Authority role: viewer")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Complete previous authority read" }));
+    await expect(canvas.getByText("Authority task: cleared")).toBeVisible();
+  },
+};
+
+export const NewSessionDoesNotSharePriorInFlightRead: Story = {
+  render: () => <SessionNavigationStory />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Refresh Planning" }));
+    await expect(await canvas.findByText("Workspace requests: 1")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Rotate session" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Refresh Planning" }));
+    await expect(await canvas.findByText("Workspace requests: 2")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Complete superseded previous read" }));
+    await expect(canvas.getByText("Task: Before navigation")).toBeVisible();
   },
 };
