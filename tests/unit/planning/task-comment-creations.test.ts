@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { createPlanningState, type PlanningStateAdapter } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
@@ -12,18 +12,18 @@ function fixture(adapter: Partial<PlanningStateAdapter> = {}) { return createPla
 function detail(comments: TaskComment[] = []): TaskDetailModel { return { revision: "detail", project: emptyPlanningShellState.project, item: task, ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments, externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [], coverage: { discussion: "complete" } }; }
 test("pending comment metadata is distinct from actual records and accepts exact delivery facts without changing Task revision", async () => {
  const response = deferred<{ comment: TaskComment }>(); let reads=0; const { planning } = fixture({ createTaskComment: () => response.promise, readTaskDetail: async () => { reads++; return { model: detail() }; } });
- const creating = planning.createTaskComment(task, comment.comment); expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({ phase: "saving", submitted: comment.comment }); expect(planning.taskDetail(task.id).comments).toEqual([]); response.resolve({ comment }); expect(await creating).toMatchObject({ ok: true, comment }); expect(planning.taskComments(task.id)).toMatchObject({ comments: [comment], completeness: "partial" }); expect(planning.protectedCache()?.tasks[0].updatedAt).toBe("r1"); expect(reads).toBe(0);
+ const creating = planning.createTaskComment(task, comment.comment).completion; expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({ phase: "saving", submitted: comment.comment }); expect(planning.taskDetail(task.id).comments).toEqual([]); response.resolve({ comment }); expect(await creating).toMatchObject({ ok: true, comment }); expect(planning.taskComments(task.id)).toMatchObject({ comments: [comment], completeness: "partial" }); expect(planning.protectedCache()?.tasks[0].updatedAt).toBe("r1"); expect(reads).toBe(0);
 });
 test("an old complete discussion read cannot erase a confirmed comment or change its delivery status", async () => {
- const old = deferred<{ model: TaskDetailModel }>(); const { planning } = fixture({ createTaskComment: async () => ({ comment }), readTaskDetail: () => old.promise }); const reading = planning.loadTaskDetail(task.id); await planning.createTaskComment(task,comment.comment); old.resolve({ model: detail() }); await reading; expect(planning.taskDetail(task.id).comments).toEqual([comment]); expect(planning.taskComments(task.id)).toMatchObject({ completeness: "partial", readStatus: "stale" });
+ const old = deferred<{ model: TaskDetailModel }>(); const { planning } = fixture({ createTaskComment: async () => ({ comment }), readTaskDetail: () => old.promise }); const reading = planning.loadTaskDetail(task.id); await planning.createTaskComment(task,comment.comment).completion; old.resolve({ model: detail() }); await reading; expect(planning.taskDetail(task.id).comments).toEqual([comment]); expect(planning.taskComments(task.id)).toMatchObject({ completeness: "partial", readStatus: "stale" });
 });
 
 
 test.each(["failed","retry_scheduled","waiting_for_author_connection","delivered","not_applicable"] as const)("an actual %s delivery remains a confirmed local comment", async githubDeliveryStatus => {
- const saved={...comment,githubDeliveryStatus,githubCommentUrl:githubDeliveryStatus==="delivered"?"https://github.com/example/repository/issues/1#issuecomment-7":""};const notice={code:"github_author_connection_required",level:"info" as const,message:"Kommentar gespeichert. Veröffentlichung wartet auf deine GitHub-Verbindung."};const {planning}=fixture({createTaskComment:async()=>({comment:saved,notice:githubDeliveryStatus==="waiting_for_author_connection"?notice:null})});expect(await planning.createTaskComment(task,comment.comment)).toMatchObject({ok:true,comment:saved});expect(planning.taskDetail(task.id).comments).toEqual([saved]);expect(planning.taskCommentCreations(task.id)[0].phase).toBe("confirmed");
+ const saved={...comment,githubDeliveryStatus,githubCommentUrl:githubDeliveryStatus==="delivered"?"https://github.com/example/repository/issues/1#issuecomment-7":""};const notice={code:"github_author_connection_required",level:"info" as const,message:"Kommentar gespeichert. Veröffentlichung wartet auf deine GitHub-Verbindung."};const {planning}=fixture({createTaskComment:async()=>({comment:saved,notice:githubDeliveryStatus==="waiting_for_author_connection"?notice:null})});expect(await planning.createTaskComment(task,comment.comment).completion).toMatchObject({ok:true,comment:saved});expect(planning.taskDetail(task.id).comments).toEqual([saved]);expect(planning.taskCommentCreations(task.id)[0].phase).toBe("confirmed");
 });
 test("an older failed creation cannot remove a later confirmed comment or independent Task edit", async()=>{
- const old=deferred<{comment:TaskComment}>();const {planning}=fixture({createTaskComment:async(_,text)=>text==="Older submission"?old.promise:{comment}});const writing=planning.createTaskComment(task,"Older submission");await planning.createTaskComment(task,comment.comment);await planning.saveTask(task,{title:"Independent confirmed title"});old.reject(Object.assign(new Error("Rejected"),{status:403}));expect(await writing).toMatchObject({kind:"rejected"});expect(planning.taskDetail(task.id).comments).toEqual([comment]);expect(planning.taskDetail(task.id).task).toMatchObject({title:"Independent confirmed title",updatedAt:"edit-r2"});
+ const old=deferred<{comment:TaskComment}>();const {planning}=fixture({createTaskComment:async(_,text)=>text==="Older submission"?old.promise:{comment}});const writing=planning.createTaskComment(task,"Older submission").completion;await planning.createTaskComment(task,comment.comment).completion;await planning.saveTask(task,{title:"Independent confirmed title"});old.reject(Object.assign(new Error("Rejected"),{status:403}));expect(await writing).toMatchObject({kind:"rejected"});expect(planning.taskDetail(task.id).comments).toEqual([comment]);expect(planning.taskDetail(task.id).task).toMatchObject({title:"Independent confirmed title",updatedAt:"edit-r2"});
 });
 test("lost confirmation resolves the exact submission without mistaking identical discussion text for identity", async()=>{
  let identity = "";
@@ -31,19 +31,19 @@ test("lost confirmation resolves the exact submission without mistaking identica
   createTaskComment: async (_, __, submission) => { identity = submission.id; throw new Error("Lost response"); },
   checkTaskCommentCreation: async (_, submission) => { expect(submission.id).toBe(identity); return { outcome: "confirmed", comment: { ...comment, submissionId: identity, submittedAt: submission.submittedAt } }; },
  });
- await planning.createTaskComment(task, comment.comment);
+ await planning.createTaskComment(task, comment.comment).completion;
  const id = planning.taskCommentCreations(task.id)[0].id;
  expect(await planning.checkTaskCommentCreation(id)).toMatchObject({ outcome: "confirmed" });
  expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({ phase: "confirmed", comment: { id: comment.id } });
  expect(planning.taskDetail(task.id).comments).toMatchObject([{ id: comment.id }]);
 });
 test("a discussion read alone cannot establish submission identity or prove a missing submission failed", async()=>{
- let writes=0,reads=0;const {planning}=fixture({createTaskComment:async()=>{writes++;throw new Error("Lost");},readTaskDetail:async()=>{reads++;return{model:detail([comment])};}});expect(await planning.createTaskComment(task,comment.comment)).toMatchObject({kind:"unconfirmed"});const id=planning.taskCommentCreations(task.id)[0].id;expect(reads).toBe(0);await Promise.all([planning.checkTaskCommentCreation(id),planning.checkTaskCommentCreation(id)]);expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({phase:"unconfirmed",submitted:comment.comment,comment:null,checkStatus:"checked"});expect(planning.taskDetail(task.id).comments).toEqual([comment]);expect(await planning.createTaskComment(task,"Different new text")).toMatchObject({kind:"blocked"});expect(await planning.saveTask(task,{title:"Independent Task edit"})).toMatchObject({ok:true});expect({writes,reads}).toEqual({writes:1,reads:1});
+ let writes=0,reads=0;const {planning}=fixture({createTaskComment:async()=>{writes++;throw new Error("Lost");},readTaskDetail:async()=>{reads++;return{model:detail([comment])};}});expect(await planning.createTaskComment(task,comment.comment).completion).toMatchObject({kind:"unconfirmed"});const id=planning.taskCommentCreations(task.id)[0].id;expect(reads).toBe(0);await Promise.all([planning.checkTaskCommentCreation(id),planning.checkTaskCommentCreation(id)]);expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({phase:"unconfirmed",submitted:comment.comment,comment:null,checkStatus:"checked"});expect(planning.taskDetail(task.id).comments).toEqual([comment]);expect(await planning.createTaskComment(task,"Different new text").completion).toMatchObject({kind:"unconfirmed"});expect(await planning.saveTask(task,{title:"Independent Task edit"})).toMatchObject({ok:true});expect({writes,reads}).toEqual({writes:2,reads:1});
 });
 test("a missing submission receipt remains unresolved and can later be confirmed without resending", async()=>{
  let submission:{id:string;submittedAt:string}|undefined, stored=false, writes=0;
  const {planning}=fixture({createTaskComment:async(_,__,identity)=>{writes++;submission=identity;throw new Error("Response lost before storage completed");},checkTaskCommentCreation:async()=>stored?{outcome:"confirmed",comment:{...comment,submissionId:submission!.id,submittedAt:submission!.submittedAt}}:{outcome:"unconfirmed"}});
- await planning.createTaskComment(task,comment.comment);const id=planning.taskCommentCreations(task.id)[0].id;
+ await planning.createTaskComment(task,comment.comment).completion;const id=planning.taskCommentCreations(task.id)[0].id;
  expect(await planning.checkTaskCommentCreation(id)).toMatchObject({outcome:"unconfirmed"});
  expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({phase:"unconfirmed",submitted:comment.comment});
  stored=true;expect(await planning.checkTaskCommentCreation(id)).toMatchObject({outcome:"confirmed"});
@@ -52,43 +52,43 @@ test("a missing submission receipt remains unresolved and can later be confirmed
 test("an ended session cannot publish a late recovered receipt", async()=>{
  const result=deferred<{outcome:"confirmed";comment:TaskComment}>();let submission:{id:string;submittedAt:string}|undefined;
  const owner=fixture({createTaskComment:async(_,__,identity)=>{submission=identity;throw new Error("Lost");},checkTaskCommentCreation:()=>result.promise});
- await owner.planning.createTaskComment(task,comment.comment);const checking=owner.planning.checkTaskCommentCreation(owner.planning.taskCommentCreations(task.id)[0].id);
+ await owner.planning.createTaskComment(task,comment.comment).completion;const checking=owner.planning.checkTaskCommentCreation(owner.planning.taskCommentCreations(task.id)[0].id);
  owner.internal.sessionChanged("replacement-account");result.resolve({outcome:"confirmed",comment:{...comment,submissionId:submission!.id,submittedAt:submission!.submittedAt}});
  expect(await checking).toMatchObject({outcome:"session-ended"});expect(owner.planning.taskCommentCreations()).toEqual([]);expect(owner.planning.protectedCache()).toBeNull();
 });
 test("unknown verification waits for an existing old GET then reads after the submission boundary", async()=>{
- const old=deferred<{model:TaskDetailModel}>(),fresh=deferred<{model:TaskDetailModel}>();let reads=0;const {planning}=fixture({createTaskComment:async()=>{throw new Error("Lost");},readTaskDetail:()=>++reads===1?old.promise:fresh.promise});const loading=planning.loadTaskDetail(task.id);await planning.createTaskComment(task,comment.comment);const check=planning.checkTaskCommentCreation(planning.taskCommentCreations(task.id)[0].id);old.resolve({model:detail()});await loading;await Promise.resolve();expect(reads).toBe(2);fresh.resolve({model:detail([comment])});expect(await check).toMatchObject({outcome:"unconfirmed",readStatus:"current"});
+ const old=deferred<{model:TaskDetailModel}>(),fresh=deferred<{model:TaskDetailModel}>();let reads=0;const {planning}=fixture({createTaskComment:async()=>{throw new Error("Lost");},readTaskDetail:()=>++reads===1?old.promise:fresh.promise});const loading=planning.loadTaskDetail(task.id);await planning.createTaskComment(task,comment.comment).completion;const check=planning.checkTaskCommentCreation(planning.taskCommentCreations(task.id)[0].id);old.resolve({model:detail()});await loading;await Promise.resolve();expect(reads).toBe(2);fresh.resolve({model:detail([comment])});expect(await check).toMatchObject({outcome:"unconfirmed",readStatus:"current"});
 });
 test("partial discussion reads preserve missing rows while complete absence has a tombstone against older responses",async()=>{
- const old=deferred<{data:typeof emptyPlanningShellState;coverage:{taskComments:"partial"}}>();let stage="complete";const {planning}=fixture({createTaskComment:async()=>({comment}),readWorkspace:()=>old.promise,readTaskDetail:async()=>({model:{...detail(stage==="complete"?[comment]:[]),coverage:{discussion:stage==="partial"?"partial":"complete"}}})});await planning.createTaskComment(task,comment.comment);await planning.loadTaskDetail(task.id);expect(planning.taskComments(task.id).completeness).toBe("complete");stage="partial";await planning.loadTaskDetail(task.id);expect(planning.taskDetail(task.id).comments).toEqual([comment]);const reading=planning.refreshWorkspace("planning");stage="empty";await planning.loadTaskDetail(task.id);expect(planning.taskComments(task.id)).toMatchObject({comments:[],completeness:"complete"});old.resolve({data:{...emptyPlanningShellState,taskComments:[comment]},coverage:{taskComments:"partial"}});await reading;expect(planning.taskDetail(task.id).comments).toEqual([]);
+ const old=deferred<{data:typeof emptyPlanningShellState;coverage:{taskComments:"partial"}}>();let stage="complete";const {planning}=fixture({createTaskComment:async()=>({comment}),readWorkspace:()=>old.promise,readTaskDetail:async()=>({model:{...detail(stage==="complete"?[comment]:[]),coverage:{discussion:stage==="partial"?"partial":"complete"}}})});await planning.createTaskComment(task,comment.comment).completion;await planning.loadTaskDetail(task.id);expect(planning.taskComments(task.id).completeness).toBe("complete");stage="partial";await planning.loadTaskDetail(task.id);expect(planning.taskDetail(task.id).comments).toEqual([comment]);const reading=planning.refreshWorkspace("planning");stage="empty";await planning.loadTaskDetail(task.id);expect(planning.taskComments(task.id)).toMatchObject({comments:[],completeness:"complete"});old.resolve({data:{...emptyPlanningShellState,taskComments:[comment]},coverage:{taskComments:"partial"}});await reading;expect(planning.taskDetail(task.id).comments).toEqual([]);
 });
 test.each([null,"replacement"])("ended session %s rejects late comment receipts and clears submitted text",async account=>{
- const response=deferred<{comment:TaskComment}>();const owner=fixture({createTaskComment:()=>response.promise});const writing=owner.planning.createTaskComment(task,comment.comment);owner.internal.sessionChanged(account);response.resolve({comment});expect(await writing).toMatchObject({kind:"ended"});expect(owner.planning.taskCommentCreations()).toEqual([]);expect(owner.planning.taskDetail(task.id).comments).toEqual([]);expect(owner.planning.protectedCache()).toBeNull();
+ const response=deferred<{comment:TaskComment}>();const owner=fixture({createTaskComment:()=>response.promise});const writing=owner.planning.createTaskComment(task,comment.comment).completion;owner.internal.sessionChanged(account);response.resolve({comment});expect(await writing).toMatchObject({kind:"ended"});expect(owner.planning.taskCommentCreations()).toEqual([]);expect(owner.planning.taskDetail(task.id).comments).toEqual([]);expect(owner.planning.protectedCache()).toBeNull();
 });
 test("Task discussion denial hides submissions and prevents late receipt publication",async()=>{
- const response=deferred<{comment:TaskComment}>();const {planning}=fixture({createTaskComment:()=>response.promise,readTaskDetail:async()=>{throw Object.assign(new Error("Denied"),{status:403});}});const writing=planning.createTaskComment(task,comment.comment);await planning.loadTaskDetail(task.id);response.resolve({comment});expect(await writing).toMatchObject({kind:"ended"});expect(planning.taskCommentCreations()).toEqual([]);expect(planning.taskComments(task.id).comments).toEqual([]);
+ const response=deferred<{comment:TaskComment}>();const {planning}=fixture({createTaskComment:()=>response.promise,readTaskDetail:async()=>{throw Object.assign(new Error("Denied"),{status:403});}});const writing=planning.createTaskComment(task,comment.comment).completion;await planning.loadTaskDetail(task.id);response.resolve({comment});expect(await writing).toMatchObject({kind:"ended"});expect(planning.taskCommentCreations()).toEqual([]);expect(planning.taskComments(task.id).comments).toEqual([]);
 });
 test.each([["confirmed",1],["unknown",1],["rejected",0]] as const)("%s creation rereads only loaded notification Header (%i)",async(mode,expected)=>{
- let reads=0;const header={...emptyPlanningHeaderData,notifications:readyHeaderSlot({unreadCount:0,items:[]})};const {planning}=createPlanningState({userId:"user",initialData:{...emptyPlanningShellState,tasks:[task]},initialHeaderData:header,adapter:{readWorkspace:async()=>null,saveTask:async()=>({task:{}}),createTaskComment:async()=>{if(mode!=="confirmed")throw Object.assign(new Error("Failure"),mode==="rejected"?{status:403}:{});return{comment};},readHeader:async slots=>{expect(slots).toEqual(["notifications"]);reads++;return header;}}});await planning.createTaskComment(task,comment.comment);expect(reads).toBe(expected);expect(planning.header().slots.quickLinks.readStatus).toBe("not-loaded");
+ let reads=0;const header={...emptyPlanningHeaderData,notifications:readyHeaderSlot({unreadCount:0,items:[]})};const {planning}=createPlanningState({userId:"user",initialData:{...emptyPlanningShellState,tasks:[task]},initialHeaderData:header,adapter:{readWorkspace:async()=>null,saveTask:async()=>({task:{}}),createTaskComment:async()=>{if(mode!=="confirmed")throw Object.assign(new Error("Failure"),mode==="rejected"?{status:403}:{});return{comment};},readHeader:async slots=>{expect(slots).toEqual(["notifications"]);reads++;return header;}}});await planning.createTaskComment(task,comment.comment).completion;expect(reads).toBe(expected);expect(planning.header().slots.quickLinks.readStatus).toBe("not-loaded");
 });
 test("inadequate records and unknown delivery values remain unconfirmed without fabricated metadata",async()=>{
- for(const malformed of [{id:7,taskId:task.id,comment:comment.comment},{...comment,githubDeliveryStatus:"invented"}]){const {planning}=fixture({createTaskComment:async()=>({comment:malformed as TaskComment})});expect(await planning.createTaskComment(task,comment.comment)).toMatchObject({kind:"unconfirmed"});expect(planning.taskDetail(task.id).comments).toEqual([]);}
+ for(const malformed of [{id:7,taskId:task.id,comment:comment.comment},{...comment,githubDeliveryStatus:"invented"}]){const {planning}=fixture({createTaskComment:async()=>({comment:malformed as TaskComment})});expect(await planning.createTaskComment(task,comment.comment).completion).toMatchObject({kind:"unconfirmed"});expect(planning.taskDetail(task.id).comments).toEqual([]);}
 });
 
 
 test("expiry clears retained submitted text before a late create can publish",async()=>{
- let now=0;const response=deferred<{comment:TaskComment}>();const {planning}=createPlanningState({userId:"user",initialSession:{userId:"user",revision:"session",expiresAt:1,user:{id:"user"}},initialData:{...emptyPlanningShellState,tasks:[task]},adapter:{now:()=>now,readWorkspace:async()=>null,saveTask:async()=>({task:{}}),createTaskComment:()=>response.promise}});const writing=planning.createTaskComment(task,comment.comment);now=1000;response.resolve({comment});expect(await writing).toMatchObject({kind:"ended"});expect(planning.taskCommentCreations()).toEqual([]);expect(planning.protectedCache()).toBeNull();
+ let now=0;const response=deferred<{comment:TaskComment}>();const {planning}=createPlanningState({userId:"user",initialSession:{userId:"user",revision:"session",expiresAt:1,user:{id:"user"}},initialData:{...emptyPlanningShellState,tasks:[task]},adapter:{now:()=>now,readWorkspace:async()=>null,saveTask:async()=>({task:{}}),createTaskComment:()=>response.promise}});const writing=planning.createTaskComment(task,comment.comment).completion;now=1000;response.resolve({comment});expect(await writing).toMatchObject({kind:"ended"});expect(planning.taskCommentCreations()).toEqual([]);expect(planning.protectedCache()).toBeNull();
 });
 test.each([400,403,404,409])("known HTTP%s is a rejected create, not a conflict or ambiguous saved comment",async status=>{
- const {planning}=fixture({createTaskComment:async()=>{throw Object.assign(new Error("Rejected"),{status});}});expect(await planning.createTaskComment(task,comment.comment)).toMatchObject({kind:"rejected",status});expect(planning.taskDetail(task.id).comments).toEqual([]);expect(planning.protectedCache()?.tasks[0].updatedAt).toBe("r1");
+ const {planning}=fixture({createTaskComment:async()=>{throw Object.assign(new Error("Rejected"),{status});}});expect(await planning.createTaskComment(task,comment.comment).completion).toMatchObject({kind:"rejected",status});expect(planning.taskDetail(task.id).comments).toEqual([]);expect(planning.protectedCache()?.tasks[0].updatedAt).toBe("r1");
 });
 test("an unknown stream does not prevent another Task's independent comment",async()=>{
- const other={...task,id:"other"},saved={...comment,id:8,taskId:other.id};const {planning}=createPlanningState({userId:"user",initialData:{...emptyPlanningShellState,tasks:[task,other]},adapter:{readWorkspace:async()=>null,saveTask:async()=>({task:{}}),createTaskComment:async id=>{if(id===task.id)throw new Error("Lost");return{comment:saved};}}});await planning.createTaskComment(task,comment.comment);expect(await planning.createTaskComment(other,comment.comment)).toMatchObject({ok:true});expect(planning.taskDetail(other.id).comments).toEqual([saved]);expect(planning.taskCommentCreations(task.id)[0].phase).toBe("unconfirmed");
+ const other={...task,id:"other"},saved={...comment,id:8,taskId:other.id};const {planning}=createPlanningState({userId:"user",initialData:{...emptyPlanningShellState,tasks:[task,other]},adapter:{readWorkspace:async()=>null,saveTask:async()=>({task:{}}),createTaskComment:async id=>{if(id===task.id)throw new Error("Lost");return{comment:saved};}}});await planning.createTaskComment(task,comment.comment).completion;expect(await planning.createTaskComment(other,comment.comment).completion).toMatchObject({ok:true});expect(planning.taskDetail(other.id).comments).toEqual([saved]);expect(planning.taskCommentCreations(task.id)[0].phase).toBe("unconfirmed");
 });
 
 
 test("a check for a later unknown create cannot reuse a read started before that outcome boundary",async()=>{
- const one=deferred<{comment:TaskComment}>(),two=deferred<{comment:TaskComment}>(),old=deferred<{model:TaskDetailModel}>(),fresh=deferred<{model:TaskDetailModel}>();let reads=0;const {planning}=fixture({createTaskComment:(_,text)=>text==="First comment"?one.promise:two.promise,readTaskDetail:()=>++reads===1?old.promise:fresh.promise});const firstWrite=planning.createTaskComment(task,"First comment"),secondWrite=planning.createTaskComment(task,"Second comment");one.reject(new Error("Lost first"));await firstWrite;const firstId=planning.taskCommentCreations(task.id)[0].id,secondId=planning.taskCommentCreations(task.id)[1].id;const firstCheck=planning.checkTaskCommentCreation(firstId);two.reject(new Error("Lost second"));await secondWrite;const secondCheck=planning.checkTaskCommentCreation(secondId);old.resolve({model:detail()});await firstCheck;await Promise.resolve();expect(reads).toBe(2);fresh.resolve({model:detail()});expect(await secondCheck).toMatchObject({outcome:"unconfirmed",readStatus:"current"});
+ const one=deferred<{comment:TaskComment}>(),two=deferred<{comment:TaskComment}>(),old=deferred<{model:TaskDetailModel}>(),fresh=deferred<{model:TaskDetailModel}>();let reads=0;const {planning}=fixture({createTaskComment:(_,text)=>text==="First comment"?one.promise:two.promise,readTaskDetail:()=>++reads===1?old.promise:fresh.promise});const firstWrite=planning.createTaskComment(task,"First comment").completion,secondWrite=planning.createTaskComment(task,"Second comment").completion;one.reject(new Error("Lost first"));await firstWrite;const firstId=planning.taskCommentCreations(task.id)[0].id,secondId=planning.taskCommentCreations(task.id)[1].id;const firstCheck=planning.checkTaskCommentCreation(firstId);two.reject(new Error("Lost second"));await secondWrite;const secondCheck=planning.checkTaskCommentCreation(secondId);old.resolve({model:detail()});await firstCheck;await Promise.resolve();expect(reads).toBe(2);fresh.resolve({model:detail()});expect(await secondCheck).toMatchObject({outcome:"unconfirmed",readStatus:"current"});
 });
 
 function browserStorage(): Storage {
@@ -98,7 +98,7 @@ function browserStorage(): Storage {
 test("reload restores a submitted identity only after an authorized check and joins the stored comment once", async()=>{
  const storage=browserStorage(), pending=deferred<{comment:TaskComment}>();let captured:{id:string;submittedAt:string}|undefined;
  const first=fixture({commentSubmissionStorage:storage,createTaskComment:(_,__,submission)=>{captured=submission;return pending.promise;}});
- void first.planning.createTaskComment(task,comment.comment);
+ void first.planning.createTaskComment(task,comment.comment).completion;
  first.internal.dispose();
  const lookup=deferred<{outcome:"confirmed";comment:TaskComment}>();
  const restored=fixture({commentSubmissionStorage:storage,checkTaskCommentCreation:()=>lookup.promise});
@@ -113,7 +113,7 @@ test("reload restores a submitted identity only after an authorized check and jo
 test("an authorized empty receipt after reload retains the operation for later checking without posting again", async()=>{
  const storage=browserStorage();let identity:{id:string;submittedAt:string}|undefined,stored=false;
  const first=fixture({commentSubmissionStorage:storage,createTaskComment:async(_,__,submission)=>{identity=submission;throw new Error("Response lost before storage");}});
- await first.planning.createTaskComment(task,comment.comment);first.internal.dispose();
+ await first.planning.createTaskComment(task,comment.comment).completion;first.internal.dispose();
  const restored=fixture({commentSubmissionStorage:storage,checkTaskCommentCreation:async()=>stored?{outcome:"confirmed",comment:{...comment,submissionId:identity!.id,submittedAt:identity!.submittedAt}}:{outcome:"unconfirmed"},readTaskDetail:async()=>({model:detail()})});
  await expect.poll(()=>restored.planning.taskCommentCreations(task.id)).toMatchObject([{id:identity!.id,phase:"unconfirmed",submitted:comment.comment,submittedAt:identity!.submittedAt}]);
  await restored.planning.loadTaskDetail(task.id);
@@ -125,7 +125,7 @@ test("an authorized empty receipt after reload retains the operation for later c
 test("a reload lookup unavailable offline preserves capture and retries when the item is loaded again", async()=>{
  const storage=browserStorage();let identity:{id:string;submittedAt:string}|undefined,online=false;
  const first=fixture({commentSubmissionStorage:storage,createTaskComment:async(_,__,submission)=>{identity=submission;throw new Error("Lost response");}});
- await first.planning.createTaskComment(task,comment.comment);first.internal.dispose();
+ await first.planning.createTaskComment(task,comment.comment).completion;first.internal.dispose();
  const restored=fixture({commentSubmissionStorage:storage,checkTaskCommentCreation:async()=>{if(!online)throw new Error("Offline");return{outcome:"unconfirmed"};},readTaskDetail:async()=>({model:detail()})});
  await new Promise(resolve=>setTimeout(resolve,0));
  expect(restored.planning.taskCommentCreations()).toEqual([]);expect(storage.length).toBe(1);
@@ -136,20 +136,60 @@ test("a reload lookup unavailable offline preserves capture and retries when the
 test("browser storage rejection retains submitted text and never starts a network write",async()=>{
  const storage=browserStorage();storage.setItem=()=>{throw new Error("Storage quota exceeded");};let writes=0;
  const {planning}=fixture({commentSubmissionStorage:storage,createTaskComment:async()=>{writes++;return{comment};}});
- expect(await planning.createTaskComment(task,comment.comment)).toMatchObject({kind:"rejected"});
- expect(planning.taskCommentCreations(task.id)).toMatchObject([{phase:"rejected",submitted:comment.comment,error:expect.stringContaining("Es wurde nichts gesendet")}]);expect(writes).toBe(0);
+ expect(await planning.createTaskComment(task,comment.comment).completion).toMatchObject({kind:"rejected"});
+ expect(planning.taskCommentCreations(task.id)).toEqual([]);expect(writes).toBe(0);
 });
 test.each([403,404])("reload receipt denial HTTP%s removes protected recovered text",async status=>{
  const storage=browserStorage();const first=fixture({commentSubmissionStorage:storage,createTaskComment:async()=>{throw new Error("Lost");}});
- await first.planning.createTaskComment(task,comment.comment);first.internal.dispose();
+ await first.planning.createTaskComment(task,comment.comment).completion;first.internal.dispose();
  const restored=fixture({commentSubmissionStorage:storage,checkTaskCommentCreation:async()=>{throw Object.assign(new Error("Denied"),{status});}});
  await expect.poll(()=>storage.length).toBe(0);expect(restored.planning.taskCommentCreations()).toEqual([]);
 });
 test("another account cannot read recovered submissions and logout clears the original account capture",async()=>{
  const storage=browserStorage(),late=deferred<{comment:TaskComment}>();const first=fixture({commentSubmissionStorage:storage,createTaskComment:()=>late.promise});
- const submitting=first.planning.createTaskComment(task,comment.comment);
+ const submitting=first.planning.createTaskComment(task,comment.comment).completion;
  const other=createPlanningState({userId:"another-user",initialData:{...emptyPlanningShellState,tasks:[task]},adapter:{commentSubmissionStorage:storage,readWorkspace:async()=>null,saveTask:async()=>({task:{}})}});
  await Promise.resolve();expect(other.planning.taskCommentCreations()).toEqual([]);expect(storage.length).toBe(1);
  first.internal.sessionChanged("another-user");late.resolve({comment});expect(await submitting).toMatchObject({kind:"ended"});expect(storage.length).toBe(0);
  expect(fixture({commentSubmissionStorage:storage}).planning.taskCommentCreations()).toEqual([]);
+});
+
+test("safe capture reports acceptance synchronously and permits identical independent submissions in one millisecond",async()=>{
+ const time=vi.spyOn(Date,"now").mockReturnValue(Date.parse("2026-11-07T10:00:00.000Z"));
+ try {
+  const storage=browserStorage();
+  const pending=deferred<{comment:TaskComment}>();
+  const first=fixture({commentSubmissionStorage:storage,createTaskComment:()=>pending.promise});
+  const one=first.planning.createTaskComment(task,"Identical intentional comment");
+  const two=first.planning.createTaskComment(task,"Identical intentional comment");
+  expect(one.accepted).toBe(true);expect(two.accepted).toBe(true);
+  const views=first.planning.taskCommentCreations(task.id);
+  expect(views.map(row=>row.submittedAt)).toEqual(["2026-11-07T10:00:00.000Z","2026-11-07T10:00:00.001Z"]);
+  expect(views[0].id).not.toBe(views[1].id);
+  first.internal.dispose();
+  const restored=fixture({commentSubmissionStorage:storage,createTaskComment:()=>pending.promise,checkTaskCommentCreation:async()=>({outcome:"unconfirmed"})});
+  await expect.poll(()=>restored.planning.taskCommentCreations(task.id).length).toBe(2);
+  expect(restored.planning.taskCommentCreations(task.id).map(row=>row.submittedAt)).toEqual(views.map(row=>row.submittedAt));
+  const next=restored.planning.createTaskComment(task,"After reload");
+  expect(next.accepted).toBe(true);
+  expect(restored.planning.taskCommentCreations(task.id)[2].submittedAt).toBe("2026-11-07T10:00:00.002Z");
+ } finally {time.mockRestore();}
+});
+
+test("failed safe capture is rejected synchronously while its completion explains the failure",async()=>{
+ const storage=browserStorage();storage.setItem=()=>{throw new Error("Storage unavailable");};
+ const {planning}=fixture({commentSubmissionStorage:storage,createTaskComment:async()=>({comment})});
+ const capture=planning.createTaskComment(task,comment.comment);
+ expect(capture.accepted).toBe(false);
+ expect(await capture.completion).toMatchObject({ok:false,kind:"rejected",error:expect.stringContaining("Es wurde nichts gesendet")});
+});
+
+test("a discussion loaded after owner creation seeds ordering when the clock moves backwards",async()=>{
+ const time=vi.spyOn(Date,"now").mockReturnValue(Date.parse("2026-11-07T10:00:00.000Z"));
+ try {
+  const {planning}=fixture({readTaskDetail:async()=>({model:detail([{...comment,submittedAt:"2026-11-07T10:01:00.000Z"}])}),createTaskComment:()=>new Promise(()=>{})});
+  await planning.loadTaskDetail(task.id);
+  expect(planning.createTaskComment(task,"After stored comment").accepted).toBe(true);
+  expect(planning.taskCommentCreations(task.id)[0].submittedAt).toBe("2026-11-07T10:01:00.001Z");
+ } finally {time.mockRestore();}
 });

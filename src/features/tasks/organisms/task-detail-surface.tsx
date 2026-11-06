@@ -96,7 +96,7 @@ type TaskDetailSurfaceProps = {
   onRequestDiscardAction: (action: () => void, force?: boolean) => void;
   onBeginEdit?: () => PlanningTaskEditor;
   onUpdate: (patch: Partial<Task>, options?: TaskUpdateOptions) => Promise<TaskUpdateResult> | void;
-  onAddComment: (comment: string) => Promise<void> | void;
+  onAddComment: (comment: string) => import("@/features/tasks/model/task-comment-creation").TaskCommentCapture;
   onUploadAttachment: (file: File) => Promise<string>;
   onImportGitHubComments: () => void;
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => Promise<TaskActionResult>;

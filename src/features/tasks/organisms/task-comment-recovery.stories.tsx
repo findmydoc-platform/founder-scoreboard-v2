@@ -17,7 +17,7 @@ function ReloadRecoveryFixture() {
     const browser = createBrowserPlanningState({ initialData: { ...emptyPlanningShellState, tasks: [task], profiles: [profile] }, initialHeaderData: emptyPlanningHeaderData, initialCurrentProfile: profile, initialUserId: "reload-user", initialWorkspace: "planning" });
     browser.runtime.session = { userId: "reload-user", revision: "reload-story-session", expiresAt: 4102444800, user: { id: "reload-user" } };
     browser.runtime.apiClient = {
-      async requestJson<T>(input, options) {
+      async requestJson<T>(input: Parameters<BrowserApiClient["requestJson"]>[0], options?: Parameters<BrowserApiClient["requestJson"]>[1]) {
         const response = await fetch(input, { method: options?.method, headers: { "Content-Type": "application/json" }, body: options?.json ? JSON.stringify(options.json) : undefined });
         return { response, body: await response.json() as T };
       },
@@ -31,7 +31,8 @@ function ReloadRecoveryFixture() {
   return <main className="mx-auto max-w-3xl p-4">
     <h1>Submitted comment reload recovery</h1>
     <h2>Task discussion</h2>
-    <TaskCommentThread comments={[...discussion.comments]} commentCreations={owner.planning.taskCommentCreations(task.id)} commentCompleteness={discussion.completeness} onCheckCommentCreation={id => { void owner.planning.checkTaskCommentCreation(id); }} profiles={[profile]} tasks={[task]} currentProfileId={profile.id} onAddComment={async text => { const result = await owner.planning.createTaskComment(task, text); if (!result.ok) throw new Error(result.error); }} />
+    <button onClick={() => { void owner.planning.loadTaskDetail(task.id); }}>Diskussion laden</button>
+    <TaskCommentThread comments={[...discussion.comments]} commentCreations={owner.planning.taskCommentCreations(task.id)} commentCompleteness={discussion.completeness} onCheckCommentCreation={id => { void owner.planning.checkTaskCommentCreation(id); }} profiles={[profile]} tasks={[task]} currentProfileId={profile.id} onAddComment={text => owner.planning.createTaskComment(task, text)} />
   </main>;
 }
 

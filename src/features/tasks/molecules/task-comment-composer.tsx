@@ -11,21 +11,20 @@ import { UiButton } from "@/shared/atoms/ui-primitives";
 type Props = {
   draft?: TaskCommentDraft;
   pending?: boolean;
-  confirmationPending?: boolean;
   attachmentConfirmationPending?: boolean;
   profiles?: Profile[];
-  onAddComment: (comment: string) => Promise<void> | void;
+  onAddComment: (comment: string) => import("@/features/tasks/model/task-comment-creation").TaskCommentCapture;
   onUploadAttachment?: (file: File) => Promise<string>;
   renderPreview: (value: string) => ReactNode;
 };
 
-export function TaskCommentComposer({ draft, pending = false, confirmationPending = false, attachmentConfirmationPending = false, profiles = [], onAddComment, onUploadAttachment, renderPreview }: Props) {
+export function TaskCommentComposer({ draft, pending = false, attachmentConfirmationPending = false, profiles = [], onAddComment, onUploadAttachment, renderPreview }: Props) {
   const textareaId = useId();
   const [localComment, setLocalComment] = useState("");
   const newComment = draft?.text ?? localComment;
   const setNewComment = draft?.update ?? setLocalComment;
   const [uploadPending, setUploadPending] = useState(false);
-  const [submitPending, setSubmitPending] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const showCommentPreview = /!\[[^\]]*\]\(https?:\/\/|https?:\/\/|\[[^\]]+\]\(https?:\/\//.test(newComment);
@@ -45,18 +44,13 @@ export function TaskCommentComposer({ draft, pending = false, confirmationPendin
     }
   }
 
-  async function submitComment() {
-    const comment = newComment;
-    setSubmitPending(true);
-    try {
-      await onAddComment(comment);
-      if (draft) draft.clear();
-      else setLocalComment((current) => current === comment ? "" : current);
-    } catch {
-      // The owning workflow surfaces the error; keep the draft unchanged for retry.
-    } finally {
-      setSubmitPending(false);
-    }
+  function submitComment() {
+    const capture = onAddComment(newComment);
+    if (!capture.accepted) { setSubmitError(capture.error); return; }
+    setSubmitError("");
+    if (draft) draft.clear();
+    else setLocalComment("");
+    document.getElementById(textareaId)?.focus({ preventScroll: true });
   }
 
   return (
@@ -79,6 +73,7 @@ export function TaskCommentComposer({ draft, pending = false, confirmationPendin
           {renderPreview(newComment)}
         </div>
       )}
+      {submitError && <div role="alert" className="mt-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{submitError}</div>}
       {uploadError && <div className="mt-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{uploadError}</div>}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -111,10 +106,10 @@ export function TaskCommentComposer({ draft, pending = false, confirmationPendin
           type="button"
           size="lg"
           variant="primary"
-          disabled={pending || confirmationPending || submitPending || uploadPending || newComment.trim().length < 2}
+          disabled={pending || uploadPending || newComment.trim().length < 2}
           onClick={() => void submitComment()}
         >
-          {submitPending ? "Kommentiert …" : "Kommentieren"}
+          Kommentieren
         </UiButton>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import type { PlanningShellState, Task, TaskComment } from "@/lib/types";
 import type { PlanningReadStatus, PlanningTaskSaveCheck } from "../planning-state";
-import type { TaskCommentCreationAdapter, TaskCommentCreationResult, TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
+import type { TaskCommentCreationAdapter, TaskCommentCapture, TaskCommentCreationResult, TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
 import { taskCommentSubmissionStorage } from "./task-comment-submission-storage";
 const deliveryStates = ["not_applicable", "pending", "waiting_for_issue", "waiting_for_author_connection", "processing", "retry_scheduled", "delivered", "failed"];
 export function createTaskCommentCreations(options: {
@@ -11,6 +11,7 @@ export function createTaskCommentCreations(options: {
  const recovery = taskCommentSubmissionStorage(options.adapter.commentSubmissionStorage, options.actor);
  const operations = new Map<string, { view: TaskCommentCreationView; after: number; submittedAt: string; authorized: boolean; restored: boolean }>();
  for (const row of recovery.load()) operations.set(row.id, {view:{...row,phase:"unconfirmed",comment:null,notice:null,error:"",checkStatus:"not-checked"},after:0,submittedAt:row.submittedAt,authorized:false,restored:true});
+ let lastSubmittedTime = Math.max(0, ...options.initial.map(row => Date.parse(row.submittedAt || row.createdAt) || 0), ...[...operations.values()].map(row => Date.parse(row.submittedAt)));
  const checks = new Map<string, Promise<PlanningTaskSaveCheck>>();
  const receipts = new Map(options.initial.map(comment => [comment.id, { taskId: comment.taskId, comment: comment as TaskComment | null, stamp: 0 }]));
  const scopes = new Map<string, { completeness: "complete" | "partial"; readStatus: PlanningReadStatus; stamp: number }>();
@@ -19,6 +20,7 @@ export function createTaskCommentCreations(options: {
  function readStatus(id: string): PlanningReadStatus { return current(id) ? scopes.get(id)?.readStatus || options.detailStatus(id) : "forbidden"; }
  function acceptRead(rows: readonly TaskComment[], started: number, complete: boolean, taskId?: string) {
   if (taskId) denied.delete(taskId);
+  for (const row of rows) lastSubmittedTime = Math.max(lastSubmittedTime, Date.parse(row.submittedAt || row.createdAt) || 0);
   const incoming = new Map(rows.map(row => [row.id,row]));
   for (const [id, receipt] of receipts) {
    if (receipt.stamp > started || taskId && receipt.taskId !== taskId) continue;
@@ -29,21 +31,24 @@ export function createTaskCommentCreations(options: {
   const ids = taskId ? [taskId] : [...new Set([...scopes.keys(), ...rows.map(row => row.taskId), ...(complete ? [...receipts.values()].map(row=>row.taskId) : [])])];
   for (const id of ids) { const previous = scopes.get(id); if ((previous?.stamp || 0) > started) continue; const stale = [...receipts.values()].some(receipt=>receipt.taskId===id&&receipt.stamp>started); scopes.set(id,{ stamp: started, completeness: complete && !stale ? "complete" : "partial", readStatus: stale ? "stale" : "current" }); }
  }
- async function create(task: Task, submitted: string): Promise<TaskCommentCreationResult> {
-  if (!current(task.id)) return { ok:false,kind:"ended",error:"Diese Diskussion ist in der Sitzung nicht verfügbar." };
-  if (options.removing(task) || [...operations.values()].some(item=>item.view.taskId===task.id&&(item.view.phase==="unconfirmed" || item.view.phase==="saving"&&item.view.submitted===submitted))) return {ok:false,kind:"blocked",error:"Eine Kommentarbestätigung ist noch offen. Es wurde kein weiterer Kommentar gesendet."};
-  if (submitted.trim().length<2) return {ok:false,kind:"rejected",error:"Kommentar ist erforderlich.",status:400};
-  if (!options.adapter.createTaskComment) return {ok:false,kind:"rejected",error:"Kommentieren ist nicht verfügbar."};
+ function create(task: Task, submitted: string): TaskCommentCapture {
+  const reject = (result: Extract<TaskCommentCreationResult, {ok:false}>): TaskCommentCapture => ({accepted:false,error:result.error,completion:Promise.resolve(result)});
+  if (!current(task.id)) return reject({ ok:false,kind:"ended",error:"Diese Diskussion ist in der Sitzung nicht verfügbar." });
+  if (options.removing(task)) return reject({ok:false,kind:"blocked",error:"Die Aufgabe wird entfernt. Es wurde kein Kommentar gesendet."});
+  if (submitted.trim().length<2) return reject({ok:false,kind:"rejected",error:"Kommentar ist erforderlich.",status:400});
+  if (!options.adapter.createTaskComment) return reject({ok:false,kind:"rejected",error:"Kommentieren ist nicht verfügbar."});
   const generation=options.generation(), authority=authorities.get(task.id)||0, id=crypto.randomUUID();
-  const submittedAt=new Date().toISOString();
+  lastSubmittedTime = Math.max(Date.now(), lastSubmittedTime + 1);
+  const submittedAt=new Date(lastSubmittedTime).toISOString();
   const operation={view:{id,taskId:task.id,submitted,submittedAt,phase:"saving",comment:null,notice:null,error:"",checkStatus:"not-checked"} as TaskCommentCreationView,after:0,submittedAt,authorized:true,restored:false};
   try { recovery.capture({id,taskId:task.id,submitted,submittedAt}); } catch {
-   operation.view={...operation.view,phase:"rejected",error:"Der Kommentar konnte nicht für die Wiederherstellung gesichert werden. Es wurde nichts gesendet."};operations.set(id,operation);options.changed();return{ok:false,kind:"rejected",error:operation.view.error};
+   return reject({ok:false,kind:"rejected",error:"Der Kommentar konnte nicht für die Wiederherstellung gesichert werden. Es wurde nichts gesendet."});
   }
   operations.set(id,operation); options.changed();
+  const completion = (async (): Promise<TaskCommentCreationResult> => {
   const valid=()=>current(task.id)&&generation===options.generation()&&authority===(authorities.get(task.id)||0);
   try {
-   const receipt=await options.adapter.createTaskComment(task.id,submitted,{id,submittedAt:operation.submittedAt}); if(!valid())return{ok:false,kind:"ended",error:"Die Sitzung oder der Zugriff wurde beendet."}; const row=receipt.comment;
+   const receipt=await options.adapter.createTaskComment!(task.id,submitted,{id,submittedAt:operation.submittedAt}); if(!valid())return{ok:false,kind:"ended",error:"Die Sitzung oder der Zugriff wurde beendet."}; const row=receipt.comment;
    if(!row||row.taskId!==task.id||!Number.isSafeInteger(row.id)||row.id<=0||![row.profileId,row.comment,row.createdAt,row.githubCommentUrl].every(value=>typeof value==="string")||!deliveryStates.includes(row.githubDeliveryStatus))throw new Error("Ob der Kommentar gespeichert wurde, ist noch unklar.");
    const stamp=options.nextSequence(); receipts.set(row.id,{taskId:task.id,comment:structuredClone(row),stamp});
    const notice=receipt.notice&&typeof receipt.notice.message==="string"&&typeof receipt.notice.code==="string"&&receipt.notice.level==="info"?structuredClone(receipt.notice):null;
@@ -57,6 +62,8 @@ export function createTaskCommentCreations(options: {
    if(phase==="unconfirmed"){operation.after=options.nextSequence();scopes.set(task.id,{completeness:"partial",readStatus:"stale",stamp:scopes.get(task.id)?.stamp||0});options.invalidateNotifications();}
    options.changed();return{ok:false,kind:phase,error:operation.view.error,status:failure.status};
   }
+  })();
+  return {accepted:true, completion};
  }
  async function check(id:string):Promise<PlanningTaskSaveCheck>{
   if(!options.active())return{outcome:"session-ended",readStatus:"not-needed"};const operation=operations.get(id);if(!operation||!current(operation.view.taskId)||operation.view.phase!=="unconfirmed")return{outcome:"not-pending",readStatus:"not-needed"};

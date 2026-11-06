@@ -22,6 +22,8 @@ import {
   UserRoundCog,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { TaskCommentCreationNotices } from "./task-comment-creation-notices";
+import type { TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import { describeTaskActivity, type TaskActivityIconKey, type TaskActivityTone } from "@/features/tasks/model/task-activity-presentation";
 import { taskCommentElementId } from "@/features/tasks/model/task-comment-target";
@@ -48,6 +50,7 @@ export type TaskCommentTimelineItem =
   | {
       id: string;
       type: "comment";
+      creation?: TaskCommentCreationView;
       createdAt: string;
       message: string;
       profileId: string;
@@ -152,6 +155,7 @@ type TaskCommentTimelineProps = {
   currentProfileId?: string;
   error?: string;
   items: TaskCommentTimelineItem[];
+  onCheckCommentCreation?: (id: string) => void;
   labelsById?: ReadonlyMap<string, string>;
   loading?: boolean;
   profiles: Profile[];
@@ -161,6 +165,7 @@ type TaskCommentTimelineProps = {
 
 export function TaskCommentTimeline({
   items,
+  onCheckCommentCreation,
   profiles,
   labelsById,
   currentProfileId = "",
@@ -209,6 +214,7 @@ export function TaskCommentTimeline({
                 <span>{formatDateTime(item.createdAt)}</span>
               </div>
               <CommentBody value={item.comment} />
+              {item.creation ? <TaskCommentCreationNotices creations={[item.creation]} onCheck={onCheckCommentCreation} /> : null}
               {item.profileId === currentProfileId && deliveryHint(item.githubDeliveryStatus) && (
                 <div className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
                   {deliveryHint(item.githubDeliveryStatus)}
