@@ -133,7 +133,7 @@ export const StoredUpdateTimestamp: Story = {
 
 export const PanelStoredUpdateTimestamp: Story = {
   ...StoredUpdateTimestamp,
-  args: { ...StoredUpdateTimestamp.args, surface: "panel" },
+  args: { ...StoredUpdateTimestamp.args, surface: "modal" },
 };
 
 export const ActivityMentionPicker: Story = {
