@@ -684,5 +684,5 @@ export const ChildOpeningControls: Story = {
 
 export const PanelChildOpeningControls: Story = {
   ...ChildOpeningControls,
-  args: { ...ChildOpeningControls.args, surface: "panel" },
+  args: { ...ChildOpeningControls.args, surface: "modal" },
 };
