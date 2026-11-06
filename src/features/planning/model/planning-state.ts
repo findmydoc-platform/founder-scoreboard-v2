@@ -134,4 +134,5 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskUpdateResult>;
   loadTaskDetail(taskId: string): Promise<{ ok: boolean; error?: string; unavailable?: import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[] }>;
   refreshWorkspace(workspace: AppWorkspace): Promise<boolean>;
+  prepareWorkspaceHydration(workspace: AppWorkspace): void;
 }

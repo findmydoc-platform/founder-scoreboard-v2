@@ -70,10 +70,11 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialSession, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialSession, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
+  initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
   initialSession?: BrowserSessionSnapshot;
   initialHeaderData?: PlanningHeaderData;
   initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
@@ -92,12 +93,21 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let sequence = 0;
   let sessionGeneration = 0;
   let sessionExpiresAt = initialSession?.expiresAt;
+  let sessionRevision = initialSession?.revision;
+  const hydrationReads = new Map<AppWorkspace, string>();
+  function hydrationIdentity(data: PlanningShellState, read: import("../planning-workspace-hydration").PlanningWorkspaceHydration) {
+    // The complete declared result is compared because latest Item time alone is not a scope revision.
+    return JSON.stringify([read, data]);
+  }
+  if (initialWorkspaceRead && initialWorkspaceRead.workspace === initialWorkspace && initialWorkspaceRead.session.userId === userId) hydrationReads.set(initialWorkspace, hydrationIdentity(initialData, initialWorkspaceRead));
   const taskConfirmedAt = new Map<string, number>();
   const taskReadAt = new Map<string, number>();
   const memberships = new Map<AppWorkspace, Set<string>>([[initialWorkspace, new Set(initialData.tasks.map(task => task.id))]]);
   const workspaceStatuses = new Map<AppWorkspace, PlanningReadStatus>([[initialWorkspace, "current"]]);
-  const completeness = new Map<AppWorkspace, PlanningWorkspaceView["completeness"]>([[initialWorkspace, workspaceReadCoverage(initialWorkspace).tasks || "none"]]);
+  const completeness = new Map<AppWorkspace, PlanningWorkspaceView["completeness"]>([[initialWorkspace, initialWorkspaceRead?.coverage.tasks || workspaceReadCoverage(initialWorkspace).tasks || "none"]]);
   const acceptedRead = new Map<AppWorkspace, number>();
+  const workspaceReads = new Map<AppWorkspace, { result: Promise<boolean>; generation: number; started: number; sessionRevision?: string }>();
+  const hydrationRequests = new Map<AppWorkspace, ReturnType<typeof beginWorkspaceRead>>();
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
   let freshness: "current" | "stale" = "current";
   let ended = false;
@@ -141,6 +151,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const outcomeCheckStatus = new Map<string, PlanningTaskSaveView["checkStatus"]>();
   const status = new Map<string, PlanningTaskSaveStatus>();
   const listeners = new Set<() => void>();
+  let deferNotifications = false;
   function isActive() {
     if (active && sessionExpiresAt !== undefined && sessionExpiresAt * 1000 <= (adapter.now?.() ?? Date.now())) suspendProtected();
     return active;
@@ -347,7 +358,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (workspaceStatuses.get(workspace) === "forbidden") publishCache?.(null, workspace);
       else { const protectedData = protectedPublication(profileSettings.protect(githubSync.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed))))))); publishCache?.({ ...protectedData, tasks: protectedData.tasks.filter(task => members.has(task.id)) }, workspace); }
     }
-    listeners.forEach(listener => listener());
+    if (deferNotifications) queueMicrotask(() => listeners.forEach(listener => listener()));
+    else listeners.forEach(listener => listener());
   }
   function saveTaskWithContext(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult> {
     if ([...retainedTaskFields.get(task.id) || []].some(field => Object.prototype.hasOwnProperty.call(patch, field))) return Promise.resolve({ ok: false, kind: "versionConflict", status: 409, error: "Diese Detailfelder stammen aus einem älteren Stand. Bitte zuerst den vollständigen Stand vergleichen." });
@@ -767,113 +779,138 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       void loaded.finally(() => { if (detailReads.get(taskId) === loaded) detailReads.delete(taskId); }).catch(() => undefined);
       return loaded;
     },
-    async refreshWorkspace(workspace) {
-      if (!isActive()) return false;
-      const generation = sessionGeneration;
-      const started = ++sequence;
-      const notificationRead = notifications.beginWorkspaceRead(workspace);
-      const eventRead = workspace === "events" ? events.beginRead() : null;
-      const toolRead = workspace === "tools" ? tools.beginRead() : null;
-      acceptedRead.set(workspace, started);
-      workspaceStatuses.set(workspace, "loading");
-      publish();
-      let result: PlanningWorkspaceRead | null;
-      try { result = await adapter.readWorkspace(workspace); }
-      catch (error) {
-        if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
-        notifications.workspaceFailed(workspace, error);
-        if (workspace === "backlog" && readErrorStatus(error) === "forbidden") { backlogAssignments.denied(); backlogOrdering.denied(); }
-        if (toolRead !== null) tools.failed(error, toolRead);
-        if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
-        workspaceStatuses.set(workspace, readErrorStatus(error));
-        if (workspace === "sprint") { sprintState.readStatus(readErrorStatus(error)); if (readErrorStatus(error) === "forbidden") {attendanceState.denyWorkspace();scoreObjections.deny();} }
-        profileSettings.readStatus(readErrorStatus(error), workspace);
-        publish();
-        return false;
-      }
-      if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
-      if (!result) {
-        if (toolRead !== null) tools.failed(new Error("Links konnten nicht geladen werden."), toolRead);
-        if (eventRead !== null) events.failed(new Error("Events konnten nicht geladen werden."), eventRead);
-        workspaceStatuses.set(workspace, "unavailable");
-        publish();
-        return false;
-      }
-      if (workspace === "backlog") backlogCoverage = result.backlogCoverage || {};
-      const coverage = result.coverage || workspaceReadCoverage(workspace);
-      if (coverage.profiles) acceptProfileScope(workspace, result.data.profiles, coverage.profiles === "complete");
-      if (coverage.taskRelations) relationshipChanges.acceptRead(result.data.taskRelations, started, coverage.taskRelations === "complete");
-      if (coverage.taskActivity) for (const taskId of new Set([...result.data.tasks.map(task => task.id), ...result.data.taskActivity.map(row => row.taskId)])) attachmentUploads.acceptRead(result.data.taskActivity, started, coverage.taskActivity === "complete", taskId);
-      if (coverage.taskExternalComments) githubImports.acceptRead(result.data.taskExternalComments, started, coverage.taskExternalComments === "complete");
-      if (coverage.taskComments) commentCreations.acceptRead(result.data.taskComments, started, coverage.taskComments === "complete");
-      if (coverage.taskBlockers) blockerReports.acceptBlockerRead(result.data.taskBlockers, started, coverage.taskBlockers === "complete");
-      const taskCoverage = result.taskCoverage === "none" ? undefined : result.taskCoverage || coverage.tasks;
-      const rawIncoming = taskCoverage ? result.data.tasks : [];
-      const currentIds = new Set(confirmed.tasks.map(task => task.id));
-      // A late full row cannot precede a confirmed partial receipt for a still-unresolved identity.
-      const incoming = rawIncoming.filter(task => currentIds.has(task.id) || (taskConfirmedAt.get(task.id) || 0) <= started);
-      const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
-      const acceptedTask = (task: Task) => {
-        const previous = confirmed.tasks.find(item => item.id === task.id);
-        const omittedFields = result.taskOmittedFields || (task.detailAvailability === "summary" ? summaryDetailFields : []);
-        acceptTaskFieldCoverage(task, omittedFields);
-        if (!previous || !omittedFields.length) return task;
-        const next = { ...previous, ...task };
-        for (const field of omittedFields) Object.assign(next, { [field]: previous[field] });
-        if (previous.detailAvailability !== "summary") {
-          next.detailAvailability = "stale";
-          detailStatuses.set(task.id, "stale");
-        }
-        return next;
-      };
-      const replacements = new Map(incoming.filter(task => !protectedIds.has(task.id)).map(task => [task.id, acceptedTask(task)]));
-      const known = new Set(confirmed.tasks.map(task => task.id));
-      for (const task of replacements.values()) taskReadAt.set(task.id, started);
-      const covered = projectCoveredRead(confirmed, result.data, coverage);
-      for (const field of result.projectOmittedFields || []) Object.assign(covered.project, { [field]: confirmed.project[field] });
-      const projectRead = coverage.project ? administration.acceptProjectRead(covered.project, started) : {project:covered.project,stale:false};
-      covered.project=projectRead.project;
-      if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
-      for (const field of ["taskActivity","taskReviews"] as const) {
-        const retained = confirmed[field].filter(item=>protectedIds.has(item.taskId));
-        const incoming = covered[field].filter(item=>!protectedIds.has(item.taskId));
-        Object.assign(covered,{[field]:[...incoming,...retained]});
-      }
-      const profileRead = profileSettings.acceptRead(covered, coverage, started, workspace, result.data, result.profileOmittedFields);
-      const sprintCoverage = { ...coverage }; delete sprintCoverage.meetingAttendance;
-      const sprintRead = sprintState.acceptRead(profileRead.data, sprintCoverage, started, result.data);
-      if (coverage.meetingAttendance) attendanceState.acceptRead(result.data.meetingAttendance, started, coverage.meetingAttendance === "complete");
-      const scoreRead=scoreObjections.acceptRead(sprintRead.data,coverage,started,result.data);
-      sprintRead.data=scoreRead.data;
-      const commitmentRead=commitments.acceptRead(result.data.sprintCommitments,coverage.sprintCommitments,started);
-      sprintRead.data.sprintCommitments=commitmentRead.rows;
-      confirmed = {
-        ...sprintRead.data,
-        project: {...sprintRead.data.project,githubProjectOwner:projectRead.project.githubProjectOwner,githubProjectNumber:projectRead.project.githubProjectNumber},
-        tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
-      };
-      if (taskCoverage) {
-        const members = taskCoverage === "complete" ? new Set<string>() : new Set(memberships.get(workspace));
-        incoming.forEach(task => members.add(task.id));
-        for (const id of protectedIds) if (memberships.get(workspace)?.has(id)) members.add(id);
-        memberships.set(workspace, members);
-      }
-      if (!memberships.has(workspace)) memberships.set(workspace, new Set());
-      completeness.set(workspace, taskCoverage || "none");
-      const stale = scoreRead.stale || commitmentRead.stale || projectRead.stale || rawIncoming.length !== incoming.length || sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
-      workspaceStatuses.set(workspace, stale ? "stale" : "current");
-      if (toolRead !== null) tools.acceptRead({ tools: result.data.fmdTools, completeness: result.toolCoverage || "partial" }, toolRead, Boolean(result.headerData && result.headerData.quickLinks.state === "ready"));
-      if (eventRead !== null) events.acceptRead({ events: result.data.events, coverage: result.eventCoverage || { range: null, completeness: "partial" } }, eventRead, Boolean(result.headerData && result.headerData.calendarEvents.state !== "idle"));
-      notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
-      profileSettings.readStatus(stale ? "stale" : "current", workspace);
-      if (workspace === "sprint") sprintState.readStatus(stale ? "stale" : "current");
-      if (result.currentProfile) actorIdentity = { ...result.currentProfile };
-      acceptWorkspaceContext?.(result);
-      freshness = stale ? "stale" : "current";
-      publish();
-      return true;
+    prepareWorkspaceHydration(workspace) {
+      if (isActive() && sessionRevision && (workspace === "planning" || workspace === "projects")) hydrationRequests.set(workspace, beginWorkspaceRead(workspace));
+    },
+    refreshWorkspace(workspace) {
+      if (!isActive()) return Promise.resolve(false);
+      const existing = workspaceReads.get(workspace);
+      if (existing && existing.generation === sessionGeneration && existing.sessionRevision === sessionRevision && existing.started === sequence && existing.started === acceptedRead.get(workspace)) return existing.result;
+      const result = readWorkspace(workspace);
+      workspaceReads.set(workspace, { result, generation: sessionGeneration, started: acceptedRead.get(workspace) || 0, sessionRevision });
+      void result.finally(() => { if (workspaceReads.get(workspace)?.result === result) workspaceReads.delete(workspace); }).catch(() => undefined);
+      return result;
     },
   };
+  async function readWorkspace(workspace: AppWorkspace) {
+    if (!isActive()) return false;
+    const token = beginWorkspaceRead(workspace);
+    const { generation, started, eventRead, toolRead } = token;
+    workspaceStatuses.set(workspace, "loading");
+    publish();
+    let result: PlanningWorkspaceRead | null;
+    try { result = await adapter.readWorkspace(workspace); }
+    catch (error) {
+      if (!isActive() || generation !== sessionGeneration || token.sessionRevision !== sessionRevision || acceptedRead.get(workspace) !== started) return false;
+      notifications.workspaceFailed(workspace, error);
+      if (workspace === "backlog" && readErrorStatus(error) === "forbidden") { backlogAssignments.denied(); backlogOrdering.denied(); }
+      if (toolRead !== null) tools.failed(error, toolRead);
+      if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
+      workspaceStatuses.set(workspace, readErrorStatus(error));
+      if (workspace === "sprint") { sprintState.readStatus(readErrorStatus(error)); if (readErrorStatus(error) === "forbidden") {attendanceState.denyWorkspace();scoreObjections.deny();} }
+      profileSettings.readStatus(readErrorStatus(error), workspace);
+      publish();
+      return false;
+    }
+    if (!isActive() || generation !== sessionGeneration || token.sessionRevision !== sessionRevision || acceptedRead.get(workspace) !== started) return false;
+    if (!result) {
+      if (toolRead !== null) tools.failed(new Error("Links konnten nicht geladen werden."), toolRead);
+      if (eventRead !== null) events.failed(new Error("Events konnten nicht geladen werden."), eventRead);
+      workspaceStatuses.set(workspace, "unavailable");
+      publish();
+      return false;
+    }
+    return acceptWorkspaceRead(workspace, result, token);
+  }
+  function beginWorkspaceRead(workspace: AppWorkspace) {
+    const token = {
+      generation: sessionGeneration,
+      sessionRevision,
+      started: ++sequence,
+      notificationRead: notifications.beginWorkspaceRead(workspace),
+      eventRead: workspace === "events" ? events.beginRead() : null,
+      toolRead: workspace === "tools" ? tools.beginRead() : null,
+    };
+    acceptedRead.set(workspace, token.started);
+    return token;
+  }
+  function acceptWorkspaceRead(workspace: AppWorkspace, result: PlanningWorkspaceRead, token: ReturnType<typeof beginWorkspaceRead>) {
+    const { generation, started, notificationRead, eventRead, toolRead } = token;
+    if (!isActive() || generation !== sessionGeneration || token.sessionRevision !== sessionRevision || acceptedRead.get(workspace) !== started) return false;
+    if (workspace === "backlog") backlogCoverage = result.backlogCoverage || {};
+    const coverage = result.coverage || workspaceReadCoverage(workspace);
+    if (coverage.profiles) acceptProfileScope(workspace, result.data.profiles, coverage.profiles === "complete");
+    if (coverage.taskRelations) relationshipChanges.acceptRead(result.data.taskRelations, started, coverage.taskRelations === "complete");
+    if (coverage.taskActivity) for (const taskId of new Set([...result.data.tasks.map(task => task.id), ...result.data.taskActivity.map(row => row.taskId)])) attachmentUploads.acceptRead(result.data.taskActivity, started, coverage.taskActivity === "complete", taskId);
+    if (coverage.taskExternalComments) githubImports.acceptRead(result.data.taskExternalComments, started, coverage.taskExternalComments === "complete");
+    if (coverage.taskComments) commentCreations.acceptRead(result.data.taskComments, started, coverage.taskComments === "complete");
+    if (coverage.taskBlockers) blockerReports.acceptBlockerRead(result.data.taskBlockers, started, coverage.taskBlockers === "complete");
+    const taskCoverage = result.taskCoverage === "none" ? undefined : result.taskCoverage || coverage.tasks;
+    const rawIncoming = taskCoverage ? result.data.tasks : [];
+    const currentIds = new Set(confirmed.tasks.map(task => task.id));
+    // A late full row cannot precede a confirmed partial receipt for a still-unresolved identity.
+    const incoming = rawIncoming.filter(task => currentIds.has(task.id) || (taskConfirmedAt.get(task.id) || 0) <= started);
+    const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
+    const acceptedTask = (task: Task) => {
+      const previous = confirmed.tasks.find(item => item.id === task.id);
+      const omittedFields = result.taskOmittedFields || (task.detailAvailability === "summary" ? summaryDetailFields : []);
+      acceptTaskFieldCoverage(task, omittedFields);
+      if (!previous || !omittedFields.length) return task;
+      const next = { ...previous, ...task };
+      for (const field of omittedFields) Object.assign(next, { [field]: previous[field] });
+      if (previous.detailAvailability !== "summary") {
+        next.detailAvailability = "stale";
+        detailStatuses.set(task.id, "stale");
+      }
+      return next;
+    };
+    const replacements = new Map(incoming.filter(task => !protectedIds.has(task.id)).map(task => [task.id, acceptedTask(task)]));
+    const known = new Set(confirmed.tasks.map(task => task.id));
+    for (const task of replacements.values()) taskReadAt.set(task.id, started);
+    const covered = projectCoveredRead(confirmed, result.data, coverage);
+    for (const field of result.projectOmittedFields || []) Object.assign(covered.project, { [field]: confirmed.project[field] });
+    const projectRead = coverage.project ? administration.acceptProjectRead(covered.project, started) : {project:covered.project,stale:false};
+    covered.project=projectRead.project;
+    if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
+    for (const field of ["taskActivity","taskReviews"] as const) {
+      const retained = confirmed[field].filter(item=>protectedIds.has(item.taskId));
+      const incoming = covered[field].filter(item=>!protectedIds.has(item.taskId));
+      Object.assign(covered,{[field]:[...incoming,...retained]});
+    }
+    const profileRead = profileSettings.acceptRead(covered, coverage, started, workspace, result.data, result.profileOmittedFields);
+    const sprintCoverage = { ...coverage }; delete sprintCoverage.meetingAttendance;
+    const sprintRead = sprintState.acceptRead(profileRead.data, sprintCoverage, started, result.data);
+    if (coverage.meetingAttendance) attendanceState.acceptRead(result.data.meetingAttendance, started, coverage.meetingAttendance === "complete");
+    const scoreRead=scoreObjections.acceptRead(sprintRead.data,coverage,started,result.data);
+    sprintRead.data=scoreRead.data;
+    const commitmentRead=commitments.acceptRead(result.data.sprintCommitments,coverage.sprintCommitments,started);
+    sprintRead.data.sprintCommitments=commitmentRead.rows;
+    confirmed = {
+      ...sprintRead.data,
+      project: {...sprintRead.data.project,githubProjectOwner:projectRead.project.githubProjectOwner,githubProjectNumber:projectRead.project.githubProjectNumber},
+      tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
+    };
+    if (taskCoverage) {
+      const members = taskCoverage === "complete" ? new Set<string>() : new Set(memberships.get(workspace));
+      incoming.forEach(task => members.add(task.id));
+      for (const id of protectedIds) if (memberships.get(workspace)?.has(id)) members.add(id);
+      memberships.set(workspace, members);
+    }
+    if (!memberships.has(workspace)) memberships.set(workspace, new Set());
+    completeness.set(workspace, taskCoverage || "none");
+    const stale = scoreRead.stale || commitmentRead.stale || projectRead.stale || rawIncoming.length !== incoming.length || sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
+    workspaceStatuses.set(workspace, stale ? "stale" : "current");
+    if (toolRead !== null) tools.acceptRead({ tools: result.data.fmdTools, completeness: result.toolCoverage || "partial" }, toolRead, Boolean(result.headerData && result.headerData.quickLinks.state === "ready"));
+    if (eventRead !== null) events.acceptRead({ events: result.data.events, coverage: result.eventCoverage || { range: null, completeness: "partial" } }, eventRead, Boolean(result.headerData && result.headerData.calendarEvents.state !== "idle"));
+    notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
+    profileSettings.readStatus(stale ? "stale" : "current", workspace);
+    if (workspace === "sprint") sprintState.readStatus(stale ? "stale" : "current");
+    if (result.currentProfile) actorIdentity = { ...result.currentProfile };
+    acceptWorkspaceContext?.(result);
+    freshness = stale ? "stale" : "current";
+    publish();
+    return true;
+  }
   function suspendProtected() {
     sessionGeneration++;
     active = false;
@@ -911,6 +948,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     memberships.clear();
     workspaceStatuses.clear();
     completeness.clear();
+    hydrationReads.clear();
+    workspaceReads.clear();
+    hydrationRequests.clear();
     backlogCoverage = {};
     detailStatuses.clear();
     deniedTaskReads.clear();
@@ -936,15 +976,41 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function bindSession(session: BrowserSessionSnapshot | null) {
     sessionChanged(session?.userId || null);
-    if (session?.userId === userId && !ended) sessionExpiresAt = session.expiresAt;
+    if (session?.userId === userId && !ended) {
+      if (sessionRevision && sessionRevision !== session.revision) {
+        hydrationReads.clear();
+        hydrationRequests.clear();
+        workspaceReads.clear();
+      }
+      sessionRevision = session.revision;
+      sessionExpiresAt = session.expiresAt;
+    }
     isActive();
   }
   const unsubscribeSession = adapter.subscribeSession?.(sessionChanged);
-  function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace) {
+  function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace, read?: import("../planning-workspace-hydration").PlanningWorkspaceHydration) {
     if (ended || (userId && userId !== account)) return;
     userId = account;
     active = Boolean(account);
     if (!isActive()) return;
+    const boundRead = read && read.workspace === workspace && read.queryKey === "workspace" && read.session.userId === userId
+      && read.session.revision === sessionRevision && read.session.expiresAt === sessionExpiresAt
+      && read.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now());
+    const requested = hydrationRequests.get(workspace);
+    hydrationRequests.delete(workspace);
+    if (boundRead && read) {
+      const identity = hydrationIdentity(data, read);
+      if (workspaceStatuses.get(workspace) === "current" && hydrationReads.get(workspace) === identity) return;
+      if (requested && acceptWorkspaceRead(workspace, {
+        data, coverage: read.coverage, taskCoverage: read.coverage.tasks,
+        taskOmittedFields: read.taskOmittedFields,
+        profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
+        projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"],
+      }, requested)) {
+        hydrationReads.set(workspace, identity);
+        return;
+      }
+    }
     // Page/cache snapshots carry no request token. They cannot prove that any existing scope is newer.
     if (initialized) {
       workspaceStatuses.set(workspace, "stale");
@@ -989,6 +1055,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     acceptDecisionLogHydration: decisionLog.hydrate,
     suspendProtected,
     endSession,
+    retire: () => {
+      deferNotifications = true;
+      try { endSession(); } finally { deferNotifications = false; }
+    },
     dispose: () => { administration.clear(); unsubscribeSession?.(); },
   } };
 }

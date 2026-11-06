@@ -10,6 +10,7 @@ import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-
 type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
+  initialWorkspaceRead,
   initialDecisionLogResult,
   initialData,
   initialHeaderData,
@@ -25,6 +26,7 @@ export function usePlanningAppController({
 }: PlanningAppControllerOptions) {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
+    initialWorkspaceRead,
     initialDecisionLogResult,
     initialData,
     initialHeaderData,
@@ -111,6 +113,7 @@ export function usePlanningAppController({
     toggleFocusMode,
     view,
     workspace,
+    navigateWorkspaceHref,
   } = bootstrap;
 
   const commandContext = {
@@ -278,6 +281,7 @@ export function usePlanningAppController({
     visibleTasks: derivedState.visibleTasks,
     workspace,
     setWorkspace,
+    navigateWorkspaceHref,
     ...boardState,
     ...commandRegistry.eventCommands,
     ...commandRegistry.fmdToolCommands,
