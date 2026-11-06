@@ -1,6 +1,7 @@
 import { GitHubContentLengthError } from "../../../src/lib/github-issue-content";
+import { allowedGitHubRepositories } from "../../../src/lib/github-repositories";
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const contract = await importTestModule("src/lib/github-sync/contract.ts");
@@ -87,6 +88,24 @@ async function projectionFixture(options = {}) {
   };
   let activeCheck = 0;
   let failurePersistenceCalls = 0;
+  const issuePayloads = [];
+  const issueReads = [];
+  const realRepositories = options.realContent ? await importTestModule("src/lib/github-repositories.ts") : undefined;
+  const realIssueProjection = options.realContent ? await importTestModule("src/lib/github-sync/issue-projection.ts", {
+    "../github-repositories": realRepositories,
+    "../github-http": {
+      GitHubApiError: class GitHubApiError extends Error {},
+      githubRequest: async () => { throw new Error("Unexpected GitHub request"); },
+      githubJson: async (url, request) => {
+        if (request.method === "PATCH") {
+          issuePayloads.push(request.body);
+          return { number: 42, html_url: "https://github.com/findmydoc-platform/management/issues/42" };
+        }
+        issueReads.push(url);
+        return { number: 42, html_url: "https://github.com/findmydoc-platform/management/issues/42", title: "[Deliverable] Project task", labels: [], body: "<!-- founderops-task-id:task-1 -->" };
+      },
+    },
+  }) : undefined;
   const taskProjectionModule = await importTestModule("src/lib/github-sync/task-projection.ts", {
     "../github-mention-team-config": { loadGitHubMentionTeam: async () => undefined },
     "../github-comment-delivery": {
@@ -136,7 +155,7 @@ async function projectionFixture(options = {}) {
       },
     },
     "../github-issue-reference": issueReferences,
-    "../github-repositories": {
+    "../github-repositories": options.realContent ? realRepositories : {
       resolveTaskGitHubRepository: () => (
         options.invalidTarget
           ? { ok: false, error: "invalid repository" }
@@ -172,7 +191,7 @@ async function projectionFixture(options = {}) {
         return { added: 0, removed: 0 };
       },
     },
-    "./issue-projection": {
+    "./issue-projection": realIssueProjection || {
       projectTaskGitHubIssue: async () => {
         calls.push("issue");
         if (options.issueError) throw options.issueError;
@@ -196,6 +215,8 @@ async function projectionFixture(options = {}) {
   });
   return {
     calls,
+    issuePayloads,
+    issueReads,
     failurePersistenceCalls: () => failurePersistenceCalls,
     project: (createIfMissing = false) => taskProjectionModule.projectTaskToGitHub({
       supabase,
@@ -430,4 +451,99 @@ test("content length errors stop projection without retrying or applying later p
   assert.equal(fixture.calls.includes("dependencies"), false);
   assert.equal(fixture.calls.includes("project"), false);
   assert.deepEqual(fixture.calls.slice(-2), ["persistFailure", "release"]);
+});
+
+
+test("task projection sends linked full references through real issue rendering and retains authored brief", async () => {
+  const text = "Änderung other-org/outside-repo#123; `other-org/code#9`; [fixed](https://github.com/other-org/outside-repo/issues/2#issuecomment-3)";
+  const task = baseTask({ title: "other-org/title#4", problemStatement: text });
+  const fixture = await projectionFixture({ tasks: [task, task], realContent: true });
+  const result = await fixture.project();
+  assert.equal(result.ok, true);
+  assert.equal(fixture.issuePayloads.length, 1);
+  assert.match(fixture.issuePayloads[0].body, /Änderung \[other-org\/outside-repo#123\]\(https:\/\/github.com\/other-org\/outside-repo\/issues\/123\)/);
+  assert.ok(fixture.issuePayloads[0].body.includes("`other-org/code#9`; [fixed](https://github.com/other-org/outside-repo/issues/2#issuecomment-3)"));
+  assert.equal(fixture.issuePayloads[0].title, "[Deliverable] other-org/title#4");
+  assert.equal(task.problemStatement, text);
+  assert.deepEqual(fixture.issueReads, ["https://api.github.com/repos/findmydoc-platform/management/issues/42"]);
+});
+
+
+test("task projection checks final linked body at the existing codepoint limit without truncating", async ({ onTestFinished }) => {
+  vi.stubEnv("APP_URL", "");
+  onTestFinished(() => vi.unstubAllEnvs());
+  // The real renderer adds 341 codepoints for these fixed sections, source and marker.
+  const reference = "other-org/outside-repo#123";
+  const task = baseTask({ problemStatement: `${"x".repeat(65_536 - 341 - 83)} ${reference}` });
+  const exact = await projectionFixture({ tasks: [task, task], realContent: true });
+  const accepted = await exact.project();
+  assert.equal(accepted.ok, true);
+  assert.equal(Array.from(exact.issuePayloads[0].body).length, 65_536);
+  assert.ok(exact.issuePayloads[0].body.includes("[other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)"));
+  const oversizedTask = { ...task, problemStatement: `ä${task.problemStatement}` };
+  const oversized = await projectionFixture({ tasks: [oversizedTask, oversizedTask], realContent: true });
+  const rejected = await oversized.project();
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.code, "github_content_too_long");
+  assert.equal(oversized.issuePayloads.length, 0);
+  assert.deepEqual(rejected.lengthErrors.map(({ field, actual, maximum, excess }) => ({ field, actual, maximum, excess })), [{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1 }]);
+});
+
+
+test("task projection uses approved repository references and preserves protected or ambiguous tokens", async () => {
+  const protectedText = "`management#9`; [management#10](https://example.com/fixed#comment); https://github.com/findmydoc-platform/management/issues/11#issuecomment-12; " + String.raw`\management#13`;
+  const text = `Änderung management#361 und website#12; unknown#361; other-org/outside-repo#123; ${protectedText}`;
+  const task = baseTask({ title: "management#4", problemStatement: text });
+  const unique = await projectionFixture({ tasks: [task, task], realContent: true });
+  const result = await unique.project();
+  assert.equal(result.ok, true);
+  assert.ok(unique.issuePayloads[0].body.includes("Änderung [management#361](https://github.com/findmydoc-platform/management/issues/361) und [website#12](https://github.com/findmydoc-platform/website/issues/12); unknown#361; [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)"));
+  assert.ok(unique.issuePayloads[0].body.includes(protectedText));
+  assert.equal(unique.issuePayloads[0].title, "[Deliverable] management#4");
+  assert.deepEqual(unique.issueReads, ["https://api.github.com/repos/findmydoc-platform/management/issues/42"]);
+  allowedGitHubRepositories.add("another-owner/management");
+  try {
+    const ambiguous = await projectionFixture({ tasks: [task, task], realContent: true });
+    const ambiguousResult = await ambiguous.project();
+    assert.equal(ambiguousResult.ok, true);
+    assert.deepEqual(ambiguousResult.warnings, result.warnings);
+    assert.ok(ambiguous.issuePayloads[0].body.includes("Änderung management#361 und [website#12](https://github.com/findmydoc-platform/website/issues/12); unknown#361"));
+    assert.ok(ambiguous.issuePayloads[0].body.includes(protectedText));
+    assert.deepEqual(ambiguous.issueReads, ["https://api.github.com/repos/findmydoc-platform/management/issues/42"]);
+  } finally {
+    allowedGitHubRepositories.delete("another-owner/management");
+  }
+  assert.equal(task.problemStatement, text);
+});
+
+test("task projection resolves relative references from the reloaded repository with fixed links unchanged", async () => {
+  const text = "Änderung #123 und other-org/outside-repo#123; `#9`; [fixed #7](https://github.com/owner/repo/issues/2#issuecomment-3)";
+  const initial = baseTask({ title: "Relative #4", problemStatement: "Alter Brief #5" });
+  const current = baseTask({ title: "Relative #4", problemStatement: text });
+  const fixture = await projectionFixture({ tasks: [initial, current], realContent: true });
+  const result = await fixture.project();
+  assert.equal(result.ok, true);
+  assert.ok(fixture.issuePayloads[0].body.includes("Änderung [#123](https://github.com/findmydoc-platform/management/issues/123) und [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123); `#9`; [fixed #7](https://github.com/owner/repo/issues/2#issuecomment-3)"));
+  assert.equal(fixture.issuePayloads[0].title, "[Deliverable] Relative #4");
+  assert.equal(current.problemStatement, text);
+  assert.deepEqual(fixture.issueReads, ["https://api.github.com/repos/findmydoc-platform/management/issues/42"]);
+});
+
+test("task projection counts expanded relative references at the final body limit", async ({ onTestFinished }) => {
+  vi.stubEnv("APP_URL", "");
+  onTestFinished(() => vi.unstubAllEnvs());
+  // The fixed sections, source and marker add 341 codepoints; the linked reference plus its space add 68.
+  const task = baseTask({ problemStatement: `${"x".repeat(65_536 - 341 - 68)} #123` });
+  const exact = await projectionFixture({ tasks: [task, task], realContent: true });
+  const accepted = await exact.project();
+  assert.equal(accepted.ok, true);
+  assert.equal(Array.from(exact.issuePayloads[0].body).length, 65_536);
+  assert.ok(exact.issuePayloads[0].body.includes("[#123](https://github.com/findmydoc-platform/management/issues/123)"));
+  const oversizedTask = { ...task, problemStatement: `ä${task.problemStatement}` };
+  const oversized = await projectionFixture({ tasks: [oversizedTask, oversizedTask], realContent: true });
+  const rejected = await oversized.project();
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.code, "github_content_too_long");
+  assert.equal(oversized.issuePayloads.length, 0);
+  assert.deepEqual(rejected.lengthErrors.map(({ field, actual, maximum, excess }) => ({ field, actual, maximum, excess })), [{ field: "githubBody", actual: 65_537, maximum: 65_536, excess: 1 }]);
 });

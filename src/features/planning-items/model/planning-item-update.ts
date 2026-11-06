@@ -1,3 +1,4 @@
+import { linkedTaskBrief, type LinkedTaskBrief } from "@/lib/github-brief-references";
 import { validateStoredPlanningContent } from "./planning-item-content-server";
 import type { ContentLengthError, IssueContentTask } from "@/lib/github-issue-content";
 import { createHash } from "node:crypto";
@@ -85,6 +86,7 @@ export type PlanningItemUpdatePreview = {
   currentItem: UnknownRecord;
   normalizedPatch: UnknownRecord;
   resultingItem: UnknownRecord;
+  linkedBrief?: LinkedTaskBrief;
   changedFields: string[];
   systemEffects: PlanningItemSystemEffect[];
   warnings: string[];
@@ -789,7 +791,9 @@ export async function buildPlanningItemUpdatePreview({
     }
   }
 
-  const lengthErrors = await validateStoredPlanningContent(supabase, { ...resultingItem, id: itemId, taskType: target.itemType } as IssueContentTask);
+  const githubRepository = resolveTaskGitHubRepository(target.itemType, String(resultingItem.githubRepo || ""));
+  const githubRepo = githubRepository.ok ? githubRepository.repository : "";
+  const lengthErrors = await validateStoredPlanningContent(supabase, { ...resultingItem, githubRepo, id: itemId, taskType: target.itemType } as IssueContentTask);
   errors.push(...lengthErrors.map((error) => error.message));
   const parentChanged = changedFields.includes("parentTaskId");
   if (parentChanged && (target.itemType === "deliverable" || target.itemType === "sub_issue") && changedFields.length > 1) {
@@ -827,6 +831,7 @@ export async function buildPlanningItemUpdatePreview({
       normalizedPatch,
       ...(lengthErrors.length ? { lengthErrors } : {}),
       resultingItem,
+      ...(!isStrategicPlanningItemType(target.itemType) ? { linkedBrief: linkedTaskBrief(resultingItem, { githubRepo }) } : {}),
       changedFields,
       systemEffects,
       warnings: changedFields.length ? [] : ["Die normalisierte Änderung entspricht dem aktuellen Stand."],

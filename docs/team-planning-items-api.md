@@ -288,3 +288,16 @@ Existing error responses remain compatible. Content failures may additionally in
 Saving does not contact GitHub. The sync path validates the final outgoing payload again, including any preserved external Sub-Issue body. A content overflow returns `github_content_too_long`, HTTP 422, with `retryable: false`, before any GitHub mutation. Sync bookkeeping may record the failure; an already saved FounderOps edit is not rolled back. Changed mention-team availability or external GitHub content can therefore cause a later sync to fail even after local validation succeeded.
 
 Existing database text columns remain unchanged. Previously truncated text cannot be recovered by this change.
+
+
+## Linked brief previews
+
+Create previews include `items[].linkedBrief` for each Deliverable and Sub-Issue. Update previews include `linkedBrief` beside `resultingItem`, based on the complete resulting brief. Both outputs are present even when no GitHub sync is requested. Epics and Initiatives omit this property.
+
+`linkedBrief` contains exactly `description`, `problemStatement`, `intendedOutcome`, `scopeConstraints`, `acceptanceCriteria`, `evidenceRequired`, and `definitionOfDone`. Every value is Markdown text; empty fields are empty strings. The title is excluded. For example, authored text `other-org/outside-repo#123` produces `[other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)`. Full references may target any GitHub repository without changing the allowed write targets or querying GitHub.
+
+Relative references such as `#123` use the task's full repository after the existing repository policy and defaults have been applied. The reference resolver adds no fallback. If the context is missing or invalid, the token remains text without a new warning. A repository-only Sub-Issue update recalculates links for all seven resulting brief fields. The authored brief and its changed fields stay unchanged; full references keep their explicit targets.
+
+Existing Markdown links and reference definitions, complete URLs including query and fragment, inline code, fenced and indented code blocks, escapes, and invalid reference tokens retain their authored bytes. The task view and GitHub issue projection use the same reference resolution as previews. This adds links without introducing general Markdown rendering in the task view.
+
+The authored fields, `currentItem`, `normalizedPatch`, `resultingItem`, and `changedFields` keep their existing meanings. `linkedBrief` is derived output only. It is not accepted as input, persisted, or included in idempotency hashes. Replays retain their existing behavior. The existing final GitHub body limit includes the expanded links, section formatting, source attribution, and mention expansion; text is never truncated.

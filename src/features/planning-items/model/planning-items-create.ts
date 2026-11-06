@@ -1,3 +1,4 @@
+import { linkedTaskBrief, type LinkedTaskBrief } from "@/lib/github-brief-references";
 import { codepointLength } from "@/lib/github-issue-content";
 import { planningText, planningCriteria, validatePlanningContent } from "./planning-item-content";
 import { planningContentContext } from "./planning-item-content-server";
@@ -78,6 +79,7 @@ export type PlanningItemCreateInput = {
 
 export type PlanningItemCreatePreviewItem = {
   clientId: string;
+  linkedBrief?: LinkedTaskBrief;
   lengthErrors?: ContentLengthError[];
   itemType: TeamPlanningItemType;
   title: string;
@@ -366,6 +368,7 @@ export async function buildPlanningItemCreatePreview(
         });
       }
     }
+    if (!isStrategicPlanningItemType(itemType)) preview.linkedBrief = linkedTaskBrief(preview, { githubRepo });
     const lengthErrors = validatePlanningContent({ ...preview, id: `${actor.id}-planning-items-v1-${idempotencyKey.replaceAll("-", "")}-${index + 1}`, taskType: itemType }, contentContext);
     if (lengthErrors.length) { preview.lengthErrors = lengthErrors; errors.push(...lengthErrors.map((error) => error.message)); }
     if (githubSync) preview.githubSync = githubSync;
@@ -375,6 +378,7 @@ export async function buildPlanningItemCreatePreview(
 
 export function planningItemCreateCommitItem(item: PlanningItemCreatePreviewItem) {
   const result = { ...item } as Partial<PlanningItemCreatePreviewItem>;
+  delete result.linkedBrief;
   delete result.errors;
   delete result.lengthErrors;
   delete result.warnings;

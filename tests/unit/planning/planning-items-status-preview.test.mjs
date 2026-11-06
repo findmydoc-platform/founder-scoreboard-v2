@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import * as repositories from "../../../src/lib/github-repositories";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 const contract = await importTestModule("src/features/planning-items/model/planning-items-contract.ts");
@@ -44,7 +45,7 @@ const updates = await importTestModule(
   "src/features/planning-items/model/planning-item-update.ts",
   {
     "@/lib/planning-read-model": { ACTIVE_PACKAGES_TABLE: "active_packages", ACTIVE_TASKS_TABLE: "active_tasks" },
-    "@/lib/github-repositories": { resolveTaskGitHubRepository: () => ({ ok: true }) },
+    "@/lib/github-repositories": repositories,
     "@/features/tasks/model/task-detail-permissions": permissions,
     "@/features/reviews/model/task-review-state": reviewState,
     "@/features/tasks/model/task-route-update-helpers": routeHelpers,
@@ -581,4 +582,88 @@ test("an invalid update preview retains the full input and exposes structured le
   assert.equal(result.ok, true);
   assert.equal(result.preview.normalizedPatch.intendedOutcome?.length, 65_537);
   assert.equal(result.preview.lengthErrors.find((error) => error.field === "intendedOutcome").excess, 1);
+});
+
+
+test("update preview derives full linked brief from resulting item without adding stored changes", async () => {
+  const text = "Änderung other-org/outside-repo#123";
+  const target = taskRow({ description: text, problem_statement: text, intended_outcome: "Bestehendes Ziel" });
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, intendedOutcome: "Neues Ziel" });
+  const result = await updates.buildPlanningItemUpdatePreview({
+    actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target),
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.preview.linkedBrief, {
+    description: "Änderung [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    problemStatement: "Änderung [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    intendedOutcome: "Neues Ziel", scopeConstraints: "", acceptanceCriteria: "", evidenceRequired: "", definitionOfDone: "",
+  });
+  assert.equal(result.preview.resultingItem.description, text);
+  assert.deepEqual(result.preview.changedFields, ["intendedOutcome"]);
+  assert.deepEqual(result.preview.dbPatch, { intended_outcome: "Neues Ziel" });
+  assert.equal(result.preview.normalizedPatch.linkedBrief, undefined);
+});
+
+
+test("update preview resolves approved repository references in the complete resulting brief", async () => {
+  const text = "Prüfe website#12 und unknown#361";
+  const target = taskRow({ github_repo: "findmydoc-platform/management", problem_statement: text });
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, intendedOutcome: "Management management#361" });
+  const result = await updates.buildPlanningItemUpdatePreview({
+    actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.preview.linkedBrief.problemStatement, "Prüfe [website#12](https://github.com/findmydoc-platform/website/issues/12) und unknown#361");
+  assert.equal(result.preview.linkedBrief.intendedOutcome, "Management [management#361](https://github.com/findmydoc-platform/management/issues/361)");
+  assert.equal(result.preview.resultingItem.problemStatement, text);
+  assert.deepEqual(result.preview.changedFields, ["intendedOutcome"]);
+  assert.deepEqual(result.preview.dbPatch, { intended_outcome: "Management management#361" });
+});
+
+test("repository-only update relinks the complete brief without adding brief changes", async () => {
+  const text = "Änderung #123 und other-org/outside-repo#123";
+  const target = taskRow({ task_type: "sub_issue", status: "Offen", github_repo: "findmydoc-platform/management", github_issue_sync_status: "not_synced", description: text, problem_statement: text, intended_outcome: "Prüfe #124", scope_constraints: "#125", acceptance_criteria: "- [ ] #126", evidence_required: "#127", definition_of_done: "#128" });
+  const options = { parents: [taskRow({ id: "initiative-1" })] };
+  const build = (patch) => updates.buildPlanningItemUpdatePreview({ actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed: updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, ...patch }), supabase: supabaseFor(target, options) });
+  const before = await build({ githubRepo: "findmydoc-platform/management" });
+  const result = await build({ githubRepo: "findmydoc-platform/website" });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.preview.errors, []);
+  assert.equal(before.preview.linkedBrief.description, "Änderung [#123](https://github.com/findmydoc-platform/management/issues/123) und [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)");
+  assert.deepEqual(result.preview.linkedBrief, {
+    description: "Änderung [#123](https://github.com/findmydoc-platform/website/issues/123) und [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    problemStatement: "Änderung [#123](https://github.com/findmydoc-platform/website/issues/123) und [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    intendedOutcome: "Prüfe [#124](https://github.com/findmydoc-platform/website/issues/124)",
+    scopeConstraints: "[#125](https://github.com/findmydoc-platform/website/issues/125)",
+    acceptanceCriteria: "- [ ] [#126](https://github.com/findmydoc-platform/website/issues/126)",
+    evidenceRequired: "[#127](https://github.com/findmydoc-platform/website/issues/127)",
+    definitionOfDone: "[#128](https://github.com/findmydoc-platform/website/issues/128)",
+  });
+  assert.equal(result.preview.resultingItem.description, text);
+  assert.equal(result.preview.resultingItem.problemStatement, text);
+  assert.deepEqual(result.preview.changedFields, ["githubRepo"]);
+  assert.deepEqual(result.preview.dbPatch, { github_repo: "findmydoc-platform/website" });
+});
+
+test("update preview applies existing missing-repository policy only to derived relative links", async () => {
+  const target = taskRow({ github_repo: null, problem_statement: "Änderung #123" });
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, title: "New title" });
+  const result = await updates.buildPlanningItemUpdatePreview({ actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target) });
+  assert.equal(result.ok, true);
+  assert.equal(result.preview.linkedBrief.problemStatement, "Änderung [#123](https://github.com/findmydoc-platform/management/issues/123)");
+  assert.equal(result.preview.currentItem.githubRepo, "");
+  assert.equal(result.preview.resultingItem.githubRepo, "");
+  assert.deepEqual(result.preview.changedFields, ["title"]);
+  assert.deepEqual(result.preview.dbPatch, { title: "New title" });
+});
+
+test.each(["management", "unknown/repository", "findmydoc-platform/website"])("update preview does not guess relative links for invalid task repository %s", async (githubRepo) => {
+  const target = taskRow({ github_repo: githubRepo, problem_statement: "#123 unknown#361 other-org/outside-repo#123" });
+  const parsed = updates.parsePlanningItemPatchPayload({ expectedUpdatedAt: updatedAt, title: "New title" });
+  const result = await updates.buildPlanningItemUpdatePreview({ actor: { id: "ceo", platformRole: "ceo" }, itemId: target.id, parsed, supabase: supabaseFor(target) });
+  assert.equal(result.ok, true);
+  assert.equal(result.preview.linkedBrief.problemStatement, "#123 unknown#361 [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)");
+  assert.equal(result.preview.resultingItem.githubRepo, githubRepo);
+  assert.deepEqual(result.preview.errors, []);
+  assert.deepEqual(result.preview.warnings, []);
 });

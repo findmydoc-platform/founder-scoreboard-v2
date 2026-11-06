@@ -127,7 +127,7 @@ test.each(["token", "role", "scope"])("prepared preview rejects %s loss after pr
 });
 
 test("HTTP preview preserves existing profile-name assignment matching", async () => {
-  const target = { ...planningTarget(), task_type: "deliverable", owner: "Synthetic Owner", assignee: "Synthetic Owner" };
+  const target = { ...planningTarget(), task_type: "deliverable", owner: "Synthetic Owner", assignee: "Synthetic Owner", problem_statement: "other-org/outside-repo#123" };
   await fixture({ receipt: { scopes: ["write:planning-items:update"], profile: { id: "profile-1", name: "Synthetic Owner", platformRole: "founder" } }, onData: request => {
     if (new URL(request.url).pathname === "/rest/v1/rpc/has_valid_planning_review_evidence") return Response.json(false);
     return planningReadResponse(request, target);
@@ -138,7 +138,7 @@ test("HTTP preview preserves existing profile-name assignment matching", async (
     body: JSON.stringify({ expectedUpdatedAt: target.updated_at, title: "Updated" }),
   }), { params: Promise.resolve({ id: "bound-item" }) });
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ valid: true, errors: [], resultingItem: { title: "Updated" } });
+  expect(await response.json()).toMatchObject({ valid: true, errors: [], resultingItem: { title: "Updated", problemStatement: "other-org/outside-repo#123" }, linkedBrief: { description: "", problemStatement: "[other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)", intendedOutcome: "", scopeConstraints: "", acceptanceCriteria: "", evidenceRequired: "", definitionOfDone: "" } });
 });
 
 test("HTTP preview rechecks authority even when the requested fields are invalid", async () => {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import * as repositories from "../../../src/lib/github-repositories";
 import { importTestModule } from "../../helpers/vitest-module.mjs";
 
 async function loadCreate() {
@@ -21,10 +22,7 @@ async function loadCreate() {
     "src/features/planning-items/model/planning-items-create.ts",
     {
       "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
-      "@/lib/github-repositories": {
-        defaultGitHubRepository: "findmydoc-platform/management",
-        resolveTaskGitHubRepository: (_kind, requested) => ({ ok: true, repository: requested || "findmydoc-platform/management" }),
-      },
+      "@/lib/github-repositories": repositories,
       "@/features/planning-items/model/planning-items-contract": contract,
       "@/features/planning-items/model/planning-item-normalization": normalization,
       "@/features/planning-items/model/deliverable-schedule": deliverableSchedule,
@@ -411,7 +409,7 @@ test("Create request hashes distinguish content beyond the former truncation bou
 
 test("create replay survives changed mention expansion diagnostics", async () => {
   const create = await loadCreate();
-  const rawItems = [{ itemType: "deliverable", title: "Mention replay", description: "x".repeat(65_000) + " @all", ownerId: actor.profileId }];
+  const rawItems = [{ itemType: "deliverable", title: "Mention replay", description: "x".repeat(65_000) + " @all other-org/outside-repo#123", ownerId: actor.profileId }];
   const responseItems = [{ itemType: "deliverable", item: { id: "saved-task" } }];
   let expanded = false;
   let stored = null;
@@ -458,4 +456,161 @@ test("invalid create commit returns per-item structured diagnostics with HTTP 40
   assert.equal(response.status, 400);
   assert.equal(response.body.ok, false);
   assert.deepEqual(response.body.items[0].lengthErrors, lengthErrors);
+});
+
+
+test("create preview links full GitHub references without changing authored fields or commit payloads", async () => {
+  const create = await loadCreate();
+  const text = "Änderung in other-org/outside-repo#123";
+  const query = {
+    select() { return this; }, eq() { return this; },
+    then(resolve) { return Promise.resolve({ data: [{ id: actor.profileId, name: "CEO" }], error: null }).then(resolve); },
+  };
+  const items = await create.buildPlanningItemCreatePreview([
+    { itemType: "deliverable", title: text, description: text, problemStatement: text },
+    { itemType: "epic", title: text, description: text, ownerId: actor.profileId },
+  ], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  assert.deepEqual(items[0].linkedBrief, {
+    description: "Änderung in [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    problemStatement: "Änderung in [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)",
+    intendedOutcome: "", scopeConstraints: "", acceptanceCriteria: "", evidenceRequired: "", definitionOfDone: "",
+  });
+  assert.equal(items[0].description, text);
+  assert.equal(items[0].problemStatement, text);
+  assert.equal(items[0].title, text);
+  assert.equal(items[1].linkedBrief, undefined);
+  assert.equal(create.planningItemCreateCommitItem(items[0]).linkedBrief, undefined);
+  const withoutLinks = items.map((item) => { const source = { ...item }; delete source.linkedBrief; return source; });
+  assert.equal(create.planningItemCreateHash(items), create.planningItemCreateHash(withoutLinks));
+});
+
+
+test("create preview preserves Markdown protection and invalid full reference tokens byte for byte", async () => {
+  const create = await loadCreate();
+  const protectedText = [
+    "[other-org/repo#1](https://example.com/fixed?q=other-org/repo#2)",
+    "[other-org/repo#3][target]", "[other-org/repo#4][]", "[other-org/repo#5]",
+    "", "[other-org/repo#4]: https://example.com/collapsed",
+    "[other-org/repo#5]: https://example.com/shortcut",
+    "[multiline]: https://example.com/path\n  \"other-org/repo#24\"",
+    "[target]: https://github.com/other-org/repo/issues/6#issuecomment-7 \"other-org/repo#8\"", "",
+    "https://example.com/path/other-org/repo#9?q=owner/repo#10",
+    "<https://github.com/other-org/repo/issues/11#issuecomment-12>",
+    "`other-org/repo#13`", "``other-org/repo#14 ` still code``",
+    "```md\nother-org/repo#15\n```", "~~~\nother-org/repo#16\n~~~",
+    "    other-org/repo#17", "\tother-org/repo#18",
+    String.raw`\other-org/repo#19 other-org/repo\#20`,
+    "owner/repo#0 owner/repo#-1 owner/repo# owner/repo#1abc owner/repo#1.5",
+    "bad_owner/repo#1 -owner/repo#1 owner-/repo#1 owner/repo/extra#1 owner/../repo#1 ba\u0308d/repo#1",
+    "unknown#361 unknown-other#362",
+  ].join("\n");
+  const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const preview = (description) => create.buildPlanningItemCreatePreview([
+    { itemType: "deliverable", title: "Protected references", description },
+  ], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  const text = `Änderung other-org/repo#21.\n${protectedText}\nAuch findmydoc-platform/founder-scoreboard-v2#397`;
+  const expected = `Änderung [other-org/repo#21](https://github.com/other-org/repo/issues/21).\n${protectedText}\nAuch [findmydoc-platform/founder-scoreboard-v2#397](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/397)`;
+  const [item] = await preview(text);
+  assert.equal(item.linkedBrief.description, expected);
+  assert.equal(item.description, text);
+  const [again] = await preview(item.linkedBrief.description);
+  assert.equal(again.linkedBrief.description, expected);
+});
+
+
+test("create preview resolves approved repository names independently of the task repository", async () => {
+  const create = await loadCreate();
+  const text = "Änderung management#361, website#12 und other-org/outside-repo#123; unknown#361";
+  const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const [item] = await create.buildPlanningItemCreatePreview([
+    { itemType: "sub_issue", title: "Repository references", description: text, githubRepo: "findmydoc-platform/clinic-dashboard" },
+  ], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  assert.equal(item.linkedBrief.description, "Änderung [management#361](https://github.com/findmydoc-platform/management/issues/361), [website#12](https://github.com/findmydoc-platform/website/issues/12) und [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123); unknown#361");
+  assert.equal(item.description, text);
+  assert.equal(item.githubRepo, "findmydoc-platform/clinic-dashboard");
+  assert.equal(create.planningItemCreateCommitItem(item).linkedBrief, undefined);
+  const authoredItem = { ...item };
+  delete authoredItem.linkedBrief;
+  assert.equal(create.planningItemCreateHash([item]), create.planningItemCreateHash([authoredItem]));
+});
+
+
+test("create preview uses configured repository names and preserves ambiguous and invalid complete tokens", async () => {
+  const create = await loadCreate();
+  const description = "research-notes#17 management#361 unknown#361 management#0 management#-1 management# management#1abc bad/management#1/extra";
+  const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const preview = () => create.buildPlanningItemCreatePreview([
+    { itemType: "deliverable", title: "Configured repository references", description },
+  ], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  const [baseline] = await preview();
+  repositories.allowedGitHubRepositories.add("another-owner/research-notes");
+  repositories.allowedGitHubRepositories.add("another-owner/management");
+  try {
+    const [item] = await preview();
+    assert.equal(item.linkedBrief.description, "[research-notes#17](https://github.com/another-owner/research-notes/issues/17) management#361 unknown#361 management#0 management#-1 management# management#1abc bad/management#1/extra");
+    assert.equal(item.description, description);
+    assert.deepEqual(item.warnings, baseline.warnings);
+    assert.equal(item.githubRepo, "findmydoc-platform/management");
+  } finally {
+    repositories.allowedGitHubRepositories.delete("another-owner/research-notes");
+    repositories.allowedGitHubRepositories.delete("another-owner/management");
+  }
+});
+
+
+test("create preview preserves shortened references in protected Markdown and remains idempotent", async () => {
+  const create = await loadCreate();
+  const protectedText = [
+    "[management#1][fixed]", "", "[fixed]: https://example.com/path#comment \"website#2\"", "",
+    "https://example.com/path?q=management#3", "`website#4`",
+    "```md\nmanagement#5\n```", "", "    website#6", "",
+    String.raw`\management#7 website\#8`,
+  ].join("\n");
+  const description = `Änderung management#361.\n${protectedText}`;
+  const expected = `Änderung [management#361](https://github.com/findmydoc-platform/management/issues/361).\n${protectedText}`;
+  const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const preview = (text) => create.buildPlanningItemCreatePreview([
+    { itemType: "deliverable", title: "Protected repository references", description: text },
+  ], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  const [item] = await preview(description);
+  assert.equal(item.linkedBrief.description, expected);
+  assert.equal(item.description, description);
+  const [again] = await preview(item.linkedBrief.description);
+  assert.equal(again.linkedBrief.description, expected);
+});
+
+test("create preview resolves relative references against the task repository without changing authored input", async () => {
+  const create = await loadCreate();
+  const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const [item] = await create.buildPlanningItemCreatePreview([
+    { itemType: "deliverable", title: "Relative #123", problemStatement: "Änderung #123 und other-org/outside-repo#123" },
+  ], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  assert.equal(item.githubRepo, "findmydoc-platform/management");
+  assert.equal(item.linkedBrief.problemStatement, "Änderung [#123](https://github.com/findmydoc-platform/management/issues/123) und [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)");
+  assert.equal(item.problemStatement, "Änderung #123 und other-org/outside-repo#123");
+  assert.equal(item.title, "Relative #123");
+  assert.equal(create.planningItemCreateCommitItem(item).problemStatement, item.problemStatement);
+  const source = { ...item }; delete source.linkedBrief;
+  assert.equal(create.planningItemCreateHash([item]), create.planningItemCreateHash([source]));
+});
+
+test("relative create references preserve protected Markdown and invalid complete tokens", async () => {
+  const create = await loadCreate();
+  const protectedText = [
+    "[fixed #2](https://example.com/fixed#3) [#4][target]", "", "[target]: https://example.com/target#5", "",
+    "https://github.com/owner/repo/issues/6#issuecomment-7 https://example.com/path?q=#8#9",
+    "`#10`", "```\n#11\n```", "", "    #12", "",
+    String.raw`\#13`,
+    "#0 #000 #-1 # #1abc #1.5 ##14 unknown#361 owner/unknown#-1 unknown/name/extra#15 @#16 _#17 ü#18",
+  ].join("\n");
+  const query = { select() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const preview = (problemStatement) => create.buildPlanningItemCreatePreview([{ itemType: "deliverable", title: "Relative protection", problemStatement }], { id: actor.profileId, platformRole: "ceo" }, { from: () => query });
+  const text = `Änderung #123.\n${protectedText}\nAuch other-org/outside-repo#123`;
+  const expected = `Änderung [#123](https://github.com/findmydoc-platform/management/issues/123).\n${protectedText}\nAuch [other-org/outside-repo#123](https://github.com/other-org/outside-repo/issues/123)`;
+  const [item] = await preview(text);
+  assert.equal(item.problemStatement, text);
+  assert.equal(item.linkedBrief.problemStatement, expected);
+  const [again] = await preview(item.linkedBrief.problemStatement);
+  assert.equal(again.linkedBrief.problemStatement, expected);
+  assert.deepEqual(item.warnings, []);
 });
