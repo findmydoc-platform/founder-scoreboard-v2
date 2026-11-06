@@ -249,6 +249,8 @@ export type ScoreObjectionResolutionInput = {
 
 export type TaskComment = {
   id: number;
+  submissionId?: string;
+  submittedAt?: string;
   taskId: string;
   profileId: string;
   comment: string;

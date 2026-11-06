@@ -209,11 +209,18 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!Array.isArray(body?.comments) || typeof body.evidenceLink !== "string" || typeof body.imported !== "number") throw new Error("Die Importbestätigung ist unvollständig.");
         return { comments: body.comments, commentsCoverage: body.commentsCoverage === "complete" ? "complete" : "partial", evidenceLink: body.evidenceLink, imported: body.imported };
       },
-      async createTaskComment(taskId, submitted) {
-        const { response, body } = await taskApi.createTaskCommentRequest(ownedApiClient, taskId, submitted);
+      async createTaskComment(taskId, submitted, submission) {
+        const { response, body } = await taskApi.createTaskCommentRequest(ownedApiClient, taskId, submitted, submission);
         if (!response.ok) throw Object.assign(new Error(body?.error || "Kommentar konnte nicht gespeichert werden."), { status: response.status, code: body?.code });
         if (!body?.comment) throw new Error("Die Kommentarbestätigung ist unvollständig.");
         return { comment: body.comment, notice: body.notice };
+      },
+      async checkTaskCommentCreation(taskId, submission) {
+        const { response, body } = await taskApi.checkTaskCommentCreationRequest(ownedApiClient, taskId, submission.id);
+        if (!response.ok) throw Object.assign(new Error(body?.error || "Kommentarbestätigung konnte nicht geprüft werden."), { status: response.status, code: body?.code });
+        if (body?.outcome === "unconfirmed") return { outcome: "unconfirmed" };
+        if (body?.outcome !== "confirmed" || !body.comment) throw new Error("Die Kommentarbestätigung ist unvollständig.");
+        return { outcome: "confirmed", comment: body.comment };
       },
       async reportBlocker(taskId, submitted) {
         const { response, body } = await taskApi.reportTaskBlockerRequest(ownedApiClient, taskId, submitted);

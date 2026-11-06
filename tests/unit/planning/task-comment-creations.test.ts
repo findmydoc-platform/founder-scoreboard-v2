@@ -25,8 +25,36 @@ test.each(["failed","retry_scheduled","waiting_for_author_connection","delivered
 test("an older failed creation cannot remove a later confirmed comment or independent Task edit", async()=>{
  const old=deferred<{comment:TaskComment}>();const {planning}=fixture({createTaskComment:async(_,text)=>text==="Older submission"?old.promise:{comment}});const writing=planning.createTaskComment(task,"Older submission");await planning.createTaskComment(task,comment.comment);await planning.saveTask(task,{title:"Independent confirmed title"});old.reject(Object.assign(new Error("Rejected"),{status:403}));expect(await writing).toMatchObject({kind:"rejected"});expect(planning.taskDetail(task.id).comments).toEqual([comment]);expect(planning.taskDetail(task.id).task).toMatchObject({title:"Independent confirmed title",updatedAt:"edit-r2"});
 });
-test("lost confirmation retains original text and checks matching discussion rows without replay or blocking unrelated Task edits", async()=>{
+test("lost confirmation resolves the exact submission without mistaking identical discussion text for identity", async()=>{
+ let identity = "";
+ const { planning } = fixture({
+  createTaskComment: async (_, __, submission) => { identity = submission.id; throw new Error("Lost response"); },
+  checkTaskCommentCreation: async (_, submission) => { expect(submission.id).toBe(identity); return { outcome: "confirmed", comment: { ...comment, submissionId: identity, submittedAt: submission.submittedAt } }; },
+ });
+ await planning.createTaskComment(task, comment.comment);
+ const id = planning.taskCommentCreations(task.id)[0].id;
+ expect(await planning.checkTaskCommentCreation(id)).toMatchObject({ outcome: "confirmed" });
+ expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({ phase: "confirmed", comment: { id: comment.id } });
+ expect(planning.taskDetail(task.id).comments).toMatchObject([{ id: comment.id }]);
+});
+test("a discussion read alone cannot establish submission identity or prove a missing submission failed", async()=>{
  let writes=0,reads=0;const {planning}=fixture({createTaskComment:async()=>{writes++;throw new Error("Lost");},readTaskDetail:async()=>{reads++;return{model:detail([comment])};}});expect(await planning.createTaskComment(task,comment.comment)).toMatchObject({kind:"unconfirmed"});const id=planning.taskCommentCreations(task.id)[0].id;expect(reads).toBe(0);await Promise.all([planning.checkTaskCommentCreation(id),planning.checkTaskCommentCreation(id)]);expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({phase:"unconfirmed",submitted:comment.comment,comment:null,checkStatus:"checked"});expect(planning.taskDetail(task.id).comments).toEqual([comment]);expect(await planning.createTaskComment(task,"Different new text")).toMatchObject({kind:"blocked"});expect(await planning.saveTask(task,{title:"Independent Task edit"})).toMatchObject({ok:true});expect({writes,reads}).toEqual({writes:1,reads:1});
+});
+test("a missing submission receipt remains unresolved and can later be confirmed without resending", async()=>{
+ let submission:{id:string;submittedAt:string}|undefined, stored=false, writes=0;
+ const {planning}=fixture({createTaskComment:async(_,__,identity)=>{writes++;submission=identity;throw new Error("Response lost before storage completed");},checkTaskCommentCreation:async()=>stored?{outcome:"confirmed",comment:{...comment,submissionId:submission!.id,submittedAt:submission!.submittedAt}}:{outcome:"unconfirmed"}});
+ await planning.createTaskComment(task,comment.comment);const id=planning.taskCommentCreations(task.id)[0].id;
+ expect(await planning.checkTaskCommentCreation(id)).toMatchObject({outcome:"unconfirmed"});
+ expect(planning.taskCommentCreations(task.id)[0]).toMatchObject({phase:"unconfirmed",submitted:comment.comment});
+ stored=true;expect(await planning.checkTaskCommentCreation(id)).toMatchObject({outcome:"confirmed"});
+ expect(writes).toBe(1);expect(planning.taskDetail(task.id).comments).toMatchObject([{id:comment.id}]);
+});
+test("an ended session cannot publish a late recovered receipt", async()=>{
+ const result=deferred<{outcome:"confirmed";comment:TaskComment}>();let submission:{id:string;submittedAt:string}|undefined;
+ const owner=fixture({createTaskComment:async(_,__,identity)=>{submission=identity;throw new Error("Lost");},checkTaskCommentCreation:()=>result.promise});
+ await owner.planning.createTaskComment(task,comment.comment);const checking=owner.planning.checkTaskCommentCreation(owner.planning.taskCommentCreations(task.id)[0].id);
+ owner.internal.sessionChanged("replacement-account");result.resolve({outcome:"confirmed",comment:{...comment,submissionId:submission!.id,submittedAt:submission!.submittedAt}});
+ expect(await checking).toMatchObject({outcome:"session-ended"});expect(owner.planning.taskCommentCreations()).toEqual([]);expect(owner.planning.protectedCache()).toBeNull();
 });
 test("unknown verification waits for an existing old GET then reads after the submission boundary", async()=>{
  const old=deferred<{model:TaskDetailModel}>(),fresh=deferred<{model:TaskDetailModel}>();let reads=0;const {planning}=fixture({createTaskComment:async()=>{throw new Error("Lost");},readTaskDetail:()=>++reads===1?old.promise:fresh.promise});const loading=planning.loadTaskDetail(task.id);await planning.createTaskComment(task,comment.comment);const check=planning.checkTaskCommentCreation(planning.taskCommentCreations(task.id)[0].id);old.resolve({model:detail()});await loading;await Promise.resolve();expect(reads).toBe(2);fresh.resolve({model:detail([comment])});expect(await check).toMatchObject({outcome:"unconfirmed",readStatus:"current"});
