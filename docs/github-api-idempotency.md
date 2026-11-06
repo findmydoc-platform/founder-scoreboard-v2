@@ -37,6 +37,14 @@ Once the child issue has been resolved, do not rebuild `subIssueUrl` as mutation
 
 Task relationship reconciliation lives in `src/lib/github-sync/dependency-projection.ts`. It resolves FounderOps edges and the complete managed GitHub set behind one interface. It observes both `/dependencies/blocked_by` and `/dependencies/blocking` for the current Issue so removing either an incoming or outgoing local edge is reconciled when either task is synchronized. The managed identity registry includes trashed tasks that still retain a GitHub reference. Native Sub-Issue parent reconciliation is invoked by `src/lib/github-sync/task-projection.ts` after its read-only parent preflight.
 
+## Local comment submissions
+
+App comment creation and GitHub comment delivery have separate identities. `POST /api/tasks/[id]/comments` accepts `submissionId`, `submittedAt` and `comment`. The UUID binds the logical submission to its actor, item, normalized text and immutable submission time. Concurrent replay returns the existing comment without repeating notifications or its delivery job. Conflicting reuse returns `409`. Different UUIDs allow intentional comments with identical text. Legacy text-only requests receive fresh server-generated identities and do not identify a previous attempt.
+
+`GET /api/tasks/[id]/comments?submissionId=...` returns `outcome: confirmed` with the stored comment, or `outcome: unconfirmed`. A missing receipt does not prove that an in-flight write failed. Lookup uses the comment-create authorization and active-item guard and exposes only the current actor's receipt for that item. A UUID grants no access; the receipt table and its write RPC are service-only.
+
+The transaction stores the comment, receipt, notifications and applicable GitHub delivery job together. The API confirms app persistence without waiting for GitHub delivery. Next.js `after()` starts the existing durable delivery path, which reconciles `fmd-comment-id` before publishing. Receipt lookup and app retry therefore do not create a new external publication for the same comment.
+
 ## Mutation checklist
 
 Before adding a mutation, answer all of the following in code and tests:
