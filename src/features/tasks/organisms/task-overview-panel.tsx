@@ -17,7 +17,6 @@ import { SubIssueEvidenceSection } from "@/features/tasks/molecules/sub-issue-ev
 import { subIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
 import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
 import type { LinkedPullRequest, Profile, Task } from "@/lib/types";
-import { formatDate } from "@/lib/display";
 import { TaskBriefText } from "@/features/tasks/atoms/task-brief-text";
 import type { GitHubBriefReferenceContext } from "@/lib/github-brief-references";
 import { LinkifiedText } from "@/shared/atoms/linkified-text";
@@ -682,7 +681,6 @@ export function TaskOverviewPanel({
               <ReadSection label="Interne Notiz" value={draft.note} />
             </>
           )}
-          {task.updatedAt ? <p className="border-t border-slate-100 py-4 text-xs text-slate-600">Zuletzt aktualisiert am {formatDate(task.updatedAt)}</p> : null}
         </div>
       )}
       <div className="sr-only" aria-live="polite">{announcement}</div>
