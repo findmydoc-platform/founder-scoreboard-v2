@@ -21,6 +21,7 @@ type Props = {
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
   externalCommentCompleteness?: "complete" | "partial";
   onCheckGitHubImport?: () => void;
+  commentDraft?: import("@/features/tasks/model/task-comment-draft").TaskCommentDraft;
   commentCreations?: readonly TaskCommentCreationView[];
   commentCompleteness?: "complete" | "partial";
   onCheckCommentCreation?: (id: string) => void;
@@ -110,6 +111,7 @@ export function TaskCommentThread({
   githubImport,
   externalCommentCompleteness = "complete",
   onCheckGitHubImport,
+  commentDraft,
   commentCreations = [],
   commentCompleteness = "complete",
   onCheckCommentCreation,
@@ -200,6 +202,7 @@ export function TaskCommentThread({
       <TaskCommentCreationNotices creations={commentCreations} onCheck={onCheckCommentCreation} />
       {!readOnly && (
         <TaskCommentComposer
+          draft={commentDraft}
           attachmentConfirmationPending={attachmentUploads.some(view => view.phase === "uploading" || view.phase === "unconfirmed" || view.phase === "uploaded" && view.taskReadStatus !== "current")}
           confirmationPending={commentCreations.some(item => item.phase === "unconfirmed")}
           pending={pending}

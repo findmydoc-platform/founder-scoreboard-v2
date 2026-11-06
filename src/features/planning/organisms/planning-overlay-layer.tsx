@@ -162,6 +162,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           githubImport={controller.planningState.taskGitHubImport(selectedTask.id)}
           externalCommentCompleteness={controller.planningState.taskGitHubComments(selectedTask.id).completeness}
           onCheckGitHubImport={() => { void controller.planningState.checkTaskGitHubImport(selectedTask.id); }}
+          commentDraft={controller.planningState.taskCommentDraft(selectedTask.id)}
           commentCreations={controller.planningState.taskCommentCreations(selectedTask.id)}
           commentCompleteness={controller.planningState.taskComments(selectedTask.id).completeness}
           onCheckCommentCreation={id => { void controller.planningState.checkTaskCommentCreation(id); }}

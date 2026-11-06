@@ -141,6 +141,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const outcomeCheckStatus = new Map<string, PlanningTaskSaveView["checkStatus"]>();
   const status = new Map<string, PlanningTaskSaveStatus>();
   const listeners = new Set<() => void>();
+  const commentDrafts = new Map<string, { text: string }>();
   function isActive() {
     if (active && sessionExpiresAt !== undefined && sessionExpiresAt * 1000 <= (adapter.now?.() ?? Date.now())) suspendProtected();
     return active;
@@ -556,6 +557,25 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     taskGitHubImport: githubImports.view,
     taskGitHubComments: taskId => githubImports.comments(taskId, visible),
     checkTaskGitHubImport: githubImports.check,
+    taskCommentDraft(taskId) {
+      const generation = sessionGeneration;
+      const canWrite = () => isActive() && generation === sessionGeneration && !deniedTaskReads.has(taskId) && confirmed.tasks.some(task => task.id === taskId && !lifecycle.isRemoved(task));
+      const captured = canWrite() ? commentDrafts.get(taskId) : undefined;
+      return {
+        text: captured?.text || "",
+        update(value) {
+          if (!canWrite()) return;
+          const current = commentDrafts.get(taskId)?.text || "";
+          commentDrafts.set(taskId, { text: typeof value === "function" ? value(current) : value });
+          publish();
+        },
+        clear() {
+          if (!canWrite() || commentDrafts.get(taskId) !== captured) return;
+          commentDrafts.delete(taskId);
+          publish();
+        },
+      };
+    },
     createTaskComment: commentCreations.create,
     taskComments: taskId => commentCreations.view(taskId, visible),
     taskCommentCreations: commentCreations.views,
@@ -894,6 +914,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     githubConnection.clear();
     githubImports.clear();
     commentCreations.clear();
+    commentDrafts.clear();
     blockerReports.clear();
     lifecycle.clear();
     administration.clear();

@@ -108,6 +108,77 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+function CommentDraftNavigationHarness(args: React.ComponentProps<typeof TaskDetailSurface>) {
+  const other = { ...task, id: "other-draft-task", title: "Andere Aufgabe" };
+  const [owner] = useState(() => createPlanningState({
+    userId: "draft-story",
+    initialData: { ...emptyPlanningShellState, tasks: [task, other], profiles },
+    adapter: { readWorkspace: async () => null, saveTask: async () => ({ task: {} }) },
+  }));
+  useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
+  const [secondItem, setSecondItem] = useState(false);
+  const [surface, setSurface] = useState<"page" | "modal">("modal");
+  const current = secondItem ? other : task;
+  return <>
+    <button onClick={() => setSecondItem(value => !value)}>Item wechseln</button>
+    <button onClick={() => setSurface(value => value === "modal" ? "page" : "modal")}>Detailansicht wechseln</button>
+    <output aria-label="Detailansicht">{surface === "modal" ? "Panel" : "Vollseite"}</output>
+    <TaskDetailSurface {...args} key={`${surface}:${current.id}`} task={current} surface={surface}
+      allTasks={[task, other]} comments={[]} activities={[]} requestedCommentTarget="comment:new"
+      commentDraft={owner.planning.taskCommentDraft(current.id)} />
+  </>;
+}
+
+export const CommentDraftSurvivesTabsItemsAndDetailSurfaces: Story = {
+  render: args => <CommentDraftNavigationHarness {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(await canvas.findByRole("textbox", { name: "Kommentar oder Update" }), "Entwurf der ersten Aufgabe");
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "Aktivität" }));
+    await expect(canvas.getByRole("textbox", { name: "Kommentar oder Update" })).toHaveValue("Entwurf der ersten Aufgabe");
+    await userEvent.click(canvas.getByRole("button", { name: "Item wechseln" }));
+    await expect(canvas.getByRole("textbox", { name: "Kommentar oder Update" })).toHaveValue("");
+    await userEvent.type(canvas.getByRole("textbox", { name: "Kommentar oder Update" }), "Entwurf der zweiten Aufgabe");
+    await userEvent.click(canvas.getByRole("button", { name: "Detailansicht wechseln" }));
+    await expect(canvas.getByLabelText("Detailansicht")).toHaveTextContent("Vollseite");
+    await expect(canvas.getByRole("textbox", { name: "Kommentar oder Update" })).toHaveValue("Entwurf der zweiten Aufgabe");
+    await userEvent.click(canvas.getByRole("button", { name: "Item wechseln" }));
+    await expect(canvas.getByRole("textbox", { name: "Kommentar oder Update" })).toHaveValue("Entwurf der ersten Aufgabe");
+    await userEvent.click(canvas.getByRole("button", { name: "Detailansicht wechseln" }));
+    await expect(canvas.getByLabelText("Detailansicht")).toHaveTextContent("Panel");
+    await expect(canvas.getByRole("textbox", { name: "Kommentar oder Update" })).toHaveValue("Entwurf der ersten Aufgabe");
+  },
+};
+
+export const StoredUpdateTimestamp: Story = {
+  args: {
+    task: { ...task, updatedAt: "2026-11-05T14:51:00", fixedDate: "2026-11-19" },
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const title = canvas.getByRole("heading", { name: args.task.title, level: 1 });
+    const timestamp = canvas.getByText(/^Zuletzt aktualisiert am/);
+    const status = canvas.getByRole("combobox", { name: "Status ändern" });
+    await expect(timestamp).toBeVisible();
+    await expect(timestamp).toHaveTextContent("Zuletzt aktualisiert am 05.11.2026, 14:51");
+    await expect(canvas.getAllByText(/^Zuletzt aktualisiert am/)).toHaveLength(1);
+    await expect(timestamp.getBoundingClientRect().top).toBeGreaterThanOrEqual(title.getBoundingClientRect().bottom);
+    await expect(timestamp.getBoundingClientRect().bottom).toBeLessThanOrEqual(status.getBoundingClientRect().top);
+    await expect(timestamp.getBoundingClientRect().left).toBe(title.getBoundingClientRect().left);
+    await userEvent.click(canvas.getByRole("tab", { name: /Aktivität/ }));
+    await expect(timestamp).toBeVisible();
+    await expect(canvas.getByLabelText("Item-Historie")).toHaveTextContent("Erstellt von");
+    await expect(canvas.getByText("Die Prüfkriterien sind abgestimmt. Bitte die GitHub-Zustellung im Review mitprüfen.")).toBeVisible();
+    await expect(timestamp).toHaveTextContent("Zuletzt aktualisiert am 05.11.2026, 14:51");
+  },
+};
+
+export const PanelStoredUpdateTimestamp: Story = {
+  ...StoredUpdateTimestamp,
+  args: { ...StoredUpdateTimestamp.args, surface: "modal" },
+};
+
 export const ActivityMentionPicker: Story = {
   args: {
     activities: [],
