@@ -12,7 +12,7 @@ export function taskAssigneeProfile(task: Pick<Task, "assigneeId" | "assignee">,
   return profiles.find((profile) => profile.name === task.assignee);
 }
 
-export function taskChildProgress(childItems: Task[]) {
+export function taskChildProgress(childItems: readonly Task[]) {
   const completed = childItems.filter((item) => normalizeStatus(item.status) === "Erledigt").length;
   const total = childItems.length;
 

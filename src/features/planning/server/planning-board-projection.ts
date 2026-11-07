@@ -53,7 +53,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
   const cardIds = new Set(cards.map(task => task.id));
   // Context is independent from card membership and contains only records needed by this page.
   const contextIds = new Set(cardIds);
-  for (const task of model.items) if (cardIds.has(task.parentTaskId) || task.taskType === "epic" || task.taskType === "initiative") contextIds.add(task.id);
+  for (const task of model.items) if (task.taskType === "epic" || task.taskType === "initiative") contextIds.add(task.id);
   const relationships = model.relationships.filter(edge => contextIds.has(edge.taskId) || contextIds.has(edge.relatedTaskId));
   for (const edge of relationships) { contextIds.add(edge.taskId); contextIds.add(edge.relatedTaskId); }
   const byId = new Map(model.items.map(task => [task.id, task]));

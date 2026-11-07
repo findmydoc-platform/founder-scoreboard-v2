@@ -173,6 +173,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
 
   const detailStatuses = new Map<string, PlanningReadStatus>(initialData.tasks.filter(task=>task.detailAvailability === "stale").map(task=>[task.id,"stale"]));
+  const childLists = new Map<string, { ids: Set<string>; started: number; readStatus: PlanningReadStatus }>();
   const detailReads = new Map<string, ReturnType<PlanningState["loadTaskDetail"]>>();
   const tails = new Map<string, { context: symbol; result: Promise<TaskUpdateResult> }>();
   const pending = new Map<symbol, { taskId: string; patch: Partial<Task>; submitted: Partial<Task>; phase: PlanningTaskSaveView["phase"] }>();
@@ -708,7 +709,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     loadBoardColumn(status) { return readBoardColumn(status, false); },
     refreshBoardColumn(status) { return readBoardColumn(status, true); },
     workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id) || ((workspace === "planning" || workspace === "projects") && lifecycle.isTemporary(task.id))), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
-    taskDetail: taskId => { isActive(); return ({
+    taskDetail: taskId => { isActive(); const childList = childLists.get(taskId); return ({
+      removed: lifecycle.isRemoved({ id: taskId } as Task),
+      children: deniedTaskReads.has(taskId) || childList?.readStatus === "forbidden" ? [] : visible.tasks.filter(task => task.parentTaskId === taskId && (childList?.ids.has(task.id) || (childList && (taskConfirmedAt.get(task.id) || 0) > childList.started))),
+      childrenReadStatus: childList?.readStatus || "not-loaded",
       task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
       saveStatus: githubSync.blocksTask(taskId) ? githubSync.view(taskId)?.phase === "syncing" ? "saving" : "unconfirmed" : taskReviews.blocksTask(taskId) ? taskReviews.blockingOperation(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : relationshipChanges.blocksTask(taskId) ? relationshipChanges.pendingViews(taskId).some(view => view.phase === "saving") ? "saving" : "unconfirmed" : attachmentUploads.blocksTask(taskId) ? attachmentUploads.views(taskId).some(view => view.phase === "uploading") ? "saving" : "unconfirmed" : githubImports.blocksTask(taskId) ? githubImports.view(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : blockerReports.saveStatus(taskId) || backlogOrdering.saveStatus(taskId) || backlogAssignments.saveStatus(taskId) || status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
       comments: deniedTaskReads.has(taskId) ? [] : visible.taskComments.filter(item => item.taskId === taskId),
@@ -783,6 +787,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (existing) return existing;
       const readTaskDetail = adapter.readTaskDetail;
       detailStatuses.set(taskId, "loading");
+      childLists.set(taskId, { ids: childLists.get(taskId)?.ids || new Set(visible.tasks.filter(task => task.parentTaskId === taskId).map(task => task.id)), started: childLists.get(taskId)?.started || 0, readStatus: "loading" });
       commentCreations.beginRead(taskId);
       publish();
       const loaded = (async () => {
@@ -799,6 +804,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           githubImports.failed(taskId, failedStatus);
           if (failedStatus === "forbidden") { deniedTaskReads.add(taskId); taskReviews.deny(taskId); githubSync.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId); }
           detailStatuses.set(taskId, failedStatus);
+          childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: failedStatus });
           publish();
           return { ok: false, error: error instanceof Error ? error.message : "Aufgabendetails konnten nicht geladen werden." };
         }
@@ -830,6 +836,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         githubSync.acceptTaskRead(taskId,started,!protectedIds.has(taskId)&&!unresolvedIds.has(taskId),result.model.item.updatedAt);
         githubImports.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
+        childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current" });
         const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
         for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) acceptTaskFieldCoverage(task);
         for (const task of returnedTasks) {
@@ -838,6 +845,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (profileRead.stale || sprintRead.stale || unresolvedIds.size || returnedTasks.some(task => protectedIds.has(task.id))) {
           freshness = "stale";
           if (!result.unavailable?.length) detailStatuses.set(taskId, "stale");
+          childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: "stale" });
         }
         publish();
         return { ok: true, unavailable: result.unavailable };
@@ -1016,6 +1024,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (previous.detailAvailability !== "summary") {
         next.detailAvailability = "stale";
         detailStatuses.set(task.id, "stale");
+        const childList = childLists.get(task.id);
+        if (childList?.readStatus === "current") childLists.set(task.id, { ...childList, readStatus: "stale" });
       }
       return next;
     };
@@ -1114,6 +1124,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     hydrationRequests.clear();
     backlogCoverage = {};
     detailStatuses.clear();
+    childLists.clear();
     deniedTaskReads.clear();
     retainedTaskFields.clear();
     profileScopes.clear();

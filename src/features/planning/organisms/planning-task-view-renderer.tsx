@@ -64,6 +64,8 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     visibleTasks,
   } = controller;
 
+  const deniedChildListIds = controller.planningBoard?.result?.cardIds.filter(taskId => controller.planningState.taskDetail(taskId).childrenReadStatus === "forbidden") || [];
+
   const canChangeTaskStatus = (task: (typeof data.tasks)[number]) => mayChangeTaskStatus(task) && controller.planningState.taskDetail(task.id).saveStatus !== "unconfirmed";
 
   // Table, Gantt and structure stay deliberately delivery-only in V1.  The
@@ -98,6 +100,10 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
   return (
     <>
+      {deniedChildListIds.length > 0 ? <UiNotice role="alert" tone="danger">
+        Kinder dürfen nicht geladen werden.
+        <UiButton type="button" onClick={() => { for (const taskId of deniedChildListIds) void controller.planningState.loadTaskDetail(taskId); }}>Kinder erneut laden</UiButton>
+      </UiNotice> : null}
       {controller.workspace === "planning" && controller.planningBoard?.readStatus === "unavailable" ? <UiNotice tone="info" role="alert">
         Der aktuelle Stand konnte nicht geladen werden. Deine geladenen Karten bleiben sichtbar.
         <UiButton type="button" onClick={() => void controller.planningState.refreshWorkspace("planning")}>Planung erneut laden</UiButton>
@@ -118,6 +124,10 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
         <div className="grid gap-4">
           <TaskBoardView
             childProgressById={controller.planningBoard?.result?.childProgressById}
+            childListForTask={taskId => {
+              const detail = controller.planningState.taskDetail(taskId);
+              return { items: detail.children, readStatus: detail.childrenReadStatus, load: () => { void controller.planningState.loadTaskDetail(taskId); } };
+            }}
             columns={planningLevel === "deliverable" && controller.planningBoard?.result ? Object.fromEntries(boardStatuses.map(status => [status, {
               ...controller.planningBoard.result!.columns[status],
               readStatus: controller.planningBoard.columnReadStatus?.[status] || "current",
