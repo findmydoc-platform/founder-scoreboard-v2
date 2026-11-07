@@ -34,6 +34,7 @@ export function administratorProtocol(initial = {}) {
       calls.push({ name, body });
       if (name in state.responses) return typeof state.responses[name] === "function" ? state.responses[name](body) : Response.json(state.responses[name]);
     }
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", scope_revision: "42", active_task_count: 0, latest_updated_at: null });
     if (url.pathname === "/rest/v1/profiles") return Response.json(state.devProfile || null);
     throw new Error("Unexpected external protocol in administrator test");
   });

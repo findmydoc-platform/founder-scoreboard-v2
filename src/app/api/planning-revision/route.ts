@@ -6,13 +6,14 @@ import { authorizeCredentialAction } from "@/lib/credentials";
 async function handleGET(request: NextRequest) {
   const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning.revision.read" });
   if (!permission.ok) return permission.status === 501 ? apiError("Planungsänderungen konnten nicht geprüft werden.", 501) : authzError(permission);
-  const { data, error, count } = await permission.planning.readRevision();
+  const { data, error, count, scopeRevision } = await permission.planning.readRevision();
   if (error) return apiError("Planungsänderungen konnten nicht geprüft werden.", 500);
 
   return observeRuntimePreparation(() => NextResponse.json({
     revision: {
       activeTaskCount: count ?? 0,
       latestUpdatedAt: String(data?.[0]?.updated_at || ""),
+      scopeRevision,
     },
   }, {
     headers: { "Cache-Control": "private, no-store" },

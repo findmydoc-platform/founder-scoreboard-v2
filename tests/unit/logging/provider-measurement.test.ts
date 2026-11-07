@@ -218,7 +218,7 @@ test("the public Board response distinguishes its reads, header, avatars, mappin
   const reads: string[] = [];
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), path = new URL(request.url).pathname;
-    if (path === "/rest/v1/projects") { reads.push(path); projectReadFinished = true; return Response.json({ id: "findmydoc-founder-execution", name: "Synthetic board" }); }
+    if (path === "/rest/v1/rpc/planning_workspace_snapshot") { reads.push(path); projectReadFinished = true; return Response.json({ id: "findmydoc-founder-execution", name: "Synthetic board", scope_revision: "42" }); }
     if (path === "/rest/v1/active_tasks") { reads.push(path); itemsEntered(); await itemsGate; return Response.json([], { headers: { "content-range": "*/0" } }); }
     if (path === "/rest/v1/planning_item_strategy") { reads.push(path); strategyReadFinished = true; return Response.json([], { headers: { "content-range": "*/0" } }); }
     if (path === "/auth/v1/user" && clock === 0) clock = 25;

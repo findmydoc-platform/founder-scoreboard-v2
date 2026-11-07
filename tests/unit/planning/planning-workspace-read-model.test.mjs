@@ -5,7 +5,7 @@ import { importTestModule } from "../../helpers/vitest-module.mjs";
 function createSupabaseFixture(failedTable = "", counts = {}) {
   const calls = [];
   const data = {
-    projects: { id: "findmydoc-founder-execution", name: "findmydoc Planning", range_label: "", review_objection_window_hours: 48 },
+    projects: { id: "findmydoc-founder-execution", name: "findmydoc Planning", range_label: "", review_objection_window_hours: 48, scope_revision: "42" },
     profiles: [{ id: "person", name: "Person", github_login: "person-login" }],
     active_tasks: [
       { id: "epic", task_type: "epic", parent_task_id: null, approval_status: "not_required", updated_at: "2026-08-10T00:00:00.000Z" },
@@ -25,6 +25,10 @@ function createSupabaseFixture(failedTable = "", counts = {}) {
   return {
     calls,
     data,
+    rpc(name) {
+      assert.equal(name, "planning_workspace_snapshot");
+      return Promise.resolve({ data: failedTable === "projects" ? null : { ...data.projects }, error: failedTable === "projects" ? { message: "fixture failure" } : null });
+    },
     from(table) {
       const call = { table, eq: [], orders: [], limit: null, select: "" };
       calls.push(call);
@@ -75,6 +79,25 @@ test("planning workspace reader fails closed and distinguishes dependency failur
   assert.deepEqual(await loadPlanningWorkspaceModel(unavailable, { authorized: true, actorProfileId: "person" }), { status: "unavailable" });
 });
 
+test("Planning captures its authoritative source revision before reading Items and retains that token through a concurrent change", async () => {
+  const fixture = createSupabaseFixture();
+  const snapshot = deferred();
+  fixture.rpc = () => snapshot.promise;
+  const result = loadPlanningWorkspaceModel(fixture, { authorized: true, actorProfileId: "person" });
+  assert.deepEqual(fixture.calls, []);
+  snapshot.resolve({ data: { ...fixture.data.projects, scope_revision: "41" }, error: null });
+  fixture.data.projects.scope_revision = "42";
+  const loaded = await result;
+  assert.equal(loaded.status, "ready");
+  assert.equal(loaded.model.scopeRevision, "41");
+});
+
+test("Planning does not enumerate protected sources without an authoritative snapshot", async () => {
+  const fixture = createSupabaseFixture("projects");
+  assert.deepEqual(await loadPlanningWorkspaceModel(fixture, { authorized: true, actorProfileId: "person" }), { status: "unavailable" });
+  assert.deepEqual(fixture.calls, []);
+});
+
 test("planning workspace reader loads only the focused canonical model", async () => {
   const supabase = createSupabaseFixture();
   const result = await loadPlanningWorkspaceModel(supabase, { authorized: true, actorProfileId: "person" });
@@ -85,9 +108,8 @@ test("planning workspace reader loads only the focused canonical model", async (
   assert.deepEqual(result.model.relationships.map(({ id }) => id), [1]);
   assert.equal(result.model.people[0].githubLogin, "person-login");
   assert.equal(result.model.people[0].avatarUrl, "https://lh3.googleusercontent.com/a/profile");
-  assert.deepEqual(Object.keys(result.model).sort(), ["coverage", "items", "people", "preferences", "project", "relationships", "revision", "sprints"]);
+  assert.deepEqual(Object.keys(result.model).sort(), ["coverage", "items", "people", "preferences", "project", "relationships", "revision", "scopeRevision", "sprints"]);
   assert.deepEqual(supabase.calls.map(({ table }) => table), [
-    "projects",
     "profiles",
     "active_tasks",
     "planning_item_strategy",
@@ -164,7 +186,8 @@ async function controlledReader(enrich = enrichProfiles) {
     };
     return query;
   };
-  fixture.rpc = (name, params) => { rpcCalls.push([name, params]); return rpc.promise; };
+  const snapshotRpc = fixture.rpc.bind(fixture);
+  fixture.rpc = (name, params) => { if (name === "planning_workspace_snapshot") return snapshotRpc(name); rpcCalls.push([name, params]); return rpc.promise; };
   const { loadPlanningWorkspaceModel: load } = await importTestModule(
     "src/features/planning-items/server/planning-workspace-read-source.ts",
     {
@@ -193,13 +216,15 @@ afterEach(() => vi.useRealTimers());
 
 async function measureAvatarSchedule(profileTime, serial = false) {
   const fixture = await controlledReader();
+  const snapshotRpc = fixture.fixture.rpc.bind(fixture.fixture);
   fixture.fixture.rpc = (name, params) => {
+    if (name === "planning_workspace_snapshot") return snapshotRpc(name);
     fixture.rpcCalls.push([name, params]);
     return new Promise((resolve) => setTimeout(() => resolve({ data: [null], error: null }), 200));
   };
   // Characterize the previous dependency: all nine reads, then enrichment.
   const loadSerialReference = async () => {
-    const tables = Object.keys(fixture.fixture.data);
+    const tables = Object.keys(fixture.fixture.data).filter(table => table !== "projects");
     const results = await Promise.all(tables.map((table) => fixture.fixture.from(table)));
     const profiles = results[tables.indexOf("profiles")].data.map(moduleStubs["@/lib/planning-profile-mappers"].mapProfile);
     return { people: await enrichProfiles(profiles, fixture.fixture) };
@@ -211,7 +236,7 @@ async function measureAvatarSchedule(profileTime, serial = false) {
     return value;
   });
   await flushScheduling();
-  assert.equal(fixture.executions.size, 9);
+  assert.equal(fixture.executions.size, 8);
   assert.ok([...fixture.executions.values()].every((count) => count === 1));
   setTimeout(() => fixture.resolveRead("profiles"), profileTime);
   setTimeout(() => fixture.resolveOtherReads(["profiles"]), 300);
@@ -237,9 +262,11 @@ test("avatar cleanup keeps both the reader and avatar phase open after RPC data 
   const fixture = await controlledReader();
   const cleanup = deferred();
   const transport = deferred();
-  fixture.fixture.rpc = () => transport.promise.finally(() => cleanup.promise);
+  const snapshotRpc = fixture.fixture.rpc.bind(fixture.fixture);
+  fixture.fixture.rpc = (name, params) => name === "planning_workspace_snapshot" ? snapshotRpc(name, params) : transport.promise.finally(() => cleanup.promise);
   let settled = false;
   const result = fixture.load().then((value) => { settled = true; return value; });
+  await flushScheduling();
   fixture.resolveOtherReads();
   await flushScheduling();
   transport.resolve({ data: [null], error: null });
@@ -251,10 +278,11 @@ test("avatar cleanup keeps both the reader and avatar phase open after RPC data 
   assert.notEqual(fixture.phases.find(({ name }) => name === "board.avatars").ended, null);
 });
 
-test.each(["result", "rejection", "missing-project"])("known base failure (%s) prevents a later avatar start", async (failure) => {
+test.each(["result", "rejection"])("known base failure (%s) prevents a later avatar start", async (failure) => {
   const fixture = await controlledReader();
   const error = new Error("base failed first");
   const result = fixture.load();
+  await flushScheduling();
   const observed = result.then((value) => ({ value }), (reason) => ({ reason }));
   if (failure === "rejection") fixture.reads.get("active_tasks").reject(error);
   else fixture.resolveRead(failure === "missing-project" ? "projects" : "active_tasks", { data: null, error: failure === "result" ? error : null });
@@ -270,6 +298,7 @@ test.each(["empty", "result", "rejection"])("profiles %s never dispatch avatars"
   const fixture = await controlledReader();
   const error = new Error("profile read failed");
   const result = fixture.load();
+  await flushScheduling();
   const observed = result.then((value) => ({ value }), (reason) => ({ reason }));
   if (failure === "rejection") fixture.reads.get("profiles").reject(error);
   else fixture.resolveRead("profiles", { data: [], error: failure === "result" ? error : null });
@@ -288,6 +317,7 @@ test.each(["result", "rejection"])("late base %s waits for started avatar cleanu
   const error = Object.assign(new Error("base priority"), { code: "42501" });
   let settled = false;
   const result = fixture.load().then((value) => ({ value }), (reason) => ({ reason })).then((outcome) => { settled = true; return outcome; });
+  await flushScheduling();
   fixture.resolveRead("profiles");
   await flushScheduling();
   if (failure === "rejection") fixture.reads.get("active_tasks").reject(error);
@@ -301,7 +331,7 @@ test.each(["result", "rejection"])("late base %s waits for started avatar cleanu
   avatar.reject(new Error("avatar must not win"));
   const outcome = await result;
   assert.deepEqual(outcome, failure === "rejection" ? { reason: error } : { value: { status: "unavailable" } });
-  if (failure === "rejection") assert.equal(fixture.phases.find(({ name }) => name === "board.project").ended, null);
+  if (failure === "rejection") assert.notEqual(fixture.phases.find(({ name }) => name === "board.project").ended, null);
 });
 
 test("unexpected avatar rejection is observed while base reads remain open and is propagated after their success", async () => {
@@ -309,7 +339,9 @@ test("unexpected avatar rejection is observed while base reads remain open and i
   const fixture = await controlledReader(() => avatar.promise);
   const error = new Error("unexpected avatar failure");
   const result = fixture.load();
+  await flushScheduling();
   const observed = result.then((value) => ({ value }), (reason) => ({ reason }));
+  await flushScheduling();
   fixture.resolveRead("profiles");
   await flushScheduling();
   avatar.reject(error);
@@ -321,12 +353,15 @@ test("unexpected avatar rejection is observed while base reads remain open and i
 test.each(["42501", "AbortError"])("real avatar fallback preserves profiles after %s and waits for transport cleanup", async (failure) => {
   const fixture = await controlledReader();
   const cleanup = deferred();
+  const snapshotRpc = fixture.fixture.rpc.bind(fixture.fixture);
   fixture.fixture.rpc = (name, params) => {
+    if (name === "planning_workspace_snapshot") return snapshotRpc(name);
     fixture.rpcCalls.push([name, params]);
     return fixture.rpc.promise.finally(() => cleanup.promise);
   };
   let settled = false;
   const result = fixture.load().then((value) => { settled = true; return value; });
+  await flushScheduling();
   fixture.resolveOtherReads();
   await flushScheduling();
   if (failure === "AbortError") fixture.rpc.reject(new DOMException("Cancelled", "AbortError"));
@@ -345,13 +380,17 @@ test.each(["PGRST202", "42883"])("early avatars retain the existing batch fallba
   const fixture = await controlledReader();
   fixture.fixture.data.profiles.push({ id: "other", name: "Other" });
   const calls = [];
+  const snapshotRpc = fixture.fixture.rpc.bind(fixture.fixture);
   fixture.fixture.rpc = async (name, params) => {
+    if (name === "planning_workspace_snapshot") return snapshotRpc(name, params);
     calls.push([name, params]);
     return name === "workspace_access_contexts"
       ? { data: null, error: { code } }
       : { data: null, error: params.p_profile_id === "other" ? { code: "42501" } : null };
   };
   const result = fixture.load();
+  await flushScheduling();
+  await flushScheduling();
   fixture.resolveRead("profiles");
   await flushScheduling();
   assert.deepEqual(calls, [
