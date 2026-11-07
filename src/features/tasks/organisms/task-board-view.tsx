@@ -8,6 +8,8 @@ import { normalizeStatus } from "@/lib/status";
 import type { Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 
 type TaskBoardViewProps = {
+  childProgressById?: import("@/features/planning/model/planning-board-query").PlanningBoardResult["childProgressById"];
+  completedHistory?: import("@/features/planning/model/planning-board-query").PlanningBoardColumn & { readStatus: import("@/features/planning/model/planning-state").PlanningReadStatus; onLoadMore(): void; onRefresh(): void };
   statuses: TaskStatus[];
   itemType: Task["taskType"];
   visibleTasks: Task[];
@@ -34,6 +36,8 @@ type TaskBoardViewProps = {
 
 export function TaskBoardView({
   statuses,
+  completedHistory,
+  childProgressById,
   itemType,
   visibleTasks,
   relations,
@@ -85,17 +89,19 @@ export function TaskBoardView({
         const orderedTasks = status === "Erledigt"
           ? [...tasks].sort((left, right) => {
               const updatedDifference = Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || "");
-              return Number.isNaN(updatedDifference) || updatedDifference === 0
+              return (Number.isNaN(updatedDifference) || updatedDifference === 0
                 ? left.order - right.order
-                : updatedDifference;
+                : updatedDifference) || left.id.localeCompare(right.id, "en");
             })
           : tasks;
         const completedExpanded = expandedCompletedItemType === itemType;
-        const renderedTasks = status === "Erledigt" && !completedExpanded
+        const renderedTasks = status === "Erledigt" && !completedHistory && !completedExpanded
           ? orderedTasks.slice(0, completedCardLimit)
           : orderedTasks;
         const hiddenCompletedCount = status === "Erledigt" ? tasks.length - renderedTasks.length : 0;
-        const isEmpty = tasks.length === 0;
+        const history = status === "Erledigt" ? completedHistory : undefined;
+        const total = history?.total ?? tasks.length;
+        const isEmpty = total === 0;
         const isDropTarget = dragOverStatus === status;
         const isAvailableEmptyTarget = Boolean(draggedTaskId) && isEmpty;
         return (
@@ -103,7 +109,7 @@ export function TaskBoardView({
             key={status}
             data-board-column-status={status}
             data-collapsed={isEmpty}
-            aria-label={`${status}, ${tasks.length} ${tasks.length === 1 ? itemLabel : `${itemLabel}s`}${isEmpty ? ", eingeklappt" : ""}`}
+            aria-label={`${status}, ${total} ${total === 1 ? itemLabel : `${itemLabel}s`}${isEmpty ? ", eingeklappt" : ""}`}
             onDragOver={(event) => {
               event.preventDefault();
               event.dataTransfer.dropEffect = "move";
@@ -134,7 +140,7 @@ export function TaskBoardView({
                   size="sm"
                   className={isEmpty ? "max-w-full justify-center whitespace-normal px-1.5 text-center leading-4" : undefined}
                 />
-                <span className="text-xs tabular-nums text-slate-500">({tasks.length})</span>
+                <span className="text-xs tabular-nums text-slate-500">({total})</span>
               </div>
               <button
                 type="button"
@@ -157,6 +163,7 @@ export function TaskBoardView({
                     allTasks={allTasks}
                     blockers={blockers}
                     childItems={directChildrenByParent.get(task.id) || []}
+                    childProgress={childProgressById?.[task.id]}
                     onOpenTask={onOpenTask}
                     onStatusEditingStart={() => onBeginTaskEdit?.(task)}
                     onStatusChange={canUpdateStatus ? (status) => onChangeTaskStatus(task, status) : undefined}
@@ -183,7 +190,15 @@ export function TaskBoardView({
                   )}
                 </div>
               )}
-              {status === "Erledigt" && tasks.length > completedCardLimit ? (
+              {history ? <div className="grid gap-2">
+                <p role="status" aria-live="polite" className="text-center text-xs text-slate-500">{history.loaded} von {history.total} geladen</p>
+                {history.readStatus === "unavailable" ? <p role="alert" className="text-xs text-slate-600">Weitere erledigte konnten nicht geladen werden.</p> : null}
+                {history.readStatus === "stale" ? <p role="status" className="text-xs text-slate-600">Die Ergebnisliste hat sich geändert.</p> : null}
+                {history.continuation || history.readStatus === "stale" ? <button type="button" aria-disabled={history.readStatus === "loading"} onClick={() => { if (history.readStatus === "loading") return; if (history.readStatus === "stale") history.onRefresh(); else history.onLoadMore(); }} className="min-h-11 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60">
+                  {history.readStatus === "loading" ? "Erledigte werden geladen …" : history.readStatus === "unavailable" ? "Erledigte erneut laden" : history.readStatus === "stale" ? "Erledigte aktualisieren" : "Weitere erledigte laden"}
+                </button> : null}
+              </div> : null}
+              {!history && status === "Erledigt" && tasks.length > completedCardLimit ? (
                 <button
                   type="button"
                   aria-expanded={completedExpanded}

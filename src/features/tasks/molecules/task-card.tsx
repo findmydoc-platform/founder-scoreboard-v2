@@ -177,11 +177,13 @@ function TaskCardChildItem({
 function TaskCardChildRollup({
   task,
   childItems,
+  childProgress,
   onOpenTask,
   viewerOpenSubIssueIds,
 }: {
   task: Task;
   childItems: Task[];
+  childProgress?: ReturnType<typeof taskChildProgress>;
   onOpenTask: (taskId: string) => void;
   viewerOpenSubIssueIds: string[];
 }) {
@@ -189,7 +191,7 @@ function TaskCardChildRollup({
   const [showAllOtherChildren, setShowAllOtherChildren] = useState(false);
   const generatedId = useId().replaceAll(":", "");
   const listId = `task-card-children-${generatedId}`;
-  const { completed, percentage, total, unfinished } = taskChildProgress(childItems);
+  const { completed, percentage, total, unfinished } = childProgress || taskChildProgress(childItems);
   const plural = directChildPluralLabel(task.taskType);
   const completedWithOpenChildren = normalizeStatus(task.status) === "Erledigt" && unfinished > 0;
   const sortedChildren = [...childItems].sort((first, second) => {
@@ -447,6 +449,7 @@ export function TaskCard({
   blockers,
   subIssues = [],
   childItems,
+  childProgress,
   onOpenTask,
   onStatusChange,
   onStatusEditingStart,
@@ -465,6 +468,7 @@ export function TaskCard({
   blockers: TaskBlocker[];
   subIssues?: Task[];
   childItems?: Task[];
+  childProgress?: ReturnType<typeof taskChildProgress>;
   onOpenTask: (taskId: string) => void;
   onStatusChange?: (status: TaskStatus) => void;
   onStatusEditingStart?: () => void;
@@ -535,6 +539,7 @@ export function TaskCard({
       <TaskCardChildRollup
         task={task}
         childItems={directChildren}
+        childProgress={childProgress}
         onOpenTask={onOpenTask}
         viewerOpenSubIssueIds={viewerOpenSubIssueIds}
       />

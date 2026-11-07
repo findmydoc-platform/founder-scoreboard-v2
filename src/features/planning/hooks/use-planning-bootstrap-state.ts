@@ -56,6 +56,8 @@ export function usePlanningBootstrapState({
   const { workspace, setWorkspace, navigateWorkspaceHref } = usePlanningWorkspace(initialWorkspace, planningState);
   const viewState = usePlanningViewState({
     initialData: safeInitialData,
+    initialQuery: initialWorkspaceRead?.query || initialWorkspaceRead?.board?.query,
+    initialView: safeInitialData.profileUiPreferences.find(item => item.profileId === initialCurrentProfile?.id)?.defaultTaskView,
   });
   const { setSelectedTaskId } = viewState;
   const [isPending, startTransition] = useTransition();
@@ -116,6 +118,7 @@ export function usePlanningBootstrapState({
     enabled: source === "supabase" && auth.protectedDataLoaded && workspace === "planning",
     refreshCurrentWorkspaceModel: dataRefresh.refreshCurrentWorkspaceModel,
     tasks: data.tasks,
+    authoritativeRevision: planningState.board().result?.workspaceRevision,
   });
 
   return {

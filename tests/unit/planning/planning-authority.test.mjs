@@ -34,7 +34,7 @@ test("the planning board preserves its project and current actor through the pub
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) {
       if (url.pathname === "/rest/v1/projects") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", range_label: "", review_objection_window_hours: 48 });
-      return Response.json([]);
+      return Response.json([], { headers: { "content-range": "*/0" } });
     }
     return authFetch(request);
   });
@@ -52,7 +52,7 @@ test("a read grant cannot change its bound operation after authorization", async
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return url.pathname === "/rest/v1/projects"
-      ? Response.json({ id: "findmydoc-founder-execution", name: "Planning" }) : Response.json([]);
+      ? Response.json({ id: "findmydoc-founder-execution", name: "Planning" }) : Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   const input = { credential: { kind: "session-request", request: protocol.request() }, action: "planning.revision.read" };
@@ -102,7 +102,7 @@ test.each([
   const authFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
-    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([]);
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   const routePath = operation === "decide" ? "src/app/api/tasks/[id]/review/route.ts" : `src/app/api/tasks/[id]/review/${operation}/route.ts`;
@@ -622,7 +622,7 @@ test("server rendered planning uses the same real cookie-bound read policy", asy
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return url.pathname === "/rest/v1/projects"
-      ? Response.json({ id: "findmydoc-founder-execution", name: "Planning" }) : Response.json([]);
+      ? Response.json({ id: "findmydoc-founder-execution", name: "Planning" }) : Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   const jar = protocol.cookieJar();
@@ -856,7 +856,7 @@ test("ordinary planning data outages retain the safe HTTP unavailable response",
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname === "/rest/v1/projects") { projectReads += 1; return Response.json({ code: "storage_unavailable", message: "Private upstream detail" }, { status: 503 }); }
-    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([]);
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });

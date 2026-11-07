@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type SetStateAction } from "react";
+import { useCallback, useMemo, useState, type SetStateAction } from "react";
 import type { InitiativeDraft } from "@/features/projects/model/hierarchy-state";
 import type { EpicDeleteTarget } from "@/features/projects/organisms/epic-delete-dialog";
 import type { EpicDraft } from "@/features/projects/model/hierarchy-state";
@@ -13,22 +13,7 @@ import { dateUrlField, enumUrlField, multiEnumUrlField, stringUrlField, useTable
 
 export type PlanningFilters = PlanningFilterPreferences;
 
-export const DEFAULT_PLANNING_FILTERS: PlanningFilters = {
-  query: "",
-  assignee: "Alle",
-  status: "Alle",
-  priority: "Alle",
-  review: "Alle",
-  initiativeId: "Alle",
-  quick: [],
-  sprintId: "Alle",
-  workstream: "Alle",
-  risk: "Alle",
-  targetFrom: "",
-  targetTo: "",
-  sort: "priority",
-  direction: "asc",
-};
+export { DEFAULT_PLANNING_FILTERS } from "../model/planning-board-query";
 
 type PlanningBoardUrlState = {
   level: PlanningLevel;
@@ -59,12 +44,16 @@ const planningBoardUrlSchema: TableUrlSchema<PlanningBoardUrlState> = {
 
 type UsePlanningViewStateOptions = {
   initialData: PlanningShellState;
+  initialView?: ViewMode;
+  initialQuery?: import("../model/planning-board-query").PlanningBoardQuery;
 };
 
 export function usePlanningViewState({
   initialData,
+  initialQuery,
+  initialView,
 }: UsePlanningViewStateOptions) {
-  const [view, setView] = useState<ViewMode>("board");
+  const [view, setView] = useState<ViewMode>(() => initialQuery?.view === "complete" ? initialView || "table" : "board");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
@@ -79,12 +68,13 @@ export function usePlanningViewState({
     horizonWeeks: 6,
     targetSprintNumber: 0,
   });
-  const { state: filters, updateState: updateFilters, resetState: resetFilters, hasUrlState: hasPlanningFilterUrlState } = useTableUrlState({ namespace: "tasks", schema: planningFilterSchema });
+  const initialBoardState = useMemo(() => initialQuery ? { level: initialQuery.level, parentId: initialQuery.parentId } : undefined, [initialQuery]);
+  const { state: filters, updateState: updateFilters, resetState: resetFilters, hasUrlState: hasPlanningFilterUrlState } = useTableUrlState({ namespace: "tasks", schema: planningFilterSchema, initialState: initialQuery?.filters });
   const {
     state: planningBoardUrlState,
     updateState: updatePlanningBoardUrlState,
     hasUrlState: hasPlanningBoardUrlState,
-  } = useTableUrlState({ namespace: "board", schema: planningBoardUrlSchema });
+  } = useTableUrlState({ namespace: "board", schema: planningBoardUrlSchema, initialState: initialBoardState });
   const setFilters = useCallback((next: SetStateAction<PlanningFilters>, history: TableUrlHistoryMode = "push") => {
     updateFilters((current) => typeof next === "function" ? next(current) : next, history);
   }, [updateFilters]);

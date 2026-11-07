@@ -11,6 +11,7 @@ type UsePlanningRemoteChangesOptions = {
   enabled: boolean;
   refreshCurrentWorkspaceModel: () => Promise<void>;
   tasks: Task[];
+  authoritativeRevision?: import("../model/planning-revision").PlanningTaskRevision;
 };
 
 export function usePlanningRemoteChanges({
@@ -18,10 +19,11 @@ export function usePlanningRemoteChanges({
   enabled,
   refreshCurrentWorkspaceModel,
   tasks,
+  authoritativeRevision,
 }: UsePlanningRemoteChangesOptions) {
   const [planningRemoteChangesAvailable, setPlanningRemoteChangesAvailable] = useState(false);
   const [planningRemoteChangesRefreshing, setPlanningRemoteChangesRefreshing] = useState(false);
-  const currentRevision = useMemo(() => planningTaskRevision(tasks), [tasks]);
+  const currentRevision = useMemo(() => authoritativeRevision || planningTaskRevision(tasks), [tasks, authoritativeRevision]);
   const currentRevisionRef = useRef(currentRevision);
   const checkingRef = useRef(false);
   const mountedRef = useRef(true);

@@ -41,7 +41,7 @@ export type PlanningTaskSaveCheck = {
   readStatus: PlanningReadStatus | "not-needed";
 };
 export type PlanningTaskSaveStatus = "saved" | "saving" | "rejected" | "unconfirmed";
-export type PlanningBoardView = { tasks: readonly Task[]; freshness: "current" | "stale" };
+export type PlanningBoardView = { tasks: readonly Task[]; freshness: "current" | "stale"; result?: import("./planning-board-query").PlanningBoardResult; queryKey?: string; pageStatus?: PlanningReadStatus; readStatus?: PlanningReadStatus };
 export type PlanningReadStatus = "not-loaded" | "loading" | "current" | "stale" | "unavailable" | "forbidden";
 export type PlanningTaskDetailView = {
   task: Task | null;
@@ -123,6 +123,8 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   profileSettings(profileId: string): import("@/features/profile/model/profile-settings-contract").ProfileSettingsView;
   saveOwnProfileSettings(profileId: string, patch: import("@/features/profile/model/profile-settings-contract").OwnProfileSettingsPatch): Promise<import("@/features/profile/model/profile-settings-contract").ProfileSettingsResult>;
   board(): PlanningBoardView;
+  ensureBoardQuery(query: import("./planning-board-query").PlanningBoardQueryInput): Promise<boolean>;
+  loadCompletedHistory(): Promise<boolean>;
   workspace(workspace: AppWorkspace): PlanningWorkspaceView;
   taskDetail(taskId: string): PlanningTaskDetailView;
   protectedCache(workspace?: AppWorkspace): PlanningConfirmedSnapshot | null;
