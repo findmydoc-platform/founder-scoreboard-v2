@@ -58,9 +58,12 @@ function createSupabaseFixture(options = {}) {
       if (id === "parent") return { data: rows.parent, error: null };
       if (parentId === "target") {
         let data = options.children || [rows.child];
+        const count = data.length;
         if (call.range) data = data.slice(call.range[0], call.range[1] + 1);
+        if (options.upstreamCap) data = data.slice(0, options.upstreamCap);
+        if (options.incompleteChildren && call.range?.[0] > 0) data = [];
         if (call.limits.length) data = data.slice(0, call.limits[0]);
-        return { data, error: null };
+        return { data, count, error: null };
       }
       if (ids) return { data: ids.includes("related") ? [rows.related] : [], error: null };
       throw new Error("Task read was not constrained to an item, parent, or related IDs.");
@@ -93,11 +96,13 @@ function createSupabaseFixture(options = {}) {
     if (call.table === "task_links") {
       const ids = call.in.find(([field]) => field === "task_id")?.[1] || [];
       let data = (options.links || []).filter((link) => ids.includes(link.task_id));
+      const count = data.length;
       if (call.range) data = data.slice(call.range[0], call.range[1] + 1);
       else data = data.slice(0, 1000);
-      return { data, error: null };
+      if (options.upstreamCap) data = data.slice(0, options.upstreamCap);
+      return { data, count, error: null };
     }
-    return { data: [], error: null };
+    return { data: [], count: 0, error: null };
   }
 
   return {
@@ -246,4 +251,34 @@ test("task detail loads evidence links beyond the server response page", async (
   assert.equal(result.status, "ready");
   assert.equal(subIssueEvidenceSummary(result.model.item, result.model.children).count, 1);
   assert.equal(taskHasValidReviewEvidence(result.model.item, result.model.children), true);
+});
+
+
+test("task detail enumerates direct children and supporting evidence below the requested upstream page size", async () => {
+  const children = Array.from({ length: 9 }, (_, index) => ({
+    id: `capped-child-${index + 1}`, title: `Child ${index + 1}`, task_type: "sub_issue",
+    parent_task_id: "target", sort_order: index,
+  }));
+  const links = Array.from({ length: 8 }, (_, index) => ({
+    id: index + 1, task_id: "capped-child-9", type: index === 7 ? "evidence" : "github_issue",
+    label: "Reference", url: `https://example.com/capped/${index}`, position: index, metadata: {},
+  }));
+  const result = await createSupabaseTaskDetailReadModel(createSupabaseFixture({ children, links, upstreamCap: 3 })).load(
+    { itemId: "target" }, { authorized: true, actorProfileId: "person" },
+  );
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.model.children.map(child => child.id), [
+    "capped-child-1", "capped-child-2", "capped-child-3", "capped-child-4", "capped-child-5",
+    "capped-child-6", "capped-child-7", "capped-child-8", "capped-child-9",
+  ]);
+  assert.equal(subIssueEvidenceSummary(result.model.item, result.model.children).count, 1);
+});
+
+
+test("task detail reports an interrupted counted child list unavailable instead of complete", async () => {
+  const children = Array.from({ length: 9 }, (_, index) => ({ id: `child-${index}`, task_type: "sub_issue", parent_task_id: "target" }));
+  const result = await createSupabaseTaskDetailReadModel(createSupabaseFixture({ children, upstreamCap: 3, incompleteChildren: true })).load(
+    { itemId: "target" }, { authorized: true, actorProfileId: "person" },
+  );
+  assert.deepEqual(result, { status: "unavailable" });
 });

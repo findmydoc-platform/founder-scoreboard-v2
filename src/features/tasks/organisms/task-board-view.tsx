@@ -1,13 +1,14 @@
 import { ArrowDownToLine, Plus } from "lucide-react";
 import { useState, type DragEvent } from "react";
 import { TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
-import { TaskCard } from "@/features/tasks/molecules/task-card";
+import { TaskCard, type TaskCardChildList } from "@/features/tasks/molecules/task-card";
 import { groupDirectChildrenByParent } from "@/features/tasks/model/task-card-presentation";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { normalizeStatus } from "@/lib/status";
 import type { Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 
 type TaskBoardViewProps = {
+  childListForTask?: (taskId: string) => TaskCardChildList;
   childProgressById?: import("@/features/planning/model/planning-board-query").PlanningBoardResult["childProgressById"];
   completedHistory?: import("@/features/planning/model/planning-board-query").PlanningBoardColumn & { readStatus: import("@/features/planning/model/planning-state").PlanningReadStatus; onLoadMore(): void; onRefresh(): void };
   statuses: TaskStatus[];
@@ -38,6 +39,7 @@ export function TaskBoardView({
   statuses,
   completedHistory,
   childProgressById,
+  childListForTask,
   itemType,
   visibleTasks,
   relations,
@@ -164,6 +166,7 @@ export function TaskBoardView({
                     blockers={blockers}
                     childItems={directChildrenByParent.get(task.id) || []}
                     childProgress={childProgressById?.[task.id]}
+                    childList={childListForTask?.(task.id)}
                     onOpenTask={onOpenTask}
                     onStatusEditingStart={() => onBeginTaskEdit?.(task)}
                     onStatusChange={canUpdateStatus ? (status) => onChangeTaskStatus(task, status) : undefined}

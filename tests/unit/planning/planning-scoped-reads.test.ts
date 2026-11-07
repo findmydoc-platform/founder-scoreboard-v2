@@ -155,3 +155,67 @@ test("a newer scoped read protects common identity from an older detail response
   await loading;
   expect(planning.taskDetail(task.id)).toMatchObject({ task: { title: "New task", updatedAt: "opaque-new" }, readStatus: "stale" });
 });
+
+
+test("direct child lists become complete only after their own shared detail read and retain exact membership", async () => {
+  const firstChild = { ...task, id: "child-a", taskType: "sub_issue" as const, parentTaskId: task.id };
+  const otherChild = { ...firstChild, id: "child-b" };
+  let children = [firstChild, otherChild];
+  const { planning } = createPlanningState({ userId: "user-a", initialData: { ...initial, tasks: [task, firstChild] }, adapter: {
+    saveTask: async () => ({ task }), readWorkspace: async () => null, readTaskDetail: async () => ({ model: { ...detail(), children } }),
+  } });
+  expect(planning.taskDetail(task.id)).toMatchObject({ children: [], childrenReadStatus: "not-loaded" });
+  await planning.loadTaskDetail(task.id);
+  expect(planning.taskDetail(task.id)).toMatchObject({ children: [firstChild, otherChild], childrenReadStatus: "current" });
+  children = [otherChild];
+  await planning.loadTaskDetail(task.id);
+  expect(planning.taskDetail(task.id)).toMatchObject({ children: [otherChild], childrenReadStatus: "current" });
+  expect(planning.taskDetail(firstChild.id).task).toMatchObject({ id: firstChild.id });
+});
+
+
+test("simultaneous child and panel reads share one detail response and an ended session discards its child list", async () => {
+  const response = deferred<{ model: TaskDetailModel }>();
+  let reads = 0;
+  let sessionChanged!: (userId: string | null) => void;
+  const { planning } = createPlanningState({ userId: "user-a", initialData: initial, adapter: {
+    saveTask: async () => ({ task }), readWorkspace: async () => null,
+    readTaskDetail: () => { reads++; return response.promise; },
+    subscribeSession: listener => { sessionChanged = listener; return () => {}; },
+  } });
+  const first = planning.loadTaskDetail(task.id);
+  const joined = planning.loadTaskDetail(task.id);
+  expect(first).toBe(joined);
+  expect(reads).toBe(1);
+  expect(planning.taskDetail(task.id).childrenReadStatus).toBe("loading");
+  sessionChanged(null);
+  response.resolve({ model: { ...detail(), children: [{ ...task, id: "late-child", parentTaskId: task.id }] } });
+  await expect(first).resolves.toEqual({ ok: false });
+  expect(planning.taskDetail(task.id)).toMatchObject({ task: null, children: [], childrenReadStatus: "not-loaded" });
+});
+
+test("late child detail preserves a confirmed child edit and marks its list stale", async () => {
+  const child = { ...task, id: "child-a", title: "Before", taskType: "sub_issue" as const, parentTaskId: task.id };
+  const response = deferred<{ model: TaskDetailModel }>();
+  const { planning } = createPlanningState({ userId: "user-a", initialData: { ...initial, tasks: [task, child] }, adapter: {
+    saveTask: async () => ({ task: { ...child, title: "Confirmed child", updatedAt: "after" } }),
+    readWorkspace: async () => null, readTaskDetail: () => response.promise,
+  } });
+  const loading = planning.loadTaskDetail(task.id);
+  await planning.saveTask(child, { title: "Confirmed child" });
+  response.resolve({ model: { ...detail(), children: [child] } });
+  await loading;
+  expect(planning.taskDetail(task.id)).toMatchObject({ children: [{ id: child.id, title: "Confirmed child", updatedAt: "after" }], childrenReadStatus: "stale" });
+});
+
+
+test("a later parent summary retains a loaded child list and marks it stale for re-expansion", async () => {
+  const child = { ...task, id: "child-a", taskType: "sub_issue" as const, parentTaskId: task.id, description: "Full child content" };
+  const { planning } = createPlanningState({ userId: "user-a", initialData: initial, adapter: {
+    saveTask: async () => ({ task }), readTaskDetail: async () => ({ model: { ...detail(), children: [child] } }),
+    readWorkspace: async () => ({ data: { ...initial, tasks: [{ ...task, detailAvailability: "summary" }] }, taskCoverage: "partial", coverage: { tasks: "partial" } }),
+  } });
+  await planning.loadTaskDetail(task.id);
+  await planning.refreshWorkspace("planning");
+  expect(planning.taskDetail(task.id)).toMatchObject({ children: [child], childrenReadStatus: "stale" });
+});

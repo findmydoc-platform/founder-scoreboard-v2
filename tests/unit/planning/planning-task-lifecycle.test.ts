@@ -57,7 +57,8 @@ test("withdrawal removes exactly its confirmed scope and late reads, related dat
   await refresh;
   expect(planning.board().tasks.map(task => task.id)).toEqual([original.id]);
   expect(planning.protectedCache()?.tasks.map(task => task.id)).toEqual([original.id]);
-  expect(planning.taskDetail(child.id)).toMatchObject({ task: null, comments: [], reviews: [] });
+  expect(planning.taskDetail(child.id)).toMatchObject({ task: null, comments: [], reviews: [], removed: true });
+  expect(planning.taskDetail("not-in-a-loaded-page").removed).toBe(false);
   expect(planning.taskDetail(hiddenChild.id).task).toBeNull();
 });
 

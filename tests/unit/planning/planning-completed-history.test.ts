@@ -110,7 +110,7 @@ test("personal history includes a foreign completed parent through open assigned
   if (result.status !== "ready") throw new Error("Expected personal parent");
   expect(result.model.board?.cardIds).toEqual(["done-0044"]);
   expect(result.model.board?.viewerOpenSubIssueIdsByDeliverableId).toEqual({ "done-0044": ["assigned-child"] });
-  expect(result.model.items.filter(row => row.parentTaskId === "done-0044")).toHaveLength(1008);
+  expect(result.model.items.filter(row => row.parentTaskId === "done-0044")).toHaveLength(0);
   expect(result.model.board?.childProgressById["done-0044"]).toEqual({ completed: 1007, total: 1008, unfinished: 1, percentage: 100 });
   const parentFilter = await reader.load({ ...context, query: { filters: { quick: ["mine"], priority: "P0" } } });
   if (parentFilter.status !== "ready") throw new Error("Expected empty parent-filter result");
@@ -152,6 +152,7 @@ test("waiting and Blocker context and exact child progress do not depend on filt
   if (result.status !== "ready") throw new Error("Expected contextual Board");
   expect(result.model.board?.cardIds).toEqual(["active"]);
   expect(result.model.board?.childProgressById.active).toEqual({ total: 2, completed: 1, unfinished: 1, percentage: 50 });
+  expect(result.model.items.some(item => item.id === "child-open" || item.id === "child-done")).toBe(false);
   expect(result.model.blockers).toMatchObject([{ taskId: "active", status: "open" }]);
   expect(hasOpenWaitingRelation("active", [...result.model.items], [...result.model.relationships])).toBe(true);
 });
