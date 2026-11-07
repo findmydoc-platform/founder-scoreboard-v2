@@ -1,7 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { useEffect, useState } from "react";
-import { expect, userEvent, waitFor, within } from "storybook/test";
+import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import { PlanningApp } from "./PlanningApp";
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
 import { emptyPlanningShellState } from "./model/planning-shell-state";
@@ -28,7 +28,8 @@ function page(input: PlanningBoardQueryInput = {}) {
   };
 }
 const initial = page();
-function ActiveColumnsFlow() {
+function ActiveColumnsFlow({ holdColumnPage = false }: { holdColumnPage?: boolean }) {
+  const [releasePage, setReleasePage] = useState<(() => void) | null>(null);
   const [ready, setReady] = useState(false);
   const [reads, setReads] = useState(0);
   useEffect(() => {
@@ -36,7 +37,7 @@ function ActiveColumnsFlow() {
     const previous = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
     let attempts = 0;
-    const restore = mockAccountLifecycle("google", { linked: true }, input => {
+    const restore = mockAccountLifecycle("google", { linked: true }, (input, init) => {
       const url = new URL(String(input), "http://localhost:3000");
       if (url.pathname === "/api/auth/session") return Response.json({ session });
       if (url.pathname === "/api/planning-board-data") {
@@ -44,8 +45,10 @@ function ActiveColumnsFlow() {
         const query = JSON.parse(url.searchParams.get("scope") || "{}");
         if (query.view === "complete") return Response.json({ model: { ...page(query), board: undefined, items: [active, ...completed], coverage: { ...initial.coverage, items: "complete" } }, currentProfile: profile });
         if (query.column === "Offen" && query.continuation && ++attempts === 1) return Response.json({ error: "History unavailable" }, { status: 503 });
+        if (holdColumnPage && query.column === "Review" && query.continuation) return new Promise<Response>(resolve => setReleasePage(() => () => { resolve(Response.json({ model: page(query), currentProfile: profile })); setReleasePage(null); }));
         return Response.json({ model: page(query), currentProfile: profile });
       }
+      if (url.pathname === `/api/tasks/${active.id}` && init?.method === "PATCH") return Response.json({ task: { ...active, ...JSON.parse(String(init.body)), updatedAt: "saved-status-r2" } });
       if (url.pathname === "/api/planning-revision") return Response.json({ revision: initial.board.workspaceRevision });
       if (url.pathname === "/api/github-app/status") return Response.json({ installation: { available: false }, user: { connected: false } });
       if (url.pathname === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [] });
@@ -53,8 +56,8 @@ function ActiveColumnsFlow() {
     });
     queueMicrotask(() => setReady(true));
     return () => { restore(); if (previous === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previous); };
-  }, []);
-  return <><output aria-label="Column reads">{reads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session)} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  }, [holdColumnPage]);
+  return <>{releasePage ? <button type="button" onClick={releasePage}>Seitenantwort fortsetzen</button> : null}<output aria-label="Column reads">{reads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session)} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = { title: "Planning/Active columns flow", component: ActiveColumnsFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof ActiveColumnsFlow>;
 export default meta;
@@ -75,7 +78,9 @@ export const ColumnsLoadAndRetryIndependently: Story = {
     await waitFor(() => expect(within(open).getByRole("button", { name: "Offen erneut laden" })).toBeVisible());
     await expect(within(open).getByRole("button", { name: "Offen erneut laden" })).toHaveFocus();
     await userEvent.click(within(review).getByRole("button", { name: "Weitere Karten in Review laden" }));
+    const reviewScroll = board.scrollLeft;
     await waitFor(() => expect(within(review).getByText("25 von 25 geladen")).toBeVisible());
+    await expect(board.scrollLeft).toBe(reviewScroll);
     await expect(within(open).getByText("20 von 25 geladen")).toBeVisible();
     await expect(within(board).getByText("Active work stays visible")).toBeVisible();
     await userEvent.click(within(open).getByRole("button", { name: "Offen erneut laden" }));
@@ -83,5 +88,27 @@ export const ColumnsLoadAndRetryIndependently: Story = {
     await expect(within(open).getByRole("button", { name: "Offen vollständig geladen" })).toHaveFocus();
     await expect(within(open).getByText("Offen work 25")).toBeVisible();
     await expect(canvas.getByLabelText("Column reads")).toHaveTextContent("3");
+  },
+};
+
+export const StatusDragRemainsAvailableWhileAnotherColumnLoads: Story = {
+  args: { holdColumnPage: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const board = await canvas.findByRole("region", { name: "Board nach Status" });
+    const review = within(board).getByRole("region", { name: /Review, 25/ });
+    await userEvent.click(within(review).getByRole("button", { name: "Weitere Karten in Review laden" }));
+    await expect(within(review).getByRole("button", { name: "Review wird geladen …" })).toHaveAttribute("aria-disabled", "true");
+    const card = within(board).getByRole("link", { name: active.title }).closest("article")!;
+    const target = within(board).getByRole("region", { name: /In Arbeit, 0/ });
+    const transfer = new DataTransfer();
+    fireEvent.dragStart(card, { dataTransfer: transfer });
+    fireEvent.dragOver(target, { dataTransfer: transfer });
+    fireEvent.drop(target, { dataTransfer: transfer });
+    fireEvent.dragEnd(card, { dataTransfer: transfer });
+    await waitFor(() => expect(within(target).getByRole("link", { name: active.title })).toBeVisible());
+    await userEvent.click(canvas.getByRole("button", { name: "Seitenantwort fortsetzen" }));
+    await waitFor(() => expect(within(review).getByText("25 von 25 geladen")).toBeVisible());
+    await expect(within(target).getByRole("link", { name: active.title })).toBeVisible();
   },
 };
