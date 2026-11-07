@@ -150,7 +150,7 @@ test.each([401, 503])("live authentication failure %s fails before workspace ent
 test.each([null, "administrator"])("an unsupported live profile role %j cannot grant Board reads", async role => {
   protocol.state.role = role;
   expect(await authorize()).toMatchObject({ ok: false, status: 403, code: "workspace_access_denied" });
-  expect(names()).not.toContain("projects");
+  expect(names()).not.toContain("planning_workspace_snapshot");
 });
 
 test("a changed profile binding at entry cannot grant a Board capability", async () => {
@@ -181,7 +181,7 @@ test("a session revoked after entry cannot read the Board", async () => {
   expect(result.ok).toBe(true);
   state.dispatchDenied = true;
   expect(await result.planning.loadBoard()).toEqual({ status: "forbidden" });
-  expect(names()).not.toContain("projects");
+  expect(names()).not.toContain("planning_workspace_snapshot");
 });
 
 test("an expired capability cannot dispatch Board reads", async () => {
@@ -189,7 +189,7 @@ test("an expired capability cannot dispatch Board reads", async () => {
   expect(result.ok).toBe(true);
   vi.setSystemTime(Date.now() + 900001);
   expect(await result.planning.loadBoard()).toEqual({ status: "forbidden" });
-  expect(names()).not.toContain("projects");
+  expect(names()).not.toContain("planning_workspace_snapshot");
 });
 
 test("warm Board entry retains the original membership deadline", async () => {
