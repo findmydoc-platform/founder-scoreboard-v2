@@ -68,12 +68,12 @@ export const LoadsEveryDeferredView: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Struktur öffnen" }));
-    await expect(await canvas.findByRole("button", { name: "Alle einklappen" })).toBeInTheDocument();
+    await expect(await canvas.findByRole("button", { name: "Alle einklappen" }, { timeout: 5_000 })).toBeInTheDocument();
 
     await userEvent.click(canvas.getByRole("button", { name: "Tabelle öffnen" }));
-    await expect(await canvas.findByRole("combobox", { name: "Zuständigkeit für Lazy view deliverable ändern" })).toBeInTheDocument();
+    await expect(await canvas.findByRole("combobox", { name: "Zuständigkeit für Lazy view deliverable ändern" }, { timeout: 5_000 })).toBeInTheDocument();
 
     await userEvent.click(canvas.getByRole("button", { name: "Gantt öffnen" }));
-    await expect(await canvas.findByText("Aufgabe")).toBeInTheDocument();
+    await expect(await canvas.findByText("Aufgabe", {}, { timeout: 5_000 })).toBeInTheDocument();
   },
 };

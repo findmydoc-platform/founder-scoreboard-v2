@@ -47,7 +47,9 @@ export function normalizePlanningBoardQuery(input: PlanningBoardQueryInput = {})
   return { view: input.view === "complete" ? "complete" : "board", level: input.level === "epic" || input.level === "initiative" ? input.level : "deliverable", parentId: typeof input.parentId === "string" ? input.parentId.slice(0, 512) : "all", filters, ordering: "priority-order-id-and-completed-updated-desc-order-id" };
 }
 export function planningBoardQueryKey(query: PlanningBoardQueryInput = {}) {
-  return JSON.stringify(normalizePlanningBoardQuery(query));
+  const normalized = normalizePlanningBoardQuery(query);
+  // Complete views receive the whole authorized Planning collection and filter it locally.
+  return JSON.stringify(normalized.view === "complete" ? { view: "complete" } : normalized);
 }
 export function planningBoardQueryFromSearchParams(params: URLSearchParams): PlanningBoardQueryInput {
   const filters: Record<string, unknown> = {};

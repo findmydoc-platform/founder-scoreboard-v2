@@ -26,7 +26,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
   const preferredFilters = preference && { ...preference.planningFilters, ...(preference.defaultWorkspace === "mine" ? { assignee: "Alle", quick: [...preference.planningFilters.quick, "mine"] } : {}) };
   const query = normalizePlanningBoardQuery({ ...input, view: input.view || (preference?.defaultTaskView && preference.defaultTaskView !== "board" ? "complete" : "board"), filters: input.filters || preferredFilters });
   const queryKey = planningBoardQueryKey(query);
-  const revision = digest([model.items, model.relationships, model.blockers, model.people, model.sprints, model.preferences]);
+  const revision = digest([model.items, model.relationships, model.blockers, model.people, model.sprints]);
   const statuses = [...taskStatuses, "Pausiert" as TaskStatus];
   const column = input.column || (input.continuation ? "Erledigt" : undefined);
   if (column && !(query.level === "deliverable" ? statuses : strategicPlanningStatuses).includes(column)) return { status: "staleContinuation" };
@@ -42,7 +42,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
   }
   if (query.view === "complete") {
     if (column || offset) return { status: "staleContinuation" };
-    return { status: "ready", model: { ...model, query } };
+    return { status: "ready", model: { ...model, query, queryRevision: revision } };
   }
   const data = planningWorkspaceModelToPlanningShellState(model);
   const filtered = buildPlanningTaskTableViewModel({ currentProfile: model.people.find(person => person.id === context.actorProfileId) || null, data, filters: query.filters, includeAssignedSubIssueParents: true });
@@ -55,7 +55,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
   // Context is independent from card membership and contains only records needed by this page.
   const contextIds = new Set(cardIds);
   const parentType = query.level === "initiative" ? "epic" : query.level === "deliverable" ? "initiative" : null;
-  for (const task of model.items) if (cardIds.has(task.parentTaskId) || task.taskType === parentType) contextIds.add(task.id);
+  for (const task of model.items) if (task.taskType === parentType) contextIds.add(task.id);
   const relationships = model.relationships.filter(edge => contextIds.has(edge.taskId) || contextIds.has(edge.relatedTaskId));
   for (const edge of relationships) { contextIds.add(edge.taskId); contextIds.add(edge.relatedTaskId); }
   const byId = new Map(model.items.map(task => [task.id, task]));
@@ -73,7 +73,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
     return [status, { total, loaded, completeness: continuation ? "partial" : "complete", continuation } satisfies PlanningBoardColumn];
   })) as Record<TaskStatus, PlanningBoardColumn>;
   return { status: "ready", model: {
-    ...model, query,
+    ...model, query, queryRevision: revision,
     coverage: { ...model.coverage, items: "partial", relationships: "partial", blockers: "partial" },
     items: model.items.filter(task => contextIds.has(task.id)), relationships,
     blockers: model.blockers?.filter(blocker => contextIds.has(blocker.taskId)),

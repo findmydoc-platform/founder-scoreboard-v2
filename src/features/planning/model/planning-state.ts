@@ -44,6 +44,9 @@ export type PlanningTaskSaveStatus = "saved" | "saving" | "rejected" | "unconfir
 export type PlanningBoardView = { tasks: readonly Task[]; freshness: "current" | "stale"; result?: import("./planning-board-query").PlanningBoardResult; queryKey?: string; pageStatus?: PlanningReadStatus; columnReadStatus?: Partial<Record<import("@/lib/types").TaskStatus, PlanningReadStatus>>; readStatus?: PlanningReadStatus };
 export type PlanningReadStatus = "not-loaded" | "loading" | "current" | "stale" | "unavailable" | "forbidden";
 export type PlanningTaskDetailView = {
+  removed: boolean;
+  children: readonly Task[];
+  childrenReadStatus: PlanningReadStatus;
   task: Task | null;
   saveStatus: PlanningTaskSaveStatus;
   readStatus: PlanningReadStatus;

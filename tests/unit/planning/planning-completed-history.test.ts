@@ -110,7 +110,7 @@ test("personal history includes a foreign completed parent through open assigned
   if (result.status !== "ready") throw new Error("Expected personal parent");
   expect(result.model.board?.cardIds).toEqual(["done-0044"]);
   expect(result.model.board?.viewerOpenSubIssueIdsByDeliverableId).toEqual({ "done-0044": ["assigned-child"] });
-  expect(result.model.items.filter(row => row.parentTaskId === "done-0044")).toHaveLength(1008);
+  expect(result.model.items.filter(row => row.parentTaskId === "done-0044")).toHaveLength(0);
   expect(result.model.board?.childProgressById["done-0044"]).toEqual({ completed: 1007, total: 1008, unfinished: 1, percentage: 100 });
   const parentFilter = await reader.load({ ...context, query: { filters: { quick: ["mine"], priority: "P0" } } });
   if (parentFilter.status !== "ready") throw new Error("Expected empty parent-filter result");
@@ -152,6 +152,7 @@ test("waiting and Blocker context and exact child progress do not depend on filt
   if (result.status !== "ready") throw new Error("Expected contextual Board");
   expect(result.model.board?.cardIds).toEqual(["active"]);
   expect(result.model.board?.childProgressById.active).toEqual({ total: 2, completed: 1, unfinished: 1, percentage: 50 });
+  expect(result.model.items.some(item => item.id === "child-open" || item.id === "child-done")).toBe(false);
   expect(result.model.blockers).toMatchObject([{ taskId: "active", status: "open" }]);
   expect(hasOpenWaitingRelation("active", [...result.model.items], [...result.model.relationships])).toBe(true);
 });
@@ -200,6 +201,40 @@ test("a late response from a previous filter cannot replace the current bounded 
   expect(owner.planning.board().tasks.map(task => task.id)).toEqual(["done-0044"]);
 });
 
+test("complete views retain required history, parents, Sprints and relationships beyond an upstream cap", async () => {
+  const source = fixture(1027, 173);
+  const rows = source.data.active_tasks as Array<Record<string, unknown>>;
+  rows.find(row => row.id === "done-1026")!.sprint_id = "historical-sprint";
+  source.data.sprints = [{ id: "historical-sprint", name: "Historical Sprint", start_date: "2026-01-01", end_date: "2026-01-14" }];
+  source.data.task_relationship_edges = [{ id: 1, task_id: "done-1026", related_task_id: "active", relation_type: "blocked_by" }];
+  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const board = await reader.load({ ...context, query: { view: "board" } });
+  const complete = await reader.load({ ...context, query: { view: "complete" } });
+  if (board.status !== "ready" || complete.status !== "ready") throw new Error("Expected complete alternative coverage");
+  expect(board.model.board?.cardIds).not.toContain("done-1026");
+  expect(complete.model.items.filter(task => task.taskType === "deliverable")).toHaveLength(1028);
+  expect(complete.model.items.find(task => task.id === "done-1026")).toMatchObject({ parentTaskId: "initiative", sprintId: "historical-sprint" });
+  expect(complete.model.items.find(task => task.id === "initiative")?.title).toBe("Parent");
+  expect(complete.model.sprints[0]).toMatchObject({ id: "historical-sprint", startDate: "2026-01-01", endDate: "2026-01-14" });
+  expect(hasOpenWaitingRelation("done-1026", [...complete.model.items], [...complete.model.relationships])).toBe(true);
+  expect(complete.model.board).toBeUndefined();
+  expect(complete.model.queryRevision).toBe(board.model.board?.revision);
+});
+
+test("persisted view defaults do not invalidate unchanged Board coverage but planning data does", async () => {
+  const source = fixture();
+  source.data.profile_ui_preferences = [{ profile_id: "reader", default_workspace: "planning", default_task_view: "board", planning_filters: {}, expanded_item_ids: [], updated_at: "r1" }];
+  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const board = await reader.load({ ...context, query: { view: "board" } });
+  Object.assign((source.data.profile_ui_preferences as Array<Record<string, unknown>>)[0], { default_task_view: "table", expanded_item_ids: ["initiative"], updated_at: "r2" });
+  const complete = await reader.load({ ...context, query: { view: "complete" } });
+  if (board.status !== "ready" || complete.status !== "ready") throw new Error("Expected unchanged source coverage");
+  expect(complete.model.queryRevision).toBe(board.model.board?.revision);
+  (source.data.active_tasks as Array<Record<string, unknown>>).find(row => row.id === "done-0044")!.description = "Changed searchable planning content";
+  const changed = await reader.load({ ...context, query: { view: "complete" } });
+  if (changed.status !== "ready") throw new Error("Expected changed source coverage");
+  expect(changed.model.queryRevision).not.toBe(complete.model.queryRevision);
+});
 
 test("active status columns have independent bounded pages and deterministic priority/manual order", async () => {
   const source = fixture(0, 173);

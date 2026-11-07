@@ -27,6 +27,12 @@ import type { Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib
 import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
 import { CustomActionMenu } from "@/shared/molecules/custom-action-menu";
 
+export type TaskCardChildList = {
+  items: readonly Task[];
+  readStatus: import("@/features/planning/model/planning-state").PlanningReadStatus;
+  load(): void;
+};
+
 const taskCardControlSelector = "a, button, input, select, textarea, [role='menuitem'], [data-task-card-interactive='true']";
 const collapsedOtherChildLimit = 10;
 const emptyTaskIds: string[] = [];
@@ -178,23 +184,26 @@ function TaskCardChildRollup({
   task,
   childItems,
   childProgress,
+  childList,
   onOpenTask,
   viewerOpenSubIssueIds,
 }: {
   task: Task;
-  childItems: Task[];
+  childItems: readonly Task[];
   childProgress?: ReturnType<typeof taskChildProgress>;
+  childList?: TaskCardChildList;
   onOpenTask: (taskId: string) => void;
   viewerOpenSubIssueIds: string[];
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAllOtherChildren, setShowAllOtherChildren] = useState(false);
+  const [retryRequested, setRetryRequested] = useState(false);
   const generatedId = useId().replaceAll(":", "");
   const listId = `task-card-children-${generatedId}`;
   const { completed, percentage, total, unfinished } = childProgress || taskChildProgress(childItems);
   const plural = directChildPluralLabel(task.taskType);
   const completedWithOpenChildren = normalizeStatus(task.status) === "Erledigt" && unfinished > 0;
-  const sortedChildren = [...childItems].sort((first, second) => {
+  const sortedChildren = [...(childList?.readStatus === "forbidden" ? [] : childItems)].sort((first, second) => {
     const firstDone = normalizeStatus(first.status) === "Erledigt";
     const secondDone = normalizeStatus(second.status) === "Erledigt";
     if (firstDone !== secondDone) return firstDone ? 1 : -1;
@@ -227,13 +236,14 @@ function TaskCardChildRollup({
         aria-label={`${plural} ${isExpanded ? "einklappen" : "anzeigen"}: ${unfinished} offen, ${completed} erledigt`}
         onClick={() => {
           setIsExpanded((current) => !current);
+          if (!isExpanded && childList && childList.readStatus !== "current" && childList.readStatus !== "loading") childList.load();
           if (isExpanded) setShowAllOtherChildren(false);
         }}
         onDragStart={(event) => {
           event.preventDefault();
           event.stopPropagation();
         }}
-        className="mt-2 flex min-h-6 w-full items-center justify-between gap-2 rounded-sm border border-transparent py-1 text-left font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+        className="coarse-touch-target mt-2 flex min-h-11 sm:min-h-6 w-full items-center justify-between gap-2 rounded-sm border border-transparent py-1 text-left font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
       >
         <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px]">
           <Circle size={10} className="shrink-0 text-slate-300" aria-hidden="true" />
@@ -249,7 +259,18 @@ function TaskCardChildRollup({
         )}
       </button>
       {isExpanded && (
-        <ul id={listId} className="mt-1">
+        <div id={listId} className="mt-1" aria-busy={childList?.readStatus === "loading"}>
+          {childList?.readStatus === "loading" ? <p role="status" className="px-1 py-2 text-xs text-slate-500">Kinder werden geladen …</p> : null}
+          {childList?.readStatus === "unavailable" || childList?.readStatus === "forbidden" || childList?.readStatus === "stale" ? <div role="alert" className="px-1 py-2 text-xs text-slate-600">
+            <p>{childList.readStatus === "forbidden" ? "Kinder dürfen nicht geladen werden." : childList.readStatus === "stale" ? "Kinderliste ist nicht mehr aktuell." : "Kinder konnten nicht geladen werden."}</p>
+          </div> : null}
+          {childList && (retryRequested || childList.readStatus === "unavailable" || childList.readStatus === "forbidden" || childList.readStatus === "stale") ? <button
+            type="button"
+            aria-disabled={childList.readStatus === "loading"}
+            onClick={() => { if (childList.readStatus !== "loading") { setRetryRequested(true); childList.load(); } }}
+            className="mt-1 min-h-11 rounded-sm px-1 text-xs font-medium text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >{childList.readStatus === "current" ? "Kinder aktualisieren" : "Kinder erneut laden"}</button> : null}
+          <ul>
           {viewerChildren.length > 0 ? (
             <li className="px-1 pb-1 pt-1.5 text-[11px] font-semibold text-slate-800">
               Für dich ({viewerChildren.length})
@@ -311,7 +332,8 @@ function TaskCardChildRollup({
               </button>
             </li>
           ) : null}
-        </ul>
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -450,6 +472,7 @@ export function TaskCard({
   subIssues = [],
   childItems,
   childProgress,
+  childList,
   onOpenTask,
   onStatusChange,
   onStatusEditingStart,
@@ -469,6 +492,7 @@ export function TaskCard({
   subIssues?: Task[];
   childItems?: Task[];
   childProgress?: ReturnType<typeof taskChildProgress>;
+  childList?: TaskCardChildList;
   onOpenTask: (taskId: string) => void;
   onStatusChange?: (status: TaskStatus) => void;
   onStatusEditingStart?: () => void;
@@ -481,7 +505,7 @@ export function TaskCard({
   isDragging?: boolean;
 }) {
   const showPriority = task.priority === "P0" || task.priority === "P1";
-  const directChildren = childItems || subIssues || [];
+  const directChildren = childList?.items || childItems || subIssues || [];
   const directParentType = task.taskType === "initiative" ? "Epic" : task.taskType === "deliverable" ? "Initiative" : null;
   const directParent = directParentType && task.parentTaskId ? allTasks.find((candidate) => candidate.id === task.parentTaskId) : null;
   const draggedRef = useRef(false);
@@ -540,6 +564,7 @@ export function TaskCard({
         task={task}
         childItems={directChildren}
         childProgress={childProgress}
+        childList={childList}
         onOpenTask={onOpenTask}
         viewerOpenSubIssueIds={viewerOpenSubIssueIds}
       />

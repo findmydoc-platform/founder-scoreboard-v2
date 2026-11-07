@@ -9,6 +9,7 @@ export type PlanningWorkspaceHydration = Readonly<{
   workspace: "planning" | "projects";
   queryKey: string;
   query?: import("./planning-board-query").PlanningBoardQuery;
+  queryRevision?: string;
   board?: import("./planning-board-query").PlanningBoardResult;
   session: ServerSessionView;
   revision: string;
@@ -18,5 +19,5 @@ export type PlanningWorkspaceHydration = Readonly<{
 
 export function planningWorkspaceHydration(workspace: "planning" | "projects", model: PlanningWorkspaceModel, session?: ServerSessionView): PlanningWorkspaceHydration | undefined {
   if (!session) return undefined;
-  return { workspace, queryKey: model.query ? planningBoardQueryKey(model.query) : model.board?.queryKey || "workspace", query: model.query || model.board?.query, board: model.board, session, revision: model.revision, coverage: hierarchyReadCoverage(model), taskOmittedFields: hierarchyOmittedFields(model) };
+  return { workspace, queryKey: model.query ? planningBoardQueryKey(model.query) : model.board?.queryKey || "workspace", query: model.query || model.board?.query, queryRevision: model.queryRevision || model.board?.revision, board: model.board, session, revision: model.revision, coverage: hierarchyReadCoverage(model), taskOmittedFields: hierarchyOmittedFields(model) };
 }

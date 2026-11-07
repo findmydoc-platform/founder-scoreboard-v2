@@ -135,6 +135,7 @@ export function usePlanningAppController({
 
   const taskSelection = usePlanningTaskSelection({
     data,
+    planningState,
     selectedTaskId,
     setSelectedTaskId,
   });
@@ -147,6 +148,7 @@ export function usePlanningAppController({
   const taskDetailDataLoader = useTaskDetailDataLoader({
     planningState,
     selectedTask,
+    taskId: protectedDataLoaded && authUser ? selectedTaskId || undefined : undefined,
     source,
     startTransition,
   });
@@ -265,6 +267,7 @@ export function usePlanningAppController({
     selectedTaskExternalComments: taskSelection.selectedTaskExternalComments,
     selectedTaskSubIssues: taskSelection.selectedTaskSubIssues,
     taskPanelPreviousTask: taskSelection.taskPanelPreviousTask,
+    taskPanelReturnFocusRef: taskSelection.taskPanelReturnFocusRef,
     setDevProfileId,
     setFilters,
     setGithubSyncQueueOpen,
