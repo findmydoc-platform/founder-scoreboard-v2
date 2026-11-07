@@ -65,7 +65,20 @@ function CompletedHistoryFlow({ failCompleteRead = false, delayCompleteRead = fa
   }, [failCompleteRead, delayCompleteRead]);
   return <><output aria-label="History reads">{reads}</output>{releaseCompleteRead ? <button onClick={releaseCompleteRead}>Ansichtsantwort freigeben</button> : null}{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session)} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile], sprints: [sprint] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
-const meta = { title: "Planning/Completed history flow", component: CompletedHistoryFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof CompletedHistoryFlow>;
+const meta = {
+  title: "Planning/Completed history flow",
+  component: CompletedHistoryFlow,
+  // View modules are prerequisites for the data retention and query interactions below.
+  loaders: [async () => {
+    await Promise.all([
+      import("@/features/tasks/organisms/task-table-view"),
+      import("@/features/tasks/organisms/task-structure-view"),
+      import("@/features/tasks/organisms/gantt-view"),
+    ]);
+    return {};
+  }],
+  parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } },
+} satisfies Meta<typeof CompletedHistoryFlow>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const InitialCompletedHistory: Story = {};
