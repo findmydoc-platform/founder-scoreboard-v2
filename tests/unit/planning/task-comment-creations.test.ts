@@ -95,6 +95,42 @@ function browserStorage(): Storage {
  const rows = new Map<string, string>();
  return { get length(){return rows.size;}, key:index=>[...rows.keys()][index]??null, getItem:key=>rows.get(key)??null, setItem:(key,value)=>{rows.set(key,value);}, removeItem:key=>{rows.delete(key);}, clear:()=>rows.clear() };
 }
+test("an oversized comment is rejected before capture or sending and preserves its draft", async () => {
+ const storage = browserStorage();
+ let writes = 0;
+ const { planning } = fixture({ commentSubmissionStorage: storage, createTaskComment: async () => { writes++; return { comment }; } });
+ const text = "x".repeat(4001);
+ planning.taskCommentDraft(task.id).update(text);
+ const capture = planning.createTaskComment(task, text);
+ expect(capture.accepted).toBe(false);
+ expect(await capture.completion).toMatchObject({ kind: "rejected", status: 400 });
+ expect(planning.taskCommentDraft(task.id).text).toBe(text);
+ expect(planning.taskCommentCreations(task.id)).toEqual([]);
+ expect(storage.length).toBe(0);
+ expect(writes).toBe(0);
+});
+test("a maximum-length comment with boundary whitespace survives reload, including existing raw captures", async () => {
+ const storage = browserStorage(), normalized = "x".repeat(4000), submitted = ` ${normalized} `;
+ let identity: { id: string; submittedAt: string } | undefined, sent = "";
+ const first = fixture({ commentSubmissionStorage: storage, createTaskComment: async (_, text, submission) => {
+  sent = text; identity = submission; throw new Error("Response lost");
+ } });
+ await first.planning.createTaskComment(task, submitted).completion;
+ expect(sent).toBe(normalized);
+ expect(first.planning.taskCommentCreations(task.id)[0].submitted).toBe(normalized);
+ first.internal.dispose();
+ // Captures made before normalization retained the original boundary whitespace.
+ const key = storage.key(0)!;
+ storage.setItem(key, JSON.stringify({ ...JSON.parse(storage.getItem(key)!), submitted }));
+ const restored = fixture({ commentSubmissionStorage: storage, checkTaskCommentCreation: async () => ({
+  outcome: "confirmed", comment: { ...comment, comment: normalized, submissionId: identity!.id, submittedAt: identity!.submittedAt },
+ }) });
+ await expect.poll(() => restored.planning.taskCommentCreations(task.id)).toMatchObject([{
+  id: identity!.id, submittedAt: identity!.submittedAt, submitted: normalized, phase: "confirmed",
+ }]);
+ expect(restored.planning.taskComments(task.id).comments).toMatchObject([{ comment: normalized, submissionId: identity!.id }]);
+ expect(storage.length).toBe(0);
+});
 test("reload restores a submitted identity only after an authorized check and joins the stored comment once", async()=>{
  const storage=browserStorage(), pending=deferred<{comment:TaskComment}>();let captured:{id:string;submittedAt:string}|undefined;
  const first=fixture({commentSubmissionStorage:storage,createTaskComment:(_,__,submission)=>{captured=submission;return pending.promise;}});

@@ -5,6 +5,23 @@ import { withPlanningCredentialDatabase } from "./helpers/planning-credential-da
 
 const context = (id: string) => ({ params: Promise.resolve({ id }) });
 
+it("legacy text-only comments retain truncation while identified submissions reject oversized content", () => withPlanningCredentialDatabase(async f => {
+  const next = await import("next/server");
+  const route = await importTestModule("src/app/api/tasks/[id]/comments/route.ts", { "server-only": {}, "next/server": { ...next, after: () => undefined } });
+  const path = `/api/tasks/${f.initiativeId}/comments`;
+  const comment = ` ${"x".repeat(4000)}y `;
+  const legacy = await route.POST(f.request("founder", path, "POST", { comment }), context(f.initiativeId));
+  expect(legacy.status).toBe(200);
+  const receipt = await legacy.json();
+  expect(receipt.comment.comment).toBe("x".repeat(4000));
+  const lookup = await route.GET(f.request("founder", `${path}?submissionId=${receipt.comment.submissionId}`), context(f.initiativeId));
+  expect(await lookup.json()).toMatchObject({ outcome: "confirmed", comment: { comment: "x".repeat(4000) } });
+  const submissionId = randomUUID();
+  const identified = await route.POST(f.request("founder", path, "POST", { comment, submissionId, submittedAt: "2026-11-06T12:00:00Z" }), context(f.initiativeId));
+  expect(identified.status).toBe(400);
+  expect(await (await route.GET(f.request("founder", `${path}?submissionId=${submissionId}`), context(f.initiativeId))).json()).toEqual({ ok: true, outcome: "unconfirmed" });
+}));
+
 it("replayed authenticated submissions retain one comment, notification set and durable delivery job", () => withPlanningCredentialDatabase(async f => {
   const taskId = `${f.prefix}-comment`;
   await f.db.query(`insert into public.tasks(id,project_id,title,task_type,status,priority,owner,assignee,parent_task_id)

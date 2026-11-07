@@ -46,10 +46,10 @@ async function handlePOST(request: NextRequest, context: { params: Promise<{ id:
   if (comment.length < 2) {
     return apiError("Kommentar ist erforderlich.", 400);
   }
-  if (typeof payload.comment === "string" && payload.comment.trim().length > 4000) {
+  const legacy = payload.submissionId === undefined && payload.submittedAt === undefined;
+  if (!legacy && typeof payload.comment === "string" && payload.comment.trim().length > 4000) {
     return apiError("Kommentar darf höchstens 4000 Zeichen enthalten.", 400);
   }
-  const legacy = payload.submissionId === undefined && payload.submittedAt === undefined;
   const submissionId = legacy ? randomUUID() : payload.submissionId;
   const submittedAt = legacy ? new Date().toISOString() : payload.submittedAt;
   if (!validSubmissionId(submissionId) || typeof submittedAt !== "string" || !Number.isFinite(Date.parse(submittedAt))) {

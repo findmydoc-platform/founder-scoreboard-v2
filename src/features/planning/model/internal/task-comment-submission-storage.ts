@@ -16,9 +16,9 @@ export function taskCommentSubmissionStorage(storage: CommentSubmissionStorage |
             const row = JSON.parse(storage!.getItem(key) || "null");
             return row && row.actor === actor && typeof row.id === "string" && /^[0-9a-f-]{36}$/i.test(row.id)
               && key === prefix + row.id && typeof row.taskId === "string" && row.taskId.length > 0
-              && typeof row.submitted === "string" && row.submitted.trim().length >= 2 && row.submitted.length <= 4000
+              && typeof row.submitted === "string" && row.submitted.trim().length >= 2 && row.submitted.trim().length <= 4000
               && typeof row.submittedAt === "string" && Number.isFinite(Date.parse(row.submittedAt))
-              ? [{ id: row.id, taskId: row.taskId, submitted: row.submitted, submittedAt: row.submittedAt }] : [];
+              ? [{ id: row.id, taskId: row.taskId, submitted: row.submitted.trim(), submittedAt: row.submittedAt }] : [];
           } catch { return []; }
         });
       } catch { return []; }

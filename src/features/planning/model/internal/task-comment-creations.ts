@@ -37,13 +37,15 @@ export function createTaskCommentCreations(options: {
   const reject = (result: Extract<TaskCommentCreationResult, {ok:false}>): TaskCommentCapture => ({accepted:false,error:result.error,completion:Promise.resolve(result)});
   if (!current(task.id)) return reject({ ok:false,kind:"ended",error:"Diese Diskussion ist in der Sitzung nicht verfügbar." });
   if (options.removing(task.id)) return reject({ok:false,kind:"blocked",error:"Die Aufgabe wird entfernt. Es wurde kein Kommentar gesendet."});
-  if (submitted.trim().length<2) return reject({ok:false,kind:"rejected",error:"Kommentar ist erforderlich.",status:400});
+  const normalized = submitted.trim();
+  if (normalized.length<2) return reject({ok:false,kind:"rejected",error:"Kommentar ist erforderlich.",status:400});
+  if (normalized.length>4000) return reject({ok:false,kind:"rejected",error:"Kommentar darf höchstens 4000 Zeichen enthalten.",status:400});
   if (!options.adapter.createTaskComment) return reject({ok:false,kind:"rejected",error:"Kommentieren ist nicht verfügbar."});
   const id=crypto.randomUUID();
   lastSubmittedTime = Math.max(Date.now(), lastSubmittedTime + 1);
   const submittedAt=new Date(lastSubmittedTime).toISOString();
-  const operation={view:{id,taskId:task.id,submitted,submittedAt,phase:"saving",comment:null,notice:null,error:"",checkStatus:"not-checked"} as TaskCommentCreationView,after:0,submittedAt,authorized:true,restored:false};
-  try { recovery.capture({id,taskId:task.id,submitted,submittedAt}); } catch {
+  const operation={view:{id,taskId:task.id,submitted:normalized,submittedAt,phase:"saving",comment:null,notice:null,error:"",checkStatus:"not-checked"} as TaskCommentCreationView,after:0,submittedAt,authorized:true,restored:false};
+  try { recovery.capture({id,taskId:task.id,submitted:normalized,submittedAt}); } catch {
    return reject({ok:false,kind:"rejected",error:"Der Kommentar konnte nicht für die Wiederherstellung gesichert werden. Es wurde nichts gesendet."});
   }
   operations.set(id,operation); options.changed();

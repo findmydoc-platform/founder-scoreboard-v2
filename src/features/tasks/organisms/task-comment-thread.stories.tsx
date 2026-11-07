@@ -32,6 +32,24 @@ function Fixture({scenario="success"}:{scenario?:string}){
 }
 const meta={title:"Features/Tasks/Organisms/CoordinatedTaskComments",component:Fixture,parameters:{layout:"fullscreen"}} satisfies Meta<typeof Fixture>;export default meta;type Story=StoryObj<typeof meta>;
 export const EditableSessionDraft:Story={args:{scenario:"editable-draft"}};
+export const OversizedDraftStaysEditableWithoutSending: Story = { args: { scenario: "oversized" }, play: async ({ canvasElement }) => {
+ const canvas = within(canvasElement), input = canvas.getByRole("textbox", { name: "Kommentar oder Update" });
+ const oversized = "x".repeat(4001);
+ await userEvent.type(input, oversized, { delay: null });
+ await userEvent.click(canvas.getByRole("button", { name: "Kommentieren" }));
+ await expect(input).toHaveValue(oversized);
+ await expect(canvas.getByRole("alert")).toHaveTextContent("Nicht gesendet.");
+ await userEvent.click(canvas.getByRole("button", { name: "Details zum Sendeversuch" }));
+ await expect(within(document.body).getByRole("tooltip")).toHaveTextContent("Kommentar darf höchstens 4000 Zeichen enthalten.");
+ expect(controls.get("oversized")!.writes()).toBe(0);
+ await userEvent.clear(input);
+ await userEvent.type(input, text);
+ await userEvent.click(canvas.getByRole("button", { name: "Kommentieren" }));
+ await expect(input).toHaveValue("");
+ await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
+ await expect(canvas.getByText(text)).toBeVisible();
+ expect(controls.get("oversized")!.writes()).toBe(1);
+} };
 async function submit(canvasElement:HTMLElement){const canvas=within(canvasElement);await userEvent.type(canvas.getByRole("textbox",{name:"Kommentar oder Update"}),text);await userEvent.click(canvas.getByRole("button",{name:"Kommentieren"}));return canvas;}
 export const ConfirmedLocalCommentKeepsActualPendingDelivery:Story={args:{scenario:"success"},play:async({canvasElement})=>{const canvas=await submit(canvasElement);await waitFor(()=>expect(canvas.getByText(text)).toBeVisible());await userEvent.click(canvas.getByRole("button",{name:"GitHub-Veröffentlichung ausstehend"}));await expect(within(document.body).getByRole("tooltip")).toHaveTextContent("Kommentar gespeichert. GitHub-Veröffentlichung ausstehend.");await expect(canvas.getByRole("textbox",{name:"Kommentar oder Update"})).toHaveValue("");await expect(canvas.getByText("Bestätigte Task-Version: task-r1")).toBeVisible();expect(controls.get("success")!.reads()).toBe(0);expect(controls.get("success")!.writes()).toBe(1);}};
 export const FailedExternalDeliveryDoesNotUndoLocalComment:Story={args:{scenario:"delivery-failed"},play:async({canvasElement})=>{const canvas=await submit(canvasElement);await expect(canvas.getByText(text)).toBeVisible();await expect(canvas.getByRole("button",{name:"GitHub-Veröffentlichung braucht Aufmerksamkeit"})).toBeVisible();await expect(canvas.getByRole("textbox",{name:"Kommentar oder Update"})).toHaveValue("");expect(controls.get("delivery-failed")!.writes()).toBe(1);}};
