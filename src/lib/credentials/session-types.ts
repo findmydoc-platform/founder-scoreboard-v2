@@ -23,7 +23,7 @@ export type SessionLinkPageState = {
 export type { AppWorkspace };
 
 export type ServerPlanningAuth =
-  | { ok: true; user: User; profile: AuthenticatedProfile | null; authority: SessionAuthorityContext | null }
+  | { ok: true; user: User; profile: AuthenticatedProfile | null; authority: SessionAuthorityContext | null; session?: ServerSessionView }
   | { ok: false; status: number; error: string; code?: AuthErrorCode; user: User | null };
 
 

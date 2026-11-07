@@ -42,9 +42,12 @@ export type PlanningTaskSaveCheck = {
   readStatus: PlanningReadStatus | "not-needed";
 };
 export type PlanningTaskSaveStatus = "saved" | "saving" | "rejected" | "unconfirmed";
-export type PlanningBoardView = { tasks: readonly Task[]; freshness: "current" | "stale" };
+export type PlanningBoardView = { requiresQueryRead?: boolean; scopeRevision?: string; deniedChildListIds?: readonly string[]; tasks: readonly Task[]; freshness: "current" | "stale"; result?: import("./planning-board-query").PlanningBoardResult; queryKey?: string; pageStatus?: PlanningReadStatus; columnReadStatus?: Partial<Record<import("@/lib/types").TaskStatus, PlanningReadStatus>>; readStatus?: PlanningReadStatus };
 export type PlanningReadStatus = "not-loaded" | "loading" | "current" | "stale" | "unavailable" | "forbidden";
 export type PlanningTaskDetailView = {
+  removed: boolean;
+  children: readonly Task[];
+  childrenReadStatus: PlanningReadStatus;
   task: Task | null;
   saveStatus: PlanningTaskSaveStatus;
   readStatus: PlanningReadStatus;
@@ -124,6 +127,10 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   profileSettings(profileId: string): import("@/features/profile/model/profile-settings-contract").ProfileSettingsView;
   saveOwnProfileSettings(profileId: string, patch: import("@/features/profile/model/profile-settings-contract").OwnProfileSettingsPatch): Promise<import("@/features/profile/model/profile-settings-contract").ProfileSettingsResult>;
   board(): PlanningBoardView;
+  ensureBoardQuery(query: import("./planning-board-query").PlanningBoardQueryInput): Promise<boolean>;
+  loadCompletedHistory(): Promise<boolean>;
+  loadBoardColumn(status: import("@/lib/types").TaskStatus): Promise<boolean>;
+  refreshBoardColumn(status: import("@/lib/types").TaskStatus): Promise<boolean>;
   workspace(workspace: AppWorkspace): PlanningWorkspaceView;
   taskDetail(taskId: string): PlanningTaskDetailView;
   protectedCache(workspace?: AppWorkspace): PlanningConfirmedSnapshot | null;
@@ -135,4 +142,5 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskUpdateResult>;
   loadTaskDetail(taskId: string): Promise<{ ok: boolean; error?: string; unavailable?: import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[] }>;
   refreshWorkspace(workspace: AppWorkspace): Promise<boolean>;
+  prepareWorkspaceHydration(workspace: AppWorkspace): void;
 }

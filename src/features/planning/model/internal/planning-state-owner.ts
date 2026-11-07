@@ -1,3 +1,4 @@
+import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardQueryInput, type PlanningBoardResult } from "../planning-board-query";
 import { createDecisionLogState } from "./decision-log-state";
 import { createHierarchyCommands } from "./hierarchy-commands";
 import { createMeetingAttendanceState } from "./meeting-attendance-state";
@@ -18,8 +19,9 @@ import { createPrivateWorkweekState } from "./private-workweek-state";
 import { createEventsState } from "./event-state";
 import { createPublishedWorkweekCalendars } from "./published-workweek-calendars";
 import { createHeaderNotificationsState, type HeaderNotificationsAdapter } from "./header-notifications-state";
+import { normalizeStatus } from "@/lib/status";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
-import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState, Task, TaskActivity } from "@/lib/types";
+import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState, Task, TaskActivity, TaskStatus } from "@/lib/types";
 import type { PlanningState, PlanningTaskSaveStatus, PlanningReadStatus, PlanningWorkspaceView, PlanningTaskSaveView } from "../planning-state";
 import type { AppWorkspace } from "../workspace-routes";
 import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
@@ -44,7 +46,7 @@ import { applyPlanningItemApprovalPatch } from "../approval-domain";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
-export type PlanningWorkspaceRead = { profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
 export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sync-state").TaskGitHubSyncAdapter & import("@/features/sprint/model/meeting-attendance-state").MeetingAttendanceAdapter & import("@/features/reviews/model/planning-task-review").TaskReviewAdapter & import("@/features/tasks/model/task-relationship-change").TaskRelationshipAdapter & import("@/features/team-workweek/model/google-workspace-state").GoogleWorkspaceAdapter & import("@/features/tasks/model/task-attachment-upload").TaskAttachmentAdapter & import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportAdapter & import("@/features/tasks/model/task-comment-creation").TaskCommentCreationAdapter & import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   readDecisionLog?: () => Promise<import("@/lib/notion-decision-log").NotionDecisionLogResult>;
@@ -65,15 +67,16 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   saveTeamProfile?: (profileId: string, patch: import("../planning-team-state").TeamProfilePatch, expected: Record<string, unknown>) => Promise<Partial<import("@/lib/types").Profile> & { id: string }>;
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
-  readWorkspace(workspace: AppWorkspace): Promise<PlanningWorkspaceRead | null>;
+  readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput): Promise<PlanningWorkspaceRead | null>;
   readTaskDetail?: (taskId: string) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[] }>;
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialSession, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialSession, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
+  initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
   initialSession?: BrowserSessionSnapshot;
   initialHeaderData?: PlanningHeaderData;
   initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
@@ -89,20 +92,106 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let visible = initialData;
   let active = Boolean(userId);
   let initialized = active;
+  let requiresBoundHydration = false;
   let sequence = 0;
   let sessionGeneration = 0;
   let sessionExpiresAt = initialSession?.expiresAt;
+  let sessionRevision = initialSession?.revision;
+  const hydrationReads = new Map<AppWorkspace, string>();
+  function hydrationIdentity(data: PlanningShellState, read: import("../planning-workspace-hydration").PlanningWorkspaceHydration) {
+    // The complete declared result is compared because latest Item time alone is not a scope revision.
+    return JSON.stringify([read, data]);
+  }
+  if (initialWorkspaceRead && initialWorkspaceRead.workspace === initialWorkspace && initialWorkspaceRead.session.userId === userId) hydrationReads.set(initialWorkspace, hydrationIdentity(initialData, initialWorkspaceRead));
   const taskConfirmedAt = new Map<string, number>();
   const taskReadAt = new Map<string, number>();
+  let planningSourceEpoch = 0;
+  function invalidatePlanningSource() {
+    planningSourceEpoch++;
+    freshness = "stale";
+    planningQueries.clear();
+    queryRevision = undefined;
+    if (!boardResult) {
+      if (workspaceStatuses.has("planning")) workspaceStatuses.set("planning", "stale");
+      return;
+    }
+    boardResult = { ...boardResult, columns: Object.fromEntries(Object.entries(boardResult.columns).map(([column, value]) => {
+      columnReadStatus[column as TaskStatus] = "stale";
+      return [column, { ...value, continuation: null }];
+    })) as PlanningBoardResult["columns"] };
+    pageStatus = "stale";
+    workspaceStatuses.set("planning", "stale");
+  }
+  function confirmTaskRevision(id: string, accepted: number) {
+    taskConfirmedAt.set(id, accepted);
+    invalidatePlanningSource();
+  }
+  function detachPlanningMetadata() {
+    planningSourceEpoch++;
+    freshness = "stale";
+    boardResult = undefined;
+    boardQueryKey = undefined;
+    planningQueries.clear();
+    queryRevision = undefined;
+    scopeRevision = undefined;
+    scopeRevisionReadAt = 0;
+    pageStatus = "not-loaded";
+    columnReads.clear();
+    columnRequests.clear();
+    for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
+  }
+  function denyPlanningScope() {
+    detachPlanningMetadata();
+    for (const id of new Set([...confirmed.tasks.map(task => task.id), ...detailReads.keys()])) {
+      deniedTaskReads.add(id);
+      taskDeniedAt.set(id, ++sequence);
+      detailStatuses.set(id, "forbidden");
+      const list = childLists.get(id);
+      if (list) childLists.set(id, { ...list, readStatus: "forbidden" });
+    }
+    workspaceStatuses.set("planning", "forbidden");
+  }
   const memberships = new Map<AppWorkspace, Set<string>>([[initialWorkspace, new Set(initialData.tasks.map(task => task.id))]]);
   const workspaceStatuses = new Map<AppWorkspace, PlanningReadStatus>([[initialWorkspace, "current"]]);
-  const completeness = new Map<AppWorkspace, PlanningWorkspaceView["completeness"]>([[initialWorkspace, workspaceReadCoverage(initialWorkspace).tasks || "none"]]);
+  const completeness = new Map<AppWorkspace, PlanningWorkspaceView["completeness"]>([[initialWorkspace, initialWorkspaceRead?.coverage.tasks || workspaceReadCoverage(initialWorkspace).tasks || "none"]]);
   const acceptedRead = new Map<AppWorkspace, number>();
+  const workspaceReads = new Map<AppWorkspace, { result: Promise<boolean>; generation: number; started: number; sourceEpoch: number; sessionRevision?: string }>();
+  const hydrationRequests = new Map<AppWorkspace, ReturnType<typeof beginWorkspaceRead>>();
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
   let freshness: "current" | "stale" = "current";
+  let boardResult = initialWorkspaceRead?.board;
+  let boardQuery = initialWorkspaceRead?.query || boardResult?.query;
+  let boardQueryKey = boardQuery ? planningBoardQueryKey(boardQuery) : undefined;
+  let pageStatus: PlanningReadStatus = "current";
+  const columnReadStatus: Partial<Record<TaskStatus, PlanningReadStatus>> = {};
+  const columnReads = new Map<TaskStatus, { key: string; result: Promise<boolean> }>();
+  const columnRequests = new Map<TaskStatus, number>();
+  let boardRead: { key: string; result: Promise<boolean>; sequence: number; sourceEpoch: number } | undefined;
+  let queryRevision = initialWorkspaceRead?.queryRevision || boardResult?.revision;
+  let scopeRevision = initialWorkspaceRead?.scopeRevision;
+  let scopeRevisionReadAt = 0;
+  const planningQueries = new Map<string, {
+    query: NonNullable<typeof boardQuery>;
+    revision: string;
+    result: typeof boardResult;
+    taskIds: Set<string>;
+    completeness: PlanningWorkspaceView["completeness"];
+    pageStatus: PlanningReadStatus;
+    columnReadStatus: Partial<Record<TaskStatus, PlanningReadStatus>>;
+    sourceEpoch: number;
+  }>();
+  function rememberPlanningQuery() {
+    if (!boardQuery || !boardQueryKey || !queryRevision || workspaceStatuses.get("planning") !== "current") return;
+    planningQueries.set(boardQueryKey, {
+      query: boardQuery, revision: queryRevision, result: boardResult,
+      taskIds: new Set(memberships.get("planning")), completeness: completeness.get("planning") || "none",
+      pageStatus, columnReadStatus: { ...columnReadStatus }, sourceEpoch: planningSourceEpoch,
+    });
+  }
   let ended = false;
   const detailUnavailable = new Map<string, TaskDetailUnavailableArea[]>();
   const deniedTaskReads = new Set<string>();
+  const taskDeniedAt = new Map<string, number>();
   const retainedTaskFields = new Map<string, Set<keyof Task>>();
   const summaryDetailFields: (keyof Task)[] = ["problemStatement", "intendedOutcome", "scopeConstraints", "evidenceRequired", "note"];
   const staleSnapshotFields: (keyof Task)[] = [...summaryDetailFields,"dependsOn","strategy","raciAssignments","evidenceLink","evidenceLinks","linkedPullRequests","assignee","owner","createdBy","parentApprovalStatus"];
@@ -113,6 +202,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
   }
   restoreTaskFieldCoverage(initialData.tasks);
+  for (const task of initialData.tasks) if (initialWorkspaceRead?.taskOmittedFields?.length) retainedTaskFields.set(task.id, new Set(initialWorkspaceRead.taskOmittedFields));
   function acceptTaskFieldCoverage(task: Partial<Task> & { id: string }, omitted: readonly (keyof Task)[] = []) {
     const previous = confirmed.tasks.find(row => row.id === task.id);
     const retained = new Set(retainedTaskFields.get(task.id));
@@ -134,6 +224,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
 
   const detailStatuses = new Map<string, PlanningReadStatus>(initialData.tasks.filter(task=>task.detailAvailability === "stale").map(task=>[task.id,"stale"]));
+  const childLists = new Map<string, { ids: Set<string>; started: number; readStatus: PlanningReadStatus }>();
   const detailReads = new Map<string, ReturnType<PlanningState["loadTaskDetail"]>>();
   const tails = new Map<string, { context: symbol; result: Promise<TaskUpdateResult> }>();
   const pending = new Map<symbol, { taskId: string; patch: Partial<Task>; submitted: Partial<Task>; phase: PlanningTaskSaveView["phase"] }>();
@@ -141,6 +232,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const outcomeCheckStatus = new Map<string, PlanningTaskSaveView["checkStatus"]>();
   const status = new Map<string, PlanningTaskSaveStatus>();
   const listeners = new Set<() => void>();
+  let deferNotifications = false;
   const commentDrafts = new Map<string, { text: string }>();
   function isActive() {
     if (active && sessionExpiresAt !== undefined && sessionExpiresAt * 1000 <= (adapter.now?.() ?? Date.now())) suspendProtected();
@@ -154,8 +246,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     const current=confirmed.tasks.find(row=>row.id===task.id);
     if(!current)return false;
     if(Math.max(taskConfirmedAt.get(task.id)||0,taskReadAt.get(task.id)||0)>started&&current.updatedAt!==task.updatedAt&&current.updatedAt!==patch.updatedAt)return false;
-    confirmed={...confirmed,tasks:confirmed.tasks.map(row=>row.id===task.id?{...row,...patch}:row)};taskConfirmedAt.set(task.id,++sequence);return true;
-  },invalidateTask(id){taskConfirmedAt.set(id,++sequence);freshness="stale";detailStatuses.set(id,"stale");for(const [workspace,members] of memberships)if(members.has(id))workspaceStatuses.set(workspace,"stale");},refresh:reloadBlockerTask,timelineLoaded:id=>detailReads.has(id)||detailStatuses.get(id)==="current"||confirmed.taskComments.some(comment=>comment.taskId===id),invalidateConnection:githubConnection.invalidate,endSession});
+    confirmed={...confirmed,tasks:confirmed.tasks.map(row=>row.id===task.id?{...row,...patch}:row)};confirmTaskRevision(task.id,++sequence);return true;
+  },invalidateTask(id){confirmTaskRevision(id,++sequence);freshness="stale";detailStatuses.set(id,"stale");for(const [workspace,members] of memberships)if(members.has(id))workspaceStatuses.set(workspace,"stale");},refresh:reloadBlockerTask,timelineLoaded:id=>detailReads.has(id)||detailStatuses.get(id)==="current"||confirmed.taskComments.some(comment=>comment.taskId===id),invalidateConnection:githubConnection.invalidate,endSession});
   const workweekCalendars = createPublishedWorkweekCalendars({ active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), read: adapter.readWorkweekCalendar });
   const privateWorkweek = createPrivateWorkweekState({ adapter, active: isActive, generation: () => sessionGeneration, changed: () => { if (!googleWorkspace.privateContextChanged()) publish(); }, published: workweekCalendars.invalidatePublishedWorkweeks, publicationBlocked: () => googleWorkspace.blocksPublication() });
   const googleWorkspace = createGoogleWorkspaceState({ adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidate: workweekCalendars.invalidatePublishedWorkweeks, privateBusy: privateWorkweek.publicationBusy, privateContext: privateWorkweek.disconnectBinding, privateChanged: privateWorkweek.connectionChanged });
@@ -169,7 +261,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const blockerReports = createTaskBlockerReports({ initial: active ? initialData.taskBlockers : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
     canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)),
     dependencyPending: task => githubSync.blocksTask(task.id) || taskReviews.blocksTask(task.id) || relationshipChanges.blocksTask(task.id) || attachmentUploads.blocksTask(task.id) || githubImports.blocksTask(task.id) || lifecycle.isRemoving(task) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id) || sprintLock.blocksTask(task) || taskSchedulePending(task.id),
-    invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
+    invalidateTask(id) { confirmTaskRevision(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadBlockerTask,
   });
   const commentCreations = createTaskCommentCreations({ actor: userId, initial: active ? initialData.taskComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
@@ -179,38 +271,43 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const githubImports = createTaskGitHubImports({ initial: active ? initialData.taskExternalComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
     canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)),
     dependencyPending: task => githubSync.blocksTask(task.id) || taskReviews.blocksTask(task.id) || relationshipChanges.blocksTask(task.id) || attachmentUploads.blocksTask(task.id) || lifecycle.isRemoving(task) || blockerReports.blocksTask(task.id) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id) || sprintLock.blocksTask(task) || taskSchedulePending(task.id) || [...pending.values()].some(item => item.taskId === task.id),
-    invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
+    invalidateTask(id) { confirmTaskRevision(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadGitHubImport,
   });
   const attachmentUploads = createTaskAttachmentUploads({ initial: active ? initialData.taskActivity : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
     canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)),
     dependencyPending: task => githubSync.blocksTask(task.id) || taskReviews.blocksTask(task.id) || relationshipChanges.blocksTask(task.id) || blockerReports.blocksTask(task.id) || githubImports.blocksTask(task.id) || lifecycle.isRemoving(task) || backlogAssignments.blocksTask(task.id) || backlogOrdering.blocksTask(task.id) || sprintLock.blocksTask(task) || taskSchedulePending(task.id),
-    invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
+    invalidateTask(id) { confirmTaskRevision(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     endSession, refresh: reloadBlockerTask,
   });
   const relationshipChanges = createTaskRelationshipChanges({ initial: active ? initialData.taskRelations : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
     canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)), currentTask: id => confirmed.tasks.find(task => task.id === id),
     dependencyPending: id => githubSync.blocksTask(id) || taskReviews.blocksTask(id) || taskSchedulePending(id) || blockerReports.blocksTask(id) || githubImports.blocksTask(id) || attachmentUploads.blocksTask(id) || backlogAssignments.blocksTask(id) || backlogOrdering.blocksTask(id) || lifecycle.isRemoving({ id } as Task) || lifecycle.isRemoved({ id } as Task) || Boolean(confirmed.tasks.find(task => task.id === id && sprintLock.blocksTask(task))),
-    invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
+    invalidateTask(id) { confirmTaskRevision(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadBlockerTask,
-    confirmRelation: relation => lifecycle.confirmRelationship(relation), removeRelation: id => lifecycle.confirmRelationshipRemoval(id),
+    confirmRelation: relation => { lifecycle.confirmRelationship(relation); invalidatePlanningSource(); }, removeRelation: id => { lifecycle.confirmRelationshipRemoval(id); invalidatePlanningSource(); },
   });
   const taskReviews = createTaskReviewOperations({ adapter, current: () => confirmed, active:isActive, generation:()=>sessionGeneration, changed:publish,nextSequence:()=>++sequence,canRead:id=>!deniedTaskReads.has(id)&&confirmed.tasks.some(task=>task.id===id&&!lifecycle.isRemoved(task)),dependencyPending:task=>githubSync.blocksTask(task.id)||relationshipChanges.blocksTask(task.id)||attachmentUploads.blocksTask(task.id)||lifecycle.isRemoving(task)||githubImports.blocksTask(task.id)||blockerReports.blocksTask(task.id)||backlogAssignments.blocksTask(task.id)||backlogOrdering.blocksTask(task.id)||sprintLock.blocksTask(task)||taskSchedulePending(task.id)||[...pending.values()].some(op=>op.taskId===task.id),refresh:reloadBlockerTask,invalidate:()=>notifications.invalidateHeader(["notifications"]),accept(receipt,task,started,command){
     const current=confirmed.tasks.find(row=>row.id===task.id);
     const newer=Math.max(taskConfirmedAt.get(task.id)||0,taskReadAt.get(task.id)||0)>started&&current?.updatedAt!==task.updatedAt&&current?.updatedAt!==receipt.task.updatedAt;
-    if(!newer) { const patch={...receipt.task,id:task.id}; confirmed=patch.approvalStatus!==undefined?applyPlanningItemApprovalPatch(confirmed,{...patch,approvalStatus:patch.approvalStatus}):{...confirmed,tasks:confirmed.tasks.map(row=>row.id===task.id?{...row,...patch}:row)};taskConfirmedAt.set(task.id,++sequence);
-      if(receipt.task.approvalStatus!==undefined)for(const child of confirmed.tasks)if(child.taskType===(task.taskType==="initiative"?"deliverable":"sub_issue")&&child.parentTaskId===task.id)taskConfirmedAt.set(child.id,++sequence);
+    if(!newer) { const patch={...receipt.task,id:task.id}; confirmed=patch.approvalStatus!==undefined?applyPlanningItemApprovalPatch(confirmed,{...patch,approvalStatus:patch.approvalStatus}):{...confirmed,tasks:confirmed.tasks.map(row=>row.id===task.id?{...row,...patch}:row)};confirmTaskRevision(task.id,++sequence);
+      if(receipt.task.approvalStatus!==undefined)for(const child of confirmed.tasks)if(child.taskType===(task.taskType==="initiative"?"deliverable":"sub_issue")&&child.parentTaskId===task.id)confirmTaskRevision(child.id,++sequence);
     }
     if(receipt.review)confirmed={...confirmed,taskReviews:[receipt.review,...confirmed.taskReviews.filter(review=>review.id!==receipt.review!.id)]};
     if(receipt.activities?.length){const byId=new Map(confirmed.taskActivity.map(activity=>[activity.id,activity]));for(const activity of receipt.activities)byId.set(activity.id,activity);confirmed={...confirmed,taskActivity:[...byId.values()]};}
     if(command.kind==="approval"&&detailStatuses.get(task.id)==="current") {detailStatuses.set(task.id,"stale");void planning.loadTaskDetail(task.id);}
   }});
   const attendanceState = createMeetingAttendanceState({ initial: active ? initialData.meetingAttendance : [], adapter, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, changed: publish, endSession, dependencyPending: meeting => sprintLock.blocksSprint(meeting.sprintId), invalidateNotifications: () => notifications.invalidateHeader(["notifications"]) });
-  const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
+  const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => {
+    const directory = (profiles: PlanningShellState["profiles"]) => profiles.map(({ id, name, platformRole, githubLogin, avatarUrl, color, orgRole, focus, weeklyCapacity }) => ({ id, name, platformRole, githubLogin, avatarUrl, color, orgRole, focus, weeklyCapacity }));
+    const sourceChanged = JSON.stringify(directory(data.profiles)) !== JSON.stringify(directory(confirmed.profiles));
+    confirmed = data;
+    if (sourceChanged) invalidatePlanningSource();
+  }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
   const scoreObjections=createScoreObjectionState({current:()=>confirmed,update:data=>{confirmed=data;},changed:publish,nextSequence:()=>++sequence,active:isActive,generation:()=>sessionGeneration,refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded",canRead:()=>!sprintState.denied(),dependencyPending:id=>sprintLock.blocksSprint(id),create:adapter.createScoreObjection,process:adapter.processScoreObjection});
   const commitments = createSprintCommitmentState({current:()=>confirmed,update:data=>{confirmed=data;},changed:publish,active:isActive,generation:()=>sessionGeneration,nextSequence:()=>++sequence,save:adapter.saveSprintCommitment,dependencyPending:id=>sprintLock.blocksSprint(id),checkDependency:id=>sprintLock.check(id),refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded"});
-  const sprintState = createSprintState({ current: () => confirmed, update: data => { confirmed = data; }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, dependencyPending: id => blockerBlocksSprint(id) || backlogAssignments.blocksSprint(id) || orderingBlocksSprint(id), checkDependency: async id => { if (blockerBlocksSprint(id)) return checkSprintBlocker(id); if (orderingBlocksSprint(id)) await checkOrdering(); else await backlogAssignments.checkSprint(id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }, lockPending: id=>sprintLock.blocksSprint(id), checkLock:id=>sprintLock.check(id), planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
+  const sprintState = createSprintState({ current: () => confirmed, update: data => { const sourceChanged = data.sprints.length !== confirmed.sprints.length || data.sprints.some((sprint, index) => sprint !== confirmed.sprints[index]); confirmed = data; if (sourceChanged) invalidatePlanningSource(); }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, dependencyPending: id => blockerBlocksSprint(id) || backlogAssignments.blocksSprint(id) || orderingBlocksSprint(id), checkDependency: async id => { if (blockerBlocksSprint(id)) return checkSprintBlocker(id); if (orderingBlocksSprint(id)) await checkOrdering(); else await backlogAssignments.checkSprint(id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }, lockPending: id=>sprintLock.blocksSprint(id), checkLock:id=>sprintLock.check(id), planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: () => sprintState.schedulesPending() || sprintPlan.blocksSchedules() || sprintLock.pending() || backlogAssignments.pending() || backlogOrdering.pending() || confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)), checkSchedules: () => confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)) ? checkSprintBlocker() : backlogOrdering.pending() ? checkOrdering() : sprintLock.pending() ? sprintLock.check() : sprintPlan.blocksSchedules() ? sprintPlan.check() : sprintState.checkPendingSchedules(), save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   const sprintPlan = createSprintPlanState({ schedulesPending: () => sprintState.schedulesPending() || reviewWindow.blocksSprints() || sprintLock.pending() || backlogAssignments.pending() || backlogOrdering.pending() || confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)), checkSchedules: () => confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)) ? checkSprintBlocker() : backlogOrdering.pending() ? checkOrdering() : sprintLock.pending() ? sprintLock.check() : reviewWindow.blocksSprints() ? reviewWindow.check() : sprintState.checkPendingSchedules(), current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, create: adapter.createSprintPlan, accept: sprintState.acceptPlan, denied: sprintState.denied, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   const sprintLock = createSprintLockState({
@@ -251,7 +348,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       sprintState.acceptLock(receipt);
       scoreObjections.acceptLock(receipt.sprint.id);
       for (const task of basis.tasks) {
-        taskConfirmedAt.set(task.id, ++sequence);
+        confirmTaskRevision(task.id, ++sequence);
         if (detailStatuses.has(task.id)) detailStatuses.set(task.id, "stale");
       }
       for (const workspace of ["sprint", "planning", "projects", "backlog"] as const) {
@@ -268,7 +365,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const patch = patches.get(task.id); if (!patch || lifecycle.isRemoved(task)) return task;
       const original = basis.find(item => item.id === task.id);
       if (Math.max(taskConfirmedAt.get(task.id) || 0, taskReadAt.get(task.id) || 0) > started && task.updatedAt !== original?.updatedAt && task.updatedAt !== patch.updatedAt) return task;
-      taskConfirmedAt.set(task.id, ++sequence); return { ...task, ...patch };
+      confirmTaskRevision(task.id, ++sequence); return { ...task, ...patch };
     }) };
     if (activities?.length) { const byId = new Map(confirmed.taskActivity.map(activity => [activity.id, activity])); for (const activity of activities) byId.set(activity.id, activity); confirmed = { ...confirmed, taskActivity: [...byId.values()] }; }
   }, invalidateDependencies(unknown) {
@@ -278,12 +375,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   } });
   const backlogOrdering = createBacklogOrdering({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, canRead: () => workspaceStatuses.get("backlog") !== "forbidden", changed: publish, nextSequence: () => ++sequence, readVersion: id => taskReadAt.get(id) || 0, adapter, endSession, pendingTask: id => taskEffectsPending(id) || Boolean(confirmed.tasks.find(task => task.id === id && sprintLock.blocksTask(task))) || [...pending.values()].some(item => item.taskId === id) || backlogAssignments.blocksTask(id) || lifecycle.isRemoving({ id } as Task) || taskSchedulePending(id), refresh: () => planning.refreshWorkspace("backlog"), accept(updates, started, basis) {
     const patches = new Map(updates.map(update => [update.id,update])); let unresolved = false;
-    for (const update of updates) if (!confirmed.tasks.some(task => task.id === update.id)) { unresolved = true; taskConfirmedAt.set(update.id,++sequence); }
+    for (const update of updates) if (!confirmed.tasks.some(task => task.id === update.id)) { unresolved = true; confirmTaskRevision(update.id,++sequence); }
     confirmed = { ...confirmed, tasks: confirmed.tasks.map(task => {
       const update = patches.get(task.id); if (!update || lifecycle.isRemoved(task)) return task;
       const original = basis.find(item => item.id === task.id);
       if (Math.max(taskConfirmedAt.get(task.id) || 0, taskReadAt.get(task.id) || 0) > started && task.updatedAt !== original?.updatedAt && task.updatedAt !== update.updatedAt) return task;
-      taskConfirmedAt.set(task.id,++sequence); return { ...task, order: update.sortOrder, updatedAt: update.updatedAt };
+      confirmTaskRevision(task.id,++sequence); return { ...task, order: update.sortOrder, updatedAt: update.updatedAt };
     }) }; return unresolved;
   }, invalidate(unknown) { freshness = "stale"; workspaceStatuses.set("backlog", "stale"); if (unknown && workspaceStatuses.has("sprint")) workspaceStatuses.set("sprint", "stale"); } });
   async function reloadGitHubImport(id: string, after: number): Promise<import("../planning-state").PlanningReadStatus> {
@@ -329,6 +426,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function publish() {
     confirmed = attendanceState.projectConfirmed(tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(relationshipChanges.projectConfirmed(attachmentUploads.projectConfirmed(githubImports.projectConfirmed(commentCreations.projectConfirmed(blockerReports.projectConfirmed(confirmed))))))))));
+    if (boardResult && boardQuery && workspaceStatuses.get("planning") === "stale") {
+      const byId = new Map(confirmed.tasks.map(task => [task.id, task]));
+      const cards = boardResult.cardIds.flatMap(id => {
+        const task = byId.get(id);
+        if (!task || deniedTaskReads.has(id) || task.taskType !== boardQuery!.level) return [];
+        if (boardQuery!.parentId !== "all" && task.parentTaskId !== boardQuery!.parentId) return [];
+        if (boardQuery!.filters.status !== "Alle" && normalizeStatus(task.status) !== boardQuery!.filters.status) return [];
+        return [task];
+      });
+      boardResult = { ...boardResult, cardIds: cards.map(task => task.id), columns: Object.fromEntries(Object.entries(boardResult.columns).map(([status, column]) => [status, { ...column, loaded: cards.filter(task => normalizeStatus(task.status) === status).length }])) as PlanningBoardResult["columns"] };
+    }
     const taskView = { ...confirmed, tasks: confirmed.tasks.map(task => {
       let result = task;
       for (const operation of pending.values()) {
@@ -348,7 +456,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (workspaceStatuses.get(workspace) === "forbidden") publishCache?.(null, workspace);
       else { const protectedData = protectedPublication(profileSettings.protect(githubSync.protect(relationshipChanges.protect(attachmentUploads.protect(githubImports.protect(blockerReports.protect(confirmed))))))); publishCache?.({ ...protectedData, tasks: protectedData.tasks.filter(task => members.has(task.id)) }, workspace); }
     }
-    listeners.forEach(listener => listener());
+    if (deferNotifications) queueMicrotask(() => listeners.forEach(listener => listener()));
+    else listeners.forEach(listener => listener());
   }
   function saveTaskWithContext(task: Task, patch: Partial<Task>, context: symbol): Promise<TaskUpdateResult> {
     if ([...retainedTaskFields.get(task.id) || []].some(field => Object.prototype.hasOwnProperty.call(patch, field))) return Promise.resolve({ ok: false, kind: "versionConflict", status: 409, error: "Diese Detailfelder stammen aus einem älteren Stand. Bitte zuerst den vollständigen Stand vergleichen." });
@@ -404,7 +513,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (!result.task.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
         if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
         acceptTaskFieldCoverage({ ...result.task, id: task.id }, [...retainedTaskFields.get(task.id) || []].filter(field => !Object.prototype.hasOwnProperty.call(result.task, field)));
-        taskConfirmedAt.set(task.id, ++sequence);
+        confirmTaskRevision(task.id, ++sequence);
         notifications.invalidateHeader(["notifications"]);
         const currentAfterWrite = confirmed.tasks.find(item => item.id === task.id);
         const foreignConfirmed = currentAfterWrite?.updatedAt !== task.updatedAt && currentAfterWrite?.updatedAt !== result.task.updatedAt;
@@ -413,8 +522,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           ? applyPlanningItemApprovalPatch(confirmed, { ...saved, approvalStatus: saved.approvalStatus })
           : { ...confirmed, tasks: confirmed.tasks.map(item => item.id === task.id ? { ...item, ...saved } : item) };
         if (saved.approvalStatus !== undefined && (task.taskType === "initiative" || task.taskType === "deliverable")) {
-          for (const child of confirmed.tasks) if (child.parentTaskId === task.id && child.taskType === (task.taskType === "initiative" ? "deliverable" : "sub_issue")) taskConfirmedAt.set(child.id, ++sequence);
+          for (const child of confirmed.tasks) if (child.parentTaskId === task.id && child.taskType === (task.taskType === "initiative" ? "deliverable" : "sub_issue")) confirmTaskRevision(child.id, ++sequence);
         }
+
         if (result.activities?.length) confirmed = { ...confirmed, taskActivity: [...result.activities, ...confirmed.taskActivity] };
         pending.delete(operation);
         status.set(task.id, [...pending.values()].some(item => item.taskId === task.id) ? "saving" : "saved");
@@ -460,7 +570,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     checkCreation: async () => { await planning.refreshWorkspace("planning"); return planning.workspace("planning").readStatus; },
     checkRemoval: async taskId => { await planning.loadTaskDetail(taskId); return planning.taskDetail(taskId).readStatus; },
     acceptRemoval(ids, action, rootId) {
-      for (const id of ids) taskConfirmedAt.set(id, ++sequence);
+      for (const id of ids) confirmTaskRevision(id, ++sequence);
       for (const members of memberships.values()) for (const id of ids) members.delete(id);
       confirmed = lifecycle.projectConfirmed(relationshipChanges.projectConfirmed(attachmentUploads.projectConfirmed(githubImports.projectConfirmed(commentCreations.projectConfirmed(blockerReports.projectConfirmed(confirmed))))));
       notifications.invalidateHeader(["notifications"]);
@@ -482,7 +592,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (known) confirmed = { ...confirmed, tasks: confirmed.tasks.map(item => item.id === task.id ? { ...item, ...task } : item) };
         else if (task.id === result.task.id) confirmed = { ...confirmed, tasks: [...confirmed.tasks, created] };
         else { void planning.loadTaskDetail(task.id); continue; }
-        taskConfirmedAt.set(task.id, ++sequence);
+        confirmTaskRevision(task.id, ++sequence);
       }
       for (const workspace of ["planning", "projects"] as const) if (memberships.has(workspace)) memberships.get(workspace)!.add(result.task.id);
       if (result.relation) confirmed = { ...confirmed, taskRelations: [result.relation, ...confirmed.taskRelations.filter(item => item.id !== result.relation!.id)] };
@@ -648,9 +758,51 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     checkOwnProfileSettings: profileSettings.check,
     profileSettings: profileSettings.view,
     saveOwnProfileSettings: profileSettings.save,
-    board: () => ({ tasks: planning.workspace("planning").tasks, freshness }),
+    board: () => {
+      isActive();
+      const tasks = planning.workspace("planning").tasks;
+      const byId = new Map(tasks.map(task => [task.id, task]));
+      const boardTasks = boardResult ? [...boardResult.cardIds.flatMap(id => byId.get(id) ? [byId.get(id)!] : []), ...tasks.filter(task => lifecycle.isTemporary(task.id))] : tasks;
+      return { requiresQueryRead: Boolean(boardQuery && !boardQueryKey), deniedChildListIds: [...childLists].filter(([id, list]) => list.readStatus === "forbidden" || (deniedTaskReads.has(id) && list.readStatus === "loading")).map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
+    },
+    ensureBoardQuery(query) {
+      if (!isActive()) return Promise.resolve(false);
+      const key = planningBoardQueryKey(query);
+      if (boardRead?.key === key && boardRead.sequence === acceptedRead.get("planning") && boardRead.sourceEpoch === planningSourceEpoch) return boardRead.result;
+      if (boardQueryKey === key && workspaceStatuses.get("planning") === "current") return Promise.resolve(true);
+      if (boardQuery && boardQueryKey === planningBoardQueryKey(boardQuery)) rememberPlanningQuery();
+      const exact = planningQueries.get(key);
+      const complete = planningQueries.get(planningBoardQueryKey({ view: "complete" }));
+      const retained = exact || (complete?.completeness === "complete" ? complete : undefined);
+      if (retained && retained.revision === queryRevision && retained.sourceEpoch === planningSourceEpoch && workspaceStatuses.get("planning") !== "forbidden") {
+        acceptedRead.set("planning", ++sequence);
+        boardQuery = exact ? retained.query : normalizePlanningBoardQuery(query);
+        boardQueryKey = key;
+        boardResult = retained.result;
+        pageStatus = retained.pageStatus === "loading" ? "stale" : retained.pageStatus;
+        columnReads.clear(); columnRequests.clear();
+        for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
+        for (const [column, status] of Object.entries(retained.columnReadStatus)) columnReadStatus[column as TaskStatus] = status === "loading" ? "stale" : status;
+        memberships.set("planning", new Set(retained.taskIds));
+        completeness.set("planning", retained.completeness);
+        workspaceStatuses.set("planning", "current");
+        publish();
+        return Promise.resolve(true);
+      }
+      boardQuery = normalizePlanningBoardQuery(query);
+      const result = readWorkspace("planning", boardQuery);
+      boardRead = { key, result, sequence: acceptedRead.get("planning")!, sourceEpoch: planningSourceEpoch };
+      void result.finally(() => { if (boardRead?.result === result) boardRead = undefined; }).catch(() => undefined);
+      return result;
+    },
+    loadCompletedHistory() { return planning.loadBoardColumn("Erledigt"); },
+    loadBoardColumn(status) { return readBoardColumn(status, false); },
+    refreshBoardColumn(status) { return readBoardColumn(status, true); },
     workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id) || ((workspace === "planning" || workspace === "projects") && lifecycle.isTemporary(task.id))), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
-    taskDetail: taskId => { isActive(); return ({
+    taskDetail: taskId => { isActive(); const childList = childLists.get(taskId); return ({
+      removed: lifecycle.isRemoved({ id: taskId } as Task),
+      children: deniedTaskReads.has(taskId) || childList?.readStatus === "forbidden" ? [] : visible.tasks.filter(task => task.parentTaskId === taskId && (childList?.ids.has(task.id) || (childList && (taskConfirmedAt.get(task.id) || 0) > childList.started))),
+      childrenReadStatus: childList?.readStatus || "not-loaded",
       task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
       saveStatus: githubSync.blocksTask(taskId) ? githubSync.view(taskId)?.phase === "syncing" ? "saving" : "unconfirmed" : taskReviews.blocksTask(taskId) ? taskReviews.blockingOperation(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : relationshipChanges.blocksTask(taskId) ? relationshipChanges.pendingViews(taskId).some(view => view.phase === "saving") ? "saving" : "unconfirmed" : attachmentUploads.blocksTask(taskId) ? attachmentUploads.views(taskId).some(view => view.phase === "uploading") ? "saving" : "unconfirmed" : githubImports.blocksTask(taskId) ? githubImports.view(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : blockerReports.saveStatus(taskId) || backlogOrdering.saveStatus(taskId) || backlogAssignments.saveStatus(taskId) || status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
       comments: deniedTaskReads.has(taskId) ? [] : visible.taskComments.filter(item => item.taskId === taskId),
@@ -725,6 +877,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (existing) return existing;
       const readTaskDetail = adapter.readTaskDetail;
       detailStatuses.set(taskId, "loading");
+      childLists.set(taskId, { ids: childLists.get(taskId)?.ids || new Set(visible.tasks.filter(task => task.parentTaskId === taskId).map(task => task.id)), started: childLists.get(taskId)?.started || 0, readStatus: "loading" });
       commentCreations.beginRead(taskId);
       publish();
       const loaded = (async () => {
@@ -739,12 +892,28 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           const failedStatus = readErrorStatus(error);
           commentCreations.failed(taskId, failedStatus);
           githubImports.failed(taskId, failedStatus);
-          if (failedStatus === "forbidden") { deniedTaskReads.add(taskId); taskReviews.deny(taskId); githubSync.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId); }
+          if (failedStatus === "forbidden") {
+            deniedTaskReads.add(taskId);
+            const deniedAt = ++sequence;
+            taskDeniedAt.set(taskId, deniedAt);
+            for (const id of childLists.get(taskId)?.ids || []) { deniedTaskReads.add(id); taskDeniedAt.set(id, deniedAt); }
+            detachPlanningMetadata();
+            if (workspaceStatuses.get("planning") !== "forbidden") workspaceStatuses.set("planning", "stale");
+            taskReviews.deny(taskId); githubSync.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId);
+          }
           detailStatuses.set(taskId, failedStatus);
+          childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: failedStatus });
           publish();
           return { ok: false, error: error instanceof Error ? error.message : "Aufgabendetails konnten nicht geladen werden." };
         }
         if (!isActive() || generation !== sessionGeneration) return { ok: false };
+        if ((taskDeniedAt.get(taskId) || 0) > started) return { ok: false };
+        const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
+        // A changed known record disproves retained aggregate freshness. New detail coverage alone does not.
+        if (returnedTasks.some(task => {
+          const previous = confirmed.tasks.find(row => row.id === task.id);
+          return previous && previous.updatedAt !== task.updatedAt && (taskConfirmedAt.get(task.id) || 0) <= started && (taskReadAt.get(task.id) || 0) <= started;
+        })) invalidatePlanningSource();
         const detailProjection = applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {});
         const profileRead = profileSettings.acceptRead(detailProjection, { profiles: "partial" }, started, "planning", { ...detailProjection, profiles: [...result.model.people] }, ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"]);
         const sprintRead = sprintState.acceptRead(profileRead.data, { sprints: "partial" }, started, { ...detailProjection, sprints: [...result.model.sprints] });
@@ -754,8 +923,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         acceptProfileScope(`task:${taskId}`, result.model.people);
         detailUnavailable.set(taskId, result.unavailable || []);
         detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
-        const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
-        const unresolvedIds = new Set(next.tasks.filter(task => !confirmed.tasks.some(current => current.id === task.id) && (taskConfirmedAt.get(task.id) || 0) > started).map(task => task.id));
+        const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started || (taskDeniedAt.get(task.id) || 0) > started).map(task => task.id));
+        const unresolvedIds = new Set(next.tasks.filter(task => !confirmed.tasks.some(current => current.id === task.id) && Math.max(taskConfirmedAt.get(task.id) || 0, taskDeniedAt.get(task.id) || 0) > started).map(task => task.id));
         confirmed = {
           ...next,
           tasks: next.tasks.filter(task => !unresolvedIds.has(task.id)).map(task => protectedIds.has(task.id) ? confirmed.tasks.find(item => item.id === task.id)! : task),
@@ -773,7 +942,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         githubSync.acceptTaskRead(taskId,started,!protectedIds.has(taskId)&&!unresolvedIds.has(taskId),result.model.item.updatedAt);
         githubImports.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
-        const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
+        childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current" });
+        for (const task of returnedTasks) if (!lifecycle.isRemoved(task) && (taskDeniedAt.get(task.id) || 0) <= started) deniedTaskReads.delete(task.id);
         for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) acceptTaskFieldCoverage(task);
         for (const task of returnedTasks) {
           if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) taskReadAt.set(task.id, started);
@@ -781,6 +951,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (profileRead.stale || sprintRead.stale || unresolvedIds.size || returnedTasks.some(task => protectedIds.has(task.id))) {
           freshness = "stale";
           if (!result.unavailable?.length) detailStatuses.set(taskId, "stale");
+          childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: "stale" });
         }
         publish();
         return { ok: true, unavailable: result.unavailable };
@@ -789,113 +960,248 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       void loaded.finally(() => { if (detailReads.get(taskId) === loaded) detailReads.delete(taskId); }).catch(() => undefined);
       return loaded;
     },
-    async refreshWorkspace(workspace) {
-      if (!isActive()) return false;
-      const generation = sessionGeneration;
-      const started = ++sequence;
-      const notificationRead = notifications.beginWorkspaceRead(workspace);
-      const eventRead = workspace === "events" ? events.beginRead() : null;
-      const toolRead = workspace === "tools" ? tools.beginRead() : null;
-      acceptedRead.set(workspace, started);
-      workspaceStatuses.set(workspace, "loading");
-      publish();
-      let result: PlanningWorkspaceRead | null;
-      try { result = await adapter.readWorkspace(workspace); }
-      catch (error) {
-        if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
-        notifications.workspaceFailed(workspace, error);
-        if (workspace === "backlog" && readErrorStatus(error) === "forbidden") { backlogAssignments.denied(); backlogOrdering.denied(); }
-        if (toolRead !== null) tools.failed(error, toolRead);
-        if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
-        workspaceStatuses.set(workspace, readErrorStatus(error));
-        if (workspace === "sprint") { sprintState.readStatus(readErrorStatus(error)); if (readErrorStatus(error) === "forbidden") {attendanceState.denyWorkspace();scoreObjections.deny();} }
-        profileSettings.readStatus(readErrorStatus(error), workspace);
-        publish();
-        return false;
-      }
-      if (!isActive() || generation !== sessionGeneration || acceptedRead.get(workspace) !== started) return false;
-      if (!result) {
-        if (toolRead !== null) tools.failed(new Error("Links konnten nicht geladen werden."), toolRead);
-        if (eventRead !== null) events.failed(new Error("Events konnten nicht geladen werden."), eventRead);
-        workspaceStatuses.set(workspace, "unavailable");
-        publish();
-        return false;
-      }
-      if (workspace === "backlog") backlogCoverage = result.backlogCoverage || {};
-      const coverage = result.coverage || workspaceReadCoverage(workspace);
-      if (coverage.profiles) acceptProfileScope(workspace, result.data.profiles, coverage.profiles === "complete");
-      if (coverage.taskRelations) relationshipChanges.acceptRead(result.data.taskRelations, started, coverage.taskRelations === "complete");
-      if (coverage.taskActivity) for (const taskId of new Set([...result.data.tasks.map(task => task.id), ...result.data.taskActivity.map(row => row.taskId)])) attachmentUploads.acceptRead(result.data.taskActivity, started, coverage.taskActivity === "complete", taskId);
-      if (coverage.taskExternalComments) githubImports.acceptRead(result.data.taskExternalComments, started, coverage.taskExternalComments === "complete");
-      if (coverage.taskComments) commentCreations.acceptRead(result.data.taskComments, started, coverage.taskComments === "complete");
-      if (coverage.taskBlockers) blockerReports.acceptBlockerRead(result.data.taskBlockers, started, coverage.taskBlockers === "complete");
-      const taskCoverage = result.taskCoverage === "none" ? undefined : result.taskCoverage || coverage.tasks;
-      const rawIncoming = taskCoverage ? result.data.tasks : [];
-      const currentIds = new Set(confirmed.tasks.map(task => task.id));
-      // A late full row cannot precede a confirmed partial receipt for a still-unresolved identity.
-      const incoming = rawIncoming.filter(task => currentIds.has(task.id) || (taskConfirmedAt.get(task.id) || 0) <= started);
-      const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
-      const acceptedTask = (task: Task) => {
-        const previous = confirmed.tasks.find(item => item.id === task.id);
-        const omittedFields = result.taskOmittedFields || (task.detailAvailability === "summary" ? summaryDetailFields : []);
-        acceptTaskFieldCoverage(task, omittedFields);
-        if (!previous || !omittedFields.length) return task;
-        const next = { ...previous, ...task };
-        for (const field of omittedFields) Object.assign(next, { [field]: previous[field] });
-        if (previous.detailAvailability !== "summary") {
-          next.detailAvailability = "stale";
-          detailStatuses.set(task.id, "stale");
-        }
-        return next;
-      };
-      const replacements = new Map(incoming.filter(task => !protectedIds.has(task.id)).map(task => [task.id, acceptedTask(task)]));
-      const known = new Set(confirmed.tasks.map(task => task.id));
-      for (const task of replacements.values()) taskReadAt.set(task.id, started);
-      const covered = projectCoveredRead(confirmed, result.data, coverage);
-      for (const field of result.projectOmittedFields || []) Object.assign(covered.project, { [field]: confirmed.project[field] });
-      const projectRead = coverage.project ? administration.acceptProjectRead(covered.project, started) : {project:covered.project,stale:false};
-      covered.project=projectRead.project;
-      if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
-      for (const field of ["taskActivity","taskReviews"] as const) {
-        const retained = confirmed[field].filter(item=>protectedIds.has(item.taskId));
-        const incoming = covered[field].filter(item=>!protectedIds.has(item.taskId));
-        Object.assign(covered,{[field]:[...incoming,...retained]});
-      }
-      const profileRead = profileSettings.acceptRead(covered, coverage, started, workspace, result.data, result.profileOmittedFields);
-      const sprintCoverage = { ...coverage }; delete sprintCoverage.meetingAttendance;
-      const sprintRead = sprintState.acceptRead(profileRead.data, sprintCoverage, started, result.data);
-      if (coverage.meetingAttendance) attendanceState.acceptRead(result.data.meetingAttendance, started, coverage.meetingAttendance === "complete");
-      const scoreRead=scoreObjections.acceptRead(sprintRead.data,coverage,started,result.data);
-      sprintRead.data=scoreRead.data;
-      const commitmentRead=commitments.acceptRead(result.data.sprintCommitments,coverage.sprintCommitments,started);
-      sprintRead.data.sprintCommitments=commitmentRead.rows;
-      confirmed = {
-        ...sprintRead.data,
-        project: {...sprintRead.data.project,githubProjectOwner:projectRead.project.githubProjectOwner,githubProjectNumber:projectRead.project.githubProjectNumber},
-        tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
-      };
-      if (taskCoverage) {
-        const members = taskCoverage === "complete" ? new Set<string>() : new Set(memberships.get(workspace));
-        incoming.forEach(task => members.add(task.id));
-        for (const id of protectedIds) if (memberships.get(workspace)?.has(id)) members.add(id);
-        memberships.set(workspace, members);
-      }
-      if (!memberships.has(workspace)) memberships.set(workspace, new Set());
-      completeness.set(workspace, taskCoverage || "none");
-      const stale = scoreRead.stale || commitmentRead.stale || projectRead.stale || rawIncoming.length !== incoming.length || sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
-      workspaceStatuses.set(workspace, stale ? "stale" : "current");
-      if (toolRead !== null) tools.acceptRead({ tools: result.data.fmdTools, completeness: result.toolCoverage || "partial" }, toolRead, Boolean(result.headerData && result.headerData.quickLinks.state === "ready"));
-      if (eventRead !== null) events.acceptRead({ events: result.data.events, coverage: result.eventCoverage || { range: null, completeness: "partial" } }, eventRead, Boolean(result.headerData && result.headerData.calendarEvents.state !== "idle"));
-      notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
-      profileSettings.readStatus(stale ? "stale" : "current", workspace);
-      if (workspace === "sprint") sprintState.readStatus(stale ? "stale" : "current");
-      if (result.currentProfile) actorIdentity = { ...result.currentProfile };
-      acceptWorkspaceContext?.(result);
-      freshness = stale ? "stale" : "current";
-      publish();
-      return true;
+    prepareWorkspaceHydration(workspace) {
+      if (isActive() && sessionRevision && (workspace === "planning" || workspace === "projects")) hydrationRequests.set(workspace, beginWorkspaceRead(workspace));
+    },
+    refreshWorkspace(workspace) {
+      if (!isActive()) return Promise.resolve(false);
+      const existing = workspaceReads.get(workspace);
+      if (existing && existing.generation === sessionGeneration && existing.sessionRevision === sessionRevision && (workspace === "planning" ? existing.sourceEpoch === planningSourceEpoch : existing.started === sequence) && existing.started === acceptedRead.get(workspace)) return existing.result;
+      if (workspace === "planning") planningQueries.clear();
+      const result = readWorkspace(workspace, workspace === "planning" ? boardQuery : undefined);
+      workspaceReads.set(workspace, { result, generation: sessionGeneration, started: acceptedRead.get(workspace) || 0, sourceEpoch: planningSourceEpoch, sessionRevision });
+      void result.finally(() => { if (workspaceReads.get(workspace)?.result === result) workspaceReads.delete(workspace); }).catch(() => undefined);
+      return result;
     },
   };
+  function readBoardColumn(column: TaskStatus, refresh: boolean) {
+    if (!isActive() || !boardResult || !boardQuery) return Promise.resolve(false);
+    refresh ||= (columnReadStatus[column] === "stale" || columnReadStatus[column] === "unavailable") && !boardResult.columns[column]?.continuation;
+    const continuation = refresh ? undefined : boardResult.columns[column]?.continuation || undefined;
+    if (!refresh && !continuation) return Promise.resolve(true);
+    const key = JSON.stringify([boardResult.queryKey, boardResult.revision, continuation, refresh]);
+    const existing = columnReads.get(column);
+    if (existing?.key === key) return existing.result;
+    const result = readWorkspace("planning", { ...boardQuery, column, continuation }, true);
+    columnReads.set(column, { key, result });
+    void result.finally(() => { if (columnReads.get(column)?.result === result) columnReads.delete(column); }).catch(() => undefined);
+    return result;
+  }
+  function readIsCurrent(workspace: AppWorkspace, token: ReturnType<typeof beginWorkspaceRead>) {
+    if (!isActive() || token.generation !== sessionGeneration || token.sessionRevision !== sessionRevision || (workspace === "planning" && token.sourceEpoch !== planningSourceEpoch)) return false;
+    if (!token.page) return acceptedRead.get(workspace) === token.started;
+    return acceptedRead.get(workspace) === token.page.baseRead && columnRequests.get(token.page.column) === token.started
+      && boardQueryKey === token.page.queryKey && boardResult?.queryKey === token.page.queryKey && boardResult?.revision === token.page.revision;
+  }
+  async function readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, append = false) {
+    if (!isActive()) return false;
+    if (workspace === "planning" && !append) { columnReads.clear(); columnRequests.clear(); }
+    const token = beginWorkspaceRead(workspace, append ? query : undefined);
+    const { eventRead, toolRead } = token;
+    const setPageStatus = (status: PlanningReadStatus) => { if (!token.page || token.page.column === "Erledigt") pageStatus = status; if (token.page) columnReadStatus[token.page.column] = status; };
+    if (append) setPageStatus("loading"); else workspaceStatuses.set(workspace, "loading");
+    publish();
+    let result: PlanningWorkspaceRead | null;
+    try { result = await adapter.readWorkspace(workspace, query); }
+    catch (error) {
+      if (!readIsCurrent(workspace, token)) return false;
+      if (append) {
+        const staleContinuation = typeof error === "object" && error !== null && "code" in error && error.code === "stale_continuation";
+        setPageStatus(staleContinuation ? "stale" : readErrorStatus(error));
+        if (staleContinuation && boardResult && token.page) {
+          const column = token.page.column;
+          boardResult = { ...boardResult, columns: { ...boardResult.columns, [column]: { ...boardResult.columns[column], continuation: null } } };
+        }
+        if (readErrorStatus(error) === "forbidden") denyPlanningScope();
+        publish();
+        return false;
+      }
+      notifications.workspaceFailed(workspace, error);
+      if (workspace === "backlog" && readErrorStatus(error) === "forbidden") { backlogAssignments.denied(); backlogOrdering.denied(); }
+      if (toolRead !== null) tools.failed(error, toolRead);
+      if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
+      workspaceStatuses.set(workspace, readErrorStatus(error));
+      if (workspace === "planning" && readErrorStatus(error) === "forbidden") denyPlanningScope();
+      if (workspace === "sprint") { sprintState.readStatus(readErrorStatus(error)); if (readErrorStatus(error) === "forbidden") {attendanceState.denyWorkspace();scoreObjections.deny();} }
+      profileSettings.readStatus(readErrorStatus(error), workspace);
+      publish();
+      return false;
+    }
+    if (!readIsCurrent(workspace, token)) return false;
+    if (!result) {
+      if (toolRead !== null) tools.failed(new Error("Links konnten nicht geladen werden."), toolRead);
+      if (eventRead !== null) events.failed(new Error("Events konnten nicht geladen werden."), eventRead);
+      if (append) setPageStatus("unavailable"); else workspaceStatuses.set(workspace, "unavailable");
+      publish();
+      return false;
+    }
+    if (query && result.query && planningBoardQueryKey(query) !== planningBoardQueryKey(result.query)) {
+      if (append) setPageStatus("unavailable"); else workspaceStatuses.set(workspace, "unavailable");
+      publish();
+      return false;
+    }
+    if (append && (!result.board || result.board.column !== token.page?.column)) { setPageStatus("unavailable"); publish(); return false; }
+    return acceptWorkspaceRead(workspace, { ...result, query: result.query || query, append }, token);
+  }
+  function beginWorkspaceRead(workspace: AppWorkspace, query?: PlanningBoardQueryInput) {
+    const page = query?.column && boardResult ? { column: query.column, queryKey: boardResult.queryKey, revision: boardResult.revision, baseRead: acceptedRead.get(workspace), continuation: query.continuation } : undefined;
+    const token = {
+      page,
+      generation: sessionGeneration,
+      sessionRevision,
+      sourceEpoch: planningSourceEpoch,
+      started: ++sequence,
+      notificationRead: notifications.beginWorkspaceRead(workspace),
+      eventRead: workspace === "events" ? events.beginRead() : null,
+      toolRead: workspace === "tools" ? tools.beginRead() : null,
+    };
+    if (page) columnRequests.set(page.column, token.started);
+    else acceptedRead.set(workspace, token.started);
+    return token;
+  }
+  function acceptWorkspaceRead(workspace: AppWorkspace, result: PlanningWorkspaceRead, token: ReturnType<typeof beginWorkspaceRead>) {
+    const { started, notificationRead, eventRead, toolRead } = token;
+    if (!readIsCurrent(workspace, token)) return false;
+    if (workspace === "planning" && result.query?.view === "complete") {
+      const coverage = result.coverage || {};
+      const complete = (result.taskCoverage || coverage.tasks) === "complete"
+        && ["profiles", "sprints", "taskRelations", "taskBlockers"].every(field => coverage[field as keyof PlanningReadCoverage] === "complete");
+      if (result.board || !complete) {
+        workspaceStatuses.set("planning", "unavailable");
+        publish();
+        return false;
+      }
+    }
+    if (workspace === "planning" && result.board) {
+      if (result.query && result.board.queryKey !== planningBoardQueryKey(result.query)) {
+        if (token.page) columnReadStatus[token.page.column] = "unavailable";
+        else workspaceStatuses.set("planning", "unavailable");
+        publish();
+        return false;
+      }
+      if (result.append && (!token.page || result.board.column !== token.page.column || !boardResult || boardResult.queryKey !== result.board.queryKey || (token.page.continuation && boardResult.revision !== result.board.revision))) {
+        if (token.page) columnReadStatus[token.page.column] = "stale";
+        pageStatus = "stale"; publish(); return false;
+      }
+      const previous = result.append ? boardResult : undefined;
+      const retainedIds = previous && token.page && !token.page.continuation ? previous.cardIds.filter(id => normalizeStatus(confirmed.tasks.find(task => task.id === id)?.status || "") !== token.page!.column) : previous?.cardIds || [];
+      const cardIds = [...new Set([...retainedIds, ...result.board.cardIds])];
+      const columns = previous ? { ...previous.columns } : { ...result.board.columns };
+      if (previous && token.page) {
+        const column = token.page.column;
+        const added = result.board.cardIds.filter(id => !retainedIds.includes(id)).length;
+        columns[column] = { ...result.board.columns[column], loaded: (token.page.continuation ? previous.columns[column].loaded : 0) + added };
+        if (previous.revision !== result.board.revision) {
+          for (const other of Object.keys(columns) as TaskStatus[]) if (other !== column) {
+            columnReadStatus[other] = "stale";
+            columns[other] = { ...columns[other], continuation: null };
+          }
+        }
+        columnReadStatus[column] = "current";
+      } else {
+        for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
+      }
+      boardResult = {
+        ...result.board, column: undefined, cardIds, columns,
+        attentionById: { ...previous?.attentionById, ...result.board.attentionById },
+        childProgressById: { ...previous?.childProgressById, ...result.board.childProgressById },
+        viewerOpenSubIssueIdsByDeliverableId: { ...previous?.viewerOpenSubIssueIdsByDeliverableId, ...result.board.viewerOpenSubIssueIdsByDeliverableId },
+      };
+      boardQuery = result.board.query;
+      boardQueryKey = result.board.queryKey;
+      pageStatus = "current";
+    } else if (workspace === "planning" && result.query) {
+      boardResult = undefined;
+      boardQuery = normalizePlanningBoardQuery(result.query);
+      boardQueryKey = planningBoardQueryKey(boardQuery);
+      pageStatus = "current";
+      for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
+    }
+    if (workspace === "planning") {
+      if (started >= scopeRevisionReadAt) { scopeRevision = result.scopeRevision; scopeRevisionReadAt = started; }
+      const revision = result.queryRevision || result.board?.revision;
+      if (!revision || revision !== queryRevision) planningQueries.clear();
+      queryRevision = revision;
+    }
+    if (workspace === "backlog") backlogCoverage = result.backlogCoverage || {};
+    const coverage = result.coverage || workspaceReadCoverage(workspace);
+    if (coverage.profiles) acceptProfileScope(workspace, result.data.profiles, coverage.profiles === "complete");
+    if (coverage.taskRelations) relationshipChanges.acceptRead(result.data.taskRelations, started, coverage.taskRelations === "complete");
+    if (coverage.taskActivity) for (const taskId of new Set([...result.data.tasks.map(task => task.id), ...result.data.taskActivity.map(row => row.taskId)])) attachmentUploads.acceptRead(result.data.taskActivity, started, coverage.taskActivity === "complete", taskId);
+    if (coverage.taskExternalComments) githubImports.acceptRead(result.data.taskExternalComments, started, coverage.taskExternalComments === "complete");
+    if (coverage.taskComments) commentCreations.acceptRead(result.data.taskComments, started, coverage.taskComments === "complete");
+    if (coverage.taskBlockers) blockerReports.acceptBlockerRead(result.data.taskBlockers, started, coverage.taskBlockers === "complete");
+    const taskCoverage = result.taskCoverage === "none" ? undefined : result.taskCoverage || coverage.tasks;
+    const rawIncoming = taskCoverage ? result.data.tasks : [];
+    const currentIds = new Set(confirmed.tasks.map(task => task.id));
+    // A late full row cannot precede a confirmed partial receipt for a still-unresolved identity.
+    const incoming = rawIncoming.filter(task => !lifecycle.isRemoved(task) && (taskDeniedAt.get(task.id) || 0) <= started && (currentIds.has(task.id) || (taskConfirmedAt.get(task.id) || 0) <= started));
+    for (const task of incoming) deniedTaskReads.delete(task.id);
+    const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started).map(task => task.id));
+    const acceptedTask = (task: Task) => {
+      const previous = confirmed.tasks.find(item => item.id === task.id);
+      const omittedFields = result.taskOmittedFields || (task.detailAvailability === "summary" ? summaryDetailFields : []);
+      acceptTaskFieldCoverage(task, omittedFields);
+      if (!previous || !omittedFields.length) return task;
+      const next = { ...previous, ...task };
+      for (const field of omittedFields) Object.assign(next, { [field]: previous[field] });
+      if (previous.detailAvailability !== "summary") {
+        next.detailAvailability = "stale";
+        detailStatuses.set(task.id, "stale");
+        const childList = childLists.get(task.id);
+        if (childList?.readStatus === "current") childLists.set(task.id, { ...childList, readStatus: "stale" });
+      }
+      return next;
+    };
+    const replacements = new Map(incoming.filter(task => !protectedIds.has(task.id)).map(task => [task.id, acceptedTask(task)]));
+    const known = new Set(confirmed.tasks.map(task => task.id));
+    for (const task of replacements.values()) taskReadAt.set(task.id, started);
+    const covered = projectCoveredRead(confirmed, result.data, coverage);
+    for (const field of result.projectOmittedFields || []) Object.assign(covered.project, { [field]: confirmed.project[field] });
+    const projectRead = coverage.project ? administration.acceptProjectRead(covered.project, started) : {project:covered.project,stale:false};
+    covered.project=projectRead.project;
+    if (coverage.taskRelations) lifecycle.acceptRelationshipRead(covered, started, coverage.taskRelations === "complete");
+    for (const field of ["taskActivity","taskReviews"] as const) {
+      const retained = confirmed[field].filter(item=>protectedIds.has(item.taskId));
+      const incoming = covered[field].filter(item=>!protectedIds.has(item.taskId));
+      Object.assign(covered,{[field]:[...incoming,...retained]});
+    }
+    const profileRead = profileSettings.acceptRead(covered, coverage, started, workspace, result.data, result.profileOmittedFields);
+    const sprintCoverage = { ...coverage }; delete sprintCoverage.meetingAttendance;
+    const sprintRead = sprintState.acceptRead(profileRead.data, sprintCoverage, started, result.data);
+    if (coverage.meetingAttendance) attendanceState.acceptRead(result.data.meetingAttendance, started, coverage.meetingAttendance === "complete");
+    const scoreRead=scoreObjections.acceptRead(sprintRead.data,coverage,started,result.data);
+    sprintRead.data=scoreRead.data;
+    const commitmentRead=commitments.acceptRead(result.data.sprintCommitments,coverage.sprintCommitments,started);
+    sprintRead.data.sprintCommitments=commitmentRead.rows;
+    confirmed = {
+      ...sprintRead.data,
+      project: {...sprintRead.data.project,githubProjectOwner:projectRead.project.githubProjectOwner,githubProjectNumber:projectRead.project.githubProjectNumber},
+      tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
+    };
+    if (taskCoverage) {
+      const members = taskCoverage === "complete" ? new Set<string>() : new Set(memberships.get(workspace));
+      incoming.forEach(task => members.add(task.id));
+      for (const id of protectedIds) if (memberships.get(workspace)?.has(id)) members.add(id);
+      memberships.set(workspace, members);
+    }
+    if (!memberships.has(workspace)) memberships.set(workspace, new Set());
+    completeness.set(workspace, taskCoverage || "none");
+    const stale = scoreRead.stale || commitmentRead.stale || projectRead.stale || rawIncoming.length !== incoming.length || sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id) && (!token.page || (taskConfirmedAt.get(task.id) || 0) > started)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
+    workspaceStatuses.set(workspace, stale ? "stale" : "current");
+    if (workspace === "planning" && boardResult && stale) { pageStatus = "stale"; if (token.page) columnReadStatus[token.page.column] = "stale"; }
+    if (toolRead !== null) tools.acceptRead({ tools: result.data.fmdTools, completeness: result.toolCoverage || "partial" }, toolRead, Boolean(result.headerData && result.headerData.quickLinks.state === "ready"));
+    if (eventRead !== null) events.acceptRead({ events: result.data.events, coverage: result.eventCoverage || { range: null, completeness: "partial" } }, eventRead, Boolean(result.headerData && result.headerData.calendarEvents.state !== "idle"));
+    notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
+    profileSettings.readStatus(stale ? "stale" : "current", workspace);
+    if (workspace === "sprint") sprintState.readStatus(stale ? "stale" : "current");
+    if (result.currentProfile) actorIdentity = { ...result.currentProfile };
+    acceptWorkspaceContext?.(result);
+    freshness = stale ? "stale" : "current";
+    if (workspace === "planning") rememberPlanningQuery();
+    publish();
+    return true;
+  }
   function suspendProtected() {
     sessionGeneration++;
     active = false;
@@ -930,13 +1236,25 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     profileSettings.clear();
     profileTokens.clear();
     pending.clear();
+    taskConfirmedAt.clear();
+    taskReadAt.clear();
     status.clear();
     memberships.clear();
     workspaceStatuses.clear();
     completeness.clear();
+    acceptedRead.clear();
+    hydrationReads.clear();
+    boardResult = undefined; boardQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
+    planningQueries.clear(); queryRevision = undefined; scopeRevision = undefined;
+    columnReads.clear(); columnRequests.clear();
+    for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
+    workspaceReads.clear();
+    hydrationRequests.clear();
     backlogCoverage = {};
     detailStatuses.clear();
+    childLists.clear();
     deniedTaskReads.clear();
+    taskDeniedAt.clear();
     retainedTaskFields.clear();
     profileScopes.clear();
     actorIdentity = null;
@@ -958,16 +1276,51 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (account !== userId) endSession();
   }
   function bindSession(session: BrowserSessionSnapshot | null) {
+    let authorityChanged = false;
     sessionChanged(session?.userId || null);
-    if (session?.userId === userId && !ended) sessionExpiresAt = session.expiresAt;
-    isActive();
+    if (session?.userId === userId && !ended) {
+      if (sessionRevision && sessionRevision !== session.revision) {
+        const selectedQuery = boardQuery;
+        suspendProtected();
+        active = true;
+        boardQuery = selectedQuery;
+        requiresBoundHydration = true;
+        authorityChanged = true;
+      }
+      sessionRevision = session.revision;
+      sessionExpiresAt = session.expiresAt;
+    }
+    return isActive() && authorityChanged;
   }
   const unsubscribeSession = adapter.subscribeSession?.(sessionChanged);
-  function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace) {
+  function acceptHydration(data: PlanningShellState, account: string, workspace: AppWorkspace = initialWorkspace, read?: import("../planning-workspace-hydration").PlanningWorkspaceHydration) {
     if (ended || (userId && userId !== account)) return;
     userId = account;
     active = Boolean(account);
     if (!isActive()) return;
+    const boundRead = read && read.workspace === workspace && (read.queryKey === "workspace" || (read.query && planningBoardQueryKey(read.query) === read.queryKey) || read.board?.queryKey === read.queryKey) && read.session.userId === userId
+      && read.session.revision === sessionRevision && read.session.expiresAt === sessionExpiresAt
+      && read.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now());
+    const requested = hydrationRequests.get(workspace);
+    hydrationRequests.delete(workspace);
+    if (requiresBoundHydration && !boundRead) {
+      // Reject the page payload, but recover its target through the current authority.
+      void planning.refreshWorkspace(workspace);
+      return;
+    }
+    if (boundRead && read) {
+      const identity = hydrationIdentity(data, read);
+      if (workspaceStatuses.get(workspace) === "current" && hydrationReads.get(workspace) === identity) return;
+      if (requested && acceptWorkspaceRead(workspace, {
+        data, scopeRevision: read.scopeRevision, board: read.board, query: read.query || read.board?.query, queryRevision: read.queryRevision, coverage: read.coverage, taskCoverage: read.coverage.tasks,
+        taskOmittedFields: read.taskOmittedFields,
+        profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
+        projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"],
+      }, requested)) {
+        hydrationReads.set(workspace, identity);
+        return;
+      }
+    }
     // Page/cache snapshots carry no request token. They cannot prove that any existing scope is newer.
     if (initialized) {
       workspaceStatuses.set(workspace, "stale");
@@ -995,6 +1348,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     completeness.set(workspace, coverage.tasks || "none");
     publish();
   }
+  rememberPlanningQuery();
   queueMicrotask(() => commentCreations.restore());
   return { planning, internal: {
     getSnapshot: () => visible,
@@ -1013,6 +1367,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     acceptDecisionLogHydration: decisionLog.hydrate,
     suspendProtected,
     endSession,
+    retire: () => {
+      deferNotifications = true;
+      try { endSession(); } finally { deferNotifications = false; }
+    },
     dispose: () => { administration.clear(); unsubscribeSession?.(); },
   } };
 }

@@ -10,6 +10,7 @@ export function planningWorkspaceModelToPlanningShellState(model: PlanningWorksp
     tasks: [...model.items],
     sprints: [...model.sprints],
     taskRelations: [...model.relationships],
+    taskBlockers: [...(model.blockers || [])],
     profileUiPreferences: [...model.preferences],
   };
 }

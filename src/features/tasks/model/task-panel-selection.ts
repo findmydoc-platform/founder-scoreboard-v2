@@ -4,12 +4,12 @@ export function currentTaskPanelId(history: string[]) {
   return history.at(-1) || null;
 }
 
-export function startTaskPanelHistory(taskId: string, availableTaskIds: Set<string>) {
-  return availableTaskIds.has(taskId) ? [taskId] : [];
+export function startTaskPanelHistory(taskId: string, removedTaskIds: ReadonlySet<string> = new Set()) {
+  return taskId.trim() && !removedTaskIds.has(taskId) ? [taskId] : [];
 }
 
-export function pushTaskPanelHistory(history: string[], taskId: string, availableTaskIds: Set<string>) {
-  if (!availableTaskIds.has(taskId) || currentTaskPanelId(history) === taskId) return history;
+export function pushTaskPanelHistory(history: string[], taskId: string, removedTaskIds: ReadonlySet<string> = new Set()) {
+  if (!taskId.trim() || removedTaskIds.has(taskId) || currentTaskPanelId(history) === taskId) return history;
   return [...history.filter((historyTaskId) => historyTaskId !== taskId), taskId];
 }
 
@@ -21,8 +21,8 @@ export function closeTaskPanelHistory() {
   return [] as string[];
 }
 
-export function normalizeTaskPanelHistory(history: string[], availableTaskIds: Set<string>) {
-  return history.filter((taskId) => availableTaskIds.has(taskId));
+export function normalizeTaskPanelHistory(history: string[], removedTaskIds: ReadonlySet<string> = new Set()) {
+  return history.filter((taskId) => !removedTaskIds.has(taskId));
 }
 
 export type TaskReferencePointerIntent = {

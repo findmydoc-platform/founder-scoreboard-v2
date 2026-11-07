@@ -142,6 +142,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
           canAccessAdministration={administratorAccessController.authority.capabilities.manageAdministratorEligibility}
           mobileOpen={mobileNavOpen}
           onMobileClose={() => setMobileNavOpen(false)}
+          onRequestNavigation={controller.navigateWorkspaceHref}
         />
       ) : null}
 
@@ -168,15 +169,16 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
             filters={filters}
             planningLevel={planningLevel}
             planningParentFilterId={resolvedParentFilterId}
+            levelTotals={controller.planningBoard?.result?.levelTotals}
             profiles={data.profiles}
             initiatives={initiativePlanningItems(data.tasks)}
             sprints={data.sprints}
             tasks={data.tasks}
-            workstreams={Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
+            workstreams={controller.view === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
             quickFilters={quickFilters}
             expanded={showFilters}
-            visibleCount={controller.view === "board" ? planningVisibleTasks.length : controller.visibleTasks.length}
-            totalCount={controller.view === "board" ? planningLevelTasks.length : workspaceTasks.filter((task) => task.taskType !== "sub_issue").length}
+            visibleCount={controller.view === "board" ? controller.planningBoard?.result?.metrics.total ?? planningVisibleTasks.length : controller.visibleTasks.length}
+            totalCount={controller.view === "board" ? controller.planningBoard?.result?.levelTotals?.[planningLevel] ?? planningLevelTasks.length : workspaceTasks.filter((task) => task.taskType !== "sub_issue").length}
             showPlanningLevel={controller.view === "board"}
             onExpandedChange={controller.setShowFilters}
             onChange={setFilters}

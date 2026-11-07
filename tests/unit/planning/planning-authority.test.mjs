@@ -10,10 +10,7 @@ test("a mapped viewer reads the planning revision through an action-bound capabi
   const authFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
-    if (url.pathname === "/rest/v1/active_tasks") {
-      expect(url.searchParams.get("project_id")).toBe("eq.findmydoc-founder-execution");
-      return Response.json([{ updated_at: "2026-10-17T08:00:00Z" }], { headers: { "content-range": "0-0/7" } });
-    }
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") return Response.json({ scope_revision: "42", active_task_count: 7, latest_updated_at: "2026-10-17T08:00:00Z" });
     return authFetch(request);
   });
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
@@ -34,7 +31,7 @@ test("the planning board preserves its project and current actor through the pub
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) {
       if (url.pathname === "/rest/v1/projects") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", range_label: "", review_objection_window_hours: 48 });
-      return Response.json([]);
+      return Response.json([], { headers: { "content-range": "*/0" } });
     }
     return authFetch(request);
   });
@@ -52,7 +49,7 @@ test("a read grant cannot change its bound operation after authorization", async
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return url.pathname === "/rest/v1/projects"
-      ? Response.json({ id: "findmydoc-founder-execution", name: "Planning" }) : Response.json([]);
+      ? Response.json({ id: "findmydoc-founder-execution", name: "Planning" }) : Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   const input = { credential: { kind: "session-request", request: protocol.request() }, action: "planning.revision.read" };
@@ -102,7 +99,7 @@ test.each([
   const authFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
-    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([]);
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   const routePath = operation === "decide" ? "src/app/api/tasks/[id]/review/route.ts" : `src/app/api/tasks/[id]/review/${operation}/route.ts`;
@@ -628,7 +625,7 @@ test("server rendered planning uses the same real cookie-bound read policy", asy
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return url.pathname === "/rest/v1/projects"
-      ? Response.json({ id: "findmydoc-founder-execution", name: "Planning" }) : Response.json([]);
+      ? Response.json({ id: "findmydoc-founder-execution", name: "Planning" }) : Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   const jar = protocol.cookieJar();
@@ -861,8 +858,8 @@ test("ordinary planning data outages retain the safe HTTP unavailable response",
   let projectReads = 0;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
-    if (url.pathname === "/rest/v1/projects") { projectReads += 1; return Response.json({ code: "storage_unavailable", message: "Private upstream detail" }, { status: 503 }); }
-    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([]);
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") { projectReads += 1; return Response.json({ code: "storage_unavailable", message: "Private upstream detail" }, { status: 503 }); }
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
@@ -883,7 +880,7 @@ test("local simulation keeps the existing host gate and cannot run on a deployed
   let reads = 0;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init);
-    if (new URL(request.url).pathname === "/rest/v1/active_tasks") { reads++; return Response.json([]); }
+    if (new URL(request.url).pathname === "/rest/v1/rpc/planning_workspace_snapshot") { reads++; return Response.json({ scope_revision: "42", active_task_count: 0, latest_updated_at: null }); }
     return authFetch(request);
   });
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });

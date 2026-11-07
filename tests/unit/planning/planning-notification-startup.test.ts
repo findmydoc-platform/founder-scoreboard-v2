@@ -16,9 +16,9 @@ function planningProtocol(notificationsUnavailable = true) {
   const notificationRead = vi.fn();
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), url = new URL(request.url);
-    if (url.pathname === "/rest/v1/projects") return Response.json({ id: "findmydoc-founder-execution", name: "Planning" });
-    if (url.pathname === "/rest/v1/notification_events") { notificationRead(); return notificationsUnavailable ? Response.json({ message: "Unavailable" }, { status: 503 }) : Response.json([]); }
-    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([]);
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", scope_revision: "42" });
+    if (url.pathname === "/rest/v1/notification_events") { notificationRead(); return notificationsUnavailable ? Response.json({ message: "Unavailable" }, { status: 503 }) : Response.json([], { headers: { "content-range": "*/0" } }); }
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   return { protocol, notificationRead };

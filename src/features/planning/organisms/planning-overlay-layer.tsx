@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { TaskDetailPendingPanel } from "@/features/tasks/molecules/task-detail-pending-panel";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 
 type OverlayLoadingFallbackProps = {
@@ -125,8 +126,19 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
         />
       )}
 
+      {controller.selectedTaskId && !selectedTask && !controller.planningState.taskDetail(controller.selectedTaskId).removed && (
+        <TaskDetailPendingPanel
+          restoreFocusRef={controller.taskPanelReturnFocusRef}
+          error={selectedTaskDetailError}
+          loading={selectedTaskDetailLoading}
+          onRetry={retrySelectedTaskDetail}
+          onClose={closeTaskPanel}
+          onBack={taskPanelPreviousTask ? backTaskPanel : undefined}
+        />
+      )}
       {selectedTask && (
         <TaskDetailPanel
+          restoreFocusRef={controller.taskPanelReturnFocusRef}
           task={selectedTask}
           previousTask={taskPanelPreviousTask}
           comments={selectedTaskComments}

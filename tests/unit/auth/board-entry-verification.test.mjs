@@ -37,8 +37,8 @@ beforeEach(() => {
     if (url.hostname === "sts.googleapis.com") return Response.json({ access_token: "synthetic-exchange" });
     if (url.hostname === "iamcredentials.googleapis.com") return Response.json({ accessToken: "synthetic-directory", expireTime: new Date(Date.now() + 3600000).toISOString() });
     if (url.hostname === "admin.googleapis.com") return Response.json({ isMember: state.member ?? true });
-    if (url.pathname === "/rest/v1/projects") return Response.json({ id: "findmydoc-founder-execution", name: "Planning" });
-    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([]);
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", scope_revision: "42" });
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return fallback(request);
   });
 });
@@ -84,10 +84,11 @@ test.each(["ceo", "founder", "deputy", "viewer"])("%s retains Board reads and li
   expect(result.ok).toBe(true);
   expect((await result.planning.loadBoard()).status).toBe("ready");
   expect(names().filter(name => name === "workspace_calendar_entry")).toHaveLength(1);
-  expect(names().filter(name => name === "current_authenticated_profile")).toHaveLength(11);
-  expect(names().filter(name => name === "workspace_dispatch_prepare")).toHaveLength(11);
-  expect(names().filter(name => name === "workspace_release_permit")).toHaveLength(11);
-  expect(names().filter(name => name === "user")).toHaveLength(13);
+  expect(names().filter(name => name === "current_authenticated_profile")).toHaveLength(13);
+  expect(names().filter(name => name === "workspace_dispatch_prepare")).toHaveLength(13);
+  expect(names().filter(name => name === "workspace_release_permit")).toHaveLength(13);
+  expect(names().filter(name => name === "user")).toHaveLength(15);
+  expect(names().filter(name => name === "planning_workspace_snapshot")).toHaveLength(2);
   for (const request of requests.filter(request => request.name === "current_authenticated_profile")) {
     expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
     expect(request.headers.get("authorization")).toBe(protocol.request().headers.get("authorization"));
@@ -147,6 +148,12 @@ test.each([401, 503])("live authentication failure %s fails before workspace ent
   expect(names()).not.toContain("workspace_calendar_entry");
 });
 
+test.each([null, "administrator"])("an unsupported live profile role %j cannot grant Board reads", async role => {
+  protocol.state.role = role;
+  expect(await authorize()).toMatchObject({ ok: false, status: 403, code: "workspace_access_denied" });
+  expect(names()).not.toContain("planning_workspace_snapshot");
+});
+
 test("a changed profile binding at entry cannot grant a Board capability", async () => {
   state.profileId = "rebound-profile";
   expect(await authorize()).toMatchObject({ ok: false, status: 403 });
@@ -175,7 +182,7 @@ test("a session revoked after entry cannot read the Board", async () => {
   expect(result.ok).toBe(true);
   state.dispatchDenied = true;
   expect(await result.planning.loadBoard()).toEqual({ status: "forbidden" });
-  expect(names()).not.toContain("projects");
+  expect(names()).not.toContain("planning_workspace_snapshot");
 });
 
 test("an expired capability cannot dispatch Board reads", async () => {
@@ -183,5 +190,45 @@ test("an expired capability cannot dispatch Board reads", async () => {
   expect(result.ok).toBe(true);
   vi.setSystemTime(Date.now() + 900001);
   expect(await result.planning.loadBoard()).toEqual({ status: "forbidden" });
-  expect(names()).not.toContain("projects");
+  expect(names()).not.toContain("planning_workspace_snapshot");
+});
+
+test("warm Board entry retains the original membership deadline", async () => {
+  const started = Date.now();
+  expect((await authorize()).ok).toBe(true);
+  vi.setSystemTime(started + 899000);
+  expect((await authorize()).ok).toBe(true);
+  expect(names().filter(name => name === "member%40findmydoc.eu")).toHaveLength(1);
+  vi.setSystemTime(started + 900001);
+  state.member = false;
+  expect(await authorize()).toMatchObject({ ok: false, status: 403, code: "workspace_access_denied" });
+  expect(names().filter(name => name === "member%40findmydoc.eu")).toHaveLength(2);
+});
+
+test("warm Board entry cannot outlive its original JWT expiry", async () => {
+  const started = Date.now();
+  const request = requestWithClaims({ exp: Math.floor(started / 1000) + 60 });
+  expect((await authorize(request)).ok).toBe(true);
+  vi.setSystemTime(started + 30000);
+  expect((await authorize(request)).ok).toBe(true);
+  vi.setSystemTime(started + 60001);
+  expect(await authorize(request)).toMatchObject({ ok: false, status: 401 });
+  expect(names().filter(name => name === "member%40findmydoc.eu")).toHaveLength(1);
+});
+
+test("changed Directory configuration cannot reuse warm Board membership", async () => {
+  expect((await authorize()).ok).toBe(true);
+  vi.stubEnv("GOOGLE_WORKLOAD_IDENTITY_AUDIENCE", "changed-audience");
+  state.member = false;
+  expect(await authorize()).toMatchObject({ ok: false, status: 403, code: "workspace_access_denied" });
+  expect(names().filter(name => name === "member%40findmydoc.eu")).toHaveLength(2);
+});
+
+test("Calendar cannot inherit warm Board membership evidence", async () => {
+  expect((await authorize()).ok).toBe(true);
+  state.member = false;
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const calendar = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "calendar.read" });
+  expect(calendar).toMatchObject({ ok: false, status: 403, code: "workspace_access_denied" });
+  expect(names().filter(name => name === "member%40findmydoc.eu")).toHaveLength(2);
 });

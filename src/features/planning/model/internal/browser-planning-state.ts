@@ -36,6 +36,7 @@ import { setProtectedPlanningShellStateCache } from "@/features/planning/model/i
 import type { AppWorkspace } from "../workspace-routes";
 
 export type PlanningPageState = {
+  initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
   initialData: PlanningShellState;
   initialHeaderData: PlanningHeaderData;
   initialCurrentProfile: AuthenticatedProfile | null;
@@ -69,7 +70,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
       const result = await runtime.apiClient.requestJson<T>(input, { ...requestOptions, expectedSession: binding });
       if ((result.body as { code?: string } | null)?.code === "session_superseded") {
         if (isCurrent() && owner.internal.isActive() && requestOptions?.expectedSession?.isCurrent?.() === false) throw Object.assign(new Error("Die zeitlich begrenzte Berechtigung wurde beendet."), { status: 403, code: "administrator_access_expired" });
-        owner.internal.endSession();
+        if (runtime.session?.userId === binding.userId && runtime.session.revision === binding.revision) owner.internal.endSession();
         throw Object.assign(new Error("Die Sitzung wurde ersetzt."), { status: 409, code: "session_superseded" });
       }
       return result;
@@ -78,7 +79,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
       const binding = await dispatchBinding(requestOptions?.expectedSession);
       const result = await runtime.apiClient.requestForm<T>(input, formData, { ...requestOptions, expectedSession: binding });
       if ((result.body as { code?: string } | null)?.code === "session_superseded") {
-        owner.internal.endSession();
+        if (runtime.session?.userId === binding.userId && runtime.session.revision === binding.revision) owner.internal.endSession();
         throw Object.assign(new Error("Die Sitzung wurde ersetzt."), { status: 409, code: "session_superseded" });
       }
       return result;
@@ -91,6 +92,8 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     },
   };
   const owner = createPlanningState({
+    initialWorkspaceRead: options.initialWorkspaceRead,
+    initialSession: options.initialWorkspaceRead?.session,
     userId: options.initialUserId,
     initialData: options.initialData,
     initialWorkspace: options.initialWorkspace,
@@ -441,11 +444,11 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || !body?.taskDetail) throw Object.assign(new Error(body?.error || "Aufgabendetails konnten nicht geladen werden."), { status: response.status });
         return { model: body.taskDetail, unavailable: body.unavailable };
       },
-      async readWorkspace(workspace) {
+      async readWorkspace(workspace, query) {
         if (workspace === "planning" || workspace === "projects") {
-          const { response, body } = await planningApi.requestPlanningWorkspaceData(ownedApiClient, workspace);
-          if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status });
-          return body?.model ? { data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), coverage: hierarchyReadCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: hierarchyOmittedFields(body.model), headerData: body.headerData, currentProfile: body.currentProfile } : null;
+          const { response, body } = await planningApi.requestPlanningWorkspaceData(ownedApiClient, workspace, workspace === "planning" ? query || { view: "board" } : query);
+          if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status, code: body?.code });
+          return body?.model ? { scopeRevision: body.model.scopeRevision, board: body.model.board, query: body.model.query || query, queryRevision: body.model.queryRevision || body.model.board?.revision, data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), coverage: hierarchyReadCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: hierarchyOmittedFields(body.model), headerData: body.headerData, currentProfile: body.currentProfile } : null;
         }
         if (workspace === "backlog") {
           const { response, body } = await requestBacklogModel(ownedApiClient);
@@ -491,9 +494,9 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     acceptHeaderHydration: owner.internal.acceptHeaderHydration,
     owner,
     runtime,
-    acceptProtectedData(data: PlanningShellState, account: string, workspace: AppWorkspace = runtime.workspace) {
+    acceptProtectedData(data: PlanningShellState, account: string, workspace: AppWorkspace = runtime.workspace, read?: import("../planning-workspace-hydration").PlanningWorkspaceHydration) {
       if (!isCurrent() || account !== runtime.userId) return;
-      owner.internal.acceptHydration(data, account, workspace);
+      owner.internal.acceptHydration(data, account, workspace, read);
     },
   };
 

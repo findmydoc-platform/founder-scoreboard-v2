@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { normalizePlanningBoardQuery, planningBoardQueryKey } from "../model/planning-board-query";
 import { usePlanningBootstrapState, type PlanningBootstrapStateOptions } from "@/features/planning/hooks/use-planning-bootstrap-state";
 import { usePlanningCommandRegistry } from "@/features/planning/hooks/use-planning-command-registry";
 import { usePlanningDerivedState } from "@/features/planning/hooks/use-planning-derived-state";
@@ -10,6 +11,7 @@ import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-
 type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
+  initialWorkspaceRead,
   initialDecisionLogResult,
   initialData,
   initialHeaderData,
@@ -25,6 +27,7 @@ export function usePlanningAppController({
 }: PlanningAppControllerOptions) {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
+    initialWorkspaceRead,
     initialDecisionLogResult,
     initialData,
     initialHeaderData,
@@ -111,6 +114,7 @@ export function usePlanningAppController({
     toggleFocusMode,
     view,
     workspace,
+    navigateWorkspaceHref,
   } = bootstrap;
 
   const commandContext = {
@@ -131,6 +135,7 @@ export function usePlanningAppController({
 
   const taskSelection = usePlanningTaskSelection({
     data,
+    planningState,
     selectedTaskId,
     setSelectedTaskId,
   });
@@ -143,14 +148,25 @@ export function usePlanningAppController({
   const taskDetailDataLoader = useTaskDetailDataLoader({
     planningState,
     selectedTask,
+    taskId: protectedDataLoaded && authUser ? selectedTaskId || undefined : undefined,
     source,
     startTransition,
   });
+
+  const planningBoard = planningState.board();
+  const planningQuery = useMemo(() => normalizePlanningBoardQuery({ view: view === "board" ? "board" : "complete", level: planningLevel, parentId: planningParentFilterId, filters }), [view, planningLevel, planningParentFilterId, filters]);
+  const planningQueryKey = planningBoardQueryKey(planningQuery);
+  const usesScopedBoard = Boolean(planningBoard.queryKey) || planningBoard.requiresQueryRead === true;
+  useEffect(() => {
+    if (workspace === "planning" && usesScopedBoard && !planningBoard.requiresQueryRead) void planningState.ensureBoardQuery(planningQuery);
+  }, [planningState, planningQuery, workspace, usesScopedBoard, planningBoard.requiresQueryRead]);
+  const planningQueryReady = !usesScopedBoard || planningBoard.queryKey === planningQueryKey;
 
   const derivedState = usePlanningDerivedState({
     currentProfile,
     data,
     workspaceTasks: planningState.workspace(workspace).tasks,
+    boardResult: workspace === "planning" && planningQueryReady ? planningBoard.result : undefined,
     filters,
     planningLevel,
     setInitiativeDialogDefaults,
@@ -191,6 +207,9 @@ export function usePlanningAppController({
   return {
     actualProfile,
     planningState,
+    planningQueryReady,
+    retryPlanningQuery: () => planningState.ensureBoardQuery(planningQuery),
+    planningBoard,
     beginTaskEdit: planningState.beginTaskEdit,
     authAvailable,
     authBusy,
@@ -248,6 +267,7 @@ export function usePlanningAppController({
     selectedTaskExternalComments: taskSelection.selectedTaskExternalComments,
     selectedTaskSubIssues: taskSelection.selectedTaskSubIssues,
     taskPanelPreviousTask: taskSelection.taskPanelPreviousTask,
+    taskPanelReturnFocusRef: taskSelection.taskPanelReturnFocusRef,
     setDevProfileId,
     setFilters,
     setGithubSyncQueueOpen,
@@ -278,6 +298,7 @@ export function usePlanningAppController({
     visibleTasks: derivedState.visibleTasks,
     workspace,
     setWorkspace,
+    navigateWorkspaceHref,
     ...boardState,
     ...commandRegistry.eventCommands,
     ...commandRegistry.fmdToolCommands,

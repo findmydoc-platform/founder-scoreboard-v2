@@ -1,4 +1,6 @@
 import "server-only";
+import { createHmac } from "node:crypto";
+import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import type { PlanningCredentialInput } from "../types";
 import type { SessionPolicyAction } from "./session-policy-types";
 import { authorizeSessionPolicy, currentAdministratorAccess, administratorAccessFailure, rolePermitsAction } from "./session-policy";
@@ -9,6 +11,7 @@ import { isLocalLoginRequestAllowed } from "../../local-development-auth";
 import { WorkspaceAccessError } from "../../workspace-identity";
 import { administratorAccessExpiredErrorCode, type AuthErrorCode } from "../../auth-error-contract";
 import { getServerAuthSupabase } from "./cookie-client";
+import { resolveSessionRequest } from "./session-request";
 import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import { ACTIVE_TASKS_TABLE } from "../../planning-read-model";
@@ -318,10 +321,10 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.task.read" || !targetId || !detailPeople || await current()) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
       return loadPlanningTrashTaskDetail(service, targetId, detailPeople);
     },
-    async loadBoard() {
+    async loadBoard(query?: PlanningBoardQueryInput) {
       const denial = action === "planning.board.read" ? await current() : forbidden();
       if (denial) return { status: "forbidden" as const };
-      return createSupabasePlanningBoardReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
+      return createSupabasePlanningBoardReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null, query, authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning").update(JSON.stringify(["planning-board-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") });
     },
     async loadHeader(slots?: PlanningHeaderSlotKey[]) {
       const denial = ["planning.board.read", "planning.header.read", "planning.backlog.read", "planning.sprint.read", "planning.task.read"].includes(action) ? await current() : forbidden();
@@ -338,9 +341,13 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     },
     async readRevision() {
       const denial = action === "planning.revision.read" ? await current() : forbidden();
-      if (denial) return { data: null, count: null, error: denial };
-      return await service.from(ACTIVE_TASKS_TABLE).select("updated_at", { count: "exact" })
-        .eq("project_id", "findmydoc-founder-execution").order("updated_at", { ascending: false }).limit(1);
+      if (denial) return { data: null, count: null, scopeRevision: undefined, error: denial };
+      const result = await service.rpc("planning_workspace_snapshot");
+      const snapshot = result.data as { scope_revision?: string; active_task_count?: number; latest_updated_at?: string | null } | null;
+      if (result.error || typeof snapshot?.scope_revision !== "string" || typeof snapshot.active_task_count !== "number") {
+        return { data: null, count: null, scopeRevision: undefined, error: result.error || { message: "Planning revision is unavailable." } };
+      }
+      return { data: snapshot.latest_updated_at ? [{ updated_at: snapshot.latest_updated_at }] : [], count: snapshot.active_task_count, scopeRevision: snapshot.scope_revision, error: null };
     },
   } };
 }

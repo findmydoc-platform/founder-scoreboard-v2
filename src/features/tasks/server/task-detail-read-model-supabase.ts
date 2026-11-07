@@ -91,9 +91,9 @@ async function loadSupportingRows(supabase: SupabaseClient, itemIds: readonly st
     for (let from = 0; from < itemIds.length; from += taskDetailReadLimits.children) {
       const ids = itemIds.slice(from, from + taskDetailReadLimits.children);
       const [links, strategies, raci] = await Promise.all([
-        loadAllSupabaseRows<DbTaskLink>((start, end) => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").in("task_id", ids).order("position").order("id").range(start, end)),
-        loadAllSupabaseRows<DbPlanningItemStrategy>((start, end) => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").in("task_id", ids).order("task_id").range(start, end)),
-        loadAllSupabaseRows<DbPlanningItemRaciAssignment>((start, end) => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").in("task_id", ids).order("task_id").order("sort_order").order("profile_id").range(start, end)),
+        loadAllSupabaseRows<DbTaskLink>((start, end) => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata", { count: "exact" }).in("task_id", ids).order("position").order("id").range(start, end), undefined, true),
+        loadAllSupabaseRows<DbPlanningItemStrategy>((start, end) => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints", { count: "exact" }).in("task_id", ids).order("task_id").range(start, end), undefined, true),
+        loadAllSupabaseRows<DbPlanningItemRaciAssignment>((start, end) => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order", { count: "exact" }).in("task_id", ids).order("task_id").order("sort_order").order("profile_id").range(start, end), undefined, true),
       ]);
       result.links.push(...links);
       result.strategies.push(...strategies);
@@ -108,7 +108,7 @@ async function loadSupportingRows(supabase: SupabaseClient, itemIds: readonly st
 async function loadDirectChildren(supabase: SupabaseClient, parentId: string) {
   try {
     const data = await loadAllSupabaseRows<DbTask>((from, to) => supabase.from(ACTIVE_TASKS_TABLE)
-      .select(taskRowSelect).eq("parent_task_id", parentId).order("sort_order").order("id").range(from, to).returns<DbTask[]>(), taskDetailReadLimits.children);
+      .select(taskRowSelect, { count: "exact" }).eq("parent_task_id", parentId).order("sort_order").order("id").range(from, to).returns<DbTask[]>(), taskDetailReadLimits.children, true);
     return { data, error: false };
   } catch {
     return { data: [] as DbTask[], error: true };

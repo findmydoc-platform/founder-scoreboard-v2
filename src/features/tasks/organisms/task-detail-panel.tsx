@@ -4,7 +4,7 @@ import type { PlanningTaskEditor, PlanningTaskSaveView, PlanningTaskSaveCheck } 
 import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 import type { TaskActionResult, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import { useTaskDiscardGuard } from "@/features/tasks/hooks/use-task-discard-guard";
 import { TaskDiscardChangesDialog } from "@/features/tasks/molecules/task-discard-changes-dialog";
@@ -16,6 +16,7 @@ import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import type { ApprovalDecisionAction, AuthenticatedProfile, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
 
 type Props = {
+  restoreFocusRef?: RefObject<HTMLElement | null>;
   task: Task;
   initiative?: Task;
   comments: TaskComment[];
@@ -76,7 +77,7 @@ type Props = {
   onDecideApproval: (action: ApprovalDecisionAction, note?: string, basis?: Task) => void;
 };
 
-export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {
+export function TaskDetailPanel({ onClose, restoreFocusRef, ...surfaceProps }: Props) {
   const router = useRouter();
   const [overviewDirty, setOverviewDirty] = useState(false);
   const { previousTask, onBack, ...taskSurfaceProps } = surfaceProps;
@@ -90,7 +91,7 @@ export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {
     }
     discard();
   };
-  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardDialogOpen });
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardDialogOpen, restoreFocusRef });
 
   useEffect(() => {
     if (!overviewDirty) return;

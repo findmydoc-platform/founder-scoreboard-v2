@@ -5,5 +5,6 @@ import type { PlanningBoardReadModel } from "@/features/planning/model/planning-
 import { loadPlanningWorkspaceModel } from "@/features/planning-items/server/planning-workspace-read-source";
 
 export function createSupabasePlanningBoardReadModel(supabase: SupabaseClient): PlanningBoardReadModel {
-  return { load: (context) => loadPlanningWorkspaceModel(supabase, context) };
+  // Earlier browser clients omit scope and search the complete authorized collection locally.
+  return { load: (context) => loadPlanningWorkspaceModel(supabase, { ...context, query: context.query || { view: "complete" } }) };
 }

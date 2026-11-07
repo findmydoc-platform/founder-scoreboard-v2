@@ -218,13 +218,13 @@ test("the public Board response distinguishes its reads, header, avatars, mappin
   const reads: string[] = [];
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), path = new URL(request.url).pathname;
-    if (path === "/rest/v1/projects") { reads.push(path); projectReadFinished = true; return Response.json({ id: "findmydoc-founder-execution", name: "Synthetic board" }); }
-    if (path === "/rest/v1/active_tasks") { reads.push(path); itemsEntered(); await itemsGate; return Response.json([]); }
-    if (path === "/rest/v1/planning_item_strategy") { reads.push(path); strategyReadFinished = true; return Response.json([]); }
+    if (path === "/rest/v1/rpc/planning_workspace_snapshot") { reads.push(path); projectReadFinished = true; return Response.json({ id: "findmydoc-founder-execution", name: "Synthetic board", scope_revision: "42" }); }
+    if (path === "/rest/v1/active_tasks") { reads.push(path); itemsEntered(); await itemsGate; return Response.json([], { headers: { "content-range": "*/0" } }); }
+    if (path === "/rest/v1/planning_item_strategy") { reads.push(path); strategyReadFinished = true; return Response.json([], { headers: { "content-range": "*/0" } }); }
     if (path === "/auth/v1/user" && clock === 0) clock = 25;
-    if (path === "/rest/v1/profiles") { reads.push(path); return Response.json([{ id: "synthetic-profile", name: "Seeded private name", platform_role: "viewer" }]); }
+    if (path === "/rest/v1/profiles") { reads.push(path); return Response.json([{ id: "synthetic-profile", name: "Seeded private name", platform_role: "viewer" }], { headers: { "content-range": "0-0/1" } }); }
     if (path === "/rest/v1/rpc/workspace_access_contexts") return Response.json([{ profileId: "synthetic-profile", linked: false }]);
-    if (path.startsWith("/rest/v1/") && !path.includes("/rpc/")) { reads.push(path); return Response.json([]); }
+    if (path.startsWith("/rest/v1/") && !path.includes("/rpc/")) { reads.push(path); return Response.json([], { headers: { "content-range": "*/0" } }); }
     return authFetch(request);
   });
   const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {}, "next/cache": { unstable_cache: (load: () => unknown) => load } });
@@ -243,14 +243,15 @@ test("the public Board response distinguishes its reads, header, avatars, mappin
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ model: { project: { name: "Synthetic board" } }, headerData: { quickLinks: { state: "ready" } }, currentProfile: { platformRole: "viewer" } });
   const completion = records().find(record => record.event === "request.completed");
-  for (const operation of ["board.authorization", "board.load", "board.header", "board.project", "board.profiles", "board.items", "board.strategy", "board.raci", "board.links", "board.sprints", "board.relationships", "board.preferences", "board.avatars", "board.map", "response.prepare"]) {
+  for (const operation of ["board.authorization", "board.load", "board.header", "board.profiles", "board.items", "board.strategy", "board.raci", "board.links", "board.sprints", "board.relationships", "board.preferences", "board.avatars", "board.map", "response.prepare"]) {
     expect(completion.phaseAggregates[operation]?.operation?.[0], operation).toBe(1);
   }
   expect(completion.phaseAggregates["board.items"].operation).toEqual([1, 200, 200]);
-  expect(completion.phaseAggregates["board.project"].operation).toEqual([1, 0, 0]);
+  expect(completion.phaseAggregates["board.project"].operation).toEqual([2, 0, 0]);
   expect(completion.phaseAggregates["board.strategy"].operation).toEqual([1, 0, 0]);
   expect([...completion.phases, ...completion.slowestPhases]).toContainEqual(expect.objectContaining({ operation: "board.items", offsetMs: 25, durationMs: 200 }));
   expect(reads.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
+  expect(reads.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(2);
   expect(JSON.stringify(records())).not.toMatch(/seeded-private|Seeded private name|synthetic-profile/);
 });
 

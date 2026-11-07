@@ -57,9 +57,10 @@ async function protocol(input, init) {
     const page = remaining.slice(0,100).map(id => ({ id, calendar: [], tail: [] }));
     return Response.json(page, { headers: { "content-range": page.length ? `0-${page.length-1}/${remaining.length}` : "*/0" } });
   }
+  if (path === "/rest/v1/rpc/planning_workspace_snapshot") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", range_label: "", review_objection_window_hours: 48, scope_revision: "42", active_task_count: 1, latest_updated_at: "2026-10-21T09:00:00Z" });
   if (path === "/rest/v1/projects") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", range_label: "", review_objection_window_hours: 48 });
-  if (["planning_item_strategy", "planning_item_raci_assignments", "task_links", "sprints", "task_relationship_edges", "profile_ui_preferences"].some(table => path === `/rest/v1/${table}`)) return Response.json([]);
-  if (path === "/rest/v1/active_tasks" && url.searchParams.get("select") !== "updated_at") return Response.json([]);
+  if (["planning_item_strategy", "planning_item_raci_assignments", "task_links", "sprints", "task_relationship_edges", "profile_ui_preferences", "task_blockers"].some(table => path === `/rest/v1/${table}`)) return Response.json([], { headers: { "content-range": "*/0" } });
+  if (path === "/rest/v1/active_tasks" && url.searchParams.get("select") !== "updated_at") return Response.json([], { headers: { "content-range": "*/0" } });
   if (path === "/rest/v1/active_tasks") return Response.json([{ updated_at: "2026-10-21T09:00:00Z" }], { headers: { "content-range": "0-0/1" } });
   throw new Error("Unexpected synthetic transport operation");
 }
@@ -209,7 +210,7 @@ test("a warm Planning revision read uses 17 HTTP requests and three independentl
   attempts = []; preparations = []; releases = []; dispatched = []; userResponses = 0;
   const authorized = await authorize(jwt, "planning.revision.read");
   expect(authorized.ok).toBe(true);
-  expect(await authorized.planning.readRevision()).toMatchObject({ data: [{ updated_at: "2026-10-21T09:00:00Z" }], count: 1, error: null });
+  expect(await authorized.planning.readRevision()).toMatchObject({ data: [{ updated_at: "2026-10-21T09:00:00Z" }], count: 1, scopeRevision: "42", error: null });
   expect(attempts).toHaveLength(17);
   expect(userResponses).toBe(4);
   expect(preparations).toHaveLength(3);
@@ -231,7 +232,7 @@ for (const response of [null, {}, "true", false, "lost"]) test(`Planning revisio
   expect((await authorized.planning.readRevision()).error).not.toBeNull();
   expect(preparations).toHaveLength(2);
   expect(releases).toHaveLength(2);
-  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(0);
+  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(0);
 });
 
 test("Planning revision retains live profile checks and denies unavailable profile before the service read", async () => {
@@ -240,7 +241,7 @@ test("Planning revision retains live profile checks and denies unavailable profi
   profileFailure = true;
   expect((await authorized.planning.readRevision()).error).not.toBeNull();
   expect(preparations).toHaveLength(2);
-  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(0);
+  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(0);
 });
 
 test("Planning revision permit release failure preserves the result without replay", async () => {
@@ -250,7 +251,7 @@ test("Planning revision permit release failure preserves the result without repl
   expect((await authorized.planning.readRevision()).error).toBeNull();
   expect(preparations).toHaveLength(3);
   expect(releases).toHaveLength(3);
-  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
+  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(1);
 });
 
 test("Planning board groups dispatch preparation while other team reads retain separate checks", async () => {
@@ -282,7 +283,7 @@ test("Planning revision denies a role change at the last current check before se
   expect((await authorized.planning.readRevision()).error).not.toBeNull();
   expect(preparations).toHaveLength(3);
   expect(releases).toHaveLength(3);
-  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(0);
+  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(0);
 });
 
 test("Planning revision denies expiry during final preparation and releases without reading data", async () => {
@@ -292,7 +293,7 @@ test("Planning revision denies expiry during final preparation and releases with
   expect((await authorized.planning.readRevision()).error).not.toBeNull();
   expect(preparations).toHaveLength(3);
   expect(releases).toHaveLength(3);
-  expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(0);
+  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(0);
 });
 
 for (const response of [null, {}, "true", false, "lost"]) test(`Planning board denies uncertain preparation ${JSON.stringify(response)} without reading data`, async () => {
@@ -305,7 +306,7 @@ for (const response of [null, {}, "true", false, "lost"]) test(`Planning board d
   expect(await authorized.planning.loadBoard()).toEqual({ status: "forbidden" });
   expect(preparations).toHaveLength(2);
   expect(releases).toHaveLength(2);
-  expect(attempts.filter(path => path === "/rest/v1/projects")).toHaveLength(0);
+  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(0);
 });
 
 test.each(["profile", "user", "role", "deadline"])("Planning board denies changed %s before its service read", async change => {
@@ -316,7 +317,7 @@ test.each(["profile", "user", "role", "deadline"])("Planning board denies change
   if (change === "role") duringPreparation = () => { profileRole = "founder"; };
   if (change === "deadline") duringPreparation = () => { vi.setSystemTime(Date.now() + 900000); };
   expect(await authorized.planning.loadBoard()).toEqual({ status: "forbidden" });
-  expect(attempts.filter(path => path === "/rest/v1/projects")).toHaveLength(0);
+  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(0);
 });
 
 test("Planning board retains a successful result when bounded permit cleanup fails without replay", async () => {
@@ -324,9 +325,9 @@ test("Planning board retains a successful result when bounded permit cleanup fai
   const authorized = await authorize(token(), "planning.board.read");
   expect(authorized.ok).toBe(true);
   expect(await authorized.planning.loadBoard()).toMatchObject({ status: "ready", model: { items: [] } });
-  expect(preparations).toHaveLength(11);
-  expect(releases).toHaveLength(11);
-  expect(attempts.filter(path => path === "/rest/v1/projects")).toHaveLength(1);
+  expect(preparations).toHaveLength(13);
+  expect(releases).toHaveLength(13);
+  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(2);
 });
 
 test.each(["provider failure", "lost response"])("Planning board header retains unavailable status after preparation %s", async failure => {
