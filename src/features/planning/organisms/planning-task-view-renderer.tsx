@@ -118,7 +118,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
         <div className="grid gap-4">
           <TaskBoardView
             childProgressById={controller.planningBoard?.result?.childProgressById}
-            columns={planningLevel === "deliverable" && controller.planningBoard?.result ? Object.fromEntries(boardStatuses.map(status => [status, {
+            columns={controller.planningBoard?.result ? Object.fromEntries(boardStatuses.map(status => [status, {
               ...controller.planningBoard.result!.columns[status],
               readStatus: controller.planningBoard.columnReadStatus?.[status] || "current",
               onLoadMore: () => { void controller.planningState.loadBoardColumn(status); },
