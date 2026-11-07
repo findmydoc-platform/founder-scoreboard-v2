@@ -1,3 +1,6 @@
+import { buildPlanningTaskTableViewModel } from "@/features/planning/model/planning-task-table-view-model";
+import { DEFAULT_PLANNING_FILTERS } from "@/features/planning/model/planning-board-query";
+import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { expect, it, vi } from "vitest";
@@ -39,7 +42,7 @@ it.each([
     const actor = await fixture.actor("viewer");
     vi.stubEnv("VERCEL_OIDC_TOKEN", actor.session.access_token);
     const base = `sb-${new URL(fixture.local.API_URL).hostname.split(".")[0]}-auth-token`;
-    const request = (scope: object, session = actor.session) => new NextRequest(`https://application.example.test/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`, { headers: { cookie: `${base}=base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}` } });
+    const request = (scope?: object, session = actor.session) => new NextRequest(`https://application.example.test/api/planning-board-data${scope ? `?scope=${encodeURIComponent(JSON.stringify(scope))}` : ""}`, { headers: { cookie: `${base}=base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}` } });
     const query = { level, filters: { query: "Synthetic history" }, limit: 1000 };
     const page = { ...query, column: status };
     const firstResponse = await GET(request(query));
@@ -47,6 +50,28 @@ it.each([
     const first = (await firstResponse.json()).model as PlanningWorkspaceModel;
     expect(first.board?.columns[status]).toMatchObject({ total: 1027, loaded: 20, completeness: "partial" });
     expect(first.items.filter(item => item.taskType === level)).toHaveLength(20);
+    expect(first.taskOmittedFields).toEqual(expect.arrayContaining(["description", "acceptanceCriteria", "definitionOfDone"]));
+    expect(first.items.every(item => !("description" in item) && !("acceptanceCriteria" in item) && !("definitionOfDone" in item))).toBe(true);
+    if (level === "deliverable" && status === "Erledigt") {
+      const legacyResponse = await GET(request());
+      expect(legacyResponse.status).toBe(200);
+      const legacy = (await legacyResponse.json()).model as PlanningWorkspaceModel;
+      expect(legacy.board).toBeUndefined();
+      expect(legacy.items.filter(item => item.id.startsWith(prefix) && item.taskType === "deliverable")).toHaveLength(1027);
+      const searched = buildPlanningTaskTableViewModel({ currentProfile: null, data: planningWorkspaceModelToPlanningShellState(legacy), filters: { ...DEFAULT_PLANNING_FILTERS, query: "Synthetic history 1027" } });
+      expect(searched.visibleTasks.map(item => item.id)).toEqual([`${prefix}-1027`]);
+      vi.resetModules();
+      const cookie = { name: base, value: `base64-${Buffer.from(JSON.stringify(actor.session)).toString("base64url")}` };
+      const { default: PlanningPage } = await importTestModule("src/app/(workspaces)/planning/page.tsx", {
+        "server-only": {},
+        "next/headers": { headers: async () => new Headers(), cookies: async () => ({ getAll: () => [cookie], get: (name: string) => name === base ? cookie : undefined, set: () => {} }) },
+        "@/features/planning/PlanningApp": { PlanningApp: () => null },
+      });
+      const page = await PlanningPage({ searchParams: Promise.resolve({ "tasks.query": "Synthetic history" }) });
+      expect(page.props.initialWorkspaceRead?.board?.cardIds).toEqual(first.board?.cardIds);
+      expect(page.props.initialData.tasks.every((item: object) => !("description" in item) && !("acceptanceCriteria" in item) && !("definitionOfDone" in item))).toBe(true);
+      expect(page.props.initialData.tasks).toHaveLength(first.items.length);
+    }
     const continuation = first.board!.columns[status].continuation!;
     const tampered = JSON.parse(Buffer.from(continuation, "base64url").toString("utf8"));
     tampered.offset = 100;

@@ -124,6 +124,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
         <div className="grid gap-4">
           <TaskBoardView
             childProgressById={controller.planningBoard?.result?.childProgressById}
+            attentionById={controller.planningBoard?.result?.attentionById}
             childListForTask={taskId => {
               const detail = controller.planningState.taskDetail(taskId);
               return { items: detail.children, readStatus: detail.childrenReadStatus, load: () => { void controller.planningState.loadTaskDetail(taskId); } };
