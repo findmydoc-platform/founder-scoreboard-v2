@@ -18,7 +18,7 @@ const user = { id: "entry-user", email: "entry@example.com" } as User;
 const session = { user, userId: user.id, revision: "entry-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
 const task = taskDetailStoryTask({ id: "entry-task", title: "Planning entry task", updatedAt: "entry-r1", assigneeId: profile.id, ownerId: profile.id });
 const headerData = { ...emptyPlanningHeaderData, quickLinks: readyHeaderSlot([]), calendarEvents: readyHeaderSlot([]) };
-const model = { revision: "entry-r1", project: emptyPlanningShellState.project, items: [task], people: [profile], sprints: [], relationships: [], preferences: [], coverage: { items: "complete", people: "complete", strategies: "complete", raci: "complete", links: "complete", sprints: "complete", relationships: "complete", preferences: "complete" } } as const;
+const model = { revision: "entry-r1", scopeRevision: "scope-r1", project: emptyPlanningShellState.project, items: [task], people: [profile], sprints: [], relationships: [], preferences: [], coverage: { items: "complete", people: "complete", strategies: "complete", raci: "complete", links: "complete", sprints: "complete", relationships: "complete", preferences: "complete" } } as const;
 
 function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, changedPageOnReturn = false, revisionChanged = false }: { startInEvents?: boolean; backgroundFailure?: boolean; changedPageOnReturn?: boolean; revisionChanged?: boolean }) {
   const navigationCalls = useRef(0);
@@ -46,7 +46,7 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
         });
         return Response.json({ model, currentProfile: profile });
       }
-      if (path === "/api/planning-revision") { setRevisions(count => count + 1); return Response.json({ revision: { activeTaskCount: 1, latestUpdatedAt: revisionChanged ? "entry-r2" : task.updatedAt } }); }
+      if (path === "/api/planning-revision") { setRevisions(count => count + 1); return Response.json({ revision: { activeTaskCount: 1, latestUpdatedAt: task.updatedAt, scopeRevision: revisionChanged ? "scope-r2" : "scope-r1" } }); }
       if (path === "/api/events-data") return Response.json({ model: { revision: "events", people: [profile], events: [], coverage: { completeness: "complete" } } });
       if (path === "/api/github-app/status") return Response.json({ installation: { available: false }, user: { connected: false } });
       if (path === "/api/administrator-access") return Response.json({ administratorAccess: { eligible: false, active: false, expiresAt: null } });
@@ -69,7 +69,7 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
       if (previousSeen === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previousSeen);
     };
   }, [startInEvents, backgroundFailure, changedPageOnReturn, revisionChanged]);
-  const pageModel = changedPageOnReturn && pages > 1 ? { ...model, revision: "entry-r2", items: [{ ...task, title: "New page task", updatedAt: "entry-r2" }] } : model;
+  const pageModel = changedPageOnReturn && pages > 1 ? { ...model, revision: "entry-r2", scopeRevision: "scope-r2", items: [{ ...task, title: "New page task", updatedAt: "entry-r2" }] } : model;
   return <div onClickCapture={() => { navigationCalls.current = getRouter().push.mock.calls.length; }} onClick={event => {
     const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
     if (getRouter().push.mock.calls.length === navigationCalls.current && link && ["/planning", "/events"].includes(link.getAttribute("href") || "")) {

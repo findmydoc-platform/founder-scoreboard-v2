@@ -107,8 +107,13 @@ export const StatusDragRemainsAvailableWhileAnotherColumnLoads: Story = {
     fireEvent.drop(target, { dataTransfer: transfer });
     fireEvent.dragEnd(card, { dataTransfer: transfer });
     await waitFor(() => expect(within(target).getByRole("link", { name: active.title })).toBeVisible());
+    const scroll = board.scrollLeft;
     await userEvent.click(canvas.getByRole("button", { name: "Seitenantwort fortsetzen" }));
-    await waitFor(() => expect(within(review).getByText("25 von 25 geladen")).toBeVisible());
+    await waitFor(() => expect(within(review).getByRole("button", { name: "Review aktualisieren" })).toBeVisible());
+    await expect(within(review).getByText("20 von 25 geladen")).toBeVisible();
+    await expect(within(review).queryByText("Review work 25")).not.toBeInTheDocument();
+    await expect(board.scrollLeft).toBe(scroll);
     await expect(within(target).getByRole("link", { name: active.title })).toBeVisible();
+    await expect(canvas.getByLabelText("Column reads")).toHaveTextContent("1");
   },
 };

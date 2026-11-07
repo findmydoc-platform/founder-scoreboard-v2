@@ -64,7 +64,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     visibleTasks,
   } = controller;
 
-  const deniedChildListIds = controller.planningBoard?.result?.cardIds.filter(taskId => controller.planningState.taskDetail(taskId).childrenReadStatus === "forbidden") || [];
+  const deniedChildListIds = controller.planningBoard?.deniedChildListIds || [];
 
   const canChangeTaskStatus = (task: (typeof data.tasks)[number]) => mayChangeTaskStatus(task) && controller.planningState.taskDetail(task.id).saveStatus !== "unconfirmed";
 
