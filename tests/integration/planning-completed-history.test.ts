@@ -71,6 +71,9 @@ it.each([
       expect(page.props.initialWorkspaceRead?.board?.cardIds).toEqual(first.board?.cardIds);
       expect(page.props.initialData.tasks.every((item: object) => !("description" in item) && !("acceptanceCriteria" in item) && !("definitionOfDone" in item))).toBe(true);
       expect(page.props.initialData.tasks).toHaveLength(first.items.length);
+      const invalid = await PlanningPage({ searchParams: Promise.resolve({ "tasks.query": "Synthetic history", "tasks.review": "bogus", "tasks.sort": "bogus", "tasks.targetFrom": "2026-02-30", "tasks.targetTo": "tomorrow" }) });
+      expect(invalid.props.initialWorkspaceRead?.query?.filters).toMatchObject({ review: "Alle", sort: "priority", targetFrom: "", targetTo: "" });
+      expect(invalid.props.initialWorkspaceRead?.board?.columns.Erledigt.total).toBe(1027);
     }
     const continuation = first.board!.columns[status].continuation!;
     const tampered = JSON.parse(Buffer.from(continuation, "base64url").toString("utf8"));

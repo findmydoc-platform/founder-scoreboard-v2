@@ -17,7 +17,7 @@ function read(input: PlanningBoardQueryInput = {}, items = [card, history], revi
   } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
   return { query, queryRevision: revision, scopeRevision: `scope-${revision}`, data: { ...emptyPlanningShellState, tasks: items }, coverage: { tasks: "partial", profiles: "complete", sprints: "complete", taskRelations: "partial", taskBlockers: "partial" },
     board: { query, queryKey: planningBoardQueryKey(query), column: input.column, revision, observedAt: "2026-11-07T00:00:00Z", cardIds: items.map(item => item.id), columns,
-      childProgressById: { card: { total: 2, completed: 1, unfinished: 1, percentage: 50 } }, metrics: { total: 26, open: 1, done: 25, blocked: 0 }, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: { activeTaskCount: 26, latestUpdatedAt: "r1" } },
+      workstreams: ["Current workstream"], childProgressById: { card: { total: 2, completed: 1, unfinished: 1, percentage: 50 } }, metrics: { total: 26, open: 1, done: 25, blocked: 0 }, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: { activeTaskCount: 26, latestUpdatedAt: "r1" } },
   };
 }
 function owner(adapter: Partial<PlanningStateAdapter> = {}, initial = read()) {
@@ -31,6 +31,40 @@ function deferred<T>() {
   const promise = new Promise<T>(done => { resolve = done; });
   return { promise, resolve };
 }
+
+test.each(["Offen", "Erledigt"] as const)("a failed stale %s refresh retries from the start even without a cursor", async column => {
+  const queries: PlanningBoardQueryInput[] = [];
+  const { planning } = owner({ readWorkspace: async (_, query = {}) => {
+    queries.push(query);
+    if (queries.length === 1) throw Object.assign(new Error("Temporarily unavailable"), { status: 503 });
+    return read(query, [column === "Offen" ? { ...card, title: "Fresh card" } : { ...history, title: "Fresh history" }], "r3");
+  } });
+  await planning.saveTask(card, { title: "Confirmed edit" });
+  expect(planning.board().result?.columns[column].continuation).toBeNull();
+  await expect(planning.refreshBoardColumn(column)).resolves.toBe(false);
+  expect(planning.board().columnReadStatus?.[column]).toBe("unavailable");
+  await expect(planning.loadBoardColumn(column)).resolves.toBe(true);
+  expect(queries).toHaveLength(2);
+  expect(queries.map(query => query.continuation)).toEqual([undefined, undefined]);
+  expect(planning.board().columnReadStatus?.[column]).toBe("current");
+  expect(planning.board().tasks.some(task => task.title === (column === "Offen" ? "Fresh card" : "Fresh history"))).toBe(true);
+});
+
+test("old-session and unbound hydration stay rejected after a current-session replacement read", async () => {
+  const recovery = deferred<PlanningWorkspaceRead>();
+  let reads = 0;
+  const state = owner({ readWorkspace: async (_, query) => ++reads === 1 ? read(query, [{ ...card, title: "Current-session card" }]) : recovery.promise });
+  state.internal.bindSession({ ...session, revision: "rotated-session" });
+  await state.planning.refreshWorkspace("planning");
+  const oldData = { ...emptyPlanningShellState, tasks: [{ ...card, title: "Rejected old page" }] };
+  state.internal.acceptHydration(oldData, session.userId, "planning", { workspace: "planning", session, revision: "old", queryKey: "workspace", coverage: { tasks: "complete" }, taskOmittedFields: [] });
+  state.internal.acceptHydration(oldData, session.userId, "planning");
+  expect(state.planning.board().tasks.map(task => task.title)).toEqual(["Current-session card"]);
+  expect(reads).toBe(2);
+  recovery.resolve(read({}, [{ ...card, title: "Recovered current-session card" }]));
+  await state.planning.refreshWorkspace("planning");
+  expect(state.planning.board().tasks.map(task => task.title)).toEqual(["Recovered current-session card"]);
+});
 
 test("a confirmed status move invalidates its column metadata and rejects an older page without losing the Item", async () => {
   const page = deferred<PlanningWorkspaceRead>();
@@ -151,10 +185,11 @@ test("identical query reads still coalesce when an independent detail request st
 test("a rejected query response cannot replace source metadata or leave a column loading", async () => {
   const { planning } = owner({ readWorkspace: async (_, query) => {
     const result = read(query);
-    return { ...result, scopeRevision: "unrelated-source", board: { ...result.board!, queryKey: "another-query" } };
+    return { ...result, scopeRevision: "unrelated-source", board: { ...result.board!, workstreams: ["Unrelated workstream"], queryKey: "another-query" } };
   } });
   await expect(planning.loadBoardColumn("Erledigt")).resolves.toBe(false);
   expect(planning.board().scopeRevision).toBe("scope-r1");
+  expect(planning.board().result?.workstreams).toEqual(["Current workstream"]);
   expect(planning.board().columnReadStatus?.Erledigt).toBe("unavailable");
   expect(planning.board().tasks).toHaveLength(2);
 });

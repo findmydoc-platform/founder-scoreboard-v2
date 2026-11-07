@@ -17,7 +17,7 @@ function fixture(history = 45, cap = 7) {
   };
   return { data, client: { rpc() { return Promise.resolve({ data: { ...(data.projects as object), scope_revision: "42" }, error: null }); }, from(table: string) {
     let from = 0, to = Infinity;
-    const query = { select() { return query; }, eq() { return query; }, order() { return query; }, limit(value: number) { to = value - 1; return query; }, single() { return query; }, range(start: number, end: number) { from = start; to = end; return query; }, then(resolve: (value: unknown) => unknown) { const value = data[table]; return Promise.resolve({ data: Array.isArray(value) ? value.slice(from, Math.min(to + 1, from + cap)) : value, count: Array.isArray(value) ? value.length : null, error: null }).then(resolve); } };
+    const query = { select() { return query; }, eq() { return query; }, is() { return query; }, order() { return query; }, limit(value: number) { to = value - 1; return query; }, single() { return query; }, range(start: number, end: number) { from = start; to = end; return query; }, then(resolve: (value: unknown) => unknown) { const value = data[table]; return Promise.resolve({ data: Array.isArray(value) ? value.slice(from, Math.min(to + 1, from + cap)) : value, count: Array.isArray(value) ? value.length : null, error: null }).then(resolve); } };
     return query;
   } } as unknown as SupabaseClient };
 }

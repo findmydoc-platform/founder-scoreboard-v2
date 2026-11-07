@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
 import { buildPlanningTaskTableViewModel } from "@/features/planning/model/planning-task-table-view-model";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
-import { DEFAULT_PLANNING_FILTERS } from "@/features/planning/model/planning-board-query";
+import { DEFAULT_PLANNING_FILTERS, planningBoardQueryFromSearchParams } from "@/features/planning/model/planning-board-query";
 
 vi.mock("server-only", () => ({}));
 
@@ -20,7 +20,7 @@ function fixture() {
   const denied = new Set<string>();
   const client = { rpc() { return Promise.resolve({ data: { ...(data.projects as object), scope_revision: "42" }, error: null }); }, from(table: string) {
     let start = 0, end = Infinity;
-    const query = { select() { return query; }, eq() { return query; }, order() { return query; }, limit(value: number) { end = value - 1; return query; }, single() { return query; }, range(from: number, to: number) { start = from; end = to; return query; }, then(resolve: (result: unknown) => unknown) {
+    const query = { select() { return query; }, eq() { return query; }, is() { return query; }, order() { return query; }, limit(value: number) { end = value - 1; return query; }, single() { return query; }, range(from: number, to: number) { start = from; end = to; return query; }, then(resolve: (result: unknown) => unknown) {
       const value = data[table];
       return Promise.resolve({ data: Array.isArray(value) ? value.slice(start, Math.min(end + 1, start + 7)) : value, count: Array.isArray(value) ? value.length : null, error: denied.has(table) ? new Error("Unavailable source") : null }).then(resolve);
     } }; return query;
@@ -28,6 +28,28 @@ function fixture() {
   return { rows, data, denied, reader: createSupabasePlanningBoardReadModel(client) };
 }
 const context = { authorized: true, actorProfileId: "reader", authorityKey: "compact-session" };
+
+test("invalid URL schema filters cannot empty the server Board or survive its hydration query", async () => {
+  const result = await fixture().reader.load({ ...context, query: planningBoardQueryFromSearchParams(new URLSearchParams("tasks.review=bogus&tasks.sort=bogus&tasks.targetFrom=2026-02-30&tasks.targetTo=tomorrow")) });
+  if (result.status !== "ready") throw new Error("Expected authorized Board");
+  expect(result.model.board?.metrics.total).toBe(45);
+  expect(result.model.query?.filters).toMatchObject({ review: "Alle", sort: "priority", targetFrom: "", targetTo: "" });
+  expect(planningWorkspaceHydration("planning", result.model, { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 60 })?.query?.filters).toMatchObject({ review: "Alle", sort: "priority", targetFrom: "", targetTo: "" });
+});
+
+test("workstream choices cover unloaded authorized cards and remain available under a narrower filter", async () => {
+  const { reader, rows } = fixture();
+  rows.find(row => row.id === "item-44")!.workstream = "Unloaded workstream";
+  for (const query of [{}, { filters: { query: "Item 0" } }]) {
+    const result = await reader.load({ ...context, query });
+    if (result.status !== "ready") throw new Error("Expected authorized Board");
+    expect(result.model.board?.workstreams).toEqual(["Unloaded workstream"]);
+    expect(result.model.board?.cardIds).not.toContain("item-44");
+  }
+  const selected = await reader.load({ ...context, query: { filters: { workstream: "Unloaded workstream" } } });
+  if (selected.status !== "ready") throw new Error("Expected selected workstream");
+  expect(selected.model.board?.cardIds).toEqual(["item-44"]);
+});
 
 test("bounded Board cards and parent context omit briefs while complete coverage retains searchable content", async () => {
   const { reader } = fixture();

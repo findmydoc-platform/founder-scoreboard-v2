@@ -62,15 +62,16 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
       const response = await GET(request);
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ model: { project: { id: "findmydoc-founder-execution" } }, currentProfile: { id: actor.profileId, platformRole: role } });
-      // The proxy and route include the independently guarded Blocker context read.
-      expect(attempts).toHaveLength(80);
-      expect(attempts.filter(path => path === "/auth/v1/user")).toHaveLength(18);
+      // The post-enumeration fence has its own Auth, profile, permit and cleanup.
+      expect(attempts).toHaveLength(85);
+      expect(attempts.filter(path => path === "/auth/v1/user")).toHaveLength(19);
       for (const rpc of ["workspace_dispatch_prepare", "current_authenticated_profile", "workspace_release_permit"]) {
-        expect(attempts.filter(path => path === `/rest/v1/rpc/${rpc}`)).toHaveLength(16);
+        expect(attempts.filter(path => path === `/rest/v1/rpc/${rpc}`)).toHaveLength(17);
       }
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_access_context")).toHaveLength(0);
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_calendar_entry")).toHaveLength(1);
       expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
+      expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(2);
       expect((await fixture.database.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actor.userId])).rows[0].remaining).toBe(0);
       attempts = [];
       const beforeLiveChecks = successfulLiveChecks;

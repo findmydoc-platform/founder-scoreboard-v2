@@ -954,7 +954,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   };
   function readBoardColumn(column: TaskStatus, refresh: boolean) {
     if (!isActive() || !boardResult || !boardQuery) return Promise.resolve(false);
-    refresh ||= columnReadStatus[column] === "stale" && !boardResult.columns[column]?.continuation;
+    refresh ||= (columnReadStatus[column] === "stale" || columnReadStatus[column] === "unavailable") && !boardResult.columns[column]?.continuation;
     const continuation = refresh ? undefined : boardResult.columns[column]?.continuation || undefined;
     if (!refresh && !continuation) return Promise.resolve(true);
     const key = JSON.stringify([boardResult.queryKey, boardResult.revision, continuation, refresh]);
@@ -1280,7 +1280,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       && read.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now());
     const requested = hydrationRequests.get(workspace);
     hydrationRequests.delete(workspace);
-    if (requiresBoundHydration && !boundRead) return;
+    if (requiresBoundHydration && !boundRead) {
+      // Reject the page payload, but recover its target through the current authority.
+      void planning.refreshWorkspace(workspace);
+      return;
+    }
     if (boundRead && read) {
       const identity = hydrationIdentity(data, read);
       if (workspaceStatuses.get(workspace) === "current" && hydrationReads.get(workspace) === identity) return;

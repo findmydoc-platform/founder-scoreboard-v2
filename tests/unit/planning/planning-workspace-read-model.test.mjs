@@ -35,6 +35,7 @@ function createSupabaseFixture(failedTable = "", counts = {}) {
       const query = {
         select(columns, options) { call.count = options?.count; call.select = columns; return query; },
         eq(field, value) { call.eq.push([field, value]); return query; },
+        is() { return query; },
         single() { return query; },
         order(field, options) { call.orders.push([field, options]); return query; },
         limit(value) { call.limit = value; return query; },
