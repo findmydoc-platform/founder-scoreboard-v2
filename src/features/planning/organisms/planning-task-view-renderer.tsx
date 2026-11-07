@@ -128,7 +128,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
               const detail = controller.planningState.taskDetail(taskId);
               return { items: detail.children, readStatus: detail.childrenReadStatus, load: () => { void controller.planningState.loadTaskDetail(taskId); } };
             }}
-            columns={planningLevel === "deliverable" && controller.planningBoard?.result ? Object.fromEntries(boardStatuses.map(status => [status, {
+            columns={controller.planningBoard?.result ? Object.fromEntries(boardStatuses.map(status => [status, {
               ...controller.planningBoard.result!.columns[status],
               readStatus: controller.planningBoard.columnReadStatus?.[status] || "current",
               onLoadMore: () => { void controller.planningState.loadBoardColumn(status); },

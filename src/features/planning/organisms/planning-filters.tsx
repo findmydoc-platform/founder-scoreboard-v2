@@ -35,6 +35,7 @@ type PlanningFiltersProps = {
   filters: PlanningFiltersValue;
   planningLevel: PlanningLevel;
   planningParentFilterId: string;
+  levelTotals?: Partial<Record<PlanningLevel, number>>;
   profiles: Profile[];
   initiatives: Task[];
   sprints: Sprint[];
@@ -55,6 +56,7 @@ export function PlanningFilters({
   filters,
   planningLevel,
   planningParentFilterId,
+  levelTotals,
   profiles,
   initiatives,
   sprints,
@@ -276,6 +278,7 @@ export function PlanningFilters({
             <div data-tour-id="planning-kanban-level-switch">
               <PlanningLevelSelect
                 ariaLabel="Planungsebene im Kanban"
+                totals={levelTotals}
                 value={planningLevel}
                 tasks={tasks}
                 onChange={onPlanningLevelChange}
@@ -353,6 +356,7 @@ export function PlanningFilters({
                   <FilterField label="Planungsebene">
                     <PlanningLevelSelect
                       ariaLabel="Planungsebene im Kanban"
+                      totals={levelTotals}
                       value={planningLevel}
                       tasks={tasks}
                       onChange={onPlanningLevelChange}

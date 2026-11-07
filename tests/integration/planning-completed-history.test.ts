@@ -5,7 +5,10 @@ import { importTestModule } from "../helpers/vitest-module.mjs";
 import { createCalendarLiveFixture } from "./helpers/calendar-live-fixture";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 
-it.each(["Erledigt", "Offen"] as const)("authorized %s Board HTTP pages keep exact totals beyond the upstream cap and reject foreign continuations", async status => {
+it.each([
+  { level: "deliverable", status: "Erledigt" }, { level: "deliverable", status: "Offen" },
+  { level: "epic", status: "Erledigt" }, { level: "initiative", status: "Pausiert" },
+] as const)("authorized $level $status Board HTTP pages keep exact totals beyond the upstream cap and reject foreign continuations", async ({ level, status }) => {
   const fixture = await createCalendarLiveFixture();
   const nativeFetch = globalThis.fetch;
   const prefix = `history-${randomUUID()}`;
@@ -17,8 +20,8 @@ it.each(["Erledigt", "Offen"] as const)("authorized %s Board HTTP pages keep exa
     await fixture.database.query("insert into public.tasks(id,project_id,title,status,priority,task_type) values($1,'findmydoc-founder-execution','Synthetic Epic','Offen','P2','epic')", [`${prefix}-epic`]);
     await fixture.database.query("insert into public.tasks(id,project_id,title,status,priority,task_type,parent_task_id,approval_status) values($1,'findmydoc-founder-execution','Synthetic Initiative','Offen','P2','initiative',$2,'approved')", [`${prefix}-initiative`, `${prefix}-epic`]);
     await fixture.database.query(`insert into public.tasks(id,project_id,title,status,priority,task_type,approval_status,sort_order,parent_task_id)
-      select $1 || '-' || lpad(n::text,4,'0'),'findmydoc-founder-execution','Synthetic history ' || n,$2,'P2','deliverable','approved',n,$1 || '-initiative'
-      from generate_series(1,1027) n`, [prefix, status]);
+      select $1 || '-' || lpad(n::text,4,'0'),'findmydoc-founder-execution','Synthetic history ' || n,$2,'P2',$3,$4,n,$5
+      from generate_series(1,1027) n`, [prefix, status, level, level === "epic" ? null : "approved", level === "epic" ? null : `${prefix}-${level === "initiative" ? "epic" : "initiative"}`]);
     for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: fixture.local.API_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: fixture.local.ANON_KEY, SUPABASE_SERVICE_ROLE_KEY: fixture.local.SERVICE_ROLE_KEY,
       REQUIRE_SUPABASE_AUTH: "true", GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-history-audience",
@@ -37,18 +40,19 @@ it.each(["Erledigt", "Offen"] as const)("authorized %s Board HTTP pages keep exa
     vi.stubEnv("VERCEL_OIDC_TOKEN", actor.session.access_token);
     const base = `sb-${new URL(fixture.local.API_URL).hostname.split(".")[0]}-auth-token`;
     const request = (scope: object, session = actor.session) => new NextRequest(`https://application.example.test/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`, { headers: { cookie: `${base}=base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}` } });
-    const query = { filters: { query: "Synthetic history" }, limit: 1000 };
+    const query = { level, filters: { query: "Synthetic history" }, limit: 1000 };
     const page = { ...query, column: status };
     const firstResponse = await GET(request(query));
     expect(firstResponse.status).toBe(200);
     const first = (await firstResponse.json()).model as PlanningWorkspaceModel;
     expect(first.board?.columns[status]).toMatchObject({ total: 1027, loaded: 20, completeness: "partial" });
-    expect(first.items.filter(item => item.taskType === "deliverable")).toHaveLength(20);
+    expect(first.items.filter(item => item.taskType === level)).toHaveLength(20);
     const continuation = first.board!.columns[status].continuation!;
     const tampered = JSON.parse(Buffer.from(continuation, "base64url").toString("utf8"));
     tampered.offset = 100;
     expect((await GET(request({ ...page, continuation: Buffer.from(JSON.stringify(tampered)).toString("base64url") }))).status).toBe(409);
     expect((await GET(request({ ...page, column: status === "Offen" ? "Review" : "Offen", continuation }))).status).toBe(409);
+    expect((await GET(request({ ...page, level: level === "epic" ? "initiative" : "epic", continuation }))).status).toBe(409);
     const nextResponse = await GET(request({ ...page, continuation }));
     expect(nextResponse.status).toBe(200);
     const next = (await nextResponse.json()).model as PlanningWorkspaceModel;
@@ -57,7 +61,7 @@ it.each(["Erledigt", "Offen"] as const)("authorized %s Board HTTP pages keep exa
     const other = await fixture.actor("viewer");
     expect((await GET(request({ ...page, continuation }, other.session))).status).toBe(409);
     expect((await GET(request({ ...page, continuation, filters: { query: "Different search" } }))).status).toBe(409);
-    const searched = await GET(request({ filters: { query: "Synthetic history 1027" } }));
+    const searched = await GET(request({ level, filters: { query: "Synthetic history 1027" } }));
     expect(searched.status).toBe(200);
     expect((await searched.json()).model.board.cardIds).toEqual([`${prefix}-1027`]);
     await fixture.database.query("delete from auth.sessions where id=$1", [actor.sessionId]);
