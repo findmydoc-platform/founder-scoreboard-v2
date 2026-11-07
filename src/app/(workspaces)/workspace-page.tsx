@@ -149,7 +149,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
     }
 
     if (initialWorkspace === "planning" || initialWorkspace === "projects") {
-      const planningWorkspace = await loadPlanningWorkspacePageData(initialWorkspace, auth.profile, planningQuery);
+      const planningWorkspace = await loadPlanningWorkspacePageData(initialWorkspace, auth.profile, planningQuery || {});
       if (planningWorkspace.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
       }

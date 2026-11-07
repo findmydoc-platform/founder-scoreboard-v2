@@ -432,7 +432,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
       },
       async readWorkspace(workspace, query) {
         if (workspace === "planning" || workspace === "projects") {
-          const { response, body } = await planningApi.requestPlanningWorkspaceData(ownedApiClient, workspace, query);
+          const { response, body } = await planningApi.requestPlanningWorkspaceData(ownedApiClient, workspace, workspace === "planning" ? query || { view: "board" } : query);
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status, code: body?.code });
           return body?.model ? { scopeRevision: body.model.scopeRevision, board: body.model.board, query: body.model.query || query, queryRevision: body.model.queryRevision || body.model.board?.revision, data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), coverage: hierarchyReadCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: hierarchyOmittedFields(body.model), headerData: body.headerData, currentProfile: body.currentProfile } : null;
         }

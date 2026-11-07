@@ -10,6 +10,7 @@ import type { Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib
 type ColumnLoading = import("@/features/planning/model/planning-board-query").PlanningBoardColumn & { readStatus: import("@/features/planning/model/planning-state").PlanningReadStatus; onLoadMore(): void; onRefresh(): void };
 
 type TaskBoardViewProps = {
+  attentionById?: import("@/features/planning/model/planning-board-query").PlanningBoardResult["attentionById"];
   childListForTask?: (taskId: string) => TaskCardChildList;
   columns?: Partial<Record<TaskStatus, ColumnLoading>>;
   childProgressById?: import("@/features/planning/model/planning-board-query").PlanningBoardResult["childProgressById"];
@@ -43,6 +44,7 @@ export function TaskBoardView({
   columns,
   completedHistory,
   childProgressById,
+  attentionById,
   childListForTask,
   itemType,
   visibleTasks,
@@ -176,6 +178,7 @@ export function TaskBoardView({
                     blockers={blockers}
                     childItems={directChildrenByParent.get(task.id) || []}
                     childProgress={childProgressById?.[task.id]}
+                    attentionSignals={attentionById?.[task.id]}
                     childList={childListForTask?.(task.id)}
                     onOpenTask={onOpenTask}
                     onStatusEditingStart={() => onBeginTaskEdit?.(task)}

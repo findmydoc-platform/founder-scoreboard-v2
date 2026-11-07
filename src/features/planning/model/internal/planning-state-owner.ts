@@ -1080,6 +1080,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       boardResult = {
         ...result.board, column: undefined, cardIds, columns,
+        attentionById: { ...previous?.attentionById, ...result.board.attentionById },
         childProgressById: { ...previous?.childProgressById, ...result.board.childProgressById },
         viewerOpenSubIssueIdsByDeliverableId: { ...previous?.viewerOpenSubIssueIdsByDeliverableId, ...result.board.viewerOpenSubIssueIdsByDeliverableId },
       };

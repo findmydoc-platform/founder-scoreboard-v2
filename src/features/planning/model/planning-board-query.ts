@@ -27,6 +27,7 @@ export type PlanningBoardResult = Readonly<{
   observedAt: string;
   cardIds: readonly string[];
   levelTotals?: Record<PlanningLevel, number>;
+  attentionById?: Record<string, import("@/features/tasks/model/task-attention-signals").TaskAttentionSignal[]>;
   childProgressById: Record<string, { completed: number; total: number; unfinished: number; percentage: number }>;
   columns: Record<TaskStatus, PlanningBoardColumn>;
   metrics: { total: number; open: number; blocked: number; done: number };
