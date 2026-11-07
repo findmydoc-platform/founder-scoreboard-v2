@@ -21,7 +21,7 @@ function fixture(level: "epic" | "initiative", count = 47) {
     projects: { id: "findmydoc-founder-execution", name: "Planning" }, profiles: [], active_tasks: rows,
     planning_item_strategy: [], planning_item_raci_assignments: [], task_links: [], task_blockers: [], sprints: [], task_relationship_edges: [], profile_ui_preferences: [],
   };
-  const client = { from(table: string) {
+  const client = { rpc() { return Promise.resolve({ data: { ...(data.projects as object), scope_revision: "42" }, error: null }); }, from(table: string) {
     let from = 0, to = Infinity;
     const query = { select() { return query; }, eq() { return query; }, order() { return query; }, limit(value: number) { to = value - 1; return query; }, single() { return query; }, range(start: number, end: number) { from = start; to = end; return query; }, then(resolve: (value: unknown) => unknown) {
       const value = data[table];

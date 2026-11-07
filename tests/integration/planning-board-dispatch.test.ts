@@ -78,17 +78,17 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
       expect(await authorize()).toMatchObject({ ok: false, status: 403 });
       expect(successfulLiveChecks - beforeLiveChecks).toBe(2);
       expect(rejectedProfileStatus).toBe(401);
-      expect(attempts.filter(path => path === "/rest/v1/projects" || path === "/rest/v1/active_tasks")).toHaveLength(0);
+      expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot" || path === "/rest/v1/active_tasks")).toHaveLength(0);
       expect((await fixture.database.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actor.userId])).rows[0].remaining).toBe(0);
       await fixture.mode("google");
       attempts = [];
       expect((await authorized.planning.loadBoard()).status).toBe("forbidden");
-      expect(attempts.filter(path => path === "/rest/v1/projects")).toHaveLength(0);
+      expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(0);
       await fixture.mode("linking");
       await fixture.database.query("update public.profiles set auth_user_id=null where id=$1", [actor.profileId]);
       attempts = [];
       expect((await authorized.planning.loadBoard()).status).toBe("forbidden");
-      expect(attempts.filter(path => path === "/rest/v1/projects")).toHaveLength(0);
+      expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(0);
       await fixture.database.query("update public.profiles set auth_user_id=$1 where id=$2", [actor.userId, actor.profileId]);
       await fixture.database.query("delete from auth.sessions where id=$1", [actor.sessionId]);
       attempts = [];
@@ -149,7 +149,7 @@ it("real Board entry rejects profile, mode and session changes before the first 
         expect(afterEntry).toBeUndefined();
         expect(result.ok).toBe(false);
         expect(paths.filter(path => path === "/rest/v1/rpc/workspace_calendar_entry")).toHaveLength(1);
-        for (const path of ["/rest/v1/rpc/current_authenticated_profile", "/rest/v1/projects", "/rest/v1/active_tasks"]) expect(paths).not.toContain(path);
+        for (const path of ["/rest/v1/rpc/current_authenticated_profile", "/rest/v1/rpc/planning_workspace_snapshot", "/rest/v1/active_tasks"]) expect(paths).not.toContain(path);
         expect((await fixture.database.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actor.userId])).rows[0].remaining).toBe(0);
       }
     }

@@ -10,10 +10,7 @@ test("a mapped viewer reads the planning revision through an action-bound capabi
   const authFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
-    if (url.pathname === "/rest/v1/active_tasks") {
-      expect(url.searchParams.get("project_id")).toBe("eq.findmydoc-founder-execution");
-      return Response.json([{ updated_at: "2026-10-17T08:00:00Z" }], { headers: { "content-range": "0-0/7" } });
-    }
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") return Response.json({ scope_revision: "42", active_task_count: 7, latest_updated_at: "2026-10-17T08:00:00Z" });
     return authFetch(request);
   });
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
@@ -855,7 +852,7 @@ test("ordinary planning data outages retain the safe HTTP unavailable response",
   let projectReads = 0;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
-    if (url.pathname === "/rest/v1/projects") { projectReads += 1; return Response.json({ code: "storage_unavailable", message: "Private upstream detail" }, { status: 503 }); }
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") { projectReads += 1; return Response.json({ code: "storage_unavailable", message: "Private upstream detail" }, { status: 503 }); }
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
@@ -877,7 +874,7 @@ test("local simulation keeps the existing host gate and cannot run on a deployed
   let reads = 0;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init);
-    if (new URL(request.url).pathname === "/rest/v1/active_tasks") { reads++; return Response.json([]); }
+    if (new URL(request.url).pathname === "/rest/v1/rpc/planning_workspace_snapshot") { reads++; return Response.json({ scope_revision: "42", active_task_count: 0, latest_updated_at: null }); }
     return authFetch(request);
   });
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
