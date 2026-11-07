@@ -37,7 +37,7 @@ beforeEach(() => {
     if (url.hostname === "sts.googleapis.com") return Response.json({ access_token: "synthetic-exchange" });
     if (url.hostname === "iamcredentials.googleapis.com") return Response.json({ accessToken: "synthetic-directory", expireTime: new Date(Date.now() + 3600000).toISOString() });
     if (url.hostname === "admin.googleapis.com") return Response.json({ isMember: state.member ?? true });
-    if (url.pathname === "/rest/v1/projects") return Response.json({ id: "findmydoc-founder-execution", name: "Planning" });
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", scope_revision: "42" });
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return fallback(request);
   });

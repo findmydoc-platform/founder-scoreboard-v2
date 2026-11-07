@@ -117,7 +117,7 @@ export function usePlanningBootstrapState({
     apiClient: requestContext.apiClient,
     enabled: source === "supabase" && auth.protectedDataLoaded && workspace === "planning",
     refreshCurrentWorkspaceModel: dataRefresh.refreshCurrentWorkspaceModel,
-    tasks: data.tasks,
+    scopeRevision: planningState.board().scopeRevision,
     authoritativeRevision: planningState.board().result?.workspaceRevision,
   });
 

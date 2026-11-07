@@ -156,10 +156,10 @@ export function usePlanningAppController({
   const planningBoard = planningState.board();
   const planningQuery = useMemo(() => normalizePlanningBoardQuery({ view: view === "board" ? "board" : "complete", level: planningLevel, parentId: planningParentFilterId, filters }), [view, planningLevel, planningParentFilterId, filters]);
   const planningQueryKey = planningBoardQueryKey(planningQuery);
-  const usesScopedBoard = Boolean(planningBoard.queryKey);
+  const usesScopedBoard = Boolean(planningBoard.queryKey) || planningBoard.requiresQueryRead === true;
   useEffect(() => {
-    if (workspace === "planning" && usesScopedBoard) void planningState.ensureBoardQuery(planningQuery);
-  }, [planningState, planningQuery, workspace, usesScopedBoard]);
+    if (workspace === "planning" && usesScopedBoard && !planningBoard.requiresQueryRead) void planningState.ensureBoardQuery(planningQuery);
+  }, [planningState, planningQuery, workspace, usesScopedBoard, planningBoard.requiresQueryRead]);
   const planningQueryReady = !usesScopedBoard || planningBoard.queryKey === planningQueryKey;
 
   const derivedState = usePlanningDerivedState({

@@ -18,7 +18,7 @@ function fixture() {
   ];
   const data: Record<string, unknown> = { projects: { id: "findmydoc-founder-execution", name: "Planning" }, profiles: [], active_tasks: rows, planning_item_strategy: [], planning_item_raci_assignments: [], task_links: [], task_blockers: [], sprints: [], task_relationship_edges: [], profile_ui_preferences: [] };
   const denied = new Set<string>();
-  const client = { from(table: string) {
+  const client = { rpc() { return Promise.resolve({ data: { ...(data.projects as object), scope_revision: "42" }, error: null }); }, from(table: string) {
     let start = 0, end = Infinity;
     const query = { select() { return query; }, eq() { return query; }, order() { return query; }, limit(value: number) { end = value - 1; return query; }, single() { return query; }, range(from: number, to: number) { start = from; end = to; return query; }, then(resolve: (result: unknown) => unknown) {
       const value = data[table];

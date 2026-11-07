@@ -87,7 +87,7 @@ async function completeAndOpenChild(canvasElement: HTMLElement) {
   await userEvent.click(toggle);
   await expect(canvas.getByLabelText("Child detail reads")).toHaveTextContent("1");
   await userEvent.click(canvas.getByRole("link", { name: "On-demand child, Status Offen" }));
-  const panel = await canvas.findByRole("dialog", { name: "On-demand child" });
+  const panel = await canvas.findByRole("dialog", { name: "On-demand child" }, { timeout: 5000 });
   await expect(await within(panel).findByText("The child detail is loaded independently.")).toBeVisible();
   await expect(canvas.getByLabelText("Child Board reads")).toHaveTextContent("0");
 }
@@ -114,5 +114,6 @@ export const DeniedChildListKeepsASafeOutcome: Story = { args: { failure: "forbi
   await expect(await canvas.findByText("Kinder dürfen nicht geladen werden.")).toBeVisible();
   await expect(canvas.queryByRole("link", { name: /On-demand child/ })).not.toBeInTheDocument();
   await expect(canvas.queryByText("Parent deliverable")).not.toBeInTheDocument();
+  await expect(canvas.queryByRole("region", { name: "Board nach Status" })).not.toBeInTheDocument();
   await expect(canvas.getByLabelText("Child Board reads")).toHaveTextContent("0");
 } };

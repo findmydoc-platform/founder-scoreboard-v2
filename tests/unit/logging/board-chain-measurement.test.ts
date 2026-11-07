@@ -37,7 +37,7 @@ test.each([
     if (url.hostname === "sts.googleapis.com") return Response.json({ access_token: "synthetic-exchange" });
     if (url.hostname === "iamcredentials.googleapis.com") return Response.json({ accessToken: "synthetic-directory", expireTime: new Date(Date.now() + 3600000).toISOString() });
     if (url.hostname === "admin.googleapis.com") return Response.json({ isMember: true });
-    if (name === "projects") return Response.json({ id: "findmydoc-founder-execution", name: "Synthetic board" });
+    if (name === "planning_workspace_snapshot") return Response.json({ id: "findmydoc-founder-execution", name: "Synthetic board", scope_revision: "42" });
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return fallback(request);
   });

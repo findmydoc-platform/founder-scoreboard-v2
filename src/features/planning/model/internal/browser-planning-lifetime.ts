@@ -31,7 +31,10 @@ export function createBrowserPlanningLifetime(sessions: SessionSource = createBr
     if (next) {
       if (next.expiresAt * 1000 <= Date.now()) { clearCurrent(); session = null; }
       else {
-        if (current) { current.runtime.session = next; current.owner.internal.bindSession(next); }
+        if (current) {
+          current.runtime.session = next;
+          if (current.owner.internal.bindSession(next)) void current.owner.planning.refreshWorkspace(current.runtime.workspace);
+        }
         expiry = setTimeout(() => { session = null; clearCurrent(); emit(); }, Math.max(0, next.expiresAt * 1000 - Date.now()));
       }
     }

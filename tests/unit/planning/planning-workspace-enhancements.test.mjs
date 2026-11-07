@@ -9,10 +9,10 @@ async function loadRevisionRoute({ queryResult = { data: [], count: 0 }, denied 
   const calls = [], authFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
-    if (url.pathname === "/rest/v1/active_tasks") {
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") {
       calls.push(url);
       return queryResult.error ? Response.json(queryResult.error, { status: 503 })
-        : Response.json(queryResult.data, { headers: { "content-range": `0-0/${queryResult.count}` } });
+        : Response.json({ scope_revision: "42", active_task_count: queryResult.count, latest_updated_at: queryResult.data?.[0]?.updated_at || null });
     }
     return authFetch(request);
   });
@@ -45,16 +45,14 @@ test("planning revision route preserves authorization, exact count, latest times
   const response = await route.GET({});
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, {
-    revision: { activeTaskCount: 17, latestUpdatedAt: "2026-08-03T12:00:00.000Z" },
+    revision: { activeTaskCount: 17, latestUpdatedAt: "2026-08-03T12:00:00.000Z", scopeRevision: "42" },
   });
   assert.equal(response.headers["cache-control"], "private, no-store");
   assert.equal(route.calls.length, 1);
-  assert.equal(route.calls[0].searchParams.get("project_id"), "eq.findmydoc-founder-execution");
-  assert.equal(route.calls[0].searchParams.get("select"), "updated_at");
-  assert.equal(route.calls[0].searchParams.get("limit"), "1");
+
 
   const empty = await loadRevisionRoute({ queryResult: { data: [], error: null, count: 0 } });
-  assert.deepEqual((await empty.GET({})).body.revision, { activeTaskCount: 0, latestUpdatedAt: "" });
+  assert.deepEqual((await empty.GET({})).body.revision, { activeTaskCount: 0, latestUpdatedAt: "", scopeRevision: "42" });
 
   const failed = await loadRevisionRoute({ queryResult: { data: null, error: { message: "offline" }, count: null } });
   const failedResponse = await failed.GET({});

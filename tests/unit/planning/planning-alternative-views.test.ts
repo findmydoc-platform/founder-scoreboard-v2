@@ -53,6 +53,18 @@ test("complete authorized coverage supports local filters and retained strategic
   expect(reads).toHaveLength(1);
 });
 
+test("a new Board filter reuses a current complete authorized collection for local matching", async () => {
+  const reads: PlanningBoardQueryInput[] = [];
+  const { planning } = ownerWithViews(async query => { reads.push(query); return viewRead(query); });
+  await planning.ensureBoardQuery({ view: "complete" });
+  const query = { view: "board", filters: { query: "Historical Deliverable 44" } } as const;
+  await planning.ensureBoardQuery(query);
+  expect(reads).toHaveLength(1);
+  expect(planning.board().queryKey).toBe(planningBoardQueryKey(query));
+  expect(planning.workspace("planning").completeness).toBe("complete");
+  expect(planning.board().tasks).toHaveLength(45);
+});
+
 test("a Board column retry stays with its retained Board instead of leaking into complete views", async () => {
   const { planning } = ownerWithViews(async query => {
     if (query.column) throw new Error("Column temporarily unavailable");
@@ -122,7 +134,7 @@ test("a delayed complete view preserves confirmed edits, pending edits and previ
   expect(planning.taskDetail(cards[1].id)).toMatchObject({ task: { title: "Pending edit" }, saveStatus: "saved" });
 });
 
-test("changed source coverage invalidates retained Board membership", async () => {
+test("changed complete source replaces obsolete Board coverage and supports local matching", async () => {
   const reads: PlanningBoardQueryInput[] = [];
   const { planning } = ownerWithViews(async query => {
     reads.push(query);
@@ -131,8 +143,10 @@ test("changed source coverage invalidates retained Board membership", async () =
   });
   await planning.ensureBoardQuery({ view: "complete" });
   await planning.ensureBoardQuery({ view: "board" });
-  expect(reads).toHaveLength(2);
-  expect(planning.board().result?.revision).toBe("r2");
+  expect(reads).toHaveLength(1);
+  expect(planning.board().result).toBeUndefined();
+  expect(planning.board().tasks).toHaveLength(45);
+  expect(planning.workspace("planning").completeness).toBe("complete");
 });
 
 test.each([null, "another-user"])("cached complete coverage and delayed reads end with the session (%s)", async replacement => {

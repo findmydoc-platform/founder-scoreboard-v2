@@ -64,7 +64,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     visibleTasks,
   } = controller;
 
-  const deniedChildListIds = controller.planningBoard?.result?.cardIds.filter(taskId => controller.planningState.taskDetail(taskId).childrenReadStatus === "forbidden") || [];
+  const deniedChildListIds = controller.planningBoard?.deniedChildListIds || [];
 
   const canChangeTaskStatus = (task: (typeof data.tasks)[number]) => mayChangeTaskStatus(task) && controller.planningState.taskDetail(task.id).saveStatus !== "unconfirmed";
 
@@ -93,6 +93,13 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
   if (!filtersAvailable) return null;
   if (controller.workspace === "planning" && controller.planningBoard?.readStatus === "forbidden") return <UiNotice role="alert" tone="danger">Planung darf nicht geladen werden.</UiNotice>;
+  if (controller.planningBoard?.requiresQueryRead && deniedChildListIds.length) return <UiNotice role="alert" tone="danger">
+    Kinder dürfen nicht geladen werden.
+    <UiButton type="button" aria-disabled={deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")} onClick={() => {
+      if (deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")) return;
+      void Promise.all(deniedChildListIds.map(id => controller.planningState.loadTaskDetail(id))).then(results => { if (results.every(result => result.ok)) void controller.retryPlanningQuery(); });
+    }}>Kinder erneut laden</UiButton>
+  </UiNotice>;
   if (controller.planningQueryReady === false) return <UiNotice role="status" tone="info">
     {controller.planningBoard.readStatus === "unavailable" ? "Diese Ansicht konnte nicht geladen werden." : "Planung wird geladen …"}
     {controller.planningBoard.readStatus === "unavailable" ? <UiButton type="button" onClick={() => void controller.retryPlanningQuery()}>Ansicht erneut laden</UiButton> : null}

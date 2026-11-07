@@ -1,6 +1,7 @@
 import type { Task } from "@/lib/types";
 
 export type PlanningTaskRevision = {
+  scopeRevision?: string;
   activeTaskCount: number;
   latestUpdatedAt: string;
 };

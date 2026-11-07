@@ -1,16 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import { planningTaskRevision, planningTaskRevisionsEqual } from "@/features/planning/model/planning-revision";
+import { planningTaskRevisionsEqual } from "@/features/planning/model/planning-revision";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { Task } from "@/lib/types";
 
 type UsePlanningRemoteChangesOptions = {
   apiClient: BrowserApiClient;
   enabled: boolean;
   refreshCurrentWorkspaceModel: () => Promise<void>;
-  tasks: Task[];
+  scopeRevision?: string;
   authoritativeRevision?: import("../model/planning-revision").PlanningTaskRevision;
 };
 
@@ -18,19 +17,20 @@ export function usePlanningRemoteChanges({
   apiClient,
   enabled,
   refreshCurrentWorkspaceModel,
-  tasks,
+  scopeRevision,
   authoritativeRevision,
 }: UsePlanningRemoteChangesOptions) {
   const [planningRemoteChangesAvailable, setPlanningRemoteChangesAvailable] = useState(false);
   const [planningRemoteChangesRefreshing, setPlanningRemoteChangesRefreshing] = useState(false);
-  const currentRevision = useMemo(() => authoritativeRevision || planningTaskRevision(tasks), [tasks, authoritativeRevision]);
-  const currentRevisionRef = useRef(currentRevision);
+  const currentRevisionRef = useRef({ scopeRevision, authoritativeRevision });
+  const contextRef = useRef(0);
   const checkingRef = useRef(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
-    currentRevisionRef.current = currentRevision;
-  }, [currentRevision]);
+    currentRevisionRef.current = { scopeRevision, authoritativeRevision };
+    contextRef.current++;
+  }, [scopeRevision, authoritativeRevision, apiClient, enabled]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -42,10 +42,18 @@ export function usePlanningRemoteChanges({
   const checkForPlanningRemoteChanges = useCallback(async () => {
     if (!enabled || !mountedRef.current || checkingRef.current) return;
     checkingRef.current = true;
+    const context = contextRef.current;
     try {
       const { response, body } = await planningApi.requestPlanningShellStateRevision(apiClient);
-      if (!mountedRef.current || !response.ok || !body?.revision) return;
-      setPlanningRemoteChangesAvailable(!planningTaskRevisionsEqual(body.revision, currentRevisionRef.current));
+      if (!mountedRef.current || context !== contextRef.current || !response.ok || !body?.revision) return;
+      const current = currentRevisionRef.current;
+      const remoteScopeRevision = "scopeRevision" in body.revision && typeof body.revision.scopeRevision === "string" ? body.revision.scopeRevision : undefined;
+      if (current.scopeRevision && remoteScopeRevision) {
+        setPlanningRemoteChangesAvailable(current.scopeRevision !== remoteScopeRevision);
+      } else if (current.authoritativeRevision && !planningTaskRevisionsEqual(body.revision, current.authoritativeRevision)) {
+        // Legacy metadata can disprove freshness, but equality cannot prove an unchanged source.
+        setPlanningRemoteChangesAvailable(true);
+      }
     } catch {
       // Connectivity failures leave the current view unchanged and retry on the next check.
     } finally {

@@ -125,6 +125,11 @@ export async function loadPlanningWorkspaceModel(
   context: PlanningWorkspaceLoadContext,
 ): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
+  // Capture the source token before enumeration. A concurrent commit can then
+  // make this response stale, but cannot make old data claim the newer token.
+  const snapshot = await observeRuntimePhase("board.project", () => supabase.rpc("planning_workspace_snapshot"));
+  const project = snapshot.data as (ProjectRow & { scope_revision?: string }) | null;
+  if (snapshot.error || !project?.id || typeof project.scope_revision !== "string") return { status: "unavailable" };
   const completeRead = <T>(query: () => PromiseLike<{ data: T[] | null; count: number | null; error: unknown }> & { range(from: number, to: number): PromiseLike<{ data: T[] | null; count: number | null; error: unknown }> }) => context.query ? countedRows(query) : Promise.resolve(query());
   let baseReadFailed = false;
   const trackRead = <T extends { error: unknown }>(read: Promise<T>, missingData?: (result: T) => boolean): Promise<T> => read.then(
@@ -137,7 +142,6 @@ export async function loadPlanningWorkspaceModel(
       throw error;
     },
   );
-  const projectRead = trackRead(observeRuntimePhase("board.project", () => supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<ProjectRow>()), (result) => !result.data);
   const profileRead = trackRead(observeRuntimePhase("board.profiles", () => completeRead(() => supabase.from("profiles").select(planningProfileSelect, { count: "exact" }).order("name").order("id"))));
   type AvatarOutcome = { people: Profile[] } | { error: unknown };
   let avatarWork: Promise<AvatarOutcome> | undefined;
@@ -149,7 +153,6 @@ export async function loadPlanningWorkspaceModel(
     );
   }, () => undefined);
   const baseReads = Promise.all([
-    projectRead,
     profileRead,
     trackRead(observeRuntimePhase("board.items", () => completeRead(() => supabase.from(ACTIVE_TASKS_TABLE).select(planningSummarySelect, { count: "exact" }).eq("project_id", planningProjectId).order("sort_order").order("id")))),
     trackRead(observeRuntimePhase("board.strategy", () => completeRead(() => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints", { count: "exact" }).order("task_id")))),
@@ -160,14 +163,14 @@ export async function loadPlanningWorkspaceModel(
     trackRead(observeRuntimePhase("board.preferences", () => completeRead(() => supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at", { count: "exact" }).order("profile_id")))),
     context.query ? trackRead(completeRead(() => supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at", { count: "exact" }).order("id"))) : Promise.resolve({ data: [], error: null, count: 0 }),
   ]);
-  const [projectResult, profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult, blockerResult] = await baseReads.catch(async (error: unknown) => {
+  const [profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult, blockerResult] = await baseReads.catch(async (error: unknown) => {
     // A failed base read owns the result, but started avatar dispatch must finish cleanup.
     if (avatarWork) await avatarWork;
     throw error;
   });
   await avatarStart;
   const avatars = avatarWork ? await avatarWork : { people: [] };
-  if (projectResult.error || !projectResult.data || profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error || sprintResult.error || relationResult.error || preferenceResult.error || blockerResult.error) {
+  if (profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error || sprintResult.error || relationResult.error || preferenceResult.error || blockerResult.error) {
     return { status: "unavailable" };
   }
   if ("error" in avatars) throw avatars.error;
@@ -184,8 +187,9 @@ export async function loadPlanningWorkspaceModel(
     const activeIds = new Set(items.map((item) => item.id));
     const model = {
         revision: items.reduce((latest, item) => item.updatedAt && item.updatedAt > latest ? item.updatedAt : latest, ""),
+        scopeRevision: project.scope_revision,
         coverage: { items: complete(itemResult), people: complete(profileResult), strategies: complete(strategyResult), raci: complete(raciResult), links: complete(linkResult), sprints: complete(sprintResult), relationships: complete(itemResult) === "complete" ? complete(relationResult) : "partial", preferences: complete(preferenceResult), ...(context.query ? { blockers: complete(blockerResult) } : {}) },
-        project: mapPlanningProject(projectResult.data),
+        project: mapPlanningProject(project),
         items,
         ...(context.query ? { blockers: ((blockerResult.data || []) as DbTaskBlocker[]).filter(row => activeIds.has(row.task_id)).map(mapTaskBlocker) } : {}),
         relationships: ((relationResult.data || []) as DbTaskRelation[])
