@@ -118,12 +118,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
         <div className="grid gap-4">
           <TaskBoardView
             childProgressById={controller.planningBoard?.result?.childProgressById}
-            completedHistory={planningLevel === "deliverable" && controller.planningBoard?.result ? {
-              ...controller.planningBoard.result.columns.Erledigt,
-              readStatus: controller.planningBoard.pageStatus || "current",
-              onLoadMore: () => { void controller.planningState.loadCompletedHistory(); },
-              onRefresh: () => { void controller.planningState.refreshWorkspace("planning"); },
-            } : undefined}
+            columns={planningLevel === "deliverable" && controller.planningBoard?.result ? Object.fromEntries(boardStatuses.map(status => [status, {
+              ...controller.planningBoard.result!.columns[status],
+              readStatus: controller.planningBoard.columnReadStatus?.[status] || "current",
+              onLoadMore: () => { void controller.planningState.loadBoardColumn(status); },
+              onRefresh: () => { void controller.planningState.refreshBoardColumn(status); },
+            }])) : undefined}
             statuses={boardStatuses}
             itemType={planningLevel}
             visibleTasks={boardTasks}

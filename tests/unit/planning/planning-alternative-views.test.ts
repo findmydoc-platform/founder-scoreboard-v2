@@ -17,7 +17,7 @@ function viewRead(input: PlanningBoardQueryInput = {}): PlanningWorkspaceRead {
     completeness: status === "Erledigt" ? "partial" : "complete", continuation: status === "Erledigt" ? input.continuation ? "page-3" : "page-2" : null,
   } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
   return { data: { ...emptyPlanningShellState, tasks: items }, query, queryRevision: "r1", coverage: { tasks: complete ? "complete" : "partial", profiles: "complete", sprints: "complete", taskRelations: "complete", taskBlockers: "complete" },
-    ...(!complete ? { board: { query, queryKey: planningBoardQueryKey(query), revision: "r1", observedAt: "2026-11-07T00:00:00Z", cardIds: items.map(task => task.id), columns, childProgressById: {}, viewerOpenSubIssueIdsByDeliverableId: {}, metrics: { total: 45, open: 0, done: 45, blocked: 0 }, workspaceRevision: { activeTaskCount: 45, latestUpdatedAt: "r1" } } } : {}),
+    ...(!complete ? { board: { query, column: input.column, queryKey: planningBoardQueryKey(query), revision: "r1", observedAt: "2026-11-07T00:00:00Z", cardIds: items.map(task => task.id), columns, childProgressById: {}, viewerOpenSubIssueIdsByDeliverableId: {}, metrics: { total: 45, open: 0, done: 45, blocked: 0 }, workspaceRevision: { activeTaskCount: 45, latestUpdatedAt: "r1" } } } : {}),
   };
 }
 
@@ -51,6 +51,37 @@ test("complete authorized coverage supports local filters and retained strategic
   await planning.ensureBoardQuery({ view: "complete", level: "initiative", parentId: "retained-epic", filters: { query: "Historical Deliverable 44", sort: "title", direction: "desc" } });
   expect(planning.board().tasks).toHaveLength(45);
   expect(reads).toHaveLength(1);
+});
+
+test("a Board column retry stays with its retained Board instead of leaking into complete views", async () => {
+  const { planning } = ownerWithViews(async query => {
+    if (query.column) throw new Error("Column temporarily unavailable");
+    return viewRead(query);
+  });
+  await expect(planning.loadBoardColumn("Erledigt")).resolves.toBe(false);
+  expect(planning.board().columnReadStatus?.Erledigt).toBe("unavailable");
+  await planning.ensureBoardQuery({ view: "complete" });
+  expect(planning.board().columnReadStatus).toEqual({});
+  await planning.ensureBoardQuery({ view: "board" });
+  expect(planning.board().columnReadStatus?.Erledigt).toBe("unavailable");
+  expect(planning.board().tasks).toHaveLength(20);
+});
+
+test("returning from a complete view can retry an interrupted Board page and ignores the old response", async () => {
+  const pages: Array<{ query: PlanningBoardQueryInput; resolve: (value: PlanningWorkspaceRead) => void }> = [];
+  const { planning } = ownerWithViews(query => query.column ? new Promise(resolve => { pages.push({ query, resolve }); }) : Promise.resolve(viewRead(query)));
+  const interrupted = planning.loadBoardColumn("Erledigt");
+  await planning.ensureBoardQuery({ view: "complete" });
+  await planning.ensureBoardQuery({ view: "board" });
+  expect(planning.board().columnReadStatus?.Erledigt).toBe("stale");
+  const retry = planning.loadBoardColumn("Erledigt");
+  expect(pages).toHaveLength(2);
+  pages[0].resolve(viewRead(pages[0].query));
+  await expect(interrupted).resolves.toBe(false);
+  expect(planning.board().tasks).toHaveLength(20);
+  pages[1].resolve(viewRead(pages[1].query));
+  await expect(retry).resolves.toBe(true);
+  expect(planning.board().tasks).toHaveLength(40);
 });
 
 function deferred<T>() {
