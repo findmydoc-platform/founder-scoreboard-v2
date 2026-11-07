@@ -8,6 +8,7 @@ export type PlanningWorkspaceModel = Readonly<{
   queryRevision?: string;
   board?: import("@/features/planning/model/planning-board-query").PlanningBoardResult;
   coverage?: PlanningWorkspaceReadCoverage;
+  taskOmittedFields?: readonly (keyof Task)[];
   project: Project;
   items: readonly Task[];
   relationships: readonly TaskRelation[];

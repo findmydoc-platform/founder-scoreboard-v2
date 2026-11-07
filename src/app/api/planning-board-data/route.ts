@@ -7,7 +7,7 @@ import { apiError, authzError } from "@/lib/api-response";
 async function handleGET(request: NextRequest) {
   const permission = await observeRuntimePhase("board.authorization", () => authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning.board.read" }));
   if (!permission.ok) return authzError(permission);
-  let query: PlanningBoardQueryInput = {};
+  let query: PlanningBoardQueryInput | undefined;
   const rawQuery = request.nextUrl.searchParams.get("scope");
   if (rawQuery) {
     try {

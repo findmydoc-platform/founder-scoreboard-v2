@@ -321,7 +321,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.task.read" || !targetId || !detailPeople || await current()) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
       return loadPlanningTrashTaskDetail(service, targetId, detailPeople);
     },
-    async loadBoard(query: PlanningBoardQueryInput = {}) {
+    async loadBoard(query?: PlanningBoardQueryInput) {
       const denial = action === "planning.board.read" ? await current() : forbidden();
       if (denial) return { status: "forbidden" as const };
       return createSupabasePlanningBoardReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null, query, authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning").update(JSON.stringify(["planning-board-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") });
