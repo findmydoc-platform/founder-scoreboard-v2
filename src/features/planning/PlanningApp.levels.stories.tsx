@@ -34,7 +34,7 @@ function page(input: PlanningBoardQueryInput = {}) {
   })) as Record<TaskStatus, PlanningBoardColumn>;
   const items = [...new Map([...cards, ...tasks.filter(task => query.level === "initiative" && task.taskType === "epic" || query.level === "deliverable" && task.taskType !== "deliverable")].map(task => [task.id, task])).values()];
   return { revision: "strategic-r1", query, project: emptyPlanningShellState.project, items, people: [profile], sprints: [], relationships: [], preferences: [], coverage: { items: "partial", people: "complete", strategies: "complete", raci: "complete", links: "complete", sprints: "complete", relationships: "complete", preferences: "complete" } as const,
-    board: { query, column: input.column, queryKey: planningBoardQueryKey(query), revision: "strategic-r1", observedAt: "2026-11-07T00:00:00Z", cardIds: cards.map(task => task.id), childProgressById: Object.fromEntries(cards.map(card => {
+    board: { query, column: input.column, queryKey: planningBoardQueryKey(query), revision: "strategic-r1", observedAt: "2026-11-07T00:00:00Z", levelTotals: { epic: 75, initiative: 75, deliverable: 75 }, cardIds: cards.map(task => task.id), childProgressById: Object.fromEntries(cards.map(card => {
       const children = tasks.filter(task => task.parentTaskId === card.id);
       const completed = children.filter(task => task.status === "Erledigt").length;
       return [card.id, { total: children.length, completed, unfinished: children.length - completed, percentage: children.length ? Math.round(completed / children.length * 100) : 0 }];
@@ -70,6 +70,7 @@ export const StrategicPagingAndParentFilter: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement), body = within(document.body);
     const board = await canvas.findByRole("region", { name: "Board nach Status" });
+    await expect(canvas.getByRole("combobox", { name: "Planungsebene im Kanban" })).toHaveTextContent("Epics · 75");
     const done = within(board).getByRole("region", { name: /Erledigt, 25/ });
     await expect(within(done).getByText("20 von 25 geladen")).toBeVisible();
     await expect(within(board).queryByRole("region", { name: /Review,/ })).not.toBeInTheDocument();
@@ -89,5 +90,13 @@ export const StrategicPagingAndParentFilter: Story = {
     await expect(within(selectedBoard).getByRole("link", { name: "initiative Offen 25" })).toBeVisible();
     await expect(within(selectedBoard).queryByRole("link", { name: "initiative Offen 1" })).not.toBeInTheDocument();
     await expect(within(selectedBoard).queryByRole("region", { name: /Review,/ })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("combobox", { name: "Planungsebene im Kanban" }));
+    await userEvent.click(body.getByRole("option", { name: /Deliverables/ }));
+    const deliveryOpen = await canvas.findByRole("region", { name: /Offen, 25/ });
+    await userEvent.click(within(deliveryOpen).getByRole("button", { name: "Weitere Karten in Offen laden" }));
+    await waitFor(() => expect(within(deliveryOpen).getByText("25 von 25 geladen")).toBeVisible());
+    await userEvent.click(canvas.getByRole("combobox", { name: "Planungsebene im Kanban" }));
+    await userEvent.click(body.getByRole("option", { name: /Epics/ }));
+    await waitFor(() => expect(within(canvas.getByRole("region", { name: /Erledigt, 25/ })).getByText("25 von 25 geladen")).toBeVisible());
   },
 };

@@ -26,6 +26,7 @@ export type PlanningBoardResult = Readonly<{
   revision: string;
   observedAt: string;
   cardIds: readonly string[];
+  levelTotals?: Record<PlanningLevel, number>;
   childProgressById: Record<string, { completed: number; total: number; unfinished: number; percentage: number }>;
   columns: Record<TaskStatus, PlanningBoardColumn>;
   metrics: { total: number; open: number; blocked: number; done: number };

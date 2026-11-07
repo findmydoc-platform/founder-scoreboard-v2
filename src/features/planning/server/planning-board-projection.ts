@@ -78,6 +78,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
     items: model.items.filter(task => contextIds.has(task.id)), relationships,
     blockers: model.blockers?.filter(blocker => contextIds.has(blocker.taskId)),
     board: { query, column, queryKey, revision, observedAt: new Date().toISOString(), cardIds: [...cardIds], childProgressById, columns,
+      levelTotals: { epic: model.items.filter(task => task.taskType === "epic").length, initiative: model.items.filter(task => task.taskType === "initiative").length, deliverable: model.items.filter(task => task.taskType === "deliverable").length },
       metrics: { total: matches.length, open: matches.length - completed.length, done: completed.length, blocked: matches.filter(task => normalizeStatus(task.status) === "Blockiert" || task.dependsOn || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)).length },
       viewerOpenSubIssueIdsByDeliverableId: Object.fromEntries(Object.entries(filtered.viewerOpenSubIssueIdsByDeliverableId).filter(([id]) => cardIds.has(id))),
       workspaceRevision: { activeTaskCount: model.items.length, latestUpdatedAt: model.revision },

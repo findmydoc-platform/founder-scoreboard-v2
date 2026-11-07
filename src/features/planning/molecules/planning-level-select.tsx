@@ -11,6 +11,7 @@ type PlanningLevelSelectProps = {
   className?: string;
   onChange: (level: PlanningLevel) => void;
   tasks: Task[];
+  totals?: Partial<Record<PlanningLevel, number>>;
   value: PlanningLevel;
 };
 
@@ -19,11 +20,12 @@ export function PlanningLevelSelect({
   className,
   onChange,
   tasks,
+  totals,
   value,
 }: PlanningLevelSelectProps) {
   const options = planningLevels.map((level) => ({
     value: level.value,
-    label: `${level.label} · ${tasks.filter((task) => task.taskType === level.value).length}`,
+    label: `${level.label} · ${totals?.[level.value] ?? tasks.filter((task) => task.taskType === level.value).length}`,
     icon: <TaskTypeIcon taskType={level.value} size={16} />,
   }));
 

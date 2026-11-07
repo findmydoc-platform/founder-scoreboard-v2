@@ -39,6 +39,7 @@ test.each(["epic", "initiative"] as const)("%s Board pages each strategic status
   const first = await reader.load({ ...context, query });
   if (first.status !== "ready") throw new Error("Expected strategic Board");
   expect(first.model.board?.cardIds).toHaveLength(60);
+  expect(first.model.board?.levelTotals).toEqual({ epic: level === "epic" ? 142 : 1, initiative: level === "initiative" ? 141 : 0, deliverable: 0 });
   for (const status of ["Offen", "Pausiert", "Erledigt"] as const) {
     expect(first.model.board?.columns[status]).toMatchObject({ total: 47, loaded: 20, completeness: "partial" });
     const ids = first.model.board!.cardIds.filter(id => id.includes(status));
@@ -71,6 +72,7 @@ test.each(["epic", "initiative"] as const)("%s page keeps direct-child aggregate
   if (searched.status !== "ready") throw new Error("Expected full-scope strategic search");
   expect(searched.model.board?.cardIds).toEqual([parentId]);
   expect(searched.model.board?.childProgressById[parentId]).toEqual({ completed: 1, total: 2, unfinished: 1, percentage: 50 });
+  expect(searched.model.items.some(task => task.id === "open-child" || task.id === "done-child" || task.id === "grandchild")).toBe(false);
   const children = await reader.load({ ...context, query: { level: childType, parentId, filters: { status: "Offen" } } });
   if (children.status !== "ready") throw new Error("Expected child Board");
   expect(children.model.board?.cardIds).toEqual(["open-child"]);
