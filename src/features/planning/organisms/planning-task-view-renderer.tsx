@@ -90,9 +90,18 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
   };
 
   if (!filtersAvailable) return null;
+  if (controller.workspace === "planning" && controller.planningBoard?.readStatus === "forbidden") return <UiNotice role="alert" tone="danger">Planung darf nicht geladen werden.</UiNotice>;
+  if (controller.planningQueryReady === false) return <UiNotice role="status" tone="info">
+    {controller.planningBoard.readStatus === "unavailable" ? "Diese Ansicht konnte nicht geladen werden." : "Planung wird geladen …"}
+    {controller.planningBoard.readStatus === "unavailable" ? <UiButton type="button" onClick={() => void controller.retryPlanningQuery()}>Ansicht erneut laden</UiButton> : null}
+  </UiNotice>;
 
   return (
     <>
+      {controller.workspace === "planning" && controller.planningBoard?.readStatus === "unavailable" ? <UiNotice tone="info" role="alert">
+        Der aktuelle Stand konnte nicht geladen werden. Deine geladenen Karten bleiben sichtbar.
+        <UiButton type="button" onClick={() => void controller.planningState.refreshWorkspace("planning")}>Planung erneut laden</UiButton>
+      </UiNotice> : null}
       {data.tasks.map(task => <TaskSaveNotice key={task.id} taskTitle={controller.planningState.taskDetail(task.id).task ? task.title : "Aufgabe"} saves={controller.planningState.taskSaves(task.id)} labels={{ profiles: data.profiles, tasks: data.tasks, sprints: data.sprints }} onCheck={() => controller.planningState.checkTaskSave(task.id)} />)}
       {boardTaskEditConflict ? <UiNotice tone="info" role="alert" className="mb-4">
         <p>Die Aufgabe wurde inzwischen geändert. Deine Eingaben bleiben erhalten.</p>
@@ -108,6 +117,13 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       {view === "board" && (
         <div className="grid gap-4">
           <TaskBoardView
+            childProgressById={controller.planningBoard?.result?.childProgressById}
+            completedHistory={planningLevel === "deliverable" && controller.planningBoard?.result ? {
+              ...controller.planningBoard.result.columns.Erledigt,
+              readStatus: controller.planningBoard.pageStatus || "current",
+              onLoadMore: () => { void controller.planningState.loadCompletedHistory(); },
+              onRefresh: () => { void controller.planningState.refreshWorkspace("planning"); },
+            } : undefined}
             statuses={boardStatuses}
             itemType={planningLevel}
             visibleTasks={boardTasks}

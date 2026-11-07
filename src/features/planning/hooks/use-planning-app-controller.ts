@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { normalizePlanningBoardQuery, planningBoardQueryKey } from "../model/planning-board-query";
 import { usePlanningBootstrapState, type PlanningBootstrapStateOptions } from "@/features/planning/hooks/use-planning-bootstrap-state";
 import { usePlanningCommandRegistry } from "@/features/planning/hooks/use-planning-command-registry";
 import { usePlanningDerivedState } from "@/features/planning/hooks/use-planning-derived-state";
@@ -150,10 +151,20 @@ export function usePlanningAppController({
     startTransition,
   });
 
+  const planningBoard = planningState.board();
+  const planningQuery = useMemo(() => normalizePlanningBoardQuery({ view: view === "board" ? "board" : "complete", level: planningLevel, parentId: planningParentFilterId, filters }), [view, planningLevel, planningParentFilterId, filters]);
+  const planningQueryKey = planningBoardQueryKey(planningQuery);
+  const usesScopedBoard = Boolean(planningBoard.queryKey);
+  useEffect(() => {
+    if (workspace === "planning" && usesScopedBoard) void planningState.ensureBoardQuery(planningQuery);
+  }, [planningState, planningQuery, workspace, usesScopedBoard]);
+  const planningQueryReady = !usesScopedBoard || planningBoard.queryKey === planningQueryKey;
+
   const derivedState = usePlanningDerivedState({
     currentProfile,
     data,
     workspaceTasks: planningState.workspace(workspace).tasks,
+    boardResult: workspace === "planning" && planningQueryReady ? planningBoard.result : undefined,
     filters,
     planningLevel,
     setInitiativeDialogDefaults,
@@ -194,6 +205,9 @@ export function usePlanningAppController({
   return {
     actualProfile,
     planningState,
+    planningQueryReady,
+    retryPlanningQuery: () => planningState.ensureBoardQuery(planningQuery),
+    planningBoard,
     beginTaskEdit: planningState.beginTaskEdit,
     authAvailable,
     authBusy,

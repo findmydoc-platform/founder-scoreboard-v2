@@ -62,11 +62,11 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
       const response = await GET(request);
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ model: { project: { id: "findmydoc-founder-execution" } }, currentProfile: { id: actor.profileId, platformRole: role } });
-      // The proxy and route retain every live check in the measured request budget.
-      expect(attempts).toHaveLength(75);
-      expect(attempts.filter(path => path === "/auth/v1/user")).toHaveLength(17);
+      // The proxy and route include the independently guarded Blocker context read.
+      expect(attempts).toHaveLength(80);
+      expect(attempts.filter(path => path === "/auth/v1/user")).toHaveLength(18);
       for (const rpc of ["workspace_dispatch_prepare", "current_authenticated_profile", "workspace_release_permit"]) {
-        expect(attempts.filter(path => path === `/rest/v1/rpc/${rpc}`)).toHaveLength(15);
+        expect(attempts.filter(path => path === `/rest/v1/rpc/${rpc}`)).toHaveLength(16);
       }
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_access_context")).toHaveLength(0);
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_calendar_entry")).toHaveLength(1);

@@ -97,8 +97,10 @@ export function taskRelationsFor(taskId: string, relations: TaskRelation[]) {
 }
 
 export function hasOpenWaitingRelation(taskId: string, tasks: Task[], relations: TaskRelation[]) {
+  const waitingRelations = taskRelationsFor(taskId, relations).waitsOn;
+  if (!waitingRelations.length) return false;
   const taskById = new Map(tasks.map((task) => [task.id, task]));
-  return taskRelationsFor(taskId, relations).waitsOn.some((relation) => {
+  return waitingRelations.some((relation) => {
     const blockingTaskId = effectiveTaskRelation(taskId, relation)?.linkedTaskId;
     const blockingTask = blockingTaskId ? taskById.get(blockingTaskId) : undefined;
     return blockingTask && blockingTask.status !== "Erledigt";

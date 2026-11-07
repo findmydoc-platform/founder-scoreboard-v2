@@ -38,7 +38,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
   if (!context.ok) return context;
   const { profile, service, followup, correction, userData } = context;
   const bound = context;
-  async function load<M>(readModel: { load(context: { authorized: boolean; actorProfileId: string | null }): Promise<{ status: "ready"; model: M } | { status: "forbidden" } | { status: "unavailable" }> }) {
+  async function load<M>(readModel: { load(context: { authorized: boolean; actorProfileId: string | null }): Promise<{ status: "ready"; model: M } | { status: "forbidden" } | { status: "unavailable" } | { status: "staleContinuation" }> }) {
       // Admission runs outside the shared data cache on hits and misses.
       try { await bound.current(); bound.assertCurrent(); }
       catch { return { status: "unavailable" as const }; }
@@ -46,7 +46,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
         readModel.load({ authorized: true, actorProfileId: profile?.id || null }),
         loadPlanningHeaderData(service, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, sharedSlotLoaders: planningHeaderSlotLoaders(service) }),
       ]);
-      return result.status === "ready" ? { ...result, headerData } : result;
+      return result.status === "ready" ? { ...result, headerData } : result.status === "staleContinuation" ? { status: "unavailable" as const } : result;
   }
   let observedNotification: { id: number; recipient_profile_id: string | null; status: string; seen_at: string | null; dismissed_at: string | null } | null = null;
   let observedTool: DbFmdTool | null = null;

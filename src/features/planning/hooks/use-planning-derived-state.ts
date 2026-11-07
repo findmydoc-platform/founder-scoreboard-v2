@@ -11,6 +11,7 @@ import type { PlanningShellState, Profile, Task, ViewMode } from "@/lib/types";
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
 type UsePlanningDerivedStateOptions = {
+  boardResult?: import("../model/planning-board-query").PlanningBoardResult;
   currentProfile: Profile | null;
   data: PlanningShellState;
   workspaceTasks?: readonly Task[];
@@ -26,6 +27,7 @@ type UsePlanningDerivedStateOptions = {
 
 export function usePlanningDerivedState({
   currentProfile,
+  boardResult,
   data,
   workspaceTasks,
   filters,
@@ -63,9 +65,9 @@ export function usePlanningDerivedState({
   return {
     filtersAvailable,
     headerActions,
-    metrics,
+    metrics: boardResult?.metrics || metrics,
     statusGuardTask,
-    viewerOpenSubIssueIdsByDeliverableId,
-    visibleTasks,
+    viewerOpenSubIssueIdsByDeliverableId: boardResult?.viewerOpenSubIssueIdsByDeliverableId || viewerOpenSubIssueIdsByDeliverableId,
+    visibleTasks: boardResult ? data.tasks.filter(task => boardResult.cardIds.includes(task.id)) : visibleTasks,
   };
 }

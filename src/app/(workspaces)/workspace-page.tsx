@@ -1,3 +1,4 @@
+import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { WorkspaceDataUnavailablePage } from "@/features/planning/templates/workspace-data-unavailable-page";
@@ -28,12 +29,13 @@ async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
 async function loadPlanningWorkspacePageData(
   workspace: "planning" | "projects",
   profile?: AuthenticatedProfile | null,
+  query?: PlanningBoardQueryInput,
 ) {
   if (workspace === "planning") {
     const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
     if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
     const [planningWorkspace, header] = await Promise.all([
-      permission.planning.loadBoard(), permission.planning.loadHeader(permission.profile ? ["quickLinks", "calendarEvents"] : undefined),
+      permission.planning.loadBoard(query), permission.planning.loadHeader(permission.profile ? ["quickLinks", "calendarEvents"] : undefined),
     ]);
     return planningWorkspace.status === "ready" && header.ok
       ? { status: "ready" as const, model: planningWorkspace.model, headerData: header.headerData }
@@ -81,7 +83,7 @@ async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
   } catch { return { status: "unavailable" as const }; }
 }
 
-export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
+export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planningQuery?: PlanningBoardQueryInput) {
   if (requiresSupabaseAuth()) {
     const auth = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" });
     if (!auth.ok) {
@@ -147,7 +149,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
     }
 
     if (initialWorkspace === "planning" || initialWorkspace === "projects") {
-      const planningWorkspace = await loadPlanningWorkspacePageData(initialWorkspace, auth.profile);
+      const planningWorkspace = await loadPlanningWorkspacePageData(initialWorkspace, auth.profile, planningQuery);
       if (planningWorkspace.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
       }

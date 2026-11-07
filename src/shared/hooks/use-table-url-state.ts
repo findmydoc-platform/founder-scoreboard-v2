@@ -91,7 +91,9 @@ export function writeTableUrlState<State extends object>(namespace: string, sche
 export function useTableUrlState<State extends object>({
   namespace,
   schema,
+  initialState,
 }: {
+  initialState?: State;
   namespace: string;
   schema: TableUrlSchema<State>;
 }) {
@@ -102,17 +104,20 @@ export function useTableUrlState<State extends object>({
     () => readTableUrlState(namespace, schema, new URLSearchParams(serializedParams)),
     [namespace, schema, serializedParams],
   );
-  const [state, setState] = useState<State>(urlState);
-  const stateRef = useRef<State>(urlState);
+  const [state, setState] = useState<State>(initialState || urlState);
+  const stateRef = useRef<State>(initialState || urlState);
   const replaceTimerRef = useRef<number | null>(null);
 
+  const initialUrlState = useRef({ params: serializedParams, retained: Boolean(initialState) });
   useEffect(() => {
+    if (initialUrlState.current.retained && initialUrlState.current.params === serializedParams) return;
+    initialUrlState.current.retained = false;
     const timeout = window.setTimeout(() => {
       stateRef.current = urlState;
       setState(urlState);
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [urlState]);
+  }, [urlState, serializedParams]);
 
   useEffect(() => () => {
     if (replaceTimerRef.current !== null) window.clearTimeout(replaceTimerRef.current);

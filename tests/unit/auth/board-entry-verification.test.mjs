@@ -38,7 +38,7 @@ beforeEach(() => {
     if (url.hostname === "iamcredentials.googleapis.com") return Response.json({ accessToken: "synthetic-directory", expireTime: new Date(Date.now() + 3600000).toISOString() });
     if (url.hostname === "admin.googleapis.com") return Response.json({ isMember: state.member ?? true });
     if (url.pathname === "/rest/v1/projects") return Response.json({ id: "findmydoc-founder-execution", name: "Planning" });
-    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([]);
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });
     return fallback(request);
   });
 });
@@ -84,10 +84,10 @@ test.each(["ceo", "founder", "deputy", "viewer"])("%s retains Board reads and li
   expect(result.ok).toBe(true);
   expect((await result.planning.loadBoard()).status).toBe("ready");
   expect(names().filter(name => name === "workspace_calendar_entry")).toHaveLength(1);
-  expect(names().filter(name => name === "current_authenticated_profile")).toHaveLength(11);
-  expect(names().filter(name => name === "workspace_dispatch_prepare")).toHaveLength(11);
-  expect(names().filter(name => name === "workspace_release_permit")).toHaveLength(11);
-  expect(names().filter(name => name === "user")).toHaveLength(13);
+  expect(names().filter(name => name === "current_authenticated_profile")).toHaveLength(12);
+  expect(names().filter(name => name === "workspace_dispatch_prepare")).toHaveLength(12);
+  expect(names().filter(name => name === "workspace_release_permit")).toHaveLength(12);
+  expect(names().filter(name => name === "user")).toHaveLength(14);
   for (const request of requests.filter(request => request.name === "current_authenticated_profile")) {
     expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
     expect(request.headers.get("authorization")).toBe(protocol.request().headers.get("authorization"));

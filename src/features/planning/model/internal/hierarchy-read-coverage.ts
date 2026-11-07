@@ -4,7 +4,7 @@ import type { PlanningReadCoverage } from "./planning-read-scopes";
 
 export function hierarchyReadCoverage(model: PlanningWorkspaceModel): PlanningReadCoverage {
   const coverage = model.coverage;
-  return { project: "complete", tasks: coverage?.items || "partial", profiles: coverage?.people || "partial", sprints: coverage?.sprints || "partial", taskRelations: coverage?.relationships || "partial", profileUiPreferences: coverage?.preferences || "partial" };
+  return { project: "complete", tasks: coverage?.items || "partial", profiles: coverage?.people || "partial", sprints: coverage?.sprints || "partial", taskRelations: coverage?.relationships || "partial", ...(model.blockers ? { taskBlockers: coverage?.blockers || "partial" } : {}), profileUiPreferences: coverage?.preferences || "partial" };
 }
 export function hierarchyOmittedFields(model: PlanningWorkspaceModel): (keyof Task)[] {
   const omitted: (keyof Task)[] = ["problemStatement", "intendedOutcome", "scopeConstraints", "evidenceRequired", "note"];

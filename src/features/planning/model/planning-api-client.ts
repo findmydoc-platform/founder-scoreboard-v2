@@ -12,14 +12,15 @@ import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-m
 
 type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status"> & { expectedUpdatedAt?: string };
 
-export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects") {
+export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects", query?: import("./planning-board-query").PlanningBoardQueryInput) {
   const route = workspace === "planning" ? "/api/planning-board-data" : "/api/strategic-planning-data";
   return apiClient.requestJson<{
     model?: PlanningWorkspaceModel;
     headerData?: PlanningHeaderData;
     currentProfile?: AuthenticatedProfile | null;
     error?: string;
-  }>(route);
+    code?: string;
+  }>(query && workspace === "planning" ? `${route}?scope=${encodeURIComponent(JSON.stringify(query))}` : route);
 }
 
 export function requestSupportingWorkspaceData(apiClient: BrowserApiClient, workspace: SupportingWorkspace) {

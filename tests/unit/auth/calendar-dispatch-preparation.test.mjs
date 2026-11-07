@@ -58,8 +58,8 @@ async function protocol(input, init) {
     return Response.json(page, { headers: { "content-range": page.length ? `0-${page.length-1}/${remaining.length}` : "*/0" } });
   }
   if (path === "/rest/v1/projects") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", range_label: "", review_objection_window_hours: 48 });
-  if (["planning_item_strategy", "planning_item_raci_assignments", "task_links", "sprints", "task_relationship_edges", "profile_ui_preferences"].some(table => path === `/rest/v1/${table}`)) return Response.json([]);
-  if (path === "/rest/v1/active_tasks" && url.searchParams.get("select") !== "updated_at") return Response.json([]);
+  if (["planning_item_strategy", "planning_item_raci_assignments", "task_links", "sprints", "task_relationship_edges", "profile_ui_preferences", "task_blockers"].some(table => path === `/rest/v1/${table}`)) return Response.json([], { headers: { "content-range": "*/0" } });
+  if (path === "/rest/v1/active_tasks" && url.searchParams.get("select") !== "updated_at") return Response.json([], { headers: { "content-range": "*/0" } });
   if (path === "/rest/v1/active_tasks") return Response.json([{ updated_at: "2026-10-21T09:00:00Z" }], { headers: { "content-range": "0-0/1" } });
   throw new Error("Unexpected synthetic transport operation");
 }
@@ -324,8 +324,8 @@ test("Planning board retains a successful result when bounded permit cleanup fai
   const authorized = await authorize(token(), "planning.board.read");
   expect(authorized.ok).toBe(true);
   expect(await authorized.planning.loadBoard()).toMatchObject({ status: "ready", model: { items: [] } });
-  expect(preparations).toHaveLength(11);
-  expect(releases).toHaveLength(11);
+  expect(preparations).toHaveLength(12);
+  expect(releases).toHaveLength(12);
   expect(attempts.filter(path => path === "/rest/v1/projects")).toHaveLength(1);
 });
 

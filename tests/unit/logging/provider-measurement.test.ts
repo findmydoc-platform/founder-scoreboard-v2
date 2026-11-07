@@ -219,12 +219,12 @@ test("the public Board response distinguishes its reads, header, avatars, mappin
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), path = new URL(request.url).pathname;
     if (path === "/rest/v1/projects") { reads.push(path); projectReadFinished = true; return Response.json({ id: "findmydoc-founder-execution", name: "Synthetic board" }); }
-    if (path === "/rest/v1/active_tasks") { reads.push(path); itemsEntered(); await itemsGate; return Response.json([]); }
-    if (path === "/rest/v1/planning_item_strategy") { reads.push(path); strategyReadFinished = true; return Response.json([]); }
+    if (path === "/rest/v1/active_tasks") { reads.push(path); itemsEntered(); await itemsGate; return Response.json([], { headers: { "content-range": "*/0" } }); }
+    if (path === "/rest/v1/planning_item_strategy") { reads.push(path); strategyReadFinished = true; return Response.json([], { headers: { "content-range": "*/0" } }); }
     if (path === "/auth/v1/user" && clock === 0) clock = 25;
-    if (path === "/rest/v1/profiles") { reads.push(path); return Response.json([{ id: "synthetic-profile", name: "Seeded private name", platform_role: "viewer" }]); }
+    if (path === "/rest/v1/profiles") { reads.push(path); return Response.json([{ id: "synthetic-profile", name: "Seeded private name", platform_role: "viewer" }], { headers: { "content-range": "0-0/1" } }); }
     if (path === "/rest/v1/rpc/workspace_access_contexts") return Response.json([{ profileId: "synthetic-profile", linked: false }]);
-    if (path.startsWith("/rest/v1/") && !path.includes("/rpc/")) { reads.push(path); return Response.json([]); }
+    if (path.startsWith("/rest/v1/") && !path.includes("/rpc/")) { reads.push(path); return Response.json([], { headers: { "content-range": "*/0" } }); }
     return authFetch(request);
   });
   const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {}, "next/cache": { unstable_cache: (load: () => unknown) => load } });
