@@ -10,16 +10,18 @@ export type PlanningBoardQuery = Readonly<{
   level: PlanningLevel;
   parentId: string;
   filters: PlanningFilterPreferences;
-  ordering: "completed-updated-desc-order-id";
+  ordering: "priority-order-id-and-completed-updated-desc-order-id";
 }>;
 export type PlanningBoardQueryInput = Partial<Omit<PlanningBoardQuery, "filters" | "ordering">> & {
   filters?: Partial<PlanningFilterPreferences>;
   limit?: number;
   continuation?: string;
+  column?: TaskStatus;
 };
 export type PlanningBoardColumn = Readonly<{ total: number; loaded: number; completeness: "complete" | "partial"; continuation: string | null }>;
 export type PlanningBoardResult = Readonly<{
   query: PlanningBoardQuery;
+  column?: TaskStatus;
   queryKey: string;
   revision: string;
   observedAt: string;
@@ -42,7 +44,7 @@ export function normalizePlanningBoardQuery(input: PlanningBoardQueryInput = {})
   filters.query = filters.query.trim().toLocaleLowerCase("de");
   filters.quick = Array.isArray(candidate.quick) ? [...new Set(candidate.quick.filter(value => ["mine", "my-reviews", "open", "critical", "blocked", "week", "high", "evidence"].includes(value)))].sort() : [];
   filters.direction = candidate.direction === "desc" ? "desc" : "asc";
-  return { view: input.view === "complete" ? "complete" : "board", level: input.level === "epic" || input.level === "initiative" ? input.level : "deliverable", parentId: typeof input.parentId === "string" ? input.parentId.slice(0, 512) : "all", filters, ordering: "completed-updated-desc-order-id" };
+  return { view: input.view === "complete" ? "complete" : "board", level: input.level === "epic" || input.level === "initiative" ? input.level : "deliverable", parentId: typeof input.parentId === "string" ? input.parentId.slice(0, 512) : "all", filters, ordering: "priority-order-id-and-completed-updated-desc-order-id" };
 }
 export function planningBoardQueryKey(query: PlanningBoardQueryInput = {}) {
   return JSON.stringify(normalizePlanningBoardQuery(query));
