@@ -50,6 +50,7 @@ async function checkpoint<T>(name: string, operation: Promise<T>): Promise<T> {
 let role = "founder", mapped = true, activeAdministrator = false;
 let itemPageFixture = false;
 const itemPageTaskId = "c3333333-3333-4333-8333-333333333333";
+const planningProject = { id: "findmydoc-founder-execution", name: "Synthetic project", range_label: "November 2026", review_objection_window_hours: 24 };
 let browserClientCode = "", userCalls = 0, rejectUserAt = 0;
 let permanentAuthDenial = false;
 const cookieBase = "sb-localhost-auth-token";
@@ -77,7 +78,10 @@ async function freePort() { const server = createServer(); const url = await lis
 beforeAll(async () => {
   auth = createServer(async (request, response) => {
     const url = new URL(request.url!, authOrigin);
-    const send = (data: unknown, status = 200) => { response.writeHead(status, { "content-type": "application/json" }); response.end(JSON.stringify(data)); };
+    const send = (data: unknown, status = 200) => {
+      if (url.pathname.startsWith("/rest/v1/") && Array.isArray(data)) response.setHeader("content-range", data.length ? `0-${data.length - 1}/${data.length}` : "*/0");
+      response.writeHead(status, { "content-type": "application/json" }); response.end(JSON.stringify(data));
+    };
     if (url.pathname === "/auth/v1/authorize") {
       const redirect = new URL(url.searchParams.get("redirect_to")!); redirect.searchParams.set("code", "synthetic-code-b");
       response.writeHead(302, { location: redirect.href }); response.end(); return;
@@ -123,6 +127,9 @@ beforeAll(async () => {
     if (url.pathname === "/rest/v1/rpc/workspace_linking_session_allowed") { send(loginRecorded); return; }
     if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send(mapped ? { id: "synthetic-profile", name: "Synthetic Founder", platform_role: role } : null); return; }
     if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: activeAdministrator, active: activeAdministrator, expiresAt: activeAdministrator ? new Date(Date.now() + 60000).toISOString() : null }); return; }
+    if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") {
+      send({ ...planningProject, scope_revision: "synthetic-planning-revision", active_task_count: itemPageFixture ? 1 : 0, latest_updated_at: itemPageFixture ? "2026-11-01T12:00:00Z" : null }); return;
+    }
     if (url.pathname === "/rest/v1/platform_releases") {
       const summary = loginUser === userA ? "Synthetic previous account release" : "Synthetic replacement release";
       const manifest = { schemaVersion: 2, version: "v1.0.0", summary, highlights: [], changes: [], components: [], visuals: [], publishedAt: "2026-10-01T00:00:00Z" };
@@ -132,11 +139,11 @@ beforeAll(async () => {
       send(url.searchParams.get("id") === `eq.${itemPageTaskId}` ? { id: itemPageTaskId, title: "Synthetic planning item", task_type: "deliverable", status: "Offen", priority: "P2", assignee: "synthetic-profile", owner: "synthetic-profile", approval_status: "approved", problem_statement: "Preserve local drafts", updated_at: "2026-11-01T12:00:00Z" } : []); return;
     }
     if (itemPageFixture && url.pathname === "/rest/v1/projects") {
-      send({ id: "findmydoc-founder-execution", name: "Synthetic project", range_label: "November 2026", review_objection_window_hours: 24 }); return;
+      send(planningProject); return;
     }
     if (url.pathname === "/rest/v1/profiles") {
       if (itemPageFixture) { send([{ id: "synthetic-profile", auth_user_id: loginUser, name: "Synthetic Founder", platform_role: role, github_login: "synthetic", weekly_capacity: 40 }]); return; }
-      response.writeHead(200, { "content-type": "application/json", "content-range": "*/0" }); response.end("[]"); return;
+      send([]); return;
     }
     if (url.pathname.startsWith("/rest/v1/")) { send([]); return; }
     send({ error: "Unscripted synthetic protocol" }, 501);
