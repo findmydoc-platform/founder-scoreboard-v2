@@ -70,6 +70,7 @@ export const serviceRoleOnlyTablePrivileges = Object.freeze([
   ["team_workweek_provider_writes", Object.freeze(["SELECT", "INSERT", "UPDATE"])],
   ["github_planning_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
   ["github_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
+  ["task_comment_submissions", tablePrivileges],
 ]);
 
 export const sequencePrivileges = Object.freeze(["USAGE", "SELECT", "UPDATE"]);

@@ -522,20 +522,26 @@ test("Weekly self reports bind owner and meeting while lead reviews preserve sco
 
 
 test("task comments bind their author, item and committed delivery IDs", async () => {
-  const protocol = administratorProtocol({ role: "founder", responses: { create_task_comment_with_notifications: { comment: { id: 8, task_id: "comment-task", profile_id: "synthetic-profile", comment: "Evidence is ready" } } } });
+  const values = { comment: "Evidence is ready", submissionId: "00000000-0000-4000-8000-000000000008", submittedAt: "2026-11-07T00:00:00.000Z", mentions: [], recipients: [] };
+  const protocol = administratorProtocol({ role: "founder", responses: { create_task_comment_submission: { comment: { id: 8, task_id: "comment-task", profile_id: "synthetic-profile", comment: values.comment } } } });
   const authFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname === "/rest/v1/tasks") return Response.json({ id: "comment-task", task_type: "epic", title: "Comment task" });
     if (url.pathname === "/rest/v1/profiles") return Response.json([{ id: "synthetic-profile", name: "Founder", platform_role: "founder" }]);
+    if (url.pathname === "/rest/v1/task_comment_github_deliveries") {
+      expect(url.searchParams.get("task_comment_id")).toBe("eq.8");
+      return Response.json(null);
+    }
     return authFetch(request);
   });
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   const grant = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.comment.create", targetId: "comment-task" });
   expect(grant.ok).toBe(true);
-  expect(await grant.planning.writeComment({ comment: "Evidence is ready", mentions: [], recipients: [] })).toMatchObject({ data: { comment: { id: 8 } } });
-  expect(protocol.calls.find(call => call.name === "create_task_comment_with_notifications").body).toMatchObject({ p_task_id: "comment-task", p_profile_id: "synthetic-profile", p_deliver_to_github: false });
-  expect(await grant.planning.writeComment({ comment: "Evidence", mentions: [], recipients: ["foreign"] })).toMatchObject({ error: { code: "42501" } });
+  expect(await grant.planning.writeComment(values)).toMatchObject({ data: { comment: { id: 8 } } });
+  expect(protocol.calls.find(call => call.name === "create_task_comment_submission").body).toEqual({ p_submission_id: values.submissionId, p_submitted_at: values.submittedAt, p_task_id: "comment-task", p_profile_id: "synthetic-profile", p_comment: "Evidence is ready", p_deliver_to_github: false, p_mention_recipient_profile_ids: [], p_comment_recipient_profile_ids: [] });
+  expect(await grant.planning.writeComment({ ...values, comment: "Evidence", recipients: ["foreign"] })).toMatchObject({ error: { code: "42501" } });
+  expect(await grant.planning.readCommentDelivery(8)).toMatchObject({ data: null, error: null });
   expect(await grant.planning.readCommentDelivery(999)).toMatchObject({ error: { code: "42501" } });
   expect(await grant.planning.writeBlocker({ reason: "Foreign operation", impact: "", needsHelpFrom: "", notifications: [], mentions: [] }, {})).toMatchObject({ error: { code: "42501" } });
   protocol.state.role = "viewer";

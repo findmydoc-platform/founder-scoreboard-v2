@@ -141,7 +141,13 @@ export function planningCollaborationOperations({ action, targetId, profile, ser
       if ((action !== "planning.comment.create" && action !== "planning.blocker.report") || await current()) return denied();
       return await service.from("profiles").select("id,name,github_login,platform_role");
     },
-    async writeComment(suppliedValues: { comment: string; mentions: string[]; recipients: string[] }) {
+    async readCommentSubmission(submissionId: string) {
+      if (action !== "planning.comment.create" || !profile || !targetId || await current()) return denied();
+      return await service.from("task_comment_submissions")
+        .select("id,submitted_at,task_comments(id,task_id,profile_id,comment,created_at,github_delivery_applicable,task_comment_github_deliveries(status,github_comment_url))")
+        .eq("id", submissionId).eq("task_id", targetId).eq("profile_id", profile.id).maybeSingle();
+    },
+    async writeComment(suppliedValues: { comment: string; submissionId: string; submittedAt: string; mentions: string[]; recipients: string[] }) {
       const values = structuredClone(suppliedValues);
       if (action !== "planning.comment.create" || !profile) return denied();
       const task = await readTask();
@@ -155,7 +161,7 @@ export function planningCollaborationOperations({ action, targetId, profile, ser
       recipients.add(task.data.assignee || task.data.owner || "");
       if (values.mentions.some(id => !profileIds.has(id)) || values.recipients.some(id => !recipients.has(id))) return denied();
       deliveryApplicable = !["epic", "initiative"].includes(task.data.task_type);
-      const result = await service.rpc("create_task_comment_with_notifications", { p_task_id: targetId, p_profile_id: profile.id, p_comment: values.comment,
+      const result = await service.rpc("create_task_comment_submission", { p_submission_id: values.submissionId, p_submitted_at: values.submittedAt, p_task_id: targetId, p_profile_id: profile.id, p_comment: values.comment,
         p_deliver_to_github: deliveryApplicable, p_mention_recipient_profile_ids: values.mentions, p_comment_recipient_profile_ids: values.recipients });
       if (!result.error && result.data?.comment?.task_id === targetId && result.data.comment.profile_id === profile.id) commentIds.add(result.data.comment.id);
       return result;

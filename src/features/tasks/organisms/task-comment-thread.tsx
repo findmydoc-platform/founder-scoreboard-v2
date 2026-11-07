@@ -6,7 +6,6 @@ import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import type { TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
 import { TaskAttachmentUploadNotices } from "@/features/tasks/molecules/task-attachment-upload-notices";
 import { TaskGitHubImportNotice } from "@/features/tasks/molecules/task-github-import-notice";
-import { TaskCommentCreationNotices } from "@/features/tasks/molecules/task-comment-creation-notices";
 import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-composer";
 import { TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
 import type { TaskCommentTimelineItem } from "@/features/tasks/molecules/task-comment-timeline";
@@ -21,9 +20,11 @@ type Props = {
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
   externalCommentCompleteness?: "complete" | "partial";
   onCheckGitHubImport?: () => void;
+  commentDraft?: import("@/features/tasks/model/task-comment-draft").TaskCommentDraft;
   commentCreations?: readonly TaskCommentCreationView[];
   commentCompleteness?: "complete" | "partial";
   onCheckCommentCreation?: (id: string) => void;
+  onRetryCommentCreation?: (id: string) => void;
   externalComments?: TaskExternalComment[];
   activities?: TaskActivity[];
   reviews?: TaskReview[];
@@ -42,12 +43,12 @@ type Props = {
   title?: string;
   description?: string;
   footer?: ReactNode;
-  onAddComment: (comment: string) => Promise<void> | void;
+  onAddComment: (comment: string) => import("@/features/tasks/model/task-comment-creation").TaskCommentCapture;
   onImportGitHubComments?: () => void;
   onUploadAttachment?: (file: File) => Promise<string>;
 };
 
-function buildTimeline(comments: TaskComment[], externalComments: TaskExternalComment[], activities: TaskActivity[], reviews: TaskReview[]): TaskCommentTimelineItem[] {
+function buildTimeline(comments: TaskComment[], externalComments: TaskExternalComment[], activities: TaskActivity[], reviews: TaskReview[], creations: readonly TaskCommentCreationView[], currentProfileId: string): TaskCommentTimelineItem[] {
   const visibleActivities = activities.filter((activity) => isUsefulActivity(activity) && !isReviewDecisionActivity(activity));
   return [
     ...visibleActivities.map((activity) => ({
@@ -64,7 +65,8 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
     ...comments.map((comment) => ({
       id: localTaskCommentTarget(comment.id),
       type: "comment" as const,
-      createdAt: comment.createdAt,
+      createdAt: comment.submittedAt || creations.find(view => view.comment?.id === comment.id)?.submittedAt || comment.createdAt,
+      creation: creations.find(view => view.comment?.id === comment.id),
       message: "",
       profileId: comment.profileId,
       comment: comment.comment,
@@ -73,6 +75,18 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
       htmlUrl: "",
       githubDeliveryStatus: comment.githubDeliveryStatus,
       githubCommentUrl: comment.githubCommentUrl,
+    })),
+    ...creations.filter(view => view.phase !== "confirmed" && !comments.some(comment => comment.submissionId === view.id)).map(view => ({
+      id: `submission:${view.id}`,
+      type: "comment" as const,
+      createdAt: view.submittedAt,
+      message: "",
+      profileId: currentProfileId,
+      comment: view.submitted,
+      creation: view,
+      authorLogin: "",
+      authorAvatarUrl: "",
+      htmlUrl: "",
     })),
     ...externalComments.map((comment) => ({
       id: githubTaskCommentTarget(comment.externalId),
@@ -110,9 +124,11 @@ export function TaskCommentThread({
   githubImport,
   externalCommentCompleteness = "complete",
   onCheckGitHubImport,
+  commentDraft,
   commentCreations = [],
   commentCompleteness = "complete",
   onCheckCommentCreation,
+  onRetryCommentCreation,
   externalComments = [],
   activities = [],
   reviews = [],
@@ -136,9 +152,9 @@ export function TaskCommentThread({
   onUploadAttachment,
 }: Props) {
   const visibleActivities = activities.filter((activity) => isUsefulActivity(activity) && !isReviewDecisionActivity(activity));
-  const commentCount = comments.length + externalComments.length;
+  const commentCount = comments.length + externalComments.length + commentCreations.filter(view => view.phase !== "confirmed" && !comments.some(comment => comment.submissionId === view.id)).length;
   const activityCount = visibleActivities.length + reviews.length;
-  const timeline = buildTimeline(comments, externalComments, visibleActivities, reviews);
+  const timeline = buildTimeline(comments, externalComments, visibleActivities, reviews, commentCreations, currentProfileId);
   const labelsById = useMemo(() => new Map([
     ...profiles.map((profile) => [profile.id, profile.name] as const),
     ...tasks.map((task) => [task.id, task.title] as const),
@@ -197,11 +213,10 @@ export function TaskCommentThread({
       {externalCommentCompleteness === "partial" ? <p className="mt-3 text-xs text-slate-600">Du siehst nur einen Teil der GitHub-Kommentare.</p> : null}
       <TaskAttachmentUploadNotices uploads={attachmentUploads} onCheck={onCheckAttachmentUpload} />
       <TaskGitHubImportNotice view={githubImport} onCheck={onCheckGitHubImport} />
-      <TaskCommentCreationNotices creations={commentCreations} onCheck={onCheckCommentCreation} />
       {!readOnly && (
         <TaskCommentComposer
+          draft={commentDraft}
           attachmentConfirmationPending={attachmentUploads.some(view => view.phase === "uploading" || view.phase === "unconfirmed" || view.phase === "uploaded" && view.taskReadStatus !== "current")}
-          confirmationPending={commentCreations.some(item => item.phase === "unconfirmed")}
           pending={pending}
           profiles={profiles}
           onAddComment={onAddComment}
@@ -211,6 +226,8 @@ export function TaskCommentThread({
       )}
       <TaskCommentTimeline
         items={timeline}
+        onCheckCommentCreation={onCheckCommentCreation}
+        onRetryCommentCreation={readOnly ? undefined : onRetryCommentCreation}
         profiles={profiles}
         labelsById={labelsById}
         currentProfileId={currentProfileId}

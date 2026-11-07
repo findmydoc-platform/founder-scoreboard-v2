@@ -118,16 +118,19 @@ sequenceDiagram
   GH-->>API: Result
   API-->>UI: Return non-secret response
 
-  UI->>API: Create local comment
-  API->>API: Atomically create comment and delivery outbox row
-  API->>VAULT: Load encrypted user token for original author profile
-  alt author connection is missing or invalid
-    API->>API: Keep waiting_for_author_connection
-    API-->>UI: HTTP 200 with informational notice
-  else author connection is valid
-    API->>GH: Search issue comments for durable marker
-    API->>GH: Post only when no marker or exact legacy match exists
-    API->>API: Mark delivery as delivered
+  UI->>API: Create local comment with submission UUID and time
+  API->>API: Atomically create comment, receipt, notifications and applicable outbox row
+  API-->>UI: Confirm app storage without waiting for GitHub
+  opt comment requires GitHub delivery
+    API->>API: Start durable delivery through Next.js after()
+    API->>VAULT: Load encrypted user token for original author profile
+    alt author connection is missing or invalid
+      API->>API: Keep waiting_for_author_connection
+    else author connection is valid
+      API->>GH: Search issue comments for durable marker
+      API->>GH: Post only when no marker or exact legacy match exists
+      API->>API: Mark delivery as delivered
+    end
   end
 
   UI->>API: Upload attachment
@@ -147,7 +150,8 @@ sequenceDiagram
 - Browser closed and reopened: Supabase cookies restore the app session when still valid; the saved encrypted GitHub App user token keeps GitHub comments and attachments usable without another manual reconnect.
 - Laptop standby then resume: Proxy maintenance and browser recovery request server-owned session renewal. `/api/github-app/status` refreshes a soon-expiring GitHub App user access token when possible.
 - Missing, revoked, expired, or mismatched GitHub App user connection: issue sync remains available. A locally saved comment waits for its original author's connection and is retried after OAuth reconnect or a later task/bulk sync. It must not start OAuth only because a task was opened.
-- Expired or revoked Supabase session: the app clears protected client state and returns to the login gate.
+- Same-tab reload with an unfinished submitted comment: restore its account-scoped `sessionStorage` capture, then use the authorized submission receipt lookup before exposing recovered text. Lookup confirms the original stored comment without another POST. Unsent drafts remain in memory across item/tab changes and do not survive reload.
+- Expired or revoked Supabase session: the app clears protected client state, including comment drafts and submitted recovery capture, and returns to the login gate. Logout, account replacement and protected-state reset also clear this state. Late results cannot restore it for a different session or account.
 
 ## Cookie generations and browser coordination
 

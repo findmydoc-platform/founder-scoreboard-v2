@@ -126,30 +126,6 @@ export function taskAssigneePatch(assigneeValue: string, profiles: Profile[]): P
   };
 }
 
-export function createTaskDragPreview(source: HTMLElement, pointerX: number, pointerY: number) {
-  const rect = source.getBoundingClientRect();
-  const preview = source.cloneNode(true) as HTMLElement;
-  preview.style.position = "fixed";
-  preview.style.top = `${pointerY - 18}px`;
-  preview.style.left = `${pointerX - 24}px`;
-  preview.style.width = `${rect.width}px`;
-  preview.style.boxSizing = "border-box";
-  preview.style.pointerEvents = "none";
-  preview.style.transform = "rotate(-1.5deg) scale(1.03)";
-  preview.style.opacity = "1";
-  preview.style.filter = "drop-shadow(0 18px 28px rgba(15, 23, 42, 0.22))";
-  preview.style.zIndex = "9999";
-  document.body.appendChild(preview);
-  return preview;
-}
-
-export function transparentDragImage() {
-  const image = document.createElement("canvas");
-  image.width = 1;
-  image.height = 1;
-  return image;
-}
-
 export function initiativePlanningItems(items: readonly Task[]) {
   return items.filter((item) => item.taskType === "initiative");
 }

@@ -23,12 +23,14 @@ function ChildRow({ item, onOpenTask }: { item: Task; onOpenTask: (taskId: strin
     <article className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm sm:grid-cols-[auto_minmax(0,1fr)_auto]">
       <TaskStatusBadge status={item.status} size="xs" />
       <div className="min-w-0">
-        <TaskReferenceLink task={item} onOpenTask={onOpenTask} className="break-words text-left text-sm font-semibold leading-5 text-slate-900 hover:text-blue-700">
+        <TaskReferenceLink task={item} onOpenTask={onOpenTask} className="break-words text-left text-sm font-semibold leading-5 text-slate-900 hover:text-blue-700 sm:min-h-6">
           {item.title}
         </TaskReferenceLink>
         <p className="mt-1 text-xs text-slate-500">{taskAssigneeLabel(item)}</p>
       </div>
-            <span className="hidden self-center text-xs font-medium text-slate-500 sm:block">Öffnen</span>
+      <TaskReferenceLink task={item} onOpenTask={onOpenTask} showIcon={false} className="col-start-2 self-center justify-self-start px-1 text-xs font-medium text-blue-700 sm:col-auto sm:min-h-6">
+        Öffnen
+      </TaskReferenceLink>
     </article>
   );
 }

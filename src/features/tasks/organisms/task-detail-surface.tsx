@@ -77,9 +77,11 @@ type TaskDetailSurfaceProps = {
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
   externalCommentCompleteness?: "complete" | "partial";
   onCheckGitHubImport?: () => void;
+  commentDraft?: import("@/features/tasks/model/task-comment-draft").TaskCommentDraft;
   commentCreations?: readonly import("@/features/tasks/model/task-comment-creation").TaskCommentCreationView[];
   commentCompleteness?: "complete" | "partial";
   onCheckCommentCreation?: (id: string) => void;
+  onRetryCommentCreation?: (id: string) => void;
   blockerReports?: readonly import("@/features/tasks/model/task-blocker-report").TaskBlockerReportView[];
   onCheckBlockerReport?: (id: string) => void;
   onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;
@@ -95,7 +97,7 @@ type TaskDetailSurfaceProps = {
   onRequestDiscardAction: (action: () => void, force?: boolean) => void;
   onBeginEdit?: () => PlanningTaskEditor;
   onUpdate: (patch: Partial<Task>, options?: TaskUpdateOptions) => Promise<TaskUpdateResult> | void;
-  onAddComment: (comment: string) => Promise<void> | void;
+  onAddComment: (comment: string) => import("@/features/tasks/model/task-comment-creation").TaskCommentCapture;
   onUploadAttachment: (file: File) => Promise<string>;
   onImportGitHubComments: () => void;
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => Promise<TaskActionResult>;
@@ -160,9 +162,11 @@ function HydratedTaskDetailSurface({
   githubImport,
   externalCommentCompleteness,
   onCheckGitHubImport,
+  commentDraft,
   commentCreations = [],
   commentCompleteness = "complete",
   onCheckCommentCreation,
+  onRetryCommentCreation,
   blockerReports = [],
   onCheckBlockerReport,
   onCheckTaskSave,
@@ -537,6 +541,7 @@ function HydratedTaskDetailSurface({
     ),
     activity: (
       <TaskCommentThread
+        commentDraft={commentDraft}
         comments={comments}
         attachmentUploads={attachmentUploads}
         onCheckAttachmentUpload={onCheckAttachmentUpload}
@@ -546,6 +551,7 @@ function HydratedTaskDetailSurface({
         commentCreations={commentCreations}
         commentCompleteness={commentCompleteness}
         onCheckCommentCreation={onCheckCommentCreation}
+        onRetryCommentCreation={onRetryCommentCreation}
         externalComments={externalComments}
         activities={activities}
         reviews={reviews}
