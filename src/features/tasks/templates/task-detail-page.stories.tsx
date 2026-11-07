@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { getRouter } from "@storybook/nextjs-vite/navigation.mock";
 import { TaskDetailPage } from "./task-detail-page";
+import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
+import { clearTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
 import { expectApplicationHeader } from "../../../../tests/helpers/application-header-browser-contract";
 import { itemPageHeaderData, itemPageModel, itemPageProfile, itemPageUser, mockItemPageBrowser } from "../../../../tests/helpers/task-detail-page-browser-fixture";
 
@@ -18,6 +20,17 @@ const meta = {
 } satisfies Meta<typeof TaskDetailPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+export const StoredUpdateTimestamp: Story = {
+  args: {
+    initialModel: { ...itemPageModel(), item: { ...itemPageModel().item, updatedAt: "2026-11-05T14:51:00" } },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("heading", { name: "Reliable planning", level: 1 })).toBeVisible();
+    await expect(canvas.getByText(/^Zuletzt aktualisiert am/)).toHaveTextContent("Zuletzt aktualisiert am 05.11.2026, 14:51");
+  },
+};
 
 export const GlobalActionsAndItemHeading: Story = {
   play: async ({ canvasElement }) => {
@@ -265,3 +278,97 @@ export const TabletRailKeepsReleaseNavigationCompact: Story = {
 export const EpicTabletRailKeepsReleaseNavigationCompact: Story = { ...TabletRailKeepsReleaseNavigationCompact, args: { initialModel: itemPageModel("epic") } };
 export const InitiativeTabletRailKeepsReleaseNavigationCompact: Story = { ...TabletRailKeepsReleaseNavigationCompact, args: { initialModel: itemPageModel("initiative") } };
 export const SubIssueTabletRailKeepsReleaseNavigationCompact: Story = { ...TabletRailKeepsReleaseNavigationCompact, args: { initialModel: itemPageModel("sub_issue") } };
+
+
+const reviewNavigationModel = {
+  ...itemPageModel(),
+  item: { ...itemPageModel().item, status: "Review" as const, reviewStatus: "requested" as const,
+    reviewOwnerProfileId: itemPageProfile.id, reviewRequestedAt: "2026-11-06T12:00:00Z" },
+  children: [
+    taskDetailStoryTask({ id: "review-open-child", title: "Unfinished supporting work", taskType: "sub_issue", parentTaskId: "item-page-task", assignee: "another-founder", owner: "another-founder" }),
+    taskDetailStoryTask({ id: "review-completed-child", title: "Completed supporting work", taskType: "sub_issue", parentTaskId: "item-page-task", status: "Erledigt", assignee: "another-founder", owner: "another-founder" }),
+  ],
+};
+
+export const ReviewChildrenProtectUnsavedInput: Story = {
+  args: { initialModel: reviewNavigationModel },
+  beforeEach: ({ args }) => {
+    const navigationModel = args.initialModel!;
+    clearTaskReviewDraft(reviewNavigationModel.item.id, reviewNavigationModel.item.reviewRequestedAt, itemPageProfile.id);
+    return mockItemPageBrowser({ detailModel: navigationModel, respond: input => {
+      const path = new URL(String(input), window.location.origin).pathname;
+      const child = reviewNavigationModel.children.find(item => path === `/api/tasks/${item.id}/detail-data`);
+      return child ? Response.json({ taskDetail: { ...itemPageModel("sub_issue"), people: navigationModel.people, item: child, children: [], ancestors: [navigationModel.item] }, unavailable: [] }) : undefined;
+    } });
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const review = await canvas.findByRole("textbox", { name: "Review-Kommentar" });
+    await userEvent.type(review, "Keep my review input.");
+    const openChild = reviewNavigationModel.children[0];
+    const row = canvas.getByRole("link", { name: openChild.title }).closest("article")!;
+    await userEvent.click(within(row).getByRole("link", { name: "Öffnen" }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Weiter bearbeiten" }));
+    await expect(review).toHaveValue("Keep my review input.");
+    await expect(canvas.queryByRole("dialog", { name: openChild.title })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("link", { name: openChild.title }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
+    const openPanel = await canvas.findByRole("dialog", { name: openChild.title });
+    await expect(await within(openPanel).findByRole("button", { name: "Bearbeiten" })).toBeEnabled();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(canvas.queryByRole("dialog", { name: openChild.title })).not.toBeInTheDocument());
+    await userEvent.click(canvas.getByText("Erledigt 1", { selector: "summary" }));
+    const completedChild = reviewNavigationModel.children[1];
+    const completedRow = canvas.getByRole("link", { name: completedChild.title }).closest("article")!;
+    await userEvent.click(within(completedRow).getByRole("link", { name: "Öffnen" }));
+    await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
+    const completedPanel = await canvas.findByRole("dialog", { name: completedChild.title });
+    await expect(await within(completedPanel).findByRole("heading", { name: completedChild.title })).toBeVisible();
+    await expect(within(completedPanel).queryByRole("button", { name: "Bearbeiten" })).not.toBeInTheDocument();
+  },
+};
+
+export const ReviewNavigationKeepsFounderPermissions: Story = {
+  ...ReviewChildrenProtectUnsavedInput,
+  args: { initialModel: { ...reviewNavigationModel, people: [founderProfile] }, initialCurrentProfile: founderProfile },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const child = reviewNavigationModel.children[0];
+    await userEvent.click(await canvas.findByRole("link", { name: child.title }));
+    const panel = await canvas.findByRole("dialog", { name: child.title });
+    await expect(await within(panel).findByRole("heading", { name: child.title })).toBeVisible();
+    await waitFor(() => expect(within(panel).queryByRole("button", { name: "Bearbeiten" })).not.toBeInTheDocument());
+  },
+};
+
+export const CommentStatusHelpDismissesBeforeDetailPanel: Story = {
+ args: { initialModel: reviewNavigationModel },
+ beforeEach: () => mockItemPageBrowser({ detailModel: reviewNavigationModel, respond: input => {
+  const child = reviewNavigationModel.children[0];
+  const path = new URL(String(input), window.location.origin).pathname;
+  return path === `/api/tasks/${child.id}/detail-data` ? Response.json({ taskDetail: {
+   ...itemPageModel("sub_issue"), item: child, children: [], ancestors: [reviewNavigationModel.item],
+   discussion: { comments: [{ id: 746, taskId: child.id, profileId: itemPageProfile.id,
+    comment: "Stored comment waiting for GitHub.", createdAt: "2026-11-07T09:00:00Z",
+    githubDeliveryStatus: "pending", githubCommentUrl: "" }], externalComments: [] },
+  }, unavailable: [] }) : undefined;
+ } }),
+ play: async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  const page = within(document.body);
+  const child = reviewNavigationModel.children[0];
+  await userEvent.click(await canvas.findByRole("link", { name: child.title }));
+  const panel = await canvas.findByRole("dialog", { name: child.title });
+  await userEvent.click(await within(panel).findByRole("tab", { name: /Aktivität/ }));
+  const draft = await within(panel).findByRole("textbox", { name: "Kommentar oder Update" });
+  await userEvent.type(draft, "New panel draft");
+  await userEvent.click(await within(panel).findByRole("button", { name: "GitHub-Veröffentlichung ausstehend" }));
+  await expect(page.getByRole("tooltip")).toHaveTextContent("Kommentar gespeichert.");
+  await userEvent.keyboard("{Escape}");
+  await expect(page.queryByRole("tooltip")).not.toBeInTheDocument();
+  await expect(panel).toBeVisible();
+  await expect(draft).toHaveValue("New panel draft");
+  await userEvent.keyboard("{Escape}");
+  await expect(canvas.queryByRole("dialog", { name: child.title })).not.toBeInTheDocument();
+ },
+};

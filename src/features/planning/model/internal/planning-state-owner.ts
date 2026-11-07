@@ -141,6 +141,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const outcomeCheckStatus = new Map<string, PlanningTaskSaveView["checkStatus"]>();
   const status = new Map<string, PlanningTaskSaveStatus>();
   const listeners = new Set<() => void>();
+  const commentDrafts = new Map<string, { text: string }>();
   function isActive() {
     if (active && sessionExpiresAt !== undefined && sessionExpiresAt * 1000 <= (adapter.now?.() ?? Date.now())) suspendProtected();
     return active;
@@ -171,8 +172,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     invalidateTask(id) { taskConfirmedAt.set(id, ++sequence); freshness = "stale"; detailStatuses.set(id, "stale"); for (const [workspace, members] of memberships) if (members.has(id)) workspaceStatuses.set(workspace, "stale"); },
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadBlockerTask,
   });
-  const commentCreations = createTaskCommentCreations({ initial: active ? initialData.taskComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
-    canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)), removing: task => lifecycle.isRemoving(task), detailStatus: id => detailStatuses.get(id) || "not-loaded", endSession,
+  const commentCreations = createTaskCommentCreations({ actor: userId, initial: active ? initialData.taskComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
+    canRead: id => !deniedTaskReads.has(id) && confirmed.tasks.some(task => task.id === id && !lifecycle.isRemoved(task)), removing: id => { const task=confirmed.tasks.find(task=>task.id===id); return !task || lifecycle.isRemoving(task); }, detailStatus: id => detailStatuses.get(id) || "not-loaded", endSession,
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), refresh: reloadCommentDiscussion,
   });
   const githubImports = createTaskGitHubImports({ initial: active ? initialData.taskExternalComments : [], adapter, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence,
@@ -556,7 +557,27 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     taskGitHubImport: githubImports.view,
     taskGitHubComments: taskId => githubImports.comments(taskId, visible),
     checkTaskGitHubImport: githubImports.check,
+    taskCommentDraft(taskId) {
+      const generation = sessionGeneration;
+      const canWrite = () => isActive() && generation === sessionGeneration && !deniedTaskReads.has(taskId) && confirmed.tasks.some(task => task.id === taskId && !lifecycle.isRemoved(task));
+      const captured = canWrite() ? commentDrafts.get(taskId) : undefined;
+      return {
+        text: captured?.text || "",
+        update(value) {
+          if (!canWrite()) return;
+          const current = commentDrafts.get(taskId)?.text || "";
+          commentDrafts.set(taskId, { text: typeof value === "function" ? value(current) : value });
+          publish();
+        },
+        clear() {
+          if (!canWrite() || commentDrafts.get(taskId) !== captured) return;
+          commentDrafts.delete(taskId);
+          publish();
+        },
+      };
+    },
     createTaskComment: commentCreations.create,
+    retryTaskCommentCreation: commentCreations.retry,
     taskComments: taskId => commentCreations.view(taskId, visible),
     taskCommentCreations: commentCreations.views,
     checkTaskCommentCreation: commentCreations.check,
@@ -742,6 +763,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         };
         if (result.unavailable?.includes("discussion")) commentCreations.failed(taskId, "unavailable");
         else commentCreations.acceptRead(result.model.discussion.comments, started, result.model.coverage?.discussion === "complete", taskId);
+        commentCreations.restore();
         if (result.unavailable?.includes("discussion")) githubImports.failed(taskId, "unavailable");
         else githubImports.acceptRead(result.model.discussion.externalComments, started, result.model.coverage?.discussion === "complete", taskId);
         if (!result.unavailable?.includes("timeline")) attachmentUploads.acceptRead(result.model.activity, started, result.model.coverage?.timeline === "complete", taskId);
@@ -893,6 +915,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     githubConnection.clear();
     githubImports.clear();
     commentCreations.clear();
+    commentDrafts.clear();
     blockerReports.clear();
     lifecycle.clear();
     administration.clear();
@@ -972,6 +995,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     completeness.set(workspace, coverage.tasks || "none");
     publish();
   }
+  queueMicrotask(() => commentCreations.restore());
   return { planning, internal: {
     getSnapshot: () => visible,
     isActive,

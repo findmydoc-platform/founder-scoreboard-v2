@@ -305,6 +305,7 @@ export type DbTaskComment = {
   comment: string;
   created_at: string;
   github_delivery_applicable?: boolean | null;
+  task_comment_submissions?: { id: string; submitted_at: string } | Array<{ id: string; submitted_at: string }> | null;
   task_comment_github_deliveries?: {
     status: TaskComment["githubDeliveryStatus"];
     github_comment_url: string | null;

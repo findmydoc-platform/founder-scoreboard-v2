@@ -89,6 +89,12 @@ Hard failures stop the workflow and persist `failed`. A stale compare-and-set re
 
 Lock release is part of the typed outcome. A returned or thrown release error produces retryable `github_sync_unavailable` instead of reporting success; a finalized task patch is retained when the core projection already completed.
 
+## Comment creation and delivery
+
+`POST /api/tasks/[id]/comments` commits the app comment, submission receipt, notification events and applicable comment delivery job in one transaction. It returns app-storage confirmation without waiting for GitHub. Next.js `after()` invokes the existing durable comment delivery path after the response. Later task/bulk sync and author reconnect can also resume waiting delivery.
+
+The browser's submission UUID identifies the app operation; the stored comment ID supplies the existing `fmd-comment-id` delivery marker. Replaying the submission or looking up its receipt does not create another comment or delivery job. See [Local comment submissions](github-api-idempotency.md#local-comment-submissions) for the request and authorized lookup contracts. GitHub delivery failures remain separate from app-storage failure, and existing GitHub UI actions and permissions are unchanged.
+
 ## Response contract
 
 `src/lib/github-sync/contract.ts` is browser-safe and owns the success and failure union, HTTP status mapping, retryability, and client classifier.

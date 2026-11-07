@@ -3,11 +3,9 @@
 import { useState, type DragEvent } from "react";
 import type { PlanningShellState, Task, TaskStatus } from "@/lib/types";
 import {
-  createTaskDragPreview,
   founderCompletedTaskGuardMessage,
   founderTaskAssignmentGuardMessage,
   initiativePlanningItems,
-  transparentDragImage,
 } from "@/features/planning/model/planning-app-model";
 import { normalizeStatus } from "@/lib/status";
 
@@ -66,27 +64,8 @@ export function usePlanningBoardState({
     setDraggedTaskId(task.id);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", task.id);
-    event.dataTransfer.setDragImage(transparentDragImage(), 0, 0);
-
-    const preview = createTaskDragPreview(event.currentTarget, event.clientX, event.clientY);
-    document.body.style.cursor = "none";
-
-    const movePreview = (dragEvent: globalThis.DragEvent) => {
-      if (dragEvent.clientX === 0 && dragEvent.clientY === 0) return;
-      preview.style.left = `${dragEvent.clientX - 24}px`;
-      preview.style.top = `${dragEvent.clientY - 18}px`;
-    };
-    const cleanupPreview = () => {
-      preview.remove();
-      document.body.style.cursor = "";
-      window.removeEventListener("dragover", movePreview);
-      window.removeEventListener("drop", cleanupPreview);
-      window.removeEventListener("dragend", cleanupPreview);
-    };
-
-    window.addEventListener("dragover", movePreview);
-    window.addEventListener("drop", cleanupPreview, { once: true });
-    window.addEventListener("dragend", cleanupPreview, { once: true });
+    const rect = event.currentTarget.getBoundingClientRect();
+    event.dataTransfer.setDragImage(event.currentTarget, event.clientX - rect.left, event.clientY - rect.top);
   };
 
   const dropTaskOnStatus = (status: TaskStatus, event: DragEvent<HTMLElement>) => {

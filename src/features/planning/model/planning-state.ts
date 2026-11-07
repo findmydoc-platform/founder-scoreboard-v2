@@ -6,6 +6,7 @@ import type { PlanningTaskAttachments } from "@/features/tasks/model/task-attach
 import type { PlanningTaskReviews } from "@/features/reviews/model/planning-task-review";
 import type { PlanningTaskGitHubImports } from "@/features/tasks/model/task-github-comment-import";
 import type { PlanningTaskComments } from "@/features/tasks/model/task-comment-creation";
+import type { PlanningTaskCommentDrafts } from "@/features/tasks/model/task-comment-draft";
 import type { PlanningTaskBlockerReports } from "@/features/tasks/model/task-blocker-report";
 import type { GoogleWorkspacePlanningState } from "@/features/team-workweek/model/google-workspace-state";
 import type { PrivateWorkweekPlanningState } from "@/features/team-workweek/model/private-workweek-planning-state";
@@ -37,7 +38,7 @@ export type PlanningTaskSaveView = {
   serverTask: Task | null;
 };
 export type PlanningTaskSaveCheck = {
-  outcome: "unconfirmed" | "not-pending" | "session-ended";
+  outcome: "confirmed" | "unconfirmed" | "not-pending" | "session-ended";
   readStatus: PlanningReadStatus | "not-needed";
 };
 export type PlanningTaskSaveStatus = "saved" | "saving" | "rejected" | "unconfirmed";
@@ -68,7 +69,7 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 import type { AdministrationPeopleState } from "@/features/administration/model/administration-state";
-export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskCommentDrafts, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   decisionLog(): import("./planning-decision-log").PlanningDecisionLogView;
   loadDecisionLog(): Promise<boolean>;
   currentProfile(): import("@/lib/types").AuthenticatedProfile | null;

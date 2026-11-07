@@ -197,9 +197,11 @@ export function TaskDetailPage({
           githubImport={controller.planningState.taskGitHubImport(task.id)}
           externalCommentCompleteness={controller.planningState.taskGitHubComments(task.id).completeness}
           onCheckGitHubImport={() => { void controller.planningState.checkTaskGitHubImport(task.id); }}
+          commentDraft={controller.planningState.taskCommentDraft(task.id)}
           commentCreations={controller.planningState.taskCommentCreations(task.id)}
           commentCompleteness={controller.planningState.taskComments(task.id).completeness}
           onCheckCommentCreation={id => { void controller.planningState.checkTaskCommentCreation(id); }}
+          onRetryCommentCreation={id => { void controller.planningState.retryTaskCommentCreation(id); }}
           blockerReports={controller.planningState.taskBlockerReports(task.id)}
           onCheckBlockerReport={id => { void controller.planningState.checkTaskBlockerReport(id); }}
           onCheckTaskSave={() => controller.planningState.checkTaskSave(task.id)}

@@ -45,9 +45,11 @@ type Props = {
   githubImport?: import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportView | null;
   externalCommentCompleteness?: "complete" | "partial";
   onCheckGitHubImport?: () => void;
+  commentDraft?: import("@/features/tasks/model/task-comment-draft").TaskCommentDraft;
   commentCreations?: readonly import("@/features/tasks/model/task-comment-creation").TaskCommentCreationView[];
   commentCompleteness?: "complete" | "partial";
   onCheckCommentCreation?: (id: string) => void;
+  onRetryCommentCreation?: (id: string) => void;
   blockerReports?: readonly import("@/features/tasks/model/task-blocker-report").TaskBlockerReportView[];
   onCheckBlockerReport?: (id: string) => void;
   onCheckTaskSave?: () => Promise<PlanningTaskSaveCheck>;
@@ -59,7 +61,7 @@ type Props = {
   onOpenTask: (taskId: string) => void;
   onBeginEdit?: () => PlanningTaskEditor;
   onUpdate: (patch: Partial<Task>, options?: TaskUpdateOptions) => Promise<TaskUpdateResult> | void;
-  onAddComment: (comment: string) => Promise<void> | void;
+  onAddComment: (comment: string) => import("@/features/tasks/model/task-comment-creation").TaskCommentCapture;
   onUploadAttachment: (file: File) => Promise<string>;
   onImportGitHubComments: () => void;
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => Promise<TaskActionResult>;
