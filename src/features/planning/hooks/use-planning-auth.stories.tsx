@@ -13,7 +13,7 @@ const profile={id:"actor",name:"Angezeigte Person",platformRole:"viewer" as cons
 function Fixture({denied=false,late=false}:{denied?:boolean;late?:boolean}){
  const [readCount,setReadCount]=useState(0);
  const [network]=useState(()=>{const original=window.fetch;let reads=0;let finish:undefined|(()=>void);window.fetch=async(input,init)=>{
- const path=String(input);if(path==="/api/auth/session")return Response.json({session});
+ const path=new URL(input instanceof Request?input.url:String(input),window.location.href).pathname;if(path==="/api/auth/session")return Response.json({session});
  if(path==="/api/planning-board-data"){reads++;setReadCount(reads);if(late)await new Promise<void>(resolve=>{finish=resolve;});return denied?Response.json({error:"Kein Zugriff"},{status:403}):Response.json({currentProfile:profile,model:{revision:"read",project:emptyPlanningShellState.project,items:[],people:[{...profile,orgRole:"Viewer",weeklyCapacity:0}],sprints:[],relationships:[],preferences:[],coverage:{items:"complete",people:"complete",sprints:"complete",relationships:"complete",preferences:"complete"}}});}
  return original(input,init);};return{restore:()=>{window.fetch=original;},reads:()=>reads,finish:()=>finish?.()};});
  useEffect(()=>network.restore,[network]);
