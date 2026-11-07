@@ -199,3 +199,183 @@ test("a late response from a previous filter cannot replace the current bounded 
   await expect(older).resolves.toBe(false);
   expect(owner.planning.board().tasks.map(task => task.id)).toEqual(["done-0044"]);
 });
+
+
+test("active status columns have independent bounded pages and deterministic priority/manual order", async () => {
+  const source = fixture(0, 173);
+  const rows = source.data.active_tasks as Array<Record<string, unknown>>;
+  rows.splice(1);
+  for (const status of ["Offen", "In Arbeit", "Review"]) for (let index = 1026; index >= 0; index--) rows.push({ id: `${status}-${String(index).padStart(4, "0")}`, task_type: "deliverable", approval_status: "approved", title: `Active ${status} ${index}`, status, priority: index === 1026 ? "P0" : "P2", sort_order: 0, parent_task_id: "initiative" });
+  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const first = await reader.load({ ...context, query: { limit: 1000 } });
+  if (first.status !== "ready") throw new Error("Expected bounded active Board");
+  expect(first.model.board?.cardIds).toHaveLength(60);
+  expect(first.model.board?.columns.Offen).toMatchObject({ total: 1027, loaded: 20, completeness: "partial" });
+  expect(first.model.board?.columns.Review).toMatchObject({ total: 1027, loaded: 20, completeness: "partial" });
+  expect(first.model.board!.cardIds.slice(0, 3)).toEqual(["Offen-1026", "Offen-0000", "Offen-0001"]);
+  const ids = first.model.board!.cardIds.filter(id => id.startsWith("Offen-"));
+  let continuation = first.model.board!.columns.Offen.continuation;
+  const foreignStatus = await reader.load({ ...context, query: { column: "Review", continuation: continuation! } });
+  expect(foreignStatus.status).toBe("staleContinuation");
+  while (continuation) {
+    const result = await reader.load({ ...context, query: { column: "Offen", continuation } });
+    if (result.status !== "ready") throw new Error("Expected active continuation");
+    expect(result.model.board?.column).toBe("Offen");
+    expect(result.model.board!.cardIds.length).toBeLessThanOrEqual(20);
+    expect(result.model.board!.cardIds.every(id => id.startsWith("Offen-"))).toBe(true);
+    ids.push(...result.model.board!.cardIds);
+    continuation = result.model.board!.columns.Offen.continuation;
+  }
+  expect(ids).toHaveLength(1027);
+  expect(new Set(ids).size).toBe(1027);
+  expect(ids.slice(-2)).toEqual(["Offen-1024", "Offen-1025"]);
+});
+
+
+test("the owner accepts concurrent independent columns, coalesces identical pages and retries only a failed column", async () => {
+  const source = fixture(25);
+  const rows = source.data.active_tasks as Array<Record<string, unknown>>;
+  rows.push(...Array.from({ length: 44 }, (_, index) => ({ id: `open-${index}`, title: `Open ${index}`, task_type: "deliverable", approval_status: "approved", status: "Offen", parent_task_id: "initiative" })));
+  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const initial = await reader.load({ ...context, query: {} });
+  if (initial.status !== "ready") throw new Error("Expected bounded Board");
+  const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+  const pending: Array<{ query: import("@/features/planning/model/planning-board-query").PlanningBoardQueryInput; finish(fail?: boolean): Promise<void> }> = [];
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+    saveTask: async task => ({ task }),
+    readWorkspace: (_, query) => new Promise((resolve, reject) => pending.push({ query: query!, finish: async fail => {
+      if (fail) { reject(new Error("Column unavailable")); return; }
+      const result = await reader.load({ ...context, query });
+      if (result.status !== "ready") throw new Error("Expected column");
+      resolve({ data: planningWorkspaceModelToPlanningShellState(result.model), board: result.model.board, query: result.model.query, coverage: { tasks: "partial" } });
+    } })),
+  } });
+  const open = owner.planning.loadBoardColumn("Offen");
+  const same = owner.planning.loadBoardColumn("Offen");
+  const done = owner.planning.loadBoardColumn("Erledigt");
+  expect(pending).toHaveLength(2);
+  await pending[1].finish();
+  await expect(done).resolves.toBe(true);
+  await pending[0].finish(true);
+  await expect(Promise.all([open, same])).resolves.toEqual([false, false]);
+  expect(owner.planning.board().columnReadStatus).toMatchObject({ Offen: "unavailable", Erledigt: "current" });
+  expect(owner.planning.board().result?.columns.Erledigt).toMatchObject({ total: 25, loaded: 25, completeness: "complete" });
+  const retry = owner.planning.loadBoardColumn("Offen");
+  expect(pending[2].query.continuation).toBe(pending[0].query.continuation);
+  await pending[2].finish();
+  await expect(retry).resolves.toBe(true);
+  expect(owner.planning.board().result?.columns.Offen).toMatchObject({ total: 45, loaded: 40, completeness: "partial" });
+  expect(owner.planning.board().result?.columns.Erledigt).toMatchObject({ total: 25, loaded: 25, completeness: "complete" });
+  expect(owner.planning.board().tasks).toHaveLength(65);
+});
+
+
+test("concurrent successful status pages keep both columns current when their context overlaps", async () => {
+  const source = fixture(25);
+  const rows = source.data.active_tasks as Array<Record<string, unknown>>;
+  rows.push(...Array.from({ length: 24 }, (_, index) => ({ id: `open-${index}`, title: `Open ${index}`, task_type: "deliverable", approval_status: "approved", status: "Offen", parent_task_id: "initiative" })));
+  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const initial = await reader.load({ ...context, query: {} });
+  if (initial.status !== "ready") throw new Error("Expected Board");
+  const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+  const pending: Array<() => Promise<void>> = [];
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+    saveTask: async task => ({ task }), readWorkspace: (_, query) => new Promise(resolve => pending.push(async () => {
+      const result = await reader.load({ ...context, query });
+      if (result.status !== "ready") throw new Error("Expected page");
+      resolve({ data: planningWorkspaceModelToPlanningShellState(result.model), board: result.model.board, query: result.model.query, coverage: { tasks: "partial" } });
+    })),
+  } });
+  const open = owner.planning.loadBoardColumn("Offen"), done = owner.planning.loadBoardColumn("Erledigt");
+  await pending[1](); await done;
+  await pending[0](); await open;
+  expect(owner.planning.board().columnReadStatus).toMatchObject({ Offen: "current", Erledigt: "current" });
+  expect(owner.planning.board().readStatus).toBe("current");
+  expect(owner.planning.board().tasks).toHaveLength(50);
+});
+
+
+test.each(["query", "session"])("a late column page cannot re-enter an ended %s context", async boundary => {
+  const reader = createSupabasePlanningBoardReadModel(fixture(25).client);
+  const initial = await reader.load({ ...context, query: {} });
+  if (initial.status !== "ready") throw new Error("Expected Board");
+  const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+  let sessionChanged!: (userId: string | null) => void;
+  const pending: Array<() => Promise<void>> = [];
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+    subscribeSession: listener => { sessionChanged = listener; return () => {}; },
+    saveTask: async task => ({ task }), readWorkspace: (_, query) => new Promise(resolve => pending.push(async () => {
+      const result = await reader.load({ ...context, query });
+      if (result.status !== "ready") throw new Error("Expected scoped page");
+      resolve({ data: planningWorkspaceModelToPlanningShellState(result.model), board: result.model.board, query: result.model.query, coverage: { tasks: "partial" } });
+    })),
+  } });
+  const old = owner.planning.loadBoardColumn("Erledigt");
+  if (boundary === "query") {
+    const selected = owner.planning.ensureBoardQuery({ parentId: "another-parent" });
+    await pending[1](); await selected;
+  } else sessionChanged(null);
+  await pending[0]();
+  await expect(old).resolves.toBe(false);
+  expect(owner.planning.board().tasks).toEqual([]);
+  if (boundary === "session") {
+    expect(owner.planning.board().result).toBeUndefined();
+    expect(owner.planning.board().columnReadStatus).toEqual({});
+  }
+});
+
+test("a stale continuation refreshes only its status membership and marks other snapshots stale", async () => {
+  const source = fixture(25);
+  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const initial = await reader.load({ ...context, query: {} });
+  if (initial.status !== "ready") throw new Error("Expected Board");
+  const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+    saveTask: async task => ({ task }), readWorkspace: async (_, query) => {
+      const result = await reader.load({ ...context, query });
+      if (result.status === "staleContinuation") throw Object.assign(new Error("Changed result"), { code: "stale_continuation" });
+      if (result.status !== "ready") throw new Error("Expected refreshed status");
+      return { data: planningWorkspaceModelToPlanningShellState(result.model), board: result.model.board, query: result.model.query, coverage: { tasks: "partial" } };
+    },
+  } });
+  const rows = source.data.active_tasks as Array<Record<string, unknown>>;
+  rows.splice(2);
+  await expect(owner.planning.loadBoardColumn("Erledigt")).resolves.toBe(false);
+  expect(owner.planning.board().columnReadStatus?.Erledigt).toBe("stale");
+  expect(owner.planning.board().tasks).toHaveLength(21);
+  await expect(owner.planning.refreshBoardColumn("Erledigt")).resolves.toBe(true);
+  expect(owner.planning.board().result?.columns.Erledigt).toMatchObject({ total: 0, loaded: 0, completeness: "complete" });
+  expect(owner.planning.board().tasks.map(task => task.id)).toEqual(["active"]);
+  expect(owner.planning.board().columnReadStatus?.Offen).toBe("stale");
+  expect(owner.planning.taskDetail("done-0000").task?.id).toBe("done-0000");
+});
+
+
+test("a column page preserves confirmed edits and pending work in shared dependency context", async () => {
+  const source = fixture(25);
+  (source.data.active_tasks as Array<Record<string, unknown>>).push({ id: "pending-work", title: "Before pending", task_type: "deliverable", approval_status: "approved", status: "Offen", parent_task_id: "initiative" });
+  source.data.task_relationship_edges = [{ id: 1, task_id: "done-0020", related_task_id: "active", relation_type: "blocked_by" }, { id: 2, task_id: "done-0020", related_task_id: "pending-work", relation_type: "blocked_by" }];
+  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const initial = await reader.load({ ...context, query: {} });
+  if (initial.status !== "ready") throw new Error("Expected Board");
+  const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+  let finishPage!: () => Promise<void>;
+  let finishSave!: (result: { task: Partial<import("@/lib/types").Task> }) => void;
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+    saveTask: task => task.id === "pending-work" ? new Promise(resolve => { finishSave = resolve; }) : Promise.resolve({ task: { id: task.id, title: "Confirmed edit", updatedAt: "confirmed-r2" } }),
+    readWorkspace: (_, query) => new Promise(resolve => { finishPage = async () => {
+      const result = await reader.load({ ...context, query });
+      if (result.status !== "ready") throw new Error("Expected page");
+      resolve({ data: planningWorkspaceModelToPlanningShellState(result.model), board: result.model.board, query: result.model.query, coverage: { tasks: "partial" } });
+    }; }),
+  } });
+  const page = owner.planning.loadBoardColumn("Erledigt");
+  await owner.planning.saveTask(owner.planning.taskDetail("active").task!, { title: "Confirmed edit" });
+  const saving = owner.planning.saveTask(owner.planning.taskDetail("pending-work").task!, { title: "Pending edit" });
+  await finishPage(); await page;
+  expect(owner.planning.taskDetail("active").task?.title).toBe("Confirmed edit");
+  expect(owner.planning.taskDetail("pending-work")).toMatchObject({ task: { title: "Pending edit" }, saveStatus: "saving" });
+  expect(owner.planning.protectedCache()?.tasks.find(task => task.id === "active")?.title).toBe("Confirmed edit");
+  finishSave({ task: { id: "pending-work", title: "Pending edit", updatedAt: "confirmed-r3" } });
+  await saving;
+});
