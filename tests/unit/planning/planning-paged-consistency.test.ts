@@ -147,3 +147,51 @@ test("identical query reads still coalesce when an independent detail request st
   response.resolve(read(query));
   await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
 });
+
+test("a rejected query response cannot replace source metadata or leave a column loading", async () => {
+  const { planning } = owner({ readWorkspace: async (_, query) => {
+    const result = read(query);
+    return { ...result, scopeRevision: "unrelated-source", board: { ...result.board!, queryKey: "another-query" } };
+  } });
+  await expect(planning.loadBoardColumn("Erledigt")).resolves.toBe(false);
+  expect(planning.board().scopeRevision).toBe("scope-r1");
+  expect(planning.board().columnReadStatus?.Erledigt).toBe("unavailable");
+  expect(planning.board().tasks).toHaveLength(2);
+});
+
+test("an older independent page retains the newer accepted scope proof", async () => {
+  const older = deferred<PlanningWorkspaceRead>();
+  const { planning } = owner({ readWorkspace: async (_, query = {}) => query.column === "Erledigt" ? older.promise : { ...read(query, [card]), scopeRevision: "newer-proof" } });
+  const reading = planning.loadBoardColumn("Erledigt");
+  await planning.refreshBoardColumn("Offen");
+  older.resolve({ ...read({ column: "Erledigt", continuation: "next" }, [{ ...history, id: "later-card" }]), scopeRevision: "older-proof" });
+  await expect(reading).resolves.toBe(true);
+  expect(planning.board().scopeRevision).toBe("newer-proof");
+  expect(planning.board().tasks.map(task => task.id)).toEqual(["history", "card", "later-card"]);
+});
+
+test("an older detail context cannot republish a subsequently denied target", async () => {
+  const related = deferred<Awaited<ReturnType<NonNullable<PlanningStateAdapter["readTaskDetail"]>>>>();
+  const { planning } = owner({ readTaskDetail: id => {
+    if (id === history.id) return related.promise;
+    return Promise.reject(Object.assign(new Error("Denied"), { status: 403 }));
+  } });
+  const reading = planning.loadTaskDetail(history.id);
+  await planning.loadTaskDetail(card.id);
+  expect(planning.taskDetail(card.id).task).toBeNull();
+  related.resolve({ model: { revision: "r1", project: emptyPlanningShellState.project, item: history, ancestors: [], children: [], relatedItems: [card], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } });
+  await reading;
+  expect(planning.taskDetail(card.id).task).toBeNull();
+  expect(planning.board().result).toBeUndefined();
+});
+
+test("a Board denial also rejects a detail target that was already loading", async () => {
+  const detail = deferred<Awaited<ReturnType<NonNullable<PlanningStateAdapter["readTaskDetail"]>>>>();
+  const { planning } = owner({ readWorkspace: async () => { throw Object.assign(new Error("Denied"), { status: 403 }); }, readTaskDetail: () => detail.promise });
+  const reading = planning.loadTaskDetail(card.id);
+  await planning.refreshWorkspace("planning");
+  detail.resolve({ model: { revision: "r1", project: emptyPlanningShellState.project, item: card, ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } });
+  await expect(reading).resolves.toMatchObject({ ok: false });
+  expect(planning.taskDetail(card.id)).toMatchObject({ task: null, readStatus: "forbidden" });
+  expect(planning.board().result).toBeUndefined();
+});

@@ -135,6 +135,7 @@ function SessionNavigationStory() {
       <button onClick={sessions.logout}>Logout</button>
       <button onClick={sessions.rotate}>Rotate session</button>
       <button onClick={network.supersedeOriginalRead}>Complete superseded previous read</button>
+      <button onClick={network.completeHeader}>Complete current authorized read</button>
       <button onClick={() => { sessions.replace(); setAccount("replacement-user"); }}>Replace account</button>
       <button onClick={sessions.expire}>Expire session</button>
       <button onClick={network.confirm}>Confirm old save</button>
@@ -234,9 +235,13 @@ export const NewSessionDoesNotSharePriorInFlightRead: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Refresh Planning" }));
     await expect(await canvas.findByText("Workspace requests: 1")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Rotate session" }));
+    await expect(canvas.getByText("Task: cleared")).toBeVisible();
+    await expect(await canvas.findByText("Workspace requests: 2")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Refresh Planning" }));
     await expect(await canvas.findByText("Workspace requests: 2")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Complete superseded previous read" }));
-    await expect(canvas.getByText("Task: Before navigation")).toBeVisible();
+    await expect(canvas.getByText("Task: cleared")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Complete current authorized read" }));
+    await expect(await canvas.findByText("Task: Before navigation")).toBeVisible();
   },
 };
