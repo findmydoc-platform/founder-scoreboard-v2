@@ -108,6 +108,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let planningSourceEpoch = 0;
   function invalidatePlanningSource() {
     planningSourceEpoch++;
+    freshness = "stale";
     planningQueries.clear();
     queryRevision = undefined;
     if (!boardResult) {
@@ -120,7 +121,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     })) as PlanningBoardResult["columns"] };
     pageStatus = "stale";
     workspaceStatuses.set("planning", "stale");
-    freshness = "stale";
   }
   function confirmTaskRevision(id: string, accepted: number) {
     taskConfirmedAt.set(id, accepted);
@@ -128,6 +128,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function detachPlanningMetadata() {
     planningSourceEpoch++;
+    freshness = "stale";
     boardResult = undefined;
     boardQueryKey = undefined;
     planningQueries.clear();
@@ -741,7 +742,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const tasks = planning.workspace("planning").tasks;
       const byId = new Map(tasks.map(task => [task.id, task]));
       const boardTasks = boardResult ? [...boardResult.cardIds.flatMap(id => byId.get(id) ? [byId.get(id)!] : []), ...tasks.filter(task => lifecycle.isTemporary(task.id))] : tasks;
-      return { deniedChildListIds: [...childLists].filter(([, list]) => list.readStatus === "forbidden").map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
+      return { requiresQueryRead: Boolean(boardQuery && !boardQueryKey), deniedChildListIds: [...childLists].filter(([id, list]) => list.readStatus === "forbidden" || (deniedTaskReads.has(id) && list.readStatus === "loading")).map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
     },
     ensureBoardQuery(query) {
       if (!isActive()) return Promise.resolve(false);

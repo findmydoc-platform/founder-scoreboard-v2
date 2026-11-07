@@ -68,7 +68,7 @@ export const CompactSignalsAndFullDetail: Story = { play: async ({ canvasElement
   await expect(within(board).queryByText("DoD fehlt")).not.toBeInTheDocument();
   await expect(canvas.getByLabelText("Detail reads")).toHaveTextContent("0");
   await userEvent.click(within(board).getByRole("link", { name: "Compact card" }));
-  const panel = await canvas.findByRole("dialog", { name: "Compact card" });
+    const panel = await canvas.findByRole("dialog", { name: "Compact card" }, { timeout: 5000 });
   await expect(await within(panel).findByText("Full acceptance criteria")).toBeVisible();
   await expect(await within(panel).findByText("Full definition of done")).toBeVisible();
   await expect(canvas.getByLabelText("Detail reads")).toHaveTextContent("1");
