@@ -7,10 +7,13 @@ import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { normalizeStatus } from "@/lib/status";
 import type { Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 
+type ColumnLoading = import("@/features/planning/model/planning-board-query").PlanningBoardColumn & { readStatus: import("@/features/planning/model/planning-state").PlanningReadStatus; onLoadMore(): void; onRefresh(): void };
+
 type TaskBoardViewProps = {
   childListForTask?: (taskId: string) => TaskCardChildList;
+  columns?: Partial<Record<TaskStatus, ColumnLoading>>;
   childProgressById?: import("@/features/planning/model/planning-board-query").PlanningBoardResult["childProgressById"];
-  completedHistory?: import("@/features/planning/model/planning-board-query").PlanningBoardColumn & { readStatus: import("@/features/planning/model/planning-state").PlanningReadStatus; onLoadMore(): void; onRefresh(): void };
+  completedHistory?: ColumnLoading;
   statuses: TaskStatus[];
   itemType: Task["taskType"];
   visibleTasks: Task[];
@@ -37,6 +40,7 @@ type TaskBoardViewProps = {
 
 export function TaskBoardView({
   statuses,
+  columns,
   completedHistory,
   childProgressById,
   childListForTask,
@@ -66,6 +70,7 @@ export function TaskBoardView({
   const itemLabel = itemType === "epic" ? "Epic" : itemType === "initiative" ? "Initiative" : "Deliverable";
   const [expandedCompletedItemType, setExpandedCompletedItemType] = useState<Task["taskType"] | null>(null);
   const completedCardLimit = 20;
+  const [requestedColumns, setRequestedColumns] = useState<Set<string>>(new Set());
 
   return (
     <div className="w-full min-w-0 overflow-hidden [contain:layout_paint]">
@@ -97,11 +102,16 @@ export function TaskBoardView({
             })
           : tasks;
         const completedExpanded = expandedCompletedItemType === itemType;
-        const renderedTasks = status === "Erledigt" && !completedHistory && !completedExpanded
+        const renderedTasks = status === "Erledigt" && !columns?.[status] && !completedHistory && !completedExpanded
           ? orderedTasks.slice(0, completedCardLimit)
           : orderedTasks;
         const hiddenCompletedCount = status === "Erledigt" ? tasks.length - renderedTasks.length : 0;
-        const history = status === "Erledigt" ? completedHistory : undefined;
+        const history = columns?.[status] || (status === "Erledigt" ? completedHistory : undefined);
+        const completedLabel = status === "Erledigt";
+        const loading = history?.readStatus === "loading";
+        const stale = history?.readStatus === "stale";
+        const failed = history?.readStatus === "unavailable";
+        const finished = history?.completeness === "complete" && !stale;
         const total = history?.total ?? tasks.length;
         const isEmpty = total === 0;
         const isDropTarget = dragOverStatus === status;
@@ -189,16 +199,20 @@ export function TaskBoardView({
                       <span>{isDropTarget ? "Loslassen" : "Hier ablegen"}</span>
                     </>
                   ) : (
-                    <span className="sr-only">Keine Aufgaben in dieser Spalte.</span>
+                    <span className="sr-only">{isEmpty ? "Keine Aufgaben in dieser Spalte." : "Karten sind noch nicht geladen."}</span>
                   )}
                 </div>
               )}
               {history ? <div className="grid gap-2">
                 <p role="status" aria-live="polite" className="text-center text-xs text-slate-500">{history.loaded} von {history.total} geladen</p>
-                {history.readStatus === "unavailable" ? <p role="alert" className="text-xs text-slate-600">Weitere erledigte konnten nicht geladen werden.</p> : null}
-                {history.readStatus === "stale" ? <p role="status" className="text-xs text-slate-600">Die Ergebnisliste hat sich geändert.</p> : null}
-                {history.continuation || history.readStatus === "stale" ? <button type="button" aria-disabled={history.readStatus === "loading"} onClick={() => { if (history.readStatus === "loading") return; if (history.readStatus === "stale") history.onRefresh(); else history.onLoadMore(); }} className="min-h-11 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60">
-                  {history.readStatus === "loading" ? "Erledigte werden geladen …" : history.readStatus === "unavailable" ? "Erledigte erneut laden" : history.readStatus === "stale" ? "Erledigte aktualisieren" : "Weitere erledigte laden"}
+                {failed ? <p role="alert" className="text-xs text-slate-600">Weitere Karten konnten nicht geladen werden.</p> : null}
+                {stale ? <p role="status" className="text-xs text-slate-600">Die Ergebnisliste hat sich geändert. Der angezeigte Stand ist veraltet.</p> : null}
+                {history.continuation || stale || requestedColumns.has(`${itemType}:${status}`) ? <button type="button" aria-disabled={loading || finished} onClick={() => {
+                  if (loading || finished) return;
+                  setRequestedColumns(previous => new Set(previous).add(`${itemType}:${status}`));
+                  if (stale) history.onRefresh(); else history.onLoadMore();
+                }} className="min-h-11 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 aria-disabled:opacity-60">
+                  {loading ? `${status} wird geladen …` : failed ? completedLabel ? "Erledigte erneut laden" : `${status} erneut laden` : stale ? completedLabel ? "Erledigte aktualisieren" : `${status} aktualisieren` : finished ? `${status} vollständig geladen` : completedLabel ? "Weitere erledigte laden" : `Weitere Karten in ${status} laden`}
                 </button> : null}
               </div> : null}
               {!history && status === "Erledigt" && tasks.length > completedCardLimit ? (
