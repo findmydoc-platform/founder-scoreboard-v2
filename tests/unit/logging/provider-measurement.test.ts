@@ -243,14 +243,15 @@ test("the public Board response distinguishes its reads, header, avatars, mappin
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ model: { project: { name: "Synthetic board" } }, headerData: { quickLinks: { state: "ready" } }, currentProfile: { platformRole: "viewer" } });
   const completion = records().find(record => record.event === "request.completed");
-  for (const operation of ["board.authorization", "board.load", "board.header", "board.project", "board.profiles", "board.items", "board.strategy", "board.raci", "board.links", "board.sprints", "board.relationships", "board.preferences", "board.avatars", "board.map", "response.prepare"]) {
+  for (const operation of ["board.authorization", "board.load", "board.header", "board.profiles", "board.items", "board.strategy", "board.raci", "board.links", "board.sprints", "board.relationships", "board.preferences", "board.avatars", "board.map", "response.prepare"]) {
     expect(completion.phaseAggregates[operation]?.operation?.[0], operation).toBe(1);
   }
   expect(completion.phaseAggregates["board.items"].operation).toEqual([1, 200, 200]);
-  expect(completion.phaseAggregates["board.project"].operation).toEqual([1, 0, 0]);
+  expect(completion.phaseAggregates["board.project"].operation).toEqual([2, 0, 0]);
   expect(completion.phaseAggregates["board.strategy"].operation).toEqual([1, 0, 0]);
   expect([...completion.phases, ...completion.slowestPhases]).toContainEqual(expect.objectContaining({ operation: "board.items", offsetMs: 25, durationMs: 200 }));
   expect(reads.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
+  expect(reads.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(2);
   expect(JSON.stringify(records())).not.toMatch(/seeded-private|Seeded private name|synthetic-profile/);
 });
 

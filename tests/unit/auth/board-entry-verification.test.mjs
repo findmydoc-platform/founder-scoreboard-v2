@@ -84,10 +84,11 @@ test.each(["ceo", "founder", "deputy", "viewer"])("%s retains Board reads and li
   expect(result.ok).toBe(true);
   expect((await result.planning.loadBoard()).status).toBe("ready");
   expect(names().filter(name => name === "workspace_calendar_entry")).toHaveLength(1);
-  expect(names().filter(name => name === "current_authenticated_profile")).toHaveLength(12);
-  expect(names().filter(name => name === "workspace_dispatch_prepare")).toHaveLength(12);
-  expect(names().filter(name => name === "workspace_release_permit")).toHaveLength(12);
-  expect(names().filter(name => name === "user")).toHaveLength(14);
+  expect(names().filter(name => name === "current_authenticated_profile")).toHaveLength(13);
+  expect(names().filter(name => name === "workspace_dispatch_prepare")).toHaveLength(13);
+  expect(names().filter(name => name === "workspace_release_permit")).toHaveLength(13);
+  expect(names().filter(name => name === "user")).toHaveLength(15);
+  expect(names().filter(name => name === "planning_workspace_snapshot")).toHaveLength(2);
   for (const request of requests.filter(request => request.name === "current_authenticated_profile")) {
     expect(request.headers.get("x-founderops-workspace-permit")).toBeTruthy();
     expect(request.headers.get("authorization")).toBe(protocol.request().headers.get("authorization"));
