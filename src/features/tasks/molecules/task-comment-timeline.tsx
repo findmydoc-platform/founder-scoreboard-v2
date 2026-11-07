@@ -7,6 +7,7 @@ import {
   CircleDot,
   CirclePlus,
   ClipboardCheck,
+  CloudUpload,
   Flag,
   GitBranch,
   GitPullRequestArrow,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TaskCommentCreationNotices } from "./task-comment-creation-notices";
+import { TaskCommentStatusHelp } from "@/features/tasks/atoms/task-comment-status-help";
 import type { TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import { describeTaskActivity, type TaskActivityIconKey, type TaskActivityTone } from "@/features/tasks/model/task-activity-presentation";
@@ -206,22 +208,30 @@ export function TaskCommentTimeline({
           Der erwähnende GitHub-Kommentar wurde inzwischen gelöscht.
         </div>
       ) : null}
-      {items.map((item) => (
+      {items.map((item) => {
+        const commentDeliveryHint = item.type === "comment" && item.profileId === currentProfileId ? deliveryHint(item.githubDeliveryStatus) : "";
+        const deliveryNotice = item.type === "comment" && item.creation?.phase === "confirmed" ? item.creation.notice : null;
+        const noticeExplainsDelivery = deliveryNotice?.code === "github_author_connection_required" && item.githubDeliveryStatus === "waiting_for_author_connection";
+        return (
         item.type === "comment" ? (
           <article id={taskCommentElementId(item.id)} key={item.id} className={classNames("flex min-w-0 gap-3 overflow-hidden rounded-md border bg-slate-50 px-3 py-2 text-sm transition", highlightedTarget === item.id ? "border-blue-300 ring-4 ring-blue-100" : "border-slate-100")}>
             <ProfileAvatar profile={profileById(item.profileId)} />
             <div className="min-w-0 flex-1 overflow-hidden">
               <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
                 <span className="font-semibold text-slate-700">{profileName(item.profileId)}</span>
-                <span>{formatDateTime(item.createdAt)}</span>
+                <span className="inline-flex shrink-0 items-center gap-1">
+                  <span>{formatDateTime(item.createdAt)}</span>
+                  {commentDeliveryHint ? (
+                    <TaskCommentStatusHelp label={commentDeliveryHint} icon={item.githubDeliveryStatus === "failed" || item.githubDeliveryStatus === "waiting_for_author_connection" ? AlertTriangle : CloudUpload}>
+                      <p>{noticeExplainsDelivery ? deliveryNotice.message : `Kommentar gespeichert. ${commentDeliveryHint}.`}</p>
+                      {deliveryNotice && !noticeExplainsDelivery ? <p>{deliveryNotice.message}</p> : null}
+                      {item.creation?.phase === "confirmed" && item.creation.error ? <p>{item.creation.error}</p> : null}
+                    </TaskCommentStatusHelp>
+                  ) : null}
+                </span>
               </div>
               <CommentBody value={item.comment} />
-              {item.creation ? <TaskCommentCreationNotices creations={[item.creation]} onCheck={onCheckCommentCreation} onRetry={onRetryCommentCreation} /> : null}
-              {item.profileId === currentProfileId && deliveryHint(item.githubDeliveryStatus) && (
-                <div className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
-                  {deliveryHint(item.githubDeliveryStatus)}
-                </div>
-              )}
+              {item.creation && !(item.creation.phase === "confirmed" && commentDeliveryHint) ? <TaskCommentCreationNotices creations={[item.creation]} onCheck={onCheckCommentCreation} onRetry={onRetryCommentCreation} /> : null}
               {item.profileId === currentProfileId && item.githubDeliveryStatus === "delivered" && item.githubCommentUrl && (
                 <a href={item.githubCommentUrl} target="_blank" rel="noreferrer" aria-label="Kommentar in GitHub öffnen (öffnet in neuem Tab)" className="mt-2 inline-flex text-xs font-semibold text-blue-600 hover:text-blue-700">
                   In GitHub öffnen
@@ -299,7 +309,8 @@ export function TaskCommentTimeline({
             </article>
           );
         })()
-      ))}
+        );
+      })}
       {loading ? (
         <div className="grid gap-2" aria-label="Aktivitäten werden geladen">
           <div className="h-16 animate-pulse rounded-md bg-slate-100" />

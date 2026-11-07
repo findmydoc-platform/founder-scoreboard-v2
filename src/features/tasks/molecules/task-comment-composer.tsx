@@ -5,6 +5,7 @@ import { useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { TaskCommentDraft } from "@/features/tasks/model/task-comment-draft";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import { TaskCommentStatusHelp } from "@/features/tasks/atoms/task-comment-status-help";
 import type { Profile } from "@/lib/types";
 import { UiButton } from "@/shared/atoms/ui-primitives";
 
@@ -73,7 +74,10 @@ export function TaskCommentComposer({ draft, pending = false, attachmentConfirma
           {renderPreview(newComment)}
         </div>
       )}
-      {submitError && <div role="alert" className="mt-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{submitError}</div>}
+      {submitError && <div role="alert" className="mt-2 flex items-center gap-1 text-xs font-semibold text-red-700">
+        <span>Nicht gesendet.</span>
+        <TaskCommentStatusHelp label="Details zum Sendeversuch"><p>{submitError}</p></TaskCommentStatusHelp>
+      </div>}
       {uploadError && <div className="mt-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{uploadError}</div>}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <div>

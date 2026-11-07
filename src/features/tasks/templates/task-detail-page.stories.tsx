@@ -340,3 +340,35 @@ export const ReviewNavigationKeepsFounderPermissions: Story = {
     await waitFor(() => expect(within(panel).queryByRole("button", { name: "Bearbeiten" })).not.toBeInTheDocument());
   },
 };
+
+export const CommentStatusHelpDismissesBeforeDetailPanel: Story = {
+ args: { initialModel: reviewNavigationModel },
+ beforeEach: () => mockItemPageBrowser({ detailModel: reviewNavigationModel, respond: input => {
+  const child = reviewNavigationModel.children[0];
+  const path = new URL(String(input), window.location.origin).pathname;
+  return path === `/api/tasks/${child.id}/detail-data` ? Response.json({ taskDetail: {
+   ...itemPageModel("sub_issue"), item: child, children: [], ancestors: [reviewNavigationModel.item],
+   discussion: { comments: [{ id: 746, taskId: child.id, profileId: itemPageProfile.id,
+    comment: "Stored comment waiting for GitHub.", createdAt: "2026-11-07T09:00:00Z",
+    githubDeliveryStatus: "pending", githubCommentUrl: "" }], externalComments: [] },
+  }, unavailable: [] }) : undefined;
+ } }),
+ play: async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  const page = within(document.body);
+  const child = reviewNavigationModel.children[0];
+  await userEvent.click(await canvas.findByRole("link", { name: child.title }));
+  const panel = await canvas.findByRole("dialog", { name: child.title });
+  await userEvent.click(await within(panel).findByRole("tab", { name: /Aktivität/ }));
+  const draft = await within(panel).findByRole("textbox", { name: "Kommentar oder Update" });
+  await userEvent.type(draft, "New panel draft");
+  await userEvent.click(await within(panel).findByRole("button", { name: "GitHub-Veröffentlichung ausstehend" }));
+  await expect(page.getByRole("tooltip")).toHaveTextContent("Kommentar gespeichert.");
+  await userEvent.keyboard("{Escape}");
+  await expect(page.queryByRole("tooltip")).not.toBeInTheDocument();
+  await expect(panel).toBeVisible();
+  await expect(draft).toHaveValue("New panel draft");
+  await userEvent.keyboard("{Escape}");
+  await expect(canvas.queryByRole("dialog", { name: child.title })).not.toBeInTheDocument();
+ },
+};

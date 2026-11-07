@@ -1,10 +1,20 @@
 import type { TaskCommentCreationView } from "@/features/tasks/model/task-comment-creation";
+import { TaskCommentStatusHelp } from "@/features/tasks/atoms/task-comment-status-help";
 import { UiButton } from "@/shared/atoms/ui-primitives";
+
 export function TaskCommentCreationNotices({ creations, onCheck, onRetry }: { creations: readonly TaskCommentCreationView[]; onCheck?: (id: string) => void; onRetry?: (id: string) => void }) {
- return <>{creations.filter(item => item.phase !== "saving" && (item.phase !== "confirmed" || item.notice)).map(item => <div key={item.id} role="status" className="mt-3 grid gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-800">
-  <p className="font-semibold">{item.phase === "unconfirmed" ? "Ob der Kommentar gespeichert wurde, ist noch unklar. Nicht erneut senden." : item.phase === "rejected" ? "Kommentar wurde nicht gespeichert." : item.notice?.message}</p>
-  {item.phase === "rejected" && onRetry ? <UiButton className="min-h-11 justify-self-start" onClick={() => onRetry(item.id)}>Erneut versuchen</UiButton> : null}
-  {item.error ? <p>{item.error}</p> : null}
-  {item.phase === "unconfirmed" ? <><p>Prüfen gleicht die Übermittlung ab und sendet keinen Kommentar.</p>{item.checkStatus === "checked" ? <p>Übermittlung geprüft. Ob der Kommentar gespeichert wurde, bleibt unklar.</p> : null}{onCheck ? <UiButton className="min-h-11 justify-self-start" disabled={item.checkStatus === "checking"} onClick={() => onCheck(item.id)}>Diskussion prüfen</UiButton> : null}</> : null}
- </div>)}</>;
+  return <>{creations.filter(item => item.phase !== "saving" && (item.phase !== "confirmed" || item.notice)).map(item => (
+    <div key={item.id} role="status" className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+      <span>{item.phase === "unconfirmed" ? item.checkStatus === "checked" ? "Speicherung weiterhin unklar" : "Speicherung unklar" : item.phase === "rejected" ? "Nicht gespeichert." : "Kommentar gespeichert"}</span>
+      <TaskCommentStatusHelp label="Details zur Speicherung">
+        {item.phase === "unconfirmed" ? <>
+          <p>Nicht erneut senden. Prüfen gleicht die Übermittlung ab und sendet keinen neuen Kommentar.</p>
+          {item.checkStatus === "checked" ? <p>Die Prüfung konnte die Speicherung nicht bestätigen.</p> : null}
+        </> : item.notice ? <p>{item.notice.message}</p> : <p>Der Kommentar wurde nicht gespeichert. Du kannst ihn erneut versuchen.</p>}
+        {item.error ? <p>{item.error}</p> : null}
+      </TaskCommentStatusHelp>
+      {item.phase === "rejected" && onRetry ? <UiButton onClick={() => onRetry(item.id)}>Erneut versuchen</UiButton> : null}
+      {item.phase === "unconfirmed" && onCheck ? <UiButton disabled={item.checkStatus === "checking"} onClick={() => onCheck(item.id)}>Speicherung prüfen</UiButton> : null}
+    </div>
+  ))}</>;
 }
