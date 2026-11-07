@@ -426,17 +426,19 @@ function TaskCardRiskBadges({
   allTasks,
   blockers,
   maxVisible = 3,
+  attentionSignals,
 }: {
   task: Task;
   relations: TaskRelation[];
   allTasks: Task[];
   blockers: TaskBlocker[];
   maxVisible?: number;
+  attentionSignals?: TaskAttentionSignal[];
 }) {
   const relationGroups = taskRelationsFor(task.id, relations);
   const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
   const signals = [
-    ...taskPlanningAttentionSignals(task, { taskBlockers: blockers, taskRelations: relations, tasks: allTasks })
+    ...(attentionSignals || taskPlanningAttentionSignals(task, { taskBlockers: blockers, taskRelations: relations, tasks: allTasks }))
       .map((signal) => ({ id: signal.id, label: signal.label, tone: attentionTone(signal) })),
     relationGroups.waitsOn.length ? { id: "waits-on", label: `Wartet auf ${relationGroups.waitsOn.length}`, tone: hasOpenWait ? "amber" : "slate" } : null,
     relationGroups.blocks.length ? { id: "blocks", label: `Blockiert ${relationGroups.blocks.length}`, tone: "blue" } : null,
@@ -472,6 +474,7 @@ export function TaskCard({
   subIssues = [],
   childItems,
   childProgress,
+  attentionSignals,
   childList,
   onOpenTask,
   onStatusChange,
@@ -492,6 +495,7 @@ export function TaskCard({
   subIssues?: Task[];
   childItems?: Task[];
   childProgress?: ReturnType<typeof taskChildProgress>;
+  attentionSignals?: TaskAttentionSignal[];
   childList?: TaskCardChildList;
   onOpenTask: (taskId: string) => void;
   onStatusChange?: (status: TaskStatus) => void;
@@ -558,7 +562,7 @@ export function TaskCard({
             {task.priority}
           </UiBadge>
         )}
-        <TaskCardRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} maxVisible={2} />
+        <TaskCardRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} attentionSignals={attentionSignals} maxVisible={2} />
       </div>
       <TaskCardChildRollup
         task={task}

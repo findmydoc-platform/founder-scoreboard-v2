@@ -7,11 +7,23 @@ import { sortTasks } from "../model/planning-app-model";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardColumn } from "../model/planning-board-query";
 import { buildPlanningTaskTableViewModel } from "../model/planning-task-table-view-model";
 import { groupDirectChildrenByParent, taskChildProgress } from "@/features/tasks/model/task-card-presentation";
+import { taskPlanningAttentionSignals } from "@/features/tasks/model/task-attention-signals";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { isTaskPlanningActive } from "../model/approval-domain";
 import { hasOpenWaitingRelation } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { Task, TaskStatus } from "@/lib/types";
+
+// Omission is explicit so a later Board page cannot clear loaded detail content.
+const cardOmittedFields: readonly (keyof Task)[] = [
+  "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "note",
+  "strategy", "raciAssignments", "evidenceLinks", "linkedPullRequests", "reviewEvidenceExceptionNote", "githubIssueSyncError", "decisionNote", "carryoverReason",
+];
+function compactPlanningCard(task: Task): Task {
+  const summary = { ...task, detailAvailability: "summary" as const };
+  for (const field of cardOmittedFields) delete summary[field];
+  return summary;
+}
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function compareCompletedPlanningCards(left: Task, right: Task) {
@@ -75,9 +87,11 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
   return { status: "ready", model: {
     ...model, query, queryRevision: revision,
     coverage: { ...model.coverage, items: "partial", relationships: "partial", blockers: "partial" },
-    items: model.items.filter(task => contextIds.has(task.id)), relationships,
+    taskOmittedFields: cardOmittedFields,
+    items: model.items.filter(task => contextIds.has(task.id)).map(compactPlanningCard), relationships,
     blockers: model.blockers?.filter(blocker => contextIds.has(blocker.taskId)),
     board: { query, column, queryKey, revision, observedAt: new Date().toISOString(), cardIds: [...cardIds], childProgressById, columns,
+      attentionById: Object.fromEntries(cards.map(card => [card.id, taskPlanningAttentionSignals(card, data)])),
       levelTotals: { epic: model.items.filter(task => task.taskType === "epic").length, initiative: model.items.filter(task => task.taskType === "initiative").length, deliverable: model.items.filter(task => task.taskType === "deliverable").length },
       metrics: { total: matches.length, open: matches.length - completed.length, done: completed.length, blocked: matches.filter(task => normalizeStatus(task.status) === "Blockiert" || task.dependsOn || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)).length },
       viewerOpenSubIssueIdsByDeliverableId: Object.fromEntries(Object.entries(filtered.viewerOpenSubIssueIdsByDeliverableId).filter(([id]) => cardIds.has(id))),

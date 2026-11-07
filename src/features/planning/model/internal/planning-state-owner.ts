@@ -152,6 +152,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
   }
   restoreTaskFieldCoverage(initialData.tasks);
+  for (const task of initialData.tasks) if (initialWorkspaceRead?.taskOmittedFields?.length) retainedTaskFields.set(task.id, new Set(initialWorkspaceRead.taskOmittedFields));
   function acceptTaskFieldCoverage(task: Partial<Task> & { id: string }, omitted: readonly (keyof Task)[] = []) {
     const previous = confirmed.tasks.find(row => row.id === task.id);
     const retained = new Set(retainedTaskFields.get(task.id));
@@ -987,6 +988,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       boardResult = {
         ...result.board, column: undefined, cardIds, columns,
+        attentionById: { ...previous?.attentionById, ...result.board.attentionById },
         childProgressById: { ...previous?.childProgressById, ...result.board.childProgressById },
         viewerOpenSubIssueIdsByDeliverableId: { ...previous?.viewerOpenSubIssueIdsByDeliverableId, ...result.board.viewerOpenSubIssueIdsByDeliverableId },
       };
