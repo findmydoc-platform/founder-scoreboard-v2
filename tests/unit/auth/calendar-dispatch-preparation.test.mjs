@@ -325,9 +325,9 @@ test("Planning board retains a successful result when bounded permit cleanup fai
   const authorized = await authorize(token(), "planning.board.read");
   expect(authorized.ok).toBe(true);
   expect(await authorized.planning.loadBoard()).toMatchObject({ status: "ready", model: { items: [] } });
-  expect(preparations).toHaveLength(12);
-  expect(releases).toHaveLength(12);
-  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(1);
+  expect(preparations).toHaveLength(13);
+  expect(releases).toHaveLength(13);
+  expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(2);
 });
 
 test.each(["provider failure", "lost response"])("Planning board header retains unavailable status after preparation %s", async failure => {

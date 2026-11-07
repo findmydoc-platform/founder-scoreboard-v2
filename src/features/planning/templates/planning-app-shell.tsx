@@ -174,7 +174,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
             initiatives={initiativePlanningItems(data.tasks)}
             sprints={data.sprints}
             tasks={data.tasks}
-            workstreams={Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
+            workstreams={controller.view === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
             quickFilters={quickFilters}
             expanded={showFilters}
             visibleCount={controller.view === "board" ? controller.planningBoard?.result?.metrics.total ?? planningVisibleTasks.length : controller.visibleTasks.length}

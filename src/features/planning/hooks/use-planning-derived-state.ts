@@ -3,7 +3,7 @@
 import { usePlanningHeaderActions } from "@/features/planning/hooks/use-planning-header-actions";
 import { usePlanningTaskViewModel } from "@/features/planning/hooks/use-planning-task-view-model";
 import type { PlanningFilters, usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
-import { planningWorkspaces } from "@/features/planning/model/planning-app-model";
+import { planningWorkspaces, sortTasks } from "@/features/planning/model/planning-app-model";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { PlanningShellState, Profile, Task, ViewMode } from "@/lib/types";
@@ -68,6 +68,6 @@ export function usePlanningDerivedState({
     metrics: boardResult?.metrics || metrics,
     statusGuardTask,
     viewerOpenSubIssueIdsByDeliverableId: boardResult?.viewerOpenSubIssueIdsByDeliverableId || viewerOpenSubIssueIdsByDeliverableId,
-    visibleTasks: boardResult ? data.tasks.filter(task => boardResult.cardIds.includes(task.id)) : visibleTasks,
+    visibleTasks: boardResult ? sortTasks(data.tasks.filter(task => boardResult.cardIds.includes(task.id)).sort((left, right) => left.id.localeCompare(right.id, "en"))) : visibleTasks,
   };
 }

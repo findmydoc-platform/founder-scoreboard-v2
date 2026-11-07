@@ -125,8 +125,7 @@ export async function loadPlanningWorkspaceModel(
   context: PlanningWorkspaceLoadContext,
 ): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
-  // Capture the source token before enumeration. A concurrent commit can then
-  // make this response stale, but cannot make old data claim the newer token.
+  // The matching post-enumeration fence rejects mixed provider pages.
   const snapshot = await observeRuntimePhase("board.project", () => supabase.rpc("planning_workspace_snapshot"));
   const project = snapshot.data as (ProjectRow & { scope_revision?: string }) | null;
   if (snapshot.error || !project?.id || typeof project.scope_revision !== "string") return { status: "unavailable" };
@@ -155,13 +154,14 @@ export async function loadPlanningWorkspaceModel(
   const baseReads = Promise.all([
     profileRead,
     trackRead(observeRuntimePhase("board.items", () => completeRead(() => supabase.from(ACTIVE_TASKS_TABLE).select(planningSummarySelect, { count: "exact" }).eq("project_id", planningProjectId).order("sort_order").order("id")))),
-    trackRead(observeRuntimePhase("board.strategy", () => completeRead(() => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints", { count: "exact" }).order("task_id")))),
-    trackRead(observeRuntimePhase("board.raci", () => completeRead(() => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order", { count: "exact" }).order("task_id").order("sort_order").order("profile_id").order("role")))),
-    trackRead(observeRuntimePhase("board.links", () => completeRead(() => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata", { count: "exact" }).order("position").order("id")))),
+    // Auxiliary offsets enumerate the same active project covered by the source clock.
+    trackRead(observeRuntimePhase("board.strategy", () => completeRead(() => supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints,scope:tasks!inner(id)", { count: "exact" }).eq("scope.project_id", planningProjectId).is("scope.trashed_at", null).order("task_id")))),
+    trackRead(observeRuntimePhase("board.raci", () => completeRead(() => supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order,scope:tasks!inner(id)", { count: "exact" }).eq("scope.project_id", planningProjectId).is("scope.trashed_at", null).order("task_id").order("sort_order").order("profile_id").order("role")))),
+    trackRead(observeRuntimePhase("board.links", () => completeRead(() => supabase.from("task_links").select("id,task_id,type,label,url,position,metadata,scope:tasks!inner(id)", { count: "exact" }).eq("scope.project_id", planningProjectId).is("scope.trashed_at", null).order("position").order("id")))),
     trackRead(observeRuntimePhase("board.sprints", () => completeRead(() => supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked,updated_at", { count: "exact" }).order("start_date").order("id")))),
-    trackRead(observeRuntimePhase("board.relationships", () => completeRead(() => { const query = supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at", { count: "exact" }).order("created_at", { ascending: false }).order("id"); return context.query ? query : query.limit(500); }))),
-    trackRead(observeRuntimePhase("board.preferences", () => completeRead(() => supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at", { count: "exact" }).order("profile_id")))),
-    context.query ? trackRead(completeRead(() => supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at", { count: "exact" }).order("id"))) : Promise.resolve({ data: [], error: null, count: 0 }),
+    trackRead(observeRuntimePhase("board.relationships", () => completeRead(() => { const query = supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at,scope:tasks!task_relationship_edges_task_id_fkey!inner(id),related:tasks!task_relationship_edges_related_task_id_fkey!inner(id)", { count: "exact" }).eq("scope.project_id", planningProjectId).is("scope.trashed_at", null).eq("related.project_id", planningProjectId).is("related.trashed_at", null).order("created_at", { ascending: false }).order("id"); return context.query ? query : query.limit(500); }))),
+    trackRead(observeRuntimePhase("board.preferences", () => completeRead(() => supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at", { count: "exact" }).eq("profile_id", context.actorProfileId || "").order("profile_id")))),
+    context.query ? trackRead(completeRead(() => supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at,scope:tasks!inner(id)", { count: "exact" }).eq("scope.project_id", planningProjectId).is("scope.trashed_at", null).order("id"))) : Promise.resolve({ data: [], error: null, count: 0 }),
   ]);
   const [profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult, blockerResult] = await baseReads.catch(async (error: unknown) => {
     // A failed base read owns the result, but started avatar dispatch must finish cleanup.
@@ -174,6 +174,13 @@ export async function loadPlanningWorkspaceModel(
     return { status: "unavailable" };
   }
   if ("error" in avatars) throw avatars.error;
+  if (context.query) {
+    const current = await observeRuntimePhase("board.project", () => supabase.rpc("planning_workspace_snapshot"));
+    if (current.error || typeof current.data?.scope_revision !== "string") return { status: "unavailable" };
+    if (current.data.scope_revision !== project.scope_revision) {
+      return { status: context.query.continuation ? "staleContinuation" : "unavailable" };
+    }
+  }
   const people = avatars.people;
   const complete = (result: { data: unknown[] | null; count: number | null }) => typeof result.count === "number" && (result.data?.length || 0) >= result.count ? "complete" as const : "partial" as const;
   return observeRuntimePreparation(() => {

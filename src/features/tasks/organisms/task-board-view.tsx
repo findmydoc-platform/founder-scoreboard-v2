@@ -113,7 +113,7 @@ export function TaskBoardView({
         const loading = history?.readStatus === "loading";
         const stale = history?.readStatus === "stale";
         const failed = history?.readStatus === "unavailable";
-        const finished = history?.completeness === "complete" && !stale;
+        const finished = history?.completeness === "complete" && !stale && !failed;
         const total = history?.total ?? tasks.length;
         const isEmpty = total === 0;
         const isDropTarget = dragOverStatus === status;
@@ -210,7 +210,7 @@ export function TaskBoardView({
                 <p role="status" aria-live="polite" className="text-center text-xs text-slate-500">{history.loaded} von {history.total} geladen</p>
                 {failed ? <p role="alert" className="text-xs text-slate-600">Weitere Karten konnten nicht geladen werden.</p> : null}
                 {stale ? <p role="status" className="text-xs text-slate-600">Die Ergebnisliste hat sich geändert. Der angezeigte Stand ist veraltet.</p> : null}
-                {history.continuation || stale || requestedColumns.has(`${itemType}:${status}`) ? <button type="button" aria-disabled={loading || finished} onClick={() => {
+                {history.continuation || stale || failed || requestedColumns.has(`${itemType}:${status}`) ? <button type="button" aria-disabled={loading || finished} onClick={() => {
                   if (loading || finished) return;
                   setRequestedColumns(previous => new Set(previous).add(`${itemType}:${status}`));
                   if (stale) history.onRefresh(); else history.onLoadMore();

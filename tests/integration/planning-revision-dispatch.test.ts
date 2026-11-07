@@ -84,7 +84,7 @@ it("real Auth and PostgREST retain Planning revision roles, JWTs and live checks
   }
 }, 60_000);
 
-it("Planning revision detects older Item, relationship and Sprint changes without a full model poll and retains the pre-enumeration token", async () => {
+it("Planning revision detects older Item, relationship and Sprint changes and rejects a model changed during enumeration", async () => {
   const fixture = await createCalendarLiveFixture();
   const nativeFetch = globalThis.fetch;
   let afterSnapshot: (() => Promise<unknown>) | undefined;
@@ -178,11 +178,12 @@ it("Planning revision detects older Item, relationship and Sprint changes withou
     const beforeModel = await read();
     afterSnapshot = () => fixture.database.query("update public.tasks set title='Changed during enumeration' where id='revision-old'");
     const loaded = await boardPermission.planning.loadBoard({ view: "complete" });
-    expect(loaded.status).toBe("ready");
-    if (loaded.status !== "ready") throw new Error("Expected complete Planning model");
-    expect(loaded.model.scopeRevision).toBe(beforeModel.scopeRevision);
-    expect(loaded.model.items.find((item: { id: string; title: string }) => item.id === "revision-old")?.title).toBe("Changed during enumeration");
-    expect((await read()).scopeRevision).not.toBe(loaded.model.scopeRevision);
+    expect(loaded.status).toBe("unavailable");
+    const currentModel = await boardPermission.planning.loadBoard({ view: "complete" });
+    if (currentModel.status !== "ready") throw new Error("Expected stable complete Planning model");
+    expect(currentModel.model.scopeRevision).not.toBe(beforeModel.scopeRevision);
+    expect(currentModel.model.items.find((item: { id: string; title: string }) => item.id === "revision-old")?.title).toBe("Changed during enumeration");
+    expect((await read()).scopeRevision).toBe(currentModel.model.scopeRevision);
     await fixture.database.query("select set_config('founderops.trash_lifecycle_write','on',false)");
     const beforeTrash = await read();
     await fixture.database.query("update public.tasks set trashed_at=transaction_timestamp(),trashed_by=$1,trash_reason='Synthetic withdrawal',trash_cause='withdrawn',purge_after=transaction_timestamp()+interval '90 days',trash_root_type='deliverable',trash_root_id=id,trash_revision=1 where id='revision-old'", [actor.profileId]);

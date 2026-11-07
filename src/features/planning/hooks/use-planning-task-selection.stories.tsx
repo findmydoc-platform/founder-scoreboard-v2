@@ -39,7 +39,13 @@ function UnloadedPanelFlow({ fail = false, forbidden = false }: { fail?: boolean
   }, [fail, forbidden]);
   return ready ? <PlanningStateProvider><PanelController /></PlanningStateProvider> : null;
 }
-const meta = { title: "Planning/Unloaded Item navigation", component: UnloadedPanelFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof UnloadedPanelFlow>;
+const meta = {
+  title: "Planning/Unloaded Item navigation",
+  component: UnloadedPanelFlow,
+  // These stories control the detail read independently of UI module compilation.
+  loaders: [async () => { await import("@/features/tasks/organisms/task-detail-panel"); return {}; }],
+  parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } },
+} satisfies Meta<typeof UnloadedPanelFlow>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const UnloadedItemOpensThroughTheSharedDetailBoundary: Story = { play: async ({ canvasElement }) => {
