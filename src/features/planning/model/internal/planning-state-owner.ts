@@ -879,7 +879,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (toolRead !== null) tools.failed(error, toolRead);
       if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
       workspaceStatuses.set(workspace, readErrorStatus(error));
-      if (workspace === "planning" && readErrorStatus(error) === "forbidden") { planningQueries.clear(); queryRevision = undefined; }
+      if (workspace === "planning" && readErrorStatus(error) === "forbidden") { planningQueries.clear(); queryRevision = undefined; boardResult = undefined; boardQueryKey = undefined; }
       if (workspace === "sprint") { sprintState.readStatus(readErrorStatus(error)); if (readErrorStatus(error) === "forbidden") {attendanceState.denyWorkspace();scoreObjections.deny();} }
       profileSettings.readStatus(readErrorStatus(error), workspace);
       publish();

@@ -132,6 +132,8 @@ test("a replacement authority cannot reuse complete coverage or a retained Board
   await expect(owner.planning.ensureBoardQuery({ view: "board" })).resolves.toBe(false);
   await expect(owner.planning.ensureBoardQuery({ view: "complete" })).resolves.toBe(false);
   expect(owner.planning.board()).toMatchObject({ tasks: [], readStatus: "forbidden" });
+  expect(owner.planning.board().queryKey).toBeUndefined();
+  expect(owner.planning.board().result).toBeUndefined();
   expect(owner.planning.protectedCache("planning")).toBeNull();
 });
 
