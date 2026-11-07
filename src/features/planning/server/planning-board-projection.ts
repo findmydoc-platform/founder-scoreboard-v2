@@ -24,7 +24,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
   const preferredFilters = preference && { ...preference.planningFilters, ...(preference.defaultWorkspace === "mine" ? { assignee: "Alle", quick: [...preference.planningFilters.quick, "mine"] } : {}) };
   const query = normalizePlanningBoardQuery({ ...input, view: input.view || (preference?.defaultTaskView && preference.defaultTaskView !== "board" ? "complete" : "board"), filters: input.filters || preferredFilters });
   const queryKey = planningBoardQueryKey(query);
-  const revision = digest([model.items, model.relationships, model.blockers, model.people, model.sprints, model.preferences]);
+  const revision = digest([model.items, model.relationships, model.blockers, model.people, model.sprints]);
   const binding = (offset: number) => createHmac("sha256", context.authorityKey || context.actorProfileId || "local-planning").update(JSON.stringify([context.actorProfileId, queryKey, revision, offset])).digest("hex");
   const limit = Math.min(20, Math.max(1, Math.trunc(Number(input.limit) || 20)));
   let offset = 0;
@@ -37,7 +37,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
   }
   if (query.view === "complete" || query.level !== "deliverable") {
     if (offset) return { status: "staleContinuation" };
-    return { status: "ready", model: { ...model, query } };
+    return { status: "ready", model: { ...model, query, queryRevision: revision } };
   }
   const data = planningWorkspaceModelToPlanningShellState(model);
   const filtered = buildPlanningTaskTableViewModel({ currentProfile: model.people.find(person => person.id === context.actorProfileId) || null, data, filters: query.filters, includeAssignedSubIssueParents: true });
@@ -66,7 +66,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
     return [status, { total, loaded: cards.filter(task => normalizeStatus(task.status) === status).length, completeness: continuation ? "partial" : "complete", continuation } satisfies PlanningBoardColumn];
   })) as Record<TaskStatus, PlanningBoardColumn>;
   return { status: "ready", model: {
-    ...model, query,
+    ...model, query, queryRevision: revision,
     coverage: { ...model.coverage, items: "partial", relationships: "partial", blockers: "partial" },
     items: model.items.filter(task => contextIds.has(task.id)), relationships,
     blockers: model.blockers?.filter(blocker => contextIds.has(blocker.taskId)),
