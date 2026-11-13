@@ -217,13 +217,14 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
     async function checkPublication(outcome: PlanningBoardColumnOutcome): Promise<PlanningBoardColumnOutcome> {
       if (terminal) return terminal;
       try {
-        if (outcome.kind === "failure") return outcome;
+        if (outcome.kind === "failure" && outcome.status !== 503) return outcome;
         // Run at the actual HTTP/SSR publication boundary, even if hydration
         // settled earlier. The guarded client rechecks original JWT/live access.
         const fence = await supabase.rpc("planning_source_version").abortSignal(controller.signal);
         if (terminal) return terminal;
-        if (fence.error || typeof fence.data !== "string") return failure(outcome.column, fence.status === 401 || fence.status === 403 ? 403 : 503);
-        if (fence.data !== plan.source_revision || plan.valid_until && Date.parse(plan.valid_until) <= Date.now()) return failure(outcome.column, 409);
+        const column = outcome.column || pending[0];
+        if (fence.error || typeof fence.data !== "string") return failure(column, fence.status === 401 || fence.status === 403 ? 403 : 503);
+        if (fence.data !== plan.source_revision || plan.valid_until && Date.parse(plan.valid_until) <= Date.now()) return failure(column, 409);
         return outcome;
       } catch (error) {
         const status = typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? 403 : 503;

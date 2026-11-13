@@ -44,6 +44,7 @@ async function loadPlanningWorkspacePageData(
     const planningWorkspace = await boardRead;
     if (planningWorkspace.status !== "ready") return { status: "unavailable" as const };
     const board = await preparePlanningServerBoardColumns(planningWorkspace);
+    if (board.status !== "ready") return { status: "unavailable" as const };
     return { status: "ready" as const, model: board.model, boardDelivery: board.delivery, readAuthority: permission.readAuthority, readSession: permission.readSession, serverHeaderRead: permission.serverHeaderRead, headerSlots, headerData: permission.profile ? emptyPlanningHeaderData : { ...emptyPlanningHeaderData, notifications: { state: "ready" as const, data: { unreadCount: 0, items: [] } } } };
 
   }

@@ -42,29 +42,29 @@ function mergeInitialColumn(model: PlanningWorkspaceModel, outcome: Extract<Plan
 
 export async function preparePlanningServerBoardColumns(result: Extract<PlanningBoardQueryLoadResult, { status: "ready" }>) {
   const { delivery, model } = result;
-  if (!delivery || !model.board?.delivery) return { model, delivery };
+  if (!delivery || !model.board?.delivery) return { status: "ready" as const, model, delivery };
   const columns = Object.fromEntries(Object.entries(delivery.columns).map(([column, promise]) => [column,
     promise!.catch(error => failedColumn(delivery.id, column as TaskStatus, error)),
   ])) as PlanningBoardDelivery["columns"];
   const entries = Object.entries(columns) as Array<[TaskStatus, Promise<PlanningBoardColumnOutcome>]>;
-  if (!entries.length) return { model: { ...model, board: { ...model.board, delivery: undefined } }, delivery: undefined };
+  if (!entries.length) return { status: "ready" as const, model: { ...model, board: { ...model.board, delivery: undefined } }, delivery: undefined };
 
   // One settled column can seed operable HTML; no particular status gates it.
   const first = await Promise.race(entries.map(async ([column, promise]) => ({ column, outcome: await promise })));
   const outcome = await publishColumn(delivery, first.column, Promise.resolve(first.outcome));
   if (outcome.kind === "failure") {
-    return { model, delivery: { ...delivery, columns: { ...columns, [first.column]: Promise.resolve(outcome) } } };
+    if (outcome.status !== 503) { delivery.abort(); return { status: "unavailable" as const }; }
+    return { status: "ready" as const, model, delivery: { ...delivery, columns: { ...columns, [first.column]: Promise.resolve(outcome) } } };
   }
   if (outcome.readId !== delivery.id || outcome.column !== first.column || outcome.scopeRevision !== model.scopeRevision
     || outcome.queryRevision !== model.board.revision || outcome.observedAt !== model.board.observedAt
     || outcome.validUntil !== (model.board.validUntil ?? null)) {
-    const failure: PlanningBoardColumnOutcome = { kind: "failure", readId: delivery.id, column: first.column, status: 409,
-      error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden.", code: "stale_continuation" };
-    return { model, delivery: { ...delivery, columns: { ...columns, [first.column]: Promise.resolve(failure) } } };
+    delivery.abort();
+    return { status: "unavailable" as const };
   }
   const remaining = { ...columns };
   delete remaining[first.column];
-  return { model: mergeInitialColumn(model, outcome), delivery: Object.keys(remaining).length ? { ...delivery, columns: remaining } : undefined };
+  return { status: "ready" as const, model: mergeInitialColumn(model, outcome), delivery: Object.keys(remaining).length ? { ...delivery, columns: remaining } : undefined };
 }
 
 async function BoardColumn({ delivery, column, result }: { delivery: PlanningBoardDelivery; column: TaskStatus; result: Promise<PlanningBoardColumnOutcome> }) {
