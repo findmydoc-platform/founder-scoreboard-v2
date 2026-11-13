@@ -2,7 +2,7 @@
 
 ## Status
 
-Document status: Accepted. Constraints were approved in [decision #637](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/637#issuecomment-6827012925) and [decision #638](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/638#issuecomment-6828242358), then carried into [specification #641](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/641). This record does not assert that every reader already supplies the required evidence. Current coverage and migration status belong in the [read contract](../planning-item-read-contract.md).
+Document status: Accepted. Constraints were approved in [decision #637](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/637#issuecomment-6827012925) and [decision #638](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/638#issuecomment-6828242358), then carried into [specification #641](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/641). This record does not assert that every reader already supplies the required evidence. Current coverage and migration status belong in the [read contract](../planning-item-read-contracts.md).
 
 ## Context
 

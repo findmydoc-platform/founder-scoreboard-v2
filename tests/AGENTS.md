@@ -13,4 +13,4 @@
 - Add focused domain test files instead of growing large `platform-*` contract files by default.
 - Never connect tests to production services. Use real UTF-8 for German fixtures.
 
-- When verifying Planning Item readers, follow `docs/planning-item-read-contract.md` and `docs/planning-item-read-verification.md`. Use independent fixture expectations alongside real SQL comparisons; mock databases and historical timings do not satisfy migration gates.
+- When verifying Planning Item readers, follow `docs/planning-item-read-contracts.md` and `docs/planning-item-read-verification.md`. Use independent fixture expectations alongside real SQL comparisons; mock databases and historical timings do not satisfy migration gates.

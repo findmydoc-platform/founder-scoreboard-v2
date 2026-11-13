@@ -1,6 +1,6 @@
 # Planning Item read verification
 
-This is a recurring procedure for verifying [read contracts](planning-item-read-contract.md) before migrating a consumer. Specification #641 owns the gates. Keep each run's plans, drivers, raw observations, screenshots and results outside the repository. The repository retains reusable contracts, fixtures and behavioral checks only.
+This is a recurring procedure for verifying [read contracts](planning-item-read-contracts.md) before migrating a consumer. Specification #641 owns the gates. Keep each run's plans, drivers, raw observations, screenshots and results outside the repository. The repository retains reusable contracts, fixtures and behavioral checks only.
 
 ## Controlled semantic fixture
 

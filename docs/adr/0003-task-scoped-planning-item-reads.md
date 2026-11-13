@@ -2,7 +2,7 @@
 
 ## Status
 
-Document status: Accepted. Architecture constraints were approved in [decision #636](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/636#issuecomment-6712685439) and carried into [specification #641](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/641). Acceptance of this record does not certify migration, runtime evidence or deployment. The [read contract](../planning-item-read-contract.md) distinguishes required guarantees from the current readers.
+Document status: Accepted. Architecture constraints were approved in [decision #636](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/636#issuecomment-6712685439) and carried into [specification #641](https://github.com/findmydoc-platform/founder-scoreboard-v2/issues/641). Acceptance of this record does not certify migration, runtime evidence or deployment. The [read contract](../planning-item-read-contracts.md) distinguishes required guarantees from the current readers.
 
 ## Context
 

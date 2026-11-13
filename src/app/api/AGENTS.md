@@ -10,4 +10,4 @@
 - Add focused tests for unauthenticated access, wrong roles, invalid input, missing dependencies, and relevant external-service failures.
 - GitHub projection routes are HTTP and authorization adapters only. They may acquire credentials and translate the typed result, but must not own projection steps, lock/CAS workflow, GitHub resource details, or GraphQL envelopes.
 
-- When changing a Planning Item read, aggregate, continuation or context route, read `docs/planning-item-read-contract.md`, preserve its credential boundary and update the affected inventory entry and executable evidence.
+- When changing a Planning Item read, aggregate, continuation or context route, read `docs/planning-item-read-contracts.md`, preserve its credential boundary and update the affected inventory entry and executable evidence.
