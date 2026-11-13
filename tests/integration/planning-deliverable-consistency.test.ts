@@ -104,3 +104,32 @@ test("a session revoked after selection cannot publish selected cards or retain 
     expect((await db.query("select count(*)::int as count from workspace_private.request_permits where user_id=$1", [actors.founder.userId])).rows[0].count).toBe(0);
   });
 }, 120_000);
+
+test("real active ordering and completed personal parents preserve manual ties ownership precedence and parent filters", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors }) => {
+    const active = [
+      ["c", "P2", 0], ["a", "P0", 10], ["b", "P0", 2], ["d", "P0", 2], ["e", "P4", 1], ["f", "Urgent", -3],
+    ] as const;
+    for (const [suffix, priority, order] of active) await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,assignee,sort_order) values($1,'findmydoc-founder-execution',$1,'deliverable','Offen',$2,'approved',$3,$4,$5)", [`${prefix}-active-${suffix}`, priority, initiativeId, actors.other.profileId, order]);
+    const selected = async (filters: Parameters<typeof normalizePlanningBoardQuery>[0], column: string, revision: string | null = null) => (await db.query("select public.planning_deliverable_selection($1,$2,$3,0,20,$4,null) as selection", [actors.founder.profileId, normalizePlanningBoardQuery(filters), column, revision])).rows[0].selection;
+    expect((await selected({ filters: { query: `${prefix}-active` } }, "Offen")).card_ids).toEqual(["b", "d", "a", "c", "e", "f"].map(suffix => `${prefix}-active-${suffix}`));
+    const parent = `${prefix}-personal-old`, precedence = `${prefix}-personal-assignee-wins`, child = `${prefix}-assigned-child`;
+    for (const [id, owner] of [[parent, actors.other.profileId], [precedence, actors.founder.profileId]]) await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,assignee,owner) values($1,'findmydoc-founder-execution',$1,'deliverable','Erledigt','P1','approved',$2,$3,$4)", [id, initiativeId, actors.other.profileId, owner]);
+    await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,parent_task_id,owner) values($1,'findmydoc-founder-execution','Synthetic assigned child','sub_issue','Offen','P0',$2,$3)", [child, parent, actors.founder.profileId]);
+    await db.query("begin");
+    try {
+      await db.query("set local session_replication_role = replica");
+      await db.query("update public.tasks set updated_at='2020-01-01T00:00:00Z' where id=$1", [parent]);
+      await db.query("commit");
+    } catch (error) { await db.query("rollback"); throw error; }
+    const query = { filters: { query: `${prefix}-personal`, quick: ["mine"], priority: "P1" } };
+    const first = await selected(query, "Erledigt");
+    expect(first.card_ids).toEqual([parent]);
+    expect(first.personal_children).toEqual({ [parent]: [child] });
+    expect(first.rows.some((row: { id: string }) => row.id === child || row.id === precedence)).toBe(false);
+    expect((await selected({ filters: { ...query.filters, priority: "P0" } }, "Erledigt")).card_ids).toEqual([]);
+    await db.query("update public.tasks set status='Erledigt' where id=$1", [child]);
+    expect((await selected(query, "Erledigt", first.source_revision)).status).toBe("staleContinuation");
+    expect((await selected(query, "Erledigt")).card_ids).toEqual([]);
+  });
+}, 120_000);
