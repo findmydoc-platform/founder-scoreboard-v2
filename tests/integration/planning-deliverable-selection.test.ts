@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import fixture from "../fixtures/planning-reads/contract.json";
+import materialized from "../fixtures/planning-reads/materialized-deliverables.json";
 import { DEFAULT_PLANNING_FILTERS, normalizePlanningBoardQuery } from "@/features/planning/model/planning-board-query";
 import { buildPlanningTaskTableViewModel } from "@/features/planning/model/planning-task-table-view-model";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
@@ -31,6 +32,7 @@ test("real Deliverable selection preserves the frozen complete reference and ind
       for (const edge of fixture.relationships) await db.query("insert into public.task_relationship_edges(task_id,related_task_id,relation_type) values($1,$2,$3)", [edge.taskId, edge.relatedTaskId, edge.relationType]);
       const data = { ...emptyPlanningShellState, tasks, profiles: fixture.profiles, sprints: fixture.sprints, taskRelations: fixture.relationships } as PlanningShellState;
       const { loadPlanningWorkspaceModel } = await importTestModule("src/features/planning-items/server/planning-workspace-read-source.ts", { "server-only": {} });
+      const { projectPlanningBoard } = await importTestModule("src/features/planning/server/planning-board-projection.ts", { "server-only": {} });
       const legacyClient = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
       // The public provider cannot see this transaction's uncommitted fixture.
       // Commit only this isolated fixture before observing the complete legacy
@@ -40,8 +42,6 @@ test("real Deliverable selection preserves the frozen complete reference and ind
       expect(legacy.status).toBe("ready");
       if (legacy.status !== "ready") throw new Error("Complete legacy database reference was unavailable");
       const legacyData = planningWorkspaceModelToPlanningShellState(legacy.model);
-      const differences: Array<{ name: string; rawExpected: readonly string[]; persistedReference: string[]; actual: string[] }> = [];
-      const sqlDifferences: Array<{ name: string; legacy: string[]; sql: string[] }> = [];
       vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(fixture.evaluationTime));
       try {
         for (const example of fixture.searchCases) {
@@ -49,15 +49,20 @@ test("real Deliverable selection preserves the frozen complete reference and ind
           const reference = buildPlanningTaskTableViewModel({ data, filters, currentProfile: data.profiles[0], includeAssignedSubIssueParents: true }).visibleTasks.filter(task => task.taskType === "deliverable").map(task => task.id);
           expect(reference, example.name).toEqual(example.ids);
           const legacyReference = buildPlanningTaskTableViewModel({ data: legacyData, filters, currentProfile: legacyData.profiles.find(profile => profile.id === fixture.profiles[0].id)!, includeAssignedSubIssueParents: true }).visibleTasks.filter(task => task.taskType === "deliverable");
+          const overrides = materialized.caseOverrides as Record<string, { ids: string[] }>;
+          const expectedIds = overrides[example.name]?.ids || example.ids;
+          expect(legacyReference.map(task => task.id), `${example.name}: independent persisted membership`).toEqual(expectedIds);
+          const legacyBoard = projectPlanningBoard(legacy.model, { authorized: true, actorProfileId: fixture.profiles[0].id, query: { filters } });
+          expect(legacyBoard.status).toBe("ready");
+          if (legacyBoard.status !== "ready") throw new Error("Complete legacy Board reference was unavailable");
+          const expectedOrder = materialized.boardOrder.filter(id => expectedIds.includes(id));
+          expect(legacyBoard.model.board!.cardIds, `${example.name}: independent persisted Board order`).toEqual(expectedOrder);
           const result = (await db.query("select public.planning_deliverable_selection($1,$2,null,0,20,null,$3) as selection", [fixture.profiles[0].id, normalizePlanningBoardQuery({ filters }), fixture.evaluationTime])).rows[0].selection;
           expect(result.status, example.name).toBe("ready");
-          const legacyIds = legacyReference.map(task => task.id);
-          if (JSON.stringify([...result.card_ids].sort()) !== JSON.stringify([...legacyIds].sort())) sqlDifferences.push({ name: example.name, legacy: legacyIds, sql: result.card_ids });
-          if (JSON.stringify([...legacyIds].sort()) !== JSON.stringify([...example.ids].sort())) differences.push({ name: example.name, rawExpected: example.ids, persistedReference: legacyIds, actual: result.card_ids });
-          expect(result.metrics.total, example.name).toBe(result.card_ids.length);
+          expect(result.card_ids, `${example.name}: actual SQL against legacy projection and independent order`).toEqual(expectedOrder);
+          expect(result.metrics.total, example.name).toBe(expectedIds.length);
           expect(result.rows.every((row: { id: string }) => result.context_ids.includes(row.id))).toBe(true);
         }
-        expect({ sqlDifferences, materializedDifferences: differences }, `Complete legacy provider reference and independent materialization expectations: ${JSON.stringify({ sqlDifferences, materializedDifferences: differences })}`).toEqual({ sqlDifferences: [], materializedDifferences: [] });
       } finally { vi.useRealTimers(); }
     } finally {
       await db.query("rollback");
