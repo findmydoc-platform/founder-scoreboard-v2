@@ -1,4 +1,4 @@
-import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardQueryInput, type PlanningBoardResult } from "../planning-board-query";
+import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardQuery, type PlanningBoardQueryInput, type PlanningBoardResult } from "../planning-board-query";
 import { createDecisionLogState } from "./decision-log-state";
 import { createHierarchyCommands } from "./hierarchy-commands";
 import { createMeetingAttendanceState } from "./meeting-attendance-state";
@@ -19,6 +19,7 @@ import { createPrivateWorkweekState } from "./private-workweek-state";
 import { createEventsState } from "./event-state";
 import { createPublishedWorkweekCalendars } from "./published-workweek-calendars";
 import { createHeaderNotificationsState, type HeaderNotificationsAdapter } from "./header-notifications-state";
+import { isThisWeek } from "../planning-app-model";
 import { normalizeStatus } from "@/lib/status";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState, Task, TaskActivity, TaskStatus } from "@/lib/types";
@@ -46,7 +47,18 @@ import { applyPlanningItemApprovalPatch } from "../approval-domain";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
-export type PlanningWorkspaceRead = { scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+type PlanningWeekBasis = { observedAt: number; sprints: import("@/lib/types").Sprint[] };
+function planningWeekBasis(board: PlanningBoardResult | undefined, coverage: PlanningReadCoverage | undefined, sprints: readonly import("@/lib/types").Sprint[]): PlanningWeekBasis | undefined {
+  const observedAt = Date.parse(board?.observedAt || "");
+  if (coverage?.sprints !== "complete" || !Number.isFinite(observedAt)) return undefined;
+  return { observedAt, sprints: sprints.map(sprint => ({ ...sprint })) };
+}
+function planningWeekIsCurrent(query: PlanningBoardQuery | undefined, basis: PlanningWeekBasis | undefined, now: number) {
+  if (query?.view !== "board" || !query.filters.quick.includes("week")) return true;
+  return Boolean(basis && basis.sprints.every(sprint =>
+    isThisWeek({ sprintId: sprint.id }, [sprint], new Date(basis.observedAt)) === isThisWeek({ sprintId: sprint.id }, [sprint], new Date(now))));
+}
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
 export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sync-state").TaskGitHubSyncAdapter & import("@/features/sprint/model/meeting-attendance-state").MeetingAttendanceAdapter & import("@/features/reviews/model/planning-task-review").TaskReviewAdapter & import("@/features/tasks/model/task-relationship-change").TaskRelationshipAdapter & import("@/features/team-workweek/model/google-workspace-state").GoogleWorkspaceAdapter & import("@/features/tasks/model/task-attachment-upload").TaskAttachmentAdapter & import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportAdapter & import("@/features/tasks/model/task-comment-creation").TaskCommentCreationAdapter & import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   readDecisionLog?: () => Promise<import("@/lib/notion-decision-log").NotionDecisionLogResult>;
@@ -67,17 +79,19 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   saveTeamProfile?: (profileId: string, patch: import("../planning-team-state").TeamProfilePatch, expected: Record<string, unknown>) => Promise<Partial<import("@/lib/types").Profile> & { id: string }>;
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
+  readPlanningSourceVersion?: () => Promise<string>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput): Promise<PlanningWorkspaceRead | null>;
   readTaskDetail?: (taskId: string) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[] }>;
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialSession, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialSession, initialServerHeaderRead, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
   initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
   initialSession?: BrowserSessionSnapshot;
+  initialServerHeaderRead?: import("../planning-server-header-read").PlanningServerHeaderRead;
   initialHeaderData?: PlanningHeaderData;
   initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
   initialCurrentProfile?: AuthenticatedProfile | null;
@@ -97,17 +111,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let sessionGeneration = 0;
   let sessionExpiresAt = initialSession?.expiresAt;
   let sessionRevision = initialSession?.revision;
-  const hydrationReads = new Map<AppWorkspace, string>();
-  function hydrationIdentity(data: PlanningShellState, read: import("../planning-workspace-hydration").PlanningWorkspaceHydration) {
-    // The complete declared result is compared because latest Item time alone is not a scope revision.
-    return JSON.stringify([read, data]);
-  }
-  if (initialWorkspaceRead && initialWorkspaceRead.workspace === initialWorkspace && initialWorkspaceRead.session.userId === userId) hydrationReads.set(initialWorkspace, hydrationIdentity(initialData, initialWorkspaceRead));
+  let planningAuthority = initialWorkspaceRead?.workspace === "planning" ? initialWorkspaceRead.readAuthority || { userId, deadline: 0 } : undefined;
+  const hydrationReads = new Map<AppWorkspace, import("../planning-workspace-hydration").PlanningWorkspaceHydration>();
+  if (initialWorkspaceRead && initialWorkspaceRead.workspace === initialWorkspace && initialWorkspaceRead.session.userId === userId) hydrationReads.set(initialWorkspace, initialWorkspaceRead);
   const taskConfirmedAt = new Map<string, number>();
   const taskReadAt = new Map<string, number>();
   let planningSourceEpoch = 0;
   function invalidatePlanningSource() {
     planningSourceEpoch++;
+    sourceStatus = "changed";
     freshness = "stale";
     planningQueries.clear();
     queryRevision = undefined;
@@ -135,6 +147,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     queryRevision = undefined;
     scopeRevision = undefined;
     scopeRevisionReadAt = 0;
+    weekBasis = undefined;
     pageStatus = "not-loaded";
     columnReads.clear();
     columnRequests.clear();
@@ -160,6 +173,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
   let freshness: "current" | "stale" = "current";
   let boardResult = initialWorkspaceRead?.board;
+  let weekBasis = planningWeekBasis(boardResult, initialWorkspaceRead?.coverage, initialData.sprints);
   let boardQuery = initialWorkspaceRead?.query || boardResult?.query;
   let boardQueryKey = boardQuery ? planningBoardQueryKey(boardQuery) : undefined;
   let pageStatus: PlanningReadStatus = "current";
@@ -170,6 +184,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let queryRevision = initialWorkspaceRead?.queryRevision || boardResult?.revision;
   let scopeRevision = initialWorkspaceRead?.scopeRevision;
   let scopeRevisionReadAt = 0;
+  let sourceStatus: import("../planning-state").PlanningSourceStatus = "current";
+  let sourceObservation: Promise<import("../planning-state").PlanningSourceObservation> | undefined;
   const planningQueries = new Map<string, {
     query: NonNullable<typeof boardQuery>;
     revision: string;
@@ -179,13 +195,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     pageStatus: PlanningReadStatus;
     columnReadStatus: Partial<Record<TaskStatus, PlanningReadStatus>>;
     sourceEpoch: number;
+    weekBasis?: PlanningWeekBasis;
+    readAuthority?: import("../planning-server-header-read").PlanningReadAuthority;
   }>();
   function rememberPlanningQuery() {
     if (!boardQuery || !boardQueryKey || !queryRevision || workspaceStatuses.get("planning") !== "current") return;
     planningQueries.set(boardQueryKey, {
       query: boardQuery, revision: queryRevision, result: boardResult,
       taskIds: new Set(memberships.get("planning")), completeness: completeness.get("planning") || "none",
-      pageStatus, columnReadStatus: { ...columnReadStatus }, sourceEpoch: planningSourceEpoch,
+      pageStatus, columnReadStatus: { ...columnReadStatus }, sourceEpoch: planningSourceEpoch, weekBasis, readAuthority: planningAuthority,
     });
   }
   let ended = false;
@@ -236,6 +254,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const commentDrafts = new Map<string, { text: string }>();
   function isActive() {
     if (active && sessionExpiresAt !== undefined && sessionExpiresAt * 1000 <= (adapter.now?.() ?? Date.now())) suspendProtected();
+    if (active && planningAuthority && (planningAuthority.userId !== userId || !Number.isFinite(planningAuthority.deadline) || planningAuthority.deadline <= (adapter.now?.() ?? Date.now()))) {
+      planningAuthority = undefined;
+      const expired = memberships.get("planning") || new Set<string>();
+      for (const id of expired) if (![...memberships].some(([scope, members]) => scope !== "planning" && members.has(id)) && detailStatuses.get(id) !== "current") deniedTaskReads.add(id);
+      detachPlanningMetadata();
+      memberships.delete("planning");
+      profileScopes.delete("planning");
+      completeness.set("planning", "none");
+      workspaceStatuses.set("planning", "not-loaded");
+      visible = protectedPublication(visible);
+    }
     return active;
   }
   function readErrorStatus(error: unknown): "forbidden" | "unavailable" {
@@ -252,7 +281,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const privateWorkweek = createPrivateWorkweekState({ adapter, active: isActive, generation: () => sessionGeneration, changed: () => { if (!googleWorkspace.privateContextChanged()) publish(); }, published: workweekCalendars.invalidatePublishedWorkweeks, publicationBlocked: () => googleWorkspace.blocksPublication() });
   const googleWorkspace = createGoogleWorkspaceState({ adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidate: workweekCalendars.invalidatePublishedWorkweeks, privateBusy: privateWorkweek.publicationBusy, privateContext: privateWorkweek.disconnectBinding, privateChanged: privateWorkweek.connectionChanged });
   const administration = createAdministrationPersonState({ actorRole: () => confirmed.profiles.find(profile => profile.id === administrationActorProfileId)?.platformRole || null, active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), profiles: () => visible.profiles, nextSequence: () => ++sequence, acceptCommonPeople: (people, started) => profileSettings.acceptAdministrationPeople(people, started), invalidateDeliveryEffects: () => notifications.deliveryStarted(), refreshDeliveryEffects: () => notifications.refreshDeliveryEffects(), commonProject: () => confirmed.project, acceptCommonProject: project => { confirmed = {...confirmed,project:{...confirmed.project,githubProjectOwner:project.owner,githubProjectNumber:project.number}}; }, initialAuthority: initialAdministrationAuthority, read: adapter.readAdministration, adapter });
-  const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
+  const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, serverRead: initialServerHeaderRead, acceptsReadAuthority: read => isActive() && read.userId === userId && read.deadline > (adapter.now?.() ?? Date.now()), acceptsServerRead: read => isActive() && read.userId === userId && read.sessionRevision === sessionRevision && read.deadline > (adapter.now?.() ?? Date.now()) && Number.isFinite(read.timeoutAt) && read.timeoutAt > (adapter.now?.() ?? Date.now()), notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
   const events = createEventsState({ initial: active ? initialData.events : [], loaded: initialWorkspace === "events", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidateCalendar: () => notifications.invalidateHeader(["calendarEvents"]), refreshWorkspace: () => planning.refreshWorkspace("events"), endSession,
     beginHeaderRead: () => notifications.beginWorkspaceRead("events"),
     acceptHeaderRead: (data, started) => notifications.acceptWorkspaceRead("events", confirmed, { ...emptyPlanningHeaderData, calendarEvents: notifications.publicState.header().slots.calendarEvents.readStatus === "not-loaded" ? emptyPlanningHeaderData.calendarEvents : data.calendarEvents }, started),
@@ -619,6 +648,46 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const planning: PlanningState = {
     decisionLog: decisionLog.view,
     loadDecisionLog: decisionLog.load,
+    checkPlanningSource() {
+      if (!isActive()) return Promise.resolve("session-ended");
+      const status = workspaceStatuses.get("planning");
+      const workspaceRead = workspaceReads.get("planning");
+      const pendingContent = workspaceRead?.generation === sessionGeneration && workspaceRead.sessionRevision === sessionRevision
+        && workspaceRead.sourceEpoch === planningSourceEpoch && workspaceRead.started === acceptedRead.get("planning") ? workspaceRead.result
+        : boardRead && boardRead.sequence === acceptedRead.get("planning") && boardRead.sourceEpoch === planningSourceEpoch ? boardRead.result : undefined;
+      if (pendingContent) return pendingContent.then(accepted => accepted ? "content-read" as const : "unverified" as const);
+      if (status === "forbidden") return Promise.resolve("session-ended");
+      if (!memberships.has("planning") || completeness.get("planning") === "none" || status === "stale" || status === "not-loaded" || status === "unavailable") {
+        return planning.refreshWorkspace("planning").then(accepted => accepted ? "content-read" as const : "unverified" as const);
+      }
+      if (!planningWeekIsCurrent(boardQuery, weekBasis, adapter.now?.() ?? Date.now())) {
+        invalidatePlanningSource();
+        return planning.refreshWorkspace("planning").then(accepted => accepted ? "content-read" as const : "unverified" as const);
+      }
+      if (sourceObservation) return sourceObservation;
+      const generation = sessionGeneration, revision = sessionRevision, epoch = planningSourceEpoch, source = scopeRevision;
+      sourceStatus = "checking";
+      const current = () => isActive() && memberships.has("planning") && generation === sessionGeneration && revision === sessionRevision && epoch === planningSourceEpoch && source === scopeRevision;
+      const observed = (async (): Promise<import("../planning-state").PlanningSourceObservation> => {
+        try {
+          if (!adapter.readPlanningSourceVersion || !source) { sourceStatus = "unverified"; return "unverified"; }
+          const remote = await adapter.readPlanningSourceVersion();
+          if (!current()) return "session-ended";
+          if (remote !== source) { invalidatePlanningSource(); sourceStatus = "changed"; return "changed"; }
+          sourceStatus = "current";
+          return "unchanged";
+        } catch (error) {
+          if (!isActive() || generation !== sessionGeneration || revision !== sessionRevision) return "session-ended";
+          if (readErrorStatus(error) === "forbidden") denyPlanningScope();
+          else if (!current()) return "session-ended";
+          sourceStatus = "unverified";
+          return "unverified";
+        } finally { publish(); }
+      })();
+      sourceObservation = observed;
+      void observed.finally(() => { if (sourceObservation === observed) sourceObservation = undefined; });
+      return observed;
+    },
     currentProfile() { if (!isActive()) return null; const row = confirmed.profiles.find(profile => profile.id === actorIdentity?.id && canPresentProfile(profile.id)); return row ? { id: row.id, name: row.name, platformRole: row.platformRole, githubLogin: row.githubLogin } : actorIdentity; },
     hierarchy: () => planning.workspace("projects"),
     hierarchyEdits: hierarchy.views,
@@ -763,10 +832,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const tasks = planning.workspace("planning").tasks;
       const byId = new Map(tasks.map(task => [task.id, task]));
       const boardTasks = boardResult ? [...boardResult.cardIds.flatMap(id => byId.get(id) ? [byId.get(id)!] : []), ...tasks.filter(task => lifecycle.isTemporary(task.id))] : tasks;
-      return { requiresQueryRead: Boolean(boardQuery && !boardQueryKey), deniedChildListIds: [...childLists].filter(([id, list]) => list.readStatus === "forbidden" || (deniedTaskReads.has(id) && list.readStatus === "loading")).map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
+      return { sourceStatus, requiresQueryRead: Boolean(boardQuery && !boardQueryKey), deniedChildListIds: [...childLists].filter(([id, list]) => list.readStatus === "forbidden" || (deniedTaskReads.has(id) && list.readStatus === "loading")).map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
     },
     ensureBoardQuery(query) {
       if (!isActive()) return Promise.resolve(false);
+      if (!planningWeekIsCurrent(boardQuery, weekBasis, adapter.now?.() ?? Date.now())) invalidatePlanningSource();
       const key = planningBoardQueryKey(query);
       if (boardRead?.key === key && boardRead.sequence === acceptedRead.get("planning") && boardRead.sourceEpoch === planningSourceEpoch) return boardRead.result;
       if (boardQueryKey === key && workspaceStatuses.get("planning") === "current") return Promise.resolve(true);
@@ -774,11 +844,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const exact = planningQueries.get(key);
       const complete = planningQueries.get(planningBoardQueryKey({ view: "complete" }));
       const retained = exact || (complete?.completeness === "complete" ? complete : undefined);
-      if (retained && retained.revision === queryRevision && retained.sourceEpoch === planningSourceEpoch && workspaceStatuses.get("planning") !== "forbidden") {
+      if (retained && retained.revision === queryRevision && retained.sourceEpoch === planningSourceEpoch && workspaceStatuses.get("planning") !== "forbidden"
+        && (!retained.readAuthority || retained.readAuthority.deadline > (adapter.now?.() ?? Date.now()))
+        && planningWeekIsCurrent(retained.query, retained.weekBasis, adapter.now?.() ?? Date.now())) {
         acceptedRead.set("planning", ++sequence);
         boardQuery = exact ? retained.query : normalizePlanningBoardQuery(query);
         boardQueryKey = key;
         boardResult = retained.result;
+        weekBasis = retained.weekBasis;
+        planningAuthority = retained.readAuthority;
         pageStatus = retained.pageStatus === "loading" ? "stale" : retained.pageStatus;
         columnReads.clear(); columnRequests.clear();
         for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
@@ -976,6 +1050,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   };
   function readBoardColumn(column: TaskStatus, refresh: boolean) {
     if (!isActive() || !boardResult || !boardQuery) return Promise.resolve(false);
+    if (!planningWeekIsCurrent(boardQuery, weekBasis, adapter.now?.() ?? Date.now())) {
+      invalidatePlanningSource();
+      return planning.refreshWorkspace("planning");
+    }
     refresh ||= (columnReadStatus[column] === "stale" || columnReadStatus[column] === "unavailable") && !boardResult.columns[column]?.continuation;
     const continuation = refresh ? undefined : boardResult.columns[column]?.continuation || undefined;
     if (!refresh && !continuation) return Promise.resolve(true);
@@ -1062,6 +1140,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function acceptWorkspaceRead(workspace: AppWorkspace, result: PlanningWorkspaceRead, token: ReturnType<typeof beginWorkspaceRead>) {
     const { started, notificationRead, eventRead, toolRead } = token;
     if (!readIsCurrent(workspace, token)) return false;
+    if (workspace === "planning" && result.readAuthority && (result.readAuthority.userId !== userId || !Number.isFinite(result.readAuthority.deadline) || result.readAuthority.deadline <= (adapter.now?.() ?? Date.now()))) return false;
     if (workspace === "planning" && result.query?.view === "complete") {
       const coverage = result.coverage || {};
       const complete = (result.taskCoverage || coverage.tasks) === "complete"
@@ -1101,6 +1180,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       } else {
         for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
       }
+      if (!result.append) weekBasis = planningWeekBasis(result.board, result.coverage, result.data.sprints);
       boardResult = {
         ...result.board, column: undefined, cardIds, columns,
         attentionById: { ...previous?.attentionById, ...result.board.attentionById },
@@ -1112,13 +1192,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       pageStatus = "current";
     } else if (workspace === "planning" && result.query) {
       boardResult = undefined;
+      weekBasis = undefined;
       boardQuery = normalizePlanningBoardQuery(result.query);
       boardQueryKey = planningBoardQueryKey(boardQuery);
       pageStatus = "current";
       for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
     }
     if (workspace === "planning") {
-      if (started >= scopeRevisionReadAt) { scopeRevision = result.scopeRevision; scopeRevisionReadAt = started; }
+      if (started >= scopeRevisionReadAt) { scopeRevision = result.scopeRevision; scopeRevisionReadAt = started; sourceStatus = "current"; }
       const revision = result.queryRevision || result.board?.revision;
       if (!revision || revision !== queryRevision) planningQueries.clear();
       queryRevision = revision;
@@ -1198,11 +1279,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (result.currentProfile) actorIdentity = { ...result.currentProfile };
     acceptWorkspaceContext?.(result);
     freshness = stale ? "stale" : "current";
-    if (workspace === "planning") rememberPlanningQuery();
+    if (workspace === "planning") {
+      planningAuthority = result.append && planningAuthority && result.readAuthority
+        ? { ...result.readAuthority, deadline: Math.min(planningAuthority.deadline, result.readAuthority.deadline) }
+        : result.readAuthority;
+      rememberPlanningQuery();
+    }
     publish();
     return true;
   }
   function suspendProtected() {
+    planningAuthority = undefined;
     sessionGeneration++;
     active = false;
     initialized = false;
@@ -1244,8 +1331,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     completeness.clear();
     acceptedRead.clear();
     hydrationReads.clear();
-    boardResult = undefined; boardQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
-    planningQueries.clear(); queryRevision = undefined; scopeRevision = undefined;
+    boardResult = undefined; weekBasis = undefined; boardQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
+    planningQueries.clear(); queryRevision = undefined; scopeRevision = undefined; sourceObservation = undefined; sourceStatus = "unverified";
     columnReads.clear(); columnRequests.clear();
     for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
     workspaceReads.clear();
@@ -1300,7 +1387,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (!isActive()) return;
     const boundRead = read && read.workspace === workspace && (read.queryKey === "workspace" || (read.query && planningBoardQueryKey(read.query) === read.queryKey) || read.board?.queryKey === read.queryKey) && read.session.userId === userId
       && read.session.revision === sessionRevision && read.session.expiresAt === sessionExpiresAt
-      && read.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now());
+      && read.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now())
+      && (!read.readAuthority || read.readAuthority.userId === userId && read.readAuthority.deadline > (adapter.now?.() ?? Date.now()));
+    if (read?.readAuthority && !boundRead) return;
     const requested = hydrationRequests.get(workspace);
     hydrationRequests.delete(workspace);
     if (requiresBoundHydration && !boundRead) {
@@ -1309,10 +1398,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return;
     }
     if (boundRead && read) {
-      const identity = hydrationIdentity(data, read);
+      const identity = read;
       if (workspaceStatuses.get(workspace) === "current" && hydrationReads.get(workspace) === identity) return;
       if (requested && acceptWorkspaceRead(workspace, {
-        data, scopeRevision: read.scopeRevision, board: read.board, query: read.query || read.board?.query, queryRevision: read.queryRevision, coverage: read.coverage, taskCoverage: read.coverage.tasks,
+        data, readAuthority: read.readAuthority, scopeRevision: read.scopeRevision, board: read.board, query: read.query || read.board?.query, queryRevision: read.queryRevision, coverage: read.coverage, taskCoverage: read.coverage.tasks,
         taskOmittedFields: read.taskOmittedFields,
         profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
         projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"],
@@ -1320,6 +1409,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         hydrationReads.set(workspace, identity);
         return;
       }
+    }
+    // A returned page cannot replace a result without its original request token.
+    // Reuse its compatible authorized scope and observe only the uncertain source.
+    if (initialized && boundRead && read && workspace === "planning" && memberships.has(workspace)
+      && (read.queryKey === "workspace" ? !boardQueryKey : read.queryKey === boardQueryKey)) {
+      void planning.checkPlanningSource();
+      return;
+    }
+    if (initialized && boundRead && read?.query && workspace === "planning") {
+      void planning.ensureBoardQuery(read.query);
+      return;
     }
     // Page/cache snapshots carry no request token. They cannot prove that any existing scope is newer.
     if (initialized) {
@@ -1353,6 +1453,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   return { planning, internal: {
     getSnapshot: () => visible,
     isActive,
+    planningReadAuthority: () => planningAuthority,
+    watchServerHeaderRead: notifications.watchServerRead,
     bindAdministrationAuthority: administration.bindAuthority,
     captureAdministrationDispatchGuard: administration.captureDispatchGuard,
     confirmedHeader: notifications.confirmedHeader,

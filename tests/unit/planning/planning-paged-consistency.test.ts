@@ -15,14 +15,14 @@ function read(input: PlanningBoardQueryInput = {}, items = [card, history], revi
     loaded: items.filter(item => item.status === status).length,
     completeness: status === "Erledigt" ? "partial" : "complete", continuation: status === "Erledigt" ? "next" : null,
   } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
-  return { query, queryRevision: revision, scopeRevision: `scope-${revision}`, data: { ...emptyPlanningShellState, tasks: items }, coverage: { tasks: "partial", profiles: "complete", sprints: "complete", taskRelations: "partial", taskBlockers: "partial" },
+  return { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, query, queryRevision: revision, scopeRevision: `scope-${revision}`, data: { ...emptyPlanningShellState, tasks: items }, coverage: { tasks: "partial", profiles: "complete", sprints: "complete", taskRelations: "partial", taskBlockers: "partial" },
     board: { query, queryKey: planningBoardQueryKey(query), column: input.column, revision, observedAt: "2026-11-07T00:00:00Z", cardIds: items.map(item => item.id), columns,
       workstreams: ["Current workstream"], childProgressById: { card: { total: 2, completed: 1, unfinished: 1, percentage: 50 } }, metrics: { total: 26, open: 1, done: 25, blocked: 0 }, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: { activeTaskCount: 26, latestUpdatedAt: "r1" } },
   };
 }
 function owner(adapter: Partial<PlanningStateAdapter> = {}, initial = read()) {
   return createPlanningState({ userId: session.userId, initialData: initial.data, initialSession: session,
-    initialWorkspaceRead: { workspace: "planning", session, revision: "r1", queryKey: initial.board!.queryKey, query: initial.board!.query, queryRevision: "r1", scopeRevision: initial.scopeRevision, board: initial.board, coverage: initial.coverage!, taskOmittedFields: [] },
+    initialWorkspaceRead: { workspace: "planning", session, readAuthority: initial.readAuthority, revision: "r1", queryKey: initial.board!.queryKey, query: initial.board!.query, queryRevision: "r1", scopeRevision: initial.scopeRevision, board: initial.board, coverage: initial.coverage!, taskOmittedFields: [] },
     adapter: { saveTask: async (task, patch) => ({ task: { ...task, ...patch, updatedAt: "r2" } }), readWorkspace: async (_, query) => read(query), ...adapter },
   });
 }

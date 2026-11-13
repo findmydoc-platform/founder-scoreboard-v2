@@ -74,7 +74,7 @@ const meta = {
     if (path === "/api/auth/session") return Response.json({ session: { user, userId: user.id, revision: "workspace-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 } });
     if (path === "/api/administrator-access") return init?.method && init.method !== "GET" ? Response.json({ error: "This fixture does not activate administrator access" }, { status: 403 }) : Response.json({ administratorAccess: access });
     if (path === "/api/administration-data") return capabilities.manageAdministratorEligibility ? Response.json({ administration: { ...administrationStoryModel, capabilities, people: [], notificationEvents: [], notificationDeliveries: [] } }) : Response.json({ error: "Kein Zugriff", code: "administrator_access_required" }, { status: 403 });
-    if (path === "/api/planning-header-data") return Response.json({ headerData });
+    if (path === "/api/planning-header-data") return Response.json({ headerData, readAuthority: { userId: user.id, deadline: Date.now() + 60_000 } });
     if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [] });
     if (path === "/api/github-app/status") return Response.json({ installation: { available: false }, user: { connected: false } });
     if (path === "/api/events-data") return Response.json({ model: { revision: "events", events: [event], people: [profile], coverage: { completeness: "complete" } } });

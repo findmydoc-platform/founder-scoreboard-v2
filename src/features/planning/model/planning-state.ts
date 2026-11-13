@@ -42,7 +42,9 @@ export type PlanningTaskSaveCheck = {
   readStatus: PlanningReadStatus | "not-needed";
 };
 export type PlanningTaskSaveStatus = "saved" | "saving" | "rejected" | "unconfirmed";
-export type PlanningBoardView = { requiresQueryRead?: boolean; scopeRevision?: string; deniedChildListIds?: readonly string[]; tasks: readonly Task[]; freshness: "current" | "stale"; result?: import("./planning-board-query").PlanningBoardResult; queryKey?: string; pageStatus?: PlanningReadStatus; columnReadStatus?: Partial<Record<import("@/lib/types").TaskStatus, PlanningReadStatus>>; readStatus?: PlanningReadStatus };
+export type PlanningSourceStatus = "current" | "checking" | "changed" | "unverified";
+export type PlanningSourceObservation = "unchanged" | "changed" | "unverified" | "session-ended" | "content-read";
+export type PlanningBoardView = { sourceStatus?: PlanningSourceStatus; requiresQueryRead?: boolean; scopeRevision?: string; deniedChildListIds?: readonly string[]; tasks: readonly Task[]; freshness: "current" | "stale"; result?: import("./planning-board-query").PlanningBoardResult; queryKey?: string; pageStatus?: PlanningReadStatus; columnReadStatus?: Partial<Record<import("@/lib/types").TaskStatus, PlanningReadStatus>>; readStatus?: PlanningReadStatus };
 export type PlanningReadStatus = "not-loaded" | "loading" | "current" | "stale" | "unavailable" | "forbidden";
 export type PlanningTaskDetailView = {
   removed: boolean;
@@ -75,6 +77,7 @@ import type { AdministrationPeopleState } from "@/features/administration/model/
 export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskCommentDrafts, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   decisionLog(): import("./planning-decision-log").PlanningDecisionLogView;
   loadDecisionLog(): Promise<boolean>;
+  checkPlanningSource(): Promise<PlanningSourceObservation>;
   currentProfile(): import("@/lib/types").AuthenticatedProfile | null;
   beginBacklogOrder(tasks: readonly Task[]): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
   backlogOrders(): readonly import("@/features/backlog/model/backlog-ordering").BacklogOrderView[];

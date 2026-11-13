@@ -205,7 +205,7 @@ test("completed measurements retain late operation aggregates and slow spans aft
 });
 
 
-test("the public Board response distinguishes its reads, header, avatars, mapping and serialization", async () => {
+test("the public Board response distinguishes content reads, avatars, mapping and serialization independently of the header", async () => {
   const protocol = administratorProtocol({ role: "viewer" }); const records = capture();
   vi.stubEnv("RUNTIME_LOG_DETAIL_PERCENT", "100");
   const { performance } = await import("node:perf_hooks"); let clock = 0;
@@ -241,11 +241,12 @@ test("the public Board response distinguishes its reads, header, avatars, mappin
   }
   const response = await pending;
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ model: { project: { name: "Synthetic board" } }, headerData: { quickLinks: { state: "ready" } }, currentProfile: { platformRole: "viewer" } });
+  expect(await response.json()).toMatchObject({ model: { project: { name: "Synthetic board" } }, headerData: { quickLinks: { state: "idle" } }, currentProfile: { platformRole: "viewer" } });
   const completion = records().find(record => record.event === "request.completed");
-  for (const operation of ["board.authorization", "board.load", "board.header", "board.profiles", "board.items", "board.strategy", "board.raci", "board.links", "board.sprints", "board.relationships", "board.preferences", "board.avatars", "board.map", "response.prepare"]) {
+  for (const operation of ["board.authorization", "board.load", "board.profiles", "board.items", "board.strategy", "board.raci", "board.links", "board.sprints", "board.relationships", "board.preferences", "board.avatars", "board.map", "response.prepare"]) {
     expect(completion.phaseAggregates[operation]?.operation?.[0], operation).toBe(1);
   }
+  expect(completion.phaseAggregates["board.header"]).toBeUndefined();
   expect(completion.phaseAggregates["board.items"].operation).toEqual([1, 200, 200]);
   expect(completion.phaseAggregates["board.project"].operation).toEqual([2, 0, 0]);
   expect(completion.phaseAggregates["board.strategy"].operation).toEqual([1, 0, 0]);

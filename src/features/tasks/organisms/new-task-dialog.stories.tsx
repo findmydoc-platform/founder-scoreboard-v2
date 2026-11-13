@@ -19,6 +19,7 @@ function CreateStory({ partial = false }: { partial?: boolean }) {
   const [, setError] = useState("");
   const [bundle] = useState(() => {
     const state = createBrowserPlanningState({ initialData: initial, initialHeaderData: emptyPlanningHeaderData, initialCurrentProfile: profile, initialUserId: "story-user", initialWorkspace: "planning" });
+    const readAuthority = { userId: state.runtime.userId, deadline: Date.now() + 60_000 };
     const client: BrowserApiClient = {
       async requestJson<T>(_: Parameters<BrowserApiClient["requestJson"]>[0], options?: Parameters<BrowserApiClient["requestJson"]>[1]) {
         if (options?.method === "POST") {
@@ -27,7 +28,7 @@ function CreateStory({ partial = false }: { partial?: boolean }) {
           return { response: new Response(null, { status: 400 }), body: { code: "task_created_approval_failed", error: "Deliverable konnte nicht freigegeben werden.", task: taskDetailStoryTask({ id: "created", title: "Mein neuer Vorschlag", approvalStatus: "proposed", updatedAt: "opaque/created", sprintId: "" }) } as T };
         }
         setReads(count => count + 1);
-        return { response: new Response(null), body: { model: { revision: "workspace", project: initial.project, items: [parent], people: [profile], sprints: [], relationships: [], preferences: [] } } as T };
+        return { response: new Response(null), body: { readAuthority, model: { revision: "workspace", project: initial.project, items: [parent], people: [profile], sprints: [], relationships: [], preferences: [] } } as T };
       },
       requestForm: async () => { throw new Error("Unexpected form"); }, requestBlob: async () => { throw new Error("Unexpected blob"); },
     };
@@ -53,7 +54,9 @@ export const LostCreationResponseRetainsDraftWithoutReplay: Story = {
     await expect(canvas.getByRole("button", { name: "Deliverable vorschlagen" })).toBeDisabled();
     await expect(canvas.getByRole("textbox", { name: /Titel/ })).toHaveValue("Mein neuer Vorschlag");
     await userEvent.click(canvas.getByRole("button", { name: "Ergebnis prüfen" }));
-    await expect(canvas.getByText(/Ob die Änderung vollständig ausgeführt wurde, bleibt unklar/)).toBeVisible();
+    await expect(await canvas.findByText(/Ob die Änderung vollständig ausgeführt wurde, bleibt unklar/)).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Deliverable vorschlagen" })).toBeDisabled();
+    await expect(canvas.getByRole("textbox", { name: /Titel/ })).toHaveValue("Mein neuer Vorschlag");
     await expect(canvas.getByLabelText("Create requests")).toHaveTextContent("1");
     await expect(canvas.getByLabelText("Check reads")).toHaveTextContent("1");
     await expect(canvas.getByLabelText("Confirmed task count")).toHaveTextContent("1");

@@ -55,9 +55,9 @@ test.each([
   expect(ancestors).toContain(owner);
   expect(ancestors.at(-1)).toBe("request.workflow");
   expect(requests.filter(name => name === "workspace_calendar_entry")).toHaveLength(1);
-  expect(requests.filter(name => name === "user")).toHaveLength(18);
-  expect(requests.filter(name => name === "workspace_dispatch_prepare")).toHaveLength(16);
-  expect(requests.filter(name => name === "workspace_release_permit")).toHaveLength(16);
+  expect(requests.filter(name => name === "user")).toHaveLength(15);
+  expect(requests.filter(name => name === "workspace_dispatch_prepare")).toHaveLength(13);
+  expect(requests.filter(name => name === "workspace_release_permit")).toHaveLength(13);
   expect(requests.filter(name => name === "planning_workspace_snapshot")).toHaveLength(2);
   expect(requests.filter(name => name === "sprints")).toHaveLength(1);
   expect(completion.externalCalls.total).toBe(requests.length);

@@ -57,7 +57,7 @@ const meta = {
       const path = new URL(String(input), "http://localhost").pathname;
       if (path === "/api/auth/session") return Response.json({ session: { user, userId: user.id, revision: "parity-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 } });
       if (path === "/api/administrator-access") return Response.json({ administratorAccess: inactiveAdministratorAccess });
-      if (path === "/api/planning-header-data") return Response.json({ headerData });
+      if (path === "/api/planning-header-data") return Response.json({ headerData, readAuthority: { userId: user.id, deadline: Date.now() + 60_000 } });
       if (path === "/api/planning-revision") return Response.json({ revision: planningTaskRevision([]) });
       if (path === "/api/github-app/status") return Response.json({ installation: { available: true }, user: { connected: true }, waitingCommentCount: 0 });
       if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()] });

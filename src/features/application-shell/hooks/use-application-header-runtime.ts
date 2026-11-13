@@ -30,6 +30,7 @@ export function useApplicationHeaderRuntime(lifecycle: ApplicationHeaderLifecycl
   return {
     headerData,
     quickLinksOpen,
+    retryQuickLinks: enabled ? () => { void planningState.refreshHeader(["quickLinks"]); } : undefined,
     toggleQuickLinks: () => setQuickLinksOpen(value => !value),
     notificationsOpen,
     toggleNotifications: () => setNotificationsOpen(value => !value),

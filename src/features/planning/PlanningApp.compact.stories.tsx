@@ -43,7 +43,7 @@ function CompactBoardFlow({ bootstrap = false, paging = false }: { bootstrap?: b
       const url = new URL(String(input), window.location.origin);
       if (url.pathname === "/api/planning-board-data") {
         if (!url.searchParams.has("scope")) setUnscopedReads(value => value + 1);
-        return Response.json({ model: paging ? compactPage(Boolean(JSON.parse(url.searchParams.get("scope") || "{}").continuation)) : model, currentProfile: itemPageProfile });
+        return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: paging ? compactPage(Boolean(JSON.parse(url.searchParams.get("scope") || "{}").continuation)) : model, currentProfile: itemPageProfile });
       }
       if (url.pathname === "/api/planning-revision") return Response.json({ revision: initialModel.board.workspaceRevision });
       if (url.pathname === `/api/tasks/${full.id}/detail-data`) {
@@ -56,7 +56,7 @@ function CompactBoardFlow({ bootstrap = false, paging = false }: { bootstrap?: b
     // The initial fixture is fixed for one mounted story.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <><output className="sr-only" aria-label="Unscoped reads">{unscopedReads}</output><output className="sr-only" aria-label="Detail reads">{detailReads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", bootstrap ? { ...model, items: [], query: undefined, board: undefined } : initialModel, session)} initialData={bootstrap ? { ...emptyPlanningShellState, profiles: [itemPageProfile] } : { ...emptyPlanningShellState, tasks: initialModel.items, profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded={!bootstrap} authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  return <><output className="sr-only" aria-label="Unscoped reads">{unscopedReads}</output><output className="sr-only" aria-label="Detail reads">{detailReads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", bootstrap ? { ...model, items: [], query: undefined, board: undefined } : initialModel, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={bootstrap ? { ...emptyPlanningShellState, profiles: [itemPageProfile] } : { ...emptyPlanningShellState, tasks: initialModel.items, profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded={!bootstrap} authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = { title: "Planning/Compact Board flow", component: CompactBoardFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof CompactBoardFlow>;
 export default meta;
