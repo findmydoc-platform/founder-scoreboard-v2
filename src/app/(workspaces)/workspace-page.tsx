@@ -1,6 +1,7 @@
 import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import { PlanningServerHeaderSlots } from "@/features/planning/server/planning-server-header-slots";
+import { PlanningServerBoardColumns, preparePlanningServerBoardColumns } from "@/features/planning/server/planning-server-board-columns";
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { WorkspaceDataUnavailablePage } from "@/features/planning/templates/workspace-data-unavailable-page";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
@@ -14,6 +15,7 @@ import { loadNotionDecisionLog } from "@/lib/notion-decision-log";
 import { requiresSupabaseAuth } from "@/lib/supabase-configuration";
 import type { AuthenticatedProfile } from "@/lib/types";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
 import { planningWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
@@ -35,12 +37,14 @@ async function loadPlanningWorkspacePageData(
   if (workspace === "planning") {
     const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
     if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-    const boardRead = permission.planning.loadBoard(query);
+    const controller = permission.readAuthority ? new AbortController() : undefined;
+    if (controller) after(() => controller.abort());
+    const boardRead = controller ? permission.planning.startBoardQuery(query, { signal: controller.signal }) : permission.planning.loadBoard(query);
     const headerSlots = permission.serverHeaderRead ? permission.planning.startServerHeaderSlots() : undefined;
     const planningWorkspace = await boardRead;
-    return planningWorkspace.status === "ready"
-      ? { status: "ready" as const, model: planningWorkspace.model, readAuthority: permission.readAuthority, readSession: permission.readSession, serverHeaderRead: permission.serverHeaderRead, headerSlots, headerData: permission.profile ? emptyPlanningHeaderData : { ...emptyPlanningHeaderData, notifications: { state: "ready" as const, data: { unreadCount: 0, items: [] } } } }
-      : { status: "unavailable" as const };
+    if (planningWorkspace.status !== "ready") return { status: "unavailable" as const };
+    const board = await preparePlanningServerBoardColumns(planningWorkspace);
+    return { status: "ready" as const, model: board.model, boardDelivery: board.delivery, readAuthority: permission.readAuthority, readSession: permission.readSession, serverHeaderRead: permission.serverHeaderRead, headerSlots, headerData: permission.profile ? emptyPlanningHeaderData : { ...emptyPlanningHeaderData, notifications: { state: "ready" as const, data: { unreadCount: 0, items: [] } } } };
 
   }
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "strategic.read" });
@@ -170,6 +174,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
           initialProtectedDataLoaded
         >
           {"serverHeaderRead" in planningWorkspace && planningWorkspace.serverHeaderRead && planningWorkspace.headerSlots ? <PlanningServerHeaderSlots read={planningWorkspace.serverHeaderRead} results={planningWorkspace.headerSlots} /> : null}
+          {"boardDelivery" in planningWorkspace && planningWorkspace.boardDelivery ? <PlanningServerBoardColumns delivery={planningWorkspace.boardDelivery} /> : null}
         </PlanningApp>
       );
     }
