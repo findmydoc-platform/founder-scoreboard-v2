@@ -52,6 +52,7 @@ let itemPageFixture = false;
 const itemPageTaskId = "c3333333-3333-4333-8333-333333333333";
 const planningProject = { id: "findmydoc-founder-execution", name: "Synthetic project", range_label: "November 2026", review_objection_window_hours: 24 };
 let browserClientCode = "", userCalls = 0, rejectUserAt = 0;
+let selectedPlanningReads = 0;
 let permanentAuthDenial = false;
 const cookieBase = "sb-localhost-auth-token";
 const userA = "b1111111-1111-4111-8111-111111111111";
@@ -60,7 +61,7 @@ let loginUser = userB;
 let sessionSequence = 0;
 let workspaceMode = "legacy", linkingEnforced = false, workspaceLinked = false, loginRecorded = false;
 let linkNonce: string | null = null;
-beforeEach(() => { permanentAuthDenial = false; role = "founder"; mapped = true; activeAdministrator = false; itemPageFixture = false; workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
+beforeEach(() => { selectedPlanningReads = 0; permanentAuthDenial = false; role = "founder"; mapped = true; activeAdministrator = false; itemPageFixture = false; workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
 function token(userId: string) {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", amr: [{ method: "oauth" }], iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
@@ -128,6 +129,16 @@ beforeAll(async () => {
     if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send(mapped ? { id: "synthetic-profile", name: "Synthetic Founder", platform_role: role } : null); return; }
     if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: activeAdministrator, active: activeAdministrator, expiresAt: activeAdministrator ? new Date(Date.now() + 60000).toISOString() : null }); return; }
     if (url.pathname === "/rest/v1/rpc/planning_source_version") { send("synthetic-planning-revision"); return; }
+    if (url.pathname === "/rest/v1/rpc/planning_deliverable_selection") {
+      selectedPlanningReads++;
+      // This server supplies protocol DTOs for real browser/session behavior.
+      // Selection semantics and persisted parity use separate real SQL fixtures.
+      send({ status: "ready", source_revision: "synthetic-planning-revision", evaluated_at: new Date().toISOString(), temporal_key: "stable", valid_until: null,
+        project: planningProject, rows: [], card_ids: [], context_ids: [], profiles: [], sprints: [], preferences: [], relationships: [],
+        columns: Object.fromEntries(["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt", "Pausiert"].map(status => [status, { total: 0 }])),
+        metrics: { total: 0, open: 0, done: 0, blocked: 0 }, level_totals: { epic: 0, initiative: 0, deliverable: 0 }, personal_children: {},
+        workstreams: [], initiative_options: [], workspace_revision: { activeTaskCount: 0, latestUpdatedAt: "" } }); return;
+    }
     if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") {
       send({ ...planningProject, scope_revision: "synthetic-planning-revision", active_task_count: itemPageFixture ? 1 : 0, latest_updated_at: itemPageFixture ? "2026-11-01T12:00:00Z" : null }); return;
     }
@@ -329,6 +340,7 @@ test.each(["/planning", "/team/platform-releases", "/team/platform-releases/v1.0
       await page.waitForURL(`${appOrigin}${workspace}`);
     }
     await page.getByRole("button", { name: /Account-Menü öffnen/ }).click();
+    if (workspace === "/planning") expect(selectedPlanningReads).toBeGreaterThan(0);
     holdLogout = true;
     const startedLogout = new Promise<void>(resolve => { logoutEntered = resolve; });
     const completedLogout = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/auth/session/logout");
@@ -447,6 +459,7 @@ test("Item phone help keeps the draft and resumes an explicit tour after approve
     await page.getByRole("button", { name: "Änderungen verwerfen" }).click();
     await page.waitForURL(`${appOrigin}/planning`);
     await page.getByText("Gemeinsamen Kalender öffnen", { exact: true }).waitFor();
+    expect(selectedPlanningReads).toBeGreaterThan(0);
     expect(await updates.isVisible()).toBe(false);
     expect(await page.getByRole("button", { name: "Mehr", exact: true, includeHidden: true }).getAttribute("aria-expanded")).toBe("true");
     expect(tourNavigations).toEqual(["team-workweek-v1"]);
@@ -468,6 +481,7 @@ test("Planning polling clears loaded protected state after permanent Auth denial
     await page.goto(`${appOrigin}/auth/login?next=%2Fplanning`);
     await page.waitForURL(`${appOrigin}/planning`);
     await page.getByRole("button", { name: /Account-Menü öffnen/ }).waitFor();
+    expect(selectedPlanningReads).toBeGreaterThan(0);
     const observation = await checkpoint("initial Planning source observation", initialObservation);
     expect(observation.status()).toBe(200);
     expect(await observation.json()).toEqual({ version: "synthetic-planning-revision" });
