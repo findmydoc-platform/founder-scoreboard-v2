@@ -133,3 +133,43 @@ test("real active ordering and completed personal parents preserve manual ties o
     expect((await selected(query, "Erledigt")).card_ids).toEqual([]);
   });
 }, 120_000);
+
+test("selected records search discovery relationships and summaries stay within the active Planning project", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request }) => {
+    const project = `${prefix}-excluded-project`, foreignEpic = `${prefix}-foreign-epic`, foreignInitiative = `${prefix}-foreign-initiative`, foreignCard = `${prefix}-foreign-card`;
+    const archived = `${prefix}-archived-initiative`, archivedCard = `${prefix}-archived-card`, cross = `${prefix}-scope-cross-parent`, archiveChild = `${prefix}-scope-archive-child`, target = `${prefix}-scope-target`;
+    try {
+      await db.query("insert into public.projects(id,name) values($1,'Synthetic excluded project')", [project]);
+      await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,owner) values($1,$2,'Excluded foreign Epic','epic','Offen',null,$3)", [foreignEpic, project, actors.other.profileId]);
+      await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner,workstream) values($1,$2,'Excluded foreign ancestor','initiative','Offen','P2','approved',$3,$4,'Excluded foreign workstream')", [foreignInitiative, project, foreignEpic, actors.other.profileId]);
+      await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner,workstream) values($1,$2,'Excluded foreign card','deliverable','Offen','P2','approved',$3,$4,'Excluded foreign workstream')", [foreignCard, project, foreignInitiative, actors.other.profileId]);
+      const epic = (await db.query("select parent_task_id from public.tasks where id=$1", [initiativeId])).rows[0].parent_task_id;
+      await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner,workstream) values($1,'findmydoc-founder-execution','Excluded archived ancestor','initiative','Offen','P2','approved',$2,$3,'Excluded archived workstream')", [archived, epic, actors.other.profileId]);
+      for (const [id, parent] of [[cross, foreignInitiative], [archiveChild, archived], [target, initiativeId], [archivedCard, initiativeId]]) await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner,workstream) values($1,'findmydoc-founder-execution',$2,'deliverable','Offen','P2','approved',$3,$4,$5)", [id, id === archivedCard ? "Excluded archived card" : "Scope accessible", parent, actors.founder.profileId, id === archivedCard ? "Excluded archived workstream" : "In scope"]);
+      for (const related of [target, foreignCard, archivedCard]) await db.query("insert into public.task_relationship_edges(task_id,related_task_id,relation_type,note) values($1,$2,'blocked_by','Synthetic scope edge')", [cross, related]);
+      await db.query("select set_config('founderops.trash_lifecycle_write','on',false)");
+      for (const [id, type] of [[archived, "initiative"], [archivedCard, "deliverable"]]) await db.query("update public.tasks set trashed_at=now(),trashed_by=$2,trash_reason='Synthetic excluded lifecycle',trash_cause='withdrawn',purge_after=now()+interval '90 days',trash_root_type=$3,trash_root_id=id,trash_revision=1 where id=$1", [id, actors.ceo.profileId, type]);
+      await db.query("select set_config('founderops.trash_lifecycle_write','off',false)");
+      const query = normalizePlanningBoardQuery({ filters: { query: "Scope accessible" } });
+      const raw = (await db.query("select public.planning_deliverable_selection($1,$2,'Offen') as selection", [actors.founder.profileId, query])).rows[0].selection;
+      expect(raw.card_ids).toEqual([archiveChild, cross, target]);
+      expect(new Set(raw.context_ids)).toEqual(new Set([archiveChild, cross, target, initiativeId, epic]));
+      expect(new Set(raw.rows.map((row: { id: string }) => row.id))).toEqual(new Set([archiveChild, cross, target, initiativeId, epic]));
+      expect(raw.relationships.map((edge: { task_id: string; related_task_id: string }) => [edge.task_id, edge.related_task_id])).toEqual([[cross, target]]);
+      expect(raw.metrics.total).toBe(3); expect(raw.workspace_revision.activeTaskCount).toBe(5);
+      expect(raw.workstreams).not.toEqual(expect.arrayContaining(["Excluded foreign workstream"]));
+      expect(raw.workstreams).not.toEqual(expect.arrayContaining(["Excluded archived workstream"]));
+      expect(raw.initiative_options.map((value: { id: string }) => value.id)).toEqual([initiativeId]);
+      const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+      for (const text of ["Excluded foreign ancestor", "Excluded foreign card", "Excluded archived ancestor", "Excluded archived card"]) {
+        const response = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ view: "board", filters: { query: text } }))}`));
+        expect(response.status).toBe(200); const model = (await response.json()).model;
+        expect(model.board.cardIds).toEqual([]); expect(model.board.metrics.total).toBe(0); expect(model.items).toEqual([]); expect(model.relationships).toEqual([]);
+      }
+    } finally {
+      await db.query("select set_config('founderops.trash_lifecycle_write','on',false)");
+      await db.query("delete from public.tasks where project_id=$1", [project]);
+      await db.query("delete from public.projects where id=$1", [project]);
+    }
+  });
+}, 120_000);
