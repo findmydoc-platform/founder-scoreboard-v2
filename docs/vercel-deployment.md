@@ -83,6 +83,8 @@ Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync,
 
 Workflow: `.github/workflows/dependency-validation.yml`
 
+<!-- Temporary documentation-only CI routing verification; this change will not be merged. -->
+
 Every pull request targeting `main` first classifies changed files with the shared `.github/filters/validation.yml` rules. The `Application Validation` and `Migration Integration` jobs still start after successful classification, but omit their work when no changed path requires it. Their summaries state why work was omitted. New commits cancel older validation runs for the same pull request.
 
 | Changed paths | Application validation and Preview | Historical migration tests |
