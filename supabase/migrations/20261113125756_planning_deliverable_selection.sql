@@ -181,7 +181,7 @@ select case
     'sprints',coalesce((select jsonb_agg(jsonb_build_object('id',id,'name',name,'status',status,'start_date',start_date,'end_date',end_date,'review_due_at',review_due_at,'score_locked',score_locked,'updated_at',updated_at) order by start_date,id) from public.sprints),'[]'::jsonb),
     'preferences',coalesce((select jsonb_agg(to_jsonb(preference)) from public.profile_ui_preferences preference where profile_id=p_actor_profile_id),'[]'::jsonb),
     'relationships',coalesce((select jsonb_agg(to_jsonb(edge) order by edge.id) from selected_edges edge),'[]'::jsonb),
-    'columns',(select jsonb_object_agg(status,jsonb_build_object('total',(select count(*) from matches where normalized=status))) from statuses),
+    'columns',(select jsonb_object_agg(column_status.status,jsonb_build_object('total',(select count(*) from matches matched where matched.normalized=column_status.status))) from statuses column_status),
     'workstreams',coalesce((select jsonb_agg(workstream order by workstream collate "de-x-icu") from (select distinct workstream from active where coalesce(workstream,'')<>'') choices),'[]'::jsonb),
     'initiative_options',coalesce((select jsonb_agg(jsonb_build_object('id',id,'title',title) order by sort_order,id) from active where task_type='initiative'),'[]'::jsonb),
     'metrics',(select jsonb_build_object('total',count(*),'open',count(*) filter(where normalized<>'Erledigt'),'done',count(*) filter(where normalized='Erledigt'),'blocked',count(*) filter(where blocked)) from matches),
