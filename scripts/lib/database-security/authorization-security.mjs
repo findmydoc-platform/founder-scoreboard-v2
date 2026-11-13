@@ -13,7 +13,13 @@ const planningContributorWritePolicySet = new Set(
 );
 
 export async function verifyAuthorizationSecurity(client, failures) {
-  for (const signature of ["public.planning_deliverable_selection(text,jsonb,text,integer,integer,text,timestamptz)", "public.planning_selection_status(text,boolean)"]) {
+  for (const signature of [
+    "public.planning_deliverable_selection(text,jsonb,text,integer,integer,text,timestamptz)",
+    "public.planning_selection_status(text,boolean)",
+    "public.planning_deliverable_query_basis(text,jsonb,text,integer,integer,text,timestamptz,boolean)",
+    "public.planning_deliverable_query_plan(text,jsonb,integer,timestamptz)",
+    "public.planning_deliverable_column(text,text[],text,timestamptz,timestamptz)",
+  ]) {
     const privileges = (await client.query(`select to_regprocedure($1) is not null as present,
       has_function_privilege('anon',to_regprocedure($1),'EXECUTE') as anonymous_execute,
       has_function_privilege('authenticated',to_regprocedure($1),'EXECUTE') as user_execute,

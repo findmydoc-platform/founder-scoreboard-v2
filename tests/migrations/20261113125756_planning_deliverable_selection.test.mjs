@@ -20,6 +20,9 @@ it("preserves existing Planning data and exposes selected Deliverable SQL only t
       await client.query(`set role ${role}`);
       try {
         await expect(client.query("select public.planning_deliverable_selection('selection-existing-viewer','{}')")).rejects.toMatchObject({ code: "42501" });
+        await expect(client.query("select public.planning_deliverable_query_basis('selection-existing-viewer','{}')")).rejects.toMatchObject({ code: "42501" });
+        await expect(client.query("select public.planning_deliverable_query_plan('selection-existing-viewer','{}')")).rejects.toMatchObject({ code: "42501" });
+        await expect(client.query("select public.planning_deliverable_column('selection-existing-viewer',array[]::text[],'source',now())")).rejects.toMatchObject({ code: "42501" });
         await expect(client.query("select public.planning_selection_status('done',true)")).rejects.toMatchObject({ code: "42501" });
       } finally { await client.query("reset role"); }
     }
@@ -28,6 +31,12 @@ it("preserves existing Planning data and exposes selected Deliverable SQL only t
       expect((await client.query("select public.planning_deliverable_selection('selection-existing-viewer','{}') as value")).rows[0].value.status).toBe("ready");
       expect((await client.query("select public.planning_selection_status('done',true) as value")).rows[0].value).toBe("Erledigt");
       expect((await client.query("select public.planning_deliverable_selection('missing-profile','{}') as value")).rows[0].value.status).toBe("forbidden");
+      for (const functionName of ["planning_deliverable_query_basis", "planning_deliverable_query_plan"]) {
+        expect((await client.query(`select public.${functionName}('selection-existing-viewer','{}') as value`)).rows[0].value.status).toBe("ready");
+        expect((await client.query(`select public.${functionName}('missing-profile','{}') as value`)).rows[0].value.status).toBe("forbidden");
+      }
+      expect((await client.query("select public.planning_deliverable_column('selection-existing-viewer',array[]::text[],public.planning_source_version(),now()) as value")).rows[0].value).toMatchObject({ status: "ready", card_ids: [], rows: [] });
+      expect((await client.query("select public.planning_deliverable_column('missing-profile',array[]::text[],public.planning_source_version(),now()) as value")).rows[0].value.status).toBe("forbidden");
     } finally { await client.query("reset role"); }
   });
 });
