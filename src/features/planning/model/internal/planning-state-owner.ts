@@ -221,6 +221,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let boardQueryKey = boardQuery ? planningBoardQueryKey(boardQuery) : undefined;
   let pageStatus: PlanningReadStatus = "current";
   const columnReadStatus: Partial<Record<TaskStatus, PlanningReadStatus>> = {};
+  for (const [column, coverage] of Object.entries(boardResult?.columns || {})) if (coverage.availability === "not-loaded") columnReadStatus[column as TaskStatus] = "not-loaded";
   const columnReads = new Map<TaskStatus, { key: string; result: Promise<boolean> }>();
   const columnRequests = new Map<TaskStatus, number>();
   let boardRead: { key: string; result: Promise<boolean>; sequence: number; sourceEpoch: number } | undefined;
@@ -1185,7 +1186,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       invalidatePlanningSource();
       return planning.refreshWorkspace("planning");
     }
-    refresh ||= (columnReadStatus[column] === "stale" || columnReadStatus[column] === "unavailable") && !boardResult.columns[column]?.continuation;
+    refresh ||= boardResult.columns[column]?.availability === "not-loaded" || (columnReadStatus[column] === "stale" || columnReadStatus[column] === "unavailable") && !boardResult.columns[column]?.continuation;
     const continuation = refresh ? undefined : boardResult.columns[column]?.continuation || undefined;
     if (!refresh && !continuation) return Promise.resolve(true);
     const key = JSON.stringify([boardResult.queryKey, boardResult.revision, continuation, refresh]);
@@ -1257,9 +1258,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return false;
     }
     if (append && (!result.board || result.board.column !== token.page?.column)) { setPageStatus("unavailable"); publish(); return false; }
-    if (workspace === "planning" && !append && boardInteractions.size && (!boardQueryKey || !query || boardQueryKey === planningBoardQueryKey(query))) {
-      workspaceStatuses.set("planning", "stale");
-      freshness = "stale";
+    const collapsesColumn = append && token.page && result.board?.columns[token.page.column].total === 0 && boardResult?.columns[token.page.column].total !== 0;
+    if (workspace === "planning" && boardInteractions.size && (!append || collapsesColumn) && (!boardQueryKey || !query || boardQueryKey === planningBoardQueryKey(query))) {
+      if (append) setPageStatus("stale");
+      else { workspaceStatuses.set("planning", "stale"); freshness = "stale"; }
       publish();
       await new Promise<void>(resolve => heldReads.add(resolve));
     }
@@ -1328,6 +1330,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         columnReadStatus[column] = "current";
       } else {
         for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
+        for (const [column, coverage] of Object.entries(columns)) if (coverage.availability === "not-loaded") columnReadStatus[column as TaskStatus] = "not-loaded";
       }
       if (!result.append) weekBasis = planningWeekBasis(result.board, result.coverage, result.data.sprints);
       boardResult = {

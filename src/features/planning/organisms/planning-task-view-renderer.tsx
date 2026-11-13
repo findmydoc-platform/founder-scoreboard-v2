@@ -76,6 +76,13 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
   const pointerInteraction = useRef<(() => void) | undefined>(undefined);
   const focusedResult = useRef<HTMLElement | null>(null);
   const acceptedQuery = JSON.stringify(controller.planningBoard?.query) || controller.planningBoard?.queryKey;
+  useEffect(() => {
+    if (controller.workspace !== "planning" || view !== "board" || controller.planningQueryReady === false) return;
+    const board = controller.planningBoard?.result;
+    for (const [status, column] of Object.entries(board?.columns || {})) {
+      if (column.availability === "not-loaded" && controller.planningBoard.columnReadStatus?.[status as (typeof taskStatuses)[number]] === "not-loaded") void controller.planningState.loadBoardColumn(status as (typeof taskStatuses)[number]);
+    }
+  }, [controller.workspace, controller.planningState, controller.planningBoard, controller.planningQueryReady, view]);
   const previousQuery = useRef(acceptedQuery);
   const positionQuery = useRef(acceptedQuery || "planning");
   useLayoutEffect(() => {

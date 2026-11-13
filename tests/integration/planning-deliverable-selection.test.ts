@@ -6,6 +6,8 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import type { PlanningFilterPreferences, PlanningShellState, Task } from "@/lib/types";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 import { importTestModule } from "../helpers/vitest-module.mjs";
+import { mapTaskRow } from "@/lib/planning-task-mappers";
+import type { DbTask } from "@/lib/planning-row-types";
 
 test("real Deliverable selection preserves the frozen complete reference and independent literal expectations before its page limit", async () => {
   await withPlanningCredentialDatabase(async ({ db }) => {
@@ -26,18 +28,25 @@ test("real Deliverable selection preserves the frozen complete reference and ind
       }
       for (const edge of fixture.relationships) await db.query("insert into public.task_relationship_edges(task_id,related_task_id,relation_type) values($1,$2,$3)", [edge.taskId, edge.relatedTaskId, edge.relationType]);
       const data = { ...emptyPlanningShellState, tasks, profiles: fixture.profiles, sprints: fixture.sprints, taskRelations: fixture.relationships } as PlanningShellState;
+      const persisted = (await db.query("select task.*,coalesce((select jsonb_agg(jsonb_build_object('note',dependency.note) order by dependency.id) from public.task_dependencies dependency where dependency.task_id=task.id),'[]'::jsonb) as task_dependencies from public.tasks task where task.id=any($1)", [tasks.map(task => task.id)])).rows as DbTask[];
+      const strategies = (await db.query("select * from public.planning_item_strategy where task_id=any($1)", [tasks.map(task => task.id)])).rows;
+      const mappedData = { ...data, tasks: persisted.map(row => mapTaskRow(row, data.profiles, { strategy: strategies.find(strategy => strategy.task_id === row.id) })) };
+      const differences: Array<{ name: string; rawExpected: readonly string[]; persistedReference: string[]; actual: string[] }> = [];
       vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(fixture.evaluationTime));
       try {
         for (const example of fixture.searchCases) {
           const filters = { ...DEFAULT_PLANNING_FILTERS, ...example.filters } as PlanningFilterPreferences;
           const reference = buildPlanningTaskTableViewModel({ data, filters, currentProfile: data.profiles[0], includeAssignedSubIssueParents: true }).visibleTasks.filter(task => task.taskType === "deliverable").map(task => task.id);
           expect(reference, example.name).toEqual(example.ids);
+          const mappedReference = buildPlanningTaskTableViewModel({ data: mappedData, filters, currentProfile: data.profiles[0], includeAssignedSubIssueParents: true }).visibleTasks.filter(task => task.taskType === "deliverable");
           const result = (await db.query("select public.planning_deliverable_selection($1,$2,null,0,20,null,$3) as selection", [fixture.profiles[0].id, normalizePlanningBoardQuery({ filters }), fixture.evaluationTime])).rows[0].selection;
           expect(result.status, example.name).toBe("ready");
-          expect(new Set(result.card_ids), example.name).toEqual(new Set(example.ids));
-          expect(result.metrics.total, example.name).toBe(example.ids.length);
+          expect(new Set(result.card_ids), `${example.name}: complete persisted TypeScript reference`).toEqual(new Set(mappedReference.map(task => task.id)));
+          if (JSON.stringify([...result.card_ids].sort()) !== JSON.stringify([...example.ids].sort())) differences.push({ name: example.name, rawExpected: example.ids, persistedReference: mappedReference.map(task => task.id), actual: result.card_ids });
+          expect(result.metrics.total, example.name).toBe(mappedReference.length);
           expect(result.rows.every((row: { id: string }) => result.context_ids.includes(row.id))).toBe(true);
         }
+        expect(differences, "Persisted fixture semantics must also have independent expectations").toEqual([]);
       } finally { vi.useRealTimers(); }
     } finally { await db.query("rollback"); }
   });

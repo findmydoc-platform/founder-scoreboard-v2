@@ -72,7 +72,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     const loaded = status === column ? selected.card_ids.length : 0;
     const next = (cursor?.offset || 0) + loaded;
     const basis = { offset: next, source: selected.source_revision, evaluatedAt: selected.evaluated_at, temporalKey: selected.temporal_key, validUntil: selected.valid_until };
-    return [status, { total, loaded, availability: status === column ? "ready" : "not-loaded", completeness: status === column && next >= total ? "complete" : "partial",
+    return [status, { total: status === column ? total : null, loaded, availability: status === column ? "ready" : "not-loaded", completeness: status === column && next >= total ? "complete" : "partial",
       continuation: status === column && next < total ? Buffer.from(JSON.stringify({ ...basis, binding: sign(basis) })).toString("base64url") : null } satisfies PlanningBoardColumn];
   })) as Record<TaskStatus, PlanningBoardColumn>;
   return { status: "ready", model: {
@@ -83,7 +83,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     relationships: selected.relationships.map(mapTaskRelation), blockers: [], taskOmittedFields: planningCardOmittedFields,
     coverage: { items: "partial", people: "complete", sprints: "complete", preferences: "complete", strategies: "partial", raci: "partial", links: "partial", relationships: "partial", blockers: "partial" },
     board: { query, column, queryKey, revision, observedAt: selected.evaluated_at, validUntil: selected.valid_until,
-      cardIds: selected.card_ids, columns, metrics: selected.metrics, levelTotals: selected.level_totals,
+      cardIds: selected.card_ids, columns, metrics: { ...selected.metrics, blocked: null }, levelTotals: selected.level_totals,
       childProgressById: Object.fromEntries(selected.card_ids.map(id => [id, null])), attentionById: Object.fromEntries(selected.card_ids.map(id => [id, null])),
       viewerOpenSubIssueIdsByDeliverableId: selected.personal_children, workspaceRevision: selected.workspace_revision },
   } };

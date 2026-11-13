@@ -1,15 +1,12 @@
 import ts from "typescript";
 import path from "node:path";
+import { createSourceModuleResolver } from "./source-module-resolver.mjs";
 
 const internalDirectory = "src/lib/credentials/internal/";
 const publicEntries = new Set(["src/lib/credentials/index.ts", "src/lib/credentials/browser.ts"]);
 
 export function verifyCredentialBoundary({ root, resourceEdges = [], protectedModules = [], resourceTransports = [], collect = false }) {
-  const configPath = path.join(root, "tsconfig.json");
-  const config = ts.sys.fileExists(configPath) ? ts.readConfigFile(configPath, ts.sys.readFile) : null;
-  const configured = config && !config.error ? ts.parseJsonConfigFileContent(config.config, ts.sys, root).options : {};
-  const options = { allowJs: true, moduleResolution: ts.ModuleResolutionKind.Bundler,
-    module: ts.ModuleKind.ESNext, baseUrl: root, paths: { "@/*": ["src/*"] }, ...configured };
+  const resolver = createSourceModuleResolver(root);
   const sourceExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
   const files = ts.sys.readDirectory(path.join(root, "src"), sourceExtensions);
   const queuedFiles = new Set(files);
@@ -19,7 +16,7 @@ export function verifyCredentialBoundary({ root, resourceEdges = [], protectedMo
   const dependencies = new Map();
   const clientEntries = [];
   const allowed = new Set(resourceEdges.map(edge => `${edge.from} -> ${edge.to}`));
-  const relative = file => path.relative(root, file).split(path.sep).join("/");
+  const relative = resolver.relative;
   for (const file of files) {
     const from = relative(file);
     const source = ts.createSourceFile(file, ts.sys.readFile(file), ts.ScriptTarget.Latest, true);
@@ -27,7 +24,7 @@ export function verifyCredentialBoundary({ root, resourceEdges = [], protectedMo
     if (source.statements.some(statement => ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression) && statement.expression.text === "use client")) clientEntries.push(from);
     function dependency(specifier, typeOnly = false) {
       if (typeOnly) return;
-      const resolved = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule;
+      const resolved = resolver.resolve(specifier, file);
       if (resolved && !resolved.isExternalLibraryImport && !queuedFiles.has(resolved.resolvedFileName)
         && sourceExtensions.some(extension => resolved.resolvedFileName.endsWith(extension))) {
         queuedFiles.add(resolved.resolvedFileName);

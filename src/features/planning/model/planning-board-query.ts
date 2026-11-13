@@ -18,7 +18,7 @@ export type PlanningBoardQueryInput = Partial<Omit<PlanningBoardQuery, "filters"
   continuation?: string;
   column?: TaskStatus;
 };
-export type PlanningBoardColumn = Readonly<{ total: number; loaded: number; availability?: "ready" | "not-loaded"; completeness: "complete" | "partial"; continuation: string | null }>;
+export type PlanningBoardColumn = Readonly<{ total: number | null; loaded: number; availability?: "ready" | "not-loaded"; completeness: "complete" | "partial"; continuation: string | null }>;
 export type PlanningBoardResult = Readonly<{
   query: PlanningBoardQuery;
   column?: TaskStatus;
@@ -32,7 +32,7 @@ export type PlanningBoardResult = Readonly<{
   attentionById?: Record<string, import("@/features/tasks/model/task-attention-signals").TaskAttentionSignal[] | null>;
   childProgressById: Record<string, { completed: number; total: number; unfinished: number; percentage: number } | null>;
   columns: Record<TaskStatus, PlanningBoardColumn>;
-  metrics: { total: number; open: number; blocked: number; done: number };
+  metrics: { total: number; open: number; blocked: number | null; done: number };
   viewerOpenSubIssueIdsByDeliverableId: Record<string, string[]>;
   workspaceRevision: { activeTaskCount: number; latestUpdatedAt: string };
 }>;
