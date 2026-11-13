@@ -33,7 +33,7 @@ const initial = page();
 // HTTP delivery is controlled here. Real selection and Auth have separate
 // disposable integration coverage; this flow verifies rendered interaction.
 function IndependentColumnsFlow({ failEarlier = false }: { failEarlier?: boolean }) {
-  const [ready, setReady] = useState(false), [release, setRelease] = useState<(() => void) | null>(null), [delivered, setDelivered] = useState(false), [attempts, setAttempts] = useState(0);
+  const [ready, setReady] = useState(false), [release, setRelease] = useState<(() => void) | null>(null), [delivered, setDelivered] = useState(false), [attempts, setAttempts] = useState(0), [hiddenReads, setHiddenReads] = useState(0);
   useEffect(() => {
     const key = `founderops.product-updates.seen.${profile.id}`, previous = localStorage.getItem(key);
     localStorage.setItem(key, JSON.stringify(productUpdates.map(update => update.id)));
@@ -44,6 +44,7 @@ function IndependentColumnsFlow({ failEarlier = false }: { failEarlier?: boolean
       if (url.pathname === "/api/planning-source-version") return Response.json({ version: "42" });
       if (url.pathname === "/api/planning-board-data") {
         const query = JSON.parse(url.searchParams.get("scope") || "{}");
+        if (query.column === "Pausiert") setHiddenReads(value => value + 1);
         if (query.column === "In Arbeit") {
           setAttempts(value => value + 1);
           return new Promise<Response>(resolve => {
@@ -63,7 +64,7 @@ function IndependentColumnsFlow({ failEarlier = false }: { failEarlier?: boolean
     queueMicrotask(() => setReady(true));
     return () => { completePending?.(Response.json({ error: "Flow ended" }, { status: 503 })); restore(); if (previous === null) localStorage.removeItem(key); else localStorage.setItem(key, previous); };
   }, [failEarlier]);
-  return <><button type="button" disabled={!release || delivered} onMouseDown={event => event.preventDefault()} onClick={() => release?.()}>Frühere Antwort liefern</button><button type="button">Interaktion abschließen</button><output aria-label="Frühere Antwort">{delivered ? "empfangen" : "ausstehend"}</output><output aria-label="Frühere Leseversuche">{attempts}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: user.id, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: [...initial.items], profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  return <><button type="button" disabled={!release || delivered} onMouseDown={event => event.preventDefault()} onClick={() => release?.()}>Frühere Antwort liefern</button><button type="button">Interaktion abschließen</button><output aria-label="Frühere Antwort">{delivered ? "empfangen" : "ausstehend"}</output><output aria-label="Frühere Leseversuche">{attempts}</output><output aria-label="Versteckte Spaltenabrufe">{hiddenReads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: user.id, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: [...initial.items], profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = { title: "Planning/Independent column reveal", component: IndependentColumnsFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof IndependentColumnsFlow>;
 export default meta;
@@ -96,6 +97,7 @@ async function operateLaterCard(canvasElement: HTMLElement, failed: boolean) {
   if (!failed) await waitFor(() => expect(earlier).toHaveAttribute("data-collapsed", "true"));
   else await expect(earlier).toHaveAttribute("data-collapsed", "false");
   await expect(canvas.getByLabelText("Frühere Leseversuche")).toHaveTextContent("1");
+  await expect(canvas.getByLabelText("Versteckte Spaltenabrufe")).toHaveTextContent("0");
   await expect(canvas.getByRole("link", { name: review.title })).toBeInTheDocument();
 }
 export const EarlierEmptyWaitsForCardInteraction: Story = { play: async ({ canvasElement }) => operateLaterCard(canvasElement, false) };

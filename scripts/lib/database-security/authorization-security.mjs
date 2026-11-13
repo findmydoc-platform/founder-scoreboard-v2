@@ -13,6 +13,14 @@ const planningContributorWritePolicySet = new Set(
 );
 
 export async function verifyAuthorizationSecurity(client, failures) {
+  for (const signature of ["public.planning_deliverable_selection(text,jsonb,text,integer,integer,text,timestamptz)", "public.planning_selection_status(text,boolean)"]) {
+    const privileges = (await client.query(`select to_regprocedure($1) is not null as present,
+      has_function_privilege('anon',to_regprocedure($1),'EXECUTE') as anonymous_execute,
+      has_function_privilege('authenticated',to_regprocedure($1),'EXECUTE') as user_execute,
+      has_function_privilege('service_role',to_regprocedure($1),'EXECUTE') as server_execute,
+      (select not prosecdef from pg_proc where oid=to_regprocedure($1)) as invoker`, [signature])).rows[0];
+    if (!privileges?.present || privileges.anonymous_execute || privileges.user_execute || !privileges.server_execute || !privileges.invoker) failures.push(`Planning selection must remain invoker-only and server-executable: ${signature}`);
+  }
   const observationConfirmation = "public.apply_google_team_workweek_observations(uuid,integer,jsonb,timestamptz)";
   const confirmationPrivileges = await client.query(
     `select to_regprocedure($1) is not null as exists,

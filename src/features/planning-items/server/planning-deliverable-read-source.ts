@@ -40,8 +40,8 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     const version = await (context.signal ? versionRead.abortSignal(context.signal) : versionRead);
     if (version.error || typeof version.data !== "string") return { status: "unavailable" };
     preferenceRevision = version.data;
-    const preferenceRead = supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").eq("profile_id", context.actorProfileId || "").maybeSingle();
-    const preferenceResult = await (context.signal ? preferenceRead.abortSignal(context.signal) : preferenceRead);
+    const preferenceRead = supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").eq("profile_id", context.actorProfileId || "");
+    const preferenceResult = await (context.signal ? preferenceRead.abortSignal(context.signal) : preferenceRead).maybeSingle();
     if (preferenceResult.error) return { status: "unavailable" };
     const preference = preferenceResult.data ? mapProfileUiPreference(preferenceResult.data as DbProfileUiPreference) : undefined;
     const filters = preference && { ...preference.planningFilters, ...(preference.defaultWorkspace === "mine" ? { assignee: "Alle", quick: [...preference.planningFilters.quick, "mine"] } : {}) };
