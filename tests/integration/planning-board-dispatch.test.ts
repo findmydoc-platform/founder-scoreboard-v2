@@ -62,14 +62,18 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
       const response = await GET(request);
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ model: { project: { id: "findmydoc-founder-execution" } }, currentProfile: { id: actor.profileId, platformRole: role } });
-      // The post-enumeration fence has its own Auth, profile, permit and cleanup.
-      expect(attempts).toHaveLength(85);
-      expect(attempts.filter(path => path === "/auth/v1/user")).toHaveLength(19);
+      // Content retains its post-enumeration Auth/profile/permit fence. Optional Header
+      // slots now have their own request: this removes two data reads and their
+      // three live guard/dispatch/cleanup groups from this content-only budget.
+      expect(attempts).toHaveLength(71);
+      expect(attempts.filter(path => path === "/auth/v1/user")).toHaveLength(16);
       for (const rpc of ["workspace_dispatch_prepare", "current_authenticated_profile", "workspace_release_permit"]) {
-        expect(attempts.filter(path => path === `/rest/v1/rpc/${rpc}`)).toHaveLength(17);
+        expect(attempts.filter(path => path === `/rest/v1/rpc/${rpc}`)).toHaveLength(14);
       }
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_access_context")).toHaveLength(0);
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_calendar_entry")).toHaveLength(1);
+      expect(attempts).not.toContain("/rest/v1/fmd_tools");
+      expect(attempts).not.toContain("/rest/v1/founder_events");
       expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
       expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(2);
       expect((await fixture.database.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actor.userId])).rows[0].remaining).toBe(0);

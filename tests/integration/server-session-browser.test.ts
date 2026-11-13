@@ -127,6 +127,7 @@ beforeAll(async () => {
     if (url.pathname === "/rest/v1/rpc/workspace_linking_session_allowed") { send(loginRecorded); return; }
     if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send(mapped ? { id: "synthetic-profile", name: "Synthetic Founder", platform_role: role } : null); return; }
     if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: activeAdministrator, active: activeAdministrator, expiresAt: activeAdministrator ? new Date(Date.now() + 60000).toISOString() : null }); return; }
+    if (url.pathname === "/rest/v1/rpc/planning_source_version") { send("synthetic-planning-revision"); return; }
     if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") {
       send({ ...planningProject, scope_revision: "synthetic-planning-revision", active_task_count: itemPageFixture ? 1 : 0, latest_updated_at: itemPageFixture ? "2026-11-01T12:00:00Z" : null }); return;
     }
@@ -463,13 +464,14 @@ test("Planning polling clears loaded protected state after permanent Auth denial
   try {
     const page = await context.newPage();
     await page.clock.install();
-    const initialRevision = page.waitForResponse(response => new URL(response.url()).pathname === "/api/planning-revision");
+    const initialObservation = page.waitForResponse(response => new URL(response.url()).pathname === "/api/planning-source-version");
     await page.goto(`${appOrigin}/auth/login?next=%2Fplanning`);
     await page.waitForURL(`${appOrigin}/planning`);
     await page.getByRole("button", { name: /Account-Menü öffnen/ }).waitFor();
-    const revision = await checkpoint("initial planning revision", initialRevision);
-    expect(revision.status()).toBe(200);
-    expect(await revision.finished()).toBeNull();
+    const observation = await checkpoint("initial Planning source observation", initialObservation);
+    expect(observation.status()).toBe(200);
+    expect(await observation.json()).toEqual({ version: "synthetic-planning-revision" });
+    expect(await observation.finished()).toBeNull();
     // Let the completed initial check settle before advancing its polling interval.
     await page.evaluate(() => new Promise<void>(resolve => setTimeout(resolve, 0)));
     await page.evaluate("window.__samePlanningDocument = true");
