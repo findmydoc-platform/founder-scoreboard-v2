@@ -54,6 +54,7 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
         });
         return Response.json({ model, currentProfile: profile });
       }
+      if (path === "/api/planning-source-version") { setRevisions(count => count + 1); return Response.json({ version: revisionChanged ? "scope-r2" : "scope-r1" }); }
       if (path === "/api/planning-revision") { setRevisions(count => count + 1); return Response.json({ revision: { activeTaskCount: 1, latestUpdatedAt: task.updatedAt, scopeRevision: revisionChanged ? "scope-r2" : "scope-r1" } }); }
       if (path === "/api/events-data") {
         setEventReads(count => count + 1);

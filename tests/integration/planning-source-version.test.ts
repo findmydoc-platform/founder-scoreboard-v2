@@ -53,9 +53,11 @@ it("the Planning source observation covers its Board sources and preserves live 
       ["insert into public.planning_item_strategy(task_id,goal) values($1,'Synthetic goal')", [`${prefix}-initiative`]],
       ["insert into public.planning_item_raci_assignments(task_id,profile_id,role) values($1,$2,'accountable')", [`${prefix}-initiative`, actor.profileId]],
       ["insert into public.task_links(task_id,type,label,url) values($1,'evidence','Synthetic evidence','https://example.test/evidence')", [`${prefix}-card`]],
+      ["insert into public.task_dependencies(task_id,note) values($1,'Synthetic dependency note')", [`${prefix}-card`]],
       ["insert into public.task_blockers(task_id,profile_id,reason) values($1,$2,'Synthetic blocker')", [`${prefix}-card`, actor.profileId]],
       ["insert into public.task_relationship_edges(task_id,related_task_id,relation_type) values($1,$2,'relates_to')", [`${prefix}-card`, `${prefix}-initiative`]],
       ["insert into public.sprints(id,project_id,name) values($1,'findmydoc-founder-execution','Synthetic Sprint')", [`${prefix}-sprint`]],
+      ["update public.projects set range_label='Synthetic range' where id='findmydoc-founder-execution'", []],
       ["update public.profiles set focus='Synthetic changed focus' where id=$1", [actor.profileId]],
       ["insert into public.profile_ui_preferences(profile_id,expanded_item_ids) values($1,array[$2])", [actor.profileId, `${prefix}-initiative`]],
       ["update auth.identities set identity_data=jsonb_set(identity_data,'{picture}','\"https://example.test/avatar.png\"') where user_id=$1 and provider='google'", [actor.userId]],
@@ -67,6 +69,11 @@ it("the Planning source observation covers its Board sources and preserves live 
       previous = current;
     }
     expect(await version()).toBe(previous);
+    await fixture.database.query("begin");
+    await fixture.database.query("update workspace_private.identity_bindings set google_subject='synthetic-rebound' where user_id=$1", [actor.userId]);
+    expect(await sqlVersion()).not.toBe(previous);
+    await fixture.database.query("rollback");
+    expect(await sqlVersion()).toBe(previous);
     // This is Board evidence, not a discussion clock. Comments must use their own future observation.
     await fixture.database.query("insert into public.task_comments(task_id,profile_id,comment,github_delivery_applicable) values($1,$2,'Synthetic discussion',false)", [`${prefix}-card`, actor.profileId]);
     expect(await sqlVersion()).toBe(previous);

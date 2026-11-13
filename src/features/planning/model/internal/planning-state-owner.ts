@@ -105,6 +105,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let planningSourceEpoch = 0;
   function invalidatePlanningSource() {
     planningSourceEpoch++;
+    sourceStatus = "changed";
     freshness = "stale";
     planningQueries.clear();
     queryRevision = undefined;
@@ -623,7 +624,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const status = workspaceStatuses.get("planning");
       if (status === "forbidden") return Promise.resolve("session-ended");
       if (!memberships.has("planning") || completeness.get("planning") === "none" || status === "stale" || status === "not-loaded" || status === "unavailable") {
-        return planning.refreshWorkspace("planning").then(() => "content-read" as const);
+        return planning.refreshWorkspace("planning").then(accepted => accepted ? "content-read" as const : "unverified" as const);
       }
       if (sourceObservation) return sourceObservation;
       const generation = sessionGeneration, revision = sessionRevision, epoch = planningSourceEpoch, source = scopeRevision;

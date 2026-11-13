@@ -53,7 +53,8 @@ export function usePlanningRemoteChanges({
 
   useEffect(() => {
     if (!enabled) return;
-    void checkForPlanningRemoteChanges();
+    let active = true;
+    queueMicrotask(() => { if (active) void checkForPlanningRemoteChanges(); });
     const interval = window.setInterval(() => void checkForPlanningRemoteChanges(), 60_000);
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") void checkForPlanningRemoteChanges();
@@ -61,6 +62,7 @@ export function usePlanningRemoteChanges({
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("online", handleVisibilityChange);
     return () => {
+      active = false;
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleVisibilityChange);
@@ -72,12 +74,12 @@ export function usePlanningRemoteChanges({
     setPlanningRemoteChangesRefreshing(true);
     try {
       await refreshCurrentWorkspaceModel();
-      if (mountedRef.current) setPlanningRemoteChangesAvailable(false);
+      if (mountedRef.current && planningState.board().readStatus === "current") setPlanningRemoteChangesAvailable(false);
     } finally {
       if (mountedRef.current) setPlanningRemoteChangesRefreshing(false);
       if (mountedRef.current) window.setTimeout(() => void checkForPlanningRemoteChanges(), 500);
     }
-  }, [checkForPlanningRemoteChanges, planningRemoteChangesRefreshing, refreshCurrentWorkspaceModel]);
+  }, [checkForPlanningRemoteChanges, planningState, planningRemoteChangesRefreshing, refreshCurrentWorkspaceModel]);
 
   return {
     planningRemoteChangesAvailable,
