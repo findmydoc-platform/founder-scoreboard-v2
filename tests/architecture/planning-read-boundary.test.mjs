@@ -68,6 +68,22 @@ test("an exact accounted read remains allowed while a second neighboring read is
   });
 });
 
+for (const operation of ["planning_deliverable_query_plan", "planning_deliverable_column", "planning_deliverable_query_basis"])
+  test(`only the exact accounted ${operation} expression is allowed`, () => {
+    const source = `client.rpc('${operation}', { p_actor_profile_id: actor });`;
+    fixture({ "src/adapter.ts": source }, root => {
+      const observed = verifyPlanningReadBoundary({ root, policy, collect: true });
+      assert.equal(observed.readSites.length, 1);
+      const exception = { ...observed.readSites[0], consumer: "BOARD", owner: "Planning feature maintainer", reason: "Declared selected query delivery", evidence: "planning-board-query-delivery.test.ts", expiresWhen: "Revalidate when BOARD changes under #641" };
+      const accounted = { ...policy, readSites: [exception] };
+      assert.deepEqual(verifyPlanningReadBoundary({ root, policy: accounted }), []);
+      writeFileSync(path.join(root, "src/adapter.ts"), `${source}\nclient.rpc('${operation}', { p_actor_profile_id: neighbor });`);
+      assert.ok(verifyPlanningReadBoundary({ root, policy: accounted }).some(value => /competing/.test(value)));
+      writeFileSync(path.join(root, "src/adapter.ts"), `${source}\n${source}`);
+      assert.ok(verifyPlanningReadBoundary({ root, policy: accounted }).some(value => /duplicate/.test(value)));
+    });
+  });
+
 for (const source of ["client.from(table).select('id');", "client.rpc(operation);", "const read = client.from; read('tasks');", "const read = client['rpc']; read('planning_source_version');"])
   test(`an unresolved or detached reader cannot hide a competing Planning read: ${source}`, () => fixture({ "src/neighbor.ts": source }, root => assert.ok(verifyPlanningReadBoundary({ root, policy }).some(value => /competing|detached/.test(value)))));
 

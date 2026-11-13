@@ -10,8 +10,8 @@
     "BOARD": {
       "consumer": "BOARD / PERSONAL",
       "owner": "Planning feature owner",
-      "reason": "The declared credential-bound Deliverable adapter and selected-only shared source.",
-      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/integration/planning-deliverable-selection.test.ts",
+      "reason": "The declared credential-bound Deliverable adapter owns one bounded query plan, selected-only column hydration and fresh source checks at publication. Complete and JSON column consumers keep their established shared source.",
+      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts",
       "expiresWhen": "Revalidate when the BOARD or PERSONAL contract changes under #641."
     },
     "COMPLETE": {
@@ -477,6 +477,30 @@
       "kind": "rpc",
       "target": "planning_deliverable_selection",
       "fingerprint": "5794f031ecbe809c88bd51608de5812dd2ec6997841e0f32ae05ff783ab4ad09",
+      "contract": "BOARD",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_deliverable_query_plan",
+      "fingerprint": "379a1dcb11683c96339e65a58b378a44be115bdc5ca88ccf38f4d608b580d4f1",
+      "contract": "BOARD",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_source_version",
+      "fingerprint": "8aec5c83d232665674dbb0be8a4d9fd2ed23afdb2ba07a22873e9b0327af811d",
+      "contract": "BOARD",
+      "references": 2
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_deliverable_column",
+      "fingerprint": "0b6a370e8839972ae94b43935c795325a0b0908dbd338c228cd7ca7824399bd2",
       "contract": "BOARD",
       "references": 1
     },

@@ -5,7 +5,7 @@ import { createSourceModuleResolver } from "./source-module-resolver.mjs";
 
 const extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 const tables = new Set(["tasks", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "task_dependencies", "task_relationship_edges", "task_blockers"]);
-const readRpcs = /^(planning_workspace_snapshot|planning_source_version|planning_deliverable_selection|planning_.*(read|search|select|snapshot|summary|count|version).*|prepare_(team_)?planning_.*command)$/;
+const readRpcs = /^(planning_workspace_snapshot|planning_source_version|planning_deliverable_(selection|query_plan|query_basis|column)|planning_.*(read|search|select|snapshot|summary|count|version).*|prepare_(team_)?planning_.*command)$/;
 const field = node => ts.isPropertyAccessExpression(node) ? node.name.text : ts.isElementAccessExpression(node) && node.argumentExpression && ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
 const accountable = entry => ["consumer", "owner", "reason", "evidence", "expiresWhen"].every(key => typeof entry[key] === "string" && entry[key].trim());
 
