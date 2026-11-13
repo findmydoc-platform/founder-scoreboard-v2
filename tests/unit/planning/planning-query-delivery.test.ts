@@ -99,3 +99,74 @@ test("streamed later evidence never extends the original query authority deadlin
     expect(state.workspace("planning").tasks).toEqual([]);
   } finally { transport.resolve(null); await pending; }
 });
+
+test.each([403, 409] as const)("a fatal %s stream outcome invalidates the whole accepted query basis", async status => {
+  let emit: ((event: Progress) => void) | undefined, signal: AbortSignal | undefined;
+  const transport = deferred<PlanningWorkspaceRead | null>();
+  const state = createPlanningState({ userId: "reader", initialData: emptyPlanningShellState, adapter: { saveTask: async task => ({ task }), readWorkspace: async (_workspace, _query, options) => {
+    emit = options?.onBoardStream as typeof emit; signal = options?.signal; return transport.promise;
+  } } }).planning;
+  const pending = state.ensureBoardQuery(query);
+  try {
+    emit!({ kind: "basis", readId: "fatal", read: read(query) });
+    emit!({ kind: "column", readId: "fatal", column: "Review", read: read(query, "Review") });
+    expect(state.board().tasks.map(task => task.id)).toEqual(["first-Review"]);
+    emit!({ kind: "failure", readId: "fatal", column: "Offen", error: { status, ...(status === 409 ? { code: "stale_continuation" } : {}) } });
+    expect(signal?.aborted).toBe(true);
+    if (status === 403) {
+      expect(state.board().tasks).toEqual([]); expect(state.workspace("planning").tasks).toEqual([]);
+      expect(state.board().readStatus).toBe("forbidden");
+    } else {
+      expect(state.board().freshness).toBe("stale"); expect(state.board().sourceStatus).toBe("changed");
+      for (const column of statuses) {
+        expect(state.board().columnReadStatus?.[column]).toBe("stale");
+        expect(state.board().result?.columns[column].continuation).toBeNull();
+      }
+    }
+  } finally { transport.resolve(null); await pending; }
+});
+
+test("a targeted retry supersedes its initial stream token without cancelling or overwriting a ready sibling", async () => {
+  let emit: ((event: Progress) => void) | undefined, signal: AbortSignal | undefined, calls = 0;
+  const transport = deferred<PlanningWorkspaceRead | null>();
+  const state = createPlanningState({ userId: "reader", initialData: emptyPlanningShellState, adapter: { saveTask: async task => ({ task }), readWorkspace: async (_workspace, input, options) => {
+    calls++;
+    if (input?.column) {
+      const current = read(query, input.column);
+      return { ...current, data: { ...current.data, tasks: current.data.tasks.map(task => ({ ...task, title: "Current authorized retry" })) } };
+    }
+    emit = options?.onBoardStream as typeof emit; signal = options?.signal; return transport.promise;
+  } } }).planning;
+  const pending = state.ensureBoardQuery(query);
+  try {
+    emit!({ kind: "basis", readId: "retry", read: read(query) });
+    emit!({ kind: "column", readId: "retry", column: "Review", read: read(query, "Review") });
+    expect(await state.refreshBoardColumn("Offen")).toBe(true);
+    expect(signal?.aborted).toBe(false);
+    const obsolete = read(query, "Offen");
+    emit!({ kind: "column", readId: "retry", column: "Offen", read: { ...obsolete, data: { ...obsolete.data, tasks: obsolete.data.tasks.map(task => ({ ...task, title: "Obsolete initial stream", updatedAt: "2099-01-01T00:00:00Z" })) } } });
+    expect(state.board().tasks.find(task => task.id === "first-Offen")?.title).toBe("Current authorized retry");
+    expect(state.board().tasks.some(task => task.id === "first-Review")).toBe(true);
+    expect(calls).toBe(2);
+  } finally { transport.resolve(null); await pending; }
+});
+
+test("native column receipts cannot reserve an unsolicited read or reenter a replaced query", async () => {
+  const epoch = Date.parse("2026-11-13T12:00:00Z"), basis = read(query);
+  const session = { userId: "reader", user: { id: "reader" }, revision: "native-session", expiresAt: (epoch + 3_600_000) / 1000 };
+  const initial = { workspace: "planning" as const, queryKey: planningBoardQueryKey(query), query, scopeRevision: "42", queryRevision: "same-source", revision: "same-source",
+    board: { ...basis.board!, delivery: { id: "native", columns: ["Offen", "Review"] as TaskStatus[] } }, session,
+    readAuthority: { userId: "reader", deadline: epoch + 10_000 }, coverage: { tasks: "partial" as const }, taskOmittedFields: [] };
+  const state = createPlanningState({ userId: "reader", initialData: emptyPlanningShellState, initialWorkspaceRead: initial, initialSession: session,
+    adapter: { now: () => epoch, saveTask: async task => ({ task }), readWorkspace: async (_workspace, input) => read(normalizePlanningBoardQuery(input), "Review", epoch + 10_000) },
+  }).planning;
+  const column = read(query, "Offen");
+  const packet = { kind: "column" as const, readId: "native", column: "Offen" as const, scopeRevision: "42", queryRevision: "same-source", observedAt: "2026-11-13T12:00:00Z", validUntil: null,
+    cardIds: column.board!.cardIds, items: column.data.tasks, relationships: [], columnState: column.board!.columns.Offen, personalChildren: {}, taskOmittedFields: [] };
+  expect(await state.acceptServerBoardColumn("unsolicited", { ...packet, readId: "unsolicited" })).toBe(false);
+  expect(state.board().tasks).toEqual([]);
+  const next = normalizePlanningBoardQuery({ view: "board", filters: { query: "replacement" } });
+  expect(await state.ensureBoardQuery(next)).toBe(true);
+  expect(await state.acceptServerBoardColumn("native", packet)).toBe(false);
+  expect(state.board().tasks.map(task => task.id)).toEqual(["replacement-Review"]);
+});
