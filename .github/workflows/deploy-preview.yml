@@ -35,6 +35,9 @@ defaults:
 jobs:
   deploy-preview:
     name: Deploy Preview
+    permissions:
+      contents: read
+      pull-requests: read
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'push' ||
@@ -56,8 +59,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Classify changed paths
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          predicate-quantifier: every
+          filters: .github/filters/validation.yml
+
       - name: Validate preview secrets
         id: preview_guard
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.app_required == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -137,6 +149,9 @@ jobs:
       - name: Generate deployment summary
         if: always()
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          SCOPE_OUTCOME: ${{ steps.filter.outcome }}
+          DEPLOYMENT_REQUIRED: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.app_required == 'true' }}
           PREVIEW_READY: ${{ steps.preview_guard.outputs.ready }}
           PREVIEW_REASON: ${{ steps.preview_guard.outputs.reason }}
           PREVIEW_DATABASE_READY: ${{ steps.preview_database.outputs.ready }}
@@ -146,7 +161,14 @@ jobs:
         run: |
           {
             echo "## Preview Deployment Summary"
-            if [[ "$PREVIEW_READY" != "true" ]]; then
+            if [[ "$EVENT_NAME" == 'pull_request' && "$SCOPE_OUTCOME" != 'success' ]]; then
+              echo '- **Status**: Failed'
+              echo '- **Reason**: path classification did not succeed'
+            elif [[ "$DEPLOYMENT_REQUIRED" == 'false' ]]; then
+              echo '- **Status**: Omitted'
+              echo '- **Reason**: only documentation or Markdown files changed'
+              echo '- Dependency installation, Vercel configuration, backend checks, build and deployment were not needed.'
+            elif [[ "$PREVIEW_READY" != "true" ]]; then
               echo "- **Status**: Failed"
               echo "- **Reason**: preview secrets are missing"
               if [[ -n "$PREVIEW_REASON" ]]; then
