@@ -8,3 +8,5 @@
 - When a desktop table becomes hard to operate below `1280px`, provide a card or stacked representation from the same data and actions. Keep the desktop table unchanged and reuse shared filters, badges, selects, and action components.
 - Preserve keyboard navigation, visible focus, Escape handling, outside-click handling, and correct ARIA semantics for interactive UI.
 - Auth-related UI must clear protected client state during logout and must never display or persist raw tokens.
+
+- For every new or materially changed Planning Item consumer, including Team, Profile, Notifications, Sprint, detail, selectors and releases, follow `docs/planning-item-read-contract.md` and update its inventory and evidence.
