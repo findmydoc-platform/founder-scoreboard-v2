@@ -148,6 +148,7 @@ test("selected records search discovery relationships and summaries stay within 
       await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner,workstream) values($1,'findmydoc-founder-execution','Excluded archived ancestor','initiative','Offen','P2','approved',$2,$3,'Excluded archived workstream')", [archived, epic, actors.other.profileId]);
       for (const [id, parent] of [[cross, foreignInitiative], [archiveChild, archived], [target, initiativeId], [archivedCard, initiativeId]]) await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner,workstream) values($1,'findmydoc-founder-execution',$2,'deliverable','Offen','P2','approved',$3,$4,$5)", [id, id === archivedCard ? "Excluded archived card" : "Scope accessible", parent, actors.founder.profileId, id === archivedCard ? "Excluded archived workstream" : "In scope"]);
       for (const related of [target, foreignCard, archivedCard]) await db.query("insert into public.task_relationship_edges(task_id,related_task_id,relation_type,note) values($1,$2,'blocked_by','Synthetic scope edge')", [cross, related]);
+      for (const related of [foreignCard, archivedCard]) await db.query("insert into public.task_relationship_edges(task_id,related_task_id,relation_type,note) values($1,$2,'blocked_by','Synthetic excluded wait')", [archiveChild, related]);
       await db.query("select set_config('founderops.trash_lifecycle_write','on',false)");
       for (const [id, type] of [[archived, "initiative"], [archivedCard, "deliverable"]]) await db.query("update public.tasks set trashed_at=now(),trashed_by=$2,trash_reason='Synthetic excluded lifecycle',trash_cause='withdrawn',purge_after=now()+interval '90 days',trash_root_type=$3,trash_root_id=id,trash_revision=1 where id=$1", [id, actors.ceo.profileId, type]);
       await db.query("select set_config('founderops.trash_lifecycle_write','off',false)");
@@ -157,7 +158,11 @@ test("selected records search discovery relationships and summaries stay within 
       expect(new Set(raw.context_ids)).toEqual(new Set([archiveChild, cross, target, initiativeId, epic]));
       expect(new Set(raw.rows.map((row: { id: string }) => row.id))).toEqual(new Set([archiveChild, cross, target, initiativeId, epic]));
       expect(raw.relationships.map((edge: { task_id: string; related_task_id: string }) => [edge.task_id, edge.related_task_id])).toEqual([[cross, target]]);
-      expect(raw.metrics.total).toBe(3); expect(raw.workspace_revision.activeTaskCount).toBe(5);
+      expect(raw.metrics.total).toBe(3); expect(raw.metrics.blocked).toBe(1); expect(raw.workspace_revision.activeTaskCount).toBe(5);
+      for (const extra of [{ risk: "blocked" }, { quick: ["blocked"] }]) {
+        const filtered = (await db.query("select public.planning_deliverable_selection($1,$2,'Offen') as selection", [actors.founder.profileId, normalizePlanningBoardQuery({ filters: { query: "Scope accessible", ...extra } })])).rows[0].selection;
+        expect(filtered.card_ids).toEqual([cross]); expect(filtered.metrics.total).toBe(1); expect(filtered.metrics.blocked).toBe(1);
+      }
       expect(raw.workstreams).not.toEqual(expect.arrayContaining(["Excluded foreign workstream"]));
       expect(raw.workstreams).not.toEqual(expect.arrayContaining(["Excluded archived workstream"]));
       expect(raw.initiative_options.map((value: { id: string }) => value.id)).toEqual([initiativeId]);
