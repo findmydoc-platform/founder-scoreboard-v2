@@ -450,14 +450,14 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || !body?.taskDetail) throw Object.assign(new Error(body?.error || "Aufgabendetails konnten nicht geladen werden."), { status: response.status });
         return { model: body.taskDetail, unavailable: body.unavailable };
       },
-      async readPlanningSourceVersion() {
-        const { response, body } = await ownedApiClient.requestJson<{ version?: string; error?: string }>("/api/planning-source-version");
+      async readPlanningSourceVersion(options) {
+        const { response, body } = await ownedApiClient.requestJson<{ version?: string; error?: string }>("/api/planning-source-version", options);
         if (!response.ok || typeof body?.version !== "string") throw Object.assign(new Error(body?.error || "Planungsänderungen konnten nicht geprüft werden."), { status: response.status });
         return body.version;
       },
-      async readWorkspace(workspace, query) {
+      async readWorkspace(workspace, query, options) {
         if (workspace === "planning" || workspace === "projects") {
-          const { response, body } = await planningApi.requestPlanningWorkspaceData(ownedApiClient, workspace, workspace === "planning" ? query || { view: "board" } : query);
+          const { response, body } = await planningApi.requestPlanningWorkspaceData(ownedApiClient, workspace, workspace === "planning" ? query || { view: "board" } : query, options);
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status, code: body?.code });
           if (workspace === "planning") requireReadAuthority(body?.readAuthority);
           return body?.model ? { readAuthority: body.readAuthority, scopeRevision: body.model.scopeRevision, board: body.model.board, query: body.model.query || query, queryRevision: body.model.queryRevision || body.model.board?.revision, data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), coverage: hierarchyReadCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: hierarchyOmittedFields(body.model), headerData: body.headerData, currentProfile: body.currentProfile } : null;

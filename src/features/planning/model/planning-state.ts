@@ -44,7 +44,7 @@ export type PlanningTaskSaveCheck = {
 export type PlanningTaskSaveStatus = "saved" | "saving" | "rejected" | "unconfirmed";
 export type PlanningSourceStatus = "current" | "checking" | "changed" | "unverified";
 export type PlanningSourceObservation = "unchanged" | "changed" | "unverified" | "session-ended" | "content-read";
-export type PlanningBoardView = { sourceStatus?: PlanningSourceStatus; requiresQueryRead?: boolean; scopeRevision?: string; deniedChildListIds?: readonly string[]; tasks: readonly Task[]; freshness: "current" | "stale"; result?: import("./planning-board-query").PlanningBoardResult; queryKey?: string; pageStatus?: PlanningReadStatus; columnReadStatus?: Partial<Record<import("@/lib/types").TaskStatus, PlanningReadStatus>>; readStatus?: PlanningReadStatus };
+export type PlanningBoardView = { query?: import("./planning-board-query").PlanningBoardQuery; sourceStatus?: PlanningSourceStatus; requiresQueryRead?: boolean; scopeRevision?: string; deniedChildListIds?: readonly string[]; tasks: readonly Task[]; freshness: "current" | "stale"; result?: import("./planning-board-query").PlanningBoardResult; queryKey?: string; pageStatus?: PlanningReadStatus; columnReadStatus?: Partial<Record<import("@/lib/types").TaskStatus, PlanningReadStatus>>; readStatus?: PlanningReadStatus };
 export type PlanningReadStatus = "not-loaded" | "loading" | "current" | "stale" | "unavailable" | "forbidden";
 export type PlanningTaskDetailView = {
   removed: boolean;
@@ -67,6 +67,10 @@ export type PlanningWorkspaceView = {
   readStatus: PlanningReadStatus;
   completeness: "complete" | "partial" | "none";
 };
+export type PlanningInteraction = {
+  selectedTaskId: string | null;
+  position?: { queryKey: string; top: number; left: number };
+};
 import type { PlanningToolsState } from "@/features/tools/model/tool-state";
 import type { PlanningEventsState } from "@/features/events/model/event-state";
 import type { PlanningNotificationsState } from "./planning-notifications-state";
@@ -78,6 +82,10 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   decisionLog(): import("./planning-decision-log").PlanningDecisionLogView;
   loadDecisionLog(): Promise<boolean>;
   checkPlanningSource(): Promise<PlanningSourceObservation>;
+  activatePlanningView(): () => void;
+  beginBoardInteraction(): () => void;
+  planningInteraction(): Readonly<PlanningInteraction>;
+  rememberPlanningInteraction(patch: Partial<PlanningInteraction>): void;
   currentProfile(): import("@/lib/types").AuthenticatedProfile | null;
   beginBacklogOrder(tasks: readonly Task[]): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
   backlogOrders(): readonly import("@/features/backlog/model/backlog-ordering").BacklogOrderView[];
@@ -131,6 +139,7 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   saveOwnProfileSettings(profileId: string, patch: import("@/features/profile/model/profile-settings-contract").OwnProfileSettingsPatch): Promise<import("@/features/profile/model/profile-settings-contract").ProfileSettingsResult>;
   board(): PlanningBoardView;
   ensureBoardQuery(query: import("./planning-board-query").PlanningBoardQueryInput): Promise<boolean>;
+  scheduleBoardQuery(query: import("./planning-board-query").PlanningBoardQueryInput, options?: { immediate?: boolean }): Promise<boolean>;
   loadCompletedHistory(): Promise<boolean>;
   loadBoardColumn(status: import("@/lib/types").TaskStatus): Promise<boolean>;
   refreshBoardColumn(status: import("@/lib/types").TaskStatus): Promise<boolean>;

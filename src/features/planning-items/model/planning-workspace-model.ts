@@ -23,6 +23,7 @@ export type PlanningWorkspaceLoadContext = Readonly<{
   authorized: boolean;
   actorProfileId: string | null;
   authorityKey?: string;
+  signal?: AbortSignal;
   query?: import("@/features/planning/model/planning-board-query").PlanningBoardQueryInput;
 }>;
 

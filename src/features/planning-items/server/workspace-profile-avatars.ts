@@ -20,11 +20,12 @@ function withWorkspaceAvatar(profile: Profile, data: unknown): Profile {
   }
 }
 
-export async function withWorkspaceProfileAvatars(profiles: Profile[], service: SupabaseClient | null): Promise<Profile[]> {
+export async function withWorkspaceProfileAvatars(profiles: Profile[], service: SupabaseClient | null, signal?: AbortSignal): Promise<Profile[]> {
   if (profiles.length === 0 || !service) return profiles;
 
   try {
-    const { data, error } = await service.rpc("workspace_access_contexts", { p_profile_ids: profiles.map((profile) => profile.id) });
+    const read = service.rpc("workspace_access_contexts", { p_profile_ids: profiles.map((profile) => profile.id) });
+    const { data, error } = await (signal ? read.abortSignal(signal) : read);
     if (error) {
       if (error.code !== "PGRST202" && error.code !== "42883") return profiles;
     } else if (Array.isArray(data) && data.length === profiles.length) {
@@ -37,9 +38,11 @@ export async function withWorkspaceProfileAvatars(profiles: Profile[], service: 
   }
 
   // A missing batch RPC can occur while the application and schema are rolling out.
+  if (signal?.aborted) return profiles;
   return Promise.all(profiles.map(async (profile) => {
     try {
-      const { data, error } = await service.rpc("workspace_access_context", { p_profile_id: profile.id });
+      const read = service.rpc("workspace_access_context", { p_profile_id: profile.id });
+      const { data, error } = await (signal ? read.abortSignal(signal) : read);
       return error ? profile : withWorkspaceAvatar(profile, data);
     } catch {
       return profile;

@@ -18,7 +18,6 @@ export function usePlanningRemoteChanges({
   scopeRevision,
   authoritativeRevision,
 }: UsePlanningRemoteChangesOptions) {
-  const [planningRemoteChangesAvailable, setPlanningRemoteChangesAvailable] = useState(false);
   const [planningRemoteChangesRefreshing, setPlanningRemoteChangesRefreshing] = useState(false);
   const contextRef = useRef(0);
   const checkingRef = useRef(false);
@@ -42,8 +41,7 @@ export function usePlanningRemoteChanges({
     try {
       const result = await planningState.checkPlanningSource();
       if (!mountedRef.current || context !== contextRef.current) return;
-      if (result === "changed") setPlanningRemoteChangesAvailable(true);
-      else if (result === "unchanged" || result === "content-read") setPlanningRemoteChangesAvailable(false);
+      return result;
     } catch {
       // Connectivity failures leave the current view unchanged and retry on the next check.
     } finally {
@@ -54,38 +52,46 @@ export function usePlanningRemoteChanges({
   useEffect(() => {
     if (!enabled) return;
     let active = true;
-    queueMicrotask(() => { if (active) void checkForPlanningRemoteChanges(); });
-    const interval = window.setInterval(() => void checkForPlanningRemoteChanges(), 60_000);
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") void checkForPlanningRemoteChanges();
+    let release: (() => void) | undefined;
+    let interval: number | undefined;
+    const visible = () => {
+      if (document.visibilityState === "hidden") {
+        release?.(); release = undefined;
+        if (interval !== undefined) window.clearInterval(interval);
+        interval = undefined;
+        return;
+      }
+      release ||= planningState.activatePlanningView();
+      interval ??= window.setInterval(() => void checkForPlanningRemoteChanges(), 60_000);
+      void checkForPlanningRemoteChanges();
     };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("online", handleVisibilityChange);
+    queueMicrotask(() => { if (active) visible(); });
+    document.addEventListener("visibilitychange", visible);
+    window.addEventListener("online", visible);
     return () => {
       active = false;
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("online", handleVisibilityChange);
+      release?.();
+      if (interval !== undefined) window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", visible);
+      window.removeEventListener("online", visible);
     };
-  }, [checkForPlanningRemoteChanges, enabled]);
+  }, [checkForPlanningRemoteChanges, enabled, planningState]);
 
   const refreshPlanningRemoteChanges = useCallback(async () => {
     if (planningRemoteChangesRefreshing) return;
     setPlanningRemoteChangesRefreshing(true);
     try {
       await refreshCurrentWorkspaceModel();
-      if (mountedRef.current && planningState.board().readStatus === "current") setPlanningRemoteChangesAvailable(false);
     } finally {
       if (mountedRef.current) setPlanningRemoteChangesRefreshing(false);
-      if (mountedRef.current) window.setTimeout(() => void checkForPlanningRemoteChanges(), 500);
     }
-  }, [checkForPlanningRemoteChanges, planningState, planningRemoteChangesRefreshing, refreshCurrentWorkspaceModel]);
+  }, [planningRemoteChangesRefreshing, refreshCurrentWorkspaceModel]);
 
   return {
-    planningRemoteChangesAvailable,
+    planningRemoteChangesAvailable: planningState.board().sourceStatus === "changed",
     planningRemoteChangesUnverified: planningState.board().sourceStatus === "unverified",
     checkForPlanningRemoteChanges,
-    planningRemoteChangesRefreshing,
+    planningRemoteChangesRefreshing: planningRemoteChangesRefreshing || planningState.board().readStatus === "loading",
     refreshPlanningRemoteChanges,
   };
 }

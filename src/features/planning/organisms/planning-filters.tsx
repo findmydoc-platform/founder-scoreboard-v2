@@ -48,6 +48,7 @@ type PlanningFiltersProps = {
   showPlanningLevel: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onChange: (filters: PlanningFiltersValue, history?: TableUrlHistoryMode) => void;
+  onSearchSubmit?: () => void;
   onPlanningLevelChange: (level: PlanningLevel) => void;
   onPlanningParentFilterChange: (parentId: string) => void;
 };
@@ -69,6 +70,7 @@ export function PlanningFilters({
   showPlanningLevel,
   onExpandedChange,
   onChange,
+  onSearchSubmit,
   onPlanningLevelChange,
   onPlanningParentFilterChange,
 }: PlanningFiltersProps) {
@@ -259,7 +261,12 @@ export function PlanningFilters({
   );
 
   return (
-    <>
+    <div onKeyDown={event => {
+      if (event.key === "Enter" && !event.nativeEvent.isComposing && event.target instanceof HTMLInputElement && event.target.type === "search") {
+        event.preventDefault();
+        onSearchSubmit?.();
+      }
+    }}>
       <div className="hidden min-[1200px]:block">
         <FilterToolbar
           className="mx-6 mb-4"
@@ -401,6 +408,6 @@ export function PlanningFilters({
           </div>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

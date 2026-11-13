@@ -182,6 +182,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
             showPlanningLevel={controller.view === "board"}
             onExpandedChange={controller.setShowFilters}
             onChange={setFilters}
+            onSearchSubmit={() => { void controller.submitPlanningSearch(); }}
             onPlanningLevelChange={handlePlanningLevelChange}
             onPlanningParentFilterChange={handlePlanningParentFilterChange}
           />

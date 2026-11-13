@@ -135,15 +135,26 @@ export const FailedAlternativeViewKeepsBoardUsable: Story = {
   args: { failCompleteRead: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByRole("region", { name: "Board nach Status" });
+    const board = await canvas.findByRole("region", { name: "Board nach Status" });
     await userEvent.click(canvas.getByRole("button", { name: "Tabelle" }));
-    await expect(await canvas.findByText("Diese Ansicht konnte nicht geladen werden.")).toBeVisible();
-    await expect(canvas.queryByRole("link", { name: "Active work stays visible" })).not.toBeInTheDocument();
+    const attribution = await canvas.findByRole("status", { name: "Vorherige Suchergebnisse" });
+    await waitFor(() => expect(attribution).toHaveTextContent("Vorherige Suche: ohne Suchtext. Neue Ergebnisse konnten nicht geladen werden."));
+    await expect(canvas.getByRole("button", { name: "Ansicht erneut laden" })).toBeEnabled();
+    await expect(board).toBeVisible();
+    await expect(within(board).getByRole("link", { name: "Active work stays visible" })).toBeVisible();
+    await expect(within(board).getByText("20 von 25 geladen")).toBeVisible();
+    await expect(canvas.queryByRole("table")).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("link", { name: "Completed work 25" })).not.toBeInTheDocument();
+    await expect(canvas.getByLabelText("History reads")).toHaveTextContent("1");
     await userEvent.click(canvas.getByRole("button", { name: "Board" }));
     await expect(await canvas.findByText("20 von 25 geladen")).toBeVisible();
+    await expect(canvas.queryByRole("status", { name: "Vorherige Suchergebnisse" })).not.toBeInTheDocument();
     await expect(canvas.getByLabelText("History reads")).toHaveTextContent("1");
     await userEvent.click(canvas.getByRole("button", { name: "Tabelle" }));
     await expect(await canvas.findByRole("link", { name: "Completed work 25" })).toBeVisible();
+    await expect(canvas.queryByRole("region", { name: "Board nach Status" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("status", { name: "Vorherige Suchergebnisse" })).not.toBeInTheDocument();
+    await expect(canvas.getByLabelText("History reads")).toHaveTextContent("2");
   },
 };
 
@@ -151,17 +162,36 @@ export const DelayedAlternativeViewCannotReplaceReturnedBoard: Story = {
   args: { delayCompleteRead: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByRole("region", { name: "Board nach Status" });
+    const board = await canvas.findByRole("region", { name: "Board nach Status" });
     await userEvent.click(canvas.getByRole("button", { name: "Gantt" }));
-    await expect(await canvas.findByText("Planung wird geladen …")).toBeVisible();
-    await expect(canvas.queryByRole("link", { name: "Active work stays visible" })).not.toBeInTheDocument();
+    await expect(await canvas.findByRole("status", { name: "Vorherige Suchergebnisse" })).toHaveTextContent("Vorherige Suche: ohne Suchtext. Neue Ergebnisse werden geladen …");
+    await canvas.findByRole("button", { name: "Ansichtsantwort freigeben" });
+    await expect(board).toBeVisible();
+    await expect(within(board).getByRole("link", { name: "Active work stays visible" })).toBeVisible();
+    await expect(within(board).getByText("20 von 25 geladen")).toBeVisible();
+    await expect(canvas.queryByRole("link", { name: "Active work stays visible · 14 Tage" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("link", { name: "Completed work 25" })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Board" }));
     await expect(await canvas.findByText("20 von 25 geladen")).toBeVisible();
+    await waitFor(() => expect(canvas.queryByRole("status", { name: "Vorherige Suchergebnisse" })).not.toBeInTheDocument());
     await userEvent.click(canvas.getByRole("button", { name: "Ansichtsantwort freigeben" }));
     await waitFor(() => expect(canvas.queryByRole("button", { name: "Ansichtsantwort freigeben" })).not.toBeInTheDocument());
     await expect(canvas.getByText("20 von 25 geladen")).toBeVisible();
     await expect(canvas.queryByRole("link", { name: "Completed work 25" })).not.toBeInTheDocument();
     await expect(canvas.getByLabelText("History reads")).toHaveTextContent("1");
+    // Obsolete success must not establish reusable complete coverage for another demand.
+    await userEvent.click(canvas.getByRole("button", { name: "Tabelle" }));
+    await canvas.findByRole("button", { name: "Ansichtsantwort freigeben" });
+    await expect(canvas.getByRole("status", { name: "Vorherige Suchergebnisse" })).toBeVisible();
+    await expect(canvas.queryByRole("link", { name: "Completed work 25" })).not.toBeInTheDocument();
+    await expect(canvas.getByLabelText("History reads")).toHaveTextContent("2");
+    await userEvent.click(canvas.getByRole("button", { name: "Ansichtsantwort freigeben" }));
+    await expect(await canvas.findByRole("link", { name: "Completed work 25" })).toBeVisible();
+    await expect(canvas.queryByRole("region", { name: "Board nach Status" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("status", { name: "Vorherige Suchergebnisse" })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Board" }));
+    await expect(await canvas.findByText("20 von 25 geladen")).toBeVisible();
+    await expect(canvas.getByLabelText("History reads")).toHaveTextContent("2");
   },
 };
 

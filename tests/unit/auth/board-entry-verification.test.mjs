@@ -70,6 +70,34 @@ test("a valid workspace member receives the fixed Board capability after live pr
   expect(names()).toContain("workspace_release_permit");
 });
 
+test("Board HTTP cancellation reaches supported data reads while permit cleanup remains independent", async () => {
+  const controller = new AbortController();
+  let receivedSignal;
+  let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  state.respond = async (name, request) => {
+    if (name !== "active_tasks") return null;
+    receivedSignal = request.signal;
+    entered();
+    await new Promise(resolve => {
+      if (request.signal.aborted) resolve();
+      else request.signal.addEventListener("abort", resolve, { once: true });
+    });
+    throw new DOMException("Controlled read cancelled", "AbortError");
+  };
+  const { NextRequest } = await import("next/server");
+  const request = new NextRequest(protocol.request("/api/planning-board-data?scope=%7B%22view%22%3A%22board%22%7D"), { signal: controller.signal });
+  const route = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const reading = route.GET(request);
+  await started;
+  controller.abort();
+  await vi.waitFor(() => expect(receivedSignal?.aborted).toBe(true));
+  const response = await reading;
+  expect(response.status).toBe(503);
+  expect(names()).toContain("workspace_release_permit");
+  expect(requests.filter(request => request.name === "workspace_release_permit").length).toBe(requests.filter(request => request.name === "workspace_dispatch_prepare").length);
+});
+
 test("Board entry removes one serial admission hop before the unchanged profile dispatch", async () => {
   expect((await authorize()).ok).toBe(true);
   expect(names()).toEqual(["user", "user", "workspace_calendar_entry", "token", "synthetic-account:generateAccessToken", "member%40findmydoc.eu",

@@ -18,7 +18,7 @@ async function handleGET(request: NextRequest) {
     } catch { return apiError("Ungültiger Planungsbereich.", 400); }
   }
   const currentProfile = permission.profile;
-  const result = await observeRuntimePhase("board.load", () => permission.planning.loadBoard(query));
+  const result = await observeRuntimePhase("board.load", () => permission.planning.loadBoard(query, { signal: request.signal }));
   if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
   if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
   if (result.status === "unavailable") return apiError("Planung konnte nicht geladen werden.", 503);
