@@ -76,12 +76,6 @@ jobs:
         if: needs.changes.outputs.migrations_required == 'true'
         run: pnpm install --frozen-lockfile
 
-      - name: Verify credential boundaries
-        run: pnpm run verify:credentials
-
-      - name: Verify Planning read boundaries
-        run: pnpm run verify:planning-reads
-
       - name: Start local Supabase
         id: supabase_start
         if: needs.changes.outputs.migrations_required == 'true'
@@ -140,6 +134,14 @@ jobs:
       - name: Install dependencies
         if: needs.changes.outputs.app_required == 'true'
         run: pnpm install --frozen-lockfile
+
+      - name: Verify credential boundaries
+        if: needs.changes.outputs.app_required == 'true'
+        run: pnpm run verify:credentials
+
+      - name: Verify Planning read boundaries
+        if: needs.changes.outputs.app_required == 'true'
+        run: pnpm run verify:planning-reads
 
       - name: Install Storybook browser
         if: needs.changes.outputs.app_required == 'true'
