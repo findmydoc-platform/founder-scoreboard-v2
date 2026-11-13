@@ -11,7 +11,7 @@ import { mapSprint } from "@/lib/planning-sprint-mappers";
 import { mapTaskRelation } from "@/lib/planning-row-mappers";
 import type { DbProfile, DbProfileUiPreference, DbSprint, DbTask, DbTaskRelation } from "@/lib/planning-row-types";
 import { taskStatuses } from "@/lib/status";
-import type { TaskStatus } from "@/lib/types";
+import type { Task, TaskStatus } from "@/lib/types";
 import type { PlanningWorkspaceLoadContext, PlanningWorkspaceLoadResult } from "../model/planning-workspace-model";
 import { observeRuntimePhase } from "@/lib/runtime-logging";
 
@@ -29,6 +29,7 @@ type Selection = {
 };
 type Cursor = { offset: number; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; binding: string };
 const statuses: TaskStatus[] = [...taskStatuses, "Pausiert"];
+const selectedOmittedFields: readonly (keyof Task)[] = [...planningCardOmittedFields, "dependsOn", "evidenceLink"];
 
 export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
@@ -100,9 +101,9 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   return { status: "ready", model: {
     revision: selected.workspace_revision.latestUpdatedAt, scopeRevision: selected.source_revision, query, queryRevision: revision,
     project: mapPlanningProject(selected.project),
-    items: mapPlanningItemRows(selected.rows, people, [], [], []).map(compactPlanningCard),
+    items: mapPlanningItemRows(selected.rows, people, [], [], []).map(task => compactPlanningCard(task, selectedOmittedFields)),
     people, sprints: selected.sprints.map(mapSprint), preferences: selected.preferences.map(mapProfileUiPreference),
-    relationships: selected.relationships.map(mapTaskRelation), blockers: [], taskOmittedFields: planningCardOmittedFields,
+    relationships: selected.relationships.map(mapTaskRelation), blockers: [], taskOmittedFields: selectedOmittedFields,
     coverage: { items: "partial", people: "complete", sprints: "complete", preferences: "complete", strategies: "partial", raci: "partial", links: "partial", relationships: "partial", blockers: "partial" },
     board: { query, column, queryKey, revision, observedAt: selected.evaluated_at, validUntil: selected.valid_until,
       cardIds: selected.card_ids, columns, metrics: { ...selected.metrics, blocked: null }, levelTotals: selected.level_totals,

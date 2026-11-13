@@ -101,6 +101,10 @@ test("selected and source-fence reads propagate the caller cancellation signal a
   expect(result.model.board?.metrics.blocked).toBeNull();
   expect(result.model.board?.columns.Review.total).toBeNull();
   expect(result.model.taskOmittedFields).toContain("description");
+  expect(result.model.taskOmittedFields).toContain("dependsOn");
+  expect(result.model.taskOmittedFields).toContain("evidenceLink");
+  expect(result.model.items[0]).not.toHaveProperty("dependsOn");
+  expect(result.model.items[0]).not.toHaveProperty("evidenceLink");
 });
 
 test.each([{ view: "complete" as const }, { view: "board" as const, level: "epic" as const }])("the established complete and unmigrated strategic request stays on its compatible source: %j", async query => {

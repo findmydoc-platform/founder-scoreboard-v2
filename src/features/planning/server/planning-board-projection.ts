@@ -78,7 +78,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
     ...model, query, queryRevision: revision,
     coverage: { ...model.coverage, items: "partial", relationships: "partial", blockers: "partial" },
     taskOmittedFields: cardOmittedFields,
-    items: model.items.filter(task => contextIds.has(task.id)).map(compactPlanningCard), relationships,
+    items: model.items.filter(task => contextIds.has(task.id)).map(task => compactPlanningCard(task)), relationships,
     blockers: model.blockers?.filter(blocker => contextIds.has(blocker.taskId)),
     board: { query, column, queryKey, revision, observedAt: new Date().toISOString(), cardIds: [...cardIds], childProgressById, columns,
       workstreams: [...new Set(model.items.map(item => item.workstream).filter(Boolean))].sort((left, right) => left.localeCompare(right, "de")),

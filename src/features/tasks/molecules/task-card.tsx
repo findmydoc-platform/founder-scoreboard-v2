@@ -200,7 +200,7 @@ function TaskCardChildRollup({
   const [retryRequested, setRetryRequested] = useState(false);
   const generatedId = useId().replaceAll(":", "");
   const listId = `task-card-children-${generatedId}`;
-  const progressKnown = childProgress !== null || childList?.readStatus === "current";
+  const progressKnown = childProgress !== null;
   const { completed, percentage, total, unfinished } = childProgress || taskChildProgress(childItems);
   const plural = directChildPluralLabel(task.taskType);
   const completedWithOpenChildren = normalizeStatus(task.status) === "Erledigt" && unfinished > 0;
