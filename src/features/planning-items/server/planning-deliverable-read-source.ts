@@ -75,7 +75,9 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   const selected = result.data as Selection;
   if (selected.status === "forbidden" || selected.status === "staleContinuation") return { status: selected.status };
   if (selected.status !== "ready" || !selected.project?.id || typeof selected.source_revision !== "string" || !Array.isArray(selected.rows) || !Array.isArray(selected.card_ids)
-    || !Number.isFinite(Date.parse(selected.evaluated_at)) || !selected.columns || !selected.metrics) return { status: "unavailable" };
+    || !Number.isFinite(Date.parse(selected.evaluated_at)) || typeof selected.temporal_key !== "string"
+    || !(selected.valid_until === null || typeof selected.valid_until === "string" && Number.isFinite(Date.parse(selected.valid_until)))
+    || !selected.columns || !selected.metrics) return { status: "unavailable" };
   if (cursor && (cursor.source !== selected.source_revision || cursor.temporalKey !== selected.temporal_key)) return { status: "staleContinuation" };
   if (preferenceRevision && preferenceRevision !== selected.source_revision) return { status: "unavailable" };
   const people = await withWorkspaceProfileAvatars(selected.profiles.map(mapProfile), supabase, context.signal);

@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
+import { createCompletePlanningReference } from "../../helpers/complete-planning-reference";
 import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { planningWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
@@ -29,7 +30,7 @@ function fixture(level: "epic" | "initiative", count = 47) {
     } };
     return query;
   } } as unknown as SupabaseClient;
-  return { rows, data, reader: createSupabasePlanningBoardReadModel(client) };
+  return { rows, data, reader: createSupabasePlanningBoardReadModel(client), reference: createCompletePlanningReference(client) };
 }
 const context = { authorized: true, actorProfileId: "reader", authorityKey: "strategic-session" };
 
@@ -56,7 +57,7 @@ test.each(["epic", "initiative"] as const)("%s Board pages each strategic status
 });
 
 test.each(["epic", "initiative"] as const)("%s page keeps direct-child aggregates and required old parent context without serializing unrelated cards", async level => {
-  const { reader, rows } = fixture(level);
+  const { reader, reference, rows } = fixture(level);
   const parentId = `${level}-Erledigt-0046`;
   const childType = level === "epic" ? "initiative" : "deliverable";
   rows.push(
@@ -73,7 +74,7 @@ test.each(["epic", "initiative"] as const)("%s page keeps direct-child aggregate
   expect(searched.model.board?.cardIds).toEqual([parentId]);
   expect(searched.model.board?.childProgressById[parentId]).toEqual({ completed: 1, total: 2, unfinished: 1, percentage: 50 });
   expect(searched.model.items.some(task => task.id === "open-child" || task.id === "done-child" || task.id === "grandchild")).toBe(false);
-  const children = await reader.load({ ...context, query: { level: childType, parentId, filters: { status: "Offen" } } });
+  const children = await (childType === "deliverable" ? reference : reader).load({ ...context, query: { level: childType, parentId, filters: { status: "Offen" } } });
   if (children.status !== "ready") throw new Error("Expected child Board");
   expect(children.model.board?.cardIds).toEqual(["open-child"]);
   expect(children.model.items.find(task => task.id === parentId)).toMatchObject({ status: "Erledigt" });

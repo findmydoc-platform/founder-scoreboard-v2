@@ -3,7 +3,10 @@ import { planningWorkspaceHydration } from "@/features/planning/model/planning-w
 import { hierarchyOmittedFields, hierarchyReadCoverage } from "@/features/planning/model/internal/hierarchy-read-coverage";
 import { expect, test, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
+import { createCompletePlanningReference } from "../../helpers/complete-planning-reference";
+
+// Preserve complete reference projections, including the aggregate basis that
+// selected Deliverable cards explicitly defer until their separate contract.
 import { buildPlanningTaskTableViewModel } from "@/features/planning/model/planning-task-table-view-model";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { DEFAULT_PLANNING_FILTERS, planningBoardQueryFromSearchParams } from "@/features/planning/model/planning-board-query";
@@ -25,7 +28,7 @@ function fixture() {
       return Promise.resolve({ data: Array.isArray(value) ? value.slice(start, Math.min(end + 1, start + 7)) : value, count: Array.isArray(value) ? value.length : null, error: denied.has(table) ? new Error("Unavailable source") : null }).then(resolve);
     } }; return query;
   } } as unknown as SupabaseClient;
-  return { rows, data, denied, reader: createSupabasePlanningBoardReadModel(client) };
+  return { rows, data, denied, reader: createCompletePlanningReference(client) };
 }
 const context = { authorized: true, actorProfileId: "reader", authorityKey: "compact-session" };
 
