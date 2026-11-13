@@ -57,3 +57,44 @@ test("a newly proven empty earlier column waits until the active card interactio
   expect(await earlier).toBe(true);
   expect(state.board().result?.columns["In Arbeit"]).toMatchObject({ availability: "ready", total: 0 });
 });
+
+test.each(["before", "after"] as const)("a later column receipt delivered %s the first deadline and unchanged source evidence cannot renew earlier protected cards", async delivery => {
+  const epoch = Date.parse("2026-11-13T12:00:00Z");
+  let now = epoch, contentReads = 0, versionReads = 0;
+  let finish!: (result: PlanningWorkspaceRead) => void;
+  const later = new Promise<PlanningWorkspaceRead>(resolve => { finish = resolve; });
+  const providerExpiresAt = Math.floor((epoch + 3_600_000) / 1000);
+  const state = createPlanningState({ userId: "reader", initialData: data,
+    initialSession: { userId: "reader", user: { id: "reader" }, revision: "same-provider-session", expiresAt: providerExpiresAt },
+    initialCurrentProfile: { id: "reader", name: "Synthetic Reader", platformRole: "founder", githubLogin: "" },
+    adapter: { now: () => now, saveTask: async task => ({ task }),
+      readPlanningSourceVersion: async () => { versionReads++; return "42"; },
+      readWorkspace: async (_workspace, input) => {
+        contentReads++;
+        return input?.column === "Review" ? later : { ...response("Offen"), scopeRevision: "42", readAuthority: { userId: "reader", deadline: epoch + 1000 } };
+      },
+    },
+  }).planning;
+  expect(await state.ensureBoardQuery(query)).toBe(true);
+  now = epoch + 100;
+  const second = state.loadBoardColumn("Review");
+  if (delivery === "before") {
+    now = epoch + 200;
+    finish({ ...response("Review"), scopeRevision: "42", readAuthority: { userId: "reader", deadline: epoch + 5000 } });
+    expect(await second).toBe(true);
+    expect(state.board().tasks.map(task => task.id)).toEqual(["open", "review"]);
+  }
+  now = epoch + 999;
+  expect(await state.checkPlanningSource()).toBe("unchanged");
+  expect(state.board().tasks.some(task => task.id === "open")).toBe(true);
+  now = epoch + 1000;
+  if (delivery === "after") {
+    finish({ ...response("Review"), scopeRevision: "42", readAuthority: { userId: "reader", deadline: epoch + 5000 } });
+    expect(await second).toBe(false);
+  }
+  expect(state.board().tasks).toEqual([]);
+  expect(state.workspace("planning").tasks).toEqual([]);
+  expect(state.currentProfile()?.id).toBe("reader");
+  expect(providerExpiresAt * 1000).toBeGreaterThan(now + 3_000_000);
+  expect({ contentReads, versionReads }).toEqual({ contentReads: 2, versionReads: 1 });
+});
