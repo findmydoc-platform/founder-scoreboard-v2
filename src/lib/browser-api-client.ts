@@ -252,4 +252,5 @@ export function createBrowserApiClient({
   };
 }
 
-export type BrowserApiClient = ReturnType<typeof createBrowserApiClient>;
+export type BrowserApiResponseClient = ReturnType<typeof createBrowserApiClient>;
+export type BrowserApiClient = Pick<BrowserApiResponseClient, "requestJson" | "requestForm" | "requestBlob">;
