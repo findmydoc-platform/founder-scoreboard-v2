@@ -104,6 +104,14 @@ jobs:
         if: steps.preview_guard.outputs.ready == 'true'
         run: pnpm install --frozen-lockfile
 
+      - name: Verify credential boundaries
+        if: steps.preview_guard.outputs.ready == 'true'
+        run: pnpm run verify:credentials
+
+      - name: Verify Planning read boundaries
+        if: steps.preview_guard.outputs.ready == 'true'
+        run: pnpm run verify:planning-reads
+
       - name: Pull Vercel Environment Variables for Preview
         if: steps.preview_guard.outputs.ready == 'true'
         env:

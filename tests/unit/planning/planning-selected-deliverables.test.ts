@@ -7,7 +7,12 @@ vi.mock("server-only", () => ({}));
 function source() {
   const calls: Array<{ name: string; args: Record<string, unknown> | undefined }> = [];
   let revision = "42";
-  const client = { from() { throw new Error("A selected Deliverable read must not enumerate tables."); }, rpc(name: string, args?: Record<string, unknown>) {
+  let preference: Record<string, unknown> | null = null;
+  const client = { from(table: string) {
+    if (table !== "profile_ui_preferences") throw new Error("A selected Deliverable read must not enumerate tables.");
+    const read = { select() { return read; }, eq() { return read; }, abortSignal() { return read; }, maybeSingle() { return Promise.resolve({ data: preference, error: null }); } };
+    return read;
+  }, rpc(name: string, args?: Record<string, unknown>) {
     calls.push({ name, args });
     const data = name === "planning_source_version" ? revision : name === "workspace_access_contexts" ? [] : {
       status: "ready", source_revision: revision, evaluated_at: "2026-11-13T12:00:00Z", temporal_key: "stable", valid_until: null,
@@ -18,13 +23,13 @@ function source() {
     };
     return { abortSignal() { return this; }, then(resolve: (value: unknown) => unknown) { return Promise.resolve({ data, error: null }).then(resolve); } };
   } } as unknown as SupabaseClient;
-  return { client, calls, changeRevision() { revision = "43"; } };
+  return { client, calls, changeRevision() { revision = "43"; }, preferMine() { preference = { profile_id: "reader", default_workspace: "mine", default_task_view: "board", planning_filters: { query: "saved", assignee: "other", quick: ["high"] } }; } };
 }
 const context = { authorized: true, actorProfileId: "reader", authorityKey: "session" };
 
 test("an initial Deliverable column is selected in the database and marks independent columns as not loaded", async () => {
   const fixture = source();
-  const result = await createSupabasePlanningBoardReadModel(fixture.client).load({ ...context, query: { view: "board" } });
+  const result = await createSupabasePlanningBoardReadModel(fixture.client).load({ ...context, query: { view: "board", filters: {} } });
   expect(result.status).toBe("ready");
   if (result.status !== "ready") throw new Error("Expected selected cards");
   expect(fixture.calls[0]).toMatchObject({ name: "planning_deliverable_selection", args: { p_column: "Offen", p_offset: 0, p_limit: 20 } });
@@ -32,6 +37,13 @@ test("an initial Deliverable column is selected in the database and marks indepe
   expect(result.model.board?.columns.Erledigt).toMatchObject({ availability: "not-loaded", loaded: 0 });
   expect(result.model.items.map(item => item.id)).toEqual(["selected"]);
   expect(result.model.coverage?.items).toBe("partial");
+});
+
+test("the initial selected query preserves stored personal defaults on one fenced source basis", async () => {
+  const fixture = source(); fixture.preferMine();
+  const result = await createSupabasePlanningBoardReadModel(fixture.client).load({ ...context, query: { view: "board" } });
+  expect(result.status).toBe("ready");
+  expect(fixture.calls.find(call => call.name === "planning_deliverable_selection")?.args?.p_query).toMatchObject({ filters: { query: "saved", assignee: "Alle", quick: ["high", "mine"] } });
 });
 
 test("continuations bind source, normalized query, column and original authority before dispatch", async () => {

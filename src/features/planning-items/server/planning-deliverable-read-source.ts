@@ -3,7 +3,7 @@ import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardColumn } from "@/features/planning/model/planning-board-query";
-import { mapPlanningItemRows, mapPlanningProject } from "./planning-workspace-read-source";
+import { loadPlanningWorkspaceModel, mapPlanningItemRows, mapPlanningProject } from "./planning-workspace-read-source";
 import { compactPlanningCard, planningCardOmittedFields } from "./planning-card-summary";
 import { withWorkspaceProfileAvatars } from "./workspace-profile-avatars";
 import { mapProfile, mapProfileUiPreference } from "@/lib/planning-profile-mappers";
@@ -31,7 +31,25 @@ const statuses: TaskStatus[] = [...taskStatuses, "Pausiert"];
 
 export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
-  const input = context.query || {}, query = normalizePlanningBoardQuery(input);
+  const input = context.query || {};
+  let query = normalizePlanningBoardQuery(input);
+  let preferenceRevision: string | undefined;
+  if (!input.continuation && (!input.filters || !input.view)) {
+    const versionRead = supabase.rpc("planning_source_version");
+    const version = await (context.signal ? versionRead.abortSignal(context.signal) : versionRead);
+    if (version.error || typeof version.data !== "string") return { status: "unavailable" };
+    preferenceRevision = version.data;
+    const preferenceRead = supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").eq("profile_id", context.actorProfileId || "").maybeSingle();
+    const preferenceResult = await (context.signal ? preferenceRead.abortSignal(context.signal) : preferenceRead);
+    if (preferenceResult.error) return { status: "unavailable" };
+    const preference = preferenceResult.data ? mapProfileUiPreference(preferenceResult.data as DbProfileUiPreference) : undefined;
+    const filters = preference && { ...preference.planningFilters, ...(preference.defaultWorkspace === "mine" ? { assignee: "Alle", quick: [...preference.planningFilters.quick, "mine"] } : {}) };
+    query = normalizePlanningBoardQuery({ ...input, view: input.view || (preference?.defaultTaskView && preference.defaultTaskView !== "board" ? "complete" : "board"), filters: input.filters || filters });
+    if (query.view === "complete") {
+      const complete = await loadPlanningWorkspaceModel(supabase, { ...context, query });
+      return complete.status === "ready" && complete.model.scopeRevision !== preferenceRevision ? { status: "unavailable" } : complete;
+    }
+  }
   const queryKey = planningBoardQueryKey(query);
   const column = input.column || (input.continuation ? "Erledigt" : query.filters.status !== "Alle" && statuses.includes(query.filters.status as TaskStatus) ? query.filters.status as TaskStatus : "Offen");
   if (!statuses.includes(column)) return { status: "staleContinuation" };
@@ -59,6 +77,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   if (selected.status !== "ready" || !selected.project?.id || typeof selected.source_revision !== "string" || !Array.isArray(selected.rows) || !Array.isArray(selected.card_ids)
     || !Number.isFinite(Date.parse(selected.evaluated_at)) || !selected.columns || !selected.metrics) return { status: "unavailable" };
   if (cursor && (cursor.source !== selected.source_revision || cursor.temporalKey !== selected.temporal_key)) return { status: "staleContinuation" };
+  if (preferenceRevision && preferenceRevision !== selected.source_revision) return { status: "unavailable" };
   const people = await withWorkspaceProfileAvatars(selected.profiles.map(mapProfile), supabase, context.signal);
   // The SQL statement covers selection and hydration. Avatar identity is a
   // separate read, so retain a matching source fence across that supporting work.

@@ -10,6 +10,7 @@ const field = node => ts.isPropertyAccessExpression(node) ? node.name.text : ts.
 const accountable = entry => ["consumer", "owner", "reason", "evidence", "expiresWhen"].every(key => typeof entry[key] === "string" && entry[key].trim());
 
 export function verifyPlanningReadBoundary({ root, policy, collect = false }) {
+  const accountableEntry = entry => accountable({ ...policy.contracts?.[entry.contract], ...entry });
   const resolver = createSourceModuleResolver(root), failures = [], edges = [], sites = [];
   const files = ts.sys.readDirectory(path.join(root, "src"), extensions);
   const queued = new Set(files), parsed = new Map();
@@ -47,7 +48,7 @@ export function verifyPlanningReadBoundary({ root, policy, collect = false }) {
       if (resolved && !resolved.isExternalLibraryImport && !queued.has(resolved.resolvedFileName) && extensions.some(extension => resolved.resolvedFileName.endsWith(extension))) { queued.add(resolved.resolvedFileName); files.push(resolved.resolvedFileName); }
       if (privateModules.has(to)) {
         edges.push({ from, to });
-        const allowance = policy.allowedEdges?.find(entry => entry.from === from && entry.to === to && accountable(entry));
+        const allowance = policy.allowedEdges?.find(entry => entry.from === from && entry.to === to && accountableEntry(entry));
         if (!collect && !allowance) failures.push(`${from} -> ${to}: Planning read implementation is private`);
       }
       return resolved;
@@ -76,9 +77,17 @@ export function verifyPlanningReadBoundary({ root, policy, collect = false }) {
         const access = node.parent, call = access.parent;
         if (from !== "src/lib/credentials/internal/github-installation.ts" || !ts.isPropertyAccessExpression(access) || access.expression.getText(source) !== "process" || !ts.isCallExpression(call) || call.arguments.length !== 1 || !ts.isStringLiteral(call.arguments[0]) || call.arguments[0].text !== "node:fs") failures.push(`${from}: unresolved runtime loader is forbidden`);
       }
+      const receiver = ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) ? node.expression : null;
+      const builtinCollection = receiver && ts.isIdentifier(receiver) && ["Array", "Buffer", "Uint8Array", "Int32Array", "Float64Array"].includes(receiver.text);
+      const detached = node.parent && (ts.isVariableDeclaration(node.parent) && node.parent.initializer === node
+        || ts.isBinaryExpression(node.parent) && node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.parent.right === node
+        || ts.isPropertyAccessExpression(node.parent) && ["bind", "call", "apply"].includes(node.parent.name.text));
+      if (receiver && !builtinCollection && ["from", "rpc"].includes(field(node)) && detached) failures.push(`${from}: detached database reader is forbidden`);
       if (ts.isCallExpression(node) && ["from", "rpc"].includes(field(node.expression))) {
-        const kind = field(node.expression), target = literal(node.arguments[0], source);
-        if (kind === "from" && tables.has(target) || kind === "rpc" && readRpcs.test(target || "")) {
+        const callReceiver = ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression) ? node.expression.expression : null;
+        const collectionCall = callReceiver && ts.isIdentifier(callReceiver) && ["Array", "Buffer", "Uint8Array", "Int32Array", "Float64Array"].includes(callReceiver.text);
+        const kind = field(node.expression), resolvedTarget = literal(node.arguments[0], source), target = resolvedTarget || "<dynamic>";
+        if (!collectionCall && (kind === "from" && (tables.has(target) || target === "<dynamic>") || kind === "rpc" && (readRpcs.test(target) || target === "<dynamic>"))) {
           let chain = node;
           const operations = [];
           while (ts.isPropertyAccessExpression(chain.parent) || ts.isElementAccessExpression(chain.parent) || ts.isCallExpression(chain.parent)) {
@@ -90,7 +99,7 @@ export function verifyPlanningReadBoundary({ root, policy, collect = false }) {
             const fingerprint = createHash("sha256").update(expression).digest("hex");
             const site = { from, kind, target, fingerprint };
             sites.push(site);
-            if (!collect && !policy.readSites?.some(entry => entry.from === from && entry.kind === kind && entry.target === target && entry.fingerprint === fingerprint && accountable(entry))) failures.push(`${from}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: competing Planning ${kind} read ${target} (${fingerprint})`);
+            if (!collect && !policy.readSites?.some(entry => entry.from === from && entry.kind === kind && entry.target === target && entry.fingerprint === fingerprint && accountableEntry(entry))) failures.push(`${from}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: competing Planning ${kind} read ${target} (${fingerprint})`);
           }
         }
       }
@@ -106,7 +115,7 @@ export function verifyPlanningReadBoundary({ root, policy, collect = false }) {
       const site = JSON.parse(key), entry = policy.readSites?.find(value => value.from === site.from && value.fingerprint === site.fingerprint && value.kind === site.kind && value.target === site.target);
       if (entry && count > (entry.references || 1)) failures.push(`${site.from}: competing duplicate Planning read ${site.target}`);
     }
-    for (const entry of [...(policy.allowedEdges || []), ...(policy.readSites || [])]) if (!accountable(entry)) failures.push(`${entry.from}: Planning exception is missing accountable contract fields`);
+    for (const entry of [...(policy.allowedEdges || []), ...(policy.readSites || [])]) if (!accountableEntry(entry)) failures.push(`${entry.from}: Planning exception is missing accountable contract fields`);
   }
   return collect ? { edges, readSites: sites } : [...new Set(failures)];
 }

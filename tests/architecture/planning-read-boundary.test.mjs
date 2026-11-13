@@ -66,3 +66,10 @@ test("an exact accounted read remains allowed while a second neighboring read is
     assert.ok(verifyPlanningReadBoundary({ root, policy: accounted }).some(value => /competing/.test(value)));
   });
 });
+
+for (const source of ["client.from(table).select('id');", "client.rpc(operation);", "const read = client.from; read('tasks');", "const read = client['rpc']; read('planning_source_version');"])
+  test(`an unresolved or detached reader cannot hide a competing Planning read: ${source}`, () => fixture({ "src/neighbor.ts": source }, root => assert.ok(verifyPlanningReadBoundary({ root, policy }).some(value => /competing|detached/.test(value)))));
+
+test("standard collection construction is not database access", () => fixture({ "src/collection.ts": "const ids = Array.from({ length: 20 }, (_, index) => index);" }, root => assert.deepEqual(verifyPlanningReadBoundary({ root, policy }), [])));
+
+test("renamed imported table constants are resolved before ownership is checked", () => fixture({ "src/constants.ts": "export const table = 'tasks';", "src/neighbor.ts": "import { table as data } from './constants'; client.from(data).select('id');" }, root => assert.ok(verifyPlanningReadBoundary({ root, policy }).some(value => /competing.*tasks/.test(value)))));
