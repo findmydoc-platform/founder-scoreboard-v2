@@ -220,7 +220,9 @@ export const CardsKeepTheirDirtyPanelWorkflow: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole("link", { name: "Reliable planning" }));
     const panel = within(await canvas.findByRole("dialog", { name: "Reliable planning" }));
-    await userEvent.click(await panel.findByRole("button", { name: "Bearbeiten" }));
+    const edit = await panel.findByRole("button", { name: "Bearbeiten" });
+    await waitFor(() => expect(edit).toBeEnabled());
+    await userEvent.click(edit);
     const title = await panel.findByRole("textbox", { name: "Titel" });
     await userEvent.type(title, " panel draft");
     await userEvent.keyboard("{Escape}");
