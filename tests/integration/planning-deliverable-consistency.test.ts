@@ -21,8 +21,8 @@ test("the actual selected API preserves saved personal defaults and discovers op
     expect(initial.board.cardIds).toEqual([root]);
     expect(initial.board.viewerOpenSubIssueIdsByDeliverableId).toEqual({ [root]: [child] });
     expect(initial.items.some((item: { id: string }) => [child, hidden, otherInitiative].includes(item.id))).toBe(false);
-    expect(initial.board.workstreams).toEqual(expect.arrayContaining(["Visible workstream", "Off-page workstream"]));
-    expect(initial.board.initiativeOptions).toEqual(expect.arrayContaining([{ id: otherInitiative, title: "Off-page Initiative" }]));
+    expect(initial.board.workstreams).toEqual(["Off-page workstream", "Visible workstream"]);
+    expect(initial.board.initiativeOptions).toEqual([{ id: initiativeId, title: "Synthetic acceptance Initiative" }, { id: otherInitiative, title: "Off-page Initiative" }]);
     expect(initial.sprints.some((value: { id: string }) => value.id === sprint)).toBe(true);
     expect(observed.some(value => value.path.endsWith("/active_tasks"))).toBe(false);
     const explicit = await read({ view: "board", filters: { query: prefix, status: "Erledigt", assignee: actors.other.profileId } }); expect(explicit.status).toBe(200);

@@ -8,7 +8,7 @@ function source() {
   const calls: Array<{ name: string; args: Record<string, unknown> | undefined }> = [];
   let revision = "42";
   let preference: Record<string, unknown> | null = null;
-  let validUntil: string | null = null, failure = false;
+  let validUntil: string | null = null, failure = false, choices = true;
   const signals: AbortSignal[] = [];
   const client = { from(table: string) {
     if (table !== "profile_ui_preferences") throw new Error("A selected Deliverable read must not enumerate tables.");
@@ -22,10 +22,11 @@ function source() {
       card_ids: ["selected"], context_ids: ["selected"], profiles: [], sprints: [], preferences: [], relationships: [], blockers: [], strategies: [], raci: [], links: [],
       columns: Object.fromEntries(["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt", "Pausiert"].map(status => [status, { total: status === (args?.p_column || "Offen") ? 25 : 0 }])),
       metrics: { total: 25, open: 25, done: 0, blocked: 0 }, level_totals: { epic: 0, initiative: 0, deliverable: 25 }, child_progress: {}, personal_children: {}, workspace_revision: { activeTaskCount: 25, latestUpdatedAt: "2026-11-01T00:00:00Z" },
+      ...(choices ? { workstreams: [], initiative_options: [] } : {}),
     };
     return { abortSignal(signal: AbortSignal) { signals.push(signal); return this; }, then(resolve: (value: unknown) => unknown) { return Promise.resolve({ data, error: failure ? { message: "Synthetic source unavailable" } : null }).then(resolve); } };
   } } as unknown as SupabaseClient;
-  return { client, calls, signals, changeRevision() { revision = "43"; }, expires(value: string) { validUntil = value; }, fail() { failure = true; }, preferMine() { preference = { profile_id: "reader", default_workspace: "mine", default_task_view: "board", planning_filters: { query: "saved", assignee: "other", quick: ["high"] } }; } };
+  return { client, calls, signals, changeRevision() { revision = "43"; }, expires(value: string) { validUntil = value; }, fail() { failure = true; }, omitChoices() { choices = false; }, preferMine() { preference = { profile_id: "reader", default_workspace: "mine", default_task_view: "board", planning_filters: { query: "saved", assignee: "other", quick: ["high"] } }; } };
 }
 const context = { authorized: true, actorProfileId: "reader", authorityKey: "session" };
 
@@ -89,6 +90,11 @@ test("source failure, denied admission and invalid temporal evidence never expos
   expect(await reader.load({ ...context, query })).toEqual({ status: "unavailable" });
   fixture.fail();
   expect(await reader.load({ ...context, query })).toEqual({ status: "unavailable" });
+});
+
+test("missing complete discovery metadata cannot fall back to choices from hydrated cards", async () => {
+  const fixture = source(); fixture.omitChoices();
+  expect(await createSupabasePlanningBoardReadModel(fixture.client).load({ ...context, query: { view: "board", filters: {} } })).toEqual({ status: "unavailable" });
 });
 
 test("selected and source-fence reads propagate the caller cancellation signal and preserve unknown summaries", async () => {

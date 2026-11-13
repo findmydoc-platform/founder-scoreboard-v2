@@ -125,7 +125,7 @@ selected_edges as materialized (
 ),
 context(id) as (
   select id from cards union select task_id from selected_edges union select related_task_id from selected_edges
-  union select item.parent_task_id from active item join context child on child.id=item.id where item.parent_task_id is not null
+  union select parent.id from active item join context child on child.id=item.id join active parent on parent.id=item.parent_task_id
 ),
 statuses(status,ordinal) as (values ('Offen',1),('In Arbeit',2),('Review',3),('Nacharbeit',4),('Blockiert',5),('Erledigt',6),('Pausiert',7))
 select case

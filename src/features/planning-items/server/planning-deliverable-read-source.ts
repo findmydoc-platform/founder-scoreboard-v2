@@ -79,6 +79,8 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   if (selected.status !== "ready" || !selected.project?.id || typeof selected.source_revision !== "string" || !Array.isArray(selected.rows) || !Array.isArray(selected.card_ids)
     || !Number.isFinite(Date.parse(selected.evaluated_at)) || typeof selected.temporal_key !== "string"
     || !(selected.valid_until === null || typeof selected.valid_until === "string" && Number.isFinite(Date.parse(selected.valid_until)))
+    || !Array.isArray(selected.workstreams) || selected.workstreams.some(value => typeof value !== "string")
+    || !Array.isArray(selected.initiative_options) || selected.initiative_options.some(value => !value || typeof value.id !== "string" || typeof value.title !== "string")
     || !selected.columns || !selected.metrics) return { status: "unavailable" };
   if (cursor && (cursor.source !== selected.source_revision || cursor.temporalKey !== selected.temporal_key)) return { status: "staleContinuation" };
   if (preferenceRevision && preferenceRevision !== selected.source_revision) return { status: "unavailable" };
