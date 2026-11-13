@@ -74,6 +74,43 @@ test("real Deliverable selection preserves the frozen complete reference and ind
   });
 }, 120_000);
 
+test("real SQL selects before all card and provider boundaries and traverses stable completed ties without omissions", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors }) => {
+    for (const size of [19, 20, 21, 999, 1000, 1001, 1027]) {
+      await db.query("begin");
+      try {
+        const key = `${prefix}-boundary`;
+        await db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,approval_status,status,priority,assignee,sort_order)
+          select $1||'-'||lpad(n::text,4,'0'),'findmydoc-founder-execution',case when n=$4-1 then $1||' 100%_ready\\[x]' else $1||' ordinary' end,
+            repeat('Synthetic long content ',100),'deliverable',$2,'approved','Erledigt',case when n%2=0 then 'P0' else 'P4' end,$3,n/3
+          from generate_series(0,$4::integer-1) n`, [key, initiativeId, actors.founder.profileId, size]);
+        await db.query("set local session_replication_role = replica");
+        await db.query("update public.tasks set updated_at='2020-01-01T00:00:00Z' where id like $1", [`${key}-%`]);
+        await db.query("set local session_replication_role = origin");
+        const query = normalizePlanningBoardQuery({ filters: { query: key, status: "Erledigt" } });
+        const select = async (offset = 0, source: string | null = null, evaluatedAt: string | null = null) => (await db.query("select public.planning_deliverable_selection($1,$2,'Erledigt',$3,20,$4,$5) as selection", [actors.founder.profileId, query, offset, source, evaluatedAt])).rows[0].selection;
+        const first = await select();
+        expect(first.status).toBe("ready");
+        expect(first.columns.Erledigt.total).toBe(size);
+        expect(first.card_ids).toEqual(Array.from({ length: Math.min(size, 20) }, (_, index) => `${key}-${String(index).padStart(4, "0")}`));
+        expect(first.rows).toHaveLength(Math.min(size, 20) + 2);
+        expect(first.rows.every((row: Record<string, unknown>) => !("description" in row) && !("definition_of_done" in row) && !("creation_request_payload" in row))).toBe(true);
+        const ids: string[] = [];
+        for (let offset = 0; offset < size; offset += 20) {
+          const page = offset === 0 ? first : await select(offset, first.source_revision, first.evaluated_at);
+          expect(page.status).toBe("ready"); ids.push(...page.card_ids);
+        }
+        expect(ids).toEqual(Array.from({ length: size }, (_, index) => `${key}-${String(index).padStart(4, "0")}`));
+        expect(new Set(ids).size).toBe(size);
+        const literal = (await db.query("select public.planning_deliverable_selection($1,$2,'Erledigt',0,20,null,null) as selection", [actors.founder.profileId, normalizePlanningBoardQuery({ filters: { query: "100%_ready\\[x]", status: "Erledigt" } })])).rows[0].selection;
+        expect(literal.card_ids).toEqual([`${key}-${String(size - 1).padStart(4, "0")}`]);
+        await db.query("update public.tasks set sort_order=10000 where id=$1", [`${key}-0000`]);
+        expect((await select(20, first.source_revision, first.evaluated_at)).status).toBe("staleContinuation");
+      } finally { await db.query("rollback"); }
+    }
+  });
+}, 120_000);
+
 test("the real Board API selects bounded completed history, rejects stale continuation and retains live authority and permit cleanup", async () => {
   await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, observed, request, rpc }) => {
     for (let index = 0; index < 21; index++) await db.query("insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,assignee,sort_order) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'approved','Erledigt','P2',$4,$5)", [`${prefix}-done-${String(index).padStart(2, "0")}`, `${prefix} synthetic completed`, initiativeId, actors.founder.profileId, index]);
