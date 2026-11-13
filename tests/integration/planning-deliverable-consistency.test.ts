@@ -217,3 +217,42 @@ test("completed SQL ordering matches the complete JavaScript reference at timest
     expect(actual.rows.find((row: { id: string }) => row.id === `${key}-case-a`).updated_at).toContain(".123001");
   });
 }, 120_000);
+
+
+test("each SQL and public API column has its own exact matching total for mixed and empty status scopes", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request }) => {
+    const key = `${prefix}-column-counts`;
+    // Independent persisted facts: eight cards, with absent Review/Pausiert
+    // statuses and three completed cards in the narrower completed scope.
+    const cases = [
+      ["Offen", ["open-a", "open-b"]], ["In Arbeit", ["working"]], ["Review", []],
+      ["Nacharbeit", ["rework"]], ["Blockiert", ["blocked"]],
+      ["Erledigt", ["done-a", "done-b", "done-c"]], ["Pausiert", []],
+    ] as const;
+    for (const [status, suffixes] of cases) for (const suffix of suffixes) {
+      await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'P2','approved',$4,$5)", [`${key}-${suffix}`, `${key} ${status === "Erledigt" ? "completed" : "active"}`, status, initiativeId, actors.founder.profileId]);
+    }
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    for (const completedOnly of [false, true]) {
+      const filters = { query: `${key}${completedOnly ? " completed" : ""}` };
+      const expectedTotals = Object.fromEntries(cases.map(([status, ids]) => [status, { total: completedOnly && status !== "Erledigt" ? 0 : ids.length }]));
+      for (const [column, suffixes] of cases) {
+        const expectedIds = (completedOnly && column !== "Erledigt" ? [] : suffixes).map(suffix => `${key}-${suffix}`);
+        const scope = { view: "board" as const, filters, column };
+        const raw = (await db.query("select public.planning_deliverable_selection($1,$2,$3) as selection", [actors.founder.profileId, normalizePlanningBoardQuery(scope), column])).rows[0].selection;
+        expect(raw.status).toBe("ready");
+        expect(raw.columns, `${completedOnly ? "completed" : "mixed"}: independent SQL totals for ${column}`).toEqual(expectedTotals);
+        expect(new Set(raw.card_ids)).toEqual(new Set(expectedIds));
+        const response = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+        expect(response.status).toBe(200);
+        const model = (await response.json()).model;
+        expect(model.board.column).toBe(column);
+        expect(model.board.columns[column]).toMatchObject({ total: expectedIds.length, loaded: expectedIds.length, availability: "ready", completeness: "complete", continuation: null });
+        expect(new Set(model.board.cardIds)).toEqual(new Set(expectedIds));
+        if (!expectedIds.length) expect(model.items).toEqual([]);
+        for (const [other] of cases) if (other !== column) expect(model.board.columns[other]).toMatchObject({ total: null, loaded: 0, availability: "not-loaded" });
+      }
+    }
+    expect((await db.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actors.founder.userId])).rows[0].remaining).toBe(0);
+  });
+}, 120_000);
