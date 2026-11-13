@@ -13,6 +13,7 @@ import { productUpdates } from "@/features/product-updates/model/product-update-
 import { mockAccountLifecycle } from "../../../tests/helpers/account-lifecycle-browser-fixture";
 import { planningWorkspaceHydration } from "./model/planning-workspace-hydration";
 import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
+import { normalizePlanningBoardQuery } from "./model/planning-board-query";
 
 const profile: Profile = { id: "entry-profile", name: "Entry Person", platformRole: "ceo", orgRole: "CEO", githubLogin: "entry-person", weeklyCapacity: 40 };
 const user = { id: "entry-user", email: "entry@example.com" } as User;
@@ -21,7 +22,7 @@ const task = taskDetailStoryTask({ id: "entry-task", title: "Planning entry task
 const headerData = { ...emptyPlanningHeaderData, quickLinks: readyHeaderSlot([]), calendarEvents: readyHeaderSlot([]) };
 const model = { revision: "entry-r1", scopeRevision: "scope-r1", project: emptyPlanningShellState.project, items: [task], people: [profile], sprints: [], relationships: [], preferences: [], coverage: { items: "complete", people: "complete", strategies: "complete", raci: "complete", links: "complete", sprints: "complete", relationships: "complete", preferences: "complete" } } as const;
 
-function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, changedPageOnReturn = false, revisionChanged = false, rotationRecovery = false, sourceFailureOnce = false, sourceRecoveryDelayed = false }: { startInEvents?: boolean; backgroundFailure?: boolean; changedPageOnReturn?: boolean; revisionChanged?: boolean; rotationRecovery?: boolean; sourceFailureOnce?: boolean; sourceRecoveryDelayed?: boolean }) {
+function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, changedPageOnReturn = false, revisionChanged = false, rotationRecovery = false, sourceFailureOnce = false, sourceRecoveryDelayed = false, searchReplacement = false }: { startInEvents?: boolean; backgroundFailure?: boolean; changedPageOnReturn?: boolean; revisionChanged?: boolean; rotationRecovery?: boolean; sourceFailureOnce?: boolean; sourceRecoveryDelayed?: boolean; searchReplacement?: boolean }) {
   const navigationCalls = useRef(0);
   const [workspace, setWorkspace] = useState<"planning" | "events">(startInEvents ? "events" : "planning");
   const [reads, setReads] = useState(0);
@@ -44,6 +45,10 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
       if (path === "/api/auth/session") return Response.json({ session: currentSession.current });
       if (path === "/api/planning-board-data") {
         setReads(count => count + 1);
+        if (searchReplacement) {
+          const query = normalizePlanningBoardQuery(JSON.parse(new URL(String(input), "http://localhost:3000").searchParams.get("scope") || "{}"));
+          return new Promise<Response>(resolve => { finishRead.current = () => resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...model, query, items: [{ ...task, title: "Replacement needle card" }] }, currentProfile: profile })); });
+        }
         if (rotationRecovery && ++boardRequests === 1) return new Promise<Response>(resolve => {
           finishRead.current = () => { resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...model, items: [{ ...task, title: "Late old-session task" }] }, currentProfile: profile })); setFinished(count => count + 1); };
         });
@@ -89,8 +94,8 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
       push.mockReset();
       if (previousSeen === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previousSeen);
     };
-  }, [startInEvents, backgroundFailure, changedPageOnReturn, revisionChanged, rotationRecovery, sourceFailureOnce, sourceRecoveryDelayed]);
-  const pageModel = changedPageOnReturn && pages > 1 ? { ...model, revision: "entry-r2", scopeRevision: "scope-r2", items: [{ ...task, title: "New page task", updatedAt: "entry-r2" }] } : model;
+  }, [startInEvents, backgroundFailure, changedPageOnReturn, revisionChanged, rotationRecovery, sourceFailureOnce, sourceRecoveryDelayed, searchReplacement]);
+  const pageModel = searchReplacement ? { ...model, query: normalizePlanningBoardQuery() } : changedPageOnReturn && pages > 1 ? { ...model, revision: "entry-r2", scopeRevision: "scope-r2", items: [{ ...task, title: "New page task", updatedAt: "entry-r2" }] } : model;
   return <div onClickCapture={() => { navigationCalls.current = getRouter().push.mock.calls.length; }} onClick={event => {
     const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
     if (getRouter().push.mock.calls.length === navigationCalls.current && link && ["/planning", "/events"].includes(link.getAttribute("href") || "")) {
@@ -228,6 +233,66 @@ export const SourceRecoveryDoesNotStealIndependentInputFocus: Story = {
     await waitFor(() => expect(canvas.queryByRole("button", { name: "Aktualität der Planung erneut prüfen" })).not.toBeInTheDocument());
     await expect(input).toHaveFocus();
     await expect(input).toHaveValue("Keep this draft");
+    await expect(canvas.getByLabelText("Complete Board API reads")).toHaveTextContent("0");
+  },
+};
+
+export const PendingSearchKeepsAttributedCardsAndControlFocus: Story = {
+  args: { searchReplacement: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(task.title)).toBeVisible();
+    const search = canvas.getByRole("searchbox", { name: "Aufgaben durchsuchen" });
+    await userEvent.type(search, "needle");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(canvas.getByLabelText("Complete Board API reads")).toHaveTextContent("1"));
+    await expect(canvas.getByText(task.title)).toBeVisible();
+    await expect(canvas.getByRole("status", { name: "Vorherige Suchergebnisse" })).toBeVisible();
+    await expect(search).toHaveFocus();
+    fireEvent.click(canvas.getByRole("button", { name: "Finish background Board response" }));
+    await expect(await canvas.findByText("Replacement needle card")).toBeVisible();
+    await expect(search).toHaveFocus();
+    await expect(search).toHaveValue("needle");
+    await expect(canvas.queryByRole("status", { name: "Vorherige Suchergebnisse" })).not.toBeInTheDocument();
+  },
+};
+
+export const SameQueryRefreshDefersFocusedCardReplacement: Story = {
+  args: { searchReplacement: true, revisionChanged: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("link", { name: task.title });
+    card.focus();
+    await waitFor(() => expect(canvas.getByLabelText("Complete Board API reads")).toHaveTextContent("1"), { timeout: 3000 });
+    fireEvent.click(canvas.getByRole("button", { name: "Finish background Board response" }));
+    await waitFor(() => expect(canvas.getByRole("status", { name: "Planung veraltet" })).toBeVisible());
+    await expect(card).toHaveFocus();
+    await expect(canvas.queryByText("Replacement needle card")).not.toBeInTheDocument();
+    canvas.getByRole("searchbox", { name: "Aufgaben durchsuchen" }).focus();
+    await expect(await canvas.findByText("Replacement needle card")).toBeVisible();
+    await expect(canvas.getByRole("searchbox", { name: "Aufgaben durchsuchen" })).toHaveFocus();
+  },
+};
+
+export const ReturnRestoresBoardPositionAndSelection: Story = {
+  decorators: [Story => <div style={{ width: 600 }}><Story /></div>],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("link", { name: task.title });
+    const board = canvas.getByRole("region", { name: "Board nach Status" });
+    board.scrollLeft = 100;
+    fireEvent.scroll(board);
+    const position = board.scrollLeft;
+    await expect(position).toBeGreaterThan(0);
+    await userEvent.click(card);
+    await expect(await canvas.findByRole("dialog")).toBeVisible();
+    // Route delivery is controlled here; modal interaction is tested by the detail stories.
+    fireEvent.click(canvas.getByRole("link", { name: "Termine & Erinnerungen" }));
+    await expect(await canvas.findByRole("heading", { name: "Termine & Erinnerungen", level: 1 })).toBeVisible();
+    fireEvent.click(canvas.getByRole("link", { name: "Planung" }));
+    await expect(await canvas.findByRole("dialog")).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: "Erneut laden" })).toBeVisible();
+    await expect(canvas.getByRole("region", { name: "Board nach Status" }).scrollLeft).toBe(position);
     await expect(canvas.getByLabelText("Complete Board API reads")).toHaveTextContent("0");
   },
 };

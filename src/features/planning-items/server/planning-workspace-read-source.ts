@@ -126,10 +126,11 @@ export async function loadPlanningWorkspaceModel(
 ): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
   // The matching post-enumeration fence rejects mixed provider pages.
-  const snapshot = await observeRuntimePhase("board.project", () => supabase.rpc("planning_workspace_snapshot"));
+  const cancellable = <T extends { abortSignal(signal: AbortSignal): T }>(read: T): T => context.signal ? read.abortSignal(context.signal) : read;
+  const snapshot = await observeRuntimePhase("board.project", () => cancellable(supabase.rpc("planning_workspace_snapshot")));
   const project = snapshot.data as (ProjectRow & { scope_revision?: string }) | null;
   if (snapshot.error || !project?.id || typeof project.scope_revision !== "string") return { status: "unavailable" };
-  const completeRead = <T>(query: () => PromiseLike<{ data: T[] | null; count: number | null; error: unknown }> & { range(from: number, to: number): PromiseLike<{ data: T[] | null; count: number | null; error: unknown }> }) => context.query ? countedRows(query) : Promise.resolve(query());
+  const completeRead = <T, Q extends PromiseLike<{ data: T[] | null; count: number | null; error: unknown }> & { abortSignal(signal: AbortSignal): Q; range(from: number, to: number): PromiseLike<{ data: T[] | null; count: number | null; error: unknown }> }>(query: () => Q) => context.query ? countedRows(() => cancellable(query())) : Promise.resolve(cancellable(query()));
   let baseReadFailed = false;
   const trackRead = <T extends { error: unknown }>(read: Promise<T>, missingData?: (result: T) => boolean): Promise<T> => read.then(
     (result) => {
@@ -146,7 +147,7 @@ export async function loadPlanningWorkspaceModel(
   let avatarWork: Promise<AvatarOutcome> | undefined;
   const avatarStart = profileRead.then((result) => {
     if (baseReadFailed || !result.data?.length) return;
-    avatarWork = observeRuntimePhase("board.avatars", () => withWorkspaceProfileAvatars((result.data as DbProfile[]).map(mapProfile), supabase)).then(
+    avatarWork = observeRuntimePhase("board.avatars", () => withWorkspaceProfileAvatars((result.data as DbProfile[]).map(mapProfile), supabase, context.signal)).then(
       (people): AvatarOutcome => ({ people }),
       (error: unknown): AvatarOutcome => ({ error }),
     );
@@ -175,7 +176,7 @@ export async function loadPlanningWorkspaceModel(
   }
   if ("error" in avatars) throw avatars.error;
   if (context.query) {
-    const current = await observeRuntimePhase("board.project", () => supabase.rpc("planning_workspace_snapshot"));
+    const current = await observeRuntimePhase("board.project", () => cancellable(supabase.rpc("planning_workspace_snapshot")));
     if (current.error || typeof current.data?.scope_revision !== "string") return { status: "unavailable" };
     if (current.data.scope_revision !== project.scope_revision) {
       return { status: context.query.continuation ? "staleContinuation" : "unavailable" };

@@ -57,6 +57,8 @@ export function usePlanningBootstrapState({
   const { data, planningState } = stateOwner;
   const { workspace, setWorkspace, navigateWorkspaceHref } = usePlanningWorkspace(initialWorkspace, planningState);
   const viewState = usePlanningViewState({
+    planningState,
+    workspace,
     initialData: safeInitialData,
     initialQuery: initialWorkspaceRead?.query || initialWorkspaceRead?.board?.query,
     initialView: safeInitialData.profileUiPreferences.find(item => item.profileId === initialCurrentProfile?.id)?.defaultTaskView,

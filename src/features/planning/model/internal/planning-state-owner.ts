@@ -79,8 +79,8 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   saveTeamProfile?: (profileId: string, patch: import("../planning-team-state").TeamProfilePatch, expected: Record<string, unknown>) => Promise<Partial<import("@/lib/types").Profile> & { id: string }>;
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
-  readPlanningSourceVersion?: () => Promise<string>;
-  readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput): Promise<PlanningWorkspaceRead | null>;
+  readPlanningSourceVersion?: (options?: { signal?: AbortSignal }) => Promise<string>;
+  readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal }): Promise<PlanningWorkspaceRead | null>;
   readTaskDetail?: (taskId: string) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[] }>;
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
@@ -117,12 +117,49 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const taskConfirmedAt = new Map<string, number>();
   const taskReadAt = new Map<string, number>();
   let planningSourceEpoch = 0;
+  let planningInteraction: import("../planning-state").PlanningInteraction = { selectedTaskId: null };
+  const boardInteractions = new Set<symbol>();
+  const heldReads = new Set<() => void>();
+  function releaseHeldReads() {
+    for (const resolve of heldReads) resolve();
+    heldReads.clear();
+  }
+  const planningConsumers = new Set<symbol>();
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let invalidatedAt = 0;
+  function clearAutomaticRefresh() {
+    if (refreshTimer !== undefined) clearTimeout(refreshTimer);
+    refreshTimer = undefined;
+  }
+  function scheduleAffectedRefresh() {
+    clearAutomaticRefresh();
+    if (!planningConsumers.size || !active) return;
+    const delay = Math.max(0, invalidatedAt + 500 - (adapter.now?.() ?? Date.now()));
+    refreshTimer = setTimeout(() => {
+      refreshTimer = undefined;
+      if (!planningConsumers.size || !isActive() || workspaceStatuses.get("planning") === "forbidden") return;
+      const pending = workspaceReads.get("planning")?.result || boardRead?.result || (columnReads.size ? Promise.all([...columnReads.values()].map(read => read.result)) : undefined);
+      if (pending) {
+        void pending.finally(() => {
+          if (workspaceStatuses.get("planning") === "stale") scheduleAffectedRefresh();
+        });
+        return;
+      }
+      void planning.refreshWorkspace("planning");
+    }, delay);
+  }
   function invalidatePlanningSource() {
+    releaseHeldReads();
     planningSourceEpoch++;
+    invalidatedAt = adapter.now?.() ?? Date.now();
     sourceStatus = "changed";
     freshness = "stale";
     planningQueries.clear();
     queryRevision = undefined;
+    for (const workspace of workspaceStatuses.keys()) {
+      if (workspace !== "planning" && workspaceReadCoverage(workspace).tasks && workspaceStatuses.get(workspace) !== "forbidden") workspaceStatuses.set(workspace, "stale");
+    }
+    scheduleAffectedRefresh();
     if (!boardResult) {
       if (workspaceStatuses.has("planning")) workspaceStatuses.set("planning", "stale");
       return;
@@ -139,6 +176,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     invalidatePlanningSource();
   }
   function detachPlanningMetadata() {
+    releaseHeldReads();
     planningSourceEpoch++;
     freshness = "stale";
     boardResult = undefined;
@@ -169,12 +207,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const completeness = new Map<AppWorkspace, PlanningWorkspaceView["completeness"]>([[initialWorkspace, initialWorkspaceRead?.coverage.tasks || workspaceReadCoverage(initialWorkspace).tasks || "none"]]);
   const acceptedRead = new Map<AppWorkspace, number>();
   const workspaceReads = new Map<AppWorkspace, { result: Promise<boolean>; generation: number; started: number; sourceEpoch: number; sessionRevision?: string }>();
+  const readTransports = new Map<number, { workspace: AppWorkspace; controller: AbortController }>();
+  function cancelPlanningReads() {
+    for (const read of readTransports.values()) if (read.workspace === "planning") read.controller.abort();
+  }
   const hydrationRequests = new Map<AppWorkspace, ReturnType<typeof beginWorkspaceRead>>();
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
   let freshness: "current" | "stale" = "current";
   let boardResult = initialWorkspaceRead?.board;
   let weekBasis = planningWeekBasis(boardResult, initialWorkspaceRead?.coverage, initialData.sprints);
   let boardQuery = initialWorkspaceRead?.query || boardResult?.query;
+  let displayedQuery = boardQuery;
   let boardQueryKey = boardQuery ? planningBoardQueryKey(boardQuery) : undefined;
   let pageStatus: PlanningReadStatus = "current";
   const columnReadStatus: Partial<Record<TaskStatus, PlanningReadStatus>> = {};
@@ -186,6 +229,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let scopeRevisionReadAt = 0;
   let sourceStatus: import("../planning-state").PlanningSourceStatus = "current";
   let sourceObservation: Promise<import("../planning-state").PlanningSourceObservation> | undefined;
+  let sourceTransport: AbortController | undefined;
   const planningQueries = new Map<string, {
     query: NonNullable<typeof boardQuery>;
     revision: string;
@@ -198,6 +242,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     weekBasis?: PlanningWeekBasis;
     readAuthority?: import("../planning-server-header-read").PlanningReadAuthority;
   }>();
+  let queuedQuery: { query: PlanningBoardQuery; resolve: (accepted: boolean) => void; timer: ReturnType<typeof setTimeout> } | undefined;
+  function discardQueuedQuery() {
+    if (!queuedQuery) return;
+    clearTimeout(queuedQuery.timer);
+    queuedQuery.resolve(false);
+    queuedQuery = undefined;
+  }
   function rememberPlanningQuery() {
     if (!boardQuery || !boardQueryKey || !queryRevision || workspaceStatuses.get("planning") !== "current") return;
     planningQueries.set(boardQueryKey, {
@@ -646,6 +697,40 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const hierarchy = createHierarchyCommands({planning:()=>planning,currentTask:id=>confirmed.tasks.find(task=>task.id===id),active:isActive,generation:()=>sessionGeneration,changed:publish});
   const decisionLog = createDecisionLogState({initial:active ? initialDecisionLogResult : undefined,active:isActive,generation:()=>sessionGeneration,changed:publish,read:adapter.readDecisionLog});
   const planning: PlanningState = {
+    planningInteraction() { isActive(); return planningInteraction; },
+    rememberPlanningInteraction(patch) {
+      if (!isActive()) return;
+      const changedSelection = "selectedTaskId" in patch && patch.selectedTaskId !== planningInteraction.selectedTaskId;
+      planningInteraction = { ...planningInteraction, ...patch };
+      if (changedSelection) publish();
+    },
+    beginBoardInteraction() {
+      const interaction = Symbol("board-interaction");
+      boardInteractions.add(interaction);
+      return () => {
+        boardInteractions.delete(interaction);
+        if (!boardInteractions.size) releaseHeldReads();
+      };
+    },
+    activatePlanningView() {
+      const consumer = Symbol("planning-view");
+      planningConsumers.add(consumer);
+      return () => {
+        planningConsumers.delete(consumer);
+        if (!planningConsumers.size) {
+          clearAutomaticRefresh(); discardQueuedQuery();
+          sourceTransport?.abort();
+          sourceObservation = undefined;
+          if (sourceStatus === "checking") sourceStatus = "unverified";
+          if (heldReads.size || [...readTransports.values()].some(read => read.workspace === "planning")) {
+            acceptedRead.set("planning", ++sequence);
+            releaseHeldReads();
+            cancelPlanningReads();
+            if (workspaceStatuses.get("planning") === "loading") workspaceStatuses.set("planning", "stale");
+          }
+        }
+      };
+    },
     decisionLog: decisionLog.view,
     loadDecisionLog: decisionLog.load,
     checkPlanningSource() {
@@ -666,12 +751,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       if (sourceObservation) return sourceObservation;
       const generation = sessionGeneration, revision = sessionRevision, epoch = planningSourceEpoch, source = scopeRevision;
+      const controller = new AbortController();
+      sourceTransport = controller;
       sourceStatus = "checking";
-      const current = () => isActive() && memberships.has("planning") && generation === sessionGeneration && revision === sessionRevision && epoch === planningSourceEpoch && source === scopeRevision;
+      const current = () => !controller.signal.aborted && isActive() && memberships.has("planning") && generation === sessionGeneration && revision === sessionRevision && epoch === planningSourceEpoch && source === scopeRevision;
       const observed = (async (): Promise<import("../planning-state").PlanningSourceObservation> => {
         try {
           if (!adapter.readPlanningSourceVersion || !source) { sourceStatus = "unverified"; return "unverified"; }
-          const remote = await adapter.readPlanningSourceVersion();
+          const remote = await adapter.readPlanningSourceVersion({ signal: controller.signal });
           if (!current()) return "session-ended";
           if (remote !== source) { invalidatePlanningSource(); sourceStatus = "changed"; return "changed"; }
           sourceStatus = "current";
@@ -832,14 +919,40 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const tasks = planning.workspace("planning").tasks;
       const byId = new Map(tasks.map(task => [task.id, task]));
       const boardTasks = boardResult ? [...boardResult.cardIds.flatMap(id => byId.get(id) ? [byId.get(id)!] : []), ...tasks.filter(task => lifecycle.isTemporary(task.id))] : tasks;
-      return { sourceStatus, requiresQueryRead: Boolean(boardQuery && !boardQueryKey), deniedChildListIds: [...childLists].filter(([id, list]) => list.readStatus === "forbidden" || (deniedTaskReads.has(id) && list.readStatus === "loading")).map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
+      return { query: active ? displayedQuery : undefined, sourceStatus, requiresQueryRead: Boolean(boardQuery && !boardQueryKey), deniedChildListIds: [...childLists].filter(([id, list]) => list.readStatus === "forbidden" || (deniedTaskReads.has(id) && list.readStatus === "loading")).map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
+    },
+    scheduleBoardQuery(query, options) {
+      discardQueuedQuery();
+      if (!isActive()) return Promise.resolve(false);
+      const normalized = normalizePlanningBoardQuery(query);
+      if ((boardRead || workspaceReads.has("planning") || columnReads.size || heldReads.size) && (!boardQuery || planningBoardQueryKey(boardQuery) !== planningBoardQueryKey(normalized))) {
+        acceptedRead.set("planning", ++sequence);
+        releaseHeldReads();
+        cancelPlanningReads();
+      }
+      if (options?.immediate) return planning.ensureBoardQuery(normalized);
+      const delay = normalized.filters.query !== (boardQuery?.filters.query || "") ? 250 : 0;
+      return new Promise<boolean>(resolve => {
+        const timer = setTimeout(() => {
+          queuedQuery = undefined;
+          void planning.ensureBoardQuery(normalized).then(resolve);
+        }, delay);
+        queuedQuery = { query: normalized, resolve, timer };
+      });
     },
     ensureBoardQuery(query) {
+      discardQueuedQuery();
       if (!isActive()) return Promise.resolve(false);
       if (!planningWeekIsCurrent(boardQuery, weekBasis, adapter.now?.() ?? Date.now())) invalidatePlanningSource();
       const key = planningBoardQueryKey(query);
       if (boardRead?.key === key && boardRead.sequence === acceptedRead.get("planning") && boardRead.sourceEpoch === planningSourceEpoch) return boardRead.result;
-      if (boardQueryKey === key && workspaceStatuses.get("planning") === "current") return Promise.resolve(true);
+      const workspaceRead = workspaceReads.get("planning");
+      if (workspaceRead && workspaceRead.generation === sessionGeneration && workspaceRead.sessionRevision === sessionRevision && workspaceRead.sourceEpoch === planningSourceEpoch && workspaceRead.started === acceptedRead.get("planning") && boardQuery && planningBoardQueryKey(boardQuery) === key) return workspaceRead.result;
+      if (boardQueryKey === key && workspaceStatuses.get("planning") === "current") {
+        const normalized = normalizePlanningBoardQuery(query);
+        if (JSON.stringify(displayedQuery) !== JSON.stringify(normalized)) { displayedQuery = normalized; boardQuery = normalized; publish(); }
+        return Promise.resolve(true);
+      }
       if (boardQuery && boardQueryKey === planningBoardQueryKey(boardQuery)) rememberPlanningQuery();
       const exact = planningQueries.get(key);
       const complete = planningQueries.get(planningBoardQueryKey({ view: "complete" }));
@@ -850,6 +963,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         acceptedRead.set("planning", ++sequence);
         boardQuery = exact ? retained.query : normalizePlanningBoardQuery(query);
         boardQueryKey = key;
+        displayedQuery = normalizePlanningBoardQuery(query);
         boardResult = retained.result;
         weekBasis = retained.weekBasis;
         planningAuthority = retained.readAuthority;
@@ -1039,6 +1153,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     refreshWorkspace(workspace) {
       if (!isActive()) return Promise.resolve(false);
+      if (workspace === "planning") clearAutomaticRefresh();
+      if (workspace === "planning" && queuedQuery) return planning.ensureBoardQuery(queuedQuery.query);
+      if (workspace === "planning" && boardRead && boardRead.sequence === acceptedRead.get("planning") && boardRead.sourceEpoch === planningSourceEpoch) return boardRead.result;
       const existing = workspaceReads.get(workspace);
       if (existing && existing.generation === sessionGeneration && existing.sessionRevision === sessionRevision && (workspace === "planning" ? existing.sourceEpoch === planningSourceEpoch : existing.started === sequence) && existing.started === acceptedRead.get(workspace)) return existing.result;
       if (workspace === "planning") planningQueries.clear();
@@ -1073,15 +1190,22 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   async function readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, append = false) {
     if (!isActive()) return false;
-    if (workspace === "planning" && !append) { columnReads.clear(); columnRequests.clear(); }
+    if (workspace === "planning" && !append) { releaseHeldReads(); cancelPlanningReads(); columnReads.clear(); columnRequests.clear(); }
     const token = beginWorkspaceRead(workspace, append ? query : undefined);
     const { eventRead, toolRead } = token;
     const setPageStatus = (status: PlanningReadStatus) => { if (!token.page || token.page.column === "Erledigt") pageStatus = status; if (token.page) columnReadStatus[token.page.column] = status; };
     if (append) setPageStatus("loading"); else workspaceStatuses.set(workspace, "loading");
     publish();
     let result: PlanningWorkspaceRead | null;
-    try { result = await adapter.readWorkspace(workspace, query); }
+    const controller = new AbortController();
+    readTransports.set(token.started, { workspace, controller });
+    try { result = await adapter.readWorkspace(workspace, query, { signal: controller.signal }); }
     catch (error) {
+      if (workspace === "planning" && readErrorStatus(error) === "forbidden" && isActive() && token.generation === sessionGeneration && token.sessionRevision === sessionRevision) {
+        denyPlanningScope();
+        publish();
+        return false;
+      }
       if (!readIsCurrent(workspace, token)) return false;
       if (append) {
         const staleContinuation = typeof error === "object" && error !== null && "code" in error && error.code === "stale_continuation";
@@ -1104,7 +1228,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       profileSettings.readStatus(readErrorStatus(error), workspace);
       publish();
       return false;
-    }
+    } finally { readTransports.delete(token.started); }
     if (!readIsCurrent(workspace, token)) return false;
     if (!result) {
       if (toolRead !== null) tools.failed(new Error("Links konnten nicht geladen werden."), toolRead);
@@ -1119,6 +1243,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return false;
     }
     if (append && (!result.board || result.board.column !== token.page?.column)) { setPageStatus("unavailable"); publish(); return false; }
+    if (workspace === "planning" && !append && boardInteractions.size && (!boardQueryKey || !query || boardQueryKey === planningBoardQueryKey(query))) {
+      workspaceStatuses.set("planning", "stale");
+      freshness = "stale";
+      publish();
+      await new Promise<void>(resolve => heldReads.add(resolve));
+    }
     return acceptWorkspaceRead(workspace, { ...result, query: result.query || query, append }, token);
   }
   function beginWorkspaceRead(workspace: AppWorkspace, query?: PlanningBoardQueryInput) {
@@ -1140,7 +1270,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function acceptWorkspaceRead(workspace: AppWorkspace, result: PlanningWorkspaceRead, token: ReturnType<typeof beginWorkspaceRead>) {
     const { started, notificationRead, eventRead, toolRead } = token;
     if (!readIsCurrent(workspace, token)) return false;
-    if (workspace === "planning" && result.readAuthority && (result.readAuthority.userId !== userId || !Number.isFinite(result.readAuthority.deadline) || result.readAuthority.deadline <= (adapter.now?.() ?? Date.now()))) return false;
+    if (workspace === "planning" && result.readAuthority && (result.readAuthority.userId !== userId || !Number.isFinite(result.readAuthority.deadline) || result.readAuthority.deadline <= (adapter.now?.() ?? Date.now()))) {
+      if (token.page) columnReadStatus[token.page.column] = "unavailable";
+      else workspaceStatuses.set(workspace, "unavailable");
+      publish();
+      return false;
+    }
     if (workspace === "planning" && result.query?.view === "complete") {
       const coverage = result.coverage || {};
       const complete = (result.taskCoverage || coverage.tasks) === "complete"
@@ -1188,12 +1323,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         viewerOpenSubIssueIdsByDeliverableId: { ...previous?.viewerOpenSubIssueIdsByDeliverableId, ...result.board.viewerOpenSubIssueIdsByDeliverableId },
       };
       boardQuery = result.board.query;
+      displayedQuery = boardQuery;
       boardQueryKey = result.board.queryKey;
       pageStatus = "current";
     } else if (workspace === "planning" && result.query) {
       boardResult = undefined;
       weekBasis = undefined;
       boardQuery = normalizePlanningBoardQuery(result.query);
+      displayedQuery = boardQuery;
       boardQueryKey = planningBoardQueryKey(boardQuery);
       pageStatus = "current";
       for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
@@ -1289,6 +1426,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return true;
   }
   function suspendProtected() {
+    planningInteraction = { selectedTaskId: null };
+    boardInteractions.clear();
+    releaseHeldReads();
+    sourceTransport?.abort();
+    for (const read of readTransports.values()) read.controller.abort();
+    discardQueuedQuery();
+    clearAutomaticRefresh();
     planningAuthority = undefined;
     sessionGeneration++;
     active = false;
@@ -1331,7 +1475,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     completeness.clear();
     acceptedRead.clear();
     hydrationReads.clear();
-    boardResult = undefined; weekBasis = undefined; boardQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
+    boardResult = undefined; weekBasis = undefined; boardQuery = undefined; displayedQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
     planningQueries.clear(); queryRevision = undefined; scopeRevision = undefined; sourceObservation = undefined; sourceStatus = "unverified";
     columnReads.clear(); columnRequests.clear();
     for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];

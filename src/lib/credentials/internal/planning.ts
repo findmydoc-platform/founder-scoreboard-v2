@@ -330,10 +330,10 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.task.read" || !targetId || !detailPeople || await current()) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
       return loadPlanningTrashTaskDetail(service, targetId, detailPeople);
     },
-    async loadBoard(query?: PlanningBoardQueryInput) {
+    async loadBoard(query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {
       const denial = action === "planning.board.read" ? await current() : forbidden();
       if (denial) return { status: "forbidden" as const };
-      const result = await createSupabasePlanningBoardReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null, query, authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning").update(JSON.stringify(["planning-board-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") });
+      const result = await createSupabasePlanningBoardReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null, signal: options?.signal, query, authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning").update(JSON.stringify(["planning-board-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") });
       try { assertKnown(); } catch { return { status: "forbidden" as const }; }
       return result;
     },
@@ -369,10 +369,11 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       }
       return { ok: true as const, headerData };
     },
-    async readSourceVersion() {
+    async readSourceVersion(options?: { signal?: AbortSignal }) {
       const denial = action === "planning.revision.read" ? await current() : forbidden();
       if (denial) return { version: null, error: denial, status: "status" in denial ? Number(denial.status) : 403 };
-      const result = await service.rpc("planning_source_version");
+      const read = service.rpc("planning_source_version");
+      const result = await (options?.signal ? read.abortSignal(options.signal) : read);
       try { assertKnown(); } catch { return { version: null, status: 503, error: { message: "Planning source authority expired." } }; }
       return typeof result.data === "string" && !result.error
         ? { version: result.data, error: null }
