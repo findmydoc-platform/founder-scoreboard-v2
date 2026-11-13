@@ -64,7 +64,7 @@ test("one real query plan selects bounded identities and complete discovery with
 test.each(["source", "authority", "column-failure"] as const)("a real query streams a later ready column before a held first column and handles %s after hydration", async change => {
   await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, observed, request }) => {
     const key = `${prefix}-stream`, open = `${key}-open`, review = `${key}-review`;
-    for (const [id, status] of [[open, "Offen"], [review, "Review"]]) await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'P2','approved',$4,$5)", [id, key, status, initiativeId, actors.founder.profileId]);
+    for (const [id, status] of [[open, "Offen"], [review, "Review"]]) await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner,review_status,review_owner_profile_id,evidence_link,review_requested_at) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'P2','approved',$4,$5,case when $3='Review' then 'requested' else 'not_requested' end,case when $3='Review' then $6 else null end,case when $3='Review' then 'https://example.test/synthetic-review-evidence' else '' end,case when $3='Review' then now() else null end)", [id, key, status, initiativeId, actors.founder.profileId, actors.ceo.profileId]);
     const expectedQuery = normalizePlanningBoardQuery({ view: "board", filters: { query: key } });
     const safeColumns = (columns: Record<string, { total: number; ids?: string[] }>) => Object.fromEntries(Object.entries(columns).map(([status, value]) => [status, { total: value.total, selectedIds: value.ids?.length ?? null }]));
     const directPlan = (await db.query("select public.planning_deliverable_query_plan($1,$2) as plan", [actors.founder.profileId, expectedQuery])).rows[0].plan;
@@ -73,6 +73,7 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
       status: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt", "Pausiert"].includes(row.status) ? row.status : "other",
       approval: ["approved", "proposed", "rejected"].includes(row.approval_status) ? row.approval_status : "other",
     }));
+    expect(persisted).toEqual([{ taskType: "deliverable", status: "Offen", approval: "approved" }, { taskType: "deliverable", status: "Review", approval: "approved" }]);
     const planFacts: Array<{ actorBinding: boolean; queryBinding: boolean; status: string; columns: ReturnType<typeof safeColumns> }> = [];
     const transport = globalThis.fetch;
     const selectedIds: string[][] = [];
