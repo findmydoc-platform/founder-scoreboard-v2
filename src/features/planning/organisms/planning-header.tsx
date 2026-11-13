@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { RefreshCw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
@@ -17,6 +18,16 @@ import { AdministratorModeIndicator } from "@/features/administrator-access/mole
 export function PlanningHeader({ controller, administratorAccessController }: { controller: PlanningAppController; administratorAccessController: AdministratorAccessController }) {
   const router = useRouter();
   const workspaceContextAvailable = useApplicationWorkspaceContextAvailable();
+  const retainSourceRetryFocus = useCallback((button: HTMLButtonElement | null) => {
+    if (!button) return;
+    return () => {
+      if (button.ownerDocument.activeElement !== button) return;
+      const heading = button.closest("header")?.querySelector<HTMLElement>("h1");
+      if (!heading) return;
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    };
+  }, []);
   const {
     authAvailable, authBusy, authNotice, authUser, data, devProfileId, devRoleSwitchAvailable,
     focusModeActive, githubConnectionState, githubInstallationAvailable,
@@ -84,7 +95,7 @@ export function PlanningHeader({ controller, administratorAccessController }: { 
           ) : null}
           {workspace === "planning" && planningRemoteChangesUnverified && !planningRemoteChangesAvailable ? (
             <div className="flex justify-end border-b border-slate-200 px-4 lg:px-6">
-              <button type="button" aria-label="Aktualität der Planung erneut prüfen" title="Aktualität der Planung konnte nicht geprüft werden." onClick={() => void checkForPlanningRemoteChanges()} className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-xs text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+              <button ref={retainSourceRetryFocus} type="button" aria-label="Aktualität der Planung erneut prüfen" title="Aktualität der Planung konnte nicht geprüft werden." onClick={() => void checkForPlanningRemoteChanges()} className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-xs text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
                 <RefreshCw size={14} aria-hidden="true" />
                 <span role="status">Aktualität ungeprüft</span>
               </button>
