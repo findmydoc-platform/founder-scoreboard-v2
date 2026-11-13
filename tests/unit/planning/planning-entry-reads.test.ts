@@ -145,3 +145,21 @@ test("a current-scope version denial removes cards instead of presenting reusabl
   expect(owner.planning.workspace("planning")).toMatchObject({ tasks: [], readStatus: "forbidden" });
   expect(owner.contentReads()).toBe(0);
 });
+
+test("freshness demand joins an already required query read without observing the old source", async () => {
+  const session = { userId: "entry-user", revision: "entry-session", expiresAt: Math.floor(Date.now() / 1000) + 60, user: { id: "entry-user" } };
+  const read = planningWorkspaceHydration("planning", { revision: "r1", scopeRevision: "source-1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: "complete" } }, session)!;
+  const pending = deferred<{ data: typeof data; scopeRevision: string; query: { filters: { query: string } } }>();
+  let versionReads = 0;
+  const { planning } = createPlanningState({ userId: session.userId, initialData: data, initialSession: session, initialWorkspaceRead: read, adapter: {
+    saveTask: async () => ({ task }), readWorkspace: () => pending.promise,
+    readPlanningSourceVersion: async () => { versionReads++; return "source-1"; },
+  } });
+  const query = planning.ensureBoardQuery({ filters: { query: "changed query" } });
+  const observed = planning.checkPlanningSource();
+  pending.resolve({ data, scopeRevision: "source-2", query: { filters: { query: "changed query" } } });
+  await expect(query).resolves.toBe(true);
+  await expect(observed).resolves.toBe("content-read");
+  expect(versionReads).toBe(0);
+  expect(planning.board().scopeRevision).toBe("source-2");
+});

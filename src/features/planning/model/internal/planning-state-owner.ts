@@ -622,6 +622,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     checkPlanningSource() {
       if (!isActive()) return Promise.resolve("session-ended");
       const status = workspaceStatuses.get("planning");
+      const workspaceRead = workspaceReads.get("planning");
+      const pendingContent = workspaceRead?.generation === sessionGeneration && workspaceRead.sessionRevision === sessionRevision
+        && workspaceRead.sourceEpoch === planningSourceEpoch && workspaceRead.started === acceptedRead.get("planning") ? workspaceRead.result
+        : boardRead && boardRead.sequence === acceptedRead.get("planning") && boardRead.sourceEpoch === planningSourceEpoch ? boardRead.result : undefined;
+      if (pendingContent) return pendingContent.then(accepted => accepted ? "content-read" as const : "unverified" as const);
       if (status === "forbidden") return Promise.resolve("session-ended");
       if (!memberships.has("planning") || completeness.get("planning") === "none" || status === "stale" || status === "not-loaded" || status === "unavailable") {
         return planning.refreshWorkspace("planning").then(accepted => accepted ? "content-read" as const : "unverified" as const);
