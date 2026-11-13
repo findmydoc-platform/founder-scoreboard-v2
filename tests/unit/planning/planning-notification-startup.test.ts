@@ -16,6 +16,13 @@ function planningProtocol(notificationsUnavailable = true) {
   const notificationRead = vi.fn();
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/rpc/planning_source_version") return Response.json("42");
+    if (url.pathname === "/rest/v1/rpc/planning_deliverable_selection") return Response.json({
+      status: "ready", source_revision: "42", evaluated_at: new Date().toISOString(), temporal_key: "stable", valid_until: null,
+      project: { id: "findmydoc-founder-execution", name: "Planning" }, rows: [], card_ids: [], context_ids: [], profiles: [], sprints: [], preferences: [], relationships: [],
+      columns: Object.fromEntries(["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt", "Pausiert"].map(status => [status, { total: 0 }])),
+      metrics: { total: 0, open: 0, done: 0, blocked: 0 }, level_totals: { epic: 0, initiative: 0, deliverable: 0 }, personal_children: {}, workstreams: [], initiative_options: [], workspace_revision: { activeTaskCount: 0, latestUpdatedAt: "" },
+    });
     if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", scope_revision: "42" });
     if (url.pathname === "/rest/v1/notification_events") { notificationRead(); return notificationsUnavailable ? Response.json({ message: "Unavailable" }, { status: 503 }) : Response.json([], { headers: { "content-range": "*/0" } }); }
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) return Response.json([], { headers: { "content-range": "*/0" } });

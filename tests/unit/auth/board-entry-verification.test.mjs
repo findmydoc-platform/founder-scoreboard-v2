@@ -76,7 +76,7 @@ test("Board HTTP cancellation reaches supported data reads while permit cleanup 
   let entered;
   const started = new Promise(resolve => { entered = resolve; });
   state.respond = async (name, request) => {
-    if (name !== "active_tasks") return null;
+    if (name !== "planning_deliverable_selection") return null;
     receivedSignal = request.signal;
     entered();
     await new Promise(resolve => {
@@ -86,7 +86,7 @@ test("Board HTTP cancellation reaches supported data reads while permit cleanup 
     throw new DOMException("Controlled read cancelled", "AbortError");
   };
   const { NextRequest } = await import("next/server");
-  const request = new NextRequest(protocol.request("/api/planning-board-data?scope=%7B%22view%22%3A%22board%22%7D"), { signal: controller.signal });
+  const request = new NextRequest(protocol.request(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ view: "board", filters: {} }))}`), { signal: controller.signal });
   const route = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
   const reading = route.GET(request);
   await started;
