@@ -43,8 +43,11 @@ for (const recovery of [false, true]) {
     globalThis.fetch = fetchMock;
 
     let received;
-    const pending = client.requestResponse("/api/download", { expectedSession: currentSession })
-      .then(value => { received = value; });
+    // Exercise the existing response transport until the unbuffered method exists.
+    const request = client.requestResponse
+      ? client.requestResponse("/api/download", { expectedSession: currentSession })
+      : client.requestBlob("/api/download", { expectedSession: currentSession }).then(result => result.response);
+    const pending = request.then(value => { received = value; });
     let closed = false;
     try {
       await vi.waitFor(() => assert.equal(received, response), { timeout: 200, interval: 1 });
