@@ -70,3 +70,17 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Every product update must have its own small, meaningful Driver.js tour in `src/features/product-tours/model/feature-tour-registry.ts`, link it through the update-level `featureTourId`, and keep the gallery action **Lass dich leiten** usable. Do not add a tour that merely repeats the gallery text; guide the user to the changed interaction in as few steps as practical.
 - Every product update must set `expiresAt`. Use 30 days after `releasedAt` by default and never more than 60 days. Expired updates must disappear from automatic display and the help menu.
 - Purely operational deployments must not invent product news.
+
+## Agent skills
+
+### Issue tracker
+
+Engineering specs and implementation tickets use GitHub Issues in `findmydoc-platform/founder-scoreboard-v2`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Manage triage labels in GitHub only. Query the repository's existing labels when a skill needs them; keep no local label mapping.
+
+### Domain docs
+
+Use a single domain context with root `GLOSSARY.md` and `docs/adr/`. See `docs/agents/domain.md`.
