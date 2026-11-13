@@ -51,20 +51,23 @@ select case
     'status','ready','source_revision',basis.revision,'evaluated_at',p_evaluated_at,
     'card_ids',coalesce((select jsonb_agg(id order by ordinal) from chosen),'[]'::jsonb),
     'context_ids',coalesce((select jsonb_agg(id order by id) from context),'[]'::jsonb),
-    'rows',coalesce((select jsonb_agg(jsonb_build_object(
-      'id',item.id,'sort_order',item.sort_order,'title',item.title,'status',item.status,'priority',item.priority,
-      'owner',item.owner,'assignee',item.assignee,'created_by',item.created_by,'workstream',item.workstream,'target_date',item.target_date,
-      'fixed_date',item.fixed_date,'dod_template_version',item.dod_template_version,'evidence_link',item.evidence_link,'issue_number',item.issue_number,'issue_url',item.issue_url,
-      'watched',item.watched,'estimate_hours',item.estimate_hours,'sprint_id',item.sprint_id,'review_status',item.review_status,'review_owner_profile_id',item.review_owner_profile_id,
-      'review_requested_at',item.review_requested_at,'score_points',item.score_points,'score_final',item.score_final,'github_repo',item.github_repo,'github_issue_number',item.github_issue_number,
-      'github_issue_url',item.github_issue_url,'github_issue_sync_status',item.github_issue_sync_status,'github_issue_last_synced_at',item.github_issue_last_synced_at,'task_type',item.task_type,'parent_task_id',item.parent_task_id,
-      'approval_status',item.approval_status,'approval_revision',item.approval_revision,'proposed_by',item.proposed_by,'proposed_at',item.proposed_at,'decided_by',item.decided_by,
-      'decided_at',item.decided_at,'trashed_at',item.trashed_at,'trashed_by',item.trashed_by,'trash_reason',item.trash_reason,'trash_cause',item.trash_cause,
-      'purge_after',item.purge_after,'trash_root_type',item.trash_root_type,'trash_root_id',item.trash_root_id,'trash_revision',item.trash_revision,'score_relevant',item.score_relevant,
-      'original_sprint_id',item.original_sprint_id,'carried_from_task_id',item.carried_from_task_id,'carried_from_sprint_id',item.carried_from_sprint_id,'carryover_count',item.carryover_count,'sprint_outcome',item.sprint_outcome,
-      'self_dod_checked',item.self_dod_checked,'self_evidence_checked',item.self_evidence_checked,'self_documented_checked',item.self_documented_checked,'self_blockers_checked',item.self_blockers_checked,'updated_at',item.updated_at,
-      'created_at',item.created_at
-    ) order by item.id) from active item join context on context.id=item.id),'[]'::jsonb),
+    'rows',coalesce((select jsonb_agg((jsonb_build_object(
+      'id',item.id,'sort_order',item.sort_order,'title',item.title,'status',item.status,
+      'priority',item.priority,'owner',item.owner,'assignee',item.assignee,'created_by',item.created_by,
+      'workstream',item.workstream,'target_date',item.target_date,'fixed_date',item.fixed_date,'dod_template_version',item.dod_template_version,
+      'evidence_link',item.evidence_link,'issue_number',item.issue_number,'issue_url',item.issue_url,'watched',item.watched,
+      'estimate_hours',item.estimate_hours,'sprint_id',item.sprint_id,'review_status',item.review_status,'review_owner_profile_id',item.review_owner_profile_id,
+      'review_requested_at',item.review_requested_at,'score_points',item.score_points,'score_final',item.score_final,'github_repo',item.github_repo,
+      'github_issue_number',item.github_issue_number,'github_issue_url',item.github_issue_url,'github_issue_sync_status',item.github_issue_sync_status,'github_issue_last_synced_at',item.github_issue_last_synced_at
+    ) || jsonb_build_object(
+      'task_type',item.task_type,'parent_task_id',item.parent_task_id,'approval_status',item.approval_status,'approval_revision',item.approval_revision,
+      'proposed_by',item.proposed_by,'proposed_at',item.proposed_at,'decided_by',item.decided_by,'decided_at',item.decided_at,
+      'trashed_at',item.trashed_at,'trashed_by',item.trashed_by,'trash_reason',item.trash_reason,'trash_cause',item.trash_cause,
+      'purge_after',item.purge_after,'trash_root_type',item.trash_root_type,'trash_root_id',item.trash_root_id,'trash_revision',item.trash_revision,
+      'score_relevant',item.score_relevant,'original_sprint_id',item.original_sprint_id,'carried_from_task_id',item.carried_from_task_id,'carried_from_sprint_id',item.carried_from_sprint_id,
+      'carryover_count',item.carryover_count,'sprint_outcome',item.sprint_outcome,'self_dod_checked',item.self_dod_checked,'self_evidence_checked',item.self_evidence_checked,
+      'self_documented_checked',item.self_documented_checked,'self_blockers_checked',item.self_blockers_checked,'updated_at',item.updated_at,'created_at',item.created_at
+    )) order by item.id) from active item join context on context.id=item.id),'[]'::jsonb),
     'relationships',coalesce((select jsonb_agg(to_jsonb(edge) order by edge.id) from selected_edges edge),'[]'::jsonb)
   ) end from basis;
 $$;
