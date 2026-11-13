@@ -155,6 +155,8 @@ select case
     'preferences',coalesce((select jsonb_agg(to_jsonb(preference)) from public.profile_ui_preferences preference where profile_id=p_actor_profile_id),'[]'::jsonb),
     'relationships',coalesce((select jsonb_agg(to_jsonb(edge) order by edge.id) from selected_edges edge),'[]'::jsonb),
     'columns',(select jsonb_object_agg(status,jsonb_build_object('total',(select count(*) from matches where normalized=status))) from statuses),
+    'workstreams',coalesce((select jsonb_agg(workstream order by workstream collate "de-x-icu") from (select distinct workstream from active where coalesce(workstream,'')<>'') choices),'[]'::jsonb),
+    'initiative_options',coalesce((select jsonb_agg(jsonb_build_object('id',id,'title',title) order by sort_order,id) from active where task_type='initiative'),'[]'::jsonb),
     'metrics',(select jsonb_build_object('total',count(*),'open',count(*) filter(where normalized<>'Erledigt'),'done',count(*) filter(where normalized='Erledigt'),'blocked',count(*) filter(where blocked)) from matches),
     'level_totals',(select jsonb_build_object('epic',count(*) filter(where task_type='epic'),'initiative',count(*) filter(where task_type='initiative'),'deliverable',count(*) filter(where task_type='deliverable')) from active),
     'personal_children',coalesce((select jsonb_object_agg(matches.id,matches.personal_children) from matches join cards on cards.id=matches.id where jsonb_array_length(matches.personal_children)>0),'{}'::jsonb),

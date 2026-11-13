@@ -37,7 +37,7 @@ type PlanningFiltersProps = {
   planningParentFilterId: string;
   levelTotals?: Partial<Record<PlanningLevel, number>>;
   profiles: Profile[];
-  initiatives: Task[];
+  initiatives: readonly Pick<Task, "id" | "title">[];
   sprints: Sprint[];
   tasks: Task[];
   workstreams: string[];
@@ -86,7 +86,7 @@ export function PlanningFilters({
   const parentTasks = planningLevel === "initiative"
     ? tasks.filter((task) => task.taskType === "epic")
     : planningLevel === "deliverable"
-      ? tasks.filter((task) => task.taskType === "initiative")
+      ? initiatives
       : [];
   const parentLabel = planningLevel === "initiative" ? "Epic" : "Initiative";
   const parentName = parentTasks.find((task) => task.id === planningParentFilterId)?.title || planningParentFilterId;

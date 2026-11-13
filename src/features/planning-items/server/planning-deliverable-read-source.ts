@@ -24,6 +24,7 @@ type Selection = {
   metrics: { total: number; open: number; done: number; blocked: number };
   level_totals: { epic: number; initiative: number; deliverable: number };
   personal_children: Record<string, string[]>;
+  workstreams: string[]; initiative_options: Array<{ id: string; title: string }>;
   workspace_revision: { activeTaskCount: number; latestUpdatedAt: string };
 };
 type Cursor = { offset: number; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; binding: string };
@@ -105,6 +106,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     coverage: { items: "partial", people: "complete", sprints: "complete", preferences: "complete", strategies: "partial", raci: "partial", links: "partial", relationships: "partial", blockers: "partial" },
     board: { query, column, queryKey, revision, observedAt: selected.evaluated_at, validUntil: selected.valid_until,
       cardIds: selected.card_ids, columns, metrics: { ...selected.metrics, blocked: null }, levelTotals: selected.level_totals,
+      workstreams: selected.workstreams, initiativeOptions: selected.initiative_options,
       childProgressById: Object.fromEntries(selected.card_ids.map(id => [id, null])), attentionById: Object.fromEntries(selected.card_ids.map(id => [id, null])),
       viewerOpenSubIssueIdsByDeliverableId: selected.personal_children, workspaceRevision: selected.workspace_revision },
   } };
