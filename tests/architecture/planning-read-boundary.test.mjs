@@ -73,3 +73,7 @@ for (const source of ["client.from(table).select('id');", "client.rpc(operation)
 test("standard collection construction is not database access", () => fixture({ "src/collection.ts": "const ids = Array.from({ length: 20 }, (_, index) => index);" }, root => assert.deepEqual(verifyPlanningReadBoundary({ root, policy }), [])));
 
 test("renamed imported table constants are resolved before ownership is checked", () => fixture({ "src/constants.ts": "export const table = 'tasks';", "src/neighbor.ts": "import { table as data } from './constants'; client.from(data).select('id');" }, root => assert.ok(verifyPlanningReadBoundary({ root, policy }).some(value => /competing.*tasks/.test(value)))));
+
+test("finite unrelated RPC branches do not become Planning reads", () => fixture({ "src/reader.ts": "client.rpc(linked ? 'workspace_linking_session_allowed' : 'workspace_session_allowed');" }, root => assert.deepEqual(verifyPlanningReadBoundary({ root, policy }), [])));
+
+test("every branch of a finite table choice is checked", () => fixture({ "src/reader.ts": "client.from(publicRead ? 'profiles' : 'tasks').select('id');" }, root => assert.ok(verifyPlanningReadBoundary({ root, policy }).some(value => /competing.*tasks/.test(value)))));

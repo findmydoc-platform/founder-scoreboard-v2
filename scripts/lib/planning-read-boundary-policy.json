@@ -111,6 +111,20 @@
       "reason": "These exact imports use only planningProfileSelect, not Item enumeration.",
       "evidence": "tests/integration/resource-credential-closeout.test.ts; docs/planning-item-read-contracts.md",
       "expiresWhen": "Remove when shared directory ownership is isolated during #654, or earlier on a material change to these imports."
+    },
+    "GITHUB-DISPATCH": {
+      "consumer": "GITHUB fixed job and delivery storage protocols",
+      "owner": "GitHub integration owner",
+      "reason": "These exact existing dynamic expressions dispatch to the credential-bound job, webhook and lifecycle tables or claim functions. They preserve existing fixed protocol and storage checks, not a new Planning collection reader.",
+      "evidence": "tests/integration/github-webhook-credential.test.ts; tests/integration/github-webhook-cron-credential.test.ts; tests/unit/github/github-claimed-job-credential.test.mjs; docs/adr/0002-central-credential-verification.md",
+      "expiresWhen": "Recheck these exact storage expressions at #664/#665 and remove when their targets become statically resolved or their protocols are retired."
+    },
+    "HEALTH": {
+      "consumer": "Existing health.inspect core-table probe",
+      "owner": "Credential module maintainer",
+      "reason": "The exact public-resource capability probes only id presence on the fixed profiles/tasks tuple with limit 1 and returns a boolean. It does not return Planning Items or bypass the existing public-resource action binding.",
+      "evidence": "tests/integration/resource-credential-closeout.test.ts; src/lib/credentials/internal/public-resources.ts",
+      "expiresWhen": "Recheck on any material change to health.inspect or its fixed table tuple; remove when this exact probe is retired."
     }
   },
   "allowedEdges": [
@@ -307,6 +321,14 @@
       "references": 1
     },
     {
+      "from": "src/features/planning-items/model/planning-items-approval.ts",
+      "kind": "rpc",
+      "target": "prepare_planning_approval_command",
+      "fingerprint": "4c316b66daf2cb45262fdb3fed88368e928f8d9e5cbf31152e6a76fc9c73b458",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
       "from": "src/features/planning-items/model/planning-items-backlog-move.ts",
       "kind": "from",
       "target": "tasks",
@@ -387,6 +409,30 @@
       "references": 1
     },
     {
+      "from": "src/features/planning-items/model/planning-items-relationships.ts",
+      "kind": "rpc",
+      "target": "prepare_planning_relationship_command|prepare_team_planning_dependency_command",
+      "fingerprint": "b5183502db32a7f7f7b9222b8d34d74cfb8fb0ee73dfa020330c67a5112c5f02",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-reparent.ts",
+      "kind": "rpc",
+      "target": "prepare_planning_reparent_command",
+      "fingerprint": "59674d662b62741051bd085714bbddd17c74dfd13a8af71548cc7583c09c31c0",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-review.ts",
+      "kind": "rpc",
+      "target": "prepare_planning_review_command",
+      "fingerprint": "64c1b5e5e5ecde996817f9076bb0d19cb26954ad3dbe2eba022d44eb7bf6535f",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
       "from": "src/features/planning-items/model/planning-items-sprint-assignment.ts",
       "kind": "from",
       "target": "tasks",
@@ -411,11 +457,11 @@
       "references": 1
     },
     {
-      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "from": "src/features/planning-items/model/planning-items-trash.ts",
       "kind": "rpc",
-      "target": "planning_deliverable_selection",
-      "fingerprint": "5794f031ecbe809c88bd51608de5812dd2ec6997841e0f32ae05ff783ab4ad09",
-      "contract": "BOARD",
+      "target": "prepare_planning_trash_command",
+      "fingerprint": "29a7523de1780337d272b35223859dc103fef28fce19c40de0c2370758c96dcd",
+      "contract": "OPERATION",
       "references": 1
     },
     {
@@ -423,6 +469,14 @@
       "kind": "rpc",
       "target": "planning_source_version",
       "fingerprint": "bdac449e03f793dc9526a44db629fb35193943bf7d96d9ef03b391fe12c2fd73",
+      "contract": "BOARD",
+      "references": 2
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_deliverable_selection",
+      "fingerprint": "5794f031ecbe809c88bd51608de5812dd2ec6997841e0f32ae05ff783ab4ad09",
       "contract": "BOARD",
       "references": 1
     },
@@ -659,6 +713,14 @@
       "references": 1
     },
     {
+      "from": "src/lib/github-webhook-drain.ts",
+      "kind": "from",
+      "target": "<dynamic>",
+      "fingerprint": "cb56139097fd363f6d1da151d82458a08e720d975a4045d732fd7a92a9b6d133",
+      "contract": "GITHUB-DISPATCH",
+      "references": 1
+    },
+    {
       "from": "src/lib/notification-resolution.ts",
       "kind": "from",
       "target": "active_tasks",
@@ -672,6 +734,14 @@
       "target": "task_blockers",
       "fingerprint": "1c69f6b97fadb987dc418ffe018672fc60dc785e14207ac6dc6ed0f3af8c58a7",
       "contract": "NOTIFICATIONS",
+      "references": 1
+    },
+    {
+      "from": "src/lib/planning-github-lifecycle.ts",
+      "kind": "rpc",
+      "target": "<dynamic>",
+      "fingerprint": "f81094aaa87edbf614e39962590f254ecb4b43b3d28d606d10ffb4d7db4cc58b",
+      "contract": "GITHUB-DISPATCH",
       "references": 1
     },
     {
@@ -739,6 +809,14 @@
       "references": 1
     },
     {
+      "from": "src/lib/credentials/internal/github-job.ts",
+      "kind": "from",
+      "target": "<dynamic>",
+      "fingerprint": "acb9f9882b3dd0886310230d68a58c52ba31df44837c3af96e62f80b297e82ee",
+      "contract": "GITHUB-DISPATCH",
+      "references": 1
+    },
+    {
       "from": "src/lib/credentials/internal/github-user.ts",
       "kind": "from",
       "target": "active_tasks",
@@ -752,6 +830,14 @@
       "target": "active_tasks",
       "fingerprint": "736082dacce85d4b430b52aee9012c3f3db505d618b1a2a8bacb22df3632bbf7",
       "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/github-webhook.ts",
+      "kind": "from",
+      "target": "<dynamic>",
+      "fingerprint": "d948721d3839d4a725ac3f2abcb00293d37ee66bc5e1bdc3ba909204974b411e",
+      "contract": "GITHUB-DISPATCH",
       "references": 1
     },
     {
@@ -864,6 +950,14 @@
       "target": "planning_workspace_snapshot",
       "fingerprint": "10ed80df0969230fb19f1c20bce021e0c4987add7be263c7c84b7373220068b9",
       "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/public-resources.ts",
+      "kind": "from",
+      "target": "<dynamic>",
+      "fingerprint": "b152eaa5c149b502f5c77b0e47ee1bf8644e71bfdd6b1d715df7c77a29b2c57e",
+      "contract": "HEALTH",
       "references": 1
     },
     {

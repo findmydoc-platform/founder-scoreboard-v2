@@ -5,7 +5,7 @@ import { createSourceModuleResolver } from "./source-module-resolver.mjs";
 
 const extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 const tables = new Set(["tasks", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "task_dependencies", "task_relationship_edges", "task_blockers"]);
-const readRpcs = /^(planning_workspace_snapshot|planning_source_version|planning_deliverable_selection|planning_.*(read|search|select|snapshot|summary|count|version).*)$/;
+const readRpcs = /^(planning_workspace_snapshot|planning_source_version|planning_deliverable_selection|planning_.*(read|search|select|snapshot|summary|count|version).*|prepare_(team_)?planning_.*command)$/;
 const field = node => ts.isPropertyAccessExpression(node) ? node.name.text : ts.isElementAccessExpression(node) && node.argumentExpression && ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
 const accountable = entry => ["consumer", "owner", "reason", "evidence", "expiresWhen"].every(key => typeof entry[key] === "string" && entry[key].trim());
 
@@ -38,6 +38,14 @@ export function verifyPlanningReadBoundary({ root, policy, collect = false }) {
     if (imported) return literal(ts.factory.createIdentifier(imported.name), parse(imported.file), visited);
     // The existing canonical table identity is used across declared adapters.
     return node.text === "ACTIVE_TASKS_TABLE" ? "active_tasks" : null;
+  }
+  function candidates(node, source) {
+    if (node && ts.isConditionalExpression(node)) {
+      const left = candidates(node.whenTrue, source), right = candidates(node.whenFalse, source);
+      return left && right ? [...new Set([...left, ...right])] : null;
+    }
+    const value = literal(node, source);
+    return value ? [value] : null;
   }
   for (const file of files) {
     const from = resolver.relative(file), source = parse(file);
@@ -86,8 +94,10 @@ export function verifyPlanningReadBoundary({ root, policy, collect = false }) {
       if (ts.isCallExpression(node) && ["from", "rpc"].includes(field(node.expression))) {
         const callReceiver = ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression) ? node.expression.expression : null;
         const collectionCall = callReceiver && ts.isIdentifier(callReceiver) && ["Array", "Buffer", "Uint8Array", "Int32Array", "Float64Array"].includes(callReceiver.text);
-        const kind = field(node.expression), resolvedTarget = literal(node.arguments[0], source), target = resolvedTarget || "<dynamic>";
-        if (!collectionCall && (kind === "from" && (tables.has(target) || target === "<dynamic>") || kind === "rpc" && (readRpcs.test(target) || target === "<dynamic>"))) {
+        const kind = field(node.expression), targets = candidates(node.arguments[0], source) || ["<dynamic>"];
+        const planningTargets = targets.filter(target => target === "<dynamic>" || (kind === "from" ? tables.has(target) : readRpcs.test(target)));
+        const target = planningTargets.sort().join("|");
+        if (!collectionCall && planningTargets.length) {
           let chain = node;
           const operations = [];
           while (ts.isPropertyAccessExpression(chain.parent) || ts.isElementAccessExpression(chain.parent) || ts.isCallExpression(chain.parent)) {
