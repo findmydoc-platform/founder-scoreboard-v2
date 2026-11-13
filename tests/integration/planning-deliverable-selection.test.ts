@@ -57,7 +57,7 @@ test("real Deliverable selection preserves the frozen complete reference and ind
           expect(result.metrics.total, example.name).toBe(result.card_ids.length);
           expect(result.rows.every((row: { id: string }) => result.context_ids.includes(row.id))).toBe(true);
         }
-        expect({ sqlDifferences, materializedDifferences: differences }, "Complete legacy provider reference and independent materialization expectations").toEqual({ sqlDifferences: [], materializedDifferences: [] });
+        expect({ sqlDifferences, materializedDifferences: differences }, `Complete legacy provider reference and independent materialization expectations: ${JSON.stringify({ sqlDifferences, materializedDifferences: differences })}`).toEqual({ sqlDifferences: [], materializedDifferences: [] });
       } finally { vi.useRealTimers(); }
     } finally {
       await db.query("rollback");
