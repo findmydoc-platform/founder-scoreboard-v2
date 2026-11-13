@@ -190,7 +190,7 @@ function TaskCardChildRollup({
 }: {
   task: Task;
   childItems: readonly Task[];
-  childProgress?: ReturnType<typeof taskChildProgress>;
+  childProgress?: ReturnType<typeof taskChildProgress> | null;
   childList?: TaskCardChildList;
   onOpenTask: (taskId: string) => void;
   viewerOpenSubIssueIds: string[];
@@ -200,6 +200,7 @@ function TaskCardChildRollup({
   const [retryRequested, setRetryRequested] = useState(false);
   const generatedId = useId().replaceAll(":", "");
   const listId = `task-card-children-${generatedId}`;
+  const progressKnown = childProgress !== null || childList?.readStatus === "current";
   const { completed, percentage, total, unfinished } = childProgress || taskChildProgress(childItems);
   const plural = directChildPluralLabel(task.taskType);
   const completedWithOpenChildren = normalizeStatus(task.status) === "Erledigt" && unfinished > 0;
@@ -217,12 +218,12 @@ function TaskCardChildRollup({
     : otherChildren.slice(0, collapsedOtherChildLimit);
   const hiddenOtherChildCount = otherChildren.length - visibleOtherChildren.length;
 
-  if (!total) return null;
+  if (progressKnown && !total) return null;
 
   return (
     <div className="mt-2.5">
-      <TaskChildProgress completed={completed} label={plural} percentage={percentage} total={total} />
-      {completedWithOpenChildren && (
+      {progressKnown ? <TaskChildProgress completed={completed} label={plural} percentage={percentage} total={total} /> : <p className="text-xs text-slate-500">Kindfortschritt unbekannt</p>}
+      {progressKnown && completedWithOpenChildren && (
         <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800">
           <CircleAlert size={11} aria-hidden="true" />
           {unfinished === 1 ? "1 Kind noch offen" : `${unfinished} Kinder noch offen`}
@@ -233,7 +234,7 @@ function TaskCardChildRollup({
         draggable={false}
         aria-expanded={isExpanded}
         aria-controls={listId}
-        aria-label={`${plural} ${isExpanded ? "einklappen" : "anzeigen"}: ${unfinished} offen, ${completed} erledigt`}
+        aria-label={progressKnown ? `${plural} ${isExpanded ? "einklappen" : "anzeigen"}: ${unfinished} offen, ${completed} erledigt` : `${plural} ${isExpanded ? "einklappen" : "anzeigen"}: Fortschritt unbekannt`}
         onClick={() => {
           setIsExpanded((current) => !current);
           if (!isExpanded && childList && childList.readStatus !== "current" && childList.readStatus !== "loading") childList.load();
@@ -245,13 +246,13 @@ function TaskCardChildRollup({
         }}
         className="coarse-touch-target mt-2 flex min-h-11 sm:min-h-6 w-full items-center justify-between gap-2 rounded-sm border border-transparent py-1 text-left font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
       >
-        <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px]">
+        {progressKnown ? <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px]">
           <Circle size={10} className="shrink-0 text-slate-300" aria-hidden="true" />
           <span className="tabular-nums">{unfinished} offen</span>
           <span aria-hidden="true">·</span>
           <CircleCheck size={10} className="shrink-0 text-emerald-500" aria-hidden="true" />
           <span className="tabular-nums">{completed} erledigt</span>
-        </span>
+        </span> : <span className="text-[11px]">{plural} {isExpanded ? "einklappen" : "anzeigen"}</span>}
         {isExpanded ? (
           <ChevronUp size={14} className="shrink-0 text-slate-400" aria-hidden="true" />
         ) : (
@@ -433,7 +434,7 @@ function TaskCardRiskBadges({
   allTasks: Task[];
   blockers: TaskBlocker[];
   maxVisible?: number;
-  attentionSignals?: TaskAttentionSignal[];
+  attentionSignals?: TaskAttentionSignal[] | null;
 }) {
   const relationGroups = taskRelationsFor(task.id, relations);
   const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
@@ -444,6 +445,7 @@ function TaskCardRiskBadges({
     relationGroups.blocks.length ? { id: "blocks", label: `Blockiert ${relationGroups.blocks.length}`, tone: "blue" } : null,
   ].filter((signal): signal is CardRiskSignal => Boolean(signal));
 
+  if (attentionSignals === null) return <span className="text-[11px] text-slate-500">Signale unbekannt</span>;
   if (!signals.length) return null;
 
   const visibleSignals = signals.slice(0, maxVisible);
@@ -494,8 +496,8 @@ export function TaskCard({
   blockers: TaskBlocker[];
   subIssues?: Task[];
   childItems?: Task[];
-  childProgress?: ReturnType<typeof taskChildProgress>;
-  attentionSignals?: TaskAttentionSignal[];
+  childProgress?: ReturnType<typeof taskChildProgress> | null;
+  attentionSignals?: TaskAttentionSignal[] | null;
   childList?: TaskCardChildList;
   onOpenTask: (taskId: string) => void;
   onStatusChange?: (status: TaskStatus) => void;

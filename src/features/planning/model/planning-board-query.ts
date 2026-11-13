@@ -18,18 +18,19 @@ export type PlanningBoardQueryInput = Partial<Omit<PlanningBoardQuery, "filters"
   continuation?: string;
   column?: TaskStatus;
 };
-export type PlanningBoardColumn = Readonly<{ total: number; loaded: number; completeness: "complete" | "partial"; continuation: string | null }>;
+export type PlanningBoardColumn = Readonly<{ total: number; loaded: number; availability?: "ready" | "not-loaded"; completeness: "complete" | "partial"; continuation: string | null }>;
 export type PlanningBoardResult = Readonly<{
   query: PlanningBoardQuery;
   column?: TaskStatus;
   queryKey: string;
   revision: string;
   observedAt: string;
+  validUntil?: string | null;
   cardIds: readonly string[];
   workstreams?: readonly string[];
   levelTotals?: Record<PlanningLevel, number>;
-  attentionById?: Record<string, import("@/features/tasks/model/task-attention-signals").TaskAttentionSignal[]>;
-  childProgressById: Record<string, { completed: number; total: number; unfinished: number; percentage: number }>;
+  attentionById?: Record<string, import("@/features/tasks/model/task-attention-signals").TaskAttentionSignal[] | null>;
+  childProgressById: Record<string, { completed: number; total: number; unfinished: number; percentage: number } | null>;
   columns: Record<TaskStatus, PlanningBoardColumn>;
   metrics: { total: number; open: number; blocked: number; done: number };
   viewerOpenSubIssueIdsByDeliverableId: Record<string, string[]>;

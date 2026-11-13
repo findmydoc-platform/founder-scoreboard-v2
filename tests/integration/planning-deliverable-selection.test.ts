@@ -1,0 +1,79 @@
+import { expect, test, vi } from "vitest";
+import fixture from "../fixtures/planning-reads/contract.json";
+import { DEFAULT_PLANNING_FILTERS, normalizePlanningBoardQuery } from "@/features/planning/model/planning-board-query";
+import { buildPlanningTaskTableViewModel } from "@/features/planning/model/planning-task-table-view-model";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import type { PlanningFilterPreferences, PlanningShellState, Task } from "@/lib/types";
+import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
+import { importTestModule } from "../helpers/vitest-module.mjs";
+
+test("real Deliverable selection preserves the frozen complete reference and independent literal expectations before its page limit", async () => {
+  await withPlanningCredentialDatabase(async ({ db }) => {
+    await db.query("begin");
+    try {
+      for (const profile of fixture.profiles) await db.query("insert into public.profiles(id,name,platform_role) values($1,$2,$3)", [profile.id, profile.name, profile.platformRole]);
+      for (const sprint of fixture.sprints) await db.query("insert into public.sprints(id,project_id,name,status,start_date,end_date) values($1,'findmydoc-founder-execution',$2,$3,$4,$5)", [sprint.id, sprint.name, sprint.status, sprint.startDate, sprint.endDate]);
+      const tasks = fixture.tasks.map(task => ({ ...fixture.taskDefaults, ...task })) as Task[];
+      for (const task of tasks) {
+        await db.query(`insert into public.tasks(id,project_id,title,description,status,priority,assignee,owner,workstream,fixed_date,target_date,definition_of_done,task_type,parent_task_id,approval_status,sprint_id,review_status,review_owner_profile_id,score_final,github_repo,github_issue_number,github_issue_url,issue_number,issue_url,evidence_link,sort_order)
+          values($1,'findmydoc-founder-execution',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
+        [task.id, task.title, task.description, task.status, task.priority, task.assigneeId || null, task.ownerId || null, task.workstream, task.fixedDate || null, task.targetDate || null, task.definitionOfDone, task.taskType, task.parentTaskId || null, task.approvalStatus, task.sprintId || null, task.reviewStatus, task.reviewOwnerProfileId || null, task.scoreFinal, task.githubRepo || null, task.githubIssueNumber, task.githubIssueUrl || null, String(task.issueNumber || ""), task.issueUrl || null, task.evidenceLink || null, task.order]);
+        if (task.strategy) await db.query("insert into public.planning_item_strategy(task_id,goal) values($1,$2)", [task.id, task.strategy.goal]);
+        if (task.dependsOn) await db.query("insert into public.task_dependencies(task_id,note) values($1,$2)", [task.id, task.dependsOn]);
+        await db.query("set local session_replication_role = replica");
+        await db.query("update public.tasks set updated_at=$2 where id=$1", [task.id, task.updatedAt]);
+        await db.query("set local session_replication_role = origin");
+      }
+      for (const edge of fixture.relationships) await db.query("insert into public.task_relationship_edges(task_id,related_task_id,relation_type) values($1,$2,$3)", [edge.taskId, edge.relatedTaskId, edge.relationType]);
+      const data = { ...emptyPlanningShellState, tasks, profiles: fixture.profiles, sprints: fixture.sprints, taskRelations: fixture.relationships } as PlanningShellState;
+      vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(fixture.evaluationTime));
+      try {
+        for (const example of fixture.searchCases) {
+          const filters = { ...DEFAULT_PLANNING_FILTERS, ...example.filters } as PlanningFilterPreferences;
+          const reference = buildPlanningTaskTableViewModel({ data, filters, currentProfile: data.profiles[0], includeAssignedSubIssueParents: true }).visibleTasks.filter(task => task.taskType === "deliverable").map(task => task.id);
+          expect(reference, example.name).toEqual(example.ids);
+          const result = (await db.query("select public.planning_deliverable_selection($1,$2,null,0,20,null,$3) as selection", [fixture.profiles[0].id, normalizePlanningBoardQuery({ filters }), fixture.evaluationTime])).rows[0].selection;
+          expect(result.status, example.name).toBe("ready");
+          expect(new Set(result.card_ids), example.name).toEqual(new Set(example.ids));
+          expect(result.metrics.total, example.name).toBe(example.ids.length);
+          expect(result.rows.every((row: { id: string }) => result.context_ids.includes(row.id))).toBe(true);
+        }
+      } finally { vi.useRealTimers(); }
+    } finally { await db.query("rollback"); }
+  });
+}, 120_000);
+
+test("the real Board API selects bounded completed history, rejects stale continuation and retains live authority and permit cleanup", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, observed, request, rpc }) => {
+    for (let index = 0; index < 21; index++) await db.query("insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,assignee,sort_order) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'approved','Erledigt','P2',$4,$5)", [`${prefix}-done-${String(index).padStart(2, "0")}`, `${prefix} synthetic completed`, initiativeId, actors.founder.profileId, index]);
+    await db.query("begin");
+    try {
+      await db.query("set local session_replication_role = replica");
+      await db.query("update public.tasks set updated_at='2020-01-01T00:00:00Z' where id like $1", [`${prefix}-done-%`]);
+      await db.query("commit");
+    } catch (error) { await db.query("rollback"); throw error; }
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const query = { view: "board", column: "Erledigt", filters: { query: prefix } };
+    const read = (actor: Parameters<typeof request>[0], scope = query) => GET(request(actor, `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+    const first = await read("founder");
+    expect(first.status).toBe(200);
+    const firstPage = await first.json();
+    expect(firstPage.model.board.cardIds).toEqual(Array.from({ length: 20 }, (_, index) => `${prefix}-done-${String(index).padStart(2, "0")}`));
+    expect(firstPage.model.board.columns.Erledigt).toMatchObject({ total: 21, loaded: 20, completeness: "partial" });
+    expect(observed.some(entry => entry.path.endsWith("/rpc/planning_deliverable_selection"))).toBe(true);
+    expect(observed.some(entry => entry.path.endsWith("/active_tasks"))).toBe(false);
+    const continuation = firstPage.model.board.columns.Erledigt.continuation;
+    const second = await read("founder", { ...query, continuation } as typeof query);
+    expect(second.status).toBe(200);
+    expect((await second.json()).model.board.cardIds).toEqual([`${prefix}-done-20`]);
+    await db.query("update public.tasks set title=title || ' same-count change' where id=$1", [`${prefix}-done-20`]);
+    expect((await read("founder", { ...query, continuation } as typeof query)).status).toBe(409);
+    for (const role of ["ceo", "deputy", "viewer"] as const) expect((await read(role)).status).toBe(200);
+    expect((await read("unmapped")).status).toBe(403);
+    expect((await GET(request("founder", "/api/planning-board-data?scope=invalid"))).status).toBe(400);
+    for (const actor of ["anonymous", "founder", "unmapped"] as const) expect((await rpc("planning_deliverable_selection", { p_actor_profile_id: actors.founder.profileId, p_query: normalizePlanningBoardQuery() }, actor)).ok).toBe(false);
+    await db.query("delete from auth.sessions where id=$1", [actors.founder.sessionId]);
+    expect((await read("founder")).status).toBeGreaterThanOrEqual(400);
+    expect((await db.query("select count(*)::int as count from workspace_private.request_permits where user_id=any($1)", [Object.values(actors).map(actor => actor.userId)])).rows[0].count).toBe(0);
+  });
+}, 120_000);

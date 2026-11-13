@@ -13,17 +13,7 @@ import { isTaskPlanningActive } from "../model/approval-domain";
 import { hasOpenWaitingRelation } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { Task, TaskStatus } from "@/lib/types";
-
-// Omission is explicit so a later Board page cannot clear loaded detail content.
-const cardOmittedFields: readonly (keyof Task)[] = [
-  "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "note",
-  "strategy", "raciAssignments", "evidenceLinks", "linkedPullRequests", "reviewEvidenceExceptionNote", "githubIssueSyncError", "decisionNote", "carryoverReason",
-];
-function compactPlanningCard(task: Task): Task {
-  const summary = { ...task, detailAvailability: "summary" as const };
-  for (const field of cardOmittedFields) delete summary[field];
-  return summary;
-}
+import { compactPlanningCard, planningCardOmittedFields as cardOmittedFields } from "@/features/planning-items/server/planning-card-summary";
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function compareCompletedPlanningCards(left: Task, right: Task) {
