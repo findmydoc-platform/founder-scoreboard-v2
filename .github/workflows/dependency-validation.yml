@@ -8,6 +8,10 @@ permissions:
   contents: read
   pull-requests: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: 24.14.0
   NEXT_TELEMETRY_DISABLED: 1
@@ -17,26 +21,59 @@ defaults:
     shell: bash
 
 jobs:
+  changes:
+    name: Validation Scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      app_required: ${{ steps.filter.outputs.app_required }}
+      migrations_required: ${{ steps.filter.outputs.migrations_required }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Classify changed paths
+        id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          predicate-quantifier: every
+          filters: .github/filters/validation.yml
+
+      - name: Summarize validation scope
+        env:
+          APP_REQUIRED: ${{ steps.filter.outputs.app_required }}
+          MIGRATIONS_REQUIRED: ${{ steps.filter.outputs.migrations_required }}
+        run: |
+          {
+            echo '## Validation scope'
+            echo "- Application validation required: $APP_REQUIRED"
+            echo "- Migration integration required: $MIGRATIONS_REQUIRED"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   migration-integration:
     name: Migration Integration
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        if: needs.changes.outputs.migrations_required == 'true'
 
       - name: Setup pnpm
+        if: needs.changes.outputs.migrations_required == 'true'
         uses: pnpm/action-setup@v6
         with:
           version: 10.13.1
           run_install: false
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
+        if: needs.changes.outputs.migrations_required == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install dependencies
+        if: needs.changes.outputs.migrations_required == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Verify credential boundaries
@@ -46,53 +83,130 @@ jobs:
         run: pnpm run verify:planning-reads
 
       - name: Start local Supabase
+        id: supabase_start
+        if: needs.changes.outputs.migrations_required == 'true'
         run: pnpm run local:start
 
       - name: Run migration integration tests
+        id: migrations
+        if: needs.changes.outputs.migrations_required == 'true'
         run: pnpm run test:migrations
 
       - name: Stop local Supabase
-        if: always()
+        if: always() && (steps.supabase_start.outcome == 'success' || steps.supabase_start.outcome == 'failure' || steps.supabase_start.outcome == 'cancelled')
         run: pnpm run local:stop
 
-  validation:
-    name: Dependency Validation
+      - name: Summarize migration integration
+        if: always()
+        env:
+          MIGRATIONS_REQUIRED: ${{ needs.changes.outputs.migrations_required }}
+          MIGRATIONS_OUTCOME: ${{ steps.migrations.outcome }}
+        run: |
+          {
+            echo '## Migration integration'
+            if [[ "$MIGRATIONS_REQUIRED" == 'false' ]]; then
+              echo '- Omitted: all changed paths are approved documentation, application, test or package paths.'
+              echo '- Dependency installation and local Supabase startup were not needed.'
+            else
+              echo "- Migration tests: $MIGRATIONS_OUTCOME"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  app-validation:
+    name: Application Validation
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        if: needs.changes.outputs.app_required == 'true'
         with:
           fetch-depth: 0
 
       - name: Setup pnpm
+        if: needs.changes.outputs.app_required == 'true'
         uses: pnpm/action-setup@v6
         with:
           version: 10.13.1
           run_install: false
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
+        if: needs.changes.outputs.app_required == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install dependencies
+        if: needs.changes.outputs.app_required == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Install Storybook browser
+        if: needs.changes.outputs.app_required == 'true'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Verify Supabase Migration History
+        if: needs.changes.outputs.app_required == 'true'
         run: pnpm run verify:migrations
 
       - name: Run tests
+        id: tests
+        if: needs.changes.outputs.app_required == 'true'
         run: pnpm test
 
       - name: Run lint
+        id: lint
+        if: needs.changes.outputs.app_required == 'true'
         run: pnpm run lint
 
       - name: Build app
+        id: build
+        if: needs.changes.outputs.app_required == 'true'
         run: pnpm run build
+
+      - name: Summarize application validation
+        if: always()
+        env:
+          APP_REQUIRED: ${{ needs.changes.outputs.app_required }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          {
+            echo '## Application validation'
+            if [[ "$APP_REQUIRED" == 'false' ]]; then
+              echo '- Omitted: only documentation or Markdown files changed.'
+              echo '- Dependency installation, Chromium, tests, lint and build were not needed.'
+            else
+              echo "- Tests: $TEST_OUTCOME"
+              echo "- Lint: $LINT_OUTCOME"
+              echo "- Build: $BUILD_OUTCOME"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validation:
+    name: Dependency Validation
+    needs: [changes, app-validation, migration-integration]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require successful validation jobs
+        env:
+          SCOPE_RESULT: ${{ needs.changes.result }}
+          APP_RESULT: ${{ needs.app-validation.result }}
+          MIGRATIONS_RESULT: ${{ needs.migration-integration.result }}
+        run: |
+          {
+            echo '## Dependency validation gate'
+            echo "- Path classification: $SCOPE_RESULT"
+            echo "- Application validation: $APP_RESULT"
+            echo "- Migration integration: $MIGRATIONS_RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$SCOPE_RESULT" != 'success' || "$APP_RESULT" != 'success' || "$MIGRATIONS_RESULT" != 'success' ]]; then
+            echo '::error::Path classification, application validation and migration integration must all succeed.'
+            exit 1
+          fi
 
   dependabot-metadata:
     name: Dependabot Metadata

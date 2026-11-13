@@ -160,7 +160,7 @@ export const ToolsCreationFromContext: Story = {
     await userEvent.type(dialog.getByRole("textbox", { name: "Beschreibung" }), "Wissen für das Team");
     await userEvent.type(dialog.getByRole("textbox", { name: "Link" }), "https://example.com/wiki");
     await userEvent.click(dialog.getByRole("button", { name: "Eintragen" }));
-    await expect(await canvas.findByRole("heading", { name: "Teamwiki" })).toBeVisible();
+    await waitFor(() => expect(canvas.getByRole("heading", { name: "Teamwiki" })).toBeVisible());
     await expect(canvas.getByRole("searchbox", { name: "Links durchsuchen" })).toBeVisible();
     await expect(context.queryByRole("searchbox")).not.toBeInTheDocument();
   },
