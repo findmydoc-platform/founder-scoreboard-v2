@@ -48,6 +48,7 @@ for (const source of [
   "client.from('tasks').select('id');", "client.from('active_tasks').select('id');",
   "import { ACTIVE_TASKS_TABLE } from './constants'; client.from(ACTIVE_TASKS_TABLE).select('id');",
   "client.rpc('planning_deliverable_selection');", "client.rpc('planning_workspace_snapshot');",
+  "client.rpc('planning_deliverable_query_plan');", "client.rpc('planning_deliverable_column');", "client.rpc('planning_deliverable_query_basis');",
   "client['from']('task_relationship_edges').select('id');",
 ]) test(`a competing Planning read is rejected: ${source}`, () => fixture({ "src/neighbor.ts": source, "src/constants.ts": "export const ACTIVE_TASKS_TABLE = 'active_tasks';" }, root => assert.ok(verifyPlanningReadBoundary({ root, policy }).some(value => /competing/.test(value)))));
 
