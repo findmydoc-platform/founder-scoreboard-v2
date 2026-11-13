@@ -68,6 +68,11 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
     const expectedQuery = normalizePlanningBoardQuery({ view: "board", filters: { query: key } });
     const safeColumns = (columns: Record<string, { total: number; ids?: string[] }>) => Object.fromEntries(Object.entries(columns).map(([status, value]) => [status, { total: value.total, selectedIds: value.ids?.length ?? null }]));
     const directPlan = (await db.query("select public.planning_deliverable_query_plan($1,$2) as plan", [actors.founder.profileId, expectedQuery])).rows[0].plan;
+    const persisted = (await db.query("select task_type,status,approval_status from public.tasks where id=any($1) order by status", [[open, review]])).rows.map(row => ({
+      taskType: ["deliverable", "sub_issue", "initiative", "epic"].includes(row.task_type) ? row.task_type : "other",
+      status: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt", "Pausiert"].includes(row.status) ? row.status : "other",
+      approval: ["approved", "proposed", "rejected"].includes(row.approval_status) ? row.approval_status : "other",
+    }));
     const planFacts: Array<{ actorBinding: boolean; queryBinding: boolean; status: string; columns: ReturnType<typeof safeColumns> }> = [];
     const transport = globalThis.fetch;
     const selectedIds: string[][] = [];
@@ -110,9 +115,9 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
         received.push(frame);
         if (frame.kind === "basis") {
           expect(frame.model.items).toEqual([]);
-          const diagnostic = JSON.stringify({ direct: { status: directPlan.status, columns: safeColumns(directPlan.columns) }, dispatched: planFacts,
+          const diagnostic = JSON.stringify({ persisted, direct: { status: directPlan.status, columns: safeColumns(directPlan.columns) }, dispatched: planFacts,
             basis: { queryBinding: JSON.stringify(frame.model.query) === JSON.stringify(expectedQuery), columns: safeColumns(frame.model.board.columns) } });
-          if (frame.model.board.columns.Offen.total !== 1 || frame.model.board.columns.Offen.availability !== "not-loaded") throw new Error(`Safe query-basis mismatch: ${diagnostic}`);
+          if (["Offen", "Review"].some(status => frame.model.board.columns[status].total !== 1 || frame.model.board.columns[status].availability !== "not-loaded")) throw new Error(`Safe query-basis mismatch: ${diagnostic}`);
           expect(frame.model.board.columns.Offen).toMatchObject({ total: 1, availability: "not-loaded" });
           expect(frame.model.board.columns.Review).toMatchObject({ total: 1, availability: "not-loaded" });
           expect(frame.model.board.columns["In Arbeit"]).toMatchObject({ total: 0, availability: "ready", completeness: "complete" });
