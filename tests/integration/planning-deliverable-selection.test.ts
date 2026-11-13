@@ -8,9 +8,13 @@ import { withPlanningCredentialDatabase } from "./helpers/planning-credential-da
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
 import type { DbTask } from "@/lib/planning-row-types";
+import { createClient } from "@supabase/supabase-js";
+import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 
 test("real Deliverable selection preserves the frozen complete reference and independent literal expectations before its page limit", async () => {
-  await withPlanningCredentialDatabase(async ({ db }) => {
+  await withPlanningCredentialDatabase(async ({ db, local }) => {
+    const taskIds = fixture.tasks.map(task => task.id), profileIds = fixture.profiles.map(profile => profile.id), sprintIds = fixture.sprints.map(sprint => sprint.id);
+    expect((await db.query("select id from public.tasks where id=any($1) union all select id from public.profiles where id=any($2) union all select id from public.sprints where id=any($3)", [taskIds, profileIds, sprintIds])).rows).toEqual([]);
     await db.query("begin");
     try {
       for (const profile of fixture.profiles) await db.query("insert into public.profiles(id,name,platform_role) values($1,$2,$3)", [profile.id, profile.name, profile.platformRole]);
@@ -31,6 +35,16 @@ test("real Deliverable selection preserves the frozen complete reference and ind
       const persisted = (await db.query("select task.*,coalesce((select jsonb_agg(jsonb_build_object('note',dependency.note) order by dependency.id) from public.task_dependencies dependency where dependency.task_id=task.id),'[]'::jsonb) as task_dependencies from public.tasks task where task.id=any($1)", [tasks.map(task => task.id)])).rows as DbTask[];
       const strategies = (await db.query("select * from public.planning_item_strategy where task_id=any($1)", [tasks.map(task => task.id)])).rows;
       const mappedData = { ...data, tasks: persisted.map(row => mapTaskRow(row, data.profiles, { strategy: strategies.find(strategy => strategy.task_id === row.id) })) };
+      const { loadPlanningWorkspaceModel } = await importTestModule("src/features/planning-items/server/planning-workspace-read-source.ts", { "server-only": {} });
+      const legacyClient = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+      // The public provider cannot see this transaction's uncommitted fixture.
+      // Commit only this isolated fixture before observing the complete legacy
+      // source. The finally block removes these exact fixed synthetic identities.
+      await db.query("commit");
+      const legacy = await loadPlanningWorkspaceModel(legacyClient, { authorized: true, actorProfileId: fixture.profiles[0].id, query: { view: "complete" } });
+      expect(legacy.status).toBe("ready");
+      if (legacy.status !== "ready") throw new Error("Complete legacy database reference was unavailable");
+      const legacyData = planningWorkspaceModelToPlanningShellState(legacy.model);
       const differences: Array<{ name: string; rawExpected: readonly string[]; persistedReference: string[]; actual: string[] }> = [];
       vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(fixture.evaluationTime));
       try {
@@ -39,6 +53,8 @@ test("real Deliverable selection preserves the frozen complete reference and ind
           const reference = buildPlanningTaskTableViewModel({ data, filters, currentProfile: data.profiles[0], includeAssignedSubIssueParents: true }).visibleTasks.filter(task => task.taskType === "deliverable").map(task => task.id);
           expect(reference, example.name).toEqual(example.ids);
           const mappedReference = buildPlanningTaskTableViewModel({ data: mappedData, filters, currentProfile: data.profiles[0], includeAssignedSubIssueParents: true }).visibleTasks.filter(task => task.taskType === "deliverable");
+          const legacyReference = buildPlanningTaskTableViewModel({ data: legacyData, filters, currentProfile: legacyData.profiles.find(profile => profile.id === fixture.profiles[0].id)!, includeAssignedSubIssueParents: true }).visibleTasks.filter(task => task.taskType === "deliverable");
+          expect(new Set(mappedReference.map(task => task.id)), `${example.name}: same persisted fixture through the complete legacy provider`).toEqual(new Set(legacyReference.map(task => task.id)));
           const result = (await db.query("select public.planning_deliverable_selection($1,$2,null,0,20,null,$3) as selection", [fixture.profiles[0].id, normalizePlanningBoardQuery({ filters }), fixture.evaluationTime])).rows[0].selection;
           expect(result.status, example.name).toBe("ready");
           expect(new Set(result.card_ids), `${example.name}: complete persisted TypeScript reference`).toEqual(new Set(mappedReference.map(task => task.id)));
@@ -48,7 +64,13 @@ test("real Deliverable selection preserves the frozen complete reference and ind
         }
         expect(differences, "Persisted fixture semantics must also have independent expectations").toEqual([]);
       } finally { vi.useRealTimers(); }
-    } finally { await db.query("rollback"); }
+    } finally {
+      await db.query("rollback");
+      await db.query("select set_config('founderops.trash_lifecycle_write','on',false)");
+      await db.query("delete from public.tasks where id=any($1)", [taskIds]);
+      await db.query("delete from public.sprints where id=any($1)", [sprintIds]);
+      await db.query("delete from public.profiles where id=any($1)", [profileIds]);
+    }
   });
 }, 120_000);
 
