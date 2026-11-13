@@ -17,7 +17,7 @@ const data = { ...emptyPlanningShellState, tasks: [task] };
 function entryFixture() {
   const session = { userId: "entry-user", revision: "entry-session", expiresAt: Math.floor(Date.now() / 1000) + 3600, user: { id: "entry-user" } };
   const model = { revision: "content-1", scopeRevision: "source-1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: "complete" as const } };
-  const hydration = planningWorkspaceHydration("planning", model, session);
+  const hydration = planningWorkspaceHydration("planning", model, session, { userId: session.userId, deadline: session.expiresAt * 1000 });
   const listeners = new Set<() => void>();
   let contentReads = 0, versionReads = 0;
   let resolveVersion: ((value: BrowserApiJsonResult<unknown>) => void) | undefined;
@@ -31,11 +31,11 @@ function entryFixture() {
       }
       if (url.includes("planning-board-data")) {
         contentReads++; listeners.forEach(listener => listener());
-        return Promise.resolve({ response: new Response(null), body: { model } as T });
+        return Promise.resolve({ response: new Response(null), body: { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model } as T });
       }
       if (url.includes("planning-header-data")) {
         if (url.includes("quickLinks")) return new Promise<BrowserApiJsonResult<T>>(resolve => { resolveLinks = result => resolve(result as BrowserApiJsonResult<T>); });
-        return Promise.resolve({ response: new Response(null), body: { headerData: { ...emptyPlanningHeaderData,
+        return Promise.resolve({ response: new Response(null), body: { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, headerData: { ...emptyPlanningHeaderData,
           ...(url.includes("calendarEvents") ? { calendarEvents: { state: "ready", data: [] } } : {}),
           ...(url.includes("notifications") ? { notifications: { state: "ready", data: { unreadCount: 0, items: [] } } } : {}),
         } } as T });

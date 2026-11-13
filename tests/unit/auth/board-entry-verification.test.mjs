@@ -244,3 +244,109 @@ test("Planning content succeeds without dispatching optional Calendar and Quick 
   expect(names()).not.toContain("fmd_tools");
   expect(names()).not.toContain("founder_events");
 });
+
+
+async function authorizeServerBoard() {
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", {
+    "server-only": {},
+    "next/headers": { headers: async () => new Headers(), cookies: async () => protocol.cookieJar() },
+    "next/cache": { unstable_cache: callback => callback },
+  });
+  return authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
+}
+function deferredResponse() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+test("SSR receipts carry the original membership deadline separately from provider session expiry", async () => {
+  const started = Date.now();
+  const first = await authorizeServerBoard();
+  expect(first.ok).toBe(true);
+  expect(first.readAuthority).toEqual({ userId: state.userId, deadline: started + 900000 });
+  expect(first.readSession.expiresAt * 1000).toBeGreaterThan(first.readAuthority.deadline);
+  expect(first.serverHeaderRead).toMatchObject({ ...first.readAuthority, sessionRevision: first.readSession.revision });
+  expect(first.serverHeaderRead.id).not.toBe(first.readSession.revision);
+  vi.setSystemTime(started + 899000);
+  const second = await authorizeServerBoard();
+  expect(second.ok).toBe(true);
+  expect(second.readAuthority.deadline).toBe(first.readAuthority.deadline);
+});
+
+test("server Calendar and Board settle while Quick Links remains held, preserving original live dispatch guards", async () => {
+  const held = deferredResponse(), started = deferredResponse();
+  state.respond = name => { if (name === "fmd_tools") { started.resolve(); return held.promise; } return null; };
+  const permission = await authorizeServerBoard();
+  expect(permission.ok).toBe(true);
+  const board = permission.planning.loadBoard();
+  const slots = permission.planning.startServerHeaderSlots();
+  await started.promise;
+  expect((await slots.calendarEvents).headerData.calendarEvents.state).toBe("ready");
+  expect((await board).status).toBe("ready");
+  held.resolve(Response.json([]));
+  expect((await slots.quickLinks).headerData.quickLinks.state).toBe("ready");
+  for (const request of requests.filter(request => request.name === "current_authenticated_profile")) {
+    expect(request.headers.get("authorization") === protocol.request().headers.get("authorization")).toBe(true);
+    expect(request.headers.has("x-founderops-workspace-permit")).toBe(true);
+  }
+  expect(names().filter(name => name === "workspace_release_permit").length).toBe(names().filter(name => name === "current_authenticated_profile").length);
+});
+
+test("revoked server Header admission returns sanitized independent errors without optional data dispatch", async () => {
+  const permission = await authorizeServerBoard();
+  expect(permission.ok).toBe(true);
+  state.dispatchDenied = true;
+  const slots = permission.planning.startServerHeaderSlots();
+  const [links, calendar] = await Promise.all([slots.quickLinks, slots.calendarEvents]);
+  expect(links.headerData.quickLinks).toMatchObject({ state: "error", data: [] });
+  expect(calendar.headerData.calendarEvents).toMatchObject({ state: "error", data: [] });
+  expect(names()).not.toContain("fmd_tools");
+  expect(names()).not.toContain("founder_events");
+  expect(JSON.stringify([links, calendar])).not.toContain("Binding changed");
+});
+
+test("a slow server slot cannot outlive its earlier original authority deadline or poison its settled sibling", async () => {
+  const held = deferredResponse(), started = deferredResponse();
+  state.respond = name => { if (name === "fmd_tools") { started.resolve(); return held.promise; } return null; };
+  const permission = await authorizeServerBoard();
+  expect(permission.ok).toBe(true);
+  const slots = permission.planning.startServerHeaderSlots();
+  await started.promise;
+  expect((await slots.calendarEvents).headerData.calendarEvents.state).toBe("ready");
+  vi.setSystemTime(permission.readAuthority.deadline);
+  held.resolve(Response.json([]));
+  expect((await slots.quickLinks).headerData.quickLinks).toMatchObject({ state: "error", data: [] });
+  expect((await slots.calendarEvents).headerData.calendarEvents.state).toBe("ready");
+});
+
+test("actual Board and Header API envelopes retain the immutable read deadline", async () => {
+  const started = Date.now();
+  const { GET: board } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const boardResponse = await board(protocol.request("/api/planning-board-data"));
+  expect(boardResponse.status).toBe(200);
+  expect((await boardResponse.json()).readAuthority).toEqual({ userId: state.userId, deadline: started + 900000 });
+  const { GET: header } = await importTestModule("src/app/api/planning-header-data/route.ts", { "server-only": {}, "next/cache": { unstable_cache: callback => callback } });
+  state.respond = name => name === "workspace_issue_permit" ? Response.json(null) : null;
+  const headerStarted = Date.now();
+  const headerResponse = await header(protocol.request("/api/planning-header-data?slots=quickLinks"));
+  expect(headerResponse.status).toBe(200);
+  const body = await headerResponse.json();
+  expect(body.readAuthority.userId).toBe(state.userId);
+  expect(body.readAuthority.deadline).toBe(headerStarted + 900000);
+  expect(body.headerData.quickLinks.state).toBe("ready");
+});
+
+
+test("a delayed scalar observation cannot outlive its own original capability deadline", async () => {
+  const held = deferredResponse(), started = deferredResponse();
+  state.respond = name => { if (name === "planning_source_version") { started.resolve(); return held.promise; } return null; };
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action: "planning.revision.read" });
+  expect(permission.ok).toBe(true);
+  const observed = permission.planning.readSourceVersion();
+  await started.promise;
+  vi.setSystemTime(permission.readAuthority.deadline);
+  held.resolve(Response.json("42"));
+  await expect(observed).resolves.toMatchObject({ version: null, status: 503 });
+});

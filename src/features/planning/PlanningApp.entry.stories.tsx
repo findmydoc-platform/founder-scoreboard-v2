@@ -45,15 +45,15 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
       if (path === "/api/planning-board-data") {
         setReads(count => count + 1);
         if (rotationRecovery && ++boardRequests === 1) return new Promise<Response>(resolve => {
-          finishRead.current = () => { resolve(Response.json({ model: { ...model, items: [{ ...task, title: "Late old-session task" }] }, currentProfile: profile })); setFinished(count => count + 1); };
+          finishRead.current = () => { resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...model, items: [{ ...task, title: "Late old-session task" }] }, currentProfile: profile })); setFinished(count => count + 1); };
         });
         if (backgroundFailure || changedPageOnReturn) return new Promise<Response>(resolve => {
           finishRead.current = () => {
-            resolve(backgroundFailure ? Response.json({ error: "Board temporarily unavailable" }, { status: 503 }) : Response.json({ model, currentProfile: profile }));
+            resolve(backgroundFailure ? Response.json({ error: "Board temporarily unavailable" }, { status: 503 }) : Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: profile }));
             setFinished(count => count + 1);
           };
         });
-        return Response.json({ model, currentProfile: profile });
+        return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: profile });
       }
       if (path === "/api/planning-source-version") {
         setRevisions(count => count + 1);
@@ -65,7 +65,7 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
       if (path === "/api/events-data") {
         setEventReads(count => count + 1);
         setEventCredential(currentSession.current.revision);
-        return Response.json({ model: { revision: "events", people: [profile], events: rotationRecovery ? [{ id: 1, title: "Current-session event", category: "other", startsAt: "2099-01-10T10:00:00.000Z", endsAt: "", location: "", description: "", audienceMode: "all", participantProfileIds: [], reminderDaysBefore: 7, reminderGeneratedAt: "", status: "planned", createdBy: profile.id, createdAt: "r1", updatedAt: "r1" }] : [], coverage: { range: null, completeness: "complete" } } });
+        return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { revision: "events", people: [profile], events: rotationRecovery ? [{ id: 1, title: "Current-session event", category: "other", startsAt: "2099-01-10T10:00:00.000Z", endsAt: "", location: "", description: "", audienceMode: "all", participantProfileIds: [], reminderDaysBefore: 7, reminderGeneratedAt: "", status: "planned", createdBy: profile.id, createdAt: "r1", updatedAt: "r1" }] : [], coverage: { range: null, completeness: "complete" } } });
       }
       if (path === "/api/github-app/status") return Response.json({ installation: { available: false }, user: { connected: false } });
       if (path === "/api/administrator-access") return Response.json({ administratorAccess: { eligible: false, active: false, expiresAt: null } });
@@ -109,7 +109,7 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
     <button onClick={() => finishRead.current()}>Finish background Board response</button>
     {ready ? <PlanningStateProvider><PlanningApp key={workspace}
       initialWorkspace={workspace}
-      initialWorkspaceRead={workspace === "planning" ? planningWorkspaceHydration("planning", pageModel, session) : undefined}
+      initialWorkspaceRead={workspace === "planning" ? planningWorkspaceHydration("planning", pageModel, session, { userId: session.userId, deadline: session.expiresAt * 1000 }) : undefined}
       initialData={{ ...emptyPlanningShellState, profiles: [profile], tasks: workspace === "planning" ? [...pageModel.items] : [] }}
       initialHeaderData={headerData} initialAuthUser={user} initialCurrentProfile={profile}
       initialProtectedDataLoaded authRequired source="supabase"

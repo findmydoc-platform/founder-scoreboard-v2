@@ -1,5 +1,8 @@
 import "server-only";
-import { createHmac } from "node:crypto";
+import type { Session } from "@supabase/supabase-js";
+import { projectSessionView } from "./session-view";
+import { emptyPlanningHeaderData } from "../../planning-header-data";
+import { createHmac, randomUUID } from "node:crypto";
 import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import type { PlanningCredentialInput } from "../types";
 import type { SessionPolicyAction } from "./session-policy-types";
@@ -82,12 +85,14 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   const followup = planningService(strictService);
   if (!service && !strictService) return { ok: false as const, status: 501, error: "Supabase env is not configured." };
   let request: NextRequest;
+  let cookieSession: Session | undefined;
   if (input.credential.kind === "server-cookies") {
     const requestHeaders = new Headers(await headers());
     if (requiresSupabaseAuth()) {
       const client = await getServerAuthSupabase();
       const session = client ? await client.auth.getSession() : null;
       if (session?.error || !session?.data.session?.access_token) return { ok: false as const, status: 401, error: "Anmeldung erforderlich." };
+      cookieSession = session.data.session;
       requestHeaders.set("authorization", `Bearer ${session.data.session.access_token}`);
     }
     request = { headers: requestHeaders, method: "GET" } as NextRequest;
@@ -149,7 +154,11 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     if ("assertCurrent" in permission) permission.assertCurrent();
     if (administratorExpired()) throw new WorkspaceAccessError(403, "workspace_access_denied");
   }) : permission.data;
-  return { ok: true as const, profile: profile ? Object.freeze({ ...profile }) : null, authority: authority ? Object.freeze({ ...authority, profile: Object.freeze({ ...authority.profile }), administratorAccess: Object.freeze({ ...authority.administratorAccess }), capabilities: Object.freeze({ ...authority.capabilities }) }) : undefined, planning: {
+  const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
+  const readSession = cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
+  const serverHeaderRead = action === "planning.board.read" && readSession && readAuthority
+    ? { ...readAuthority, id: randomUUID(), timeoutAt: Math.min(readAuthority.deadline, Date.now() + 15_000), sessionRevision: readSession.revision } : undefined;
+  return { ok: true as const, readAuthority, readSession, serverHeaderRead, profile: profile ? Object.freeze({ ...profile }) : null, authority: authority ? Object.freeze({ ...authority, profile: Object.freeze({ ...authority.profile }), administratorAccess: Object.freeze({ ...authority.administratorAccess }), capabilities: Object.freeze({ ...authority.capabilities }) }) : undefined, planning: {
     ...planningWorkweekOperations({ action, targetId, profile, service, followup: followup!, data: permission.data, request, current }),
     ...planningCollaborationOperations({ action, targetId, profile, service, followup: followup!, request, current }),
     ...planningParticipationOperations({ action, targetId, profile, service, followup: followup!, current }),
@@ -324,7 +333,28 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     async loadBoard(query?: PlanningBoardQueryInput) {
       const denial = action === "planning.board.read" ? await current() : forbidden();
       if (denial) return { status: "forbidden" as const };
-      return createSupabasePlanningBoardReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null, query, authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning").update(JSON.stringify(["planning-board-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") });
+      const result = await createSupabasePlanningBoardReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null, query, authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning").update(JSON.stringify(["planning-board-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") });
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      return result;
+    },
+    startServerHeaderSlots() {
+      const admitted = action === "planning.board.read" && serverHeaderRead ? current() : Promise.resolve(forbidden());
+      const loaders = planningHeaderSlotLoaders(service);
+      const start = (key: "quickLinks" | "calendarEvents") => {
+        const execute = async () => {
+          if (await admitted) throw new Error("Header admission denied.");
+          const slot = await loaders[key]();
+          assertKnown();
+          return { headerData: { ...emptyPlanningHeaderData, [key]: slot } };
+        };
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        return Promise.race([
+          execute(),
+          new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error("Header read timed out.")), Math.max(0, (serverHeaderRead?.timeoutAt || Date.now()) - Date.now())); }),
+        ]).catch(() => ({ headerData: { ...emptyPlanningHeaderData, [key]: { ...emptyPlanningHeaderData[key], state: "error" as const, error: key === "quickLinks" ? "Kuratierte Links konnten nicht geladen werden." : "Kalenderdaten konnten nicht geladen werden." } } }))
+          .finally(() => { if (timeout) clearTimeout(timeout); });
+      };
+      return { quickLinks: start("quickLinks"), calendarEvents: start("calendarEvents") };
     },
     async loadHeader(slots?: PlanningHeaderSlotKey[]) {
       const denial = ["planning.board.read", "planning.header.read", "planning.backlog.read", "planning.sprint.read", "planning.task.read"].includes(action) ? await current() : forbidden();
@@ -343,6 +373,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       const denial = action === "planning.revision.read" ? await current() : forbidden();
       if (denial) return { version: null, error: denial, status: "status" in denial ? Number(denial.status) : 403 };
       const result = await service.rpc("planning_source_version");
+      try { assertKnown(); } catch { return { version: null, status: 503, error: { message: "Planning source authority expired." } }; }
       return typeof result.data === "string" && !result.error
         ? { version: result.data, error: null }
         : { version: null, status: result.status >= 400 ? result.status : 503, error: result.error || { message: "Planning source version is unavailable." } };

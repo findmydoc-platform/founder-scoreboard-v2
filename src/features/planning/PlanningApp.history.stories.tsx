@@ -47,13 +47,13 @@ function CompletedHistoryFlow({ failCompleteRead = false, delayCompleteRead = fa
         setReads(value => value + 1);
         const query = JSON.parse(url.searchParams.get("scope") || "{}");
         if (query.view === "complete") {
-          const response = () => Response.json({ model: { ...page(query), board: undefined, items: [initiative, active, ...completed], coverage: { ...initial.coverage, items: "complete" } }, currentProfile: profile });
+          const response = () => Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...page(query), board: undefined, items: [initiative, active, ...completed], coverage: { ...initial.coverage, items: "complete" } }, currentProfile: profile });
           if (failCompleteRead && ++completeAttempts === 1) return Response.json({ error: "Complete view unavailable" }, { status: 503 });
           if (delayCompleteRead) return new Promise<Response>(resolve => { setReleaseCompleteRead(() => () => { resolve(response()); setReleaseCompleteRead(null); }); });
           return response();
         }
         if (query.continuation && ++attempts === 1) return Response.json({ error: "History unavailable" }, { status: 503 });
-        return Response.json({ model: page(query), currentProfile: profile });
+        return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: page(query), currentProfile: profile });
       }
       if (url.pathname === "/api/planning-revision") return Response.json({ revision: initial.board.workspaceRevision });
       if (url.pathname === "/api/github-app/status") return Response.json({ installation: { available: false }, user: { connected: false } });
@@ -63,7 +63,7 @@ function CompletedHistoryFlow({ failCompleteRead = false, delayCompleteRead = fa
     queueMicrotask(() => setReady(true));
     return () => { restore(); if (previous === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previous); };
   }, [failCompleteRead, delayCompleteRead]);
-  return <><output aria-label="History reads">{reads}</output>{releaseCompleteRead ? <button onClick={releaseCompleteRead}>Ansichtsantwort freigeben</button> : null}{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session)} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile], sprints: [sprint] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  return <><output aria-label="History reads">{reads}</output>{releaseCompleteRead ? <button onClick={releaseCompleteRead}>Ansichtsantwort freigeben</button> : null}{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile], sprints: [sprint] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = {
   title: "Planning/Completed history flow",

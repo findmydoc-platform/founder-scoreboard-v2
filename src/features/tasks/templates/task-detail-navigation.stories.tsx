@@ -72,7 +72,7 @@ const meta = {
       if (path === "/api/notifications/732" && init?.method === "PATCH") return Response.json({ ok: true, action: "seen", status: "pending" });
       if (path === `/api/tasks/${relatedSource.item.id}/detail-data`) return Response.json({ taskDetail: relatedSource, unavailable: [] });
       if (path === "/api/planning-board-data" && args.relatedTaskFirst) return Response.json({ error: "Planning refresh unavailable." }, { status: 503 });
-      if (path === "/api/planning-board-data") return Response.json({
+      if (path === "/api/planning-board-data") return Response.json({ readAuthority: { userId: itemPageUser.id, deadline: Date.now() + 60_000 },
         model: { revision: "board", project: boardData.project, items: args.missingTask ? [] : boardData.tasks, people: boardData.profiles, sprints: [], relationships: [], preferences: [] },
         headerData, currentProfile: itemPageProfile,
       });

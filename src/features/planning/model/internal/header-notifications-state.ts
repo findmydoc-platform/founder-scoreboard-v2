@@ -3,10 +3,11 @@ import { emptyPlanningHeaderData, normalizePlanningHeaderData, planningHeaderSlo
 import { applyLocalNotificationAction } from "@/lib/notification-lifecycle";
 import type { PlanningReadStatus } from "../planning-state";
 import type { PlanningNotificationsState, NotificationAction, NotificationActionResult, NotificationOperationView } from "../planning-notifications-state";
+import type { PlanningReadAuthority, PlanningServerHeaderRead, PlanningServerHeaderSlot } from "../planning-server-header-read";
 import type { PlatformReleaseRecord } from "@/features/platform-releases/model/platform-release-model";
 
 export type HeaderNotificationsAdapter = {
-  readHeader?: (slots: readonly PlanningHeaderSlotKey[]) => Promise<PlanningHeaderData>;
+  readHeader?: (slots: readonly PlanningHeaderSlotKey[]) => Promise<PlanningHeaderData & { readAuthority?: PlanningReadAuthority }>;
   updateNotification?: (eventId: number, action: NotificationAction) => Promise<{ action: NotificationAction; status: NotificationEvent["status"] }>;
   readPlatformReleases?: () => Promise<PlatformReleaseRecord[]>;
   markPlatformReleaseSeen?: (version: string) => Promise<void>;
@@ -15,6 +16,9 @@ export function createHeaderNotificationsState(options: {
   initialHeaderData?: PlanningHeaderData; initialData: PlanningShellState; notificationsLoaded: boolean;
   adapter: HeaderNotificationsAdapter; isActive: () => boolean; generation: () => number; changed: () => void;
   refreshNotifications: () => Promise<boolean>;
+  serverRead?: PlanningServerHeaderRead;
+  acceptsReadAuthority?: (read: PlanningReadAuthority) => boolean;
+  acceptsServerRead?: (read: PlanningServerHeaderRead) => boolean;
 }) {
   let header = normalizePlanningHeaderData(options.initialHeaderData);
   let events = options.initialData.notificationEvents;
@@ -31,8 +35,20 @@ export function createHeaderNotificationsState(options: {
   let affectedAt = 0;
   let releaseRead: Promise<boolean> | undefined;
   const slots = Object.fromEntries(planningHeaderSlotKeys.map(key => [key, { readStatus: (header[key].state === "ready" ? header[key].freshness === "stale" ? "stale" : "current" : header[key].state === "error" ? "unavailable" : "not-loaded") as PlanningReadStatus, error: header[key].error || "" }])) as ReturnType<PlanningNotificationsState["header"]>["slots"];
+  const headerAuthorities = new Map<PlanningHeaderSlotKey, PlanningReadAuthority>();
   const acceptedHeaderAt = new Map<PlanningHeaderSlotKey, number>();
   const headerReads = new Map<PlanningHeaderSlotKey, { started: number; promise: Promise<boolean> }>();
+  const originalServerRead = options.serverRead ? { ...options.serverRead } : undefined;
+  let serverTimeout: ReturnType<typeof setTimeout> | undefined;
+  const serverReads = new Map<PlanningServerHeaderSlot, { read: PlanningServerHeaderRead; generation: number; started: number; finish: (accepted: boolean) => void }>();
+  if (originalServerRead && options.acceptsServerRead?.(originalServerRead)) {
+    for (const key of ["quickLinks", "calendarEvents"] as const) {
+      const started = ++clock;
+      const promise = new Promise<boolean>(finish => { serverReads.set(key, { read: originalServerRead, generation: options.generation(), started, finish }); });
+      headerReads.set(key, { started, promise });
+      slots[key] = { readStatus: "loading", error: "" };
+    }
+  }
   const operations = new Map<string, NotificationOperationView>();
   const requests = new Map<string, Promise<NotificationActionResult>>();
   const denied = (error: unknown) => typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403);
@@ -53,6 +69,13 @@ export function createHeaderNotificationsState(options: {
     if (optimistic && hidden.size) data.notifications = { ...data.notifications, data: { ...data.notifications.data, items: data.notifications.data.items.filter(event => !hidden.has(event.id)) } };
     return { data, slots: { ...slots } };
   }
+  function expireHeaderAuthorities() {
+    for (const [key, read] of headerAuthorities) if (!options.acceptsReadAuthority?.(read)) {
+      headerAuthorities.delete(key);
+      header = { ...header, [key]: emptyPlanningHeaderData[key] };
+      slots[key] = { readStatus: "not-loaded", error: "" };
+    }
+  }
   function invalidateNotifications() {
     affectedAt = ++clock;
     slots.notifications = { readStatus: "stale", error: "" };
@@ -66,6 +89,7 @@ export function createHeaderNotificationsState(options: {
     for (const key of planningHeaderSlotKeys) {
       if (started < (acceptedHeaderAt.get(key) || 0) || key === "notifications" && started < affectedAt) continue;
       if (normalized[key].state === "idle") continue;
+      headerAuthorities.delete(key);
       acceptedHeaderAt.set(key, started);
       header = { ...header, [key]: normalized[key] };
       slots[key] = { readStatus: normalized[key].state === "error" ? "unavailable" : "current", error: normalized[key].error || "" };
@@ -84,10 +108,12 @@ export function createHeaderNotificationsState(options: {
       try {
         const incoming = await options.adapter.readHeader!(pending);
         if (!current(generation)) return false;
+        if (incoming.readAuthority && !options.acceptsReadAuthority?.(incoming.readAuthority)) throw Object.assign(new Error("Die ursprüngliche Leseberechtigung ist abgelaufen."), { status: 403 });
         const accepted = pending.filter(key => headerReads.get(key)?.started === started && !(key === "notifications" && started < affectedAt));
         const selected = { ...emptyPlanningHeaderData };
         accepted.forEach(key => Object.assign(selected, { [key]: incoming[key] }));
         acceptHeader(selected, started);
+        if (incoming.readAuthority) accepted.forEach(key => headerAuthorities.set(key, { ...incoming.readAuthority! }));
         accepted.filter(key => incoming[key].state === "idle").forEach(key => { slots[key] = { readStatus: "unavailable", error: "Kalender und Benachrichtigungen konnten nicht geladen werden." }; });
         options.changed();
         return accepted.length === pending.length;
@@ -164,7 +190,25 @@ export function createHeaderNotificationsState(options: {
     operation.checking = false; options.changed(); return true;
   }
   const publicState: PlanningNotificationsState = {
-    header: () => { options.isActive(); return headerView(); }, refreshHeader,
+    header: () => { options.isActive(); expireHeaderAuthorities(); return headerView(); }, refreshHeader,
+    acceptServerHeaderSlot(read, key, incoming) {
+      const prepared = serverReads.get(key);
+      if (!prepared || prepared.read.id !== read.id || prepared.read.userId !== read.userId || prepared.read.sessionRevision !== read.sessionRevision || prepared.read.deadline !== read.deadline || prepared.read.timeoutAt !== read.timeoutAt) return false;
+      serverReads.delete(key);
+      if (!serverReads.size && serverTimeout) { clearTimeout(serverTimeout); serverTimeout = undefined; }
+      const selected = { ...emptyPlanningHeaderData, [key]: incoming[key] };
+      const accepted = current(prepared.generation) && options.acceptsServerRead?.(read) === true
+        && headerReads.get(key)?.started === prepared.started && prepared.started >= (acceptedHeaderAt.get(key) || 0);
+      if (headerReads.get(key)?.started === prepared.started) headerReads.delete(key);
+      if (accepted) {
+        if (incoming[key].state === "idle") Object.assign(selected, { [key]: { ...emptyPlanningHeaderData[key], state: "error", error: "Header-Daten konnten nicht geladen werden." } });
+        acceptHeader(selected, prepared.started);
+        headerAuthorities.set(key, prepared.read);
+      } else if (slots[key].readStatus === "loading" && !headerReads.has(key)) slots[key] = { readStatus: "not-loaded", error: "" };
+      prepared.finish(accepted);
+      options.changed();
+      return accepted;
+    },
     notifications: () => { options.isActive(); return { completeness: notificationCompleteness, events: projectedEvents(), deliveries, readStatus: notificationStatus, operations: [...operations.values()].filter(value => value.releaseVersion ? !releasesDenied : !notificationsDenied && (!audienceRestricted || events.some(event => event.id === value.eventId) || header.notifications.data.items.some(event => event.id === value.eventId))).map(value => ({ ...value })) }; },
     refreshNotifications: () => options.isActive() ? options.refreshNotifications() : Promise.resolve(false),
     updateNotificationStatus: (eventId, actionValue) => action(`notification:${eventId}`, { eventId, action: actionValue, phase: "saving", error: "", checking: false }, async () => {
@@ -183,6 +227,21 @@ export function createHeaderNotificationsState(options: {
     checkPlatformReleaseSeen: version => check(`release:${version}`),
   };
   return { publicState,
+    watchServerRead() {
+      if (serverTimeout || !serverReads.size || !originalServerRead) return;
+      serverTimeout = setTimeout(() => {
+        serverTimeout = undefined;
+        for (const [key, prepared] of serverReads) {
+          if (current(prepared.generation) && headerReads.get(key)?.started === prepared.started) {
+            headerReads.delete(key);
+            slots[key] = { readStatus: "unavailable", error: key === "quickLinks" ? "Kuratierte Links konnten nicht geladen werden." : "Kalenderdaten konnten nicht geladen werden." };
+          }
+          prepared.finish(false);
+        }
+        serverReads.clear();
+        options.changed();
+      }, Math.max(0, originalServerRead.timeoutAt - Date.now()));
+    },
     deliveryStarted() {
       affectedAt=++clock;
       if(slots.notifications.readStatus!=="not-loaded"){slots.notifications={readStatus:"stale",error:""};acceptedHeaderAt.set("notifications",affectedAt);headerReads.delete("notifications");}
@@ -206,7 +265,7 @@ export function createHeaderNotificationsState(options: {
     workspaceFailed(workspace: string, error: unknown) { if (workspace !== "notifications") return; notificationStatus = denied(error) ? "forbidden" : "unavailable"; if (denied(error)) { events = []; deliveries = []; notificationsDenied = true; header.notifications = emptyPlanningHeaderData.notifications; slots.notifications = { readStatus: "forbidden", error: "Kein Zugriff auf Benachrichtigungen." }; } },
     projectConfirmed(data: PlanningShellState) { return { ...data, notificationEvents: events, notificationDeliveries: deliveries }; },
     projectVisible(data: PlanningShellState) { return { ...data, notificationEvents: projectedEvents(), notificationDeliveries: deliveries }; },
-    confirmedHeader: () => headerView(false).data,
+    confirmedHeader: () => { options.isActive(); expireHeaderAuthorities(); return headerView(false).data; },
     invalidateNotificationAuthority() {
       if (!options.isActive()) return;
       const loaded = slots.notifications.readStatus !== "not-loaded" || notificationStatus !== "not-loaded" || [...operations.values()].some(operation => operation.eventId);
@@ -234,6 +293,6 @@ export function createHeaderNotificationsState(options: {
       void refreshHeader(loaded);
     },
     hydrateHeader(incoming: PlanningHeaderData) { if (!options.isActive()) return; if (planningHeaderSlotKeys.some(key => incoming[key].state !== "idle")) { void refreshHeader(planningHeaderSlotKeys.filter(key => incoming[key].state !== "idle")); } },
-    clear() { header = { ...emptyPlanningHeaderData }; events = []; deliveries = []; releases = []; operations.clear(); requests.clear(); headerReads.clear(); releaseRead = undefined; notificationsDenied = false; releasesDenied = false; audienceRestricted = false; notificationStatus = "not-loaded"; releaseStatus = "not-loaded"; planningHeaderSlotKeys.forEach(key => { slots[key] = { readStatus: "not-loaded", error: "" }; }); },
+    clear() { if (serverTimeout) clearTimeout(serverTimeout); serverTimeout = undefined; serverReads.forEach(read => read.finish(false)); serverReads.clear(); headerAuthorities.clear(); header = { ...emptyPlanningHeaderData }; events = []; deliveries = []; releases = []; operations.clear(); requests.clear(); headerReads.clear(); releaseRead = undefined; notificationsDenied = false; releasesDenied = false; audienceRestricted = false; notificationStatus = "not-loaded"; releaseStatus = "not-loaded"; planningHeaderSlotKeys.forEach(key => { slots[key] = { readStatus: "not-loaded", error: "" }; }); },
   };
 }

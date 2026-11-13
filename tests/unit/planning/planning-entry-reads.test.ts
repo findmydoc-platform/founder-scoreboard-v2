@@ -64,7 +64,7 @@ test("a failed shared read retains usable cards and a later refresh retries the 
 
 test.each(["complete", "partial"] as const)("the initial Board retains its declared %s coverage", coverage => {
   const session = { userId: "entry-user", revision: "entry-session", expiresAt: Math.floor(Date.now() / 1000) + 60, user: { id: "entry-user" } };
-  const read = planningWorkspaceHydration("planning", { revision: "r1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: coverage } }, session);
+  const read = planningWorkspaceHydration("planning", { revision: "r1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: coverage } }, session, { userId: session.userId, deadline: session.expiresAt * 1000 });
   const { planning } = createPlanningState({ userId: session.userId, initialData: data, initialSession: session, initialWorkspaceRead: read,
     adapter: { saveTask: async () => ({ task }), readWorkspace: async () => null },
   });
@@ -75,7 +75,7 @@ test.each(["complete", "partial"] as const)("the initial Board retains its decla
 test("returning with sufficient bound Planning content observes freshness without an equivalent content read", async () => {
   const session = { userId: "entry-user", revision: "entry-session", expiresAt: Math.floor(Date.now() / 1000) + 60, user: { id: "entry-user" } };
   const model = { revision: "r1", scopeRevision: "source-1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: "complete" as const } };
-  const read = planningWorkspaceHydration("planning", model, session)!;
+  const read = planningWorkspaceHydration("planning", model, session, { userId: session.userId, deadline: session.expiresAt * 1000 })!;
   let contentReads = 0;
   let versionReads = 0;
   const owner = createPlanningState({ userId: session.userId, initialData: data, initialSession: session, initialWorkspaceRead: read, adapter: {
@@ -93,7 +93,7 @@ test("returning with sufficient bound Planning content observes freshness withou
 
 function sourceOwner(options: { version?: () => Promise<string>; expiresAt?: number; now?: () => number; workspace?: "planning" | "events" } = {}) {
   const session = { userId: "entry-user", revision: "entry-session", expiresAt: options.expiresAt || Math.floor(Date.now() / 1000) + 60, user: { id: "entry-user" } };
-  const read = planningWorkspaceHydration("planning", { revision: "r1", scopeRevision: "source-1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: "complete" } }, session)!;
+  const read = planningWorkspaceHydration("planning", { revision: "r1", scopeRevision: "source-1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: "complete" } }, session, { userId: session.userId, deadline: session.expiresAt * 1000 })!;
   let contentReads = 0;
   const owner = createPlanningState({ userId: session.userId, initialData: data, initialWorkspace: options.workspace, initialSession: session, initialWorkspaceRead: options.workspace ? undefined : read, adapter: {
     now: options.now, saveTask: async () => ({ task }),
@@ -149,7 +149,7 @@ test("a current-scope version denial removes cards instead of presenting reusabl
 
 test("freshness demand joins an already required query read without observing the old source", async () => {
   const session = { userId: "entry-user", revision: "entry-session", expiresAt: Math.floor(Date.now() / 1000) + 60, user: { id: "entry-user" } };
-  const read = planningWorkspaceHydration("planning", { revision: "r1", scopeRevision: "source-1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: "complete" } }, session)!;
+  const read = planningWorkspaceHydration("planning", { revision: "r1", scopeRevision: "source-1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: "complete" } }, session, { userId: session.userId, deadline: session.expiresAt * 1000 })!;
   const pending = deferred<{ data: typeof data; scopeRevision: string; query: { filters: { query: string } } }>();
   let versionReads = 0;
   const { planning } = createPlanningState({ userId: session.userId, initialData: data, initialSession: session, initialWorkspaceRead: read, adapter: {
@@ -178,7 +178,7 @@ test.each([
   const board: import("@/features/planning/model/planning-board-query").PlanningBoardResult = { query, queryKey: planningBoardQueryKey(query), revision: "query-1", observedAt, cardIds: sample.before, columns, childProgressById: {}, metrics: { total: sample.before.length, open: sample.before.length, blocked: 0, done: 0 }, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: { activeTaskCount: 1, latestUpdatedAt: "r1" } };
   const sprints = [{ id: "week-sprint", name: "Synthetic Sprint", status: "planning", startDate: sample.startDate, endDate: sample.endDate, reviewDueAt: "", scoreLocked: false }] as import("@/lib/types").Sprint[];
   const initial = { ...data, tasks: [{ ...task, sprintId: "week-sprint" }], sprints };
-  const read = planningWorkspaceHydration("planning", { revision: "r1", scopeRevision: "source-1", board, query, project: data.project, items: initial.tasks, people: [], sprints, relationships: [], preferences: [], coverage: { items: "complete", sprints: "complete" } }, session)!;
+  const read = planningWorkspaceHydration("planning", { revision: "r1", scopeRevision: "source-1", board, query, project: data.project, items: initial.tasks, people: [], sprints, relationships: [], preferences: [], coverage: { items: "complete", sprints: "complete" } }, session, { userId: session.userId, deadline: session.expiresAt * 1000 })!;
   let contents = 0, versions = 0;
   const { planning } = createPlanningState({ userId: session.userId, initialData: initial, initialSession: session, initialWorkspaceRead: read, adapter: {
     now: () => now, saveTask: async () => ({ task }),
@@ -215,4 +215,52 @@ test("week reuse without a complete Sprint time basis requests its scope and can
   expect({ contents, versions }).toEqual({ contents: 1, versions: 0 });
   expect(planning.workspace("planning").readStatus).toBe("unavailable");
   expect(planning.board().freshness).toBe("stale");
+});
+
+
+test("the original Board read deadline expires before provider session expiry and equality cannot renew it", async () => {
+  let now = 1_000, versions = 0, reads = 0;
+  const session = { userId: "entry-user", revision: "original-session", expiresAt: 100, user: { id: "entry-user" } };
+  const read = planningWorkspaceHydration("planning", { revision: "r1", scopeRevision: "source-1", project: data.project, items: [task], people: [], sprints: [], relationships: [], preferences: [], coverage: { items: "complete" } }, session, { userId: session.userId, deadline: 2_000 })!;
+  const observed = deferred<string>();
+  const owner = createPlanningState({ userId: session.userId, initialSession: session, initialWorkspaceRead: read, initialData: data, adapter: {
+    now: () => now, saveTask: async () => ({ task }), readPlanningSourceVersion: () => { versions++; return observed.promise; },
+    readWorkspace: async () => { reads++; return { data, scopeRevision: "source-1", readAuthority: { userId: session.userId, deadline: 5_000 } }; },
+  } });
+  const checking = owner.planning.checkPlanningSource();
+  now = 2_000;
+  observed.resolve("source-1");
+  await expect(checking).resolves.toBe("session-ended");
+  expect(owner.planning.workspace("planning").tasks).toEqual([]);
+  owner.internal.acceptHydration(data, session.userId, "planning", read);
+  expect(owner.planning.workspace("planning").tasks).toEqual([]);
+  await expect(owner.planning.checkPlanningSource()).resolves.toBe("content-read");
+  expect({ versions, reads }).toEqual({ versions: 1, reads: 1 });
+  expect(owner.planning.workspace("planning").tasks).toEqual([task]);
+  now = 5_000;
+  expect(owner.planning.workspace("planning").tasks).toEqual([]);
+});
+
+
+test("legacy hydration without the original read receipt cannot certify retained authority", async () => {
+  const { session, read } = sourceOwner();
+  let versions = 0, contents = 0;
+  const owner = createPlanningState({ userId: session.userId, initialSession: session, initialData: data, initialWorkspaceRead: { ...read, readAuthority: undefined }, adapter: {
+    saveTask: async () => ({ task }),
+    readPlanningSourceVersion: async () => { versions++; return "source-1"; },
+    readWorkspace: async () => { contents++; return { data, readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 } }; },
+  } });
+  expect(owner.planning.workspace("planning").tasks).toEqual([]);
+  await expect(owner.planning.checkPlanningSource()).resolves.toBe("content-read");
+  expect({ versions, contents }).toEqual({ versions: 0, contents: 1 });
+  expect(owner.planning.workspace("planning").tasks).toEqual([task]);
+});
+
+test.each([{ userId: "another-user", deadline: 3_000 }, { userId: "entry-user", deadline: 1_000 }, { userId: "entry-user", deadline: NaN }])("a Board response cannot accept an invalid original authority receipt %j", async readAuthority => {
+  const owner = createPlanningState({ userId: "entry-user", initialData: emptyPlanningShellState, adapter: {
+    now: () => 1_000, saveTask: async () => ({ task }), readWorkspace: async () => ({ data, readAuthority, scopeRevision: "unaccepted-source" }),
+  } });
+  await expect(owner.planning.refreshWorkspace("planning")).resolves.toBe(false);
+  expect(owner.planning.workspace("planning").tasks).toEqual([]);
+  expect(owner.planning.board().scopeRevision).toBeUndefined();
 });

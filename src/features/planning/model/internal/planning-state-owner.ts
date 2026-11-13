@@ -47,7 +47,7 @@ import { applyPlanningItemApprovalPatch } from "../approval-domain";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
-export type PlanningWorkspaceRead = { scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 type PlanningWeekBasis = { observedAt: number; sprints: import("@/lib/types").Sprint[] };
 function planningWeekBasis(board: PlanningBoardResult | undefined, coverage: PlanningReadCoverage | undefined, sprints: readonly import("@/lib/types").Sprint[]): PlanningWeekBasis | undefined {
   const observedAt = Date.parse(board?.observedAt || "");
@@ -85,12 +85,13 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialSession, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialSession, initialServerHeaderRead, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
   initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
   initialSession?: BrowserSessionSnapshot;
+  initialServerHeaderRead?: import("../planning-server-header-read").PlanningServerHeaderRead;
   initialHeaderData?: PlanningHeaderData;
   initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
   initialCurrentProfile?: AuthenticatedProfile | null;
@@ -110,6 +111,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let sessionGeneration = 0;
   let sessionExpiresAt = initialSession?.expiresAt;
   let sessionRevision = initialSession?.revision;
+  let planningAuthority = initialWorkspaceRead?.workspace === "planning" ? initialWorkspaceRead.readAuthority || { userId, deadline: 0 } : undefined;
   const hydrationReads = new Map<AppWorkspace, import("../planning-workspace-hydration").PlanningWorkspaceHydration>();
   if (initialWorkspaceRead && initialWorkspaceRead.workspace === initialWorkspace && initialWorkspaceRead.session.userId === userId) hydrationReads.set(initialWorkspace, initialWorkspaceRead);
   const taskConfirmedAt = new Map<string, number>();
@@ -194,13 +196,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     columnReadStatus: Partial<Record<TaskStatus, PlanningReadStatus>>;
     sourceEpoch: number;
     weekBasis?: PlanningWeekBasis;
+    readAuthority?: import("../planning-server-header-read").PlanningReadAuthority;
   }>();
   function rememberPlanningQuery() {
     if (!boardQuery || !boardQueryKey || !queryRevision || workspaceStatuses.get("planning") !== "current") return;
     planningQueries.set(boardQueryKey, {
       query: boardQuery, revision: queryRevision, result: boardResult,
       taskIds: new Set(memberships.get("planning")), completeness: completeness.get("planning") || "none",
-      pageStatus, columnReadStatus: { ...columnReadStatus }, sourceEpoch: planningSourceEpoch, weekBasis,
+      pageStatus, columnReadStatus: { ...columnReadStatus }, sourceEpoch: planningSourceEpoch, weekBasis, readAuthority: planningAuthority,
     });
   }
   let ended = false;
@@ -251,6 +254,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const commentDrafts = new Map<string, { text: string }>();
   function isActive() {
     if (active && sessionExpiresAt !== undefined && sessionExpiresAt * 1000 <= (adapter.now?.() ?? Date.now())) suspendProtected();
+    if (active && planningAuthority && (planningAuthority.userId !== userId || !Number.isFinite(planningAuthority.deadline) || planningAuthority.deadline <= (adapter.now?.() ?? Date.now()))) {
+      planningAuthority = undefined;
+      const expired = memberships.get("planning") || new Set<string>();
+      for (const id of expired) if (![...memberships].some(([scope, members]) => scope !== "planning" && members.has(id)) && detailStatuses.get(id) !== "current") deniedTaskReads.add(id);
+      detachPlanningMetadata();
+      memberships.delete("planning");
+      profileScopes.delete("planning");
+      completeness.set("planning", "none");
+      workspaceStatuses.set("planning", "not-loaded");
+      visible = protectedPublication(visible);
+    }
     return active;
   }
   function readErrorStatus(error: unknown): "forbidden" | "unavailable" {
@@ -267,7 +281,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const privateWorkweek = createPrivateWorkweekState({ adapter, active: isActive, generation: () => sessionGeneration, changed: () => { if (!googleWorkspace.privateContextChanged()) publish(); }, published: workweekCalendars.invalidatePublishedWorkweeks, publicationBlocked: () => googleWorkspace.blocksPublication() });
   const googleWorkspace = createGoogleWorkspaceState({ adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidate: workweekCalendars.invalidatePublishedWorkweeks, privateBusy: privateWorkweek.publicationBusy, privateContext: privateWorkweek.disconnectBinding, privateChanged: privateWorkweek.connectionChanged });
   const administration = createAdministrationPersonState({ actorRole: () => confirmed.profiles.find(profile => profile.id === administrationActorProfileId)?.platformRole || null, active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), profiles: () => visible.profiles, nextSequence: () => ++sequence, acceptCommonPeople: (people, started) => profileSettings.acceptAdministrationPeople(people, started), invalidateDeliveryEffects: () => notifications.deliveryStarted(), refreshDeliveryEffects: () => notifications.refreshDeliveryEffects(), commonProject: () => confirmed.project, acceptCommonProject: project => { confirmed = {...confirmed,project:{...confirmed.project,githubProjectOwner:project.owner,githubProjectNumber:project.number}}; }, initialAuthority: initialAdministrationAuthority, read: adapter.readAdministration, adapter });
-  const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
+  const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, serverRead: initialServerHeaderRead, acceptsReadAuthority: read => isActive() && read.userId === userId && read.deadline > (adapter.now?.() ?? Date.now()), acceptsServerRead: read => isActive() && read.userId === userId && read.sessionRevision === sessionRevision && read.deadline > (adapter.now?.() ?? Date.now()) && Number.isFinite(read.timeoutAt) && read.timeoutAt > (adapter.now?.() ?? Date.now()), notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
   const events = createEventsState({ initial: active ? initialData.events : [], loaded: initialWorkspace === "events", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidateCalendar: () => notifications.invalidateHeader(["calendarEvents"]), refreshWorkspace: () => planning.refreshWorkspace("events"), endSession,
     beginHeaderRead: () => notifications.beginWorkspaceRead("events"),
     acceptHeaderRead: (data, started) => notifications.acceptWorkspaceRead("events", confirmed, { ...emptyPlanningHeaderData, calendarEvents: notifications.publicState.header().slots.calendarEvents.readStatus === "not-loaded" ? emptyPlanningHeaderData.calendarEvents : data.calendarEvents }, started),
@@ -653,7 +667,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (sourceObservation) return sourceObservation;
       const generation = sessionGeneration, revision = sessionRevision, epoch = planningSourceEpoch, source = scopeRevision;
       sourceStatus = "checking";
-      const current = () => isActive() && generation === sessionGeneration && revision === sessionRevision && epoch === planningSourceEpoch && source === scopeRevision;
+      const current = () => isActive() && memberships.has("planning") && generation === sessionGeneration && revision === sessionRevision && epoch === planningSourceEpoch && source === scopeRevision;
       const observed = (async (): Promise<import("../planning-state").PlanningSourceObservation> => {
         try {
           if (!adapter.readPlanningSourceVersion || !source) { sourceStatus = "unverified"; return "unverified"; }
@@ -831,12 +845,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const complete = planningQueries.get(planningBoardQueryKey({ view: "complete" }));
       const retained = exact || (complete?.completeness === "complete" ? complete : undefined);
       if (retained && retained.revision === queryRevision && retained.sourceEpoch === planningSourceEpoch && workspaceStatuses.get("planning") !== "forbidden"
+        && (!retained.readAuthority || retained.readAuthority.deadline > (adapter.now?.() ?? Date.now()))
         && planningWeekIsCurrent(retained.query, retained.weekBasis, adapter.now?.() ?? Date.now())) {
         acceptedRead.set("planning", ++sequence);
         boardQuery = exact ? retained.query : normalizePlanningBoardQuery(query);
         boardQueryKey = key;
         boardResult = retained.result;
         weekBasis = retained.weekBasis;
+        planningAuthority = retained.readAuthority;
         pageStatus = retained.pageStatus === "loading" ? "stale" : retained.pageStatus;
         columnReads.clear(); columnRequests.clear();
         for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
@@ -1124,6 +1140,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function acceptWorkspaceRead(workspace: AppWorkspace, result: PlanningWorkspaceRead, token: ReturnType<typeof beginWorkspaceRead>) {
     const { started, notificationRead, eventRead, toolRead } = token;
     if (!readIsCurrent(workspace, token)) return false;
+    if (workspace === "planning" && result.readAuthority && (result.readAuthority.userId !== userId || !Number.isFinite(result.readAuthority.deadline) || result.readAuthority.deadline <= (adapter.now?.() ?? Date.now()))) return false;
     if (workspace === "planning" && result.query?.view === "complete") {
       const coverage = result.coverage || {};
       const complete = (result.taskCoverage || coverage.tasks) === "complete"
@@ -1262,11 +1279,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (result.currentProfile) actorIdentity = { ...result.currentProfile };
     acceptWorkspaceContext?.(result);
     freshness = stale ? "stale" : "current";
-    if (workspace === "planning") rememberPlanningQuery();
+    if (workspace === "planning") {
+      planningAuthority = result.append && planningAuthority && result.readAuthority
+        ? { ...result.readAuthority, deadline: Math.min(planningAuthority.deadline, result.readAuthority.deadline) }
+        : result.readAuthority;
+      rememberPlanningQuery();
+    }
     publish();
     return true;
   }
   function suspendProtected() {
+    planningAuthority = undefined;
     sessionGeneration++;
     active = false;
     initialized = false;
@@ -1364,7 +1387,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (!isActive()) return;
     const boundRead = read && read.workspace === workspace && (read.queryKey === "workspace" || (read.query && planningBoardQueryKey(read.query) === read.queryKey) || read.board?.queryKey === read.queryKey) && read.session.userId === userId
       && read.session.revision === sessionRevision && read.session.expiresAt === sessionExpiresAt
-      && read.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now());
+      && read.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now())
+      && (!read.readAuthority || read.readAuthority.userId === userId && read.readAuthority.deadline > (adapter.now?.() ?? Date.now()));
+    if (read?.readAuthority && !boundRead) return;
     const requested = hydrationRequests.get(workspace);
     hydrationRequests.delete(workspace);
     if (requiresBoundHydration && !boundRead) {
@@ -1376,7 +1401,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const identity = read;
       if (workspaceStatuses.get(workspace) === "current" && hydrationReads.get(workspace) === identity) return;
       if (requested && acceptWorkspaceRead(workspace, {
-        data, scopeRevision: read.scopeRevision, board: read.board, query: read.query || read.board?.query, queryRevision: read.queryRevision, coverage: read.coverage, taskCoverage: read.coverage.tasks,
+        data, readAuthority: read.readAuthority, scopeRevision: read.scopeRevision, board: read.board, query: read.query || read.board?.query, queryRevision: read.queryRevision, coverage: read.coverage, taskCoverage: read.coverage.tasks,
         taskOmittedFields: read.taskOmittedFields,
         profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
         projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"],
@@ -1428,6 +1453,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   return { planning, internal: {
     getSnapshot: () => visible,
     isActive,
+    planningReadAuthority: () => planningAuthority,
+    watchServerHeaderRead: notifications.watchServerRead,
     bindAdministrationAuthority: administration.bindAuthority,
     captureAdministrationDispatchGuard: administration.captureDispatchGuard,
     confirmedHeader: notifications.confirmedHeader,

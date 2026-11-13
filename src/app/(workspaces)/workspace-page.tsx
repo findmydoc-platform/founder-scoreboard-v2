@@ -1,5 +1,6 @@
 import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import { authorizeCredentialAction } from "@/lib/credentials";
+import { PlanningServerHeaderSlots } from "@/features/planning/server/planning-server-header-slots";
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { WorkspaceDataUnavailablePage } from "@/features/planning/templates/workspace-data-unavailable-page";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
@@ -34,9 +35,11 @@ async function loadPlanningWorkspacePageData(
   if (workspace === "planning") {
     const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
     if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-    const planningWorkspace = await permission.planning.loadBoard(query);
+    const boardRead = permission.planning.loadBoard(query);
+    const headerSlots = permission.serverHeaderRead ? permission.planning.startServerHeaderSlots() : undefined;
+    const planningWorkspace = await boardRead;
     return planningWorkspace.status === "ready"
-      ? { status: "ready" as const, model: planningWorkspace.model, headerData: permission.profile ? emptyPlanningHeaderData : { ...emptyPlanningHeaderData, notifications: { state: "ready" as const, data: { unreadCount: 0, items: [] } } } }
+      ? { status: "ready" as const, model: planningWorkspace.model, readAuthority: permission.readAuthority, readSession: permission.readSession, serverHeaderRead: permission.serverHeaderRead, headerSlots, headerData: permission.profile ? emptyPlanningHeaderData : { ...emptyPlanningHeaderData, notifications: { state: "ready" as const, data: { unreadCount: 0, items: [] } } } }
       : { status: "unavailable" as const };
 
   }
@@ -155,7 +158,8 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
       return (
         <PlanningApp
           initialData={planningWorkspaceModelToPlanningShellState(planningWorkspace.model)}
-          initialWorkspaceRead={planningWorkspaceHydration(initialWorkspace, planningWorkspace.model, auth.session)}
+          initialWorkspaceRead={planningWorkspaceHydration(initialWorkspace, planningWorkspace.model, "readSession" in planningWorkspace ? planningWorkspace.readSession || auth.session : auth.session, "readAuthority" in planningWorkspace ? planningWorkspace.readAuthority : undefined)}
+          initialServerHeaderRead={"serverHeaderRead" in planningWorkspace ? planningWorkspace.serverHeaderRead : undefined}
           initialHeaderData={planningWorkspace.headerData}
           initialWorkspace={initialWorkspace}
           source="supabase"
@@ -164,7 +168,9 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
           initialCurrentProfile={auth.profile}
           initialAdministratorAccess={auth.authority?.administratorAccess}
           initialProtectedDataLoaded
-        />
+        >
+          {"serverHeaderRead" in planningWorkspace && planningWorkspace.serverHeaderRead && planningWorkspace.headerSlots ? <PlanningServerHeaderSlots read={planningWorkspace.serverHeaderRead} results={planningWorkspace.headerSlots} /> : null}
+        </PlanningApp>
       );
     }
 

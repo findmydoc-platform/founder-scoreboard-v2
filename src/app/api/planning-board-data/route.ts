@@ -22,7 +22,7 @@ async function handleGET(request: NextRequest) {
   if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
   if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
   if (result.status === "unavailable") return apiError("Planung konnte nicht geladen werden.", 503);
-  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, headerData: emptyPlanningHeaderData, currentProfile }));
+  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, readAuthority: permission.readAuthority, headerData: emptyPlanningHeaderData, currentProfile }));
 }
 
 export const GET = observeRuntimeHandler("planning.board", handleGET);
