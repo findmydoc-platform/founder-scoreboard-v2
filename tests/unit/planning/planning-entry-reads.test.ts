@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import { taskStatuses } from "@/lib/status";
 import type { Task } from "@/lib/types";
 import { planningWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
 
@@ -162,4 +163,56 @@ test("freshness demand joins an already required query read without observing th
   await expect(observed).resolves.toBe("content-read");
   expect(versionReads).toBe(0);
   expect(planning.board().scopeRevision).toBe("source-2");
+});
+
+test.each([
+  { name: "Sprint end", startDate: "2026-11-10", endDate: "2026-11-13", before: [task.id], after: [] },
+  { name: "rolling seven-day start", startDate: "2026-11-20", endDate: "2026-11-27", before: [], after: [task.id] },
+].flatMap(sample => ["observation", "query", "page"].map(demand => ({ ...sample, demand }))))("$name expiry requests week content directly for $demand despite an unchanged source", async sample => {
+  const observedAt = "2026-11-12T23:59:59.000Z";
+  let now = Date.parse(observedAt);
+  const session = { userId: "entry-user", revision: "entry-session", expiresAt: Date.parse("2026-11-13T01:00:00Z") / 1000, user: { id: "entry-user" } };
+  const { normalizePlanningBoardQuery, planningBoardQueryKey } = await import("@/features/planning/model/planning-board-query");
+  const query = normalizePlanningBoardQuery({ filters: { quick: ["week"] } });
+  const columns = Object.fromEntries([...taskStatuses, "Pausiert"].map(status => [status, { total: status === "Offen" ? sample.before.length : 0, loaded: status === "Offen" ? sample.before.length : 0, completeness: "complete", continuation: null }])) as import("@/features/planning/model/planning-board-query").PlanningBoardResult["columns"];
+  const board: import("@/features/planning/model/planning-board-query").PlanningBoardResult = { query, queryKey: planningBoardQueryKey(query), revision: "query-1", observedAt, cardIds: sample.before, columns, childProgressById: {}, metrics: { total: sample.before.length, open: sample.before.length, blocked: 0, done: 0 }, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: { activeTaskCount: 1, latestUpdatedAt: "r1" } };
+  const sprints = [{ id: "week-sprint", name: "Synthetic Sprint", status: "planning", startDate: sample.startDate, endDate: sample.endDate, reviewDueAt: "", scoreLocked: false }] as import("@/lib/types").Sprint[];
+  const initial = { ...data, tasks: [{ ...task, sprintId: "week-sprint" }], sprints };
+  const read = planningWorkspaceHydration("planning", { revision: "r1", scopeRevision: "source-1", board, query, project: data.project, items: initial.tasks, people: [], sprints, relationships: [], preferences: [], coverage: { items: "complete", sprints: "complete" } }, session)!;
+  let contents = 0, versions = 0;
+  const { planning } = createPlanningState({ userId: session.userId, initialData: initial, initialSession: session, initialWorkspaceRead: read, adapter: {
+    now: () => now, saveTask: async () => ({ task }),
+    readPlanningSourceVersion: async () => { versions++; return "source-1"; },
+    readWorkspace: async (_workspace, requestedQuery) => {
+      contents++;
+      expect(requestedQuery).toEqual(query);
+      return { data: initial, scopeRevision: "source-1", query, board: { ...board, observedAt: new Date(now).toISOString(), cardIds: sample.after, metrics: { total: sample.after.length, open: sample.after.length, blocked: 0, done: 0 } }, coverage: { tasks: "complete", sprints: "complete" } };
+    },
+  } });
+  await expect(planning.checkPlanningSource()).resolves.toBe("unchanged");
+  expect({ contents, versions }).toEqual({ contents: 0, versions: 1 });
+  now = Date.parse("2026-11-13T00:00:00.001Z");
+  if (sample.demand === "observation") await expect(planning.checkPlanningSource()).resolves.toBe("content-read");
+  else if (sample.demand === "query") await expect(planning.ensureBoardQuery(query)).resolves.toBe(true);
+  else await expect(planning.loadBoardColumn("Offen")).resolves.toBe(true);
+  expect({ contents, versions }).toEqual({ contents: 1, versions: 1 });
+  expect(planning.board().result?.cardIds).toEqual(sample.after);
+});
+
+test("week reuse without a complete Sprint time basis requests its scope and cannot certify source equality", async () => {
+  const { normalizePlanningBoardQuery, planningBoardQueryKey } = await import("@/features/planning/model/planning-board-query");
+  const { session, read } = sourceOwner();
+  const query = normalizePlanningBoardQuery({ filters: { quick: ["week"] } });
+  let contents = 0, versions = 0;
+  const { planning } = createPlanningState({ userId: session.userId, initialData: data, initialSession: session,
+    initialWorkspaceRead: { ...read, query, queryKey: planningBoardQueryKey(query), coverage: { ...read.coverage, sprints: "partial" } }, adapter: {
+      saveTask: async () => ({ task }),
+      readPlanningSourceVersion: async () => { versions++; return "source-1"; },
+      readWorkspace: async (_workspace, requestedQuery) => { contents++; expect(requestedQuery).toEqual(query); return null; },
+    },
+  });
+  await expect(planning.checkPlanningSource()).resolves.toBe("unverified");
+  expect({ contents, versions }).toEqual({ contents: 1, versions: 0 });
+  expect(planning.workspace("planning").readStatus).toBe("unavailable");
+  expect(planning.board().freshness).toBe("stale");
 });

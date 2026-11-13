@@ -1,4 +1,4 @@
-import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardQueryInput, type PlanningBoardResult } from "../planning-board-query";
+import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardQuery, type PlanningBoardQueryInput, type PlanningBoardResult } from "../planning-board-query";
 import { createDecisionLogState } from "./decision-log-state";
 import { createHierarchyCommands } from "./hierarchy-commands";
 import { createMeetingAttendanceState } from "./meeting-attendance-state";
@@ -19,6 +19,7 @@ import { createPrivateWorkweekState } from "./private-workweek-state";
 import { createEventsState } from "./event-state";
 import { createPublishedWorkweekCalendars } from "./published-workweek-calendars";
 import { createHeaderNotificationsState, type HeaderNotificationsAdapter } from "./header-notifications-state";
+import { isThisWeek } from "../planning-app-model";
 import { normalizeStatus } from "@/lib/status";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState, Task, TaskActivity, TaskStatus } from "@/lib/types";
@@ -47,6 +48,17 @@ import { applyPlanningItemApprovalPatch } from "../approval-domain";
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
 export type PlanningWorkspaceRead = { scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+type PlanningWeekBasis = { observedAt: number; sprints: import("@/lib/types").Sprint[] };
+function planningWeekBasis(board: PlanningBoardResult | undefined, coverage: PlanningReadCoverage | undefined, sprints: readonly import("@/lib/types").Sprint[]): PlanningWeekBasis | undefined {
+  const observedAt = Date.parse(board?.observedAt || "");
+  if (coverage?.sprints !== "complete" || !Number.isFinite(observedAt)) return undefined;
+  return { observedAt, sprints: sprints.map(sprint => ({ ...sprint })) };
+}
+function planningWeekIsCurrent(query: PlanningBoardQuery | undefined, basis: PlanningWeekBasis | undefined, now: number) {
+  if (query?.view !== "board" || !query.filters.quick.includes("week")) return true;
+  return Boolean(basis && basis.sprints.every(sprint =>
+    isThisWeek({ sprintId: sprint.id }, [sprint], new Date(basis.observedAt)) === isThisWeek({ sprintId: sprint.id }, [sprint], new Date(now))));
+}
 type TaskSave = { task: Partial<Task>; activities?: TaskActivity[] };
 export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sync-state").TaskGitHubSyncAdapter & import("@/features/sprint/model/meeting-attendance-state").MeetingAttendanceAdapter & import("@/features/reviews/model/planning-task-review").TaskReviewAdapter & import("@/features/tasks/model/task-relationship-change").TaskRelationshipAdapter & import("@/features/team-workweek/model/google-workspace-state").GoogleWorkspaceAdapter & import("@/features/tasks/model/task-attachment-upload").TaskAttachmentAdapter & import("@/features/tasks/model/task-github-comment-import").TaskGitHubImportAdapter & import("@/features/tasks/model/task-comment-creation").TaskCommentCreationAdapter & import("@/features/administration/model/administration-state").AdministrationPersonAdapter & import("@/features/tasks/model/task-blocker-report").TaskBlockerReportAdapter & import("@/features/backlog/model/backlog-ordering").BacklogOrderingAdapter & import("@/features/backlog/model/backlog-assignment").BacklogAssignmentAdapter & import("@/features/team-workweek/model/private-workweek-planning-state").PrivateWorkweekAdapter & import("@/features/tools/model/tool-state").ToolsAdapter & import("@/features/events/model/event-state").EventsAdapter & HeaderNotificationsAdapter & import("@/features/profile/model/profile-api-token-state").ProfileApiTokenAdapter & {
   readDecisionLog?: () => Promise<import("@/lib/notion-decision-log").NotionDecisionLogResult>;
@@ -133,6 +145,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     queryRevision = undefined;
     scopeRevision = undefined;
     scopeRevisionReadAt = 0;
+    weekBasis = undefined;
     pageStatus = "not-loaded";
     columnReads.clear();
     columnRequests.clear();
@@ -158,6 +171,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
   let freshness: "current" | "stale" = "current";
   let boardResult = initialWorkspaceRead?.board;
+  let weekBasis = planningWeekBasis(boardResult, initialWorkspaceRead?.coverage, initialData.sprints);
   let boardQuery = initialWorkspaceRead?.query || boardResult?.query;
   let boardQueryKey = boardQuery ? planningBoardQueryKey(boardQuery) : undefined;
   let pageStatus: PlanningReadStatus = "current";
@@ -179,13 +193,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     pageStatus: PlanningReadStatus;
     columnReadStatus: Partial<Record<TaskStatus, PlanningReadStatus>>;
     sourceEpoch: number;
+    weekBasis?: PlanningWeekBasis;
   }>();
   function rememberPlanningQuery() {
     if (!boardQuery || !boardQueryKey || !queryRevision || workspaceStatuses.get("planning") !== "current") return;
     planningQueries.set(boardQueryKey, {
       query: boardQuery, revision: queryRevision, result: boardResult,
       taskIds: new Set(memberships.get("planning")), completeness: completeness.get("planning") || "none",
-      pageStatus, columnReadStatus: { ...columnReadStatus }, sourceEpoch: planningSourceEpoch,
+      pageStatus, columnReadStatus: { ...columnReadStatus }, sourceEpoch: planningSourceEpoch, weekBasis,
     });
   }
   let ended = false;
@@ -631,6 +646,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (!memberships.has("planning") || completeness.get("planning") === "none" || status === "stale" || status === "not-loaded" || status === "unavailable") {
         return planning.refreshWorkspace("planning").then(accepted => accepted ? "content-read" as const : "unverified" as const);
       }
+      if (!planningWeekIsCurrent(boardQuery, weekBasis, adapter.now?.() ?? Date.now())) {
+        invalidatePlanningSource();
+        return planning.refreshWorkspace("planning").then(accepted => accepted ? "content-read" as const : "unverified" as const);
+      }
       if (sourceObservation) return sourceObservation;
       const generation = sessionGeneration, revision = sessionRevision, epoch = planningSourceEpoch, source = scopeRevision;
       sourceStatus = "checking";
@@ -803,6 +822,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     ensureBoardQuery(query) {
       if (!isActive()) return Promise.resolve(false);
+      if (!planningWeekIsCurrent(boardQuery, weekBasis, adapter.now?.() ?? Date.now())) invalidatePlanningSource();
       const key = planningBoardQueryKey(query);
       if (boardRead?.key === key && boardRead.sequence === acceptedRead.get("planning") && boardRead.sourceEpoch === planningSourceEpoch) return boardRead.result;
       if (boardQueryKey === key && workspaceStatuses.get("planning") === "current") return Promise.resolve(true);
@@ -810,11 +830,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const exact = planningQueries.get(key);
       const complete = planningQueries.get(planningBoardQueryKey({ view: "complete" }));
       const retained = exact || (complete?.completeness === "complete" ? complete : undefined);
-      if (retained && retained.revision === queryRevision && retained.sourceEpoch === planningSourceEpoch && workspaceStatuses.get("planning") !== "forbidden") {
+      if (retained && retained.revision === queryRevision && retained.sourceEpoch === planningSourceEpoch && workspaceStatuses.get("planning") !== "forbidden"
+        && planningWeekIsCurrent(retained.query, retained.weekBasis, adapter.now?.() ?? Date.now())) {
         acceptedRead.set("planning", ++sequence);
         boardQuery = exact ? retained.query : normalizePlanningBoardQuery(query);
         boardQueryKey = key;
         boardResult = retained.result;
+        weekBasis = retained.weekBasis;
         pageStatus = retained.pageStatus === "loading" ? "stale" : retained.pageStatus;
         columnReads.clear(); columnRequests.clear();
         for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
@@ -1012,6 +1034,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   };
   function readBoardColumn(column: TaskStatus, refresh: boolean) {
     if (!isActive() || !boardResult || !boardQuery) return Promise.resolve(false);
+    if (!planningWeekIsCurrent(boardQuery, weekBasis, adapter.now?.() ?? Date.now())) {
+      invalidatePlanningSource();
+      return planning.refreshWorkspace("planning");
+    }
     refresh ||= (columnReadStatus[column] === "stale" || columnReadStatus[column] === "unavailable") && !boardResult.columns[column]?.continuation;
     const continuation = refresh ? undefined : boardResult.columns[column]?.continuation || undefined;
     if (!refresh && !continuation) return Promise.resolve(true);
@@ -1137,6 +1163,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       } else {
         for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
       }
+      if (!result.append) weekBasis = planningWeekBasis(result.board, result.coverage, result.data.sprints);
       boardResult = {
         ...result.board, column: undefined, cardIds, columns,
         attentionById: { ...previous?.attentionById, ...result.board.attentionById },
@@ -1148,6 +1175,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       pageStatus = "current";
     } else if (workspace === "planning" && result.query) {
       boardResult = undefined;
+      weekBasis = undefined;
       boardQuery = normalizePlanningBoardQuery(result.query);
       boardQueryKey = planningBoardQueryKey(boardQuery);
       pageStatus = "current";
@@ -1280,7 +1308,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     completeness.clear();
     acceptedRead.clear();
     hydrationReads.clear();
-    boardResult = undefined; boardQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
+    boardResult = undefined; weekBasis = undefined; boardQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
     planningQueries.clear(); queryRevision = undefined; scopeRevision = undefined; sourceObservation = undefined; sourceStatus = "unverified";
     columnReads.clear(); columnRequests.clear();
     for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
