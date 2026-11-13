@@ -69,7 +69,7 @@ test("one real query plan selects bounded identities and complete discovery with
   });
 }, 120_000);
 
-test.each(["source", "authority", "column-failure"] as const)("a real query streams a later ready column before a held first column and handles %s after hydration", async change => {
+test.each(["source", "authority", "column-failure", "column-failure-source", "column-failure-authority"] as const)("a real query streams a later ready column before a held first column and handles %s after hydration", async change => {
   await withPlanningCredentialDatabase(async fixture => {
     const { db, actors, observed, request } = fixture;
     const { key, open, review } = await seedQueryCards(fixture, "stream");
@@ -103,7 +103,7 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
         if (body.p_selected_ids.includes(open)) {
           held = true; hydrationCompleted();
           await gate;
-          if (change === "column-failure") return Response.json({ code: "XX000", message: "Synthetic column unavailable" }, { status: 503 });
+          if (change.startsWith("column-failure")) return Response.json({ code: "XX000", message: "Synthetic column unavailable" }, { status: 503 });
         } else if (body.p_selected_ids.includes(review)) {
           // The later response is observable only after the earlier real SQL
           // hydration has completed. The mutation then targets publication.
@@ -137,15 +137,15 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
           expect(received.some(value => value.kind === "column" && value.column === "Offen")).toBe(false);
           expect(frame.cardIds).toEqual([review]); expect(frame.items.some((item: { id: string }) => item.id === review)).toBe(true);
           expect(frame).not.toHaveProperty("people"); expect(frame).not.toHaveProperty("sprints");
-          if (change === "source") await db.query("update public.tasks set sort_order=42 where id=$1", [open]);
-          if (change === "authority") await db.query("delete from auth.sessions where id=$1", [actors.founder.sessionId]);
+          if (change.endsWith("source")) await db.query("update public.tasks set sort_order=42 where id=$1", [open]);
+          if (change.endsWith("authority")) await db.query("delete from auth.sessions where id=$1", [actors.founder.sessionId]);
           release();
         }
       }
       expect(received.filter(frame => frame.kind === "basis")).toHaveLength(1);
       expect(received.some(frame => frame.kind === "column" && frame.column === "Offen")).toBe(false);
-      const failed = received.find(frame => frame.kind === "failure" && (frame.column === "Offen" || change === "authority"));
-      expect(failed).toMatchObject({ status: change === "source" ? 409 : change === "authority" ? 403 : 503 });
+      const failed = received.find(frame => frame.kind === "failure" && (frame.column === "Offen" || change.endsWith("authority")));
+      expect(failed).toMatchObject({ status: change.endsWith("source") ? 409 : change.endsWith("authority") ? 403 : 503 });
       expect(received.at(-1)?.kind).toBe("end");
       expect(selectedIds).toHaveLength(2);
       expect(new Set(selectedIds.flat())).toEqual(new Set([open, review]));
