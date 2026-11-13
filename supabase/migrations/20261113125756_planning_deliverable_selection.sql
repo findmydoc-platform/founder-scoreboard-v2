@@ -138,7 +138,8 @@ matches as materialized (
 ),
 ordered as materialized (
   select item.id,item.normalized,row_number() over(partition by item.normalized order by
-    case when item.normalized='Erledigt' then item.updated_at end desc nulls last,
+    -- The complete TypeScript comparator uses Date.parse millisecond precision.
+    case when item.normalized='Erledigt' then date_trunc('milliseconds',item.updated_at) end desc nulls last,
     case when item.normalized<>'Erledigt' then case item.priority when 'P0' then 0 when 'P1' then 1 when 'P2' then 2 when 'P3' then 3 when 'P4' then 4 else 9 end else 0 end,
     coalesce(item.sort_order,0),item.id collate "en-x-icu") as position from matches item
 ),
