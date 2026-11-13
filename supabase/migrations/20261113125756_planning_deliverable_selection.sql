@@ -36,6 +36,31 @@ edges as materialized (
   select edge.* from public.task_relationship_edges edge
   join active source on source.id=edge.task_id join active target on target.id=edge.related_task_id
 ),
+personal as materialized (
+  select parent_task_id,jsonb_agg(id order by id collate "en-x-icu") as children
+  from active where task_type='sub_issue' and normalized<>'Erledigt' and assignee_id=p_actor_profile_id
+  group by parent_task_id
+),
+waiting as materialized (
+  select edge.task_id as id from edges edge join active other on other.id=edge.related_task_id
+  where edge.relation_type='blocked_by' and edge.task_id<>edge.related_task_id
+    and (case when other.task_type='sub_issue' then other.normalized else coalesce(other.status,'Offen') end)<>'Erledigt'
+  union
+  select edge.related_task_id from edges edge join active other on other.id=edge.task_id
+  where edge.relation_type='blocks' and edge.task_id<>edge.related_task_id
+    and (case when other.task_type='sub_issue' then other.normalized else coalesce(other.status,'Offen') end)<>'Erledigt'
+),
+dependencies as materialized (
+  select dependency.task_id,string_agg(coalesce(dependency.note,''),'; ' order by dependency.id) as note
+  from public.task_dependencies dependency join active scope on scope.id=dependency.task_id group by dependency.task_id
+),
+open_blockers as materialized (
+  select distinct blocker.task_id from public.task_blockers blocker join active scope on scope.id=blocker.task_id where blocker.status='open'
+),
+evidence as materialized (
+  select distinct on(link.task_id) link.task_id,link.url from public.task_links link join active scope on scope.id=link.task_id
+  where link.type='evidence' and link.url ~* '^https?://[^/?#[:space:]]+' order by link.task_id,link.position,link.id
+),
 -- These intervals describe the existing rolling-week predicate. Reusing the
 -- same interval does not renew the original credential deadline.
 transitions as (
@@ -48,18 +73,14 @@ temporal as (
   from basis
 ),
 attributes as materialized (
-  select item.*, coalesce(person.name,item.assignee_id) as assignee_name,
+  select item.*, coalesce(nullif(person.name,''),item.assignee_id) as assignee_name,
     coalesce(parent.title,'') as initiative_title, coalesce(strategy.goal,'') as initiative_goal,
     coalesce(sprint.name,'') as sprint_name, coalesce(reviewer.name,'') as reviewer_name,
-    exists(select 1 from edges edge join active other on other.id=case when edge.task_id=item.id then edge.related_task_id else edge.task_id end
-      where other.id<>item.id and other.status<>'Erledigt'
-        and (edge.task_id=item.id and edge.relation_type='blocked_by' or edge.related_task_id=item.id and edge.relation_type='blocks')) as waiting,
-    coalesce((select string_agg(coalesce(dependency.note,''),'; ' order by dependency.id) from public.task_dependencies dependency where dependency.task_id=item.id),'') as dependency_note,
-    exists(select 1 from public.task_blockers blocker where blocker.task_id=item.id and blocker.status='open') as open_blocker,
-    coalesce((select link.url from public.task_links link where link.task_id=item.id and link.type='evidence' and link.url ~* '^https?://[^/?#[:space:]]+' order by link.position,link.id limit 1),nullif(item.evidence_link,''),'') as effective_evidence,
-    coalesce((select jsonb_agg(child.id order by child.id collate "en-x-icu") from active child
-      where child.task_type='sub_issue' and child.parent_task_id=item.id and child.normalized<>'Erledigt'
-        and child.assignee_id=p_actor_profile_id and item.assignee_id<>p_actor_profile_id),'[]'::jsonb) as personal_children,
+    waiting.id is not null as waiting,
+    coalesce(dependencies.note,'') as dependency_note,
+    open_blockers.task_id is not null as open_blocker,
+    coalesce(evidence.url,nullif(item.evidence_link,''),'') as effective_evidence,
+    case when item.assignee_id<>p_actor_profile_id then coalesce(personal.children,'[]'::jsonb) else '[]'::jsonb end as personal_children,
     sprint.start_date::timestamptz as sprint_start, sprint.end_date::timestamptz as sprint_end
   from active item
   left join public.profiles person on person.id=item.assignee_id
@@ -67,6 +88,11 @@ attributes as materialized (
   left join public.planning_item_strategy strategy on strategy.task_id=parent.id
   left join public.sprints sprint on sprint.id=item.sprint_id
   left join public.profiles reviewer on reviewer.id=item.review_owner_profile_id
+  left join personal on personal.parent_task_id=item.id
+  left join waiting on waiting.id=item.id
+  left join dependencies on dependencies.task_id=item.id
+  left join open_blockers on open_blockers.task_id=item.id
+  left join evidence on evidence.task_id=item.id
   where item.task_type='deliverable' and item.approval_status='approved'
 ),
 predicates as materialized (
