@@ -112,7 +112,8 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
           expect(frame.model.items).toEqual([]);
           const diagnostic = JSON.stringify({ direct: { status: directPlan.status, columns: safeColumns(directPlan.columns) }, dispatched: planFacts,
             basis: { queryBinding: JSON.stringify(frame.model.query) === JSON.stringify(expectedQuery), columns: safeColumns(frame.model.board.columns) } });
-          expect(frame.model.board.columns.Offen, diagnostic).toMatchObject({ total: 1, availability: "not-loaded" });
+          if (frame.model.board.columns.Offen.total !== 1 || frame.model.board.columns.Offen.availability !== "not-loaded") throw new Error(`Safe query-basis mismatch: ${diagnostic}`);
+          expect(frame.model.board.columns.Offen).toMatchObject({ total: 1, availability: "not-loaded" });
           expect(frame.model.board.columns.Review).toMatchObject({ total: 1, availability: "not-loaded" });
           expect(frame.model.board.columns["In Arbeit"]).toMatchObject({ total: 0, availability: "ready", completeness: "complete" });
           expect(frame.readAuthority.userId).toBe(actors.founder.userId);
