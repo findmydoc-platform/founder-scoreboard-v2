@@ -141,7 +141,15 @@ select case
     'card_ids',coalesce((select jsonb_agg(cards.id order by statuses.ordinal,cards.position) from cards join statuses on statuses.status=cards.normalized),'[]'::jsonb),
     'context_ids',coalesce((select jsonb_agg(id order by id) from context),'[]'::jsonb),
     -- SQL reads long fields for selection but never serializes them as cards.
-    'rows',coalesce((select jsonb_agg(to_jsonb(item)-array['description','problem_statement','intended_outcome','scope_constraints','acceptance_criteria','evidence_required','definition_of_done','decision_note','review_evidence_exception_note','github_issue_sync_error','carryover_reason','normalized','assignee_id'] order by item.id) from active item join context on context.id=item.id),'[]'::jsonb),
+    'rows',coalesce((select jsonb_agg((select jsonb_object_agg(field.key,field.value) from jsonb_each(to_jsonb(item)) field where field.key=any(array[
+      'id','sort_order','title','status','priority','owner','assignee','created_by','workstream','target_date','fixed_date','dod_template_version',
+      'evidence_link','issue_number','issue_url','watched','estimate_hours','sprint_id','review_status','review_owner_profile_id','review_requested_at',
+      'score_points','score_final','github_repo','github_issue_number','github_issue_url','github_issue_sync_status','github_issue_last_synced_at',
+      'task_type','parent_task_id','approval_status','approval_revision','proposed_by','proposed_at','decided_by','decided_at',
+      'trashed_at','trashed_by','trash_reason','trash_cause','purge_after','trash_root_type','trash_root_id','trash_revision','score_relevant',
+      'original_sprint_id','carried_from_task_id','carried_from_sprint_id','carryover_count','sprint_outcome',
+      'self_dod_checked','self_evidence_checked','self_documented_checked','self_blockers_checked','updated_at','created_at'
+    ])) order by item.id) from active item join context on context.id=item.id),'[]'::jsonb),
     'profiles',coalesce((select jsonb_agg(jsonb_build_object('id',id,'name',name,'platform_role',platform_role,'org_role',org_role,'github_login',github_login,'deputy_for',deputy_for,'deputy_active_from',deputy_active_from,'deputy_active_until',deputy_active_until,'focus',focus,'weekly_capacity',weekly_capacity,'profile_color',profile_color) order by name,id) from public.profiles),'[]'::jsonb),
     'sprints',coalesce((select jsonb_agg(jsonb_build_object('id',id,'name',name,'status',status,'start_date',start_date,'end_date',end_date,'review_due_at',review_due_at,'score_locked',score_locked,'updated_at',updated_at) order by start_date,id) from public.sprints),'[]'::jsonb),
     'preferences',coalesce((select jsonb_agg(to_jsonb(preference)) from public.profile_ui_preferences preference where profile_id=p_actor_profile_id),'[]'::jsonb),
