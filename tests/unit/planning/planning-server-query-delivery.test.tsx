@@ -20,6 +20,7 @@ vi.mock("@/features/planning/PlanningApp", () => ({ PlanningApp: () => null }));
 
 import PlanningPage from "@/app/(workspaces)/planning/page";
 import { PlanningApp } from "@/features/planning/PlanningApp";
+import { WorkspaceDataUnavailablePage } from "@/features/planning/templates/workspace-data-unavailable-page";
 
 type Page = ReactElement<ComponentProps<typeof PlanningApp>>;
 const statuses: TaskStatus[] = ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt", "Pausiert"];
@@ -44,7 +45,7 @@ function unavailable(column: TaskStatus): PlanningBoardColumnOutcome {
   return { kind: "failure", readId, column, status: 503, error: "Synthetic column unavailable" };
 }
 
-function ready(column: "Offen" | "Review"): PlanningBoardColumnOutcome {
+function ready(column: "Offen" | "Review"): Extract<PlanningBoardColumnOutcome, { kind: "column" }> {
   const id = column === "Review" ? "selected-review-card" : "selected-open-card";
   return {
     kind: "column", readId, column, scopeRevision: "selected-source", queryRevision: "selected-query",
@@ -55,7 +56,7 @@ function ready(column: "Offen" | "Review"): PlanningBoardColumnOutcome {
   };
 }
 
-function fixture(empty = false) {
+function fixture(empty = false, protectedBasis = false) {
   const open = deferred<PlanningBoardColumnOutcome>(), review = deferred<PlanningBoardColumnOutcome>();
   const entered = deferred<void>();
   const columns = Object.fromEntries(statuses.map(column => {
@@ -65,7 +66,10 @@ function fixture(empty = false) {
   const model: PlanningWorkspaceModel = {
     revision: "workspace-revision", scopeRevision: "selected-source", query, queryRevision: "selected-query",
     project: { ...emptyPlanningShellState.project, id: "ssr-project", name: "Synthetic SSR Planning" },
-    items: [], relationships: [], people: [person], sprints: [], preferences: [],
+    items: [], relationships: [],
+    people: protectedBasis ? [person, { ...person, id: "protected-directory-marker", name: "Synthetic private directory entry" }] : [person],
+    sprints: protectedBasis ? [{ id: "protected-sprint-marker", name: "Synthetic private Sprint", status: "planning", startDate: "2026-11-16", endDate: "2026-11-22", reviewDueAt: "2026-11-23", scoreLocked: false }] : [],
+    preferences: protectedBasis ? [{ profileId: person.id, defaultWorkspace: "planning", defaultTaskView: "board", planningFilters: { ...query.filters, query: "protected-preference-marker" }, expandedInitiativeIds: ["protected-preference-marker"], createdAt: observedAt, updatedAt: observedAt }] : [],
     taskOmittedFields: ["description", "definitionOfDone"],
     coverage: { items: "partial", people: "complete", sprints: "complete", preferences: "complete", relationships: "partial" },
     board: {
@@ -73,17 +77,19 @@ function fixture(empty = false) {
       delivery: { id: readId, columns: empty ? [] : ["Offen", "Review"] }, columns, cardIds: [],
       metrics: { total: empty ? 0 : 2, open: empty ? 0 : 2, done: 0, blocked: null },
       childProgressById: {}, attentionById: {}, viewerOpenSubIssueIdsByDeliverableId: {},
+      ...(protectedBasis ? { workstreams: ["protected-workstream-marker"], initiativeOptions: [{ id: "protected-option-marker", title: "Synthetic private Initiative option" }] } : {}),
       workspaceRevision: { activeTaskCount: empty ? 0 : 2, latestUpdatedAt: "workspace-revision" },
     },
   };
   let signal: AbortSignal | undefined;
   const checkPublication = vi.fn(async (outcome: PlanningBoardColumnOutcome) => outcome);
+  const abort = vi.fn();
   const loadBoard = vi.fn(() => { throw new Error("Unexpected legacy initial Board read"); });
   const startBoardQuery = vi.fn(async (_query: unknown, options?: { signal?: AbortSignal }) => {
     signal = options?.signal;
     entered.resolve();
     return { status: "ready" as const, model, delivery: {
-      id: readId, abort: vi.fn(), checkPublication,
+      id: readId, abort, checkPublication,
       columns: empty ? {} : { Offen: open.promise, Review: review.promise },
     } satisfies PlanningBoardDelivery };
   });
@@ -94,7 +100,7 @@ function fixture(empty = false) {
     throw new Error("Unexpected credential action");
   });
   ports.cleanup = () => { open.resolve(unavailable("Offen")); review.resolve(unavailable("Review")); };
-  return { open, review, entered: entered.promise, checkPublication, loadBoard, startBoardQuery, signal: () => signal };
+  return { open, review, entered: entered.promise, model, checkPublication, abort, loadBoard, startBoardQuery, signal: () => signal };
 }
 
 async function planningPage(): Promise<Page> {
@@ -204,5 +210,35 @@ test("rejection of every selected column returns the Planning basis and handled 
     expect.objectContaining({ kind: "failure", readId, column: "Offen", status: 503 }),
     expect.objectContaining({ kind: "failure", readId, column: "Review", status: 503 }),
   ]);
+  expect(controlled.loadBoard).not.toHaveBeenCalled();
+});
+
+test.each([403, 409] as const)("Planning SSR withholds its private basis when the first publication guard returns %s", async status => {
+  const controlled = fixture(false, true);
+  const checking = deferred<void>(), publication = deferred<PlanningBoardColumnOutcome>();
+  controlled.checkPublication.mockImplementationOnce(async () => { checking.resolve(); return publication.promise; });
+  const rendering = PlanningPage({ searchParams: Promise.resolve({ "board.level": "deliverable", "board.parentId": "all", "tasks.query": "receipt" }) });
+  await controlled.entered;
+  const privateMarkers = ["protected-directory-marker", "protected-sprint-marker", "protected-preference-marker", "protected-workstream-marker", "protected-option-marker"];
+  for (const marker of privateMarkers) expect(JSON.stringify(controlled.model)).toContain(marker);
+
+  const first = ready("Review");
+  const item = { ...first.items[0], id: "protected-item-marker", title: "Synthetic private selected Item" };
+  controlled.review.resolve({ ...first, cardIds: [item.id], items: [item] });
+  await checking.promise;
+  expect(controlled.open.settled()).toBe(false);
+  publication.resolve({ kind: "failure", readId, column: "Review", status,
+    error: status === 403 ? "Synthetic authority revoked before publication" : "Synthetic source changed before publication",
+    ...(status === 409 ? { code: "stale_continuation" } : {}),
+  });
+  const page = await rendering;
+
+  expect(page.type).toBe(WorkspaceDataUnavailablePage);
+  expect(page.props).toMatchObject({ workspace: "planning" });
+  expect(page.props).not.toHaveProperty("initialData");
+  expect(page.props).not.toHaveProperty("initialWorkspaceRead");
+  expect(page.props).not.toHaveProperty("children");
+  for (const marker of [...privateMarkers, "protected-item-marker"]) expect(JSON.stringify(page.props)).not.toContain(marker);
+  expect(controlled.abort).toHaveBeenCalledOnce();
   expect(controlled.loadBoard).not.toHaveBeenCalled();
 });
