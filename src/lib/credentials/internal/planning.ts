@@ -330,6 +330,23 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.task.read" || !targetId || !detailPeople || await current()) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
       return loadPlanningTrashTaskDetail(service, targetId, detailPeople);
     },
+    async startBoardQuery(query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {
+      const denial = action === "planning.board.read" ? await current() : forbidden();
+      if (denial) return { status: "forbidden" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const result = await createSupabasePlanningBoardReadModel(service).startQuery({ authorized: true, actorProfileId: profile?.id || null, signal, query, authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning").update(JSON.stringify(["planning-board-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") });
+      try { assertKnown(); } catch { if (result.status === "ready") result.delivery?.abort(); return { status: "forbidden" as const }; }
+      if (result.status !== "ready" || !result.delivery) return result;
+      const delivery = result.delivery;
+      return { ...result, delivery: { ...delivery, async checkPublication(outcome: import("@/features/planning/model/planning-board-delivery").PlanningBoardColumnOutcome) {
+        const frame = await delivery.checkPublication(outcome);
+        try { assertKnown(); return frame; } catch {
+          delivery.abort();
+          return { kind: "failure" as const, readId: delivery.id, status: 403 as const, error: "Planung darf nicht geladen werden." };
+        }
+      } } };
+    },
     async loadBoard(query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {
       const denial = action === "planning.board.read" ? await current() : forbidden();
       if (denial) return { status: "forbidden" as const };

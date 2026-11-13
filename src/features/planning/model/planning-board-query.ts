@@ -22,6 +22,7 @@ export type PlanningBoardColumn = Readonly<{ total: number | null; loaded: numbe
 export type PlanningBoardResult = Readonly<{
   query: PlanningBoardQuery;
   column?: TaskStatus;
+  delivery?: Readonly<{ id: string; columns: readonly TaskStatus[] }>;
   queryKey: string;
   revision: string;
   observedAt: string;
