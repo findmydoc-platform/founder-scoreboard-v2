@@ -43,8 +43,15 @@ it.each([
     vi.stubEnv("VERCEL_OIDC_TOKEN", actor.session.access_token);
     const base = `sb-${new URL(fixture.local.API_URL).hostname.split(".")[0]}-auth-token`;
     const request = (scope?: object, session = actor.session) => new NextRequest(`https://application.example.test/api/planning-board-data${scope ? `?scope=${encodeURIComponent(JSON.stringify(scope))}` : ""}`, { headers: { cookie: `${base}=base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}` } });
-    const query = { level, filters: { query: "Synthetic history" }, limit: 1000 };
+    const query = { level, column: status, filters: { query: "Synthetic history" }, limit: 1000 };
     const page = { ...query, column: status };
+    if (level === "deliverable") {
+      const initial = await GET(request({ level, filters: query.filters }));
+      expect(initial.status).toBe(200);
+      const initialModel = (await initial.json()).model as PlanningWorkspaceModel;
+      expect(initialModel.board?.columns.Offen.availability).toBe("ready");
+      if (status !== "Offen") expect(initialModel.board?.columns[status]).toMatchObject({ total: null, loaded: 0, availability: "not-loaded" });
+    }
     const firstResponse = await GET(request(query));
     expect(firstResponse.status).toBe(200);
     const first = (await firstResponse.json()).model as PlanningWorkspaceModel;
@@ -67,11 +74,11 @@ it.each([
         "next/headers": { headers: async () => new Headers(), cookies: async () => ({ getAll: () => [cookie], get: (name: string) => name === base ? cookie : undefined, set: () => {} }) },
         "@/features/planning/PlanningApp": { PlanningApp: () => null },
       });
-      const page = await PlanningPage({ searchParams: Promise.resolve({ "tasks.query": "Synthetic history" }) });
+      const page = await PlanningPage({ searchParams: Promise.resolve({ "tasks.query": "Synthetic history", "tasks.status": status }) });
       expect(page.props.initialWorkspaceRead?.board?.cardIds).toEqual(first.board?.cardIds);
       expect(page.props.initialData.tasks.every((item: object) => !("description" in item) && !("acceptanceCriteria" in item) && !("definitionOfDone" in item))).toBe(true);
       expect(page.props.initialData.tasks).toHaveLength(first.items.length);
-      const invalid = await PlanningPage({ searchParams: Promise.resolve({ "tasks.query": "Synthetic history", "tasks.review": "bogus", "tasks.sort": "bogus", "tasks.targetFrom": "2026-02-30", "tasks.targetTo": "tomorrow" }) });
+      const invalid = await PlanningPage({ searchParams: Promise.resolve({ "tasks.query": "Synthetic history", "tasks.status": status, "tasks.review": "bogus", "tasks.sort": "bogus", "tasks.targetFrom": "2026-02-30", "tasks.targetTo": "tomorrow" }) });
       expect(invalid.props.initialWorkspaceRead?.query?.filters).toMatchObject({ review: "Alle", sort: "priority", targetFrom: "", targetTo: "" });
       expect(invalid.props.initialWorkspaceRead?.board?.columns.Erledigt.total).toBe(1027);
     }
@@ -89,7 +96,7 @@ it.each([
     const other = await fixture.actor("viewer");
     expect((await GET(request({ ...page, continuation }, other.session))).status).toBe(409);
     expect((await GET(request({ ...page, continuation, filters: { query: "Different search" } }))).status).toBe(409);
-    const searched = await GET(request({ level, filters: { query: "Synthetic history 1027" } }));
+    const searched = await GET(request({ level, column: status, filters: { query: "Synthetic history 1027" } }));
     expect(searched.status).toBe(200);
     expect((await searched.json()).model.board.cardIds).toEqual([`${prefix}-1027`]);
     await fixture.database.query("delete from auth.sessions where id=$1", [actor.sessionId]);

@@ -5,7 +5,7 @@ import { importTestModule } from "../helpers/vitest-module.mjs";
 import { createCalendarLiveFixture } from "./helpers/calendar-live-fixture";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 
-it("guarded Planning enumeration rejects same-count source shifts and keeps unrelated rows outside its offset scope", async () => {
+it("complete enumeration and selected SQL reads reject source shifts at their actual publication fences", async () => {
   const fixture = await createCalendarLiveFixture();
   const nativeFetch = globalThis.fetch;
   const prefix = `consistency-${randomUUID()}`;
@@ -16,6 +16,7 @@ it("guarded Planning enumeration rejects same-count source shifts and keeps unre
   let beforeFence: (() => Promise<unknown>) | undefined;
   let revokeBeforeLiveCheck = false;
   let snapshotTransports = 0;
+  let sourceTransports = 0;
   let failFence = false;
   try {
     await fixture.mode("linking");
@@ -52,7 +53,17 @@ it("guarded Planning enumeration rejects same-count source shifts and keeps unre
         const next = mutation; mutation = undefined; mutations++;
         await next.run();
       }
+      if (url.pathname === "/rest/v1/rpc/planning_source_version") {
+        sourceTransports++;
+        if (failFence) { failFence = false; return Response.json({ code: "XX000", message: "Synthetic unavailable source fence" }, { status: 503 }); }
+      }
       const response = await nativeFetch(request);
+      // Selection and hydration share one SQL statement. Mutate only after its
+      // actual response so the separate publication fence must detect the shift.
+      if (mutation && url.pathname === "/rest/v1/rpc/planning_deliverable_selection") {
+        const next = mutation; mutation = undefined; mutations++;
+        await next.run();
+      }
       if (beforeFence && url.pathname === "/rest/v1/task_links" && Number(url.searchParams.get("offset")) > 0) revokeBeforeLiveCheck = true;
       return response;
     });
@@ -60,10 +71,10 @@ it("guarded Planning enumeration rejects same-count source shifts and keeps unre
     const actor = await fixture.actor("viewer");
     vi.stubEnv("VERCEL_OIDC_TOKEN", actor.session.access_token);
     const base = `sb-${new URL(fixture.local.API_URL).hostname.split(".")[0]}-auth-token`;
-    const read = async (scope: object = {}) => {
+    const read = async (scope: object = { view: "complete" }) => {
       await new Promise(resolve => setTimeout(resolve, 250));
       revokeBeforeLiveCheck = false;
-      snapshotTransports = 0;
+      snapshotTransports = 0; sourceTransports = 0;
       const response = await GET(new NextRequest(`https://application.example.test/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`, {
         headers: { cookie: `${base}=base64-${Buffer.from(JSON.stringify(actor.session)).toString("base64url")}` },
       }));
@@ -73,7 +84,11 @@ it("guarded Planning enumeration rejects same-count source shifts and keeps unre
     const stable = await read();
     expect(stable.status).toBe(200);
     const first = (await stable.json()).model as PlanningWorkspaceModel;
-    expect(first.board?.columns.Offen).toMatchObject({ total: 1027, loaded: 20, completeness: "partial" });
+    expect(first.board).toBeUndefined();
+    expect(first.items.filter(item => item.taskType === "deliverable")).toHaveLength(1027);
+    const initialBoard = await read({ view: "board", filters: {} });
+    expect(initialBoard.status).toBe(200);
+    expect((await initialBoard.json()).model.board.columns.Offen).toMatchObject({ total: 1027, loaded: 20, completeness: "partial" });
     mutation = { table: "active_tasks", run: () => fixture.database.query("update public.tasks set sort_order=5000 where id=$1", [`${prefix}-0001`]) };
     expect((await read()).status).toBe(503);
     expect(mutations).toBe(1);
@@ -88,12 +103,15 @@ it("guarded Planning enumeration rejects same-count source shifts and keeps unre
     expect((await read()).status).toBe(503);
     expect(mutations).toBe(2);
 
-    const current = await read();
+    mutation = { table: "active_tasks", run: () => fixture.database.query("update public.tasks set sort_order=5500 where id=$1", [`${prefix}-0004`]) };
+    expect((await read({ view: "board", filters: {} })).status).toBe(503);
+    expect(mutations).toBe(3);
+    const current = await read({ view: "board", filters: {} });
     expect(current.status).toBe(200);
     const continuation = ((await current.json()).model as PlanningWorkspaceModel).board!.columns.Offen.continuation!;
     mutation = { table: "active_tasks", run: () => fixture.database.query("update public.tasks set sort_order=6000 where id=$1", [`${prefix}-0003`]) };
-    expect((await read({ column: "Offen", continuation })).status).toBe(409);
-    expect(mutations).toBe(3);
+    expect((await read({ view: "board", filters: {}, column: "Offen", continuation })).status).toBe(409);
+    expect(mutations).toBe(4);
 
     await fixture.database.query(`insert into public.task_links(task_id,type,label,url,position)
       select id,'evidence','Evidence','https://example.test/' || id,sort_order from public.tasks where project_id='findmydoc-founder-execution' and task_type='deliverable' and id like $1`, [`${prefix}%`]);
@@ -101,18 +119,19 @@ it("guarded Planning enumeration rejects same-count source shifts and keeps unre
     mutation = { table: "task_links", run: () => fixture.database.query("update public.task_links set position=9000 where task_id=$1", [`${prefix}-foreign`]) };
     const complete = await read({ view: "complete" });
     expect(complete.status).toBe(200);
-    expect(mutations).toBe(4);
+    expect(mutations).toBe(5);
     const model = (await complete.json()).model as PlanningWorkspaceModel;
     expect(model.coverage?.links).toBe("complete");
     expect(model.items).toHaveLength(1029);
     expect(model.items.filter(item => item.taskType === "deliverable").every(item => item.evidenceLinks?.length === 1)).toBe(true);
     expect(new Set(model.items.map(item => item.id)).size).toBe(1029);
-    const currentBoard = await read();
+    const currentBoard = await read({ view: "board", filters: {} });
     expect(currentBoard.status).toBe(200);
     const currentContinuation = ((await currentBoard.json()).model as PlanningWorkspaceModel).board!.columns.Offen.continuation!;
     failFence = true;
-    expect((await read({ column: "Offen", continuation: currentContinuation })).status).toBe(503);
+    expect((await read({ view: "board", filters: {}, column: "Offen", continuation: currentContinuation })).status).toBe(503);
     expect(failFence).toBe(false);
+    expect(sourceTransports).toBe(1);
     beforeFence = () => fixture.database.query("delete from auth.sessions where id=$1", [actor.sessionId]);
     const deniedFence = await read();
     expect(deniedFence.status).toBe(503);
