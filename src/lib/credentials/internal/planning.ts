@@ -339,6 +339,14 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       }
       return { ok: true as const, headerData };
     },
+    async readSourceVersion() {
+      const denial = action === "planning.revision.read" ? await current() : forbidden();
+      if (denial) return { version: null, error: denial, status: "status" in denial ? Number(denial.status) : 403 };
+      const result = await service.rpc("planning_source_version");
+      return typeof result.data === "string" && !result.error
+        ? { version: result.data, error: null }
+        : { version: null, status: result.status >= 400 ? result.status : 503, error: result.error || { message: "Planning source version is unavailable." } };
+    },
     async readRevision() {
       const denial = action === "planning.revision.read" ? await current() : forbidden();
       if (denial) return { data: null, count: null, scopeRevision: undefined, error: denial };

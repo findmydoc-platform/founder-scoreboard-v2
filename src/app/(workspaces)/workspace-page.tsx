@@ -34,12 +34,11 @@ async function loadPlanningWorkspacePageData(
   if (workspace === "planning") {
     const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
     if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-    const [planningWorkspace, header] = await Promise.all([
-      permission.planning.loadBoard(query), permission.planning.loadHeader(permission.profile ? ["quickLinks", "calendarEvents"] : undefined),
-    ]);
-    return planningWorkspace.status === "ready" && header.ok
-      ? { status: "ready" as const, model: planningWorkspace.model, headerData: header.headerData }
+    const planningWorkspace = await permission.planning.loadBoard(query);
+    return planningWorkspace.status === "ready"
+      ? { status: "ready" as const, model: planningWorkspace.model, headerData: permission.profile ? emptyPlanningHeaderData : { ...emptyPlanningHeaderData, notifications: { state: "ready" as const, data: { unreadCount: 0, items: [] } } } }
       : { status: "unavailable" as const };
+
   }
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "strategic.read" });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };

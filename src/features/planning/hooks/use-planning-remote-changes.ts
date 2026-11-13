@@ -1,12 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as planningApi from "@/features/planning/model/planning-api-client";
-import { planningTaskRevisionsEqual } from "@/features/planning/model/planning-revision";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { PlanningState } from "../model/planning-state";
 
 type UsePlanningRemoteChangesOptions = {
-  apiClient: BrowserApiClient;
+  planningState: PlanningState;
   enabled: boolean;
   refreshCurrentWorkspaceModel: () => Promise<void>;
   scopeRevision?: string;
@@ -14,7 +12,7 @@ type UsePlanningRemoteChangesOptions = {
 };
 
 export function usePlanningRemoteChanges({
-  apiClient,
+  planningState,
   enabled,
   refreshCurrentWorkspaceModel,
   scopeRevision,
@@ -22,15 +20,13 @@ export function usePlanningRemoteChanges({
 }: UsePlanningRemoteChangesOptions) {
   const [planningRemoteChangesAvailable, setPlanningRemoteChangesAvailable] = useState(false);
   const [planningRemoteChangesRefreshing, setPlanningRemoteChangesRefreshing] = useState(false);
-  const currentRevisionRef = useRef({ scopeRevision, authoritativeRevision });
   const contextRef = useRef(0);
   const checkingRef = useRef(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
-    currentRevisionRef.current = { scopeRevision, authoritativeRevision };
     contextRef.current++;
-  }, [scopeRevision, authoritativeRevision, apiClient, enabled]);
+  }, [scopeRevision, authoritativeRevision, planningState, enabled]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -40,26 +36,20 @@ export function usePlanningRemoteChanges({
   }, []);
 
   const checkForPlanningRemoteChanges = useCallback(async () => {
-    if (!enabled || !mountedRef.current || checkingRef.current) return;
+    if (!enabled || document.visibilityState === "hidden" || !mountedRef.current || checkingRef.current) return;
     checkingRef.current = true;
     const context = contextRef.current;
     try {
-      const { response, body } = await planningApi.requestPlanningShellStateRevision(apiClient);
-      if (!mountedRef.current || context !== contextRef.current || !response.ok || !body?.revision) return;
-      const current = currentRevisionRef.current;
-      const remoteScopeRevision = "scopeRevision" in body.revision && typeof body.revision.scopeRevision === "string" ? body.revision.scopeRevision : undefined;
-      if (current.scopeRevision && remoteScopeRevision) {
-        setPlanningRemoteChangesAvailable(current.scopeRevision !== remoteScopeRevision);
-      } else if (current.authoritativeRevision && !planningTaskRevisionsEqual(body.revision, current.authoritativeRevision)) {
-        // Legacy metadata can disprove freshness, but equality cannot prove an unchanged source.
-        setPlanningRemoteChangesAvailable(true);
-      }
+      const result = await planningState.checkPlanningSource();
+      if (!mountedRef.current || context !== contextRef.current) return;
+      if (result === "changed") setPlanningRemoteChangesAvailable(true);
+      else if (result === "unchanged" || result === "content-read") setPlanningRemoteChangesAvailable(false);
     } catch {
       // Connectivity failures leave the current view unchanged and retry on the next check.
     } finally {
       checkingRef.current = false;
     }
-  }, [apiClient, enabled]);
+  }, [planningState, enabled]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -69,9 +59,11 @@ export function usePlanningRemoteChanges({
       if (document.visibilityState === "visible") void checkForPlanningRemoteChanges();
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleVisibilityChange);
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleVisibilityChange);
     };
   }, [checkForPlanningRemoteChanges, enabled]);
 
@@ -89,6 +81,8 @@ export function usePlanningRemoteChanges({
 
   return {
     planningRemoteChangesAvailable,
+    planningRemoteChangesUnverified: planningState.board().sourceStatus === "unverified",
+    checkForPlanningRemoteChanges,
     planningRemoteChangesRefreshing,
     refreshPlanningRemoteChanges,
   };

@@ -22,6 +22,7 @@ export function PlanningHeader({ controller, administratorAccessController }: { 
     focusModeActive, githubConnectionState, githubInstallationAvailable,
     githubSyncQueueOpen, mobileNavOpen,
     planningRemoteChangesAvailable, planningRemoteChangesRefreshing, refreshPlanningRemoteChanges,
+    planningRemoteChangesUnverified, checkForPlanningRemoteChanges,
     saveError, setDevProfileId, setGithubSyncQueueOpen, setMobileNavOpen,
     setStatusGuardNotice, setStatusGuardTaskId, signIn, signOut,
     statusGuardNotice, toggleFocusMode, workspace,
@@ -79,6 +80,14 @@ export function PlanningHeader({ controller, administratorAccessController }: { 
                 onOpen={openAccountMenu}
                 onEnd={() => setDevProfileId("")}
               />
+            </div>
+          ) : null}
+          {workspace === "planning" && planningRemoteChangesUnverified && !planningRemoteChangesAvailable ? (
+            <div className="flex justify-end border-b border-slate-200 px-4 lg:px-6">
+              <button type="button" aria-label="Aktualität der Planung erneut prüfen" title="Aktualität der Planung konnte nicht geprüft werden." onClick={() => void checkForPlanningRemoteChanges()} className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-xs text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                <RefreshCw size={14} aria-hidden="true" />
+                <span role="status">Aktualität ungeprüft</span>
+              </button>
             </div>
           ) : null}
           {planningRemoteChangesAvailable && (

@@ -232,3 +232,15 @@ test("Calendar cannot inherit warm Board membership evidence", async () => {
   expect(calendar).toMatchObject({ ok: false, status: 403, code: "workspace_access_denied" });
   expect(names().filter(name => name === "member%40findmydoc.eu")).toHaveLength(2);
 });
+
+
+test("Planning content succeeds without dispatching optional Calendar and Quick Links reads", async () => {
+  state.respond = name => ["fmd_tools", "founder_events"].includes(name)
+    ? Response.json({ message: "Optional provider unavailable" }, { status: 503 }) : null;
+  const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const response = await GET(protocol.request("/api/planning-board-data"));
+  expect(response.status).toBe(200);
+  expect((await response.json()).model).toMatchObject({ items: [] });
+  expect(names()).not.toContain("fmd_tools");
+  expect(names()).not.toContain("founder_events");
+});

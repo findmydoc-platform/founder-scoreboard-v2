@@ -54,6 +54,16 @@ Leave through actual workspace navigation and return with the same session/query
 
 Exercise the independently specified old completed search and proven-empty query. Record each result's coverage and counts. Use controlled adapter/unit cases for deliberately reordered success, failed optional reads, known stale data and session replacement. They complement the live baseline rather than substitute for it.
 
+## Entry correctness cases
+
+Run `planning-entry-reads.test.ts` through the Unit project for sufficient session-bound hydration, missing coverage, changed source, failed observation, forbidden scope and expired/replaced sessions. Run `planning-workspace-enhancements.test.mjs` and `board-entry-verification.test.mjs` for the separate source-only API and content/header independence through controlled external protocols. These checks prove observable request suppression, result acceptance and authority behavior, not real SQL or latency.
+
+The colocated `planning-entry-reuse.stories.tsx` exercises mount and return through the existing browser lifetime and owner, with a delayed/failed Quick Links slot and independently ready Calendar. It verifies usable cards and preserved open input during source/header completion. `use-planning-header-data.stories.tsx` retains visibility refresh, retry and sign-out cases.
+
+On the isolated disposable database, run `tests/integration/planning-source-version.test.ts`. It uses genuine local Auth credentials and real Data API/SQL operations, with explicitly controlled Workspace providers. Its independent expectations cover scalar output, supported reader roles, unmapped and revoked sessions, direct user RPC denial, failure cleanup and source changes in the current Board contract. It deliberately checks that comment-only changes do not advance this Board clock. This does not establish discussion freshness. Run the matching migration test to prove existing Item/preference preservation and server-only grants.
+
+These cases complement the matched browser measurements. Passing them does not certify shorter entry/return or the later selection, scheduling and migration gates.
+
 ## Matched comparison conditions
 
 Before each run, fix data variant, role, authentication mode, authorized scope, evaluation-time treatment, query and viewport. Keep these dimensions separate:

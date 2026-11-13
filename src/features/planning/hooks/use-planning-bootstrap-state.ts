@@ -114,7 +114,7 @@ export function usePlanningBootstrapState({
   });
   const focusMode = usePlanningFocusMode();
   const remoteChanges = usePlanningRemoteChanges({
-    apiClient: requestContext.apiClient,
+    planningState,
     enabled: source === "supabase" && auth.protectedDataLoaded && workspace === "planning",
     refreshCurrentWorkspaceModel: dataRefresh.refreshCurrentWorkspaceModel,
     scopeRevision: planningState.board().scopeRevision,
