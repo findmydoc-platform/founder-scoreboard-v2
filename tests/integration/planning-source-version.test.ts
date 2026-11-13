@@ -13,10 +13,13 @@ it("the Planning source observation covers its Board sources and preserves live 
     await fixture.mode("linking");
     createdProject = (await fixture.database.query("insert into public.projects(id,name) values('findmydoc-founder-execution','Synthetic Planning') on conflict(id) do nothing returning id")).rowCount === 1;
     const actor = await fixture.actor("viewer");
+    // The real OIDC SDK parses expiry before our controlled STS transport runs.
+    const providerToken = [Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url"),
+      Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url"), "synthetic"].join(".");
     for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: fixture.local.API_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY: fixture.local.ANON_KEY,
       SUPABASE_SERVICE_ROLE_KEY: fixture.local.SERVICE_ROLE_KEY, REQUIRE_SUPABASE_AUTH: "true",
       GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-source-audience", GOOGLE_WORKSPACE_SERVICE_ACCOUNT: "synthetic-source@example.test",
-      GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu", VERCEL_OIDC_TOKEN: "synthetic-source-oidc" })) vi.stubEnv(name, value);
+      GOOGLE_AUTHORIZED_GROUP: "internal-tool-founder-ops-access@findmydoc.eu", VERCEL_OIDC_TOKEN: providerToken })) vi.stubEnv(name, value);
     const paths: string[] = [];
     let failVersion = false;
     vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
