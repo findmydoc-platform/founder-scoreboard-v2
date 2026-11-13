@@ -65,6 +65,10 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
   await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, observed, request }) => {
     const key = `${prefix}-stream`, open = `${key}-open`, review = `${key}-review`;
     for (const [id, status] of [[open, "Offen"], [review, "Review"]]) await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'P2','approved',$4,$5)", [id, key, status, initiativeId, actors.founder.profileId]);
+    const expectedQuery = normalizePlanningBoardQuery({ view: "board", filters: { query: key } });
+    const safeColumns = (columns: Record<string, { total: number; ids?: string[] }>) => Object.fromEntries(Object.entries(columns).map(([status, value]) => [status, { total: value.total, selectedIds: value.ids?.length ?? null }]));
+    const directPlan = (await db.query("select public.planning_deliverable_query_plan($1,$2) as plan", [actors.founder.profileId, expectedQuery])).rows[0].plan;
+    const planFacts: Array<{ actorBinding: boolean; queryBinding: boolean; status: string; columns: ReturnType<typeof safeColumns> }> = [];
     const transport = globalThis.fetch;
     const selectedIds: string[][] = [];
     let release!: () => void, hydrationCompleted!: () => void, held = false;
@@ -72,9 +76,15 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
     const gate = new Promise<void>(resolve => { release = resolve; });
     vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
       const next = new Request(input, init), url = new URL(next.url);
-      const body = url.pathname.endsWith("/rpc/planning_deliverable_column") ? await next.clone().json() : null;
+      const isColumn = url.pathname.endsWith("/rpc/planning_deliverable_column");
+      const isPlan = url.pathname.endsWith("/rpc/planning_deliverable_query_plan");
+      const body = isColumn || isPlan ? await next.clone().json() : null;
       const response = await transport(next);
-      if (body) {
+      if (isPlan) {
+        const plan = await response.clone().json();
+        planFacts.push({ actorBinding: body.p_actor_profile_id === actors.founder.profileId, queryBinding: JSON.stringify(body.p_query) === JSON.stringify(expectedQuery), status: plan.status, columns: safeColumns(plan.columns || {}) });
+      }
+      if (isColumn) {
         selectedIds.push(body.p_selected_ids);
         if (body.p_selected_ids.includes(open)) {
           held = true; hydrationCompleted();
@@ -100,7 +110,9 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
         received.push(frame);
         if (frame.kind === "basis") {
           expect(frame.model.items).toEqual([]);
-          expect(frame.model.board.columns.Offen).toMatchObject({ total: 1, availability: "not-loaded" });
+          const diagnostic = JSON.stringify({ direct: { status: directPlan.status, columns: safeColumns(directPlan.columns) }, dispatched: planFacts,
+            basis: { queryBinding: JSON.stringify(frame.model.query) === JSON.stringify(expectedQuery), columns: safeColumns(frame.model.board.columns) } });
+          expect(frame.model.board.columns.Offen, diagnostic).toMatchObject({ total: 1, availability: "not-loaded" });
           expect(frame.model.board.columns.Review).toMatchObject({ total: 1, availability: "not-loaded" });
           expect(frame.model.board.columns["In Arbeit"]).toMatchObject({ total: 0, availability: "ready", completeness: "complete" });
           expect(frame.readAuthority.userId).toBe(actors.founder.userId);
