@@ -32,7 +32,7 @@ SUPABASE_DB_PASSWORD=
 
 Use the Supabase shared session pooler on port `5432`: `SUPABASE_DB_HOST` is the pooler host and `SUPABASE_DB_USER` is the pooler user shown under **Connect > Session pooler** in Supabase. The supported pipeline uses this pooler rather than depending on direct-database IPv6 connectivity. These database values are not Vercel runtime environment variables. Keep them only in the GitHub `production` Environment and in local `.env.local` for operator repair work.
 
-The workflows intentionally do not pre-validate these secrets. If a required secret is missing, the workflow step fails naturally.
+Preview validates its Vercel secrets before deployment setup. Documentation-only pull requests omit that setup and do not require deployment secrets. Production steps fail if their required secrets are missing.
 
 ## Runtime environment
 
@@ -83,13 +83,28 @@ Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync,
 
 Workflow: `.github/workflows/dependency-validation.yml`
 
-Every pull request targeting `main` runs the migration-history verifier, product-update verifier, regular tests, lint, and one native Next.js build in the secret-free validation job. The product-update verifier compares the pull request with its base commit. A separate job rebuilds the disposable local Supabase stack and exercises the authenticated application, RLS, and central role paths.
+Every pull request targeting `main` first classifies changed files with the shared `.github/filters/validation.yml` rules. The `Application Validation` and `Migration Integration` jobs still start after successful classification, but omit their work when no changed path requires it. Their summaries state why work was omitted. New commits cancel older validation runs for the same pull request.
+
+| Changed paths | Application validation and Preview | Historical migration tests |
+| --- | --- | --- |
+| Only `docs/**` or Markdown files | Omitted | Omitted |
+| Only `src/**`, `public/**`, `tests/unit/**` or `tests/integration/**` | Required | Omitted |
+| Only `package.json` or `pnpm-lock.yaml` | Required | Omitted |
+| Database files, scripts, shared test configuration, workflows or other paths | Required | Required |
+
+Each check considers all changed paths, including additions, deletions and renames. A mixed change runs a check if any path requires it. Unknown paths require both checks until an explicit exclusion is added. A path-filter failure fails validation; it does not approve omissions or start a fallback test run.
+
+When required, application validation installs dependencies and Chromium, verifies migration history, runs the complete unit, Storybook and integration test suite, runs lint, and builds the app with its existing credential checks. Package and lockfile changes still receive this validation, including integration tests against the current schema, but omit historical migration tests. The migration job starts a disposable local Supabase stack, runs `test:migrations`, and stops the stack after any attempted startup, including a failed startup.
+
+The required `Dependency Validation` check is a final gate that waits for path classification and both validation jobs. It fails if any of those jobs fails, is cancelled or is unexpectedly skipped. An intentional omission consists of successful jobs with omitted steps. `Migration Integration` therefore blocks this required check whenever its work is required and does not succeed. Dependabot metadata and its artifact remain available to the existing auto-merge workflow.
 
 Workflow: `.github/workflows/deploy-preview.yml`
 
-Preview deploys run for internal pull requests targeting `main` and for manual `workflow_dispatch` runs.
+Preview checks run for internal pull requests targeting `main` and for manual `workflow_dispatch` runs. Fork pull requests retain the existing skipped Preview job. The required check name remains `Deploy Preview`.
 
-Preview is optional and requires its own `preview` GitHub Environment secrets and Vercel runtime variables. Missing optional Preview configuration skips the job; partial or inconsistent configuration remains an error under the isolation guard.
+For pull requests, the same path filter runs before secret validation and deployment setup. Documentation-only changes complete successfully with an omission summary, without dependency installation, Vercel pulls, backend checks, build or deployment. A filter failure fails the check. Manual runs bypass path filtering and retain the complete deployment flow, including the explicit shared-backend smoke controls.
+
+Preview deployment is optional and requires its own `preview` GitHub Environment secrets and Vercel runtime variables. Missing Vercel secrets fail a required deployment attempt. Fully absent optional Supabase configuration omits the build and deployment steps; partial or inconsistent configuration remains an error under the isolation guard.
 
 GitHub Actions executes the preview flow in this order:
 

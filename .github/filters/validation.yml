@@ -1,0 +1,15 @@
+# Each changed file must match every rule in a filter. Any matching file requires the work.
+app_required:
+  - '**'
+  - '!docs/**'
+  - '!**/*.md'
+migrations_required:
+  - '**'
+  - '!docs/**'
+  - '!**/*.md'
+  - '!src/**'
+  - '!public/**'
+  - '!tests/unit/**'
+  - '!tests/integration/**'
+  - '!package.json'
+  - '!pnpm-lock.yaml'
