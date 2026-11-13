@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest";
 import { DEFAULT_PLANNING_FILTERS, normalizePlanningBoardQuery } from "@/features/planning/model/planning-board-query";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 import { importTestModule } from "../helpers/vitest-module.mjs";
+import { createClient } from "@supabase/supabase-js";
 
 test("the actual selected API preserves saved personal defaults and discovers options outside hydrated cards", async () => {
   await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed }) => {
@@ -177,5 +178,41 @@ test("selected records search discovery relationships and summaries stay within 
       await db.query("delete from public.tasks where project_id=$1", [project]);
       await db.query("delete from public.projects where id=$1", [project]);
     }
+  });
+}, 120_000);
+
+test("completed SQL ordering matches the complete JavaScript reference at timestamp precision and English ID ties", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, local }) => {
+    const key = `${prefix}-precision`;
+    // All .123xxx values have the same Date.parse millisecond. Within that
+    // group manual order wins, then English lower-case and punctuation ties.
+    const rows = [
+      ["case-a", 0, "123001"], ["case-A", 0, "123999"],
+      ["punct-a-b", 1, "123888"], ["punct-ab", 1, "123002"],
+      ["punct2-a_b", 2, "123009"], ["punct2-ab", 2, "123007"],
+      ["newer", 10000, "124000"], ["older", -10000, "122999"],
+    ] as const;
+    for (const [suffix, order] of rows) await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner,sort_order) values($1,'findmydoc-founder-execution',$2,'deliverable','Erledigt','P2','approved',$3,$4,$5)", [`${key}-${suffix}`, key, initiativeId, actors.founder.profileId, order]);
+    await db.query("begin");
+    try {
+      await db.query("set local session_replication_role = replica");
+      for (const [suffix, , micros] of rows) await db.query("update public.tasks set updated_at=$2 where id=$1", [`${key}-${suffix}`, `2020-01-01T00:00:00.${micros}Z`]);
+      await db.query("commit");
+    } catch (error) { await db.query("rollback"); throw error; }
+    const expected = ["newer", "case-a", "case-A", "punct-a-b", "punct-ab", "punct2-a_b", "punct2-ab", "older"].map(suffix => `${key}-${suffix}`);
+    const { loadPlanningWorkspaceModel } = await importTestModule("src/features/planning-items/server/planning-workspace-read-source.ts", { "server-only": {} });
+    const { projectPlanningBoard } = await importTestModule("src/features/planning/server/planning-board-projection.ts", { "server-only": {} });
+    const client = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    const legacy = await loadPlanningWorkspaceModel(client, { authorized: true, actorProfileId: actors.founder.profileId, query: { view: "complete" } });
+    expect(legacy.status).toBe("ready");
+    if (legacy.status !== "ready") throw new Error("Complete legacy ordering reference unavailable");
+    const input = { view: "board" as const, column: "Erledigt" as const, filters: { query: key } };
+    const reference = projectPlanningBoard(legacy.model, { authorized: true, actorProfileId: actors.founder.profileId, query: input });
+    expect(reference.status).toBe("ready");
+    if (reference.status !== "ready") throw new Error("Complete legacy Board ordering unavailable");
+    expect(reference.model.board!.cardIds, "Independent millisecond/manual/English-ID order against genuine legacy HTTP reference").toEqual(expected);
+    const actual = (await db.query("select public.planning_deliverable_selection($1,$2,'Erledigt') as selection", [actors.founder.profileId, normalizePlanningBoardQuery(input)])).rows[0].selection;
+    expect(actual.card_ids, `Actual SQL order: ${JSON.stringify(actual.card_ids)}; independently expected: ${JSON.stringify(expected)}`).toEqual(expected);
+    expect(actual.rows.find((row: { id: string }) => row.id === `${key}-case-a`).updated_at).toContain(".123001");
   });
 }, 120_000);
