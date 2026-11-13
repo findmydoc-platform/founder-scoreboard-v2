@@ -67,7 +67,8 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
     for (const [id, status] of [[open, "Offen"], [review, "Review"]]) await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,owner) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'P2','approved',$4,$5)", [id, key, status, initiativeId, actors.founder.profileId]);
     const transport = globalThis.fetch;
     const selectedIds: string[][] = [];
-    let release!: () => void, held = false;
+    let release!: () => void, hydrationCompleted!: () => void, held = false;
+    const earlierHydrated = new Promise<void>(resolve => { hydrationCompleted = resolve; });
     const gate = new Promise<void>(resolve => { release = resolve; });
     vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
       const next = new Request(input, init), url = new URL(next.url);
@@ -76,9 +77,13 @@ test.each(["source", "authority", "column-failure"] as const)("a real query stre
       if (body) {
         selectedIds.push(body.p_selected_ids);
         if (body.p_selected_ids.includes(open)) {
-          held = true;
+          held = true; hydrationCompleted();
           await gate;
           if (change === "column-failure") return Response.json({ code: "XX000", message: "Synthetic column unavailable" }, { status: 503 });
+        } else if (body.p_selected_ids.includes(review)) {
+          // The later response is observable only after the earlier real SQL
+          // hydration has completed. The mutation then targets publication.
+          await earlierHydrated;
         }
       }
       return response;
