@@ -242,7 +242,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     weekBasis?: PlanningWeekBasis;
     readAuthority?: import("../planning-server-header-read").PlanningReadAuthority;
   }>();
-  let queuedQuery: { query: PlanningBoardQuery; resolve: (accepted: boolean) => void; timer: ReturnType<typeof setTimeout> } | undefined;
+  let queuedQuery: { query: PlanningBoardQuery; result: Promise<boolean>; resolve: (accepted: boolean) => void; timer: ReturnType<typeof setTimeout> } | undefined;
+  let failedQueryDemand: { query: string; generation: number; sourceEpoch: number } | undefined;
   function discardQueuedQuery() {
     if (!queuedQuery) return;
     clearTimeout(queuedQuery.timer);
@@ -922,23 +923,36 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return { query: active ? displayedQuery : undefined, sourceStatus, requiresQueryRead: Boolean(boardQuery && !boardQueryKey), deniedChildListIds: [...childLists].filter(([id, list]) => list.readStatus === "forbidden" || (deniedTaskReads.has(id) && list.readStatus === "loading")).map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
     },
     scheduleBoardQuery(query, options) {
-      discardQueuedQuery();
       if (!isActive()) return Promise.resolve(false);
+      if (!options?.immediate && workspaceStatuses.get("planning") === "forbidden") return Promise.resolve(false);
       const normalized = normalizePlanningBoardQuery(query);
+      const signature = JSON.stringify(normalized);
+      if (!options?.immediate && queuedQuery && JSON.stringify(queuedQuery.query) === signature) return queuedQuery.result;
+      if (!options?.immediate && failedQueryDemand?.query === signature && failedQueryDemand.generation === sessionGeneration && failedQueryDemand.sourceEpoch === planningSourceEpoch) return Promise.resolve(false);
+      failedQueryDemand = undefined;
+      discardQueuedQuery();
       if ((boardRead || workspaceReads.has("planning") || columnReads.size || heldReads.size) && (!boardQuery || planningBoardQueryKey(boardQuery) !== planningBoardQueryKey(normalized))) {
         acceptedRead.set("planning", ++sequence);
         releaseHeldReads();
         cancelPlanningReads();
       }
-      if (options?.immediate) return planning.ensureBoardQuery(normalized);
+      const generation = sessionGeneration, sourceEpoch = planningSourceEpoch;
+      const rememberFailure = (result: Promise<boolean>) => {
+        void result.then(accepted => {
+          if (!accepted && generation === sessionGeneration && sourceEpoch === planningSourceEpoch && JSON.stringify(boardQuery) === signature && ["unavailable", "forbidden"].includes(workspaceStatuses.get("planning") || "")) failedQueryDemand = { query: signature, generation, sourceEpoch };
+        });
+        return result;
+      };
+      if (options?.immediate || (JSON.stringify(boardQuery) === signature && (boardRead || workspaceReads.has("planning")))) return rememberFailure(planning.ensureBoardQuery(normalized));
       const delay = normalized.filters.query !== (boardQuery?.filters.query || "") ? 250 : 0;
-      return new Promise<boolean>(resolve => {
-        const timer = setTimeout(() => {
-          queuedQuery = undefined;
-          void planning.ensureBoardQuery(normalized).then(resolve);
-        }, delay);
-        queuedQuery = { query: normalized, resolve, timer };
-      });
+      let resolve!: (accepted: boolean) => void;
+      const result = new Promise<boolean>(done => { resolve = done; });
+      const timer = setTimeout(() => {
+        queuedQuery = undefined;
+        void planning.ensureBoardQuery(normalized).then(resolve);
+      }, delay);
+      queuedQuery = { query: normalized, result, resolve, timer };
+      return rememberFailure(result);
     },
     ensureBoardQuery(query) {
       discardQueuedQuery();
@@ -1426,6 +1440,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return true;
   }
   function suspendProtected() {
+    failedQueryDemand = undefined;
     planningInteraction = { selectedTaskId: null };
     boardInteractions.clear();
     releaseHeldReads();

@@ -157,8 +157,8 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
   return (
     <section ref={resultsRef} aria-label="Planungsergebnisse" tabIndex={-1}
       onFocusCapture={event => {
-        if (!isCardInteraction(event.target)) return;
         focusedResult.current = event.target as HTMLElement;
+        if (!isCardInteraction(event.target)) return;
         focusInteraction.current ||= controller.planningState.beginBoardInteraction();
       }}
       onBlurCapture={event => {
@@ -200,6 +200,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       {view === "board" && (
         <div className="grid gap-4">
           <TaskBoardView
+            key={acceptedQuery}
             childProgressById={controller.planningBoard?.result?.childProgressById}
             attentionById={controller.planningBoard?.result?.attentionById}
             childListForTask={taskId => {

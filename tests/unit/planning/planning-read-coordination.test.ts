@@ -14,6 +14,61 @@ function deferred<T>() {
 }
 afterEach(() => vi.useRealTimers());
 
+test("an equivalent normalized URL echo retains the original search deadline and shares its result", async () => {
+  vi.useFakeTimers();
+  let reads = 0;
+  const { planning } = createPlanningState({ userId: "reader", initialData: data, adapter: {
+    saveTask: async () => ({ task }), readWorkspace: async (_workspace, query) => { reads++; return { data, query }; },
+  } });
+  const first = planning.scheduleBoardQuery({ filters: { query: " Needle ", quick: ["mine", "week"] } });
+  await vi.advanceTimersByTimeAsync(180);
+  const echoed = planning.scheduleBoardQuery({ filters: { query: "needle", quick: ["week", "mine", "week"] } });
+  await vi.advanceTimersByTimeAsync(69);
+  expect(reads).toBe(0);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(reads).toBe(1);
+  await expect(Promise.all([first, echoed])).resolves.toEqual([true, true]);
+});
+
+test("an equivalent echo shares the entered in-flight query without cancelling its transport", async () => {
+  vi.useFakeTimers();
+  const response = deferred<PlanningWorkspaceRead>();
+  let reads = 0;
+  let signal: AbortSignal | undefined;
+  const { planning } = createPlanningState({ userId: "reader", initialData: data, adapter: {
+    saveTask: async () => ({ task }), readWorkspace: async (_workspace, _query, options) => { reads++; signal = options?.signal; return response.promise; },
+  } });
+  const entered = planning.scheduleBoardQuery({ filters: { query: "needle" } }, { immediate: true });
+  await vi.advanceTimersByTimeAsync(180);
+  const echoed = planning.scheduleBoardQuery({ filters: { query: " NEEDLE " } });
+  await vi.advanceTimersByTimeAsync(500);
+  expect(reads).toBe(1);
+  expect(signal?.aborted).toBe(false);
+  response.resolve({ data });
+  await expect(Promise.all([entered, echoed])).resolves.toEqual([true, true]);
+});
+
+test.each(["unavailable", "forbidden"] as const)("an automatic URL echo cannot retry a %s current query, while explicit Enter can", async failure => {
+  vi.useFakeTimers();
+  let reads = 0;
+  const { planning } = createPlanningState({ userId: "reader", initialData: data, adapter: {
+    saveTask: async () => ({ task }), readWorkspace: async (_workspace, query) => {
+      if (++reads === 1) {
+        if (failure === "forbidden") throw { status: 403 };
+        return null;
+      }
+      return { data, query };
+    },
+  } });
+  await expect(planning.scheduleBoardQuery({ filters: { query: "failed" } }, { immediate: true })).resolves.toBe(false);
+  const echoed = planning.scheduleBoardQuery({ filters: { query: " FAILED " } });
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(reads).toBe(1);
+  await expect(echoed).resolves.toBe(false);
+  await expect(planning.scheduleBoardQuery({ filters: { query: "failed" } }, { immediate: true })).resolves.toBe(true);
+  expect(reads).toBe(2);
+});
+
 test("search bursts suppress obsolete queued queries and Enter starts the final normalized query immediately", async () => {
   vi.useFakeTimers();
   const queries: unknown[] = [];

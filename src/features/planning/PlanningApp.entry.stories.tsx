@@ -22,7 +22,7 @@ const task = taskDetailStoryTask({ id: "entry-task", title: "Planning entry task
 const headerData = { ...emptyPlanningHeaderData, quickLinks: readyHeaderSlot([]), calendarEvents: readyHeaderSlot([]) };
 const model = { revision: "entry-r1", scopeRevision: "scope-r1", project: emptyPlanningShellState.project, items: [task], people: [profile], sprints: [], relationships: [], preferences: [], coverage: { items: "complete", people: "complete", strategies: "complete", raci: "complete", links: "complete", sprints: "complete", relationships: "complete", preferences: "complete" } } as const;
 
-function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, changedPageOnReturn = false, revisionChanged = false, rotationRecovery = false, sourceFailureOnce = false, sourceRecoveryDelayed = false, searchReplacement = false }: { startInEvents?: boolean; backgroundFailure?: boolean; changedPageOnReturn?: boolean; revisionChanged?: boolean; rotationRecovery?: boolean; sourceFailureOnce?: boolean; sourceRecoveryDelayed?: boolean; searchReplacement?: boolean }) {
+function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, changedPageOnReturn = false, revisionChanged = false, rotationRecovery = false, sourceFailureOnce = false, sourceRecoveryDelayed = false, searchReplacement = false, searchFailureOnce = false, searchStartsEmpty = false }: { startInEvents?: boolean; backgroundFailure?: boolean; changedPageOnReturn?: boolean; revisionChanged?: boolean; rotationRecovery?: boolean; sourceFailureOnce?: boolean; sourceRecoveryDelayed?: boolean; searchReplacement?: boolean; searchFailureOnce?: boolean; searchStartsEmpty?: boolean }) {
   const navigationCalls = useRef(0);
   const [workspace, setWorkspace] = useState<"planning" | "events">(startInEvents ? "events" : "planning");
   const [reads, setReads] = useState(0);
@@ -39,13 +39,14 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
     const seenKey = `founderops.product-updates.seen.${profile.id}`;
     const previousSeen = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
-    let boardRequests = 0, sourceRequests = 0;
+    let boardRequests = 0, sourceRequests = 0, searchRequests = 0;
     const restore = mockAccountLifecycle("google", { linked: true }, (input) => {
       const path = String(input).split("?")[0];
       if (path === "/api/auth/session") return Response.json({ session: currentSession.current });
       if (path === "/api/planning-board-data") {
         setReads(count => count + 1);
         if (searchReplacement) {
+          if (searchFailureOnce && ++searchRequests === 1) return Response.json({ error: "Search temporarily unavailable" }, { status: 503 });
           const query = normalizePlanningBoardQuery(JSON.parse(new URL(String(input), "http://localhost:3000").searchParams.get("scope") || "{}"));
           return new Promise<Response>(resolve => { finishRead.current = () => resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...model, query, items: [{ ...task, title: "Replacement needle card" }] }, currentProfile: profile })); });
         }
@@ -94,8 +95,8 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
       push.mockReset();
       if (previousSeen === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previousSeen);
     };
-  }, [startInEvents, backgroundFailure, changedPageOnReturn, revisionChanged, rotationRecovery, sourceFailureOnce, sourceRecoveryDelayed, searchReplacement]);
-  const pageModel = searchReplacement ? { ...model, query: normalizePlanningBoardQuery() } : changedPageOnReturn && pages > 1 ? { ...model, revision: "entry-r2", scopeRevision: "scope-r2", items: [{ ...task, title: "New page task", updatedAt: "entry-r2" }] } : model;
+  }, [startInEvents, backgroundFailure, changedPageOnReturn, revisionChanged, rotationRecovery, sourceFailureOnce, sourceRecoveryDelayed, searchReplacement, searchFailureOnce]);
+  const pageModel = searchReplacement ? { ...model, items: searchStartsEmpty ? [] : model.items, query: normalizePlanningBoardQuery(searchStartsEmpty ? { filters: { query: "zz-empty" } } : {}) } : changedPageOnReturn && pages > 1 ? { ...model, revision: "entry-r2", scopeRevision: "scope-r2", items: [{ ...task, title: "New page task", updatedAt: "entry-r2" }] } : model;
   return <div onClickCapture={() => { navigationCalls.current = getRouter().push.mock.calls.length; }} onClick={event => {
     const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
     if (getRouter().push.mock.calls.length === navigationCalls.current && link && ["/planning", "/events"].includes(link.getAttribute("href") || "")) {
@@ -254,6 +255,44 @@ export const PendingSearchKeepsAttributedCardsAndControlFocus: Story = {
     await expect(search).toHaveFocus();
     await expect(search).toHaveValue("needle");
     await expect(canvas.queryByRole("status", { name: "Vorherige Suchergebnisse" })).not.toBeInTheDocument();
+  },
+};
+
+export const SearchRetryRestoresResultsFocus: Story = {
+  args: { searchReplacement: true, searchFailureOnce: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole("link", { name: task.title });
+    await userEvent.type(canvas.getByRole("searchbox", { name: "Aufgaben durchsuchen" }), "needle");
+    await userEvent.keyboard("{Enter}");
+    const retry = await canvas.findByRole("button", { name: "Ansicht erneut laden" });
+    retry.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(canvas.getByLabelText("Complete Board API reads")).toHaveTextContent("2"));
+    await expect(canvas.getByRole("region", { name: "Planungsergebnisse" })).toHaveFocus();
+    fireEvent.click(canvas.getByRole("button", { name: "Finish background Board response" }));
+    await expect(await canvas.findByRole("link", { name: "Replacement needle card" })).toBeVisible();
+    await expect(canvas.getByRole("region", { name: "Planungsergebnisse" })).toHaveFocus();
+  },
+};
+
+export const NewQueryRevealsStableFirstCard: Story = {
+  args: { searchReplacement: true, searchStartsEmpty: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole("region", { name: "Board nach Status" });
+    const search = canvas.getByRole("searchbox", { name: "Aufgaben durchsuchen" });
+    await userEvent.clear(search);
+    await userEvent.type(search, "needle");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(canvas.getByLabelText("Complete Board API reads")).toHaveTextContent("1"));
+    fireEvent.click(canvas.getByRole("button", { name: "Finish background Board response" }));
+    const card = await canvas.findByRole("link", { name: "Replacement needle card" });
+    const firstWidth = card.getBoundingClientRect().width;
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    await expect(firstWidth).toBeGreaterThan(0);
+    await expect(card.getBoundingClientRect().width).toBe(firstWidth);
+    await expect(search).toHaveFocus();
   },
 };
 
