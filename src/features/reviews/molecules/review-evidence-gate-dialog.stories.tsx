@@ -37,12 +37,13 @@ export const ExceptionNote: Story = {
   args: { onConfirm: fn(async () => true) },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Dialog schließen" })).toHaveFocus());
     const submit = canvas.getByRole("button", { name: "In Review verschieben" });
     await expect(submit).toBeDisabled();
-    await userEvent.type(
-      canvas.getByRole("textbox", { name: /Begründung/ }),
-      "Ergebnis wurde im Founder-Meeting vom 17.09.2026 abgenommen.",
-    );
+    const note = canvas.getByRole("textbox", { name: /Begründung/ });
+    await userEvent.type(note, "Ergebnis wurde im Founder-Meeting vom 17.09.2026 abgenommen.");
+    await expect(note).toHaveValue("Ergebnis wurde im Founder-Meeting vom 17.09.2026 abgenommen.");
+    await expect(note).toHaveFocus();
     await expect(submit).toBeEnabled();
     await userEvent.click(submit);
     await expect(args.onConfirm).toHaveBeenCalledWith({
