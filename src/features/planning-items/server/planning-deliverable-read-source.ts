@@ -193,13 +193,21 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     || !selected.columns || !selected.metrics) return { status: "unavailable" };
   if (cursor && (cursor.source !== selected.source_revision || cursor.temporalKey !== selected.temporal_key)) return { status: "staleContinuation" };
   if (preferenceRevision && preferenceRevision !== selected.source_revision) return { status: "unavailable" };
+  const avatarController = new AbortController();
+  const avatarSignal = context.signal ? AbortSignal.any([context.signal, avatarController.signal]) : avatarController.signal;
+  const peopleRead = withWorkspaceProfileAvatars(selected.profiles.map(mapProfile), supabase, avatarSignal);
   const summaries = await loadSelectedSummaries(supabase, context, selected);
-  if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
-  if (summaries.status === "forbidden") return { status: "forbidden" };
+  if (authorityDeadline !== null && authorityDeadline <= Date.now() || summaries.status === "forbidden") {
+    avatarController.abort();
+    return { status: "forbidden" };
+  }
   // The initial JSON read has no accepted page basis to continue. Preserve its
   // established unavailable result when the new summary detects a source shift.
-  if (summaries.status === "staleContinuation") return { status: cursor ? "staleContinuation" : "unavailable" };
-  const people = await withWorkspaceProfileAvatars(selected.profiles.map(mapProfile), supabase, context.signal);
+  if (summaries.status === "staleContinuation") {
+    avatarController.abort();
+    return { status: cursor ? "staleContinuation" : "unavailable" };
+  }
+  const people = await peopleRead;
   if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
   // The SQL statement covers selection and hydration. Avatar identity is a
   // separate read, so retain a matching source fence across that supporting work.
