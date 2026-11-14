@@ -118,7 +118,7 @@ test("an aborted Board delivery starts no new atomic publication dispatch", asyn
     await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
       values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3)`,
     [parent, initiativeId, actors.founder.profileId]);
-    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials.ts", { "server-only": {} });
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
     const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("founder", "/api/planning-board-data") }, action: "planning.board.read" });
     expect(permission.ok).toBe(true);
     if (!permission.ok) throw new Error("Synthetic Board authority unavailable");
