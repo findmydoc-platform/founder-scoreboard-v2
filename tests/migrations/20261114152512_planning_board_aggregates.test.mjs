@@ -9,8 +9,12 @@ it("preserves existing Planning rows and exposes complete selected summaries onl
     for (const role of ["ceo", "deputy", "founder", "viewer"]) {
       await client.query("insert into public.profiles(id,name,platform_role) values($1,$2,$3)", [`summary-${role}`, `Synthetic ${role}`, role]);
     }
-    await client.query(`insert into public.tasks(id,project_id,title,task_type,approval_status,status,priority)
-      values('summary-parent','findmydoc-founder-execution','Synthetic preserved parent','deliverable','approved','Offen','P2')`);
+    await client.query(`insert into public.tasks(id,project_id,title,task_type,status,priority)
+      values('summary-epic','findmydoc-founder-execution','Synthetic preserved Epic','epic','Offen','P2')`);
+    await client.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority)
+      values('summary-initiative','findmydoc-founder-execution','Synthetic preserved Initiative','initiative','summary-epic','approved','Offen','P2')`);
+    await client.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority)
+      values('summary-parent','findmydoc-founder-execution','Synthetic preserved parent','deliverable','summary-initiative','approved','Offen','P2')`);
     await client.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority)
       values('summary-child','findmydoc-founder-execution','Synthetic preserved child','sub_issue','summary-parent','Erledigt','P2')`);
     await client.query("insert into public.task_links(task_id,type,label,url) values('summary-parent','evidence','Synthetic preserved link','https://example.test/preserved')");
