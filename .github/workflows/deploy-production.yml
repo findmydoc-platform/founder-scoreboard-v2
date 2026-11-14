@@ -67,6 +67,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify credential boundaries
+        run: pnpm run verify:credentials
+
+      - name: Verify Planning read boundaries
+        run: pnpm run verify:planning-reads
+
       - name: Verify Supabase Migration History
         run: pnpm run verify:migrations
 

@@ -3,7 +3,10 @@ import { planningWorkspaceHydration } from "@/features/planning/model/planning-w
 import { hierarchyOmittedFields, hierarchyReadCoverage } from "@/features/planning/model/internal/hierarchy-read-coverage";
 import { expect, test, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
+import { createCompletePlanningReference } from "../../helpers/complete-planning-reference";
+
+// Preserve complete reference projections, including the aggregate basis that
+// selected Deliverable cards explicitly defer until their separate contract.
 import { buildPlanningTaskTableViewModel } from "@/features/planning/model/planning-task-table-view-model";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { DEFAULT_PLANNING_FILTERS, planningBoardQueryFromSearchParams } from "@/features/planning/model/planning-board-query";
@@ -25,7 +28,7 @@ function fixture() {
       return Promise.resolve({ data: Array.isArray(value) ? value.slice(start, Math.min(end + 1, start + 7)) : value, count: Array.isArray(value) ? value.length : null, error: denied.has(table) ? new Error("Unavailable source") : null }).then(resolve);
     } }; return query;
   } } as unknown as SupabaseClient;
-  return { rows, data, denied, reader: createSupabasePlanningBoardReadModel(client) };
+  return { rows, data, denied, reader: createCompletePlanningReference(client) };
 }
 const context = { authorized: true, actorProfileId: "reader", authorityKey: "compact-session" };
 
@@ -150,7 +153,7 @@ test("a later compact Board read retains opened full content and complete altern
   if (first.status !== "ready" || complete.status !== "ready") throw new Error("Expected initial scopes");
   const full = { ...complete.model.items.find(item => item.id === "item-00")!, detailAvailability: undefined, problemStatement: "Full problem", intendedOutcome: "Full outcome" };
   const session = { userId: "reader", user: { id: "reader" }, revision: "compact-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(first.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", first.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(first.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", first.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     saveTask: async task => ({ task }),
     readTaskDetail: async () => ({ model: { revision: full.updatedAt || "full", project: complete.model.project, item: full, ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } }),
     readWorkspace: async (_, query) => {
@@ -189,7 +192,7 @@ test("initial compact coverage cannot submit a missing brief as an authoritative
   if (initial.status !== "ready") throw new Error("Expected compact hydration");
   const session = { userId: "reader", user: { id: "reader" }, revision: "compact-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   let writes = 0;
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: { saveTask: async task => { writes++; return { task }; }, readWorkspace: async () => null } });
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: { saveTask: async task => { writes++; return { task }; }, readWorkspace: async () => null } });
   const result = await owner.planning.saveTask(owner.planning.board().tasks[0], { description: "Overwrite omitted content" });
   expect(result).toMatchObject({ ok: false, kind: "versionConflict" });
   expect(writes).toBe(0);

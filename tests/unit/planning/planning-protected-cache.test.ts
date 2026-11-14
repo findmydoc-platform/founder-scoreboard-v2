@@ -33,3 +33,11 @@ test("cache access cannot renew authority and unbound legacy snapshots cannot au
   setProtectedPlanningShellStateCache({ ...cached("planning", "Unbound"), sessionRevision: undefined, authorityExpiresAt: undefined });
   expect(getProtectedPlanningShellStateCache("planning", session)).toBeNull();
 });
+
+test("the read receipt can expire before the unchanged provider session without renewing cached content", () => {
+  const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+  setProtectedPlanningShellStateCache({ ...cached("planning", "Planning"), readAuthority: { userId: session.userId, deadline: 1_500 } });
+  expect(getProtectedPlanningShellStateCache("planning", session)).not.toBeNull();
+  now.mockReturnValue(1_500);
+  expect(getProtectedPlanningShellStateCache("planning", session)).toBeNull();
+});

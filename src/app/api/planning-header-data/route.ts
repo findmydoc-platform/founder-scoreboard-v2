@@ -11,7 +11,7 @@ async function handleGET(request: NextRequest) {
   if (!slots) return apiError("Unknown planning header slot.", 400);
   const result = await permission.planning.loadHeader(slots);
   if (!result.ok) return authzError(result);
-  return observeRuntimePreparation(() => NextResponse.json({ headerData: result.headerData }));
+  return observeRuntimePreparation(() => NextResponse.json({ headerData: result.headerData, readAuthority: permission.readAuthority }));
 }
 
 export const GET = observeRuntimeHandler("planning.header", handleGET);

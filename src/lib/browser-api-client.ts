@@ -214,11 +214,43 @@ export function createBrowserApiClient({
     return { response: result.response, blob };
   }
 
+  async function requestResponse(input: BrowserApiInput, options: BrowserApiBlobOptions = {}): Promise<Response> {
+    const prepared = prepareRequest(options);
+    const session = prepared.callerAuthorization ? null : await sessionPort.current();
+    if (prepared.expectedSession && (prepared.expectedSession.isCurrent?.() === false || !session || session.expiresAt * 1000 <= Date.now() || session.userId !== prepared.expectedSession.userId || session.revision !== prepared.expectedSession.revision || sessionPort.isCurrent && !sessionPort.isCurrent(session))) {
+      return Response.json({ error: "Die Sitzung wurde ersetzt.", code: "session_superseded" }, { status: 409 });
+    }
+    const first = await send(input, prepared.requestInit, session);
+    const firstErrorBody = first.response.ok ? null : await first.response.clone().json().catch(() => null);
+    transitionIfRequired(first.response, firstErrorBody, first.attachedSession);
+    const replay = await recoverAndReplay(
+      input,
+      prepared.requestInit,
+      first.response,
+      firstErrorBody,
+      first.attachedSession,
+      prepared.requestInit.method === "GET" || prepared.requestInit.method === "HEAD",
+      prepared.expectedSession,
+    );
+    const result = replay || first;
+    const replayErrorBody = replay && !replay.response.ok
+      ? await replay.response.clone().json().catch(() => null)
+      : null;
+    if (replay) transitionIfRequired(replay.response, replayErrorBody, replay.attachedSession);
+    if (replay?.response.status === 401 && isInvalidSessionBeforeEffectBody(replayErrorBody)) {
+      if (replay.attachedSession) await sessionPort.clearIfCurrent(replay.attachedSession);
+    }
+    // The caller owns body consumption and authority checks after the header-time session check.
+    return result.response;
+  }
+
   return {
     requestBlob,
     requestForm,
     requestJson,
+    requestResponse,
   };
 }
 
-export type BrowserApiClient = ReturnType<typeof createBrowserApiClient>;
+export type BrowserApiResponseClient = ReturnType<typeof createBrowserApiClient>;
+export type BrowserApiClient = Pick<BrowserApiResponseClient, "requestJson" | "requestForm" | "requestBlob">;

@@ -1,0 +1,24 @@
+{
+  "id": "planning-materialized-deliverables-v1",
+  "sourceFixture": "planning-read-contract-v1",
+  "representation": "Persisted rows read through the complete legacy Supabase/PostgREST source and its original mapper.",
+  "caseOverrides": {
+    "assignee field": {
+      "ids": ["fixture-literal", "fixture-owner-fallback"],
+      "reason": "fixture-owner-fallback persists assignee as null and owner as fixture-reader. mapTaskRow resolves assigneeId from row.assignee || row.owner, then resolves the profile name. Its searchable assignee is therefore Synthetic Reader. The frozen raw Task fixture deliberately retains an empty assignee and keeps its separate original expectation."
+    }
+  },
+  "boardOrder": [
+    "fixture-literal",
+    "fixture-owner-fallback",
+    "fixture-assignee-wins",
+    "fixture-waiting",
+    "fixture-future",
+    "fixture-unscheduled",
+    "fixture-decoy",
+    "fixture-foreign",
+    "fixture-offpage-blocker",
+    "fixture-old-match"
+  ],
+  "orderingReason": "Offen precedes In Arbeit and Erledigt. All Offen cards have P2 and manual order 10,13,14,15,17,18. In Arbeit has P0,P1,P4. The only completed fixture card is fixture-old-match. Other Board columns are empty. These are independently worked expectations from the declared fixture values."
+}

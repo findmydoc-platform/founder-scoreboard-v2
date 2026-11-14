@@ -26,7 +26,7 @@ function notificationHeader(targetPath = "") {
 
 let completeNotificationResponse: (() => void) | undefined;
 
-function NotificationPlanningPage({ host = "planning", targetPath = "", outcome, loaded = true }: { host?: "planning" | "item" | "releases"; targetPath?: string; outcome?: "saved" | "rejected" | "unconfirmed" | "delayed"; delayedResult?: "rejected" | "unconfirmed"; loaded?: boolean }) {
+function NotificationPlanningPage({ host = "planning", targetPath = "", outcome, loaded = true }: { host?: "planning" | "item" | "releases"; targetPath?: string; outcome?: "saved" | "rejected" | "unconfirmed" | "delayed"; delayedResult?: "rejected" | "unconfirmed"; loaded?: boolean; unboundHeader?: boolean }) {
   const pageHeader = notificationHeader(targetPath);
   if (host === "item") return <TaskDetailPage taskId="item-page-task" initialModel={itemPageModel()} headerData={pageHeader}
     source="supabase" authRequired initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} />;
@@ -54,9 +54,10 @@ const meta = {
     const previousSeen = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
     let currentHeader = notificationHeader(args.targetPath);
+    const headerAuthority = { userId: itemPageUser.id, deadline: Date.now() + 60_000 };
     const restoreBrowser = await mockItemPageBrowser({ headerData: notificationHeader(args.targetPath), respond: (input, init) => {
       const path = new URL(String(input), window.location.origin).pathname;
-      if (path === "/api/planning-header-data") return Response.json({ headerData: currentHeader });
+      if (path === "/api/planning-header-data") return Response.json({ headerData: currentHeader, readAuthority: args.unboundHeader ? undefined : headerAuthority });
       if (path === "/api/tasks/item-page-task/detail-data") return Response.json({ taskDetail: itemPageModel(), unavailable: [] });
       if (path === "/api/notifications/597" && init?.method === "PATCH") {
         const action = JSON.parse(String(init.body)).action;
@@ -219,7 +220,9 @@ export const CardsKeepTheirDirtyPanelWorkflow: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole("link", { name: "Reliable planning" }));
     const panel = within(await canvas.findByRole("dialog", { name: "Reliable planning" }));
-    await userEvent.click(await panel.findByRole("button", { name: "Bearbeiten" }));
+    const edit = await panel.findByRole("button", { name: "Bearbeiten" });
+    await waitFor(() => expect(edit).toBeEnabled());
+    await userEvent.click(edit);
     const title = await waitFor(() => within(canvas.getByRole("dialog", { name: "Reliable planning" })).getByRole("textbox", { name: "Titel" }));
     await userEvent.type(title, " panel draft");
     await userEvent.keyboard("{Escape}");
@@ -255,6 +258,24 @@ export const DismissKeepsTheAuthoritativeUnreadCount: Story = {
     await expect(canvas.getByText("Keine neuen Hinweise.")).toBeVisible();
     await expect(getRouter().push).not.toHaveBeenCalled();
     await expect(statusActions).toEqual(["dismiss"]);
+  },
+};
+
+export const UnboundHeaderCannotCertifyTheUnreadCount: Story = {
+  args: { outcome: "delayed", unboundHeader: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const inbox = await canvas.findByRole("button", { name: "Benachrichtigungen" });
+    await expect(inbox).toHaveTextContent("1");
+    await userEvent.click(inbox);
+    await userEvent.click(canvas.getByRole("button", { name: "Notification schließen" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Complete notification response" }));
+    await userEvent.click(inbox);
+    await expect(await canvas.findByText("Die ursprüngliche Leseberechtigung konnte nicht bestätigt werden.")).toBeVisible();
+    await expect(inbox).toHaveTextContent("…");
+    await expect(inbox).not.toHaveTextContent("7");
+    await expect(statusActions).toEqual(["dismiss"]);
+    await expect(getRouter().push).not.toHaveBeenCalled();
   },
 };
 

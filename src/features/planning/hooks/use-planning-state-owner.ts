@@ -20,6 +20,7 @@ export function usePlanningStateOwner(options: PlanningPageState) {
   const currentBundle = () => lifetime.page(initialPage) || emptyBundle;
   const bundle = useSyncExternalStore(lifetime.subscribe, currentBundle, currentBundle);
   const data = useSyncExternalStore(bundle.owner.planning.subscribe, bundle.owner.internal.getSnapshot, bundle.owner.internal.getSnapshot);
+  useEffect(() => { bundle.owner.internal.watchServerHeaderRead(); }, [bundle]);
   useEffect(() => { if (!shared) return lifetime.connect(); }, [lifetime, shared]);
   useEffect(() => {
     if (hydratedBundle.current === bundle) return;

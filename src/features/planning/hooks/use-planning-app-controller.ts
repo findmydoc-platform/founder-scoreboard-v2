@@ -12,6 +12,7 @@ type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
   initialWorkspaceRead,
+  initialServerHeaderRead,
   initialDecisionLogResult,
   initialData,
   initialHeaderData,
@@ -28,6 +29,7 @@ export function usePlanningAppController({
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
     initialWorkspaceRead,
+    initialServerHeaderRead,
     initialDecisionLogResult,
     initialData,
     initialHeaderData,
@@ -79,6 +81,8 @@ export function usePlanningAppController({
     planningLevel,
     planningParentFilterId,
     planningRemoteChangesAvailable,
+    planningRemoteChangesUnverified,
+    checkForPlanningRemoteChanges,
     planningRemoteChangesRefreshing,
     protectedDataLoaded,
     refreshCurrentWorkspaceModel,
@@ -158,22 +162,23 @@ export function usePlanningAppController({
   const planningQueryKey = planningBoardQueryKey(planningQuery);
   const usesScopedBoard = Boolean(planningBoard.queryKey) || planningBoard.requiresQueryRead === true;
   useEffect(() => {
-    if (workspace === "planning" && usesScopedBoard && !planningBoard.requiresQueryRead) void planningState.ensureBoardQuery(planningQuery);
+    if (workspace === "planning" && usesScopedBoard && !planningBoard.requiresQueryRead) void planningState.scheduleBoardQuery(planningQuery);
   }, [planningState, planningQuery, workspace, usesScopedBoard, planningBoard.requiresQueryRead]);
-  const planningQueryReady = !usesScopedBoard || planningBoard.queryKey === planningQueryKey;
+  const planningQueryReady = !usesScopedBoard || (planningBoard.queryKey === planningQueryKey && JSON.stringify(planningBoard.query) === JSON.stringify(planningQuery));
+  const displayedPlanningQuery = !planningQueryReady ? planningBoard.query : undefined;
 
   const derivedState = usePlanningDerivedState({
     currentProfile,
     data,
     workspaceTasks: planningState.workspace(workspace).tasks,
-    boardResult: workspace === "planning" && planningQueryReady ? planningBoard.result : undefined,
-    filters,
-    planningLevel,
+    boardResult: workspace === "planning" ? planningBoard.result : undefined,
+    filters: displayedPlanningQuery?.filters || filters,
+    planningLevel: displayedPlanningQuery?.level || planningLevel,
     setInitiativeDialogDefaults,
     setEpicDialogDefaults,
     setTaskDialogDefaults,
     statusGuardTaskId,
-    view,
+    view: displayedPlanningQuery?.view === "board" ? "board" : view,
     workspace,
   });
   const commandRegistry = usePlanningCommandRegistry({
@@ -208,6 +213,8 @@ export function usePlanningAppController({
     actualProfile,
     planningState,
     planningQueryReady,
+    displayedPlanningQuery,
+    submitPlanningSearch: () => planningState.scheduleBoardQuery(planningQuery, { immediate: true }),
     retryPlanningQuery: () => planningState.ensureBoardQuery(planningQuery),
     planningBoard,
     beginTaskEdit: planningState.beginTaskEdit,
@@ -247,6 +254,8 @@ export function usePlanningAppController({
     planningLevel,
     planningParentFilterId,
     planningRemoteChangesAvailable,
+    planningRemoteChangesUnverified,
+    checkForPlanningRemoteChanges,
     planningRemoteChangesRefreshing,
     openTaskPanel,
     protectedDataLoaded,

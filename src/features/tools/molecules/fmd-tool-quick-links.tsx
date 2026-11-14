@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink, ImageIcon, Link2, X } from "lucide-react";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import { fmdToolCategoryLabel } from "@/features/tools/model/fmd-tools";
@@ -13,6 +13,7 @@ export function FmdToolQuickLinks({
   quickLinks,
   open,
   onToggle,
+  onRetry,
   menuItem = false,
   restoreFocusRef,
 }: {
@@ -21,9 +22,17 @@ export function FmdToolQuickLinks({
   quickLinks: HeaderDataSlot<HeaderQuickLink[]>;
   open: boolean;
   onToggle: () => void;
+  onRetry?: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const retainRetryFocus = useCallback((button: HTMLButtonElement | null) => {
+    if (!button) return;
+    return () => {
+      if (button.ownerDocument.activeElement === button) closeRef.current?.focus({ preventScroll: true });
+    };
+  }, []);
   const dialogRef = useModalDialog<HTMLElement>({ open, onClose: onToggle, manageEnvironment: false, restoreFocusRef: restoreFocusRef || triggerRef });
   const [anchor, setAnchor] = useState({ right: 16, top: 80 });
   const links = quickLinks.data;
@@ -72,6 +81,7 @@ export function FmdToolQuickLinks({
             <div className="flex shrink-0 items-center gap-2">
               <UiBadge tone="slate" bordered={false}>{quickLinks.state === "loading" || stale ? "..." : `${links.length}/${maxHeaderQuickLinks}`}</UiBadge>
               <button
+                ref={closeRef}
                 type="button"
                 onClick={onToggle}
                 className="grid h-7 w-7 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 place-items-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-700"
@@ -89,7 +99,8 @@ export function FmdToolQuickLinks({
               </UiEmptyState>
             ) : quickLinks.state === "error" ? (
               <UiEmptyState className="px-4 py-8">
-                {quickLinks.error || "Kuratierte Links konnten nicht geladen werden."}
+                <p>{quickLinks.error || "Kuratierte Links konnten nicht geladen werden."}</p>
+                {onRetry ? <button ref={retainRetryFocus} type="button" onClick={onRetry} aria-label="Kuratierte Links erneut laden" className="mt-3 inline-flex min-h-11 items-center rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">Erneut laden</button> : null}
               </UiEmptyState>
             ) : links.length ? links.map((tool) => (
               <a

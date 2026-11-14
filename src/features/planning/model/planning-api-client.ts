@@ -12,15 +12,16 @@ import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-m
 
 type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status"> & { expectedUpdatedAt?: string };
 
-export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects", query?: import("./planning-board-query").PlanningBoardQueryInput) {
+export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects", query?: import("./planning-board-query").PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {
   const route = workspace === "planning" ? "/api/planning-board-data" : "/api/strategic-planning-data";
   return apiClient.requestJson<{
     model?: PlanningWorkspaceModel;
+    readAuthority?: import("./planning-server-header-read").PlanningReadAuthority;
     headerData?: PlanningHeaderData;
     currentProfile?: AuthenticatedProfile | null;
     error?: string;
     code?: string;
-  }>(query && workspace === "planning" ? `${route}?scope=${encodeURIComponent(JSON.stringify(query))}` : route);
+  }>(query && workspace === "planning" ? `${route}?scope=${encodeURIComponent(JSON.stringify(query))}` : route, options);
 }
 
 export function requestSupportingWorkspaceData(apiClient: BrowserApiClient, workspace: SupportingWorkspace) {
@@ -58,7 +59,7 @@ export async function requestPlanningHeaderData(apiClient: BrowserApiClient, slo
   });
   try {
     return await Promise.race([
-      apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, { signal }),
+      apiClient.requestJson<{ headerData?: PlanningHeaderData; readAuthority?: import("./planning-server-header-read").PlanningReadAuthority; error?: string }>(`/api/planning-header-data${query}`, { signal }),
       aborted,
     ]);
   } finally {

@@ -10,6 +10,7 @@ type ProtectedPlanningShellStateCache = {
   workspace?: AppWorkspace;
   sessionRevision?: string;
   authorityExpiresAt?: number;
+  readAuthority?: import("../planning-server-header-read").PlanningReadAuthority;
   data: PlanningShellState;
   headerData: PlanningHeaderData;
   currentProfile: AuthenticatedProfile | null;
@@ -27,6 +28,10 @@ createBrowserSessionAdapter().subscribe(session => {
 export function getProtectedPlanningShellStateCache(workspace?: AppWorkspace, session?: ServerSessionView | null) {
   const cache = protectedPlanningShellStateCaches.get(workspace ?? latestCacheScope) || null;
   if (!cache) return null;
+  if (cache.readAuthority && (cache.readAuthority.userId !== cache.authUserId || cache.readAuthority.deadline <= Date.now())) {
+    protectedPlanningShellStateCaches.delete(workspace ?? latestCacheScope);
+    return null;
+  }
   if (cache.authorityExpiresAt !== undefined && cache.authorityExpiresAt * 1000 <= Date.now()) {
     protectedPlanningShellStateCaches.delete(workspace ?? latestCacheScope);
     return null;

@@ -43,8 +43,9 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
       if (tamperProfile) rejectedProfileStatus = response.status;
       return response;
     });
-    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "next/headers": { cookies: async () => jar } });
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "next/headers": { cookies: async () => jar }, "next/cache": { unstable_cache: (read: () => Promise<unknown>) => read } });
     const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const { GET: headerGET } = await importTestModule("src/app/api/planning-header-data/route.ts", { "server-only": {} });
     const authorize = () => authorizeCredentialAction({ credential: { kind: "session-request", request: new NextRequest("https://application.example.test/api/planning-board-data", { headers: { authorization: `Bearer ${token}` } }) }, action: "planning.board.read" });
     for (const role of ["ceo", "founder", "deputy", "viewer"]) {
       const actor = await fixture.actor(role);
@@ -53,6 +54,9 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
       const authorized = await authorize();
       expect(authorized).toMatchObject({ ok: true, profile: { id: actor.profileId, platformRole: role } });
       if (!authorized.ok) throw new Error("Expected mapped Planning reader");
+      expect(authorized.readAuthority?.userId).toBe(actor.userId);
+      expect(authorized.readAuthority?.deadline).toBeGreaterThan(Date.now());
+      expect(authorized.readAuthority?.deadline).toBeLessThanOrEqual(actor.session.expires_at! * 1000);
       expect((await authorized.planning.loadBoard()).status).toBe("ready");
       attempts = [];
       const base = `sb-${new URL(fixture.local.API_URL).hostname.split(".")[0]}-auth-token`;
@@ -61,17 +65,32 @@ it("real Auth and PostgREST retain Planning board roles, JWTs and live checks wi
       jar = request.cookies;
       const response = await GET(request);
       expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ model: { project: { id: "findmydoc-founder-execution" } }, currentProfile: { id: actor.profileId, platformRole: role } });
-      // The post-enumeration fence has its own Auth, profile, permit and cleanup.
-      expect(attempts).toHaveLength(85);
-      expect(attempts.filter(path => path === "/auth/v1/user")).toHaveLength(19);
+      expect(await response.json()).toMatchObject({ readAuthority: authorized.readAuthority, model: { project: { id: "findmydoc-founder-execution" } }, currentProfile: { id: actor.profileId, platformRole: role } });
+      // Content retains its post-enumeration Auth/profile/permit fence. Optional Header
+      // slots are outside this content-only API request: this removes two data reads and their
+      // three live guard/dispatch/cleanup groups from this content-only budget.
+      expect(attempts).toHaveLength(71);
+      expect(attempts.filter(path => path === "/auth/v1/user")).toHaveLength(16);
       for (const rpc of ["workspace_dispatch_prepare", "current_authenticated_profile", "workspace_release_permit"]) {
-        expect(attempts.filter(path => path === `/rest/v1/rpc/${rpc}`)).toHaveLength(17);
+        expect(attempts.filter(path => path === `/rest/v1/rpc/${rpc}`)).toHaveLength(14);
       }
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_access_context")).toHaveLength(0);
       expect(attempts.filter(path => path === "/rest/v1/rpc/workspace_calendar_entry")).toHaveLength(1);
+      expect(attempts).not.toContain("/rest/v1/fmd_tools");
+      expect(attempts).not.toContain("/rest/v1/founder_events");
       expect(attempts.filter(path => path === "/rest/v1/active_tasks")).toHaveLength(1);
       expect(attempts.filter(path => path === "/rest/v1/rpc/planning_workspace_snapshot")).toHaveLength(2);
+      expect((await fixture.database.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actor.userId])).rows[0].remaining).toBe(0);
+      // Header admission has its own original deadline. It cannot borrow the Board clock.
+      const headerRequest = new NextRequest("https://application.example.test/api/planning-header-data?slots=quickLinks", { headers: { authorization: `Bearer ${token}` } });
+      const headerAuthority = await authorizeCredentialAction({ credential: { kind: "session-request", request: headerRequest }, action: "planning.header.read" });
+      if (!headerAuthority.ok) throw new Error("Expected mapped Header reader");
+      expect(headerAuthority.readAuthority?.userId).toBe(actor.userId);
+      expect(headerAuthority.readAuthority?.deadline).toBeGreaterThan(Date.now());
+      const headerResponse = await headerGET(headerRequest);
+      expect(headerResponse.status).toBe(200);
+      expect(await headerResponse.json()).toMatchObject({ readAuthority: headerAuthority.readAuthority, headerData: { quickLinks: { state: "ready" } } });
+      expect(attempts).toContain("/rest/v1/fmd_tools");
       expect((await fixture.database.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actor.userId])).rows[0].remaining).toBe(0);
       attempts = [];
       const beforeLiveChecks = successfulLiveChecks;

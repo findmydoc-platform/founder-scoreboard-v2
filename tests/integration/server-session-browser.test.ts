@@ -52,6 +52,8 @@ let itemPageFixture = false;
 const itemPageTaskId = "c3333333-3333-4333-8333-333333333333";
 const planningProject = { id: "findmydoc-founder-execution", name: "Synthetic project", range_label: "November 2026", review_objection_window_hours: 24 };
 let browserClientCode = "", userCalls = 0, rejectUserAt = 0;
+let selectedPlanningReads = 0;
+let planningQueryPlanReads = 0, planningColumnReads = 0;
 let permanentAuthDenial = false;
 const cookieBase = "sb-localhost-auth-token";
 const userA = "b1111111-1111-4111-8111-111111111111";
@@ -60,7 +62,7 @@ let loginUser = userB;
 let sessionSequence = 0;
 let workspaceMode = "legacy", linkingEnforced = false, workspaceLinked = false, loginRecorded = false;
 let linkNonce: string | null = null;
-beforeEach(() => { permanentAuthDenial = false; role = "founder"; mapped = true; activeAdministrator = false; itemPageFixture = false; workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
+beforeEach(() => { selectedPlanningReads = 0; planningQueryPlanReads = 0; planningColumnReads = 0; permanentAuthDenial = false; role = "founder"; mapped = true; activeAdministrator = false; itemPageFixture = false; workspaceMode = "legacy"; linkingEnforced = false; workspaceLinked = false; loginRecorded = false; linkNonce = null; loginUser = userB; rejectUserAt = 0; holdLogout = false; logoutEntered = undefined; releaseLogout = undefined; heldLogoutScope = null; });
 function token(userId: string) {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const value = `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: userId, aud: "authenticated", role: "authenticated", amr: [{ method: "oauth" }], iss: `${authOrigin}/auth/v1`, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+3600, session_id: userId })}`;
@@ -74,6 +76,14 @@ async function listen(server: Server | HttpsServer, protocol = "http:") {
   return `${protocol}//localhost:${(server.address() as { port: number }).port}`;
 }
 async function freePort() { const server = createServer(); const url = await listen(server); await new Promise<void>(resolve => server.close(() => resolve())); return new URL(url).port; }
+
+function planningItemFixture() {
+  return { id: itemPageTaskId, title: "Synthetic planning item", task_type: "deliverable", status: "Offen", priority: "P2", sort_order: 0,
+    assignee: "synthetic-profile", owner: "synthetic-profile", approval_status: "approved", problem_statement: "Preserve local drafts", updated_at: "2026-11-01T12:00:00Z" };
+}
+function planningProfilesFixture() {
+  return itemPageFixture ? [{ id: "synthetic-profile", auth_user_id: loginUser, name: "Synthetic Founder", platform_role: role, github_login: "synthetic", weekly_capacity: 40 }] : [];
+}
 
 beforeAll(async () => {
   auth = createServer(async (request, response) => {
@@ -127,6 +137,52 @@ beforeAll(async () => {
     if (url.pathname === "/rest/v1/rpc/workspace_linking_session_allowed") { send(loginRecorded); return; }
     if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send(mapped ? { id: "synthetic-profile", name: "Synthetic Founder", platform_role: role } : null); return; }
     if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: activeAdministrator, active: activeAdministrator, expiresAt: activeAdministrator ? new Date(Date.now() + 60000).toISOString() : null }); return; }
+    if (url.pathname === "/rest/v1/rpc/planning_source_version") { send("synthetic-planning-revision"); return; }
+    if (["planning_deliverable_selection", "planning_deliverable_query_plan", "planning_deliverable_column"].some(name => url.pathname === `/rest/v1/rpc/${name}`)) {
+      const chunks = []; for await (const chunk of request) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      if (!mapped || body.p_actor_profile_id !== "synthetic-profile" || !["ceo", "deputy", "founder", "viewer"].includes(role)) { send({ status: "forbidden" }); return; }
+      const source = "synthetic-planning-revision";
+      const evaluatedAt = body.p_evaluated_at || new Date().toISOString();
+      const tasks = itemPageFixture ? [planningItemFixture()] : [];
+      const summary = (task: ReturnType<typeof planningItemFixture>) => Object.fromEntries(Object.entries(task).filter(([key]) => key !== "problem_statement"));
+      // This transport fixture serves the SQL protocol from the same rows as Item detail.
+      // Real selection semantics, temporal boundaries and persisted parity have separate SQL gates.
+      if (url.pathname.endsWith("planning_deliverable_column")) {
+        planningColumnReads++;
+        const ids: string[] = body.p_selected_ids;
+        const chosen = Array.isArray(ids) ? ids.map(id => tasks.find(task => task.id === id)) : [];
+        if (!Array.isArray(ids) || chosen.some(task => !task) || new Set(ids).size !== ids.length || body.p_source_revision !== source
+          || !Number.isFinite(Date.parse(body.p_evaluated_at)) || body.p_valid_until !== null && Date.parse(body.p_valid_until) <= Date.now()) {
+          send({ status: "staleContinuation" }); return;
+        }
+        send({ status: "ready", source_revision: source, evaluated_at: body.p_evaluated_at,
+          rows: chosen.map(task => summary(task!)), card_ids: ids, context_ids: [...ids].sort(), relationships: [] }); return;
+      }
+      selectedPlanningReads++;
+      const plan = url.pathname.endsWith("planning_deliverable_query_plan");
+      if (plan) planningQueryPlanReads++;
+      const query = body.p_query || {}, filters = query.filters || {};
+      const unsupported = ["review", "initiativeId", "sprintId", "workstream", "risk"].some(key => filters[key] && filters[key] !== "Alle")
+        || filters.targetFrom || filters.targetTo || filters.quick?.length || query.level && query.level !== "deliverable" || query.parentId && query.parentId !== "all";
+      if (unsupported) { send({ message: "Unscripted synthetic Planning scope" }, 501); return; }
+      const matching = tasks.filter(task => (!filters.query || task.title.toLocaleLowerCase("de").includes(filters.query))
+        && (!filters.status || filters.status === "Alle" || task.status === filters.status)
+        && (!filters.priority || filters.priority === "Alle" || task.priority === filters.priority)
+        && (!filters.assignee || filters.assignee === "Alle" || task.assignee === filters.assignee));
+      const statuses = ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt", "Pausiert"];
+      const limit = Math.min(20, Math.max(1, body.p_limit || 20));
+      const chosen = matching.filter(task => !body.p_column || task.status === body.p_column).slice(body.p_offset || 0, (body.p_offset || 0) + limit);
+      if (body.p_source_revision && body.p_source_revision !== source) { send({ status: "staleContinuation" }); return; }
+      send({ status: "ready", source_revision: source, evaluated_at: evaluatedAt, temporal_key: "stable", valid_until: null,
+        project: planningProject, profiles: planningProfilesFixture(), sprints: [], preferences: [],
+        ...(!plan ? { rows: chosen.map(summary), card_ids: chosen.map(task => task.id), context_ids: chosen.map(task => task.id).sort(), relationships: [] } : {}),
+        columns: Object.fromEntries(statuses.map(status => [status, { total: matching.filter(task => task.status === status).length,
+          ...(plan ? { ids: status === "Pausiert" ? [] : matching.filter(task => task.status === status).slice(0, limit).map(task => task.id) } : {}) }])),
+        metrics: { total: matching.length, open: matching.filter(task => task.status !== "Erledigt").length, done: matching.filter(task => task.status === "Erledigt").length, blocked: 0 },
+        level_totals: { epic: 0, initiative: 0, deliverable: tasks.length }, personal_children: {}, workstreams: [], initiative_options: [],
+        workspace_revision: { activeTaskCount: tasks.length, latestUpdatedAt: tasks.length ? "2026-11-01 12:00:00+00" : "" } }); return;
+    }
     if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") {
       send({ ...planningProject, scope_revision: "synthetic-planning-revision", active_task_count: itemPageFixture ? 1 : 0, latest_updated_at: itemPageFixture ? "2026-11-01T12:00:00Z" : null }); return;
     }
@@ -136,14 +192,13 @@ beforeAll(async () => {
       send([{ version: "v1.0.0", summary, published_at: manifest.publishedAt, manifest_digest: "synthetic", manifest }]); return;
     }
     if (itemPageFixture && url.pathname === "/rest/v1/active_tasks") {
-      send(url.searchParams.get("id") === `eq.${itemPageTaskId}` ? { id: itemPageTaskId, title: "Synthetic planning item", task_type: "deliverable", status: "Offen", priority: "P2", assignee: "synthetic-profile", owner: "synthetic-profile", approval_status: "approved", problem_statement: "Preserve local drafts", updated_at: "2026-11-01T12:00:00Z" } : []); return;
+      send(url.searchParams.get("id") === `eq.${itemPageTaskId}` ? planningItemFixture() : []); return;
     }
     if (itemPageFixture && url.pathname === "/rest/v1/projects") {
       send(planningProject); return;
     }
     if (url.pathname === "/rest/v1/profiles") {
-      if (itemPageFixture) { send([{ id: "synthetic-profile", auth_user_id: loginUser, name: "Synthetic Founder", platform_role: role, github_login: "synthetic", weekly_capacity: 40 }]); return; }
-      send([]); return;
+      send(planningProfilesFixture()); return;
     }
     if (url.pathname.startsWith("/rest/v1/")) { send([]); return; }
     send({ error: "Unscripted synthetic protocol" }, 501);
@@ -328,6 +383,7 @@ test.each(["/planning", "/team/platform-releases", "/team/platform-releases/v1.0
       await page.waitForURL(`${appOrigin}${workspace}`);
     }
     await page.getByRole("button", { name: /Account-Menü öffnen/ }).click();
+    if (workspace === "/planning") { expect(selectedPlanningReads).toBeGreaterThan(0); expect(planningQueryPlanReads).toBeGreaterThan(0); expect(planningColumnReads).toBe(0); }
     holdLogout = true;
     const startedLogout = new Promise<void>(resolve => { logoutEntered = resolve; });
     const completedLogout = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/auth/session/logout");
@@ -446,6 +502,9 @@ test("Item phone help keeps the draft and resumes an explicit tour after approve
     await page.getByRole("button", { name: "Änderungen verwerfen" }).click();
     await page.waitForURL(`${appOrigin}/planning`);
     await page.getByText("Gemeinsamen Kalender öffnen", { exact: true }).waitFor();
+    expect(selectedPlanningReads).toBeGreaterThan(0);
+    expect(planningQueryPlanReads).toBeGreaterThan(0);
+    expect(planningColumnReads).toBeGreaterThan(0);
     expect(await updates.isVisible()).toBe(false);
     expect(await page.getByRole("button", { name: "Mehr", exact: true, includeHidden: true }).getAttribute("aria-expanded")).toBe("true");
     expect(tourNavigations).toEqual(["team-workweek-v1"]);
@@ -463,13 +522,17 @@ test("Planning polling clears loaded protected state after permanent Auth denial
   try {
     const page = await context.newPage();
     await page.clock.install();
-    const initialRevision = page.waitForResponse(response => new URL(response.url()).pathname === "/api/planning-revision");
+    const initialObservation = page.waitForResponse(response => new URL(response.url()).pathname === "/api/planning-source-version");
     await page.goto(`${appOrigin}/auth/login?next=%2Fplanning`);
     await page.waitForURL(`${appOrigin}/planning`);
     await page.getByRole("button", { name: /Account-Menü öffnen/ }).waitFor();
-    const revision = await checkpoint("initial planning revision", initialRevision);
-    expect(revision.status()).toBe(200);
-    expect(await revision.finished()).toBeNull();
+    expect(selectedPlanningReads).toBeGreaterThan(0);
+    expect(planningQueryPlanReads).toBeGreaterThan(0);
+    expect(planningColumnReads).toBe(0);
+    const observation = await checkpoint("initial Planning source observation", initialObservation);
+    expect(observation.status()).toBe(200);
+    expect(await observation.json()).toEqual({ version: "synthetic-planning-revision" });
+    expect(await observation.finished()).toBeNull();
     // Let the completed initial check settle before advancing its polling interval.
     await page.evaluate(() => new Promise<void>(resolve => setTimeout(resolve, 0)));
     await page.evaluate("window.__samePlanningDocument = true");

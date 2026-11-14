@@ -16,7 +16,7 @@ function viewRead(input: PlanningBoardQueryInput = {}): PlanningWorkspaceRead {
     total: status === "Erledigt" ? 45 : 0, loaded: status === "Erledigt" ? items.length : 0,
     completeness: status === "Erledigt" ? "partial" : "complete", continuation: status === "Erledigt" ? input.continuation ? "page-3" : "page-2" : null,
   } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
-  return { data: { ...emptyPlanningShellState, tasks: items }, query, queryRevision: "r1", coverage: { tasks: complete ? "complete" : "partial", profiles: "complete", sprints: "complete", taskRelations: "complete", taskBlockers: "complete" },
+  return { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, data: { ...emptyPlanningShellState, tasks: items }, query, queryRevision: "r1", coverage: { tasks: complete ? "complete" : "partial", profiles: "complete", sprints: "complete", taskRelations: "complete", taskBlockers: "complete" },
     ...(!complete ? { board: { query, column: input.column, queryKey: planningBoardQueryKey(query), revision: "r1", observedAt: "2026-11-07T00:00:00Z", cardIds: items.map(task => task.id), columns, childProgressById: {}, viewerOpenSubIssueIdsByDeliverableId: {}, metrics: { total: 45, open: 0, done: 45, blocked: 0 }, workspaceRevision: { activeTaskCount: 45, latestUpdatedAt: "r1" } } } : {}),
   };
 }
@@ -24,7 +24,7 @@ function viewRead(input: PlanningBoardQueryInput = {}): PlanningWorkspaceRead {
 function ownerWithViews(readWorkspace: (query: PlanningBoardQueryInput) => Promise<PlanningWorkspaceRead> = async query => viewRead(query), adapter: Partial<PlanningStateAdapter> = {}) {
   const initial = viewRead();
   return createPlanningState({ userId: session.userId, initialData: initial.data, initialSession: session,
-    initialWorkspaceRead: { workspace: "planning", session, revision: "r1", queryKey: initial.board!.queryKey, query: normalizePlanningBoardQuery(initial.query), board: initial.board, coverage: initial.coverage!, taskOmittedFields: [] },
+    initialWorkspaceRead: { workspace: "planning", session, readAuthority: initial.readAuthority, revision: "r1", queryKey: initial.board!.queryKey, query: normalizePlanningBoardQuery(initial.query), board: initial.board, coverage: initial.coverage!, taskOmittedFields: [] },
     adapter: { saveTask: async task => ({ task }), readWorkspace: (_, query) => readWorkspace(query || {}), ...adapter },
   });
 }

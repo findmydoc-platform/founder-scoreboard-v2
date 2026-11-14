@@ -21,3 +21,5 @@
 - Follow `docs/github-api-idempotency.md` when adding or changing a GitHub mutation.
 - `github-graphql.ts` is the only adapter for the GitHub GraphQL envelope, GraphQL errors, and missing data. Resource modules provide queries, variables, operation classification, and domain interpretation.
 - Task-to-GitHub orchestration belongs behind `projectTaskToGitHub` in `github-sync/task-projection.ts`; routes and unrelated library modules must not reconstruct its projection order.
+
+- Planning Item context, digest and synchronization readers follow `docs/planning-item-read-contracts.md`. Preserve their distinct complete-output or bounded-invocation contracts and account for indirect shared-loader callers.

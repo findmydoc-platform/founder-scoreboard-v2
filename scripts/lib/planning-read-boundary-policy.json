@@ -1,0 +1,1028 @@
+{
+  "schemaVersion": 1,
+  "privateModules": [
+    "src/features/planning-items/server/planning-workspace-read-source.ts",
+    "src/features/planning-items/server/planning-deliverable-read-source.ts",
+    "src/features/planning-items/server/workspace-profile-avatars.ts",
+    "src/features/planning-items/server/planning-card-summary.ts"
+  ],
+  "contracts": {
+    "BOARD": {
+      "consumer": "BOARD / PERSONAL",
+      "owner": "Planning feature owner",
+      "reason": "The declared credential-bound Deliverable adapter owns one bounded query plan, selected-only column hydration and fresh source checks at publication. Complete and JSON column consumers keep their established shared source.",
+      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts",
+      "expiresWhen": "Revalidate when the BOARD or PERSONAL contract changes under #641."
+    },
+    "COMPLETE": {
+      "consumer": "BOARD strategic / TABLE / STRATEGY / TEAM / PROFILE / NOTIFICATIONS / SPRINT / GANTT compatibility",
+      "owner": "Owner of each named feature in the consumer inventory",
+      "reason": "Preserve the established complete shared source while each remaining consumer migrates. No new caller or changed SELECT is covered.",
+      "evidence": "tests/unit/planning/planning-compact-board.test.ts; tests/integration/planning-enumeration-consistency.test.ts; consumer-specific evidence in docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove each source statement after its last caller passes #648, #652, #653, #654, #655, #656 or #658."
+    },
+    "BACKLOG": {
+      "consumer": "BACKLOG",
+      "owner": "Backlog feature owner",
+      "reason": "Retain existing capped Backlog basis until its separate migration.",
+      "evidence": "tests/unit/planning/backlog-planning-state.test.mjs; tests/integration/sprint-commitment-concurrency.test.ts",
+      "expiresWhen": "Remove on accepted BACKLOG migration #652."
+    },
+    "DETAIL": {
+      "consumer": "DETAIL / CHILDREN / CANDIDATES",
+      "owner": "Tasks feature owner",
+      "reason": "Retain target, ancestor, child, related and lifecycle reads until identity and child contracts migrate.",
+      "evidence": "tests/unit/tasks/task-detail-read-model.test.mjs; tests/unit/planning/planning-task-lifecycle.test.ts",
+      "expiresWhen": "Remove on the corresponding accepted migration #649, #650 or #651."
+    },
+    "STRATEGY": {
+      "consumer": "STRATEGY",
+      "owner": "Projects feature owner",
+      "reason": "Retain the existing complete strategic source until selected hierarchy migration.",
+      "evidence": "tests/unit/planning/planning-strategic-board.test.ts; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove on accepted STRATEGY migration #652."
+    },
+    "TEAM": {
+      "consumer": "TEAM",
+      "owner": "Team feature owner",
+      "reason": "Retain the existing complete metric basis until independent Team metrics migrate.",
+      "evidence": "tests/unit/shared/supporting-read-coverage.test.mjs; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove on accepted TEAM migration #654."
+    },
+    "PROFILE": {
+      "consumer": "PROFILE",
+      "owner": "Profile feature owner",
+      "reason": "Retain existing profile task and initiative context until its own migration.",
+      "evidence": "tests/unit/shared/supporting-read-coverage.test.mjs; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove on accepted PROFILE migration #655."
+    },
+    "NOTIFICATIONS": {
+      "consumer": "NOTIFICATIONS",
+      "owner": "Notifications feature owner",
+      "reason": "Retain the established inbox item and lifecycle basis separately from Board membership.",
+      "evidence": "tests/unit/shared/supporting-read-coverage.test.mjs; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove on accepted NOTIFICATIONS migration #656."
+    },
+    "RELEASE": {
+      "consumer": "RELEASE",
+      "owner": "Platform releases feature owner",
+      "reason": "Retain existing complete release matching and ancestor context.",
+      "evidence": "tests/integration/release-ingest-credential.test.ts; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove on accepted RELEASE migration #657."
+    },
+    "SPRINT": {
+      "consumer": "SPRINT-TASKS / SPRINT-ASSIGN / REVIEW / ASSESS / COMPLETE",
+      "owner": "Sprint feature owner",
+      "reason": "Retain existing complete and action-specific Sprint bases, lock checks and authority.",
+      "evidence": "tests/integration/planning-credential-actions.test.ts; tests/integration/sprint-commitment-concurrency.test.ts; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove each corresponding read on accepted #658, #659, #660 or #661."
+    },
+    "CONTEXT": {
+      "consumer": "CONTEXT",
+      "owner": "Planning Items integration owner",
+      "reason": "Preserve the complete nontrashed external Planning context and candidate identities.",
+      "evidence": "tests/integration/personal-planning-credential.test.ts; docs/team-planning-items-api.md",
+      "expiresWhen": "Remove on accepted CONTEXT migration #662."
+    },
+    "DIGEST": {
+      "consumer": "DIGEST",
+      "owner": "Notification digest integration owner",
+      "reason": "Retain the established latest-200 digest source and bounded supporting reads.",
+      "evidence": "tests/integration/notification-delivery-credential.test.ts; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove on accepted DIGEST migration #663."
+    },
+    "GITHUB": {
+      "consumer": "GITHUB / DISCUSSION",
+      "owner": "GitHub integration owner",
+      "reason": "Preserve target projection, managed identity, relationship reconciliation and exact outgoing issue binding.",
+      "evidence": "tests/integration/github-user-credential.test.ts; tests/integration/github-webhook-credential.test.ts; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove corresponding reads on accepted #664 and #665; recheck discussion binding under #649."
+    },
+    "OPERATION": {
+      "consumer": "DETAIL / BACKLOG / SPRINT-ASSIGN / REVIEW operation admission",
+      "owner": "Owner of the named feature or integration in the consumer inventory",
+      "reason": "Existing mutation preparation retains its target, parent, canonical version and lock basis. A UI collection cannot replace admission.",
+      "evidence": "tests/integration/planning-credential-actions.test.ts; tests/integration/planning-trash-maintenance-credential.test.ts; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Recheck at the affected #649, #652, #658 or #659 migration and remove only when that operation has an equivalent shared admission basis."
+    },
+    "DIRECTORY": {
+      "consumer": "EVENTS / TOOLS supporting directory",
+      "owner": "Events and Tools feature owners",
+      "reason": "These exact imports use only planningProfileSelect, not Item enumeration.",
+      "evidence": "tests/integration/resource-credential-closeout.test.ts; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Remove when shared directory ownership is isolated during #654, or earlier on a material change to these imports."
+    },
+    "GITHUB-DISPATCH": {
+      "consumer": "GITHUB fixed job and delivery storage protocols",
+      "owner": "GitHub integration owner",
+      "reason": "These exact existing dynamic expressions dispatch to the credential-bound job, webhook and lifecycle tables or claim functions. They preserve existing fixed protocol and storage checks, not a new Planning collection reader.",
+      "evidence": "tests/integration/github-webhook-credential.test.ts; tests/integration/github-webhook-cron-credential.test.ts; tests/unit/github/github-claimed-job-credential.test.mjs; docs/adr/0002-central-credential-verification.md",
+      "expiresWhen": "Recheck these exact storage expressions at #664/#665 and remove when their targets become statically resolved or their protocols are retired."
+    },
+    "HEALTH": {
+      "consumer": "Existing health.inspect core-table probe",
+      "owner": "Credential module maintainer",
+      "reason": "The exact public-resource capability probes only id presence on the fixed profiles/tasks tuple with limit 1 and returns a boolean. It does not return Planning Items or bypass the existing public-resource action binding.",
+      "evidence": "tests/integration/resource-credential-closeout.test.ts; src/lib/credentials/internal/public-resources.ts",
+      "expiresWhen": "Recheck on any material change to health.inspect or its fixed table tuple; remove when this exact probe is retired."
+    }
+  },
+  "allowedEdges": [
+    {
+      "from": "src/features/events/server/events-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "DIRECTORY"
+    },
+    {
+      "from": "src/features/notifications/server/notifications-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "NOTIFICATIONS"
+    },
+    {
+      "from": "src/features/planning/server/planning-board-projection.ts",
+      "to": "src/features/planning-items/server/planning-card-summary.ts",
+      "contract": "BOARD"
+    },
+    {
+      "from": "src/features/planning/server/planning-board-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "BOARD"
+    },
+    {
+      "from": "src/features/planning/server/planning-board-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "contract": "BOARD"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "BOARD"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "to": "src/features/planning-items/server/planning-card-summary.ts",
+      "contract": "BOARD"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "to": "src/features/planning-items/server/workspace-profile-avatars.ts",
+      "contract": "BOARD"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "to": "src/features/planning-items/server/workspace-profile-avatars.ts",
+      "contract": "COMPLETE"
+    },
+    {
+      "from": "src/features/profile/server/profile-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "PROFILE"
+    },
+    {
+      "from": "src/features/projects/server/strategic-planning-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "STRATEGY"
+    },
+    {
+      "from": "src/features/sprint/server/sprint-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "SPRINT"
+    },
+    {
+      "from": "src/features/team/server/team-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "TEAM"
+    },
+    {
+      "from": "src/features/tools/server/tools-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "DIRECTORY"
+    }
+  ],
+  "readSites": [
+    {
+      "from": "src/features/backlog/server/backlog-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "1e38b2ab1567fbec7813f56a2fa469142b68245bfdfd7a0ba8370e2041d267f1",
+      "contract": "BACKLOG",
+      "references": 1
+    },
+    {
+      "from": "src/features/backlog/server/backlog-read-model-supabase.ts",
+      "kind": "from",
+      "target": "planning_item_strategy",
+      "fingerprint": "2a7c3fd150a9eb7f9c59428bed17695e6eb5785a9672cd0bff0e85b1af619cc5",
+      "contract": "BACKLOG",
+      "references": 1
+    },
+    {
+      "from": "src/features/backlog/server/backlog-read-model-supabase.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "ec65423bd1c589d812fc88ea160111530f6f3cc9941d24bd13c91dea0bb4e8f3",
+      "contract": "BACKLOG",
+      "references": 1
+    },
+    {
+      "from": "src/features/backlog/server/backlog-read-model-supabase.ts",
+      "kind": "from",
+      "target": "task_links",
+      "fingerprint": "91937820e373f071d49cc9eb4090d500f8b56a2e10335a19fd533dc21a9a762c",
+      "contract": "BACKLOG",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-revision.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "a942d6c920337240278fac55567149af445c7b42da8b0173af622418f4e22914",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-revision.ts",
+      "kind": "from",
+      "target": "planning_item_strategy",
+      "fingerprint": "5d6cc5588939843afa5a95658cc18b3f5de901a8e4bc3eb33df86457d1f980ee",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-revision.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "841425f1280f9fd1b8911fa6a759e915745c17b9424f4f12bc6b79df9b3fc703",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-revision.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "b7aba1c1f9f9fcc6ddde31a71403670c69e8a3caa163c474a1d78f8856812023",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-revision.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "3974da809ca252ce277aebfbda25449afd2d43466f6cb89713fef414ef5f7b77",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-revision.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "36bd84b50d3da2a1ffe08af9d5db9d5f04976ee35fbbce5e23bbaf6ad6ba6672",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-update.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "82ab3a164f15dfcc17613b18f39c07f35c3b6177fda136aabcd32911b15afacc",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-update.ts",
+      "kind": "from",
+      "target": "planning_item_strategy",
+      "fingerprint": "a4ddfbf7adb483a84e762d40ce816ae1303c7cba58ae8c4419c883337cda38fc",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-update.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "9628d398b7ecbb44bbf72bfba7669d94be8cdbb749d00d59f46521d3a0e13347",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-update.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "0d3ab8ec99dfe240e9fd128cedb9d6820a330a62eb2977b3d29e2aa3e01df1b9",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-item-update.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "31eee76330da4907039dff083a18c876e1dea950bdd81ef22f4810fba31ed177",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-approval.ts",
+      "kind": "rpc",
+      "target": "prepare_planning_approval_command",
+      "fingerprint": "4c316b66daf2cb45262fdb3fed88368e928f8d9e5cbf31152e6a76fc9c73b458",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-backlog-move.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "cb5fe0c943b2989879a96fad3192bb6baaa2909294247951c3a08c0e2fb33e91",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-backlog-move.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "e6a2e2079b42d2da604f98f681fb15c3ff641fa1ba2dfd3a620da7735e775950",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-context.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "f56edf25a6865c2d7cfd6c0e55415e0360f1a678ba0fb278360ce9824330449d",
+      "contract": "CONTEXT",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-context.ts",
+      "kind": "from",
+      "target": "planning_item_strategy",
+      "fingerprint": "cee21b2d67583a80a390c6c36771e54c462683244222ff533fe50bdafac88d91",
+      "contract": "CONTEXT",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-context.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "1dd3ad1c455a67d84587b54fa1bfc55044f4509bb6797c30e7d5ef2938b48b48",
+      "contract": "CONTEXT",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-context.ts",
+      "kind": "from",
+      "target": "task_blockers",
+      "fingerprint": "41c62913a4a5047ccc6e5f1caabac0ec7203bcfff52aee08a4ee1f4b9719b8b6",
+      "contract": "CONTEXT",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-context.ts",
+      "kind": "from",
+      "target": "task_relationship_edges",
+      "fingerprint": "4d43107dffef82c4a06a608b17125627ec596d5d75d19fba64dc04d0f446f9bd",
+      "contract": "CONTEXT",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-context.ts",
+      "kind": "from",
+      "target": "task_links",
+      "fingerprint": "1267fad7d73d1b08eae76b2bfa693bf5c3a012a02be1b6cd85d3bd4b0e13fd39",
+      "contract": "CONTEXT",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-create.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "5efe8206d79c298ad88b708b2446748ec7921f5bdd32cbe2a6fa367f77213b3e",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-github-sync.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "14d0be38fae4235bcbcde48790c224a2576d201bd48e144e793bfae67e3b55e6",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-relationships.ts",
+      "kind": "rpc",
+      "target": "prepare_planning_relationship_command|prepare_team_planning_dependency_command",
+      "fingerprint": "b5183502db32a7f7f7b9222b8d34d74cfb8fb0ee73dfa020330c67a5112c5f02",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-reparent.ts",
+      "kind": "rpc",
+      "target": "prepare_planning_reparent_command",
+      "fingerprint": "59674d662b62741051bd085714bbddd17c74dfd13a8af71548cc7583c09c31c0",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-review.ts",
+      "kind": "rpc",
+      "target": "prepare_planning_review_command",
+      "fingerprint": "64c1b5e5e5ecde996817f9076bb0d19cb26954ad3dbe2eba022d44eb7bf6535f",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-sprint-assignment.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "3dae945242d4e31930aeb70331f730350d03f87bdfbb0f3189a6484a90b49daf",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-sprint-assignment.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "4601173b15536af985c139ec250669e76f860a273b8e95e0ed83b00c4d8eb6d3",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-team-canonical-item.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "e15af8ba20906570429b85833a7b581544ced7ba922994023af798ee34033f3c",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/model/planning-items-trash.ts",
+      "kind": "rpc",
+      "target": "prepare_planning_trash_command",
+      "fingerprint": "29a7523de1780337d272b35223859dc103fef28fce19c40de0c2370758c96dcd",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_source_version",
+      "fingerprint": "bdac449e03f793dc9526a44db629fb35193943bf7d96d9ef03b391fe12c2fd73",
+      "contract": "BOARD",
+      "references": 2
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_deliverable_selection",
+      "fingerprint": "5794f031ecbe809c88bd51608de5812dd2ec6997841e0f32ae05ff783ab4ad09",
+      "contract": "BOARD",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_deliverable_query_plan",
+      "fingerprint": "379a1dcb11683c96339e65a58b378a44be115bdc5ca88ccf38f4d608b580d4f1",
+      "contract": "BOARD",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_source_version",
+      "fingerprint": "8aec5c83d232665674dbb0be8a4d9fd2ed23afdb2ba07a22873e9b0327af811d",
+      "contract": "BOARD",
+      "references": 2
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_deliverable_column",
+      "fingerprint": "0b6a370e8839972ae94b43935c795325a0b0908dbd338c228cd7ca7824399bd2",
+      "contract": "BOARD",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "40521c769442516933e0cab609c71c5bb52c9195e65773e164c5262fe5314aae",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "planning_item_strategy",
+      "fingerprint": "f62644180a97952b377310569ec1187a43a4579f576360c1ffe53f63ee5c70c2",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "091f91fe707d4eb699a2ed89f3a19e2907278bb9f0a3ad71cc56d1236f034276",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "task_links",
+      "fingerprint": "00feb9566ea89ae076d2c2a39927574cb4a6242c2ad626aa971da8fef034d10d",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_workspace_snapshot",
+      "fingerprint": "9e3110bb6b978fc9bc9755e34cb5ed95da3618c1e7f2ffe04c2a65f016044a28",
+      "contract": "COMPLETE",
+      "references": 2
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "ebfd5107d2e85c6ae2e8bf11cdecacac13d12c67408f53ed5bda9bb2e310d78d",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "planning_item_strategy",
+      "fingerprint": "c9bdea9df04f83ace943d81ce3bb29e1480a9577344515249fdbcf5ff338bf6f",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "9dcc92e9b2cb082c5330934ac5b4a06caab4d853438fa11843ba9e6a442d0e84",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "task_links",
+      "fingerprint": "d75ad58df3ebc84af0b8b62e4761a8d6a0df534501a0eea1e05447534092c653",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "task_relationship_edges",
+      "fingerprint": "4caca0bcd9f0ca8dcbef74b581e74198f652c3be0bdd4c4b211a194d562118b2",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "kind": "from",
+      "target": "task_blockers",
+      "fingerprint": "e6d74442503c82f276c2269c7643b548af372f22cf4580459181d22626b185e9",
+      "contract": "COMPLETE",
+      "references": 1
+    },
+    {
+      "from": "src/features/platform-releases/server/platform-release-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "98ea1806900ceebb368e80aaa03774be082aba6f9fe4ba55d790e2c82e1c38c8",
+      "contract": "RELEASE",
+      "references": 1
+    },
+    {
+      "from": "src/features/platform-releases/server/platform-release-read-model-supabase.ts",
+      "kind": "from",
+      "target": "task_links",
+      "fingerprint": "16f5f0abbddc3cea3d1fa13f6b946e4087619e4062f1852a020199f46e707ef4",
+      "contract": "RELEASE",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "41caf66a3c4c9594149c1f93475d17526af04bb59e73fb912abe89fdcdaa264e",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "task_links",
+      "fingerprint": "3c7f433aa83508fe8c8ae779f2ecb96edd6265d9c7b01e0537083f7042d9e9f7",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "planning_item_strategy",
+      "fingerprint": "b4a2d30d763bebcd79cb54ceb81678496b9c86741809b06455c1eb9b5a6a6d67",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "ad8acd12dee34f0b0b2afc3afdf269f6a487aa96faf908ce88c9f4b58e245886",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "4666f4e78de48e74420aa17875c5fe11c15589654b550484d0dafa72b240772b",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "e0ebbe2bf5ac7613ad387e656f4c7790b1c512b0b7f484361b135e045cb82c75",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "task_relationship_edges",
+      "fingerprint": "c24a61a35f153c36c62d3371aaad8137e98a5b16fef08db43522ec1a1f3d17fb",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "task_relationship_edges",
+      "fingerprint": "2cbf017b76449be06a4d442ac46bb9bea629ca1efd2705321aa20e3b134ada09",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "89a3ba058f81667c1437dfe5124ce6e3328c2a81c24105dd0c411a5cae202037",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "task_blockers",
+      "fingerprint": "0747bea9d901bc06490ee91422e5dc29e9676d60907526b867977ecbb0fc6064",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-comment-delivery.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "a222fbc0077b4710a95aeb612b89e97d20d0704d73d4e8f87b89376ee532000d",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-planning-webhook.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "0fdd583944fb0a04b5ba2696bd0acf772e8b20644d7fa43aed208bfc4143acf5",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-planning-webhook.ts",
+      "kind": "from",
+      "target": "task_links",
+      "fingerprint": "ba8edf4564844d5d9bf3d0f5f4eb727a8dba7fb8e0de2421a6cae195635b3c9a",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-planning-webhook.ts",
+      "kind": "from",
+      "target": "task_relationship_edges",
+      "fingerprint": "fbc20a3c7e7caedbf604936bef734a65849c6734c23fd1eac0ffe74aa2472cf4",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-review-delivery.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "7461b493990fd1abe0b1d3a42af46d4cf7cf6c1883a3450b12201ee4af25ac6c",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-sub-issue-parent.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "180e3de34eec40f56402f331d6e67133792c83843efc94b85f5151e489ee3204",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-webhook-drain.ts",
+      "kind": "from",
+      "target": "<dynamic>",
+      "fingerprint": "cb56139097fd363f6d1da151d82458a08e720d975a4045d732fd7a92a9b6d133",
+      "contract": "GITHUB-DISPATCH",
+      "references": 1
+    },
+    {
+      "from": "src/lib/notification-resolution.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "bb7d122b7a6944ed05a2b09d4465d12e68f92ac5352718dd3d62bead8368125b",
+      "contract": "NOTIFICATIONS",
+      "references": 1
+    },
+    {
+      "from": "src/lib/notification-resolution.ts",
+      "kind": "from",
+      "target": "task_blockers",
+      "fingerprint": "1c69f6b97fadb987dc418ffe018672fc60dc785e14207ac6dc6ed0f3af8c58a7",
+      "contract": "NOTIFICATIONS",
+      "references": 1
+    },
+    {
+      "from": "src/lib/planning-github-lifecycle.ts",
+      "kind": "rpc",
+      "target": "<dynamic>",
+      "fingerprint": "f81094aaa87edbf614e39962590f254ecb4b43b3d28d606d10ffb4d7db4cc58b",
+      "contract": "GITHUB-DISPATCH",
+      "references": 1
+    },
+    {
+      "from": "src/lib/planning-trash-detail.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "8df3ad0d3ce63c909728e062c3fd8c8e6257758548dde3dc3dbbe6544a4a7a02",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/planning-trash-detail.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "ef2d2db519a9f39423cff64993eed9c041bb354035277946792a9c1a7a0836c9",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/planning-trash-detail.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "124582c54cc66ccffe54c699ffbb5cdf2ec4d74bb6757fe4d4285eb1fe89e0b9",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/planning-trash-detail.ts",
+      "kind": "from",
+      "target": "planning_item_strategy",
+      "fingerprint": "cf8398eaab0cce62e34f05bfd414775ebff8054da8c0aa354180360f5d49a19d",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/planning-trash-detail.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "557bf4996a05e62b7b0a9d7576296157be6ddb64d4c6cb7e99453401b0416c0d",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/planning-trash-mutation-guard.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "56bf00a3124ff3c8244e14583fd30731c3ce9bd63e87481c5f9718af56cb4013",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/lib/task-review-lock.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "f2617f532e04ff56b583bbd568ec3872819d22f67f936c8edf7f37418079813e",
+      "contract": "SPRINT",
+      "references": 1
+    },
+    {
+      "from": "src/lib/task-review-lock.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "f9e4ceee3406dae5e3d347e6e70d85e244cba6d68c567b50e62278bcf96e8012",
+      "contract": "SPRINT",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/github-job.ts",
+      "kind": "from",
+      "target": "<dynamic>",
+      "fingerprint": "acb9f9882b3dd0886310230d68a58c52ba31df44837c3af96e62f80b297e82ee",
+      "contract": "GITHUB-DISPATCH",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/github-user.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "46790ec617dd982e038de0f4c7add8c8a106e8a52b2f93dd2bdff81c1432762f",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/github-user.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "736082dacce85d4b430b52aee9012c3f3db505d618b1a2a8bacb22df3632bbf7",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/github-webhook.ts",
+      "kind": "from",
+      "target": "<dynamic>",
+      "fingerprint": "d948721d3839d4a725ac3f2abcb00293d37ee66bc5e1bdc3ba909204974b411e",
+      "contract": "GITHUB-DISPATCH",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/notification-digest.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "6d3fa56e323d53f87df503e9e97ebd8d810b48f514d7dc4cef26152be7234611",
+      "contract": "DIGEST",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/notification-digest.ts",
+      "kind": "from",
+      "target": "task_blockers",
+      "fingerprint": "e1eb1023a6ddbd301bbd5fe7a5f5b77cc4a76eab89e3225933689d84b5d78cae",
+      "contract": "DIGEST",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-collaboration.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "386c3318c7467b2af1ec3d2878f9cd84565dd92946f1a4a25c9a9a8092f29cd3",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-collaboration.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "d45ed5e5087ed7c69214152bfdf2486a01a6112d822c96a18301857c9abf356c",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-participation.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "1a83479448f72eb365885ef8b0d2044681879bcf3db8b3ebb9125f1f7a36bfec",
+      "contract": "OPERATION",
+      "references": 2
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-sprint.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "aef1b92300a5f41d30596a2e2a12f71bb12880aa537cb687a9674f68643c9a72",
+      "contract": "SPRINT",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-sprint.ts",
+      "kind": "from",
+      "target": "task_blockers",
+      "fingerprint": "f4b89b8c6b7e14d4252d05eed0fe8e036aab28379863fa33e0e624d13938e6de",
+      "contract": "SPRINT",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-sprint.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "d2abe5267d20a44bd672dae632d9da03a1c62502dda9bebbce8a90866a03a83b",
+      "contract": "SPRINT",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-sprint.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "dc6138ff80cd96f5fad473196ca3a6d78d7e9c7d5865c5f7ffdf6871dbcabdaa",
+      "contract": "SPRINT",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "bd4803032d9997ae79482bd06f4b9e77a13b603bfc109ba85d01d12d7ec8c277",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "083d3f1c79e70135697cf3833f268d79462ed1b5b3bd1fee5128f67645625bc0",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "kind": "from",
+      "target": "planning_item_raci_assignments",
+      "fingerprint": "59a2ec26bfe660411fe75e5376dd5bb775b3da33d2b2ee1e8d8b934e0ddb7464",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "kind": "rpc",
+      "target": "planning_source_version",
+      "fingerprint": "320ab13b9f724e77a04b3aca2e90fc7dd57cdb765fbee15ed840ea1fe6226e21",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "kind": "rpc",
+      "target": "planning_workspace_snapshot",
+      "fingerprint": "10ed80df0969230fb19f1c20bce021e0c4987add7be263c7c84b7373220068b9",
+      "contract": "OPERATION",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/public-resources.ts",
+      "kind": "from",
+      "target": "<dynamic>",
+      "fingerprint": "b152eaa5c149b502f5c77b0e47ee1bf8644e71bfdd6b1d715df7c77a29b2c57e",
+      "contract": "HEALTH",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-sync/dependency-projection.ts",
+      "kind": "from",
+      "target": "task_relationship_edges",
+      "fingerprint": "2d88be478e46fee776dc84aba356a712c7e4ec9e0464d41d1fac47b5a2e7ed0f",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-sync/dependency-projection.ts",
+      "kind": "from",
+      "target": "task_relationship_edges",
+      "fingerprint": "fd734102f0320fc856bdbebb7bf085dbb69decbed5ff3d13d1d5aa6a830068d9",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-sync/dependency-projection.ts",
+      "kind": "from",
+      "target": "tasks",
+      "fingerprint": "44a11ccb3ec5335a6932d6a37bc34bc5306d2ffa7f559631f760047946241ab0",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-sync/task-projection.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "6f78ac56c0bf7b356c46c2c004c19e0263c1e4f47057d9c2d7b2122c09b12e15",
+      "contract": "GITHUB",
+      "references": 1
+    },
+    {
+      "from": "src/lib/github-sync/task-projection.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "8640556ca84882aaf66070778d0afc13af7ceef944aea1ba9ac9fdfcd1ff5331",
+      "contract": "GITHUB",
+      "references": 1
+    }
+  ]
+}
