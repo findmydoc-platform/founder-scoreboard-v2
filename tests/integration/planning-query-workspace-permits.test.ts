@@ -15,13 +15,20 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
 
 async function withWorkspaceQuery(run: (context: Awaited<ReturnType<typeof prepare>>) => Promise<void>) {
   const context = await prepare();
-  try { await run(context); } finally { await context.close(); }
+  let failure: unknown;
+  try { await run(context); } catch (error) { failure = error; }
+  try { await context.close(); } catch (error) {
+    if (failure) throw new AggregateError([failure, error], "Workspace query acceptance and fixture cleanup both failed");
+    throw error;
+  }
+  if (failure) throw failure;
 }
 
 async function prepare() {
   const fixture = await createCalendarLiveFixture(), transport = globalThis.fetch;
   const prefix = `workspace-query-${randomUUID()}`;
   const ids = [`${prefix}-epic`, `${prefix}-initiative`, `${prefix}-open`, `${prefix}-done`];
+  const createdIds: string[] = [];
   let createdProject = false;
   const pending = new Set<Promise<Response>>(), gates: Array<ReturnType<typeof gate>> = [];
   const prepared = new Set<string>(), consumed = new Set<string>(), acknowledged = new Set<string>();
@@ -40,18 +47,44 @@ async function prepare() {
     for (const item of gates) item.release();
     while (pending.size) await Promise.allSettled([...pending]);
     vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules();
+    let failure: unknown;
     try {
-      await fixture.database.query("delete from public.tasks where id=any($1)", [ids]);
-      if (createdProject) await fixture.database.query("delete from public.projects where id='findmydoc-founder-execution'");
-    } finally { await fixture.close(); }
+      await fixture.database.query("begin");
+      try {
+        const rows = (await fixture.database.query("select id,project_id,owner from public.tasks where id=any($1) for update", [createdIds])).rows;
+        if (rows.length !== createdIds.length || new Set(createdIds).size !== createdIds.length
+          || !rows.every(row => row.project_id === "findmydoc-founder-execution" && row.owner === actor.profileId)) {
+          throw new Error("Synthetic Item cleanup scope verification failed");
+        }
+        await fixture.database.query("set local founderops.trash_lifecycle_write='on'");
+        await fixture.database.query("delete from public.tasks where id=any($1)", [createdIds]);
+        if (createdProject) await fixture.database.query("delete from public.projects where id='findmydoc-founder-execution'");
+        await fixture.database.query("commit");
+      } catch (error) {
+        try { await fixture.database.query("rollback"); } catch (rollbackError) {
+          throw new AggregateError([error, rollbackError], "Workspace query Item cleanup and rollback both failed");
+        }
+        throw error;
+      }
+    } catch (error) { failure = error; }
+    try { await fixture.close(); } catch (error) {
+      if (failure) throw new AggregateError([failure, error], "Workspace query Item and identity cleanup both failed");
+      throw error;
+    }
+    if (failure) throw failure;
   };
   try {
     await fixture.mode("linking", true);
     actor = await fixture.actor("founder");
     createdProject = (await fixture.database.query("insert into public.projects(id,name) values('findmydoc-founder-execution','Synthetic Workspace query') on conflict(id) do nothing returning id")).rowCount === 1;
     await fixture.database.query("insert into public.tasks(id,project_id,title,task_type,status,priority,owner) values($1,'findmydoc-founder-execution','Synthetic permit Epic','epic','Offen','P2',$2)", [ids[0], actor.profileId]);
+    createdIds.push(ids[0]);
     await fixture.database.query("insert into public.tasks(id,project_id,title,task_type,status,priority,owner,parent_task_id,approval_status) values($1,'findmydoc-founder-execution','Synthetic permit Initiative','initiative','Offen','P2',$2,$3,'approved')", [ids[1], actor.profileId, ids[0]]);
-    for (const [id, status] of [[ids[2], "Offen"], [ids[3], "Erledigt"]]) await fixture.database.query("insert into public.tasks(id,project_id,title,task_type,status,priority,owner,parent_task_id,approval_status) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'P2',$4,$5,'approved')", [id, prefix, status, actor.profileId, ids[1]]);
+    createdIds.push(ids[1]);
+    for (const [id, status] of [[ids[2], "Offen"], [ids[3], "Erledigt"]]) {
+      await fixture.database.query("insert into public.tasks(id,project_id,title,task_type,status,priority,owner,parent_task_id,approval_status) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'P2',$4,$5,'approved')", [id, prefix, status, actor.profileId, ids[1]]);
+      createdIds.push(id);
+    }
     for (const [name, value] of Object.entries({ NEXT_PUBLIC_SUPABASE_URL: fixture.local.API_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: fixture.local.ANON_KEY, SUPABASE_SERVICE_ROLE_KEY: fixture.local.SERVICE_ROLE_KEY,
       REQUIRE_SUPABASE_AUTH: "true", GOOGLE_WORKLOAD_IDENTITY_AUDIENCE: "synthetic-query-audience",
@@ -136,7 +169,12 @@ async function prepare() {
       },
       facts: () => ({ prepared: prepared.size, consumed: consumed.size, acknowledged: acknowledged.size, releaseRemovals: removedByRelease.size, profileDispatches, protectedDispatches }),
     };
-  } catch (error) { await close(); throw error; }
+  } catch (error) {
+    try { await close(); } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "Workspace query setup and fixture cleanup both failed");
+    }
+    throw error;
+  }
 }
 
 test("Workspace query delivery observes real prepared, consumed and acknowledged permits with the original JWT", async () => {
