@@ -24,7 +24,7 @@ const cards = [
   taskDetailStoryTask({ id: "summary-outgoing", title: "Outgoing waiting parent", status: "Offen", assigneeId: profile.id, ownerId: profile.id }),
   taskDetailStoryTask({ id: "summary-incoming", title: "Incoming waiting parent", status: "Offen", assigneeId: profile.id, ownerId: profile.id }),
 ];
-const query = normalizePlanningBoardQuery({ view: "board", filters: { quick: ["blocked"] } });
+const query = normalizePlanningBoardQuery({ view: "board", filters: {} });
 const columns = Object.fromEntries([...taskStatuses, "Pausiert"].map(status => [status, {
   total: status === "Offen" ? 2 : 0, loaded: status === "Offen" ? 2 : 0, availability: "ready", completeness: "complete", continuation: null,
 } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
@@ -65,7 +65,7 @@ function SummarySignalsFlow() {
     queueMicrotask(() => setReady(true));
     return () => { restore(); if (previous === null) localStorage.removeItem(key); else localStorage.setItem(key, previous); };
   }, []);
-  return <><button type="button" disabled={delivered} onClick={() => setDelivered(true)}>Signale liefern</button><output aria-label="Summary Board reads">{boardReads}</output>
+  return <><button type="button" className="min-h-11 px-3" disabled={delivered} onClick={() => setDelivered(true)}>Signale liefern</button><output aria-label="Summary Board reads">{boardReads}</output>
     {ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", model, session, { userId: user.id, deadline: session.expiresAt * 1000 })}
       initialData={{ ...emptyPlanningShellState, tasks: cards, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData}
       initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase">
