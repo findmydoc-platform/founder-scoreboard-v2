@@ -205,3 +205,35 @@ test("a same-query streamed refresh retains an operated card until the interacti
     expect(calls).toBe(2);
   } finally { release(); transport.resolve(null); await refreshed; }
 });
+
+test.each([403, 409] as const)("a fatal %s frame invalidates a same-query refresh before its interaction hold ends", async status => {
+  let emit: ((event: Progress) => void) | undefined, signal: AbortSignal | undefined, calls = 0;
+  const transport = deferred<PlanningWorkspaceRead | null>();
+  const state = createPlanningState({ userId: "reader", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async task => ({ task }), readWorkspace: async (_workspace, _query, options) => {
+      if (++calls === 1) return read(query, "Review");
+      emit = options?.onBoardStream as typeof emit; signal = options?.signal;
+      return transport.promise;
+    },
+  } }).planning;
+  expect(await state.ensureBoardQuery(query)).toBe(true);
+  const release = state.beginBoardInteraction();
+  const refreshed = state.refreshWorkspace("planning");
+  try {
+    emit!({ kind: "basis", readId: "held-fatal", read: read(query) });
+    expect(state.board().freshness).toBe("stale");
+    emit!({ kind: "failure", readId: "held-fatal", column: "Offen", error: { status, ...(status === 409 ? { code: "stale_continuation" } : {}) } });
+    expect(signal?.aborted).toBe(true);
+    if (status === 403) {
+      expect(state.board().tasks).toEqual([]);
+      expect(state.workspace("planning").tasks).toEqual([]);
+      expect(state.board().readStatus).toBe("forbidden");
+    } else {
+      expect(state.board().sourceStatus).toBe("changed");
+      expect(state.board().freshness).toBe("stale");
+    }
+    emit!({ kind: "column", readId: "held-fatal", column: "Offen", read: read(query, "Offen") });
+    release(); transport.resolve(null); await refreshed;
+    expect(state.board().tasks.some(task => task.id === "first-Offen")).toBe(false);
+  } finally { release(); transport.resolve(null); await refreshed; }
+});
