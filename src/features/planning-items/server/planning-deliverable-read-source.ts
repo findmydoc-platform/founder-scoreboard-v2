@@ -29,8 +29,29 @@ type Selection = {
   workspace_revision: { activeTaskCount: number; latestUpdatedAt: string };
 };
 type Cursor = { offset: number; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; binding: string };
+type ChildProgress = NonNullable<import("@/features/planning/model/planning-board-query").PlanningBoardResult["childProgressById"][string]>;
 const statuses: TaskStatus[] = [...taskStatuses, "Pausiert"];
 const selectedOmittedFields: readonly (keyof Task)[] = [...planningCardOmittedFields, "dependsOn", "evidenceLink"];
+
+async function loadSelectedSummaries(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, selected: Pick<Selection, "card_ids" | "source_revision" | "evaluated_at" | "valid_until">) {
+  if (!selected.card_ids.length) return { status: "ready" as const, progress: {} as Record<string, ChildProgress> };
+  const read = supabase.rpc("planning_deliverable_summaries", { p_actor_profile_id: context.actorProfileId,
+    p_selected_ids: selected.card_ids, p_source_revision: selected.source_revision,
+    p_evaluated_at: selected.evaluated_at, p_valid_until: selected.valid_until });
+  const result = await observeRuntimePhase("board.summaries", () => context.signal ? read.abortSignal(context.signal) : read);
+  if (result.error || !result.data) return { status: result.status === 401 || result.status === 403 ? "forbidden" as const : "unavailable" as const };
+  const summary = result.data as { status: string; source_revision: string; evaluated_at: string; child_progress: Record<string, ChildProgress> };
+  if (summary.status === "forbidden" || summary.status === "staleContinuation") return { status: summary.status };
+  if (summary.status !== "ready" || summary.source_revision !== selected.source_revision
+    || Date.parse(summary.evaluated_at) !== Date.parse(selected.evaluated_at)
+    || selected.card_ids.some(id => {
+      const progress = summary.child_progress?.[id];
+      return !progress || ![progress.completed, progress.total, progress.unfinished, progress.percentage].every(Number.isSafeInteger)
+        || progress.completed < 0 || progress.unfinished < 0 || progress.total !== progress.completed + progress.unfinished
+        || progress.percentage !== (progress.total ? Math.round(progress.completed * 100 / progress.total) : 0);
+    })) return { status: "unavailable" as const };
+  return { status: "ready" as const, progress: summary.child_progress };
+}
 
 async function resolveQuery(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext): Promise<PlanningWorkspaceLoadResult | { status: "query"; query: ReturnType<typeof normalizePlanningBoardQuery>; preferenceRevision?: string }> {
   const input = context.query || {};
@@ -97,6 +118,8 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     || !selected.columns || !selected.metrics) return { status: "unavailable" };
   if (cursor && (cursor.source !== selected.source_revision || cursor.temporalKey !== selected.temporal_key)) return { status: "staleContinuation" };
   if (preferenceRevision && preferenceRevision !== selected.source_revision) return { status: "unavailable" };
+  const summaries = await loadSelectedSummaries(supabase, context, selected);
+  if (summaries.status === "forbidden" || summaries.status === "staleContinuation") return { status: summaries.status };
   const people = await withWorkspaceProfileAvatars(selected.profiles.map(mapProfile), supabase, context.signal);
   // The SQL statement covers selection and hydration. Avatar identity is a
   // separate read, so retain a matching source fence across that supporting work.
@@ -123,7 +146,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     board: { query, column, queryKey, revision, observedAt: selected.evaluated_at, validUntil: selected.valid_until,
       cardIds: selected.card_ids, columns, metrics: { ...selected.metrics, blocked: null }, levelTotals: selected.level_totals,
       workstreams: selected.workstreams, initiativeOptions: selected.initiative_options,
-      childProgressById: Object.fromEntries(selected.card_ids.map(id => [id, null])), attentionById: Object.fromEntries(selected.card_ids.map(id => [id, null])),
+      childProgressById: summaries.status === "ready" ? summaries.progress : Object.fromEntries(selected.card_ids.map(id => [id, null])), attentionById: Object.fromEntries(selected.card_ids.map(id => [id, null])),
       viewerOpenSubIssueIdsByDeliverableId: selected.personal_children, workspaceRevision: selected.workspace_revision },
   } };
 }
