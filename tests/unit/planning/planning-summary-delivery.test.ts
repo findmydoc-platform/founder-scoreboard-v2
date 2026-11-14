@@ -69,3 +69,49 @@ test("the existing owner retains ready cards after a summary failure and coalesc
     expect(state.taskDetail(cardIds[0]).childrenReadStatus).toBe("not-loaded");
   } finally { finish(null); await pending; }
 });
+
+test("a successful page batch preserves earlier missing demand and known summaries for its targeted retry", async () => {
+  const openRead = read("Offen"), reviewRead = read("Review"), newId = "summary-next-page";
+  const knownEmpty = { completed: 0, total: 0, unfinished: 0, percentage: 0 };
+  const initial: PlanningWorkspaceRead = { ...reviewRead, data: { ...reviewRead.data, tasks: [...openRead.data.tasks, ...reviewRead.data.tasks] },
+    board: { ...reviewRead.board!, column: undefined, cardIds,
+      columns: { ...reviewRead.board!.columns, Offen: openRead.board!.columns.Offen,
+        Review: { total: 2, loaded: 1, availability: "ready", completeness: "partial", continuation: "next-page" } },
+      metrics: { total: 3, open: 3, done: 0, blocked: 0 },
+      childProgressById: { [cardIds[0]]: progress, [cardIds[1]]: null }, attentionById: { [cardIds[0]]: [], [cardIds[1]]: null },
+      summaryRequests: [{ token: "original-summary-batch", cardIds, status: "unavailable" }],
+    } };
+  const page: PlanningWorkspaceRead = { ...reviewRead, data: { ...reviewRead.data, tasks: [taskDetailStoryTask({ id: newId, status: "Review" })] },
+    board: { ...reviewRead.board!, cardIds: [newId], columns: { ...reviewRead.board!.columns,
+      Review: { total: 2, loaded: 1, availability: "ready", completeness: "complete", continuation: null } },
+      metrics: { total: 3, open: 3, done: 0, blocked: 0 },
+      childProgressById: { [newId]: knownEmpty }, attentionById: { [newId]: [] },
+      summaryRequests: [{ token: "page-summary-batch", cardIds: [newId], status: "current" }],
+    } };
+  let workspaceReads = 0, summaryReads = 0;
+  const state = createPlanningState({ userId: "reader", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async task => ({ task }),
+    readWorkspace: async (_workspace, input) => {
+      workspaceReads++;
+      if (input?.column) { expect(input.continuation).toBe("next-page"); return page; }
+      return initial;
+    },
+    readBoardSummaries: async token => {
+      summaryReads++; expect(token).toBe("original-summary-batch");
+      return { summaries: summaries(), readAuthority: authority };
+    },
+  } }).planning;
+  expect(await state.ensureBoardQuery(query)).toBe(true);
+  expect(state.board().result!.childProgressById[cardIds[0]]).toEqual(progress);
+  expect(await state.loadBoardColumn("Review")).toBe(true);
+  expect(state.board().tasks.map(task => task.id)).toEqual([...cardIds, newId]);
+  expect(state.board().result!.summaryRequests?.map(request => [request.token, request.status])).toEqual([
+    ["original-summary-batch", "unavailable"], ["page-summary-batch", "current"],
+  ]);
+  expect(state.board().result!.childProgressById).toEqual({ [cardIds[0]]: progress, [cardIds[1]]: null, [newId]: knownEmpty });
+  expect(await state.refreshBoardSummaries()).toBe(true);
+  expect(summaryReads).toBe(1);
+  expect(workspaceReads).toBe(2);
+  expect(state.board().result!.childProgressById).toEqual({ [cardIds[0]]: progress, [cardIds[1]]: progress, [newId]: knownEmpty });
+  expect(state.board().result!.summaryRequests?.every(request => request.status === "current")).toBe(true);
+});
