@@ -195,7 +195,10 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   if (preferenceRevision && preferenceRevision !== selected.source_revision) return { status: "unavailable" };
   const summaries = await loadSelectedSummaries(supabase, context, selected);
   if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
-  if (summaries.status === "forbidden" || summaries.status === "staleContinuation") return { status: summaries.status };
+  if (summaries.status === "forbidden") return { status: "forbidden" };
+  // The initial JSON read has no accepted page basis to continue. Preserve its
+  // established unavailable result when the new summary detects a source shift.
+  if (summaries.status === "staleContinuation") return { status: cursor ? "staleContinuation" : "unavailable" };
   const people = await withWorkspaceProfileAvatars(selected.profiles.map(mapProfile), supabase, context.signal);
   if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
   // The SQL statement covers selection and hydration. Avatar identity is a
