@@ -234,3 +234,60 @@ test("direct-child percentages preserve legacy division order and JavaScript pos
     expect(body.model.board.childProgressById).toEqual(expected);
   });
 }, 120_000);
+
+test.each(["fresh-admission", "dispatched-summary"] as const)("original summary authority survives a held %s boundary", async boundary => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed }) => {
+    const parentId = `${prefix}-held-original-authority`;
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3)`, [parentId, initiativeId, actors.founder.profileId]);
+    const initial = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const query = { view: "board", column: "Offen", filters: { query: parentId } };
+    const first = await initial.GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`));
+    expect(first.status).toBe(200);
+    const body = await first.json(), token = body.model.board.summaryRequests[0].token;
+    const jwt = JSON.parse(Buffer.from(actors.founder.token.split(".")[1], "base64url").toString("utf8"));
+    expect(body.readAuthority.deadline).toBeLessThan(jwt.exp * 1000);
+    const baseline = observed.filter(entry => entry.path.endsWith("/planning_deliverable_summaries")).length;
+    expect(baseline).toBe(1);
+    const transport = globalThis.fetch;
+    let release!: () => void, held = false, membershipReads = 0;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const next = new Request(input, init), url = new URL(next.url);
+      const response = await transport(next);
+      const membership = url.hostname === "admin.googleapis.com";
+      if (membership) membershipReads++;
+      if (!held && (boundary === "fresh-admission" && membership
+        || boundary === "dispatched-summary" && url.pathname.endsWith("/rpc/planning_deliverable_summaries"))) {
+        expect(response.status).toBe(200);
+        held = true; await gate;
+      }
+      return response;
+    });
+    let pending: Promise<Response> | undefined;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(body.readAuthority.deadline - 1000);
+      // A cold server admission has fresh membership evidence. Its longer new
+      // ceiling must not replace the signed original query's earlier ceiling.
+      vi.resetModules();
+      const retry = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+      pending = retry.GET(request("founder", `/api/planning-board-data?summaries=${encodeURIComponent(token)}`));
+      await expect.poll(() => held, { timeout: 5000 }).toBe(true);
+      expect(Date.now()).toBeLessThan(body.readAuthority.deadline);
+      expect(membershipReads).toBe(1);
+      const expectedDispatches = baseline + (boundary === "dispatched-summary" ? 1 : 0);
+      expect(observed.filter(entry => entry.path.endsWith("/planning_deliverable_summaries"))).toHaveLength(expectedDispatches);
+      vi.setSystemTime(body.readAuthority.deadline);
+      expect(Date.now()).toBeLessThan(jwt.exp * 1000);
+      release();
+      const response = await pending!;
+      expect(response.status).toBe(403);
+      const denied = await response.json();
+      expect(denied).not.toHaveProperty("summaries");
+      expect(denied).not.toHaveProperty("readAuthority");
+      expect(observed.filter(entry => entry.path.endsWith("/planning_deliverable_summaries"))).toHaveLength(expectedDispatches);
+      expect((await db.query("select count(*)::int as count from workspace_private.request_permits where user_id=$1", [actors.founder.userId])).rows[0].count).toBe(0);
+    } finally { release(); await pending?.catch(() => undefined); vi.useRealTimers(); }
+  }, "linking");
+}, 120_000);
