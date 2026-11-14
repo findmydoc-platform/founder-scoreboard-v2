@@ -237,3 +237,60 @@ test.each([403, 409] as const)("a fatal %s frame invalidates a same-query refres
     expect(state.board().tasks.some(task => task.id === "first-Offen")).toBe(false);
   } finally { release(); transport.resolve(null); await refreshed; }
 });
+
+test("a new query cancels a held refresh and rejects its deferred basis and late cards", async () => {
+  let emit: ((event: Progress) => void) | undefined, signal: AbortSignal | undefined, calls = 0;
+  const transport = deferred<PlanningWorkspaceRead | null>();
+  const next = normalizePlanningBoardQuery({ filters: { query: "replacement" } });
+  const state = createPlanningState({ userId: "reader", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async task => ({ task }), readWorkspace: async (_workspace, input, options) => {
+      calls++;
+      if (input?.filters?.query === "replacement") return read(next, "Review");
+      if (calls === 1) return read(query, "Review");
+      emit = options?.onBoardStream as typeof emit; signal = options?.signal;
+      return transport.promise;
+    },
+  } }).planning;
+  expect(await state.ensureBoardQuery(query)).toBe(true);
+  const release = state.beginBoardInteraction();
+  const refreshed = state.refreshWorkspace("planning");
+  try {
+    emit!({ kind: "basis", readId: "held-obsolete", read: read(query) });
+    expect(state.board().freshness).toBe("stale");
+    expect(await state.ensureBoardQuery(next)).toBe(true);
+    expect(signal?.aborted).toBe(true);
+    emit!({ kind: "column", readId: "held-obsolete", column: "Offen", read: read(query, "Offen") });
+    release(); transport.resolve(null); await refreshed;
+    expect(state.board().query?.filters.query).toBe("replacement");
+    expect(state.board().tasks.map(task => task.id)).toEqual(["replacement-Review"]);
+    expect(calls).toBe(3);
+  } finally { release(); transport.resolve(null); await refreshed; }
+});
+
+test("a held refresh cannot extend the earlier original authority when its basis is finally accepted", async () => {
+  const epoch = Date.parse("2026-11-13T12:00:00Z"); let now = epoch;
+  let emit: ((event: Progress) => void) | undefined, calls = 0;
+  const transport = deferred<PlanningWorkspaceRead | null>();
+  const state = createPlanningState({ userId: "reader", initialData: emptyPlanningShellState,
+    initialSession: { userId: "reader", user: { id: "reader" }, revision: "same-session", expiresAt: (epoch + 3_600_000) / 1000 },
+    adapter: { now: () => now, saveTask: async task => ({ task }), readWorkspace: async (_workspace, _query, options) => {
+      if (++calls === 1) return read(query, "Review", epoch + 1000);
+      emit = options?.onBoardStream as typeof emit;
+      return transport.promise;
+    } },
+  }).planning;
+  expect(await state.ensureBoardQuery(query)).toBe(true);
+  const release = state.beginBoardInteraction();
+  const refreshed = state.refreshWorkspace("planning");
+  try {
+    emit!({ kind: "basis", readId: "held-expired", read: read(query, undefined, epoch + 5000) });
+    expect(state.board().freshness).toBe("stale");
+    emit!({ kind: "column", readId: "held-expired", column: "Offen", read: read(query, "Offen", epoch + 5000) });
+    now = epoch + 1000;
+    expect(state.board().tasks).toEqual([]);
+    release(); transport.resolve(null); await refreshed;
+    expect(state.board().tasks).toEqual([]);
+    expect(state.workspace("planning").tasks).toEqual([]);
+    expect(calls).toBe(2);
+  } finally { release(); transport.resolve(null); await refreshed; }
+});
