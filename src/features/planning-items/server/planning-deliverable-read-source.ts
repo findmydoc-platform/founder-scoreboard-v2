@@ -31,7 +31,7 @@ type Selection = {
   workstreams: string[]; initiative_options: Array<{ id: string; title: string }>;
   workspace_revision: { activeTaskCount: number; latestUpdatedAt: string };
 };
-type Cursor = { offset: number; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; binding: string };
+type Cursor = { offset: number; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; authorityDeadline: number | null; binding: string };
 type ChildProgress = NonNullable<import("@/features/planning/model/planning-board-query").PlanningBoardResult["childProgressById"][string]>;
 type SummaryBasis = { readId: string; query: ReturnType<typeof normalizePlanningBoardQuery>; cardIds: string[]; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; authorityDeadline: number | null };
 const statuses: TaskStatus[] = [...taskStatuses, "Pausiert"];
@@ -95,13 +95,14 @@ export async function loadPlanningDeliverableSummaries(supabase: SupabaseClient,
     if (typeof parsed.readId !== "string" || !parsed.readId || !parsed.query || !Array.isArray(parsed.cardIds)
       || parsed.cardIds.length > taskStatuses.length * 20 || parsed.cardIds.some((id: unknown) => typeof id !== "string" || !id || id.length > 512)
       || new Set(parsed.cardIds).size !== parsed.cardIds.length || typeof parsed.source !== "string" || typeof parsed.temporalKey !== "string"
-      || !Number.isFinite(Date.parse(parsed.evaluatedAt)) || !(parsed.validUntil === null || typeof parsed.validUntil === "string" && Date.parse(parsed.validUntil) > Date.now())
+      || !Number.isFinite(Date.parse(parsed.evaluatedAt)) || !(parsed.validUntil === null || typeof parsed.validUntil === "string" && Number.isFinite(Date.parse(parsed.validUntil)))
       || !(parsed.authorityDeadline === null || typeof parsed.authorityDeadline === "number" && Number.isFinite(parsed.authorityDeadline))
       || typeof binding !== "string" || !/^[a-f0-9]{64}$/.test(binding)
       || !timingSafeEqual(Buffer.from(binding, "hex"), Buffer.from(signSummary(context, parsed), "hex"))) return { status: "staleContinuation" };
     basis = parsed;
   } catch { return { status: "staleContinuation" }; }
   if (basis.authorityDeadline !== null && basis.authorityDeadline <= Date.now()) return { status: "forbidden" };
+  if (basis.validUntil && Date.parse(basis.validUntil) <= Date.now()) return { status: "staleContinuation" };
   try {
     const result = await loadSelectedSummaries(supabase, context, { card_ids: basis.cardIds, source_revision: basis.source, evaluated_at: basis.evaluatedAt, valid_until: basis.validUntil });
     if (result.status !== "ready") return result;
@@ -162,16 +163,25 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
       const parsed = JSON.parse(Buffer.from(input.continuation, "base64url").toString("utf8"));
       const { binding, ...basis } = parsed;
       if (!Number.isSafeInteger(basis.offset) || basis.offset < 1 || typeof basis.source !== "string" || typeof basis.temporalKey !== "string"
-        || !Number.isFinite(Date.parse(basis.evaluatedAt)) || !(basis.validUntil === null || typeof basis.validUntil === "string" && Date.parse(basis.validUntil) > Date.now())
+        || !Number.isFinite(Date.parse(basis.evaluatedAt)) || !(basis.validUntil === null || typeof basis.validUntil === "string" && Number.isFinite(Date.parse(basis.validUntil)))
+        || !(basis.authorityDeadline === null || typeof basis.authorityDeadline === "number" && Number.isFinite(basis.authorityDeadline))
         || typeof binding !== "string" || !/^[a-f0-9]{64}$/.test(binding) || !timingSafeEqual(Buffer.from(binding, "hex"), Buffer.from(sign(basis), "hex"))) return { status: "staleContinuation" };
       cursor = parsed;
     } catch { return { status: "staleContinuation" }; }
   }
+  const ceiling = Math.min(context.authorityDeadline ?? Infinity, cursor?.authorityDeadline ?? Infinity);
+  const authorityDeadline = Number.isFinite(ceiling) ? ceiling : null;
+  if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
+  if (cursor?.validUntil && Date.parse(cursor.validUntil) <= Date.now()) return { status: "staleContinuation" };
+  const deadlineSignal = authorityDeadline === null ? undefined : AbortSignal.timeout(Math.max(0, Math.ceil(authorityDeadline - Date.now())));
+  context = { ...context, authorityDeadline: authorityDeadline ?? undefined,
+    signal: context.signal && deadlineSignal ? AbortSignal.any([context.signal, deadlineSignal]) : context.signal || deadlineSignal };
   const read = supabase.rpc("planning_deliverable_selection", {
     p_actor_profile_id: context.actorProfileId, p_query: query, p_column: column, p_offset: cursor?.offset || 0,
     p_limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit) || 20))), p_source_revision: cursor?.source || null, p_evaluated_at: cursor?.evaluatedAt || null,
   });
   const result = await observeRuntimePhase("board.selection", () => context.signal ? read.abortSignal(context.signal) : read);
+  if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
   if (result.error || !result.data) return { status: "unavailable" };
   const selected = result.data as Selection;
   if (selected.status === "forbidden" || selected.status === "staleContinuation") return { status: selected.status };
@@ -184,12 +194,15 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   if (cursor && (cursor.source !== selected.source_revision || cursor.temporalKey !== selected.temporal_key)) return { status: "staleContinuation" };
   if (preferenceRevision && preferenceRevision !== selected.source_revision) return { status: "unavailable" };
   const summaries = await loadSelectedSummaries(supabase, context, selected);
+  if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
   if (summaries.status === "forbidden" || summaries.status === "staleContinuation") return { status: summaries.status };
   const people = await withWorkspaceProfileAvatars(selected.profiles.map(mapProfile), supabase, context.signal);
+  if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
   // The SQL statement covers selection and hydration. Avatar identity is a
   // separate read, so retain a matching source fence across that supporting work.
   const fenceRead = supabase.rpc("planning_source_version");
   const fence = await (context.signal ? fenceRead.abortSignal(context.signal) : fenceRead);
+  if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
   if (fence.error || typeof fence.data !== "string") return { status: "unavailable" };
   if (fence.data !== selected.source_revision || selected.valid_until && Date.parse(selected.valid_until) <= Date.now()) return { status: cursor ? "staleContinuation" : "unavailable" };
   const revision = createHash("sha256").update(JSON.stringify([selected.source_revision, selected.temporal_key])).digest("hex");
@@ -199,11 +212,11 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     const total = selected.columns[status]?.total;
     const loaded = status === column ? selected.card_ids.length : 0;
     const next = (cursor?.offset || 0) + loaded;
-    const basis = { offset: next, source: selected.source_revision, evaluatedAt: selected.evaluated_at, temporalKey: selected.temporal_key, validUntil: selected.valid_until };
+    const basis = { offset: next, source: selected.source_revision, evaluatedAt: selected.evaluated_at, temporalKey: selected.temporal_key, validUntil: selected.valid_until, authorityDeadline };
     return [status, { total: status === column ? total : null, loaded, availability: status === column ? "ready" : "not-loaded", completeness: status === column && next >= total ? "complete" : "partial",
       continuation: status === column && next < total ? Buffer.from(JSON.stringify({ ...basis, binding: sign(basis) })).toString("base64url") : null } satisfies PlanningBoardColumn];
   })) as Record<TaskStatus, PlanningBoardColumn>;
-  return { status: "ready", model: {
+  return { status: "ready", authorityDeadline: authorityDeadline ?? undefined, model: {
     revision: selected.workspace_revision.latestUpdatedAt, scopeRevision: selected.source_revision, query, queryRevision: revision,
     project: mapPlanningProject(selected.project),
     items: mapPlanningItemRows(selected.rows, people, [], [], []).map(task => compactPlanningCard(task, selectedOmittedFields)),
@@ -316,7 +329,7 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
         if (selected.status === "staleContinuation") return failure(column, 409);
         if (selected.status !== "ready" || selected.source_revision !== plan.source_revision || !Array.isArray(selected.rows) || !Array.isArray(selected.relationships)
           || !Array.isArray(selected.card_ids) || JSON.stringify(selected.card_ids) !== JSON.stringify(ids)) return failure(column, 503);
-        const basis = { offset: ids.length, source: plan.source_revision, evaluatedAt: plan.evaluated_at, temporalKey: plan.temporal_key, validUntil: plan.valid_until };
+        const basis = { offset: ids.length, source: plan.source_revision, evaluatedAt: plan.evaluated_at, temporalKey: plan.temporal_key, validUntil: plan.valid_until, authorityDeadline: context.authorityDeadline ?? null };
         const total = plan.columns[column].total;
         return { kind: "column", readId: id, column, scopeRevision: plan.source_revision, queryRevision: revision, observedAt: plan.evaluated_at, validUntil: plan.valid_until,
           cardIds: ids, items: mapPlanningItemRows(selected.rows, people, [], [], []).map(task => compactPlanningCard(task, selectedOmittedFields)),

@@ -367,6 +367,11 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (denial) return { status: "forbidden" as const };
       const result = await createSupabasePlanningBoardReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null, authorityDeadline: readAuthority?.deadline, signal: options?.signal, query, authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning").update(JSON.stringify(["planning-board-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") });
       try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      if (result.status === "ready" && readAuthority) {
+        const deadline = Math.min(readAuthority.deadline, result.authorityDeadline ?? Infinity);
+        if (deadline <= Date.now()) return { status: "forbidden" as const };
+        return { ...result, readAuthority: { ...readAuthority, deadline } };
+      }
       return result;
     },
     startServerHeaderSlots() {

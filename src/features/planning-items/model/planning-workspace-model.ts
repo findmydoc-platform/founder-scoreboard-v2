@@ -29,7 +29,7 @@ export type PlanningWorkspaceLoadContext = Readonly<{
 }>;
 
 export type PlanningWorkspaceLoadResult =
-  | { status: "ready"; model: PlanningWorkspaceModel }
+  | { status: "ready"; model: PlanningWorkspaceModel; authorityDeadline?: number }
   | { status: "forbidden" }
   | { status: "unavailable" }
   | { status: "staleContinuation" };
