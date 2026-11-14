@@ -31,7 +31,7 @@ type Selection = {
 };
 type Cursor = { offset: number; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; binding: string };
 type ChildProgress = NonNullable<import("@/features/planning/model/planning-board-query").PlanningBoardResult["childProgressById"][string]>;
-type SummaryBasis = { readId: string; query: ReturnType<typeof normalizePlanningBoardQuery>; cardIds: string[]; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null };
+type SummaryBasis = { readId: string; query: ReturnType<typeof normalizePlanningBoardQuery>; cardIds: string[]; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; authorityDeadline: number | null };
 const statuses: TaskStatus[] = [...taskStatuses, "Pausiert"];
 const selectedOmittedFields: readonly (keyof Task)[] = [...planningCardOmittedFields, "dependsOn", "evidenceLink"];
 
@@ -81,20 +81,23 @@ export async function loadPlanningDeliverableSummaries(supabase: SupabaseClient,
       || parsed.cardIds.length > taskStatuses.length * 20 || parsed.cardIds.some((id: unknown) => typeof id !== "string" || !id || id.length > 512)
       || new Set(parsed.cardIds).size !== parsed.cardIds.length || typeof parsed.source !== "string" || typeof parsed.temporalKey !== "string"
       || !Number.isFinite(Date.parse(parsed.evaluatedAt)) || !(parsed.validUntil === null || typeof parsed.validUntil === "string" && Date.parse(parsed.validUntil) > Date.now())
+      || !(parsed.authorityDeadline === null || typeof parsed.authorityDeadline === "number" && Number.isFinite(parsed.authorityDeadline))
       || typeof binding !== "string" || !/^[a-f0-9]{64}$/.test(binding)
       || !timingSafeEqual(Buffer.from(binding, "hex"), Buffer.from(signSummary(context, parsed), "hex"))) return { status: "staleContinuation" };
     basis = parsed;
   } catch { return { status: "staleContinuation" }; }
+  if (basis.authorityDeadline !== null && basis.authorityDeadline <= Date.now()) return { status: "forbidden" };
   try {
     const result = await loadSelectedSummaries(supabase, context, { card_ids: basis.cardIds, source_revision: basis.source, evaluated_at: basis.evaluatedAt, valid_until: basis.validUntil });
     if (result.status !== "ready") return result;
     const fenceRead = supabase.rpc("planning_source_version");
     const fence = await (context.signal ? fenceRead.abortSignal(context.signal) : fenceRead);
     if (fence.error || typeof fence.data !== "string") return { status: fence.status === 401 || fence.status === 403 ? "forbidden" : "unavailable" };
+    if (basis.authorityDeadline !== null && basis.authorityDeadline <= Date.now()) return { status: "forbidden" };
     if (fence.data !== basis.source || basis.validUntil && Date.parse(basis.validUntil) <= Date.now()) return { status: "staleContinuation" };
     return { status: "ready", summaries: { kind: "summaries", readId: basis.readId, token, cardIds: basis.cardIds,
       scopeRevision: basis.source, queryRevision: createHash("sha256").update(JSON.stringify([basis.source, basis.temporalKey])).digest("hex"),
-      observedAt: basis.evaluatedAt, validUntil: basis.validUntil, childProgressById: result.progress } };
+      observedAt: basis.evaluatedAt, validUntil: basis.validUntil, authorityDeadline: basis.authorityDeadline, childProgressById: result.progress } };
   } catch (error) {
     return { status: typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" : "unavailable" };
   }
@@ -176,7 +179,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   if (fence.data !== selected.source_revision || selected.valid_until && Date.parse(selected.valid_until) <= Date.now()) return { status: cursor ? "staleContinuation" : "unavailable" };
   const revision = createHash("sha256").update(JSON.stringify([selected.source_revision, selected.temporal_key])).digest("hex");
   const request = summaryRequest(context, { readId: randomUUID(), query, cardIds: selected.card_ids, source: selected.source_revision,
-    evaluatedAt: selected.evaluated_at, temporalKey: selected.temporal_key, validUntil: selected.valid_until });
+    evaluatedAt: selected.evaluated_at, temporalKey: selected.temporal_key, validUntil: selected.valid_until, authorityDeadline: context.authorityDeadline ?? null });
   const columns = Object.fromEntries(statuses.map(status => {
     const total = selected.columns[status]?.total;
     const loaded = status === column ? selected.card_ids.length : 0;
@@ -237,7 +240,7 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
     const pending = taskStatuses.filter(status => plan.columns[status].ids.length > 0);
     const id = randomUUID(), summaryIds = pending.flatMap(column => plan.columns[column].ids);
     const request = summaryRequest(context, { readId: id, query, cardIds: summaryIds, source: plan.source_revision,
-      evaluatedAt: plan.evaluated_at, temporalKey: plan.temporal_key, validUntil: plan.valid_until });
+      evaluatedAt: plan.evaluated_at, temporalKey: plan.temporal_key, validUntil: plan.valid_until, authorityDeadline: context.authorityDeadline ?? null });
     // Only bounded, server-selected raw reads overlap the common metadata work.
     // Nothing is mapped or published until avatars and the initial fence finish.
     const rawReads = new Map(pending.map(column => {
@@ -282,7 +285,7 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
       if (terminal) return terminal;
       if (summary.status !== "ready") return failure(undefined, summary.status === "forbidden" ? 403 : summary.status === "staleContinuation" ? 409 : 503, "summaries");
       return { kind: "summaries", readId: id, token: request.token, scopeRevision: plan.source_revision, queryRevision: revision,
-        observedAt: plan.evaluated_at, validUntil: plan.valid_until, cardIds: summaryIds, childProgressById: summary.progress };
+        observedAt: plan.evaluated_at, validUntil: plan.valid_until, authorityDeadline: context.authorityDeadline ?? null, cardIds: summaryIds, childProgressById: summary.progress };
     }
     async function hydrate(column: TaskStatus): Promise<PlanningBoardColumnOutcome> {
       try {

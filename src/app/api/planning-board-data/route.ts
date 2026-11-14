@@ -15,7 +15,8 @@ async function handleGET(request: NextRequest) {
     if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
     if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
     if (result.status !== "ready") return apiError("Fortschritt und Signale konnten nicht geladen werden.", 503);
-    return NextResponse.json({ summaries: result.summaries, readAuthority: permission.readAuthority }, { headers: { "cache-control": "no-store" } });
+    if (!result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Planung darf nicht geladen werden.", 403);
+    return NextResponse.json({ summaries: result.summaries, readAuthority: result.readAuthority }, { headers: { "cache-control": "no-store" } });
   }
   let query: PlanningBoardQueryInput | undefined;
   const rawQuery = request.nextUrl.searchParams.get("scope");

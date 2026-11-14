@@ -14,6 +14,7 @@ export type PlanningBoardSummaryFrame = Readonly<{
   queryRevision: string;
   observedAt: string;
   validUntil: string | null;
+  authorityDeadline?: number | null;
   cardIds: readonly string[];
   childProgressById: PlanningBoardResult["childProgressById"];
 }>;
