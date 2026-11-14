@@ -10,7 +10,7 @@ let protocol, counters;
 function memoizedTransport(upstream) {
   const entries = new Map();
   return (input, init) => {
-    const request = new Request(input, init);
+    const request = input instanceof Request && init === undefined ? input : new Request(input, init);
     if (!["GET", "HEAD"].includes(request.method) || init?.signal || request.keepalive) return upstream(input, init);
     const key = JSON.stringify([request.url, request.method, [...request.headers].sort()]);
     if (!entries.has(key)) entries.set(key, Promise.resolve(upstream(input, init)).then(response => response.clone()));
@@ -28,11 +28,14 @@ const nextCache = {
 beforeEach(() => {
   vi.resetModules();
   protocol = administratorProtocol();
-  counters = { auth: 0, data: 0 };
+  counters = { auth: 0, data: 0, profile: 0, prepare: 0, reusedBody: 0 };
   const original = globalThis.fetch;
   vi.stubGlobal("fetch", memoizedTransport(async (input, init) => {
+    if (input instanceof Request && input.bodyUsed) counters.reusedBody++;
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname === "/auth/v1/user") counters.auth++;
+    if (url.pathname.endsWith("/current_authenticated_profile")) counters.profile++;
+    if (url.pathname.endsWith("/workspace_dispatch_prepare")) counters.prepare++;
     if (request.method === "GET" && url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/")) {
       counters.data++;
       if (url.pathname.endsWith("/projects")) return Response.json({ id: "findmydoc-founder-execution", name: "Synthetic protected project" });
@@ -41,7 +44,7 @@ beforeEach(() => {
       ], { headers: { "content-range": "0-0/1" } });
       return Response.json([], { headers: { "content-range": "*/0" } });
     }
-    return original(input, init);
+    return original(request);
   }));
 });
 
@@ -49,7 +52,15 @@ afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 async function authorize(action) {
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {}, "next/cache": nextCache });
-  return authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action });
+  const result = await authorizeCredentialAction({ credential: { kind: "session-request", request: protocol.request() }, action });
+  if (!result.ok) throw new Error(`Synthetic initial admission failed: ${JSON.stringify({
+    status: Number.isFinite(result.status) ? result.status : null,
+    code: ["workspace_access_denied", "workspace_access_unavailable", "session_invalid_before_effect"].includes(result.code) ? result.code : "other",
+    ...counters,
+  })}`);
+  expect(counters.reusedBody).toBe(0);
+  expect(counters.profile).toBeGreaterThan(0);
+  return result;
 }
 
 test("a bound Board query rejects a newly denied original JWT despite an earlier memoized Auth GET", async () => {
