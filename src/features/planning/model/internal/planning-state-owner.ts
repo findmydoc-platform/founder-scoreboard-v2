@@ -1475,7 +1475,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function readBoardSummary(request: PlanningBoardSummaryRequest): Promise<boolean> {
     const existing = summaryReads.get(request.token);
     if (existing) return existing.result;
-    if (!adapter.readBoardSummaries || request.status === "loading") return Promise.resolve(false);
+    if (!adapter.readBoardSummaries) return Promise.resolve(false);
     const token = beginBoardSummaryRead(request), controller = new AbortController();
     setSummaryStatus(request.token, "loading"); publish();
     const result = Promise.resolve().then(async () => {
