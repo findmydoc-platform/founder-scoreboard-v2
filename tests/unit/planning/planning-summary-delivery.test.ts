@@ -76,7 +76,7 @@ test("an unsolicited summary cannot reserve authority and malformed or incompati
     expect(state.board().tasks.map(task => task.id)).toEqual(cardIds);
     expect(state.board().result!.summaryRequests?.[0].status).toBe("unavailable");
     expect(state.board().result!.childProgressById).toEqual(Object.fromEntries(cardIds.map(id => [id, null])));
-    owner.dispose();
+    owner.internal.dispose();
   }
 });
 
@@ -91,7 +91,7 @@ test("an explicit pending summary retry supersedes the delayed initial receipt",
   expect(await retry).toBe(true);
   expect(calls).toBe(1);
   expect(owner.planning.board().result!.childProgressById[cardIds[0]]).toEqual(progress);
-  owner.dispose();
+  owner.internal.dispose();
 });
 
 test("a confirmed card write invalidates the original summary evidence before a delayed receipt can publish", async () => {
@@ -104,10 +104,10 @@ test("a confirmed card write invalidates the original summary evidence before a 
   expect(await retry).toBe(false);
   expect(owner.planning.board().tasks[0].title).toBe("Confirmed while summary pending");
   expect(owner.planning.board().result!.childProgressById[cardIds[0]]).toBeNull();
-  owner.dispose();
+  owner.internal.dispose();
 });
 
-test("a replaced query or session cannot receive the original summary or its old denial", async () => {
+test("query and session replacement reject old summary success while only a current-session denial remains effective", async () => {
   for (const replacement of ["query", "session"] as const) {
     const response = deferred<{ summaries: PlanningBoardSummaryFrame; readAuthority: typeof authority }>();
     const owner = nativeOwner({ readBoardSummaries: async () => response.promise });
@@ -118,10 +118,15 @@ test("a replaced query or session cannot receive the original summary or its old
     response.resolve({ summaries: summaries(), readAuthority: authority });
     expect(await retry).toBe(false);
     expect(await owner.planning.acceptServerBoardSummary("independent-summary", { kind: "failure", readId: "independent-summary", area: "summaries", token: "original-summary-batch", status: 403, error: "Old denial" })).toBe(false);
-    expect(owner.planning.board().readStatus).toBe("current");
-    expect(owner.planning.board().result!.queryKey).toBe(planningBoardQueryKey(next));
-    expect(owner.planning.board().result!.childProgressById[cardIds[0]]).toBeNull();
-    owner.dispose();
+    if (replacement === "query") {
+      expect(owner.planning.board().readStatus).toBe("forbidden");
+      expect(owner.planning.board().tasks).toEqual([]);
+    } else {
+      expect(owner.planning.board().readStatus).toBe("current");
+      expect(owner.planning.board().result!.queryKey).toBe(planningBoardQueryKey(next));
+      expect(owner.planning.board().result!.childProgressById[cardIds[0]]).toBeNull();
+    }
+    owner.internal.dispose();
   }
 });
 
@@ -135,7 +140,7 @@ test("current summary failures distinguish denied protected scope from changed s
       expect(owner.planning.board().tasks.map(task => task.id)).toEqual(cardIds);
       expect(owner.planning.board().freshness).toBe("stale");
     }
-    owner.dispose();
+    owner.internal.dispose();
   }
 });
 
@@ -158,7 +163,7 @@ test("a complete early summary survives later selected-card columns with unknown
     expect(owner.planning.board().result!.childProgressById).toEqual(Object.fromEntries(cardIds.map(id => [id, progress])));
     expect(owner.planning.board().result!.attentionById).toEqual(Object.fromEntries(cardIds.map(id => [id, []])));
     expect(owner.planning.board().result!.summaryRequests?.[0].status).toBe("current");
-  } finally { transport.resolve(null); await pending; owner.dispose(); }
+  } finally { transport.resolve(null); await pending; owner.internal.dispose(); }
 });
 
 test("the existing owner retains ready cards after a summary failure and coalesces aggregate-only recovery", async () => {
