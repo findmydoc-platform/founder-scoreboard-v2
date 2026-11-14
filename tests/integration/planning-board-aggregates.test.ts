@@ -143,3 +143,55 @@ test("aggregate-only retry cannot renew the original admission deadline while it
     } finally { vi.useRealTimers(); }
   }, "linking");
 }, 120_000);
+
+test("filtered summaries preserve complete attention in both waiting directions without transmitting endpoint content", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, local, request }) => {
+    const outgoing = `${prefix}-signals-outgoing`, incoming = `${prefix}-signals-incoming`, endpoint = `${prefix}-supporting-endpoint`, sprint = `${prefix}-signal-sprint`;
+    await db.query("insert into public.sprints(id,project_id,name,start_date,end_date) values($1,'findmydoc-founder-execution','Synthetic signal Sprint','2030-01-01','2030-01-14')", [sprint]);
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,acceptance_criteria,definition_of_done,sprint_id,github_issue_sync_status)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P0',$3,$3,$4,'failed')`, [outgoing, initiativeId, "\u00a0 \t", sprint]);
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,acceptance_criteria,definition_of_done,sprint_id)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Blockiert','P1','Synthetic AC','Synthetic DoD',$3)`, [incoming, initiativeId, sprint]);
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+      values($1,'findmydoc-founder-execution','Synthetic supporting endpoint','deliverable',$2,'approved','Offen','P4',$3)`, [endpoint, initiativeId, actors.other.profileId]);
+    await db.query("insert into public.task_relationship_edges(task_id,related_task_id,relation_type) values($1,$2,'blocked_by'),($2,$3,'blocks')", [outgoing, endpoint, incoming]);
+    await db.query("insert into public.task_blockers(task_id,profile_id,reason) values($1,$2,'Synthetic open blocker')", [incoming, actors.founder.profileId]);
+    await db.query("insert into public.task_dependencies(task_id,note) values($1,'Synthetic legacy dependency')", [incoming]);
+    // This persisted RAW URL is WHATWG-valid. Storage has no canonical URL
+    // invariant, so an anchored https:// expression is not the legacy oracle.
+    await db.query("insert into public.task_links(task_id,type,label,url) values($1,'evidence','Synthetic raw evidence','https:example.test/legacy-evidence')", [incoming]);
+    const query = { view: "board" as const, filters: { query: `${prefix}-signals`, quick: ["blocked"] } };
+    const context = { authorized: true, actorProfileId: actors.founder.profileId, query };
+    const { loadPlanningWorkspaceModel } = await importTestModule("src/features/planning-items/server/planning-workspace-read-source.ts", { "server-only": {} });
+    const { projectPlanningBoard } = await importTestModule("src/features/planning/server/planning-board-projection.ts", { "server-only": {} });
+    const referenceClient = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    const complete = await loadPlanningWorkspaceModel(referenceClient, { ...context, query: { view: "complete" } });
+    expect(complete.status).toBe("ready");
+    if (complete.status !== "ready") throw new Error("Complete legacy attention reference was unavailable");
+    const reference = projectPlanningBoard(complete.model, context);
+    expect(reference.status).toBe("ready");
+    if (reference.status !== "ready") throw new Error("Complete legacy attention projection was unavailable");
+    expect(reference.model.board!.cardIds).toEqual([outgoing, incoming]);
+    expect(reference.model.board!.attentionById![outgoing]!.map(signal => signal.id)).toEqual(["owner-missing", "waiting", "sync-failed", "acceptance-criteria-missing", "definition-of-done-missing", "evidence-missing"]);
+    expect(reference.model.board!.attentionById![incoming]!.map(signal => signal.id)).toEqual(["waiting"]);
+    expect(reference.model.board!.metrics.blocked).toBe(2);
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const input = request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`);
+    input.headers.set("accept", "application/x-ndjson");
+    const response = await GET(input);
+    expect(response.status).toBe(200);
+    const frames = (await response.text()).trim().split("\n").map((line: string) => JSON.parse(line));
+    const columns = frames.filter((frame: { kind: string }) => frame.kind === "column");
+    expect(columns.flatMap((frame: { cardIds: string[] }) => frame.cardIds).sort()).toEqual([outgoing, incoming].sort());
+    // Normal 646 columns intentionally retain scoped endpoint context.
+    expect(columns.some((frame: { items: Array<{ id: string }> }) => frame.items.some(item => item.id === endpoint))).toBe(true);
+    const summaries = frames.find((frame: { kind: string }) => frame.kind === "summaries");
+    expect(summaries.cardIds).toEqual([outgoing, incoming]);
+    expect(summaries.attentionById?.[outgoing]?.map((signal: { id: string }) => signal.id)).toEqual(["owner-missing", "waiting", "sync-failed", "acceptance-criteria-missing", "definition-of-done-missing", "evidence-missing"]);
+    expect(summaries.attentionById).toEqual(reference.model.board!.attentionById);
+    expect(frames[0].model.board.metrics.blocked).toBe(2);
+    expect(JSON.stringify(summaries)).not.toContain(endpoint);
+    expect(JSON.stringify(summaries)).not.toContain("Synthetic supporting endpoint");
+    expect(JSON.stringify(summaries)).not.toContain("https:example.test/legacy-evidence");
+  });
+}, 120_000);
