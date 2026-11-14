@@ -139,6 +139,28 @@ test("current summary failures distinguish denied protected scope from changed s
   }
 });
 
+test("a complete early summary survives later selected-card columns with unknown summary defaults", async () => {
+  let emit: NonNullable<Parameters<PlanningStateAdapter["readWorkspace"]>[2]>["onBoardStream"];
+  const transport = deferred<PlanningWorkspaceRead | null>();
+  const owner = createPlanningState({ userId: "reader", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async task => ({ task }), readWorkspace: async (_workspace, _query, options) => {
+      emit = options?.onBoardStream; return transport.promise;
+    },
+  } });
+  const pending = owner.planning.ensureBoardQuery(query);
+  try {
+    emit!({ kind: "basis", readId: "independent-summary", read: read() });
+    emit!({ kind: "outcome", outcome: { ...summaries(), attentionById: Object.fromEntries(cardIds.map(id => [id, []])) } });
+    expect(owner.planning.board().result!.summaryRequests?.[0].status).toBe("current");
+    for (const column of ["Offen", "Review"] as const) emit!({ kind: "column", readId: "independent-summary", column, read: read(column) });
+    transport.resolve(null); await pending;
+    expect(owner.planning.board().tasks.map(task => task.id)).toEqual(cardIds);
+    expect(owner.planning.board().result!.childProgressById).toEqual(Object.fromEntries(cardIds.map(id => [id, progress])));
+    expect(owner.planning.board().result!.attentionById).toEqual(Object.fromEntries(cardIds.map(id => [id, []])));
+    expect(owner.planning.board().result!.summaryRequests?.[0].status).toBe("current");
+  } finally { transport.resolve(null); await pending; owner.dispose(); }
+});
+
 test("the existing owner retains ready cards after a summary failure and coalesces aggregate-only recovery", async () => {
   let emit: NonNullable<Parameters<PlanningStateAdapter["readWorkspace"]>[2]>["onBoardStream"];
   let finish!: (read: PlanningWorkspaceRead | null) => void, workspaceReads = 0, summaryReads = 0;
