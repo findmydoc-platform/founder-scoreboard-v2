@@ -10,8 +10,8 @@
     "BOARD": {
       "consumer": "BOARD / PERSONAL",
       "owner": "Planning feature owner",
-      "reason": "The declared credential-bound Deliverable adapter owns one bounded query plan, selected-only column hydration and fresh source checks at publication. Complete and JSON column consumers keep their established shared source.",
-      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts",
+      "reason": "The declared credential-bound Deliverable adapter owns one bounded query basis, selected-only column hydration, one independent selected-identity summary batch and fresh source/time checks at publication. Complete and JSON column consumers keep compatible contracts.",
+      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts; tests/unit/planning/planning-summary-delivery.test.ts; tests/integration/planning-board-aggregates.test.ts; tests/integration/planning-summary-consistency.test.ts; tests/integration/planning-summary-semantics.test.ts",
       "expiresWhen": "Revalidate when the BOARD or PERSONAL contract changes under #641."
     },
     "COMPLETE": {
@@ -501,6 +501,14 @@
       "kind": "rpc",
       "target": "planning_deliverable_column",
       "fingerprint": "0b6a370e8839972ae94b43935c795325a0b0908dbd338c228cd7ca7824399bd2",
+      "contract": "BOARD",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_deliverable_summaries",
+      "fingerprint": "caa7354060d42736b20bbde909a67e5c65731fc43ab776da0ad92795cc89a63e",
       "contract": "BOARD",
       "references": 1
     },
