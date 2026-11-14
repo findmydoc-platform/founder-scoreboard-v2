@@ -185,7 +185,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       onPointerCancelCapture={() => { pointerInteraction.current?.(); pointerInteraction.current = undefined; }}
       onDragEndCapture={() => { pointerInteraction.current?.(); pointerInteraction.current = undefined; }}
     >
-      {view === "board" && summaryRequests?.length ? <div role="status" aria-label={summaryLabel} className="mx-4 mb-3 flex min-h-11 items-center gap-2 text-xs leading-5 text-slate-500 lg:mx-6">
+      {view === "board" && summaryRequests?.length ? <div role="status" aria-label={summaryLabel} className="mx-4 mb-3 flex min-h-11 items-center gap-2 text-xs leading-5 text-slate-600 lg:mx-6">
         <span className="min-w-0 flex-1">{summaryLabel}</span>
         <UiButton type="button" aria-label="Fortschritt und Signale erneut laden" disabled={summaryStatus === "current"}
           className={summaryStatus === "current" ? "invisible min-h-11" : "min-h-11"}
