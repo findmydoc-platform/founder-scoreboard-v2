@@ -97,14 +97,14 @@ test("missing complete discovery metadata cannot fall back to choices from hydra
   expect(await createSupabasePlanningBoardReadModel(fixture.client).load({ ...context, query: { view: "board", filters: {} } })).toEqual({ status: "unavailable" });
 });
 
-test("selected and source-fence reads propagate the caller cancellation signal and preserve unknown summaries", async () => {
+test("selected summary and source-fence reads propagate cancellation while unavailable card summaries remain unknown", async () => {
   const fixture = source(), signal = new AbortController().signal;
   const result = await createSupabasePlanningBoardReadModel(fixture.client).load({ ...context, signal, query: { view: "board", filters: {} } });
   if (result.status !== "ready") throw new Error("Expected selected cards");
-  expect(fixture.signals).toEqual([signal, signal]);
+  expect(fixture.signals).toEqual([signal, signal, signal]);
   expect(result.model.board?.childProgressById.selected).toBeNull();
   expect(result.model.board?.attentionById?.selected).toBeNull();
-  expect(result.model.board?.metrics.blocked).toBeNull();
+  expect(result.model.board?.metrics.blocked).toBe(0);
   expect(result.model.board?.columns.Review.total).toBeNull();
   expect(result.model.taskOmittedFields).toContain("description");
   expect(result.model.taskOmittedFields).toContain("dependsOn");

@@ -17,6 +17,7 @@ export type PlanningBoardSummaryFrame = Readonly<{
   authorityDeadline?: number | null;
   cardIds: readonly string[];
   childProgressById: PlanningBoardResult["childProgressById"];
+  attentionById?: PlanningBoardResult["attentionById"];
 }>;
 
 export type PlanningBoardSummaryLoadResult =

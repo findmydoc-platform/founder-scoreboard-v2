@@ -1451,13 +1451,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         const value = outcome.childProgressById[id];
         return value && [value.completed, value.total, value.unfinished, value.percentage].every(Number.isSafeInteger)
           && value.completed >= 0 && value.unfinished >= 0 && value.total === value.completed + value.unfinished
-          && value.percentage === (value.total ? Math.round(value.completed * 100 / value.total) : 0);
+          && value.percentage === (value.total ? Math.round(value.completed * 100 / value.total) : 0)
+          && (!outcome.attentionById || Array.isArray(outcome.attentionById[id]) && outcome.attentionById[id]!.every(signal =>
+            typeof signal.id === "string" && typeof signal.label === "string" && (signal.kind === "critical" || signal.kind === "quality")));
       });
     if (!complete) { setSummaryStatus(token.request.token, "unavailable"); publish(); return false; }
     if (boardInteractions.size) await new Promise<void>(resolve => heldReads.add(resolve));
     if (!boardSummaryIsCurrent(token.request.token, token) || !boardResult) return false;
     boardResult = { ...boardResult, childProgressById: { ...boardResult.childProgressById,
-      ...Object.fromEntries(token.request.cardIds.map(id => [id, outcome.childProgressById[id]])) } };
+      ...Object.fromEntries(token.request.cardIds.map(id => [id, outcome.childProgressById[id]])) },
+      ...(outcome.attentionById ? { attentionById: { ...boardResult.attentionById,
+        ...Object.fromEntries(token.request.cardIds.map(id => [id, outcome.attentionById![id]])) } } : {}) };
     setSummaryStatus(token.request.token, "current");
     rememberPlanningQuery(); publish(); return true;
   }

@@ -16,6 +16,8 @@ import type { PlanningWorkspaceLoadContext, PlanningWorkspaceLoadResult } from "
 import { observeRuntimePhase } from "@/lib/runtime-logging";
 import type { PlanningBoardColumnOutcome, PlanningBoardOutcome, PlanningBoardFailureFrame, PlanningBoardQueryLoadResult, PlanningBoardSummaryOutcome } from "@/features/planning/model/planning-board-delivery";
 import type { PlanningBoardSummaryLoadResult, PlanningBoardSummaryRequest } from "@/features/planning/model/planning-board-summaries";
+import { isHttpUrl } from "@/lib/planning-task-mappers";
+import { planningAttentionSignalsFromIds, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
 
 type Selection = {
   status: "ready" | "forbidden" | "staleContinuation";
@@ -36,17 +38,18 @@ const statuses: TaskStatus[] = [...taskStatuses, "Pausiert"];
 const selectedOmittedFields: readonly (keyof Task)[] = [...planningCardOmittedFields, "dependsOn", "evidenceLink"];
 
 async function loadSelectedSummaries(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, selected: Pick<Selection, "card_ids" | "source_revision" | "evaluated_at" | "valid_until">): Promise<
-  | { status: "ready"; progress: Record<string, ChildProgress> }
+  | { status: "ready"; progress: Record<string, ChildProgress>; attention: Record<string, TaskAttentionSignal[]> }
   | { status: "forbidden" | "staleContinuation" | "unavailable" }
 > {
-  if (!selected.card_ids.length) return { status: "ready" as const, progress: {} as Record<string, ChildProgress> };
+  if (!selected.card_ids.length) return { status: "ready" as const, progress: {}, attention: {} };
   try {
   const read = supabase.rpc("planning_deliverable_summaries", { p_actor_profile_id: context.actorProfileId,
     p_selected_ids: selected.card_ids, p_source_revision: selected.source_revision,
     p_evaluated_at: selected.evaluated_at, p_valid_until: selected.valid_until });
   const result = await observeRuntimePhase("board.summaries", () => context.signal ? read.abortSignal(context.signal) : read);
   if (result.error || !result.data) return { status: result.status === 401 || result.status === 403 ? "forbidden" as const : "unavailable" as const };
-  const summary = result.data as { status: string; source_revision: string; evaluated_at: string; child_progress: Record<string, ChildProgress> };
+  const summary = result.data as { status: string; source_revision: string; evaluated_at: string; child_progress: Record<string, ChildProgress>;
+    attention_inputs: Record<string, { signal_ids: string[]; evidence_required: boolean; evidence_urls: string[] }> };
   if (summary.status === "forbidden" || summary.status === "staleContinuation") return { status: summary.status };
   if (summary.status !== "ready" || summary.source_revision !== selected.source_revision
     || Date.parse(summary.evaluated_at) !== Date.parse(selected.evaluated_at)
@@ -56,7 +59,19 @@ async function loadSelectedSummaries(supabase: SupabaseClient, context: Planning
         || progress.completed < 0 || progress.unfinished < 0 || progress.total !== progress.completed + progress.unfinished
         || progress.percentage !== (progress.total ? Math.round(progress.completed * 100 / progress.total) : 0);
     })) return { status: "unavailable" as const };
-  return { status: "ready" as const, progress: summary.child_progress };
+  const attention: Record<string, TaskAttentionSignal[]> = {};
+  for (const id of selected.card_ids) {
+    const input = summary.attention_inputs?.[id];
+    if (!input || !Array.isArray(input.signal_ids) || input.signal_ids.some(value => typeof value !== "string")
+      || new Set(input.signal_ids).size !== input.signal_ids.length || typeof input.evidence_required !== "boolean"
+      || !Array.isArray(input.evidence_urls) || input.evidence_urls.some(value => typeof value !== "string")) return { status: "unavailable" };
+    const ids = [...input.signal_ids];
+    if (input.evidence_required && !input.evidence_urls.some(isHttpUrl)) ids.push("evidence-missing");
+    const signals = planningAttentionSignalsFromIds(ids);
+    if (!signals) return { status: "unavailable" };
+    attention[id] = signals;
+  }
+  return { status: "ready" as const, progress: summary.child_progress, attention };
   } catch (error) {
     return { status: typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
   }
@@ -97,7 +112,7 @@ export async function loadPlanningDeliverableSummaries(supabase: SupabaseClient,
     if (fence.data !== basis.source || basis.validUntil && Date.parse(basis.validUntil) <= Date.now()) return { status: "staleContinuation" };
     return { status: "ready", summaries: { kind: "summaries", readId: basis.readId, token, cardIds: basis.cardIds,
       scopeRevision: basis.source, queryRevision: createHash("sha256").update(JSON.stringify([basis.source, basis.temporalKey])).digest("hex"),
-      observedAt: basis.evaluatedAt, validUntil: basis.validUntil, authorityDeadline: basis.authorityDeadline, childProgressById: result.progress } };
+      observedAt: basis.evaluatedAt, validUntil: basis.validUntil, authorityDeadline: basis.authorityDeadline, childProgressById: result.progress, attentionById: result.attention } };
   } catch (error) {
     return { status: typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" : "unavailable" };
   }
@@ -196,10 +211,11 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     relationships: selected.relationships.map(mapTaskRelation), blockers: [], taskOmittedFields: selectedOmittedFields,
     coverage: { items: "partial", people: "complete", sprints: "complete", preferences: "complete", strategies: "partial", raci: "partial", links: "partial", relationships: "partial", blockers: "partial" },
     board: { query, column, queryKey, revision, observedAt: selected.evaluated_at, validUntil: selected.valid_until,
-      cardIds: selected.card_ids, columns, metrics: { ...selected.metrics, blocked: null }, levelTotals: selected.level_totals,
+      cardIds: selected.card_ids, columns, metrics: selected.metrics, levelTotals: selected.level_totals,
       summaryRequests: selected.card_ids.length ? [{ ...request, status: summaries.status === "ready" ? "current" : "unavailable" }] : [],
       workstreams: selected.workstreams, initiativeOptions: selected.initiative_options,
-      childProgressById: summaries.status === "ready" ? summaries.progress : Object.fromEntries(selected.card_ids.map(id => [id, null])), attentionById: Object.fromEntries(selected.card_ids.map(id => [id, null])),
+      childProgressById: summaries.status === "ready" ? summaries.progress : Object.fromEntries(selected.card_ids.map(id => [id, null])),
+      attentionById: summaries.status === "ready" ? summaries.attention : Object.fromEntries(selected.card_ids.map(id => [id, null])),
       viewerOpenSubIssueIdsByDeliverableId: selected.personal_children, workspaceRevision: selected.workspace_revision },
   } };
 }
@@ -268,7 +284,7 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
       coverage: { items: "partial", people: "complete", sprints: "complete", preferences: "complete", strategies: "partial", raci: "partial", links: "partial", relationships: "partial", blockers: "partial" },
       board: { query, queryKey: planningBoardQueryKey(query), revision, observedAt: plan.evaluated_at, validUntil: plan.valid_until, delivery: { id, columns: pending },
         summaryRequests: summaryIds.length ? [request] : [],
-        cardIds: [], columns, metrics: { ...plan.metrics, blocked: null }, levelTotals: plan.level_totals,
+        cardIds: [], columns, metrics: plan.metrics, levelTotals: plan.level_totals,
         workstreams: plan.workstreams, initiativeOptions: plan.initiative_options, childProgressById: {}, attentionById: {}, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: plan.workspace_revision },
     } satisfies import("../model/planning-workspace-model").PlanningWorkspaceModel;
     let terminal: PlanningBoardFailureFrame | undefined;
@@ -285,7 +301,7 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
       if (terminal) return terminal;
       if (summary.status !== "ready") return failure(undefined, summary.status === "forbidden" ? 403 : summary.status === "staleContinuation" ? 409 : 503, "summaries");
       return { kind: "summaries", readId: id, token: request.token, scopeRevision: plan.source_revision, queryRevision: revision,
-        observedAt: plan.evaluated_at, validUntil: plan.valid_until, authorityDeadline: context.authorityDeadline ?? null, cardIds: summaryIds, childProgressById: summary.progress };
+        observedAt: plan.evaluated_at, validUntil: plan.valid_until, authorityDeadline: context.authorityDeadline ?? null, cardIds: summaryIds, childProgressById: summary.progress, attentionById: summary.attention };
     }
     async function hydrate(column: TaskStatus): Promise<PlanningBoardColumnOutcome> {
       try {

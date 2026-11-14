@@ -172,8 +172,8 @@ test("filtered summaries preserve complete attention in both waiting directions 
     expect(reference.status).toBe("ready");
     if (reference.status !== "ready") throw new Error("Complete legacy attention projection was unavailable");
     expect(reference.model.board!.cardIds).toEqual([outgoing, incoming]);
-    expect(reference.model.board!.attentionById![outgoing]!.map(signal => signal.id)).toEqual(["owner-missing", "waiting", "sync-failed", "acceptance-criteria-missing", "definition-of-done-missing", "evidence-missing"]);
-    expect(reference.model.board!.attentionById![incoming]!.map(signal => signal.id)).toEqual(["waiting"]);
+    expect(reference.model.board!.attentionById![outgoing]!.map((signal: { id: string }) => signal.id)).toEqual(["owner-missing", "waiting", "sync-failed", "acceptance-criteria-missing", "definition-of-done-missing", "evidence-missing"]);
+    expect(reference.model.board!.attentionById![incoming]!.map((signal: { id: string }) => signal.id)).toEqual(["waiting"]);
     expect(reference.model.board!.metrics.blocked).toBe(2);
     const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
     const input = request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`);
