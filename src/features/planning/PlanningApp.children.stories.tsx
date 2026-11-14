@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { useEffect, useState } from "react";
-import { expect, userEvent, waitFor, within } from "storybook/test";
+import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import { PlanningApp } from "./PlanningApp";
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
 import { emptyPlanningShellState } from "./model/planning-shell-state";
@@ -13,10 +13,12 @@ import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-stor
 import { itemPageModel, itemPageProfile, itemPageUser, itemPageHeaderData, mockItemPageBrowser } from "../../../tests/helpers/task-detail-page-browser-fixture";
 
 let completeChildRead: (() => void) | undefined;
-function ChildListFlow({ level = "deliverable", failure = "none" }: { level?: "epic" | "initiative" | "deliverable"; failure?: "none" | "unavailable" | "forbidden" }) {
+let completeSummaryRead: (() => void) | undefined;
+function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure = false }: { level?: "epic" | "initiative" | "deliverable"; failure?: "none" | "unavailable" | "forbidden"; summaryFailure?: boolean }) {
   const [ready, setReady] = useState(false);
   const [detailReads, setDetailReads] = useState(0);
   const [boardReads, setBoardReads] = useState(0);
+  const [summaryReads, setSummaryReads] = useState(0);
   const base = itemPageModel(level);
   const parent = { ...base.item, id: `child-list-${level}`, title: `Parent ${level}`, detailAvailability: "summary" as const };
   const childType = level === "epic" ? "initiative" : level === "initiative" ? "deliverable" : "sub_issue";
@@ -26,14 +28,17 @@ function ChildListFlow({ level = "deliverable", failure = "none" }: { level?: "e
   ];
   const query = normalizePlanningBoardQuery({ level });
   const columns = Object.fromEntries([...taskStatuses, "Pausiert"].map(status => [status, { total: status === parent.status ? 1 : 0, loaded: status === parent.status ? 1 : 0, completeness: "complete", continuation: null } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
-  const model = { revision: "child-list-r1", project: base.project, items: [parent], people: [itemPageProfile], sprints: [], relationships: [], preferences: [], query,
+  const model = { revision: "child-list-r1", ...(summaryFailure ? { scopeRevision: "child-list-r1" } : {}), project: base.project, items: [parent], people: [itemPageProfile], sprints: [], relationships: [], preferences: [], query,
     coverage: { items: "partial", people: "complete", strategies: "complete", raci: "complete", links: "complete", sprints: "complete", relationships: "complete", preferences: "complete" } as const,
     board: { query, queryKey: planningBoardQueryKey(query), revision: "child-list-r1", observedAt: "2026-11-07T00:00:00Z", cardIds: [parent.id], columns,
-      childProgressById: { [parent.id]: { total: 2, completed: 1, unfinished: 1, percentage: 50 } }, metrics: { total: 1, open: 1, done: 0, blocked: 0 }, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: { activeTaskCount: 3, latestUpdatedAt: "child-list-r1" } },
+      childProgressById: { [parent.id]: summaryFailure ? null : { total: 2, completed: 1, unfinished: 1, percentage: 50 } },
+      ...(summaryFailure ? { attentionById: { [parent.id]: null }, summaryRequests: [{ token: "child-summary-batch", cardIds: [parent.id], status: "unavailable" as const }] } : {}),
+      metrics: { total: 1, open: 1, done: 0, blocked: 0 }, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: { activeTaskCount: 3, latestUpdatedAt: "child-list-r1" } },
   };
   const [session] = useState(() => ({ user: itemPageUser, userId: itemPageUser.id, revision: "item-page-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 }));
   useEffect(() => {
     completeChildRead = undefined;
+    completeSummaryRead = undefined;
     let reads = 0;
     const seenKey = `founderops.product-updates.seen.${itemPageProfile.id}`;
     const previous = localStorage.getItem(seenKey);
@@ -41,8 +46,16 @@ function ChildListFlow({ level = "deliverable", failure = "none" }: { level?: "e
     let restore: (() => void) | undefined;
     let active = true;
     void mockItemPageBrowser({ respond: input => {
-      const path = new URL(String(input), window.location.origin).pathname;
-      if (path === "/api/planning-board-data") { setBoardReads(value => value + 1); return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: itemPageProfile }); }
+      const url = new URL(String(input), window.location.origin), path = url.pathname;
+      if (path === "/api/planning-board-data") {
+        if (url.searchParams.get("summaries")) {
+          setSummaryReads(value => value + 1);
+          return new Promise<Response>(resolve => { completeSummaryRead = () => resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 },
+            summaries: { kind: "summaries", readId: "child-summary-read", token: "child-summary-batch", cardIds: [parent.id], scopeRevision: "child-list-r1", queryRevision: model.board.revision,
+              observedAt: model.board.observedAt, validUntil: null, childProgressById: { [parent.id]: { completed: 1, total: 2, unfinished: 1, percentage: 50 } } } })); });
+        }
+        setBoardReads(value => value + 1); return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: itemPageProfile });
+      }
       if (path === "/api/planning-revision") return Response.json({ revision: model.board.workspaceRevision });
       if (path === `/api/tasks/${parent.id}/detail-data`) {
         setDetailReads(value => value + 1);
@@ -59,7 +72,7 @@ function ChildListFlow({ level = "deliverable", failure = "none" }: { level?: "e
     // The fixture is fixed for the lifetime of one story.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <><output className="sr-only" aria-label="Child detail reads">{detailReads}</output><output className="sr-only" aria-label="Child Board reads">{boardReads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", model, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: [parent], profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  return <><output className="sr-only" aria-label="Child detail reads">{detailReads}</output><output className="sr-only" aria-label="Child Board reads">{boardReads}</output><output className="sr-only" aria-label="Summary reads">{summaryReads}</output>{summaryFailure ? <button type="button" onClick={() => undefined}>Interaktion abschließen</button> : null}{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", model, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: [parent], profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = { title: "Planning/On-demand children", component: ChildListFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof ChildListFlow>;
 export default meta;
@@ -107,6 +120,35 @@ export const ChildListFailureCanBeRetried: Story = { args: { failure: "unavailab
   await expect(await canvas.findByRole("link", { name: "On-demand child, Status Offen" })).toBeVisible();
   await expect(retry).toHaveFocus();
   await expect(canvas.getByLabelText("Child Board reads")).toHaveTextContent("0");
+} };
+
+export const SummaryFailureKeepsCardsAndRetriesOnlySummaries: Story = { args: { summaryFailure: true }, play: async ({ canvasElement }) => {
+  const canvas = within(canvasElement), cardLink = await canvas.findByRole("link", { name: "Parent deliverable" });
+  await expect(canvas.getByText("Kindfortschritt unbekannt")).toBeVisible();
+  await expect(canvas.getByText("Signale unbekannt")).toBeVisible();
+  const retry = canvas.getByRole("button", { name: "Fortschritt und Signale erneut laden" });
+  retry.focus(); await userEvent.keyboard("[Enter]");
+  await waitFor(() => expect(completeSummaryRead).toBeDefined());
+  await expect(retry).toHaveFocus();
+  await expect(canvas.getByLabelText("Summary reads")).toHaveTextContent("1");
+  await expect(canvas.getByLabelText("Child Board reads")).toHaveTextContent("0");
+  const card = cardLink.closest("article")!;
+  const control = within(card).getByRole("button", { name: "Status für Parent deliverable ändern" });
+  await userEvent.click(control); await userEvent.keyboard("{Escape}");
+  await expect(control).toHaveFocus();
+  fireEvent.click(control);
+  const top = card.getBoundingClientRect().top, scroll = window.scrollY;
+  completeSummaryRead?.();
+  await expect(control).toHaveFocus();
+  await expect(canvas.getByText("Kindfortschritt unbekannt")).toBeVisible();
+  await expect(card.getBoundingClientRect().top).toBe(top);
+  await expect(window.scrollY).toBe(scroll);
+  await userEvent.keyboard("{Escape}");
+  await userEvent.click(canvas.getByRole("button", { name: "Interaktion abschließen" }));
+  await expect(await canvas.findByText("50%")).toBeVisible();
+  await expect(canvas.getByLabelText("Child detail reads")).toHaveTextContent("0");
+  await expect(canvas.getByLabelText("Child Board reads")).toHaveTextContent("0");
+  await expect(canvas.getByLabelText("Summary reads")).toHaveTextContent("1");
 } };
 
 export const DeniedChildListKeepsASafeOutcome: Story = { args: { failure: "forbidden" }, play: async ({ canvasElement }) => {
