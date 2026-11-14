@@ -5,6 +5,7 @@ import { expect, userEvent, within } from "storybook/test";
 import { PlanningApp } from "./PlanningApp";
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
 import { PlanningServerBoardReceipt } from "./organisms/planning-server-board-receipt";
+import { usePlanningBusinessState } from "./hooks/use-planning-business-state";
 import { emptyPlanningShellState } from "./model/planning-shell-state";
 import { planningWorkspaceHydration } from "./model/planning-workspace-hydration";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardColumn } from "./model/planning-board-query";
@@ -48,16 +49,32 @@ const frame: PlanningBoardSummaryFrame = {
 
 // The input contains neither endpoint Item nor relationship rows. Real SQL
 // direction parity is verified separately; this story checks presentation.
-function SummarySignalsFlow() {
+function ConfirmCardWrite() {
+  const owner = usePlanningBusinessState();
+  return <button type="button" className="min-h-11 px-3" disabled={!owner}
+    onClick={() => { void owner?.saveTask(cards[0], { title: "Confirmed outgoing parent" }); }}>Bestätigte Kartenänderung</button>;
+}
+
+function SummarySignalsFlow({ confirmWrite = false }: { confirmWrite?: boolean }) {
   const [ready, setReady] = useState(false), [delivered, setDelivered] = useState(false), [boardReads, setBoardReads] = useState(0);
+  const [writes, setWrites] = useState(0);
   useEffect(() => {
     const key = `founderops.product-updates.seen.${profile.id}`, previous = localStorage.getItem(key);
     localStorage.setItem(key, JSON.stringify(productUpdates.map(update => update.id)));
-    const restore = mockAccountLifecycle("google", { linked: true }, input => {
+    let confirmed = false;
+    const restore = mockAccountLifecycle("google", { linked: true }, (input, init) => {
       const url = new URL(String(input), "http://localhost:3000");
       if (url.pathname === "/api/auth/session") return Response.json({ session });
       if (url.pathname === "/api/planning-source-version") return Response.json({ version: "42" });
-      if (url.pathname === "/api/planning-board-data") { setBoardReads(count => count + 1); return Response.json({ model, readAuthority: { userId: user.id, deadline: session.expiresAt * 1000 }, currentProfile: profile }); }
+      if (url.pathname === `/api/tasks/${cards[0].id}` && init?.method === "PATCH") {
+        confirmed = true; setWrites(count => count + 1);
+        return Response.json({ task: { ...cards[0], title: "Confirmed outgoing parent", updatedAt: "confirmed" } });
+      }
+      if (url.pathname === "/api/planning-board-data") {
+        setBoardReads(count => count + 1);
+        return confirmed ? Response.json({ error: "Synthetic replacement basis unavailable" }, { status: 503 })
+          : Response.json({ model, readAuthority: { userId: user.id, deadline: session.expiresAt * 1000 }, currentProfile: profile });
+      }
       if (url.pathname === "/api/github-app/status") return Response.json({ installation: { available: false }, user: { connected: false } });
       if (url.pathname === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [] });
       return Response.json({ error: "Synthetic optional area unavailable" }, { status: 503 });
@@ -65,11 +82,12 @@ function SummarySignalsFlow() {
     queueMicrotask(() => setReady(true));
     return () => { restore(); if (previous === null) localStorage.removeItem(key); else localStorage.setItem(key, previous); };
   }, []);
-  return <><button type="button" className="min-h-11 px-3" disabled={delivered} onClick={() => setDelivered(true)}>Signale liefern</button><output aria-label="Summary Board reads">{boardReads}</output>
+  return <><button type="button" className="min-h-11 px-3" disabled={delivered} onClick={() => setDelivered(true)}>Signale liefern</button><output aria-label="Summary Board reads">{boardReads}</output><output aria-label="Summary writes">{writes}</output>
     {ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", model, session, { userId: user.id, deadline: session.expiresAt * 1000 })}
       initialData={{ ...emptyPlanningShellState, tasks: cards, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData}
       initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase">
       {delivered ? <PlanningServerBoardReceipt readId="native-summary" outcome={frame} /> : null}
+      {confirmWrite && delivered ? <ConfirmCardWrite /> : null}
     </PlanningApp></PlanningStateProvider> : null}
   </>;
 }
@@ -90,4 +108,17 @@ export const NativeWaitingSignalsNeedNoEndpointPayload: Story = { play: async ({
   await expect(canvas.getByRole("region", { name: "Board nach Status" }).querySelectorAll("article")).toHaveLength(2);
   await expect(canvas.getByLabelText("Summary Board reads")).toHaveTextContent("0");
   await expect(canvas.queryByText("Synthetic supporting endpoint")).not.toBeInTheDocument();
+} };
+
+export const ConfirmedWriteMarksKnownSummariesStale: Story = { args: { confirmWrite: true }, play: async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  await canvas.findByRole("link", { name: cards[0].title });
+  await userEvent.click(canvas.getByRole("button", { name: "Signale liefern" }));
+  await expect(await canvas.findByRole("status", { name: "Fortschritt und Signale aktuell." })).toBeVisible();
+  await userEvent.click(canvas.getByRole("button", { name: "Bestätigte Kartenänderung" }));
+  await expect(await canvas.findByRole("link", { name: "Confirmed outgoing parent" })).toBeVisible();
+  await expect(canvas.getByLabelText("Summary writes")).toHaveTextContent("1");
+  await expect(await canvas.findByRole("status", { name: "Fortschritt und Signale veraltet." })).toBeVisible();
+  await expect(canvas.queryByRole("status", { name: "Fortschritt und Signale aktuell." })).not.toBeInTheDocument();
+  await expect(canvas.queryByRole("button", { name: "Fortschritt und Signale erneut laden" })).not.toBeInTheDocument();
 } };
