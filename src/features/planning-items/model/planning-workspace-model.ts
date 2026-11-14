@@ -25,6 +25,9 @@ export type PlanningWorkspaceLoadContext = Readonly<{
   authorityKey?: string;
   authorityDeadline?: number;
   signal?: AbortSignal;
+  publicationSource?: Readonly<{
+    read(signal?: AbortSignal): Promise<{ status: "ready"; revision: string } | { status: "forbidden" | "unavailable" }>;
+  }>;
   query?: import("@/features/planning/model/planning-board-query").PlanningBoardQueryInput;
 }>;
 

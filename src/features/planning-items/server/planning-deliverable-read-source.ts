@@ -37,6 +37,18 @@ type SummaryBasis = { readId: string; query: ReturnType<typeof normalizePlanning
 const statuses: TaskStatus[] = [...taskStatuses, "Pausiert"];
 const selectedOmittedFields: readonly (keyof Task)[] = [...planningCardOmittedFields, "dependsOn", "evidenceLink"];
 
+async function readSourceRevision(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext) {
+  if (context.publicationSource) {
+    const source = await context.publicationSource.read(context.signal);
+    return source.status === "ready" ? { data: source.revision, error: null, status: 200 }
+      : { data: null, error: { message: "Planning publication source unavailable" }, status: source.status === "forbidden" ? 403 : 503 };
+  }
+  // Direct trusted reference loaders and the existing local profile override
+  // retain their admitted service-backed read; ordinary callers supply the port.
+  const read = supabase.rpc("planning_source_version");
+  return context.signal ? read.abortSignal(context.signal) : read;
+}
+
 async function loadSelectedSummaries(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, selected: Pick<Selection, "card_ids" | "source_revision" | "evaluated_at" | "valid_until">): Promise<
   | { status: "ready"; progress: Record<string, ChildProgress>; attention: Record<string, TaskAttentionSignal[]> }
   | { status: "forbidden" | "staleContinuation" | "unavailable" }
@@ -106,8 +118,7 @@ export async function loadPlanningDeliverableSummaries(supabase: SupabaseClient,
   try {
     const result = await loadSelectedSummaries(supabase, context, { card_ids: basis.cardIds, source_revision: basis.source, evaluated_at: basis.evaluatedAt, valid_until: basis.validUntil });
     if (result.status !== "ready") return result;
-    const fenceRead = supabase.rpc("planning_source_version");
-    const fence = await (context.signal ? fenceRead.abortSignal(context.signal) : fenceRead);
+    const fence = await readSourceRevision(supabase, context);
     if (fence.error || typeof fence.data !== "string") return { status: fence.status === 401 || fence.status === 403 ? "forbidden" : "unavailable" };
     if (basis.authorityDeadline !== null && basis.authorityDeadline <= Date.now()) return { status: "forbidden" };
     if (fence.data !== basis.source || basis.validUntil && Date.parse(basis.validUntil) <= Date.now()) return { status: "staleContinuation" };
@@ -124,8 +135,7 @@ async function resolveQuery(supabase: SupabaseClient, context: PlanningWorkspace
   let query = normalizePlanningBoardQuery(input);
   let preferenceRevision: string | undefined;
   if (!input.continuation && (!input.filters || !input.view)) {
-    const versionRead = supabase.rpc("planning_source_version");
-    const version = await (context.signal ? versionRead.abortSignal(context.signal) : versionRead);
+    const version = await readSourceRevision(supabase, context);
     if (version.error || typeof version.data !== "string") return { status: "unavailable" };
     preferenceRevision = version.data;
     const preferenceRead = supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").eq("profile_id", context.actorProfileId || "");
@@ -211,8 +221,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
   // The SQL statement covers selection and hydration. Avatar identity is a
   // separate read, so retain a matching source fence across that supporting work.
-  const fenceRead = supabase.rpc("planning_source_version");
-  const fence = await (context.signal ? fenceRead.abortSignal(context.signal) : fenceRead);
+  const fence = await readSourceRevision(supabase, context);
   if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
   if (fence.error || typeof fence.data !== "string") return { status: "unavailable" };
   if (fence.data !== selected.source_revision || selected.valid_until && Date.parse(selected.valid_until) <= Date.now()) return { status: cursor ? "staleContinuation" : "unavailable" };
@@ -295,7 +304,7 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
     const rawSummaries = summaryIds.length ? loadSelectedSummaries(supabase, bound, { card_ids: summaryIds,
       source_revision: plan.source_revision, evaluated_at: plan.evaluated_at, valid_until: plan.valid_until }) : undefined;
     const people = await withWorkspaceProfileAvatars(plan.profiles.map(mapProfile), supabase, controller.signal);
-    const initialFence = await supabase.rpc("planning_source_version").abortSignal(controller.signal);
+    const initialFence = await readSourceRevision(supabase, bound);
     if (initialFence.error) { abort(); return { status: initialFence.status === 401 || initialFence.status === 403 ? "forbidden" : "unavailable" }; }
     if (initialFence.data !== plan.source_revision || plan.valid_until && Date.parse(plan.valid_until) <= Date.now()) { abort(); return { status: "unavailable" }; }
     const revision = createHash("sha256").update(JSON.stringify([plan.source_revision, plan.temporal_key])).digest("hex");
@@ -364,7 +373,7 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
         if (outcome.kind === "failure" && outcome.status !== 503) return outcome;
         // Run at the actual HTTP/SSR publication boundary, even if hydration
         // settled earlier. The guarded client rechecks original JWT/live access.
-        const fence = await supabase.rpc("planning_source_version").abortSignal(controller.signal);
+        const fence = await readSourceRevision(supabase, bound);
         if (terminal) return terminal;
         if (fence.error || typeof fence.data !== "string") return failure(column, fence.status === 401 || fence.status === 403 ? 403 : 503, area);
         if (fence.data !== plan.source_revision || plan.valid_until && Date.parse(plan.valid_until) <= Date.now()) return failure(column, 409, area);
