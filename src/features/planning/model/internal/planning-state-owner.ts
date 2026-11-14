@@ -1223,22 +1223,45 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     const controller = new AbortController();
     readTransports.set(token.started, { workspace, controller });
     let streamAccepted = false, streamId = "";
+    let heldBasis: Promise<boolean> | undefined;
     const progressReads: Promise<boolean>[] = [];
+    const finishStream = async () => {
+      const accepted = heldBasis ? await heldBasis : streamAccepted;
+      await Promise.allSettled(progressReads);
+      if (accepted) finishBoardDelivery(streamId);
+      return accepted;
+    };
     const onBoardStream = workspace === "planning" && !append ? (event: PlanningWorkspaceProgress) => {
       const denied = event.kind === "failure" ? event.error : event.kind === "outcome" && event.outcome.kind === "failure" ? event.outcome : undefined;
       if (denied && readErrorStatus(denied) === "forbidden" && isActive() && token.generation === sessionGeneration && token.sessionRevision === sessionRevision) {
         denyPlanningScope(); cancelPlanningReads(); publish(); return;
       }
+      if (heldBasis && denied?.status === 409 && readIsCurrent(workspace, token)) {
+        invalidatePlanningSource(); cancelPlanningReads(); boardDeliveries.clear(); publish(); return;
+      }
       if (event.kind === "basis") {
-        if (!readIsCurrent(workspace, token) || streamAccepted || !event.read.board || !event.read.query
+        if (!readIsCurrent(workspace, token) || streamAccepted || heldBasis || !event.read.board || !event.read.query
           || query && planningBoardQueryKey(event.read.query) !== planningBoardQueryKey(query)) return;
         const pending = taskStatuses.filter(column => event.read.board!.columns[column].availability === "not-loaded" && (event.read.board!.columns[column].total || 0) > 0);
         const basis = { ...event.read, board: { ...event.read.board, delivery: { id: event.readId, columns: pending } } };
-        streamAccepted = acceptWorkspaceRead("planning", basis, token); streamId = event.readId;
-        if (!streamAccepted) controller.abort();
-      } else if (event.kind === "outcome") {
-        if (streamAccepted && event.outcome.readId === streamId) progressReads.push(acceptServerColumn(streamId, event.outcome));
-      } else if (streamAccepted && event.readId === streamId) progressReads.push(acceptBoardProgress(event));
+        streamId = event.readId;
+        if (boardInteractions.size && (!boardQueryKey || !query || boardQueryKey === planningBoardQueryKey(query))) {
+          heldBasis = receiveWorkspaceRead("planning", basis, token, query).then(accepted => {
+            streamAccepted = accepted;
+            if (!accepted) controller.abort();
+            return accepted;
+          });
+        } else {
+          streamAccepted = acceptWorkspaceRead("planning", basis, token);
+          if (!streamAccepted) controller.abort();
+        }
+      } else {
+        const readId = event.kind === "outcome" ? event.outcome.readId : event.readId;
+        if (readId !== streamId) return;
+        const accept = () => event.kind === "outcome" ? acceptServerColumn(streamId, event.outcome) : acceptBoardProgress(event);
+        if (heldBasis) progressReads.push(heldBasis.then(accepted => accepted ? accept() : false));
+        else if (streamAccepted) progressReads.push(accept());
+      }
     } : undefined;
     try { result = await adapter.readWorkspace(workspace, query, { signal: controller.signal, onBoardStream }); }
     catch (error) {
@@ -1248,7 +1271,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         return false;
       }
       if (!readIsCurrent(workspace, token)) return false;
-      if (streamAccepted) { finishBoardDelivery(streamId); await Promise.allSettled(progressReads); return true; }
+      if (streamAccepted || heldBasis) return finishStream();
       if (append) {
         const staleContinuation = typeof error === "object" && error !== null && "code" in error && error.code === "stale_continuation";
         setPageStatus(staleContinuation ? "stale" : readErrorStatus(error));
@@ -1271,10 +1294,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       publish();
       return false;
     } finally { readTransports.delete(token.started); }
-    if (streamAccepted) {
-      finishBoardDelivery(streamId);
-      await Promise.allSettled(progressReads);
-      return readIsCurrent(workspace, token);
+    if (streamAccepted || heldBasis) {
+      const accepted = await finishStream();
+      return accepted && readIsCurrent(workspace, token);
     }
     return receiveWorkspaceRead(workspace, result, token, query, append);
   }
