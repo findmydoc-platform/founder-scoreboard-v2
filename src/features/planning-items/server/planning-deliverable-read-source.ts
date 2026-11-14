@@ -136,7 +136,7 @@ async function resolveQuery(supabase: SupabaseClient, context: PlanningWorkspace
   let preferenceRevision: string | undefined;
   if (!input.continuation && (!input.filters || !input.view)) {
     const version = await readSourceRevision(supabase, context);
-    if (version.error || typeof version.data !== "string") return { status: "unavailable" };
+    if (version.error || typeof version.data !== "string") return { status: version.status === 401 || version.status === 403 ? "forbidden" : "unavailable" };
     preferenceRevision = version.data;
     const preferenceRead = supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").eq("profile_id", context.actorProfileId || "");
     const preferenceResult = await (context.signal ? preferenceRead.abortSignal(context.signal) : preferenceRead).maybeSingle();
@@ -223,7 +223,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   // separate read, so retain a matching source fence across that supporting work.
   const fence = await readSourceRevision(supabase, context);
   if (authorityDeadline !== null && authorityDeadline <= Date.now()) return { status: "forbidden" };
-  if (fence.error || typeof fence.data !== "string") return { status: "unavailable" };
+  if (fence.error || typeof fence.data !== "string") return { status: fence.status === 401 || fence.status === 403 ? "forbidden" : "unavailable" };
   if (fence.data !== selected.source_revision || selected.valid_until && Date.parse(selected.valid_until) <= Date.now()) return { status: cursor ? "staleContinuation" : "unavailable" };
   const revision = createHash("sha256").update(JSON.stringify([selected.source_revision, selected.temporal_key])).digest("hex");
   const request = summaryRequest(context, { readId: randomUUID(), query, cardIds: selected.card_ids, source: selected.source_revision,
