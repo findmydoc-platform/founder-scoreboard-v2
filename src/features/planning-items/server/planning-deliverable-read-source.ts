@@ -161,12 +161,24 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
         || status !== "Pausiert" && plan.columns[status].ids.length !== Math.min(limit, plan.columns[status].total))
       || !plan.metrics || !plan.level_totals || !plan.workspace_revision || !plan.personal_children) { cleanup(); return { status: "unavailable" }; }
     if (preferenceRevision && plan.source_revision !== preferenceRevision) { cleanup(); return { status: "unavailable" }; }
+    const pending = taskStatuses.filter(status => plan.columns[status].ids.length > 0);
+    // Only bounded, server-selected raw reads overlap the common metadata work.
+    // Nothing is mapped or published until avatars and the initial fence finish.
+    const rawReads = new Map(pending.map(column => {
+      const ids = plan.columns[column].ids;
+      const read = supabase.rpc("planning_deliverable_column", { p_actor_profile_id: context.actorProfileId, p_selected_ids: ids,
+        p_source_revision: plan.source_revision, p_evaluated_at: plan.evaluated_at, p_valid_until: plan.valid_until });
+      const response = observeRuntimePhase("board.items", () => read.abortSignal(controller.signal));
+      // Common work can fail before hydration is awaited. Consume rejection now;
+      // the query-local outcome is classified only after the common fence.
+      return [column, response.then(value => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }))] as const;
+    }));
     const people = await withWorkspaceProfileAvatars(plan.profiles.map(mapProfile), supabase, controller.signal);
     const initialFence = await supabase.rpc("planning_source_version").abortSignal(controller.signal);
-    if (initialFence.error) { cleanup(); return { status: initialFence.status === 401 || initialFence.status === 403 ? "forbidden" : "unavailable" }; }
-    if (initialFence.data !== plan.source_revision || plan.valid_until && Date.parse(plan.valid_until) <= Date.now()) { cleanup(); return { status: "unavailable" }; }
+    if (initialFence.error) { abort(); return { status: initialFence.status === 401 || initialFence.status === 403 ? "forbidden" : "unavailable" }; }
+    if (initialFence.data !== plan.source_revision || plan.valid_until && Date.parse(plan.valid_until) <= Date.now()) { abort(); return { status: "unavailable" }; }
     const revision = createHash("sha256").update(JSON.stringify([plan.source_revision, plan.temporal_key])).digest("hex");
-    const id = randomUUID(), pending = taskStatuses.filter(status => plan.columns[status].ids.length > 0);
+    const id = randomUUID();
     const columns = Object.fromEntries(statuses.map(status => [status, { total: plan.columns[status].total, loaded: 0,
       availability: plan.columns[status].total === 0 ? "ready" : "not-loaded", completeness: plan.columns[status].total === 0 ? "complete" : "partial", continuation: null } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
     const model = {
@@ -189,9 +201,9 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
     async function hydrate(column: TaskStatus): Promise<PlanningBoardColumnOutcome> {
       try {
         const ids = plan.columns[column].ids;
-        const read = supabase.rpc("planning_deliverable_column", { p_actor_profile_id: context.actorProfileId, p_selected_ids: ids,
-          p_source_revision: plan.source_revision, p_evaluated_at: plan.evaluated_at, p_valid_until: plan.valid_until });
-        const response = await observeRuntimePhase("board.items", () => read.abortSignal(controller.signal));
+        const raw = await rawReads.get(column)!;
+        if (!raw.ok) throw raw.error;
+        const response = raw.value;
         if (terminal) return terminal;
         if (response.error || !response.data) return failure(column, response.status === 401 || response.status === 403 ? 403 : 503);
         const selected = response.data as SelectedColumn;
