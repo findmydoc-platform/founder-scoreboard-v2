@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { expect, test, vi } from "vitest";
+import type { PlanningBoardDelivery, PlanningBoardStreamFrame } from "@/features/planning/model/planning-board-delivery";
 import { createCalendarLiveFixture } from "./helpers/calendar-live-fixture";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 
@@ -140,12 +141,14 @@ async function prepare() {
 
 test("Workspace query delivery observes real prepared, consumed and acknowledged permits with the original JWT", async () => {
   await withWorkspaceQuery(async context => {
-    const response = await context.GET(context.request());
+    const response: Response = await context.GET(context.request());
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("application/x-ndjson");
-    const frames = (await response.text()).trim().split("\n").map(line => JSON.parse(line));
-    expect(frames[0]?.kind).toBe("basis");
-    expect(frames[0]?.model?.items?.length).toBe(0);
+    const frames: PlanningBoardStreamFrame[] = (await response.text()).trim().split("\n").map(line => JSON.parse(line));
+    const basis = frames[0];
+    expect(basis?.kind).toBe("basis");
+    if (!basis || basis.kind !== "basis") throw new Error("Synthetic Workspace query basis missing");
+    expect(basis.model.items.length).toBe(0);
     expect(JSON.stringify(frames.filter(frame => frame.kind === "column").flatMap(frame => frame.cardIds).sort()) === JSON.stringify(context.ids.slice(2).sort())).toBe(true);
     expect(frames.some(frame => frame.kind === "failure")).toBe(false);
     expect(frames.at(-1)?.kind).toBe("end");
@@ -163,7 +166,7 @@ test("an original Workspace deadline rejects a prepared publication dispatch and
     const started = await permission.planning.startBoardQuery(context.query);
     expect(started.status).toBe("ready");
     if (started.status !== "ready" || !started.delivery) throw new Error("Synthetic Workspace query delivery unavailable");
-    const delivery = started.delivery;
+    const delivery: PlanningBoardDelivery = started.delivery;
     try {
       const drafts = await Promise.all(Object.values(delivery.columns));
       expect(drafts.length).toBe(2);
@@ -214,7 +217,7 @@ test.each(["body", "request"] as const)("Workspace %s cancellation retains indep
       entered.release(); await cleanupGate.promise;
       callerAbortedWhileCleanupLive = !request.signal.aborted;
     });
-    const response = await context.GET(context.request(abort.signal));
+    const response: Response = await context.GET(context.request(abort.signal));
     expect(response.status).toBe(200);
     const reader = response.body!.getReader();
     try {

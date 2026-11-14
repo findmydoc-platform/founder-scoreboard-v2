@@ -225,6 +225,7 @@ test("the shared server publication guard rejects temporal expiry after real SQL
       expect(result.status).toBe("ready");
       if (result.status !== "ready" || !result.delivery) throw new Error("Temporal query delivery unavailable");
       delivery = result.delivery;
+      if (!delivery) throw new Error("Temporal query delivery capability missing");
       const draft = await delivery.columns.Offen!;
       expect(draft.kind).toBe("column");
       const validUntil = Date.parse(result.model.board!.validUntil!);
@@ -263,7 +264,9 @@ test.each(["body", "request"] as const)("aborting the %s cancels every pending c
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
       const response = await GET(input); expect(response.status).toBe(200);
-      reader = response.body!.getReader();
+      const body: ReadableStream<Uint8Array> | null = response.body;
+      if (!body) throw new Error("Synthetic query response body missing");
+      reader = body.getReader();
       const basis = await reader.read(); expect(new TextDecoder().decode(basis.value)).toContain('"kind":"basis"');
       await bothEntered;
       if (cancellation === "body") await reader.cancel(); else abort.abort();
