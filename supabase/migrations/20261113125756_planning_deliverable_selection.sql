@@ -207,7 +207,16 @@ cards as materialized (
     and (not p_plan_only or normalized<>'Pausiert')
     and position>greatest(0,p_offset) and position<=greatest(0,p_offset)+least(20,greatest(1,p_limit))
 ),
-statuses(status,ordinal) as (values ('Offen',1),('In Arbeit',2),('Review',3),('Nacharbeit',4),('Blockiert',5),('Erledigt',6),('Pausiert',7))
+statuses(status,ordinal) as (values ('Offen',1),('In Arbeit',2),('Review',3),('Nacharbeit',4),('Blockiert',5),('Erledigt',6),('Pausiert',7)),
+hydration as materialized (
+  select case when p_plan_only then '{}'::jsonb else public.planning_deliverable_column(p_actor_profile_id,
+    coalesce((select array_agg(cards.id order by statuses.ordinal,cards.position) from cards join statuses on statuses.status=cards.normalized),array[]::text[]),
+    basis.revision,basis.evaluated_at,
+    -- Initial legacy selection and hydration share this SQL snapshot. Its trusted
+    -- evaluation time may be historical; later publication retains the live TTL.
+    case when p_source_revision is null and p_offset=0 then null else temporal.valid_until end
+  ) end as payload from basis cross join temporal
+)
 select case
   when not exists(select 1 from public.profiles where id=p_actor_profile_id and platform_role in ('ceo','deputy','founder','viewer')) then jsonb_build_object('status','forbidden')
   when p_offset<0 or p_column is not null and not exists(select 1 from statuses where status=p_column)
@@ -215,6 +224,7 @@ select case
     or p_source_revision is not null and temporal.valid_until<=statement_timestamp()
     or p_offset>0 and p_offset> (select count(*) from matches where p_column is null or normalized=p_column)
     then jsonb_build_object('status','staleContinuation')
+  when not p_plan_only and hydration.payload->>'status' is distinct from 'ready' then hydration.payload
   else jsonb_build_object(
     'status','ready','source_revision',basis.revision,'evaluated_at',basis.evaluated_at,'temporal_key',temporal.temporal_key,'valid_until',temporal.valid_until,
     'project',(select to_jsonb(project) from public.projects project where id='findmydoc-founder-execution'),
@@ -231,12 +241,8 @@ select case
     'level_totals',(select jsonb_build_object('epic',count(*) filter(where task_type='epic'),'initiative',count(*) filter(where task_type='initiative'),'deliverable',count(*) filter(where task_type='deliverable')) from active),
     'personal_children',coalesce((select jsonb_object_agg(matches.id,matches.personal_children) from matches join cards on cards.id=matches.id where jsonb_array_length(matches.personal_children)>0),'{}'::jsonb),
     'workspace_revision',(select jsonb_build_object('activeTaskCount',count(*),'latestUpdatedAt',coalesce(max(updated_at)::text,'')) from active)
-  ) || case when p_plan_only then '{}'::jsonb else
-    public.planning_deliverable_column(p_actor_profile_id,
-      coalesce((select array_agg(cards.id order by statuses.ordinal,cards.position) from cards join statuses on statuses.status=cards.normalized),array[]::text[]),
-      basis.revision,basis.evaluated_at,temporal.valid_until) - 'status' - 'source_revision' - 'evaluated_at'
-    end end
-from basis cross join temporal;
+  ) || case when p_plan_only then '{}'::jsonb else hydration.payload - 'status' - 'source_revision' - 'evaluated_at' end end
+from basis cross join temporal cross join hydration;
 $$;
 
 revoke all on function public.planning_deliverable_query_basis(text,jsonb,text,integer,integer,text,timestamptz,boolean) from public, anon, authenticated;

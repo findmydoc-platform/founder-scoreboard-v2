@@ -94,6 +94,11 @@ test("real SQL week membership has inclusive boundaries and an expired temporal 
     }
     expect(inclusive.card_ids).toEqual([id]);
     expect(Date.parse(inclusive.valid_until)).toBe(Date.parse(`${yesterday}T00:00:00.001Z`));
+    const lateHydration = (await db.query("select public.planning_deliverable_column($1,$2,$3,$4,$5) as selection", [actors.founder.profileId, [id], inclusive.source_revision, inclusive.evaluated_at, inclusive.valid_until])).rows[0].selection;
+    expect(lateHydration).toEqual({ status: "staleContinuation" });
+    const current = await select(new Date().toISOString());
+    expect(current.status).toBe("ready");
+    expect(current.card_ids).toEqual([]);
     expect((await select(`${yesterday}T00:00:00.001Z`)).card_ids).toEqual([]);
     expect((await select(inclusive.evaluated_at, inclusive.source_revision)).status).toBe("staleContinuation");
     expect((await select(`${yesterday}T00:00:00.001Z`)).source_revision).toBe(inclusive.source_revision);
