@@ -298,12 +298,23 @@ test("a later page summary retains the original query authority ceiling after a 
     await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner,sort_order)
       select $1||'-'||lpad(n::text,2,'0'),'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Erledigt','P2',$3,n
       from generate_series(0,20) n`, [key, initiativeId, actors.founder.profileId]);
+    const transport = globalThis.fetch;
+    let summaryReads = 0;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const next = new Request(input, init), response = await transport(next);
+      if (new URL(next.url).pathname.endsWith("/rpc/planning_deliverable_summaries") && ++summaryReads === 1) {
+        return Response.json({ message: "Synthetic initial batch unavailable" }, { status: 503 });
+      }
+      return response;
+    });
     const initial = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
     const query = { view: "board", column: "Erledigt", filters: { query: key } };
     const first = await initial.GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`));
     expect(first.status).toBe(200);
     const original = await first.json(), cursor = original.model.board.columns.Erledigt.continuation;
     expect(original.model.board.cardIds).toEqual(Array.from({ length: 20 }, (_, index) => `${key}-${String(index).padStart(2, "0")}`));
+    expect(original.model.board.summaryRequests[0].status).toBe("unavailable");
+    expect(Object.values(original.model.board.childProgressById).every(value => value === null)).toBe(true);
     expect(cursor).toBeTypeOf("string");
     const jwt = JSON.parse(Buffer.from(actors.founder.token.split(".")[1], "base64url").toString("utf8"));
     expect(original.readAuthority.deadline).toBeLessThan(jwt.exp * 1000);
@@ -316,6 +327,7 @@ test("a later page summary retains the original query authority ceiling after a 
       expect(page.status).toBe(200);
       const body = await page.json();
       expect(body.model.board.cardIds).toEqual([`${key}-20`]);
+      expect(body.model.board.summaryRequests[0].status).toBe("current");
       expect(body.model.board.childProgressById[`${key}-20`]).toEqual({ completed: 0, total: 0, unfinished: 0, percentage: 0 });
       const token = body.model.board.summaryRequests[0].token;
       vi.setSystemTime(original.readAuthority.deadline);
