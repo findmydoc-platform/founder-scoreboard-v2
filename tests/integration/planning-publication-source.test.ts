@@ -142,6 +142,52 @@ test("an aborted Board delivery starts no new atomic publication dispatch", asyn
   }, "linking");
 }, 120_000);
 
+test.each(["deadline", "abort"] as const)("a completed atomic publication response cannot publish after original %s", async boundary => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed }) => {
+    const parent = `${prefix}-held-source`;
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3)`,
+    [parent, initiativeId, actors.founder.profileId]);
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+    const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("founder", "/api/planning-board-data") }, action: "planning.board.read" });
+    expect(permission.ok).toBe(true);
+    if (!permission.ok || !permission.readAuthority) throw new Error("Synthetic original Board authority unavailable");
+    const jwt = JSON.parse(Buffer.from(actors.founder.token.split(".")[1], "base64url").toString("utf8"));
+    expect(permission.readAuthority.deadline).toBeLessThan(jwt.exp * 1000);
+    const transport = globalThis.fetch;
+    let reached!: () => void, release!: () => void;
+    const held = new Promise<void>(resolve => { reached = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const next = new Request(input, init), response = await transport(next);
+      if (new URL(next.url).pathname.endsWith("/rpc/planning_board_publication_context")) {
+        expect(response.status).toBe(200);
+        expect(await response.clone().json()).toMatchObject({ profile_id: actors.founder.profileId, platform_role: "founder" });
+        reached(); await gate;
+      }
+      return response;
+    });
+    const controller = new AbortController();
+    const pending = permission.planning.loadBoard({ view: "board", column: "Offen", filters: { query: parent } }, { signal: controller.signal });
+    try {
+      await held;
+      if (boundary === "deadline") {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(permission.readAuthority.deadline);
+        expect(Date.now()).toBeLessThan(jwt.exp * 1000);
+      } else controller.abort();
+      release();
+      const result = await pending;
+      expect(result.status).toBe(boundary === "deadline" ? "forbidden" : "unavailable");
+      for (const field of ["model", "summaries", "readAuthority"]) expect(result).not.toHaveProperty(field);
+      expect(observed.filter(entry => entry.path.endsWith("/rpc/planning_board_publication_context"))).toEqual([
+        expect.objectContaining({ actor: "founder", permit: true }),
+      ]);
+    } finally { release(); await pending; vi.useRealTimers(); controller.abort(); }
+    expect((await db.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actors.founder.userId])).rows[0].remaining).toBe(0);
+  }, "linking");
+}, 120_000);
+
 test("an unavailable atomic publication read fails closed without a service fallback", async () => {
   await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed }) => {
     const parent = `${prefix}-unavailable-publication`;
