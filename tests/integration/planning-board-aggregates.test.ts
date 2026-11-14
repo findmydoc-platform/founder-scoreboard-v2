@@ -195,3 +195,40 @@ test("filtered summaries preserve complete attention in both waiting directions 
     expect(JSON.stringify(summaries)).not.toContain("https:example.test/legacy-evidence");
   });
 }, 120_000);
+
+test("direct-child percentages preserve legacy division order and JavaScript positive-half rounding in SQL and API", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, local, request }) => {
+    const fractional = `${prefix}-rounding-fraction`, half = `${prefix}-rounding-half`;
+    for (const [id, completed, total] of [[fractional, 29, 200], [half, 1, 8]] as const) {
+      await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+        values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3)`, [id, initiativeId, actors.founder.profileId]);
+      await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,owner)
+        select $1||'-child-'||n,'findmydoc-founder-execution','Synthetic rounding child','sub_issue',$1,
+          case when n<=$2 then 'Erledigt' else 'Offen' end,'P2',$3 from generate_series(1,$4::integer) n`, [id, completed, actors.other.profileId, total]);
+    }
+    const expected = {
+      [fractional]: { completed: 29, total: 200, unfinished: 171, percentage: 14 },
+      [half]: { completed: 1, total: 8, unfinished: 7, percentage: 13 },
+    };
+    const query = { view: "board" as const, column: "Offen" as const, filters: { query: `${prefix}-rounding` } };
+    const context = { authorized: true, actorProfileId: actors.founder.profileId, query };
+    const { loadPlanningWorkspaceModel } = await importTestModule("src/features/planning-items/server/planning-workspace-read-source.ts", { "server-only": {} });
+    const { projectPlanningBoard } = await importTestModule("src/features/planning/server/planning-board-projection.ts", { "server-only": {} });
+    const referenceClient = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    const complete = await loadPlanningWorkspaceModel(referenceClient, { ...context, query: { view: "complete" } });
+    expect(complete.status).toBe("ready");
+    if (complete.status !== "ready") throw new Error("Complete legacy rounding reference was unavailable");
+    const reference = projectPlanningBoard(complete.model, context);
+    expect(reference.status).toBe("ready");
+    if (reference.status !== "ready") throw new Error("Complete legacy rounding projection was unavailable");
+    expect(reference.model.board!.childProgressById).toEqual(expected);
+    const sql = (await db.query("select public.planning_deliverable_summaries($1,$2,public.planning_source_version(),statement_timestamp(),null) as summary", [actors.founder.profileId, [fractional, half]])).rows[0].summary;
+    expect(sql.status).toBe("ready");
+    expect(sql.child_progress).toEqual(expected);
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const response = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.model.board.childProgressById).toEqual(expected);
+  });
+}, 120_000);
