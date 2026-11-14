@@ -13,7 +13,7 @@ it("preserves existing Planning rows and exposes complete selected summaries onl
       values('summary-parent','findmydoc-founder-execution','Synthetic preserved parent','deliverable','approved','Offen','P2')`);
     await client.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority)
       values('summary-child','findmydoc-founder-execution','Synthetic preserved child','sub_issue','summary-parent','Erledigt','P2')`);
-    await client.query("insert into public.task_links(id,task_id,type,url) values('summary-link','summary-parent','evidence','https://example.test/preserved')");
+    await client.query("insert into public.task_links(task_id,type,label,url) values('summary-parent','evidence','Synthetic preserved link','https://example.test/preserved')");
     await client.query("insert into public.profile_ui_preferences(profile_id,planning_filters) values('summary-viewer','{\"query\":\"preserved\"}')");
     const preserved = {};
     for (const table of ["tasks", "profiles", "task_links", "profile_ui_preferences"]) {
