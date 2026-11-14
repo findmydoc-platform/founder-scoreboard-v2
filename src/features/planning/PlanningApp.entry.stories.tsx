@@ -14,6 +14,7 @@ import { mockAccountLifecycle } from "../../../tests/helpers/account-lifecycle-b
 import { planningWorkspaceHydration } from "./model/planning-workspace-hydration";
 import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
 import { normalizePlanningBoardQuery } from "./model/planning-board-query";
+import { planningBoardStoryResponse } from "./model/planning-board-story-stream";
 
 const profile: Profile = { id: "entry-profile", name: "Entry Person", platformRole: "ceo", orgRole: "CEO", githubLogin: "entry-person", weeklyCapacity: 40 };
 const user = { id: "entry-user", email: "entry@example.com" } as User;
@@ -40,7 +41,7 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
     const previousSeen = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
     let boardRequests = 0, sourceRequests = 0, searchRequests = 0;
-    const restore = mockAccountLifecycle("google", { linked: true }, (input) => {
+    const restore = mockAccountLifecycle("google", { linked: true }, (input, init) => {
       const path = String(input).split("?")[0];
       if (path === "/api/auth/session") return Response.json({ session: currentSession.current });
       if (path === "/api/planning-board-data") {
@@ -48,18 +49,18 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
         if (searchReplacement) {
           if (searchFailureOnce && ++searchRequests === 1) return Response.json({ error: "Search temporarily unavailable" }, { status: 503 });
           const query = normalizePlanningBoardQuery(JSON.parse(new URL(String(input), "http://localhost:3000").searchParams.get("scope") || "{}"));
-          return new Promise<Response>(resolve => { finishRead.current = () => resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...model, query, items: [{ ...task, title: "Replacement needle card" }] }, currentProfile: profile })); });
+          return new Promise<Response>(resolve => { finishRead.current = () => resolve(planningBoardStoryResponse(input, init, { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...model, query, items: [{ ...task, title: "Replacement needle card" }] }, currentProfile: profile })); });
         }
         if (rotationRecovery && ++boardRequests === 1) return new Promise<Response>(resolve => {
-          finishRead.current = () => { resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...model, items: [{ ...task, title: "Late old-session task" }] }, currentProfile: profile })); setFinished(count => count + 1); };
+          finishRead.current = () => { resolve(planningBoardStoryResponse(input, init, { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...model, items: [{ ...task, title: "Late old-session task" }] }, currentProfile: profile })); setFinished(count => count + 1); };
         });
         if (backgroundFailure || changedPageOnReturn) return new Promise<Response>(resolve => {
           finishRead.current = () => {
-            resolve(backgroundFailure ? Response.json({ error: "Board temporarily unavailable" }, { status: 503 }) : Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: profile }));
+            resolve(backgroundFailure ? Response.json({ error: "Board temporarily unavailable" }, { status: 503 }) : planningBoardStoryResponse(input, init, { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: profile }));
             setFinished(count => count + 1);
           };
         });
-        return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: profile });
+        return planningBoardStoryResponse(input, init, { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: profile });
       }
       if (path === "/api/planning-source-version") {
         setRevisions(count => count + 1);

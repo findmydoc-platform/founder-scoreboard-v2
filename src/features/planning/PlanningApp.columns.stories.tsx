@@ -13,6 +13,7 @@ import { mockAccountLifecycle } from "../../../tests/helpers/account-lifecycle-b
 import { planningWorkspaceHydration } from "./model/planning-workspace-hydration";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardColumn, type PlanningBoardQueryInput } from "./model/planning-board-query";
 import { taskStatuses } from "@/lib/status";
+import { planningBoardStoryResponse } from "./model/planning-board-story-stream";
 
 const profile: Profile = { id: "history-person", name: "History Person", platformRole: "ceo", orgRole: "CEO", githubLogin: "history-person", weeklyCapacity: 40 };
 const user = { id: "history-user", email: "history@example.com" } as User;
@@ -79,7 +80,7 @@ function ActiveColumnsFlow({ holdColumnPage = false, failRefresh = false }: { ho
         if (query.view === "complete") return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...page(query, currentActive), board: undefined, items: [currentActive, ...completed], coverage: { ...initial.coverage, items: "complete" } }, currentProfile: profile });
         if (query.column === "Offen" && query.continuation && ++attempts === 1) return Response.json({ error: "History unavailable" }, { status: 503 });
         if (holdColumnPage && query.column === "Review" && query.continuation) return new Promise<Response>(resolve => setReleasePage(() => () => { resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: page(query, currentActive), currentProfile: profile })); setReleasePage(null); }));
-        return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: page(query, currentActive), currentProfile: profile });
+        return planningBoardStoryResponse(input, init, { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: page(query, currentActive), currentProfile: profile });
       }
       if (url.pathname === `/api/tasks/${active.id}` && init?.method === "PATCH") {
         currentActive = { ...currentActive, ...JSON.parse(String(init.body)), updatedAt: "saved-status-r2" };

@@ -114,7 +114,7 @@ export function TaskBoardView({
         const stale = history?.readStatus === "stale";
         const failed = history?.readStatus === "unavailable";
         const finished = history?.completeness === "complete" && !stale && !failed;
-        const total = history?.total ?? tasks.length;
+        const total = history ? history.total : tasks.length;
         const isEmpty = total === 0;
         const isDropTarget = dragOverStatus === status;
         const isAvailableEmptyTarget = Boolean(draggedTaskId) && isEmpty;
@@ -123,7 +123,7 @@ export function TaskBoardView({
             key={status}
             data-board-column-status={status}
             data-collapsed={isEmpty}
-            aria-label={`${status}, ${total} ${total === 1 ? itemLabel : `${itemLabel}s`}${isEmpty ? ", eingeklappt" : ""}`}
+            aria-label={`${status}, ${total ?? "Anzahl unbekannt"} ${total === 1 ? itemLabel : `${itemLabel}s`}${isEmpty ? ", eingeklappt" : ""}`}
             onDragOver={(event) => {
               event.preventDefault();
               event.dataTransfer.dropEffect = "move";
@@ -154,7 +154,7 @@ export function TaskBoardView({
                   size="sm"
                   className={isEmpty ? "max-w-full justify-center whitespace-normal px-1.5 text-center leading-4" : undefined}
                 />
-                <span className="text-xs tabular-nums text-slate-500">({total})</span>
+                <span className="text-xs tabular-nums text-slate-500">({total ?? "?"})</span>
               </div>
               <button
                 type="button"
@@ -207,7 +207,7 @@ export function TaskBoardView({
                 </div>
               )}
               {history ? <div className="grid gap-2">
-                <p role="status" aria-live="polite" className="text-center text-xs text-slate-500">{history.loaded} von {history.total} geladen</p>
+                <p role="status" aria-live="polite" className="text-center text-xs text-slate-500">{history.total === null ? loading ? `${status} wird geladen …` : "Anzahl unbekannt" : `${history.loaded} von ${history.total} geladen`}</p>
                 {failed ? <p role="alert" className="text-xs text-slate-600">Weitere Karten konnten nicht geladen werden.</p> : null}
                 {stale ? <p role="status" className="text-xs text-slate-600">Die Ergebnisliste hat sich geändert. Der angezeigte Stand ist veraltet.</p> : null}
                 {history.continuation || stale || failed || requestedColumns.has(`${itemType}:${status}`) ? <button type="button" aria-disabled={loading || finished} onClick={() => {

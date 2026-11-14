@@ -4,7 +4,10 @@ import { hasOpenWaitingRelation } from "@/lib/platform";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { planningWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
-import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
+import { createCompletePlanningReference } from "../../helpers/complete-planning-reference";
+
+// Complete TypeScript/provider reference and owner acceptance. Actual selected
+// SQL traversal is verified in integration/planning-deliverable-selection.test.ts.
 
 vi.mock("server-only", () => ({}));
 
@@ -26,7 +29,7 @@ const context = { authorized: true, actorProfileId: "reader", authorityKey: "rea
 test("completed history starts with 20 cards and completely enumerates beyond an upstream cap", async () => {
   const { client, data } = fixture();
   (data.active_tasks as Array<Record<string, unknown>>).forEach(row => { row.sort_order = 0; });
-  const reader = createSupabasePlanningBoardReadModel(client);
+  const reader = createCompletePlanningReference(client);
   const first = await reader.load({ ...context, query: { view: "board", level: "deliverable" } });
   expect(first.status).toBe("ready");
   if (first.status !== "ready") throw new Error("Expected ready Board");
@@ -46,7 +49,7 @@ test("completed history starts with 20 cards and completely enumerates beyond an
 });
 
 test("the shared owner appends a completed page, retains active cards and retries only failed history", async () => {
-  const reader = createSupabasePlanningBoardReadModel(fixture().client);
+  const reader = createCompletePlanningReference(fixture().client);
   const initial = await reader.load({ ...context, query: { view: "board" } });
   if (initial.status !== "ready") throw new Error("Expected initial Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
@@ -71,13 +74,13 @@ test("the shared owner appends a completed page, retains active cards and retrie
 });
 
 test("full-scope search reaches an old completed match and unrelated history does not enlarge the initial response", async () => {
-  const small = await createSupabasePlanningBoardReadModel(fixture(45).client).load({ ...context, query: { view: "board" } });
-  const large = await createSupabasePlanningBoardReadModel(fixture(2045, 173).client).load({ ...context, query: { view: "board" } });
+  const small = await createCompletePlanningReference(fixture(45).client).load({ ...context, query: { view: "board" } });
+  const large = await createCompletePlanningReference(fixture(2045, 173).client).load({ ...context, query: { view: "board" } });
   if (small.status !== "ready" || large.status !== "ready") throw new Error("Expected complete scope counts");
   expect(large.model.board?.columns.Erledigt.total).toBe(2045);
   expect(large.model.items).toHaveLength(small.model.items.length);
   expect(Math.abs(JSON.stringify(large.model).length - JSON.stringify(small.model).length)).toBeLessThan(100);
-  const searched = await createSupabasePlanningBoardReadModel(fixture(2045, 173).client).load({ ...context, query: { view: "board", filters: { query: "  UNLOADED search NEEDLE  ", status: "Erledigt" } } });
+  const searched = await createCompletePlanningReference(fixture(2045, 173).client).load({ ...context, query: { view: "board", filters: { query: "  UNLOADED search NEEDLE  ", status: "Erledigt" } } });
   if (searched.status !== "ready") throw new Error("Expected completed search result");
   expect(searched.model.board?.cardIds).toEqual(["done-2044"]);
   expect(searched.model.board?.columns.Erledigt).toMatchObject({ total: 1, loaded: 1, completeness: "complete", continuation: null });
@@ -85,7 +88,7 @@ test("full-scope search reaches an old completed match and unrelated history doe
 
 test("continuation rejects a different query, authority and intervening data change", async () => {
   const source = fixture();
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   const first = await reader.load({ ...context, query: {} });
   if (first.status !== "ready") throw new Error("Expected first page");
   const continuation = first.model.board!.columns.Erledigt.continuation!;
@@ -105,7 +108,7 @@ test("personal history includes a foreign completed parent through open assigned
   rows.forEach(row => { row.assignee = "other"; row.priority = "P1"; });
   rows.push({ id: "assigned-child", title: "Assigned child", task_type: "sub_issue", parent_task_id: "done-0044", status: "Offen", assignee: "reader", priority: "P0" });
   rows.push(...Array.from({ length: 1007 }, (_, index) => ({ id: `closed-child-${index}`, title: "Closed child", task_type: "sub_issue", parent_task_id: "done-0044", status: "Erledigt", assignee: "other" })));
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   const result = await reader.load({ ...context, query: { filters: { quick: ["mine"], priority: "P1" } } });
   if (result.status !== "ready") throw new Error("Expected personal parent");
   expect(result.model.board?.cardIds).toEqual(["done-0044"]);
@@ -128,7 +131,7 @@ test("supported searchable fields find complete history and quick filters keep O
   const rows = source.data.active_tasks as Array<Record<string, unknown>>;
   const old = rows.find(row => row.id === "done-0044")!;
   Object.assign(old, { assignee: "reader", definition_of_done: "Unique completion checklist", workstream: "Unique workstream", priority: "P0", sprint_id: "sprint", review_owner_profile_id: "reviewer", github_issue_number: 9827, issue_number: "9827", github_repo: "synthetic/unique-repository", fixed_date: "2026-01-02" });
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   for (const query of ["Unloaded search needle", "Unique completion checklist", "Unique historical Sprint", "Unique review owner", "#9827", "unique-repository", "2026-01-02", "Unique workstream"]) {
     const result = await reader.load({ ...context, query: { filters: { query } } });
     if (result.status !== "ready") throw new Error("Expected searchable history");
@@ -148,7 +151,7 @@ test("waiting and Blocker context and exact child progress do not depend on filt
   rows.push({ id: "child-open", task_type: "sub_issue", parent_task_id: "active", title: "Open child", status: "Offen" }, { id: "child-done", task_type: "sub_issue", parent_task_id: "active", title: "Done child", status: "Erledigt" });
   source.data.task_relationship_edges = [{ id: 1, task_id: "active", related_task_id: "outside", relation_type: "blocked_by" }];
   source.data.task_blockers = [{ id: 1, task_id: "active", status: "open", reason: "Synthetic Blocker" }];
-  const result = await createSupabasePlanningBoardReadModel(source.client).load({ ...context, query: { filters: { assignee: "reader" } } });
+  const result = await createCompletePlanningReference(source.client).load({ ...context, query: { filters: { assignee: "reader" } } });
   if (result.status !== "ready") throw new Error("Expected contextual Board");
   expect(result.model.board?.cardIds).toEqual(["active"]);
   expect(result.model.board?.childProgressById.active).toEqual({ total: 2, completed: 1, unfinished: 1, percentage: 50 });
@@ -158,7 +161,7 @@ test("waiting and Blocker context and exact child progress do not depend on filt
 });
 
 test("history beyond the default upstream cap enumerates with stable ties and bounded clamped pages", async () => {
-  const reader = createSupabasePlanningBoardReadModel(fixture(1027, 173).client);
+  const reader = createCompletePlanningReference(fixture(1027, 173).client);
   const ids: string[] = [];
   let continuation: string | undefined;
   do {
@@ -171,12 +174,12 @@ test("history beyond the default upstream cap enumerates with stable ties and bo
   expect(ids).toHaveLength(1028);
   expect(new Set(ids).size).toBe(1028);
   expect(ids.slice(-2)).toEqual(["done-1025", "done-1026"]);
-  const incomplete = await createSupabasePlanningBoardReadModel(fixture(1027, 0).client).load(context);
+  const incomplete = await createCompletePlanningReference(fixture(1027, 0).client).load(context);
   expect(incomplete).toEqual({ status: "unavailable" });
 });
 
 test("a late response from a previous filter cannot replace the current bounded scope", async () => {
-  const reader = createSupabasePlanningBoardReadModel(fixture().client);
+  const reader = createCompletePlanningReference(fixture().client);
   const firstPage = await reader.load({ ...context, query: {} });
   if (firstPage.status !== "ready") throw new Error("Expected initial page");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
@@ -207,7 +210,7 @@ test("complete views retain required history, parents, Sprints and relationships
   rows.find(row => row.id === "done-1026")!.sprint_id = "historical-sprint";
   source.data.sprints = [{ id: "historical-sprint", name: "Historical Sprint", start_date: "2026-01-01", end_date: "2026-01-14" }];
   source.data.task_relationship_edges = [{ id: 1, task_id: "done-1026", related_task_id: "active", relation_type: "blocked_by" }];
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   const board = await reader.load({ ...context, query: { view: "board" } });
   const complete = await reader.load({ ...context, query: { view: "complete" } });
   if (board.status !== "ready" || complete.status !== "ready") throw new Error("Expected complete alternative coverage");
@@ -224,7 +227,7 @@ test("complete views retain required history, parents, Sprints and relationships
 test("persisted view defaults do not invalidate unchanged Board coverage but planning data does", async () => {
   const source = fixture();
   source.data.profile_ui_preferences = [{ profile_id: "reader", default_workspace: "planning", default_task_view: "board", planning_filters: {}, expanded_item_ids: [], updated_at: "r1" }];
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   const board = await reader.load({ ...context, query: { view: "board" } });
   Object.assign((source.data.profile_ui_preferences as Array<Record<string, unknown>>)[0], { default_task_view: "table", expanded_item_ids: ["initiative"], updated_at: "r2" });
   const complete = await reader.load({ ...context, query: { view: "complete" } });
@@ -241,7 +244,7 @@ test("active status columns have independent bounded pages and deterministic pri
   const rows = source.data.active_tasks as Array<Record<string, unknown>>;
   rows.splice(1);
   for (const status of ["Offen", "In Arbeit", "Review"]) for (let index = 1026; index >= 0; index--) rows.push({ id: `${status}-${String(index).padStart(4, "0")}`, task_type: "deliverable", approval_status: "approved", title: `Active ${status} ${index}`, status, priority: index === 1026 ? "P0" : "P2", sort_order: 0, parent_task_id: "initiative" });
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   const first = await reader.load({ ...context, query: { limit: 1000 } });
   if (first.status !== "ready") throw new Error("Expected bounded active Board");
   expect(first.model.board?.cardIds).toHaveLength(60);
@@ -271,7 +274,7 @@ test("the owner accepts concurrent independent columns, coalesces identical page
   const source = fixture(25);
   const rows = source.data.active_tasks as Array<Record<string, unknown>>;
   rows.push(...Array.from({ length: 44 }, (_, index) => ({ id: `open-${index}`, title: `Open ${index}`, task_type: "deliverable", approval_status: "approved", status: "Offen", parent_task_id: "initiative" })));
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   const initial = await reader.load({ ...context, query: {} });
   if (initial.status !== "ready") throw new Error("Expected bounded Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
@@ -309,7 +312,7 @@ test("concurrent successful status pages keep both columns current when their co
   const source = fixture(25);
   const rows = source.data.active_tasks as Array<Record<string, unknown>>;
   rows.push(...Array.from({ length: 24 }, (_, index) => ({ id: `open-${index}`, title: `Open ${index}`, task_type: "deliverable", approval_status: "approved", status: "Offen", parent_task_id: "initiative" })));
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   const initial = await reader.load({ ...context, query: {} });
   if (initial.status !== "ready") throw new Error("Expected Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
@@ -331,7 +334,7 @@ test("concurrent successful status pages keep both columns current when their co
 
 
 test.each(["query", "session"])("a late column page cannot re-enter an ended %s context", async boundary => {
-  const reader = createSupabasePlanningBoardReadModel(fixture(25).client);
+  const reader = createCompletePlanningReference(fixture(25).client);
   const initial = await reader.load({ ...context, query: {} });
   if (initial.status !== "ready") throw new Error("Expected Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
@@ -361,7 +364,7 @@ test.each(["query", "session"])("a late column page cannot re-enter an ended %s 
 
 test("a stale continuation refreshes only its status membership and marks other snapshots stale", async () => {
   const source = fixture(25);
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   const initial = await reader.load({ ...context, query: {} });
   if (initial.status !== "ready") throw new Error("Expected Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
@@ -390,7 +393,7 @@ test("a column page preserves confirmed edits and pending work in shared depende
   const source = fixture(25);
   (source.data.active_tasks as Array<Record<string, unknown>>).push({ id: "pending-work", title: "Before pending", task_type: "deliverable", approval_status: "approved", status: "Offen", parent_task_id: "initiative" });
   source.data.task_relationship_edges = [{ id: 1, task_id: "done-0020", related_task_id: "active", relation_type: "blocked_by" }, { id: 2, task_id: "done-0020", related_task_id: "pending-work", relation_type: "blocked_by" }];
-  const reader = createSupabasePlanningBoardReadModel(source.client);
+  const reader = createCompletePlanningReference(source.client);
   const initial = await reader.load({ ...context, query: {} });
   if (initial.status !== "ready") throw new Error("Expected Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
