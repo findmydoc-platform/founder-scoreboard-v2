@@ -291,3 +291,39 @@ test.each(["fresh-admission", "dispatched-summary"] as const)("original summary 
     } finally { release(); await pending?.catch(() => undefined); vi.useRealTimers(); }
   }, "linking");
 }, 120_000);
+
+test("a later page summary retains the original query authority ceiling after a fresh admission", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request }) => {
+    const key = `${prefix}-page-ceiling`;
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner,sort_order)
+      select $1||'-'||lpad(n::text,2,'0'),'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Erledigt','P2',$3,n
+      from generate_series(0,20) n`, [key, initiativeId, actors.founder.profileId]);
+    const initial = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const query = { view: "board", column: "Erledigt", filters: { query: key } };
+    const first = await initial.GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`));
+    expect(first.status).toBe(200);
+    const original = await first.json(), cursor = original.model.board.columns.Erledigt.continuation;
+    expect(original.model.board.cardIds).toEqual(Array.from({ length: 20 }, (_, index) => `${key}-${String(index).padStart(2, "0")}`));
+    expect(cursor).toBeTypeOf("string");
+    const jwt = JSON.parse(Buffer.from(actors.founder.token.split(".")[1], "base64url").toString("utf8"));
+    expect(original.readAuthority.deadline).toBeLessThan(jwt.exp * 1000);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(original.readAuthority.deadline - 1000);
+      vi.resetModules();
+      const fresh = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+      const page = await fresh.GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ ...query, continuation: cursor }))}`));
+      expect(page.status).toBe(200);
+      const body = await page.json();
+      expect(body.model.board.cardIds).toEqual([`${key}-20`]);
+      expect(body.model.board.childProgressById[`${key}-20`]).toEqual({ completed: 0, total: 0, unfinished: 0, percentage: 0 });
+      const token = body.model.board.summaryRequests[0].token;
+      vi.setSystemTime(original.readAuthority.deadline);
+      expect(Date.now()).toBeLessThan(jwt.exp * 1000);
+      const retry = await fresh.GET(request("founder", `/api/planning-board-data?summaries=${encodeURIComponent(token)}`));
+      expect(retry.status).toBe(403);
+      expect(await retry.json()).not.toHaveProperty("summaries");
+      expect(body.readAuthority.deadline).toBe(original.readAuthority.deadline);
+    } finally { vi.useRealTimers(); }
+  }, "linking");
+}, 120_000);
