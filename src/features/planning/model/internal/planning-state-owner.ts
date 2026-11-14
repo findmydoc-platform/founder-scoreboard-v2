@@ -1463,10 +1463,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   async function acceptServerSummary(readId: string, outcome: PlanningBoardSummaryOutcome) {
     const delivery = boardDeliveries.get(readId);
-    if (!delivery || outcome.readId !== readId || !outcome.token) return false;
-    const token = delivery.summaries.get(outcome.token);
+    if (!delivery || outcome.readId !== readId) return false;
+    const key = outcome.token || (outcome.kind === "failure" && delivery.summaries.size === 1 ? delivery.summaries.keys().next().value : undefined);
+    if (!key) return false;
+    const token = delivery.summaries.get(key);
     if (!token) return false;
-    delivery.summaries.delete(outcome.token);
+    delivery.summaries.delete(key);
     try { return await applyBoardSummary(outcome, token); }
     finally { if (!delivery.tokens.size && !delivery.summaries.size) boardDeliveries.delete(readId); }
   }
