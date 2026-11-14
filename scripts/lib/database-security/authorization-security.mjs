@@ -19,6 +19,7 @@ export async function verifyAuthorizationSecurity(client, failures) {
     "public.planning_deliverable_query_basis(text,jsonb,text,integer,integer,text,timestamptz,boolean)",
     "public.planning_deliverable_query_plan(text,jsonb,integer,timestamptz)",
     "public.planning_deliverable_column(text,text[],text,timestamptz,timestamptz)",
+    "public.planning_deliverable_summaries(text,text[],text,timestamptz,timestamptz)",
   ]) {
     const privileges = (await client.query(`select to_regprocedure($1) is not null as present,
       has_function_privilege('anon',to_regprocedure($1),'EXECUTE') as anonymous_execute,
