@@ -3,7 +3,7 @@ import "server-only";
 import { Suspense } from "react";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 import type { TaskStatus } from "@/lib/types";
-import type { PlanningBoardColumnOutcome, PlanningBoardDelivery, PlanningBoardQueryLoadResult } from "../model/planning-board-delivery";
+import type { PlanningBoardColumnOutcome, PlanningBoardDelivery, PlanningBoardOutcome, PlanningBoardQueryLoadResult } from "../model/planning-board-delivery";
 import { PlanningServerBoardReceipt } from "../organisms/planning-server-board-receipt";
 
 function failedColumn(readId: string, column: TaskStatus | undefined, error: unknown): Extract<PlanningBoardColumnOutcome, { kind: "failure" }> {
@@ -75,14 +75,15 @@ async function BoardColumn({ delivery, column, result }: { delivery: PlanningBoa
 }
 
 async function BoardSummaries({ delivery }: { delivery: PlanningBoardDelivery }) {
+  let outcome: PlanningBoardOutcome;
   try {
-    const outcome = await delivery.checkPublication(await delivery.summaries!);
-    return <PlanningServerBoardReceipt readId={delivery.id} outcome={outcome} />;
+    outcome = await delivery.checkPublication(await delivery.summaries!);
   } catch (error) {
     const failed = failedColumn(delivery.id, undefined, error);
-    return <PlanningServerBoardReceipt readId={delivery.id} outcome={{ ...failed, area: "summaries",
-      error: failed.status === 503 ? "Fortschritt und Signale konnten nicht geladen werden." : failed.error }} />;
+    outcome = { ...failed, area: "summaries",
+      error: failed.status === 503 ? "Fortschritt und Signale konnten nicht geladen werden." : failed.error };
   }
+  return <PlanningServerBoardReceipt readId={delivery.id} outcome={outcome} />;
 }
 
 export function PlanningServerBoardColumns({ delivery }: { delivery: PlanningBoardDelivery }) {
