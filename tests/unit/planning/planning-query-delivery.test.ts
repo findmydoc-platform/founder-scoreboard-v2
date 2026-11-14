@@ -170,3 +170,38 @@ test("native column receipts cannot reserve an unsolicited read or reenter a rep
   expect(await state.acceptServerBoardColumn("native", packet)).toBe(false);
   expect(state.board().tasks.map(task => task.id)).toEqual(["replacement-Review"]);
 });
+
+test("a same-query streamed refresh retains an operated card until the interaction ends", async () => {
+  let emit: ((event: Progress) => void) | undefined, calls = 0;
+  const transport = deferred<PlanningWorkspaceRead | null>();
+  const initial = read(query, "Review");
+  const state = createPlanningState({ userId: "reader", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async task => ({ task }), readWorkspace: async (_workspace, _query, options) => {
+      calls++;
+      if (calls === 1) return initial;
+      emit = options?.onBoardStream as typeof emit;
+      return transport.promise;
+    },
+  } }).planning;
+  expect(await state.ensureBoardQuery(query)).toBe(true);
+  const original = state.board().tasks[0];
+  expect(original.id).toBe("first-Review");
+  const release = state.beginBoardInteraction();
+  const refreshed = state.refreshWorkspace("planning");
+  try {
+    expect(emit).toBeTypeOf("function");
+    emit!({ kind: "basis", readId: "same-query-refresh", read: read(query) });
+    expect(state.board().freshness).toBe("stale");
+    expect(state.board().tasks).toEqual([original]);
+    const replacement = read(query, "Review");
+    emit!({ kind: "column", readId: "same-query-refresh", column: "Review", read: {
+      ...replacement, data: { ...replacement.data, tasks: replacement.data.tasks.map(task => ({ ...task, title: "Authorized replacement" })) },
+    } });
+    transport.resolve(null);
+    expect(state.board().tasks).toEqual([original]);
+    release();
+    await refreshed;
+    expect(state.board().tasks.map(task => task.title)).toEqual(["Authorized replacement"]);
+    expect(calls).toBe(2);
+  } finally { release(); transport.resolve(null); await refreshed; }
+});
