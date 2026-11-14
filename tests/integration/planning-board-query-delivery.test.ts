@@ -29,6 +29,81 @@ async function seedQueryCards({ db, prefix, initiativeId, actors }: QueryFixture
   return { key, open, review };
 }
 
+test.each(["ready", "source", "role", "deadline", "request-abort"] as const)("selected SQL hydration overlaps held avatars and preserves the %s boundary", async boundary => {
+  await withPlanningCredentialDatabase(async fixture => {
+    const { db, actors, request, observed } = fixture;
+    const { key, open, review } = await seedQueryCards(fixture, "avatar-overlap");
+    const transport = globalThis.fetch, signals: AbortSignal[] = [];
+    let avatarEntered!: () => void, releaseAvatar!: () => void, releaseRows!: () => void;
+    const avatarStarted = new Promise<void>(resolve => { avatarEntered = resolve; });
+    const avatarGate = new Promise<void>(resolve => { releaseAvatar = resolve; });
+    const rowsGate = new Promise<void>(resolve => { releaseRows = resolve; });
+    let settled = false;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const next = new Request(input, init), path = new URL(next.url).pathname;
+      const column = path.endsWith("/rpc/planning_deliverable_column");
+      if (column) signals.push(next.signal);
+      const response = await transport(next);
+      if (path.endsWith("/rpc/workspace_access_contexts")) {
+        avatarEntered(); await avatarGate;
+      } else if (column) {
+        // Keep the actual SQL response private until the common basis finishes.
+        // Cancellation releases only this response gate, not database work.
+        await new Promise<void>(resolve => {
+          const stop = () => { next.signal.removeEventListener("abort", stop); resolve(); };
+          if (next.signal.aborted) stop(); else next.signal.addEventListener("abort", stop, { once: true });
+          void rowsGate.then(stop);
+        });
+      }
+      return response;
+    });
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const abort = new AbortController(), scope = { view: "board", filters: { query: key } };
+    const input = new NextRequest(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`), { signal: abort.signal });
+    input.headers.set("accept", "application/x-ndjson");
+    const pending = GET(input).finally(() => { settled = true; });
+    let response: Response | undefined;
+    try {
+      await avatarStarted;
+      await expect.poll(() => signals.length, { timeout: 5000 }).toBe(2);
+      expect(settled).toBe(false);
+      expect(signals.every(signal => !signal.aborted)).toBe(true);
+      if (boundary === "source") await db.query("update public.tasks set sort_order=42 where id=$1", [open]);
+      if (boundary === "role") await db.query("update public.profiles set platform_role='viewer' where id=$1", [actors.founder.profileId]);
+      if (boundary === "deadline") { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(Date.now() + 3_600_000); }
+      if (boundary === "request-abort") abort.abort();
+      releaseAvatar();
+      response = await pending;
+      if (!response) throw new Error("Synthetic overlap response missing");
+      if (boundary === "ready") {
+        expect(response.status).toBe(200);
+        const received = frames(response), basis = (await received.next()).value;
+        expect(basis.kind).toBe("basis"); expect(basis.model.items).toEqual([]);
+        for (const column of ["Offen", "Review"]) expect(basis.model.board.columns[column]).toMatchObject({ total: 1, loaded: 0, availability: "not-loaded" });
+        releaseRows();
+        const outcomes = [];
+        for await (const frame of received) outcomes.push(frame);
+        expect(outcomes.filter(frame => frame.kind === "column")).toHaveLength(2);
+        expect(outcomes.some(frame => frame.kind === "column" && frame.cardIds.includes(open))).toBe(true);
+        expect(outcomes.some(frame => frame.kind === "column" && frame.cardIds.includes(review))).toBe(true);
+        expect(outcomes.at(-1)?.kind).toBe("end");
+        expect(observed.filter(value => value.path.endsWith("/planning_deliverable_query_plan"))).toHaveLength(1);
+        expect(observed.filter(value => value.path.endsWith("/workspace_access_contexts"))).toHaveLength(1);
+      } else {
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        const body = await response.json();
+        expect(body).not.toHaveProperty("model"); expect(body).not.toHaveProperty("readAuthority");
+        expect(signals).toHaveLength(2);
+        expect(signals.every(signal => signal.aborted)).toBe(true);
+      }
+    } finally {
+      abort.abort(); releaseAvatar(); releaseRows(); vi.useRealTimers();
+      const completed = response || await pending;
+      await completed?.body?.cancel().catch(() => undefined);
+    }
+  });
+}, 120_000);
+
 test("one real query plan selects bounded identities and complete discovery without hydrating card content", async () => {
   await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, rpc }) => {
     const key = `${prefix}-query-plan`, offPage = `${prefix}-off-query`;
