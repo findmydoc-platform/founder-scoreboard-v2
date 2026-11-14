@@ -117,6 +117,9 @@ test("query and session replacement reject old summary success while only a curr
     expect(await owner.planning.ensureBoardQuery(next)).toBe(true);
     response.resolve({ summaries: summaries(), readAuthority: authority });
     expect(await retry).toBe(false);
+    expect(owner.planning.board().readStatus).toBe("current");
+    expect(owner.planning.board().result!.queryKey).toBe(planningBoardQueryKey(next));
+    expect(owner.planning.board().result!.childProgressById[cardIds[0]]).toBeNull();
     expect(await owner.planning.acceptServerBoardSummary("independent-summary", { kind: "failure", readId: "independent-summary", area: "summaries", token: "original-summary-batch", status: 403, error: "Old denial" })).toBe(false);
     if (replacement === "query") {
       expect(owner.planning.board().readStatus).toBe("forbidden");
@@ -157,7 +160,13 @@ test("a complete early summary survives later selected-card columns with unknown
     emit!({ kind: "basis", readId: "independent-summary", read: read() });
     emit!({ kind: "outcome", outcome: { ...summaries(), attentionById: Object.fromEntries(cardIds.map(id => [id, []])) } });
     expect(owner.planning.board().result!.summaryRequests?.[0].status).toBe("current");
-    for (const column of ["Offen", "Review"] as const) emit!({ kind: "column", readId: "independent-summary", column, read: read(column) });
+    for (const column of ["Offen", "Review"] as const) {
+      const selected = read(column);
+      emit!({ kind: "outcome", outcome: { kind: "column", readId: "independent-summary", column,
+        scopeRevision: "42", queryRevision: "same-source", observedAt: summaries().observedAt, validUntil: null,
+        cardIds: selected.board!.cardIds, items: selected.data.tasks, relationships: [], personalChildren: {}, taskOmittedFields: [],
+        columnState: selected.board!.columns[column] } });
+    }
     transport.resolve(null); await pending;
     expect(owner.planning.board().tasks.map(task => task.id)).toEqual(cardIds);
     expect(owner.planning.board().result!.childProgressById).toEqual(Object.fromEntries(cardIds.map(id => [id, progress])));
