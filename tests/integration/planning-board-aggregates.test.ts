@@ -70,6 +70,7 @@ test("streamed cards survive one failed summary batch and its retry reads only t
     let response: Response | undefined;
     try {
       response = await GET(input);
+      if (!response) throw new Error("Synthetic streamed response missing");
       expect(response.status).toBe(200);
       const reader = response.body!.getReader(), decoder = new TextDecoder();
       let buffered = "", token = "";

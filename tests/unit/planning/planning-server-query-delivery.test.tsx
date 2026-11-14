@@ -89,7 +89,7 @@ function fixture(empty = false, protectedBasis = false) {
     signal = options?.signal;
     entered.resolve();
     return { status: "ready" as const, model, delivery: {
-      id: readId, abort, checkPublication,
+      id: readId, abort, checkPublication: checkPublication as PlanningBoardDelivery["checkPublication"],
       columns: empty ? {} : { Offen: open.promise, Review: review.promise },
     } satisfies PlanningBoardDelivery };
   });

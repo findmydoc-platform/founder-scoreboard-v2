@@ -485,7 +485,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
                   profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"],
                   taskCoverage: model.coverage?.items || "partial", taskOmittedFields: hierarchyOmittedFields(model), currentProfile: frame.currentProfile,
                 } });
-              } else if (frame.kind !== "end") {
+              } else if (frame.kind !== "end" && frame.kind !== "summaries") {
                 if (!authority || authority.deadline <= Date.now()) throw Object.assign(new Error("Die ursprüngliche Leseberechtigung ist abgelaufen."), { status: 403 });
                 options.onBoardStream!({ kind: "outcome", outcome: frame });
               }

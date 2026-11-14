@@ -6,4 +6,5 @@ export interface PlanningBoardReadModel {
 
 export interface PlanningProgressiveBoardReadModel extends PlanningBoardReadModel {
   startQuery(context: PlanningWorkspaceLoadContext): Promise<import("./planning-board-delivery").PlanningBoardQueryLoadResult>;
+  loadSummaries(context: PlanningWorkspaceLoadContext, token: string): Promise<import("./planning-board-summaries").PlanningBoardSummaryLoadResult>;
 }

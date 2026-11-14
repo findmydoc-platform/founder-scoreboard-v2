@@ -23,6 +23,7 @@ export type PlanningBoardResult = Readonly<{
   query: PlanningBoardQuery;
   column?: TaskStatus;
   delivery?: Readonly<{ id: string; columns: readonly TaskStatus[] }>;
+  summaryRequests?: readonly import("./planning-board-summaries").PlanningBoardSummaryRequest[];
   queryKey: string;
   revision: string;
   observedAt: string;
