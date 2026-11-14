@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { expect, test, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
@@ -48,7 +49,7 @@ test("the atomic publication RPC admits only a mapped live user session and retu
   });
 }, 120_000);
 
-test.each(["source", "role", "session"] as const)("a held complete summary cannot publish after its %s foundation changes", async change => {
+test.each(["source", "role", "session", "workspace"] as const)("a held complete summary cannot publish after its %s foundation changes", async change => {
   await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed }) => {
     const parent = `${prefix}-held-publication`;
     await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
@@ -67,6 +68,7 @@ test.each(["source", "role", "session"] as const)("a held complete summary canno
         if (change === "source") await db.query("update public.tasks set title='Changed after summary' where id=$1", [parent]);
         if (change === "role") await db.query("update public.profiles set platform_role='viewer' where id=$1", [actors.founder.profileId]);
         if (change === "session") await db.query("delete from auth.sessions where id=$1", [actors.founder.sessionId]);
+        if (change === "workspace") await db.query("delete from workspace_private.identity_bindings where user_id=$1", [actors.founder.userId]);
       }
       return response;
     });
@@ -78,8 +80,64 @@ test.each(["source", "role", "session"] as const)("a held complete summary canno
     const body = await response.json();
     for (const field of ["model", "summaries", "readAuthority", "publicationContext"]) expect(body).not.toHaveProperty(field);
     const publications = observed.filter(entry => entry.path.endsWith("/rpc/planning_board_publication_context"));
-    expect(publications).toHaveLength(change === "session" ? 0 : 1);
+    expect(publications).toHaveLength(change === "session" || change === "workspace" ? 0 : 1);
     expect(observed.filter(entry => entry.path.endsWith("/rpc/planning_source_version"))).toEqual([]);
+    expect((await db.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actors.founder.userId])).rows[0].remaining).toBe(0);
+  }, "linking");
+}, 120_000);
+
+test("linking publication requires its original-user Workspace permit, including expiry and revocation", async () => {
+  await withPlanningCredentialDatabase(async ({ db, actors, rpc, local, nativeFetch }) => {
+    const missing = await rpc("planning_board_publication_context", {}, "founder");
+    expect(missing.status).toBe(403);
+    expect(await missing.json()).not.toHaveProperty("source_revision");
+    const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+    for (const state of ["valid", "expired", "revoked"] as const) {
+      const permit = randomBytes(32).toString("base64url"), permitHash = hash(permit);
+      try {
+        await db.query("select public.workspace_issue_permit($1,$2,$3,'POST','/rpc/planning_board_publication_context',$4)",
+          [permitHash, actors.founder.userId, hash(actors.founder.token), actors.founder.sessionId]);
+        if (state === "expired") await db.query("update workspace_private.request_permits set expires_at=clock_timestamp()-interval '1 second' where permit_hash=$1", [permitHash]);
+        if (state === "revoked") await db.query("delete from workspace_private.request_permits where permit_hash=$1", [permitHash]);
+        const response = await nativeFetch(`${local.API_URL}/rest/v1/rpc/planning_board_publication_context`, {
+          method: "POST", body: "{}", headers: { apikey: local.ANON_KEY, authorization: `Bearer ${actors.founder.token}`,
+            "content-type": "application/json", "x-founderops-workspace-permit": permit },
+        });
+        expect(response.status).toBe(state === "valid" ? 200 : 403);
+        const body = await response.json();
+        if (state === "valid") expect(body).toMatchObject({ profile_id: actors.founder.profileId, platform_role: "founder" });
+        else expect(body).not.toHaveProperty("source_revision");
+      } finally { await db.query("delete from workspace_private.request_permits where permit_hash=$1", [permitHash]); }
+    }
+  }, "linking");
+}, 120_000);
+
+test("an aborted Board delivery starts no new atomic publication dispatch", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed }) => {
+    const parent = `${prefix}-aborted-publication`;
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3)`,
+    [parent, initiativeId, actors.founder.profileId]);
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials.ts", { "server-only": {} });
+    const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("founder", "/api/planning-board-data") }, action: "planning.board.read" });
+    expect(permission.ok).toBe(true);
+    if (!permission.ok) throw new Error("Synthetic Board authority unavailable");
+    const controller = new AbortController();
+    const result = await permission.planning.startBoardQuery({ view: "board", filters: { query: parent } }, { signal: controller.signal });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready" || !result.delivery) throw new Error("Synthetic Board delivery unavailable");
+    const delivery = result.delivery;
+    try {
+      const [column] = await Promise.all([delivery.columns.Offen!, delivery.summaries!]);
+      expect(column.kind).toBe("column");
+      const before = observed.filter(entry => entry.path.endsWith("/rpc/planning_board_publication_context")).length;
+      expect(before).toBe(1);
+      controller.abort();
+      const outcome = await delivery.checkPublication(column);
+      expect(outcome).toMatchObject({ kind: "failure", status: 503 });
+      expect(outcome).not.toHaveProperty("items");
+      expect(observed.filter(entry => entry.path.endsWith("/rpc/planning_board_publication_context"))).toHaveLength(before);
+    } finally { controller.abort(); delivery.abort(); }
     expect((await db.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actors.founder.userId])).rows[0].remaining).toBe(0);
   }, "linking");
 }, 120_000);
