@@ -78,6 +78,20 @@ test("real SQL week membership has inclusive boundaries and an expired temporal 
     const query = normalizePlanningBoardQuery({ filters: { query: id, quick: ["week"] } });
     const select = async (at: string, source: string | null = null) => (await db.query("select public.planning_deliverable_selection($1,$2,'Offen',0,20,$3,$4) as selection", [actors.founder.profileId, query, source, at])).rows[0].selection;
     const inclusive = await select(`${yesterday}T00:00:00.000Z`);
+    if (!Array.isArray(inclusive.card_ids)) {
+      const probe = (await db.query(`select
+        exists(select 1 from public.profiles where id=$1 and auth_user_id=$2) as actor_bound,
+        $3::jsonb #>> '{filters,query}' = $4 as query_bound,
+        $5::timestamptz <= statement_timestamp() as expired,
+        public.planning_deliverable_column($1,array[$4]::text[],$6,$7,$5)->>'status' as column_status`,
+      [actors.founder.profileId, actors.founder.userId, query, id, inclusive.valid_until, inclusive.source_revision, inclusive.evaluated_at])).rows[0];
+      throw new Error(`Temporal selection protocol mismatch: ${JSON.stringify({
+        topStatus: ["ready", "forbidden", "staleContinuation"].includes(inclusive.status) ? inclusive.status : "other",
+        hasCardIds: false, validUntilExpired: probe.expired === true,
+        directColumnStatus: ["ready", "forbidden", "staleContinuation"].includes(probe.column_status) ? probe.column_status : "other",
+        actorBound: probe.actor_bound === true, queryBound: probe.query_bound === true,
+      })}`);
+    }
     expect(inclusive.card_ids).toEqual([id]);
     expect(Date.parse(inclusive.valid_until)).toBe(Date.parse(`${yesterday}T00:00:00.001Z`));
     expect((await select(`${yesterday}T00:00:00.001Z`)).card_ids).toEqual([]);
