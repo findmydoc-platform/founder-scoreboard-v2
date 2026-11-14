@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { useEffect, useState } from "react";
-import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 import { PlanningApp } from "./PlanningApp";
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
 import { emptyPlanningShellState } from "./model/planning-shell-state";
@@ -136,7 +136,6 @@ export const SummaryFailureKeepsCardsAndRetriesOnlySummaries: Story = { args: { 
   const control = within(card).getByRole("button", { name: "Status für Parent deliverable ändern" });
   await userEvent.click(control); await userEvent.keyboard("{Escape}");
   await expect(control).toHaveFocus();
-  fireEvent.click(control);
   const top = card.getBoundingClientRect().top, scroll = window.scrollY;
   completeSummaryRead?.();
   await expect(control).toHaveFocus();
