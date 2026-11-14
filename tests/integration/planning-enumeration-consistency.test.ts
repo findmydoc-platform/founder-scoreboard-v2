@@ -17,6 +17,7 @@ it("complete enumeration and selected SQL reads reject source shifts at their ac
   let revokeBeforeLiveCheck = false;
   let snapshotTransports = 0;
   let sourceTransports = 0;
+  let summaryOutcomes: string[] = [];
   let failFence = false;
   try {
     await fixture.mode("linking");
@@ -58,6 +59,7 @@ it("complete enumeration and selected SQL reads reject source shifts at their ac
         if (failFence) { failFence = false; return Response.json({ code: "XX000", message: "Synthetic unavailable source fence" }, { status: 503 }); }
       }
       const response = await nativeFetch(request);
+      if (url.pathname === "/rest/v1/rpc/planning_deliverable_summaries") summaryOutcomes.push((await response.clone().json()).status);
       // Selection and hydration share one SQL statement. Mutate only after its
       // actual response so the separate publication fence must detect the shift.
       if (mutation && url.pathname === "/rest/v1/rpc/planning_deliverable_selection") {
@@ -74,7 +76,7 @@ it("complete enumeration and selected SQL reads reject source shifts at their ac
     const read = async (scope: object = { view: "complete" }) => {
       await new Promise(resolve => setTimeout(resolve, 250));
       revokeBeforeLiveCheck = false;
-      snapshotTransports = 0; sourceTransports = 0;
+      snapshotTransports = 0; sourceTransports = 0; summaryOutcomes = [];
       const response = await GET(new NextRequest(`https://application.example.test/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`, {
         headers: { cookie: `${base}=base64-${Buffer.from(JSON.stringify(actor.session)).toString("base64url")}` },
       }));
@@ -104,7 +106,14 @@ it("complete enumeration and selected SQL reads reject source shifts at their ac
     expect(mutations).toBe(2);
 
     mutation = { table: "active_tasks", run: () => fixture.database.query("update public.tasks set sort_order=5500 where id=$1", [`${prefix}-0004`]) };
-    expect((await read({ view: "board", filters: {} })).status).toBe(503);
+    const incompatibleInitial = await read({ view: "board", filters: {} });
+    const unavailable = await incompatibleInitial.json();
+    expect(summaryOutcomes).toEqual(["staleContinuation"]);
+    expect(sourceTransports).toBe(0);
+    expect(unavailable).not.toHaveProperty("model");
+    expect(unavailable).not.toHaveProperty("summaries");
+    expect(unavailable).not.toHaveProperty("readAuthority");
+    expect(incompatibleInitial.status).toBe(503);
     expect(mutations).toBe(3);
     const current = await read({ view: "board", filters: {} });
     expect(current.status).toBe(200);
