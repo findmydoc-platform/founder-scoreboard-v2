@@ -48,7 +48,7 @@ function nativeOwner(adapter: Partial<PlanningStateAdapter> = {}) {
     childProgressById: Object.fromEntries(cardIds.map(id => [id, null])), attentionById: Object.fromEntries(cardIds.map(id => [id, null])),
     delivery: { id: "independent-summary", columns: [] as TaskStatus[] } };
   return createPlanningState({ userId: "reader", initialData: data, initialSession: session,
-    initialWorkspaceRead: { workspace: "planning", session, readAuthority: authority, coverage: { tasks: "partial" },
+    initialWorkspaceRead: { workspace: "planning", session, readAuthority: authority, coverage: { tasks: "partial" }, taskOmittedFields: [],
       query, queryKey: planningBoardQueryKey(query), scopeRevision: "42", revision: "same-source", queryRevision: "same-source", board },
     adapter: { saveTask: async (task, patch) => ({ task: { ...task, ...patch, updatedAt: "confirmed" } }),
       readWorkspace: async (_workspace, input) => {
