@@ -19,6 +19,11 @@ progress as (
     and child.project_id='findmydoc-founder-execution'
   group by chosen.id
 ),
+percentages as (
+  select progress.*,case when total=0 then 0::double precision
+    else (completed::double precision / total::double precision) * 100::double precision end as percentage
+  from progress
+),
 waiting as materialized (
   select item.id from chosen item
   where exists (
@@ -57,8 +62,10 @@ select case
     'status','ready','source_revision',basis.revision,'evaluated_at',p_evaluated_at,
     'child_progress',coalesce((select jsonb_object_agg(id,jsonb_build_object(
       'completed',completed,'total',total,'unfinished',total-completed,
-      'percentage',case when total=0 then 0 else round(completed::numeric*100/total) end
-    )) from progress),'{}'::jsonb),
+      -- Match Math.round((completed / total) * 100): division order and
+      -- positive-half ties are observable, unlike PostgreSQL float round.
+      'percentage',floor(percentage)+case when percentage-floor(percentage)>=0.5 then 1 else 0 end
+    )) from percentages),'{}'::jsonb),
     -- RAW evidence URL validity follows the existing WHATWG JS helper. Return
     -- its complete scoped scalar input only when evidence is otherwise absent;
     -- the adapter removes these inputs before any browser response.

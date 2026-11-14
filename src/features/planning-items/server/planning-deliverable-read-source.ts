@@ -57,7 +57,7 @@ async function loadSelectedSummaries(supabase: SupabaseClient, context: Planning
       const progress = summary.child_progress?.[id];
       return !progress || ![progress.completed, progress.total, progress.unfinished, progress.percentage].every(Number.isSafeInteger)
         || progress.completed < 0 || progress.unfinished < 0 || progress.total !== progress.completed + progress.unfinished
-        || progress.percentage !== (progress.total ? Math.round(progress.completed * 100 / progress.total) : 0);
+        || progress.percentage !== (progress.total ? Math.round((progress.completed / progress.total) * 100) : 0);
     })) return { status: "unavailable" as const };
   const attention: Record<string, TaskAttentionSignal[]> = {};
   for (const id of selected.card_ids) {

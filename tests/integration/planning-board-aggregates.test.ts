@@ -224,6 +224,8 @@ test("direct-child percentages preserve legacy division order and JavaScript pos
     expect(reference.model.board!.childProgressById).toEqual(expected);
     const sql = (await db.query("select public.planning_deliverable_summaries($1,$2,public.planning_source_version(),statement_timestamp(),null) as summary", [actors.founder.profileId, [fractional, half]])).rows[0].summary;
     expect(sql.status).toBe("ready");
+    expect(sql.child_progress[half].percentage).toBe(13);
+    expect(sql.child_progress[fractional].percentage).toBe(14);
     expect(sql.child_progress).toEqual(expected);
     const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
     const response = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`));
