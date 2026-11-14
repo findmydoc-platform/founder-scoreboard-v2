@@ -115,3 +115,31 @@ test("streamed cards survive one failed summary batch and its retry reads only t
     }
   });
 }, 120_000);
+
+test("aggregate-only retry cannot renew the original admission deadline while its JWT is still valid", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed }) => {
+    const parentId = `${prefix}-original-summary-authority`;
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3)`, [parentId, initiativeId, actors.founder.profileId]);
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const query = { view: "board", column: "Offen", filters: { query: parentId } };
+    const first = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`));
+    expect(first.status).toBe(200);
+    const body = await first.json(), token = body.model.board.summaryRequests[0].token;
+    expect(body.model.board.cardIds).toEqual([parentId]);
+    expect(body.model.board.childProgressById[parentId]).toEqual({ completed: 0, total: 0, unfinished: 0, percentage: 0 });
+    const jwt = JSON.parse(Buffer.from(actors.founder.token.split(".")[1], "base64url").toString("utf8"));
+    expect(body.readAuthority.deadline).toBeLessThan(jwt.exp * 1000);
+    const summaryReads = observed.filter(entry => entry.path.endsWith("/planning_deliverable_summaries")).length;
+    expect(summaryReads).toBe(1);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(body.readAuthority.deadline);
+      expect(Date.now()).toBeLessThan(jwt.exp * 1000);
+      const retry = await GET(request("founder", `/api/planning-board-data?summaries=${encodeURIComponent(token)}`));
+      expect(retry.status).toBe(403);
+      expect(await retry.json()).not.toHaveProperty("summaries");
+      expect(observed.filter(entry => entry.path.endsWith("/planning_deliverable_summaries"))).toHaveLength(summaryReads);
+    } finally { vi.useRealTimers(); }
+  }, "linking");
+}, 120_000);
