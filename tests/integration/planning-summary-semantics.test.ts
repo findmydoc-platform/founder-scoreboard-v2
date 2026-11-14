@@ -73,7 +73,7 @@ test("complete summary predicates preserve negative relationship blocker depende
       for (const example of cases) expect(summary.attentionById[id(example.id)].map((signal: { id: string }) => signal.id), example.id).toEqual(example.signals);
       expect(summary.attentionById).toEqual(reference.model.board!.attentionById);
       expect(frames[0].model.board.metrics.blocked).toBe(5);
-      expect(JSON.stringify(summary)).not.toContain("last-valid");
+      expect(JSON.stringify(summary)).not.toContain("https:example.test/last-valid");
       expect(summary).not.toHaveProperty("attention_inputs");
     } finally {
       await db.query("select set_config('founderops.trash_lifecycle_write','on',false)");

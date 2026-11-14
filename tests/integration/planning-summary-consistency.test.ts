@@ -1,4 +1,5 @@
-import { expect, test } from "vitest";
+import { createHmac } from "node:crypto";
+import { expect, test, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 
@@ -122,5 +123,45 @@ test("summary reads retain supported roles and direct RPC denial without leaking
     const denied = await revoked.json();
     expect(denied).not.toHaveProperty("summaries");
     expect(denied).not.toHaveProperty("readAuthority");
+  });
+}, 120_000);
+
+test("summary temporal expiry without a source write does not become renewed authority or an empty result", async () => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, local, request, observed }) => {
+    const parent = `${prefix}-week-summary`, sprint = `${prefix}-week-sprint`;
+    const today = new Date().toISOString().slice(0, 10), tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    // A genuine local JWT outlives the independent week boundary. This is only
+    // fixture issuance; production session or membership policy is unchanged.
+    const [header, payload] = actors.founder.token.split(".");
+    const claims = { ...JSON.parse(Buffer.from(payload, "base64url").toString("utf8")), exp: Math.floor(Date.now() / 1000) + 172800 };
+    const unsigned = `${header}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}`;
+    actors.founder.token = `${unsigned}.${createHmac("sha256", local.JWT_SECRET).update(unsigned).digest("base64url")}`;
+    await db.query("insert into public.sprints(id,project_id,name,start_date,end_date) values($1,'findmydoc-founder-execution','Synthetic week boundary',$2,$3)", [sprint, today, tomorrow]);
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner,sprint_id,evidence_link)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3,$4,'https://example.test/evidence')`, [parent, initiativeId, actors.founder.profileId, sprint]);
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const query = { view: "board", column: "Offen", filters: { query: parent, quick: ["week"] } };
+    const initial = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`));
+    expect(initial.status).toBe(200);
+    const body = await initial.json(), token = body.model.board.summaryRequests[0].token, boundary = Date.parse(body.model.board.validUntil);
+    expect(body.model.board.cardIds).toEqual([parent]);
+    expect(boundary).toBeGreaterThan(Date.now());
+    expect(boundary).toBeLessThan(body.readAuthority.deadline);
+    const before = (await db.query("select public.planning_source_version() as revision")).rows[0].revision;
+    const expiredSql = (await db.query("select public.planning_deliverable_summaries($1,$2,$3,$4,statement_timestamp()-interval '1 millisecond') as summary", [actors.founder.profileId, [parent], before, body.model.board.observedAt])).rows[0].summary;
+    expect(expiredSql).toEqual({ status: "staleContinuation" });
+    const reads = observed.filter(entry => entry.path.endsWith("/planning_deliverable_summaries")).length;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(boundary);
+      expect(Date.now()).toBeLessThan(claims.exp * 1000);
+      const stale = await GET(request("founder", `/api/planning-board-data?summaries=${encodeURIComponent(token)}`));
+      expect(stale.status).toBe(409);
+      const denied = await stale.json();
+      expect(denied).not.toHaveProperty("summaries");
+      expect(denied).not.toHaveProperty("readAuthority");
+      expect(observed.filter(entry => entry.path.endsWith("/planning_deliverable_summaries"))).toHaveLength(reads);
+      expect((await db.query("select public.planning_source_version() as revision")).rows[0].revision).toBe(before);
+    } finally { vi.useRealTimers(); }
   });
 }, 120_000);
