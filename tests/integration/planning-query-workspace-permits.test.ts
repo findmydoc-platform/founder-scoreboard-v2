@@ -37,6 +37,7 @@ async function prepare() {
   let hydrationResponses = 0, profileDispatches = 0, protectedDispatches = 0;
   let afterPrepare: ((hash: string) => Promise<void>) | undefined;
   let beforeRelease: ((request: Request, hash: string, present: number) => Promise<void>) | undefined;
+  let afterHydration: (() => Promise<void>) | undefined;
   let actor: Awaited<ReturnType<typeof fixture.actor>>;
   const remaining = async (hash?: string) => (await fixture.database.query(
     "select count(*)::integer as count from workspace_private.request_permits where user_id=$1 and ($2::text is null or permit_hash=$2)",
@@ -139,7 +140,10 @@ async function prepare() {
       }
       if (["planning_deliverable_query_plan", "planning_deliverable_column", "planning_source_version"].some(name => url.pathname.endsWith(`/rpc/${name}`))) protectedDispatches++;
       const response = await transport(request);
-      if (url.pathname.endsWith("/planning_deliverable_column") && response.ok) hydrationResponses++;
+      if (url.pathname.endsWith("/planning_deliverable_column") && response.ok) {
+        hydrationResponses++;
+        await afterHydration?.();
+      }
       return response;
     };
     vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
@@ -159,6 +163,7 @@ async function prepare() {
       hold() { const item = gate(); gates.push(item); return item; },
       onPrepare(callback: typeof afterPrepare) { afterPrepare = callback; },
       onRelease(callback: typeof beforeRelease) { beforeRelease = callback; },
+      onHydration(callback: typeof afterHydration) { afterHydration = callback; },
       hydrationCount: () => hydrationResponses,
       assertAccounting() {
         expect(failures).toEqual([]);
@@ -243,24 +248,35 @@ test("an original Workspace deadline rejects a prepared publication dispatch and
 
 test.each(["body", "request"] as const)("Workspace %s cancellation retains independent real permit-release acknowledgement", async kind => {
   await withWorkspaceQuery(async context => {
-    const cleanupGate = context.hold(), entered = context.hold();
+    const cleanupGate = context.hold(), entered = context.hold(), rowsGate = context.hold(), bothRows = context.hold();
     const abort = new AbortController();
-    let cleanupSignal: AbortSignal | undefined, held = false, callerAbortedWhileCleanupLive = false;
-    context.onRelease(async (request, _hash, present) => {
-      if (held || context.hydrationCount() < 2) return;
-      held = true; cleanupSignal = request.signal;
-      // workspace_check_request consumes a permit in a writable transaction;
-      // a read-only transaction leaves it for finally. Observe the actual row.
-      expect([0, 1]).toContain(present);
-      entered.release(); await cleanupGate.promise;
-      callerAbortedWhileCleanupLive = !request.signal.aborted;
-    });
-    const response: Response = await context.GET(context.request(abort.signal));
-    expect(response.status).toBe(200);
-    const reader = response.body!.getReader();
+    let cleanupSignal: AbortSignal | undefined, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let held = false, releaseArmed = false, callerAbortedWhileCleanupLive = false;
     try {
+      context.onHydration(async () => {
+        if (context.hydrationCount() === 2) bothRows.release();
+        await rowsGate.promise;
+      });
+      context.onRelease(async (request, _hash, present) => {
+        if (held || !releaseArmed || context.hydrationCount() < 2) return;
+        held = true; cleanupSignal = request.signal;
+        // Hold a real publication cleanup after the public basis, regardless of
+        // whether raw SQL completed before the common avatar/source fence.
+        // A writable transaction consumes its permit; a read-only one leaves it.
+        expect([0, 1]).toContain(present);
+        entered.release(); await cleanupGate.promise;
+        callerAbortedWhileCleanupLive = !request.signal.aborted;
+      });
+      const response: Response = await context.GET(context.request(abort.signal));
+      expect(response.status).toBe(200);
+      if (!response.body) throw new Error("Synthetic Workspace query body missing");
+      reader = response.body.getReader();
       const basis = await reader.read();
       expect(new TextDecoder().decode(basis.value)).toContain('"kind":"basis"');
+      await bothRows.promise;
+      expect(context.hydrationCount()).toBe(2);
+      releaseArmed = true;
+      rowsGate.release();
       await entered.promise;
       if (kind === "body") await reader.cancel(); else abort.abort();
       expect(cleanupSignal?.aborted).toBe(false);
@@ -273,6 +289,6 @@ test.each(["body", "request"] as const)("Workspace %s cancellation retains indep
       expect(context.facts().consumed + context.facts().releaseRemovals).toBe(context.facts().prepared);
       context.assertAccounting();
       expect(await context.remaining()).toBe(0);
-    } finally { cleanupGate.release(); abort.abort(); await reader.cancel().catch(() => undefined); }
+    } finally { rowsGate.release(); cleanupGate.release(); abort.abort(); await reader?.cancel().catch(() => undefined); }
   });
 }, 120_000);
