@@ -165,3 +165,42 @@ test("summary temporal expiry without a source write does not become renewed aut
     } finally { vi.useRealTimers(); }
   });
 }, 120_000);
+
+test.each(["source", "session"] as const)("a held completed summary cannot publish after its %s foundation changes", async change => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request }) => {
+    const parent = `${prefix}-held-summary`, child = `${prefix}-held-child`;
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3)`, [parent, initiativeId, actors.founder.profileId]);
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,owner)
+      values($1,'findmydoc-founder-execution','Synthetic held child','sub_issue',$2,'Offen','P2',$3)`, [child, parent, actors.founder.profileId]);
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const query = { view: "board", column: "Offen", filters: { query: parent } };
+    const first = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`));
+    expect(first.status).toBe(200);
+    const body = await first.json(), token = body.model.board.summaryRequests[0].token;
+    expect(body.model.board.childProgressById[parent]).toEqual({ completed: 0, total: 1, unfinished: 1, percentage: 0 });
+    const transport = globalThis.fetch;
+    let release!: () => void, held = false;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const next = new Request(input, init), response = await transport(next);
+      if (new URL(next.url).pathname.endsWith("/rpc/planning_deliverable_summaries")) {
+        expect(response.status).toBe(200); held = true; await gate;
+      }
+      return response;
+    });
+    const pending = GET(request("founder", `/api/planning-board-data?summaries=${encodeURIComponent(token)}`));
+    try {
+      await expect.poll(() => held, { timeout: 5000 }).toBe(true);
+      if (change === "source") await db.query("update public.tasks set title='Synthetic changed off-page child' where id=$1", [child]);
+      else await db.query("delete from auth.sessions where id=$1", [actors.founder.sessionId]);
+      release();
+      const response = await pending;
+      expect(response.status).toBe(change === "source" ? 409 : 403);
+      const denied = await response.json();
+      expect(denied).not.toHaveProperty("summaries");
+      expect(denied).not.toHaveProperty("readAuthority");
+      expect((await db.query("select count(*)::int as count from public.active_tasks where parent_task_id=$1", [parent])).rows[0].count).toBe(1);
+    } finally { release(); await pending.catch(() => undefined); }
+  });
+}, 120_000);
