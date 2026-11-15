@@ -95,6 +95,7 @@ export const ScopedTablePagesRetainBoardAndRowInteraction: Story = { play: async
   await expect(canvas.getByRole("link", { name: "Synthetic needle table row 2" })).toBeVisible();
   await expect(canvas.queryByRole("link", { name: "Synthetic needle table row 3" })).not.toBeInTheDocument();
   await expect(canvas.queryByRole("link", { name: "Synthetic required ancestor" })).not.toBeInTheDocument();
+  await expect(canvas.queryByRole("link", { name: "Synthetic needle remembered Epic" })).not.toBeInTheDocument();
   await expect(canvas.getByText((_, element) => element?.tagName === "SPAN" && element.textContent === "2 von 4")).toBeVisible();
   await expect(canvas.getByLabelText("Tabellenanfragen")).toHaveTextContent("1");
   const load = canvas.getByRole("button", { name: "Weitere Aufgaben laden" });
