@@ -146,7 +146,7 @@ beforeAll(async () => {
         send({ message: "Unscripted synthetic detail scope" }, 400); return;
       }
       const basis = { source_revision: `synthetic-detail:${body.p_item_id}:${body.p_area}`, observed_at: new Date().toISOString(), valid_until: null };
-      send(url.pathname.endsWith("planning_detail_source") ? basis : mapped ? { ...basis, profile_id: "synthetic-profile", platform_role: role } : null); return;
+      send(url.pathname.endsWith("planning_detail_source") ? { ...basis, target_id: itemPageTaskId, ancestor_ids: [] } : mapped ? { ...basis, profile_id: "synthetic-profile", platform_role: role } : null); return;
     }
     if (["planning_deliverable_selection", "planning_deliverable_query_plan", "planning_deliverable_column"].some(name => url.pathname === `/rest/v1/rpc/${name}`)) {
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
@@ -202,7 +202,9 @@ beforeAll(async () => {
       send([{ version: "v1.0.0", summary, published_at: manifest.publishedAt, manifest_digest: "synthetic", manifest }]); return;
     }
     if (itemPageFixture && url.pathname === "/rest/v1/active_tasks") {
-      send(url.searchParams.get("id") === `eq.${itemPageTaskId}` ? planningItemFixture() : []); return;
+      const id = url.searchParams.get("id");
+      send(id === `eq.${itemPageTaskId}` ? planningItemFixture()
+        : id === `in.(${itemPageTaskId})` && url.searchParams.get("project_id") === `eq.${planningProject.id}` ? [planningItemFixture()] : []); return;
     }
     if (itemPageFixture && url.pathname === "/rest/v1/projects") {
       send(planningProject); return;
