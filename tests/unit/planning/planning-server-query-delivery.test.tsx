@@ -278,7 +278,7 @@ test("Epic SSR includes an already ready exact summary in its first operable sna
     childProgressById: { "selected-open-card": { completed: 0, total: 1, unfinished: 1, percentage: 0 } },
     attentionById: { "selected-open-card": [] } });
   const column = ready("Offen");
-  controlled.open.resolve({ ...column, items: [{ ...column.items[0], taskType: "epic", parentTaskId: "" }] });
+  controlled.open.resolve({ ...column, items: [{ ...column.items[0], taskType: "epic" as const, parentTaskId: "" }] });
   const page = await rendering;
 
   expect(page.props.initialData.tasks.map(task => task.id)).toEqual(["selected-open-card"]);
