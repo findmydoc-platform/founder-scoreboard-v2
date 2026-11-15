@@ -152,7 +152,7 @@ async function resolveQuery(supabase: SupabaseClient, context: PlanningWorkspace
   return { status: "query" as const, query, preferenceRevision };
 }
 
-function cursorSigner(context: PlanningWorkspaceLoadContext, query: ReturnType<typeof normalizePlanningBoardQuery>, column: TaskStatus) {
+function cursorSigner(context: PlanningWorkspaceLoadContext, query: ReturnType<typeof normalizePlanningBoardQuery>, column: TaskStatus | undefined) {
   return (cursor: Omit<Cursor, "binding">) => createHmac("sha256", context.authorityKey || context.actorProfileId || "local-planning")
     .update(JSON.stringify([context.actorProfileId, planningBoardQueryKey(query), column, query.ordering, cursor])).digest("hex");
 }
@@ -164,8 +164,9 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   if (resolved.status !== "query") return resolved;
   const { query, preferenceRevision } = resolved;
   const queryKey = planningBoardQueryKey(query);
-  const column = input.column || (input.continuation ? "Erledigt" : query.filters.status !== "Alle" && statuses.includes(query.filters.status as TaskStatus) ? query.filters.status as TaskStatus : "Offen");
-  if (!statuses.includes(column)) return { status: "staleContinuation" };
+  const tableView = query.view === "table";
+  const column = tableView ? undefined : input.column || (input.continuation ? "Erledigt" : query.filters.status !== "Alle" && statuses.includes(query.filters.status as TaskStatus) ? query.filters.status as TaskStatus : "Offen");
+  if (tableView ? Boolean(input.column) : !column || !statuses.includes(column)) return { status: "staleContinuation" };
   const sign = cursorSigner(context, query, column);
   let cursor: Cursor | undefined;
   if (input.continuation) {
@@ -187,7 +188,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   context = { ...context, authorityDeadline: authorityDeadline ?? undefined,
     signal: context.signal && deadlineSignal ? AbortSignal.any([context.signal, deadlineSignal]) : context.signal || deadlineSignal };
   const read = supabase.rpc("planning_deliverable_selection", {
-    p_actor_profile_id: context.actorProfileId, p_query: query, p_column: column, p_offset: cursor?.offset || 0,
+    p_actor_profile_id: context.actorProfileId, p_query: query, p_column: column ?? null, p_offset: cursor?.offset || 0,
     p_limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit) || 20))), p_source_revision: cursor?.source || null, p_evaluated_at: cursor?.evaluatedAt || null,
   });
   const result = await observeRuntimePhase("board.selection", () => context.signal ? read.abortSignal(context.signal) : read);
@@ -228,6 +229,27 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   const revision = createHash("sha256").update(JSON.stringify([selected.source_revision, selected.temporal_key])).digest("hex");
   const request = summaryRequest(context, { readId: randomUUID(), query, cardIds: selected.card_ids, source: selected.source_revision,
     evaluatedAt: selected.evaluated_at, temporalKey: selected.temporal_key, validUntil: selected.valid_until, authorityDeadline: context.authorityDeadline ?? null });
+  const content = {
+    revision: selected.workspace_revision.latestUpdatedAt, scopeRevision: selected.source_revision, query, queryRevision: revision,
+    project: mapPlanningProject(selected.project),
+    items: mapPlanningItemRows(selected.rows, people, [], [], []).map(task => compactPlanningCard(task, selectedOmittedFields)),
+    people, sprints: selected.sprints.map(mapSprint), preferences: selected.preferences.map(mapProfileUiPreference),
+    relationships: selected.relationships.map(mapTaskRelation), blockers: [], taskOmittedFields: selectedOmittedFields,
+    coverage: { items: "partial", people: "complete", sprints: "complete", preferences: "complete", strategies: "partial", raci: "partial", links: "partial", relationships: "partial", blockers: "partial" },
+  } satisfies import("../model/planning-workspace-model").PlanningWorkspaceModel;
+  if (tableView) {
+    const next = (cursor?.offset || 0) + selected.card_ids.length, total = selected.metrics.total;
+    const basis = { offset: next, source: selected.source_revision, evaluatedAt: selected.evaluated_at, temporalKey: selected.temporal_key, validUntil: selected.valid_until, authorityDeadline };
+    return { status: "ready", authorityDeadline: authorityDeadline ?? undefined, model: { ...content,
+      table: { query, queryKey, revision, observedAt: selected.evaluated_at, validUntil: selected.valid_until,
+        rowIds: selected.card_ids, page: { total, loaded: selected.card_ids.length, completeness: next >= total ? "complete" : "partial",
+          continuation: next < total ? Buffer.from(JSON.stringify({ ...basis, binding: sign(basis) })).toString("base64url") : null },
+        metrics: selected.metrics, workstreams: selected.workstreams, initiativeOptions: selected.initiative_options,
+        summaryRequests: selected.card_ids.length ? [{ ...request, status: summaries.status === "ready" ? "current" : "unavailable" }] : [],
+        attentionById: summaries.status === "ready" ? summaries.attention : Object.fromEntries(selected.card_ids.map(id => [id, null])),
+        workspaceRevision: selected.workspace_revision },
+    } };
+  }
   const columns = Object.fromEntries(statuses.map(status => {
     const total = selected.columns[status]?.total;
     const loaded = status === column ? selected.card_ids.length : 0;
@@ -237,12 +259,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
       continuation: status === column && next < total ? Buffer.from(JSON.stringify({ ...basis, binding: sign(basis) })).toString("base64url") : null } satisfies PlanningBoardColumn];
   })) as Record<TaskStatus, PlanningBoardColumn>;
   return { status: "ready", authorityDeadline: authorityDeadline ?? undefined, model: {
-    revision: selected.workspace_revision.latestUpdatedAt, scopeRevision: selected.source_revision, query, queryRevision: revision,
-    project: mapPlanningProject(selected.project),
-    items: mapPlanningItemRows(selected.rows, people, [], [], []).map(task => compactPlanningCard(task, selectedOmittedFields)),
-    people, sprints: selected.sprints.map(mapSprint), preferences: selected.preferences.map(mapProfileUiPreference),
-    relationships: selected.relationships.map(mapTaskRelation), blockers: [], taskOmittedFields: selectedOmittedFields,
-    coverage: { items: "partial", people: "complete", sprints: "complete", preferences: "complete", strategies: "partial", raci: "partial", links: "partial", relationships: "partial", blockers: "partial" },
+    ...content,
     board: { query, column, queryKey, revision, observedAt: selected.evaluated_at, validUntil: selected.valid_until,
       cardIds: selected.card_ids, columns, metrics: selected.metrics, levelTotals: selected.level_totals,
       summaryRequests: selected.card_ids.length ? [{ ...request, status: summaries.status === "ready" ? "current" : "unavailable" }] : [],

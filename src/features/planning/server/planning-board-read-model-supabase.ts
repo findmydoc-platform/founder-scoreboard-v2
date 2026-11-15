@@ -11,13 +11,14 @@ export function createSupabasePlanningBoardReadModel(supabase: SupabaseClient): 
   return { loadSummaries: (context, token) => loadPlanningDeliverableSummaries(supabase, context, token), startQuery: (context) => {
     const query = context.query || { view: "complete" as const };
     const normalized = normalizePlanningBoardQuery(query);
+    if (normalized.view === "table") return loadPlanningDeliverableBoard(supabase, { ...context, query });
     return normalized.view === "board" && normalized.level === "deliverable"
       ? startPlanningDeliverableQuery(supabase, { ...context, query })
       : loadPlanningWorkspaceModel(supabase, { ...context, query });
   }, load: (context) => {
     const query = context.query || { view: "complete" as const };
     const normalized = normalizePlanningBoardQuery(query);
-    return normalized.view === "board"
+    return normalized.view === "board" || normalized.view === "table"
       ? loadPlanningDeliverableBoard(supabase, { ...context, query })
       : loadPlanningWorkspaceModel(supabase, { ...context, query });
   } };

@@ -6,11 +6,11 @@ export const DEFAULT_PLANNING_FILTERS: PlanningFilterPreferences = {
   sprintId: "Alle", workstream: "Alle", risk: "Alle", targetFrom: "", targetTo: "", sort: "priority", direction: "asc",
 };
 export type PlanningBoardQuery = Readonly<{
-  view: "board" | "complete";
+  view: "board" | "table" | "complete";
   level: PlanningLevel;
   parentId: string;
   filters: PlanningFilterPreferences;
-  ordering: "priority-order-id-and-completed-updated-desc-order-id";
+  ordering: "priority-order-id-and-completed-updated-desc-order-id" | "table-sort-direction-order-priority-id";
 }>;
 export type PlanningBoardQueryInput = Partial<Omit<PlanningBoardQuery, "filters" | "ordering">> & {
   filters?: Partial<PlanningFilterPreferences>;
@@ -58,7 +58,8 @@ export function normalizePlanningBoardQuery(input: PlanningBoardQueryInput = {})
   }
   filters.quick = Array.isArray(candidate.quick) ? [...new Set(candidate.quick.filter(value => ["mine", "my-reviews", "open", "critical", "blocked", "week", "high", "evidence"].includes(value)))].sort() : [];
   filters.direction = candidate.direction === "desc" ? "desc" : "asc";
-  return { view: input.view === "complete" ? "complete" : "board", level: input.level === "epic" || input.level === "initiative" ? input.level : "deliverable", parentId: typeof input.parentId === "string" ? input.parentId.slice(0, 512) : "all", filters, ordering: "priority-order-id-and-completed-updated-desc-order-id" };
+  const view = input.view === "complete" ? "complete" : input.view === "table" ? "table" : "board";
+  return { view, level: view !== "table" && (input.level === "epic" || input.level === "initiative") ? input.level : "deliverable", parentId: view !== "table" && typeof input.parentId === "string" ? input.parentId.slice(0, 512) : "all", filters, ordering: view === "table" ? "table-sort-direction-order-priority-id" : "priority-order-id-and-completed-updated-desc-order-id" };
 }
 export function planningBoardQueryKey(query: PlanningBoardQueryInput = {}) {
   const normalized = normalizePlanningBoardQuery(query);
