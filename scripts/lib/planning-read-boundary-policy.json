@@ -484,7 +484,7 @@
       "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
       "kind": "rpc",
       "target": "planning_deliverable_selection",
-      "fingerprint": "5794f031ecbe809c88bd51608de5812dd2ec6997841e0f32ae05ff783ab4ad09",
+      "fingerprint": "592ce6dd499ebf7eff4d5311e4cd5b102a9e81752714a8694950a789923331b0",
       "contract": "BOARD",
       "references": 1
     },
@@ -1040,6 +1040,14 @@
       "contract": "BOARD",
       "references": 1,
       "reason": "This fixed original-user RPC reads the live mapped actor, role and Planning source together at each publication boundary, retaining the original JWT, Workspace dispatch preparation and permit."
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_table_risks",
+      "fingerprint": "e817cfeab997856831c3098cbefd579bd41452c009814ba9b6e68581a69f68d1",
+      "contract": "TABLE",
+      "references": 1
     }
   ]
 }
