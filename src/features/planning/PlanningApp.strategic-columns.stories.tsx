@@ -12,7 +12,7 @@ import type { PlanningWorkspaceModel } from "@/features/planning-items/model/pla
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { Profile, Task, TaskStatus } from "@/lib/types";
-import { taskStatuses } from "@/lib/status";
+import { normalizeStatus, taskStatuses } from "@/lib/status";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
 import { mockAccountLifecycle } from "../../../tests/helpers/account-lifecycle-browser-fixture";
 
@@ -68,7 +68,7 @@ function StrategicColumnsFlow({ level = "initiative" }: { level?: "epic" | "init
         }
         setStreamReads(count => count + 1);
         const basis = model(level, scope.filters.query, [open, paused], true), readId = `strategic-${level}`;
-        const frame = (task: Task): PlanningBoardStreamFrame => ({ kind: "column", readId, column: task.status,
+        const frame = (task: Task): PlanningBoardStreamFrame => ({ kind: "column", readId, column: normalizeStatus(task.status),
           scopeRevision: "43", queryRevision: "strategic-revision", observedAt, validUntil: null,
           cardIds: [task.id], items: [task], relationships: [], personalChildren: {}, taskOmittedFields: [],
           columnState: { total: 1, loaded: 1, availability: "ready", completeness: "complete", continuation: null } });
