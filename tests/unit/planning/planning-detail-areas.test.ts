@@ -74,7 +74,7 @@ test("an accepted detail retains its original deadline and clears protected fiel
       readTaskDetail: async () => ({ model, readAuthority: { userId: "user-a", deadline: 2_000 } }) },
   });
   expect(await planning.loadTaskDetail(task.id, { area: "target" })).toMatchObject({ ok: true });
-  expect(planning.taskDetail(task.id).task?.description).toBe(task.description);
+  expect(planning.taskDetail(task.id).task?.title).toBe("Complete canonical target");
   expect(planning.taskDetail(task.id).task?.id).toBe(task.id);
   now = 2_001;
   expect(planning.taskDetail(task.id).task).toBeNull();
