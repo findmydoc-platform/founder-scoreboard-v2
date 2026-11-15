@@ -134,8 +134,8 @@ export const OffPageStatusesRetainTheCompleteTableOptionBasis: Story = {
     await canvas.findByRole("link", { name: "Synthetic needle table row 1" });
     await userEvent.click(canvas.getByRole("button", { name: "Aufgaben nach Status filtern" }));
     await userEvent.click(document.getByRole("combobox", { name: "Status wählen" }));
-    await expect(document.getByRole("option", { name: "Review", exact: true })).toBeVisible();
-    await expect(document.getByRole("option", { name: "Pausiert", exact: true })).toBeVisible();
+    await expect(document.getByRole("option", { name: "Review" })).toBeVisible();
+    await expect(document.getByRole("option", { name: "Pausiert" })).toBeVisible();
     await expect(document.getAllByRole("option").map(option => option.textContent)).toEqual(["Alle Status", "In Arbeit", "Offen", "Review", "Pausiert"]);
     await userEvent.keyboard("{Escape}");
     await expect(canvas.getByRole("link", { name: "Synthetic needle table row 1" })).toBeVisible();
