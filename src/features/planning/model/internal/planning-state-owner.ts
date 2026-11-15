@@ -324,6 +324,35 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const childLists = new Map<string, { ids: Set<string>; started: number; readStatus: PlanningReadStatus }>();
   const detailAreaStatuses = new Map<string, PlanningReadStatus>();
   const detailReads = new Map<string, ReturnType<PlanningState["loadTaskDetail"]>>();
+  const detailDemands = new Map<string, { controller: AbortController; consumers: Set<symbol>; settled: boolean; previous: PlanningReadStatus }>();
+  function retainDetailRead(key: string, taskId: string, area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea, promise: ReturnType<PlanningState["loadTaskDetail"]>, signal?: AbortSignal) {
+    const demand = detailDemands.get(key);
+    if (!demand) return promise;
+    const consumer = Symbol(key);
+    demand.consumers.add(consumer);
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      signal?.removeEventListener("abort", release);
+      demand.consumers.delete(consumer);
+      if (!demand.consumers.size && !demand.settled && detailDemands.get(key) === demand) {
+        demand.controller.abort();
+        detailDemands.delete(key);
+        detailReads.delete(key);
+        if (isActive()) {
+          const next = demand.previous === "current" ? "stale" : demand.previous;
+          if (area === "target") detailStatuses.set(taskId, next);
+          else detailAreaStatuses.set(key, next);
+          publish();
+        }
+      }
+    };
+    signal?.addEventListener("abort", release, { once: true });
+    if (signal?.aborted) release();
+    return promise.then(result => signal?.aborted ? { ok: false } : result).finally(release);
+  }
+
   const tails = new Map<string, { context: symbol; result: Promise<TaskUpdateResult> }>();
   const pending = new Map<symbol, { taskId: string; patch: Partial<Task>; submitted: Partial<Task>; phase: PlanningTaskSaveView["phase"] }>();
   const outcomeChecks = new Map<string, ReturnType<PlanningState["checkTaskSave"]>>();
@@ -1121,7 +1150,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     beginTaskEdit: taskId => editing.begin(taskId),
     saveTask: (task, patch) => saveTaskWithContext(task, patch, Symbol(task.id)),
     loadTaskDetail(taskId, options) {
-      if (!isActive() || !adapter.readTaskDetail) return Promise.resolve({ ok: false });
+      if (options?.signal?.aborted || !isActive() || !adapter.readTaskDetail) return Promise.resolve({ ok: false });
       const area = options?.area;
       const key = area ? taskId+":"+area : taskId;
       const includesDiscussion = !area || area === "discussion";
@@ -1129,7 +1158,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const includesRelationships = !area;
       const includesChildren = !area;
       const existing = detailReads.get(key);
-      if (existing) return existing;
+      if (existing) return area ? retainDetailRead(key, taskId, area, existing, options?.signal) : existing;
+      const demand = area ? { controller: new AbortController(), consumers: new Set<symbol>(), settled: false, previous: (area === "target" ? detailStatuses.get(taskId) : detailAreaStatuses.get(key)) || "not-loaded" as PlanningReadStatus } : undefined;
+      if (demand) detailDemands.set(key, demand);
       const readTaskDetail = adapter.readTaskDetail;
       if (!area || area === "target") detailStatuses.set(taskId, "loading");
       if (area && area !== "target") detailAreaStatuses.set(key, "loading");
@@ -1141,14 +1172,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         const started = ++sequence;
         let result: Awaited<ReturnType<typeof readTaskDetail>>;
         try {
-          result = await readTaskDetail(taskId, options);
+          result = await readTaskDetail(taskId, area ? { area, signal: demand!.controller.signal } : options);
+          if (demand?.controller.signal.aborted) return { ok: false };
           if (area && (result.model.readArea !== area || !result.readAuthority || result.readAuthority.userId !== userId
             || !Number.isFinite(result.readAuthority.deadline) || result.readAuthority.deadline <= (adapter.now?.() ?? Date.now()))) {
             throw Object.assign(new Error("Die ursprüngliche Detailberechtigung ist nicht mehr gültig."), { status: 403 });
           }
           if (result.model.item.id !== taskId) throw new Error("Die Detailantwort gehört zu einer anderen Aufgabe.");
         } catch (error) {
-          if (!isActive() || generation !== sessionGeneration) return { ok: false };
+          if (demand?.controller.signal.aborted || !isActive() || generation !== sessionGeneration) return { ok: false };
           const failedStatus = readErrorStatus(error);
           if (includesDiscussion) { commentCreations.failed(taskId, failedStatus); githubImports.failed(taskId, failedStatus); }
           if (failedStatus === "forbidden") {
@@ -1166,7 +1198,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           publish();
           return { ok: false, error: error instanceof Error ? error.message : "Aufgabendetails konnten nicht geladen werden." };
         }
-        if (!isActive() || generation !== sessionGeneration) return { ok: false };
+        if (demand?.controller.signal.aborted || !isActive() || generation !== sessionGeneration) return { ok: false };
         if ((taskDeniedAt.get(taskId) || 0) > started) return { ok: false };
         const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
         // A changed known record disproves retained aggregate freshness. New detail coverage alone does not.
@@ -1220,8 +1252,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         return { ok: true, unavailable: result.unavailable };
       })();
       detailReads.set(key, loaded);
-      void loaded.finally(() => { if (detailReads.get(key) === loaded) detailReads.delete(key); }).catch(() => undefined);
-      return loaded;
+      void loaded.finally(() => {
+        if (demand) demand.settled = true;
+        if (detailReads.get(key) === loaded) detailReads.delete(key);
+        if (detailDemands.get(key) === demand) detailDemands.delete(key);
+      }).catch(() => undefined);
+      return area ? retainDetailRead(key, taskId, area, loaded, options?.signal) : loaded;
     },
     prepareWorkspaceHydration(workspace) {
       if (isActive() && sessionRevision && (workspace === "planning" || workspace === "projects")) hydrationRequests.set(workspace, beginWorkspaceRead(workspace));
@@ -1856,6 +1892,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     active = false;
     initialized = false;
     tails.clear();
+    for (const demand of detailDemands.values()) demand.controller.abort();
+    detailDemands.clear();
     detailReads.clear();
     outcomeChecks.clear();
     outcomeCheckStatus.clear();
@@ -1902,6 +1940,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     hydrationRequests.clear();
     backlogCoverage = {};
     detailStatuses.clear();
+    detailAreaStatuses.clear();
     childLists.clear();
     deniedTaskReads.clear();
     taskDeniedAt.clear();
