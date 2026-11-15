@@ -284,6 +284,10 @@ function HydratedTaskDetailSurface({
     ? task.taskType === "sub_issue" ? "Parent-Deliverable ist noch nicht freigegeben." : "Deliverable ist noch nicht freigegeben."
     : !controller.permissions.canUpdateStatus ? "Deine Rolle darf diesen Status nicht ändern."
       : !canSelectNextStatus ? "Für deine Rolle ist kein weiterer Status verfügbar." : undefined;
+  const areaStatuses = detailOwner?.taskDetail(task.id).areaReadStatus;
+  const activityKnown = scopedDetail ? areaStatuses?.discussion === "current" && areaStatuses?.timeline === "current" : !detailDataLoading && !detailDataError;
+  const activityPending = scopedDetail && [areaStatuses?.discussion, areaStatuses?.timeline].some(status => !status || status === "not-loaded" || status === "loading");
+  const activityUnavailable = scopedDetail && [areaStatuses?.discussion, areaStatuses?.timeline].some(status => status === "unavailable" || status === "stale");
   const detailDataKnown = !detailDataLoading && !detailDataError;
   const detailDataUnavailable = Boolean(detailDataError);
   const canEditOverview = Object.values(controller.overviewPermissions).some(Boolean);
@@ -291,7 +295,7 @@ function HydratedTaskDetailSurface({
   const activityCount = visibleTaskActivityCount({ comments, externalComments, activities }) + reviews.length;
   const availableTabs = taskDetailAvailableTabs({
     activityCount: requestedCommentTarget ? Math.max(activityCount, 1) : activityCount,
-    activityKnown: detailDataKnown,
+    activityKnown,
     canAddRelationship: relationshipAccess.allowedRelationTypes.length > 0,
     canComment: controller.permissions.canComment,
     relationshipCount,
@@ -551,6 +555,15 @@ function HydratedTaskDetailSurface({
       />
     ),
     activity: (
+      <>
+      {scopedDetail ? (["discussion", "timeline"] as const).map(area => areaStatuses?.[area] === "unavailable" || areaStatuses?.[area] === "stale" ? (
+        <UiNotice key={area} tone="danger" className="mb-2">
+          {area === "discussion" ? "Diskussion ist nicht verfügbar." : "Aktivität ist nicht verfügbar."}
+          <UiButton type="button" onClick={() => { void detailOwner?.loadTaskDetail(task.id, { area }); }}>
+            {area === "discussion" ? "Diskussion erneut laden" : "Aktivität erneut laden"}
+          </UiButton>
+        </UiNotice>
+      ) : null) : null}
       <TaskCommentThread
         commentDraft={commentDraft}
         comments={comments}
@@ -572,8 +585,8 @@ function HydratedTaskDetailSurface({
         sprints={sprints}
         currentProfileId={currentProfile?.id || ""}
         requestedCommentTarget={requestedCommentTarget}
-        loading={detailDataLoading}
-        unavailable={detailDataUnavailable}
+        loading={detailDataLoading || activityPending}
+        unavailable={detailDataUnavailable || activityUnavailable}
         pending={pending}
         importPending={commentImportPending}
         readOnly={!controller.permissions.canComment}
@@ -584,6 +597,7 @@ function HydratedTaskDetailSurface({
         description={canSyncPlanningItemToGitHub(task) ? "Kommentare, GitHub-Updates und relevante Änderungen in einer gemeinsamen Timeline." : "Kommentare und relevante Änderungen in einer gemeinsamen Timeline."}
         footer={<TaskDetailHistorySummary task={task} profiles={teamProfiles} />}
       />
+      </>
     ),
   } satisfies Record<TaskDetailTabId, ReactNode>;
 

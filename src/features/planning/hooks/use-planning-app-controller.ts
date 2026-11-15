@@ -152,6 +152,7 @@ export function usePlanningAppController({
     selectedTask,
   } = taskSelection;
   const taskDetailDataLoader = useTaskDetailDataLoader({
+    scoped: true,
     planningState,
     selectedTask,
     taskId: protectedDataLoaded && authUser ? selectedTaskId || undefined : undefined,
