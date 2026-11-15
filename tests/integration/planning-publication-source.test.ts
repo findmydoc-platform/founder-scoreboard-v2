@@ -27,6 +27,33 @@ test("selected JSON publication reads its live actor and source together without
   }, "linking");
 }, 120_000);
 
+test.each(["ignored", "localOverride"] as const)("a %s profile header preserves the admitted publication path", async mode => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed }) => {
+    const parent = `${prefix}-profile-header`;
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3)`,
+    [parent, initiativeId, actors.founder.profileId]);
+    if (mode === "localOverride") {
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("ENABLE_LOCAL_LOGIN", "true");
+    }
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const scope = { view: "board", column: "Offen", filters: { query: parent } };
+    const input = request(mode === "localOverride" ? "ceo" : "founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`);
+    input.headers.set("host", mode === "localOverride" ? "localhost:3000" : "application.example.test");
+    input.headers.set("x-fmd-dev-profile-id", mode === "localOverride" ? actors.founder.profileId : actors.other.profileId);
+    const response = await GET(input);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.currentProfile.id).toBe(actors.founder.profileId);
+    expect(body.model.board.cardIds).toEqual([parent]);
+    expect(body.model.board.childProgressById[parent]).toEqual({ completed: 0, total: 0, unfinished: 0, percentage: 0 });
+    expect(body.readAuthority.userId).toBe(mode === "localOverride" ? actors.ceo.userId : actors.founder.userId);
+    expect(observed.filter(entry => entry.path.endsWith("/rpc/planning_board_publication_context"))).toHaveLength(mode === "localOverride" ? 0 : 1);
+    expect(observed.filter(entry => entry.path.endsWith("/rpc/planning_source_version"))).toHaveLength(mode === "localOverride" ? 1 : 0);
+  });
+}, 120_000);
+
 test("the atomic publication RPC admits only a mapped live user session and returns its own current role", async () => {
   await withPlanningCredentialDatabase(async ({ db, actors, rpc }) => {
     const revision = (await db.query("select public.planning_source_version() as value")).rows[0].value;
