@@ -6,13 +6,15 @@ import { TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
 import { normalizeStatus } from "@/lib/status";
 import { taskAssigneeLabel } from "@/lib/display";
 import type { Task } from "@/lib/types";
-import { UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
+import { UiButton, UiEmptyState, UiNotice } from "@/shared/atoms/ui-primitives";
 
 type Props = {
   canCreate?: boolean;
   childItems: Task[];
   childType: Task["taskType"];
   loading?: boolean;
+  known?: boolean;
+  onLoad?: () => void;
   error?: string;
   onCreateChild: () => void;
   onOpenTask: (taskId: string) => void;
@@ -46,6 +48,8 @@ export function TaskDetailPanelChildrenSection({
   childItems,
   childType,
   loading = false,
+  known = true,
+  onLoad,
   error = "",
   onCreateChild,
   onOpenTask,
@@ -81,6 +85,11 @@ export function TaskDetailPanelChildrenSection({
           <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
           <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
         </div>
+      ) : !known ? (
+        <UiNotice tone="info" className="mt-5">
+          Unteraufgaben noch nicht geladen.
+          {onLoad ? <UiButton type="button" onClick={onLoad}>{error ? "Unteraufgaben erneut laden" : "Unteraufgaben laden"}</UiButton> : null}
+        </UiNotice>
       ) : (
         <>
           {childItems.length ? (

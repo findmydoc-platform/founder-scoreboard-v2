@@ -51,7 +51,7 @@ export type PlanningTaskDetailView = {
   children: readonly Task[];
   childrenReadStatus: PlanningReadStatus;
   scopedRead?: boolean;
-  areaReadStatus?: Record<"discussion" | "timeline", PlanningReadStatus>;
+  areaReadStatus?: Record<"discussion" | "timeline" | "relationships", PlanningReadStatus>;
   task: Task | null;
   saveStatus: PlanningTaskSaveStatus;
   readStatus: PlanningReadStatus;
