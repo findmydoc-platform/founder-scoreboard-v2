@@ -45,7 +45,7 @@ test("the Initiative Board selects its complete parent scope before provider lim
     expect(reference.model.board!.cardIds).toEqual(expected);
     expect(reference.model.board!.metrics).toEqual({ total: 2, open: 2, done: 0, blocked: 0 });
     expect(reference.model.board!.childProgressById[first]).toEqual(progress);
-    expect(reference.model.board!.attentionById[first]).toEqual([]);
+    expect(reference.model.board!.attentionById![first]).toEqual([]);
 
     const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
     const before = observed.length;
