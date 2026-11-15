@@ -51,3 +51,43 @@ test("a selected JSON page resolves avatar identity while its complete summary r
     }
   });
 }, 120_000);
+
+test.each(["forbidden", "staleContinuation"] as const)("a %s summary aborts overlapping avatar work without publishing a selected page", async failure => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request }) => {
+    const parent = `${prefix}-fatal-summary`;
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+      values($1,'findmydoc-founder-execution',$1,'deliverable',$2,'approved','Offen','P2',$3)`,
+    [parent, initiativeId, actors.founder.profileId]);
+    const transport = globalThis.fetch;
+    let reached!: () => void, release!: () => void;
+    const held = new Promise<void>(resolve => { reached = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let avatarAborted = false, avatarHeld = false, summaryReady = false;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const next = new Request(input, init), path = new URL(next.url).pathname;
+      if (path.endsWith("/rpc/workspace_access_contexts")) next.signal.addEventListener("abort", () => { avatarAborted = true; release(); }, { once: true });
+      const response = await transport(next);
+      if (path.endsWith("/rpc/workspace_access_contexts")) {
+        expect(response.status).toBe(200);
+        avatarHeld = true; reached(); await gate;
+      }
+      if (path.endsWith("/rpc/planning_deliverable_summaries")) {
+        expect(response.status).toBe(200);
+        expect((await response.clone().json()).status).toBe("ready");
+        summaryReady = true; await held;
+        return Response.json({ status: failure });
+      }
+      return response;
+    });
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const scope = { view: "board", column: "Offen", filters: { query: parent } };
+    try {
+      const response = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+      expect(avatarHeld && summaryReady).toBe(true);
+      expect(avatarAborted).toBe(true);
+      expect(response.status).toBe(failure === "forbidden" ? 403 : 503);
+      const body = await response.json();
+      for (const field of ["model", "summaries", "readAuthority"]) expect(body).not.toHaveProperty(field);
+    } finally { release(); }
+  });
+}, 120_000);
