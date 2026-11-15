@@ -147,8 +147,12 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
       const source = area !== "complete" ? await readPlanningDetailSource(supabase, normalizedItemId, area) : null;
       if (area !== "complete" && !source) return { status: "unavailable" };
 
+      const scopedIds = source ? source.descriptor.targetId ? [source.descriptor.targetId, ...source.descriptor.ancestorIds] : [] : null;
       const [targetResult, profileResult, projectResult, sprintResult] = await Promise.all([
-        supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("id", normalizedItemId).maybeSingle<DbTask>(),
+        scopedIds ? scopedIds.length
+          ? supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", projectId).in("id", scopedIds).returns<DbTask[]>()
+          : Promise.resolve({ data: [] as DbTask[], error: null })
+          : supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("id", normalizedItemId).maybeSingle<DbTask>(),
         supabase.from("profiles").select(profileSelect).order("name"),
         supabase.from("projects").select(projectSelect).eq("id", projectId).single<ProjectRow>(),
         supabase.from("sprints").select(sprintSelect).order("start_date"),
@@ -157,22 +161,27 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
         return { status: "unavailable" };
       }
       const people = ((profileResult.data || []) as DbProfile[]).map(mapProfile);
-      if (!targetResult.data) return { status: "notFound", people };
+      const selectedRows = Array.isArray(targetResult.data) ? targetResult.data : targetResult.data ? [targetResult.data] : [];
+      const target = selectedRows.find(row => row.id === normalizedItemId);
+      if (!target) return source?.descriptor.targetId ? { status: "unavailable" } : { status: "notFound", people };
 
-      const target = targetResult.data;
-      if (area !== "complete") {
-        const ancestors = await loadAncestors(supabase, target.parent_task_id);
-        if (ancestors.error) return { status: "unavailable" };
-        const rows = uniqueRows([target, ...ancestors.rows]);
+      if (source) {
+        const byId = new Map(selectedRows.map(row => [row.id, row]));
+        if (selectedRows.length !== scopedIds!.length || byId.size !== scopedIds!.length
+          || selectedRows.some(row => !scopedIds!.includes(row.id))) return { status: "unavailable" };
+        const ancestors = source.descriptor.ancestorIds.map(id => byId.get(id)!);
+        if ((target.parent_task_id || null) !== (ancestors.at(-1)?.id || null)
+          || ancestors.some((row, index) => !row || (row.parent_task_id || null) !== (ancestors[index - 1]?.id || null))) return { status: "unavailable" };
+        const rows = [target, ...ancestors];
         const supporting = await loadSupportingRows(supabase, rows.map(row => row.id));
         if (supporting.error) return { status: "unavailable" };
         const tasks = byIds(mapTasks(rows, people, supporting));
         const item = tasks.get(normalizedItemId);
         if (!item) return { status: "unavailable" };
         const model: TaskDetailModel = {
-          revision: item.updatedAt || target.updated_at, ...source!, readArea: area, coverage: {},
+          revision: item.updatedAt || target.updated_at, sourceRevision: source.sourceRevision, observedAt: source.observedAt, validUntil: source.validUntil, readArea: area as "target" | "discussion" | "timeline", coverage: {},
           project: project(projectResult.data), item,
-          ancestors: ancestors.rows.flatMap(row => tasks.get(row.id) || []),
+          ancestors: ancestors.flatMap(row => tasks.get(row.id) || []),
           children: [], relatedItems: [], people,
           sprints: ((sprintResult.data || []) as DbSprint[]).map(mapSprint),
           discussion: { comments: [], externalComments: [] },
