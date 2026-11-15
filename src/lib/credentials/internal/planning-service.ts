@@ -45,7 +45,7 @@ export function planningService(strict: boolean, beforeDispatch?: () => Promise<
 // The user-bound dispatch already checks the original JWT, Workspace binding
 // and permit. Read its live profile and source together instead of following
 // the profile check with another privileged source-only dispatch.
-export function planningPublicationSource(data: SupabaseClient | null, profile: { id: string; platformRole: string } | null, assertCurrent: () => void) {
+export function planningPublicationSource(data: SupabaseClient | null, profile: { id: string; platformRole: string } | null, assertCurrent: () => void, detail?: { itemId: string; area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea }) {
   const captured = configuration(false);
   if (!data || !profile || !captured) return undefined;
   return { async read(signal?: AbortSignal) {
@@ -57,7 +57,7 @@ export function planningPublicationSource(data: SupabaseClient | null, profile: 
         if (active?.url !== captured.url || active.key !== captured.key) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
       };
       assertEnvironment();
-      const read = data.rpc("planning_board_publication_context");
+      const read = detail ? data.rpc("planning_detail_publication_context", { p_item_id: detail.itemId, p_area: detail.area }) : data.rpc("planning_board_publication_context");
       const result = await (signal ? read.abortSignal(signal) : read);
       assertCurrent();
       assertEnvironment();

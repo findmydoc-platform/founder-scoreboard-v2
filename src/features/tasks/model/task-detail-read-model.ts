@@ -22,11 +22,17 @@ export const taskDetailReadLimits = {
   reviews: 100,
 } as const;
 
+export type TaskDetailReadArea = "target" | "discussion" | "timeline";
+
 export type TaskDetailUnavailableArea = "discussion" | "relationships" | "timeline";
 
 export type TaskDetailModel = Readonly<{
   revision: string;
   sourceRevision?: string;
+  readArea?: TaskDetailReadArea;
+  observedAt?: string;
+  validUntil?: string | null;
+  authorityDeadline?: number;
   coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea, "complete" | "partial">>>;
   project: Project;
   item: Task;
@@ -59,6 +65,6 @@ export type TaskDetailLoadResult =
   | { status: "staleContinuation" };
 
 export interface TaskDetailReadModel {
-  load(input: { itemId: string; area?: "target" | "complete" }, context: TaskDetailReadContext): Promise<TaskDetailLoadResult>;
+  load(input: { itemId: string; area?: TaskDetailReadArea | "complete" }, context: TaskDetailReadContext): Promise<TaskDetailLoadResult>;
 }
 

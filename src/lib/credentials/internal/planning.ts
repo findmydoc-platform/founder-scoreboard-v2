@@ -157,7 +157,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   // Preserve the existing explicit local profile-override path. Ordinary Board
   // publications use only the original user's bound data capability.
   const localProfileOverride = "localProfileOverride" in permission && permission.localProfileOverride === true;
-  const publicationSource = (action === "planning.board.read" || action === "planning.task.read") && !localProfileOverride
+  const publicationSource = action === "planning.board.read" && !localProfileOverride
     ? planningPublicationSource(resourceData, profile, assertKnown) : undefined;
   const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
   const readSession = cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
@@ -325,15 +325,17 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.sprint.read" || await current()) return { status: "forbidden" as const };
       return createSupabaseSprintReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
     },
-    async loadDetail(options?: { area?: "target" | "complete" }) {
+    async loadDetail(options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea | "complete" }) {
       if (action !== "planning.task.read" || !targetId || await current()) return { status: "forbidden" as const };
       const result = await createSupabaseTaskDetailReadModel(service).load({ itemId: targetId, area: options?.area }, { authorized: true, actorProfileId: profile?.id || null });
-      if (options?.area === "target" && result.status === "ready") {
-        const publication = publicationSource ? await publicationSource.read() : await current() ? { status: "forbidden" as const } : await service.rpc("planning_source_version").then(value => value.error ? { status: "unavailable" as const } : { status: "ready" as const, revision: value.data });
+      if (options?.area && options.area !== "complete" && (result.status === "ready" || result.status === "degraded")) {
+        const detailPublication = !localProfileOverride ? planningPublicationSource(resourceData, profile, assertKnown, { itemId: targetId, area: options.area }) : undefined;
+        const publication = detailPublication ? await detailPublication.read() : await current() ? { status: "forbidden" as const } : await service.rpc("planning_detail_source", { p_item_id: targetId, p_area: options.area }).then(value => value.error ? { status: "unavailable" as const } : { status: "ready" as const, revision: value.data?.source_revision });
         if (publication.status === "forbidden") return { status: "forbidden" as const };
         if (publication.status !== "ready") return { status: "unavailable" as const };
-        if (publication.revision !== result.model.sourceRevision) return { status: "staleContinuation" as const };
+        if (publication.revision !== result.model.sourceRevision || result.model.validUntil && Date.parse(result.model.validUntil) <= Date.now()) return { status: "staleContinuation" as const };
         try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+        return { ...result, model: { ...result.model, authorityDeadline: readAuthority?.deadline } };
       }
       if (result.status === "notFound") detailPeople = structuredClone([...result.people]);
       return result;

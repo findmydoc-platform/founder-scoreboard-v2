@@ -1,4 +1,5 @@
 import "server-only";
+import { readPlanningDetailSource } from "@/features/planning-items/server/planning-detail-source";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadAllSupabaseRows } from "@/features/planning-items/model/supabase-pagination";
@@ -143,8 +144,8 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
       const normalizedItemId = itemId.trim();
       if (!normalizedItemId) return { status: "notFound", people: [] };
 
-      const source = area === "target" ? await supabase.rpc("planning_source_version") : null;
-      if (source && (source.error || typeof source.data !== "string")) return { status: "unavailable" };
+      const source = area !== "complete" ? await readPlanningDetailSource(supabase, normalizedItemId, area) : null;
+      if (area !== "complete" && !source) return { status: "unavailable" };
 
       const [targetResult, profileResult, projectResult, sprintResult] = await Promise.all([
         supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("id", normalizedItemId).maybeSingle<DbTask>(),
@@ -159,7 +160,7 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
       if (!targetResult.data) return { status: "notFound", people };
 
       const target = targetResult.data;
-      if (area === "target") {
+      if (area !== "complete") {
         const ancestors = await loadAncestors(supabase, target.parent_task_id);
         if (ancestors.error) return { status: "unavailable" };
         const rows = uniqueRows([target, ...ancestors.rows]);
@@ -168,15 +169,38 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
         const tasks = byIds(mapTasks(rows, people, supporting));
         const item = tasks.get(normalizedItemId);
         if (!item) return { status: "unavailable" };
-        return { status: "ready", model: {
-          revision: item.updatedAt || target.updated_at, sourceRevision: source!.data, coverage: {},
+        const model: TaskDetailModel = {
+          revision: item.updatedAt || target.updated_at, ...source!, readArea: area, coverage: {},
           project: project(projectResult.data), item,
           ancestors: ancestors.rows.flatMap(row => tasks.get(row.id) || []),
           children: [], relatedItems: [], people,
           sprints: ((sprintResult.data || []) as DbSprint[]).map(mapSprint),
           discussion: { comments: [], externalComments: [] },
           blockers: [], relationships: [], activity: [], reviews: [],
-        } };
+        };
+        if (area === "discussion") {
+          const [comments, externalComments] = await Promise.all([
+            supabase.from("task_comments").select("id,task_id,profile_id,comment,created_at,github_delivery_applicable,task_comment_submissions(id,submitted_at),task_comment_github_deliveries(status,github_comment_url)").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.comments),
+            supabase.from("task_external_comments").select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.externalComments),
+          ]);
+          if (comments.error || externalComments.error) return { status: "degraded", model, unavailable: ["discussion"] };
+          return { status: "ready", model: { ...model,
+            discussion: { comments: ((comments.data || []) as DbTaskComment[]).map(mapTaskComment), externalComments: ((externalComments.data || []) as DbTaskExternalComment[]).map(mapTaskExternalComment) },
+            coverage: { discussion: (comments.data?.length || 0) < taskDetailReadLimits.comments && (externalComments.data?.length || 0) < taskDetailReadLimits.externalComments ? "complete" : "partial" },
+          } };
+        }
+        if (area === "timeline") {
+          const [activity, reviews] = await Promise.all([
+            supabase.from("task_audit_timeline").select("id,task_id,action,actor_profile_id,message,payload,created_at").eq("task_id", normalizedItemId).order("created_at", { ascending: true }).limit(taskDetailReadLimits.activity),
+            supabase.from("task_reviews").select("id,task_id,sprint_id,reviewer_profile_id,decision,points,comment,checklist,created_at,task_review_github_deliveries(status,github_comment_url)").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.reviews),
+          ]);
+          if (activity.error || reviews.error) return { status: "degraded", model, unavailable: ["timeline"] };
+          return { status: "ready", model: { ...model,
+            activity: ((activity.data || []) as DbTaskAuditActivity[]).map(mapTaskAuditActivity), reviews: ((reviews.data || []) as DbTaskReview[]).map(mapTaskReview),
+            coverage: { timeline: (activity.data?.length || 0) < taskDetailReadLimits.activity && (reviews.data?.length || 0) < taskDetailReadLimits.reviews ? "complete" : "partial" },
+          } };
+        }
+        return { status: "ready", model };
       }
       const [ancestorsResult, childrenResult, outgoingResult, incomingResult] = await Promise.all([
         loadAncestors(supabase, target.parent_task_id),
