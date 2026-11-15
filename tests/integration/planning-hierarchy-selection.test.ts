@@ -8,6 +8,12 @@ test("the Initiative Board selects its complete parent scope before provider lim
     const epic = `${prefix}-old-epic`, otherEpic = `${prefix}-other-epic`, key = `${prefix}-initiative`;
     for (const id of [epic, otherEpic]) await db.query(`insert into public.tasks(id,project_id,title,task_type,status,priority)
       values($1,'findmydoc-founder-execution','Synthetic completed Epic','epic','Erledigt','P2')`, [id]);
+    await db.query("begin");
+    try {
+      await db.query("set local session_replication_role = replica");
+      await db.query("update public.tasks set updated_at='2020-01-01T00:00:00Z' where id=$1", [epic]);
+      await db.query("commit");
+    } catch (error) { await db.query("rollback"); throw error; }
     await db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,approval_status,status,priority,sort_order)
       select $1||'-'||lpad(n::text,4,'0'),'findmydoc-founder-execution',
         case when n>1000 then 'Synthetic 100%_ready\\[x]' else 'Synthetic unrelated Initiative' end,
@@ -39,6 +45,7 @@ test("the Initiative Board selects its complete parent scope before provider lim
     expect(reference.model.board!.cardIds).toEqual(expected);
     expect(reference.model.board!.metrics).toEqual({ total: 2, open: 2, done: 0, blocked: 0 });
     expect(reference.model.board!.childProgressById[first]).toEqual(progress);
+    expect(reference.model.board!.attentionById[first]).toEqual([]);
 
     const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
     const before = observed.length;
@@ -49,6 +56,7 @@ test("the Initiative Board selects its complete parent scope before provider lim
     expect(model.board.metrics).toEqual(reference.model.board!.metrics);
     expect(model.board.columns.Offen).toMatchObject({ total: 2, loaded: 2, completeness: "complete" });
     expect(model.board.childProgressById[first]).toEqual(progress);
+    expect(model.board.attentionById[first]).toEqual([]);
     expect(model.items.find((item: { id: string }) => item.id === epic)).toMatchObject({ taskType: "epic", status: "Erledigt" });
     expect(model.items.some((item: { id: string }) => item.id === outside || item.id.includes("-child-") || item.id.endsWith("-grandchild"))).toBe(false);
     expect(model.coverage.items).toBe("partial");
