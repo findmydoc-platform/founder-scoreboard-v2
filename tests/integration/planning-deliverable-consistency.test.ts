@@ -28,8 +28,21 @@ test("the actual selected API preserves saved personal defaults and discovers op
     expect(observed.some(value => value.path.endsWith("/active_tasks"))).toBe(false);
     const explicit = await read({ view: "board", filters: { query: prefix, status: "Erledigt", assignee: actors.other.profileId } }); expect(explicit.status).toBe(200);
     expect((await explicit.json()).model.board.cardIds).toEqual([hidden]);
+    const owned = `${prefix}-owned-table-row`;
+    await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,assignee,owner) values($1,'findmydoc-founder-execution',$2,'deliverable','Offen','P1','approved',$3,$4,$4)", [owned, `${prefix} personal Deliverable`, initiativeId, actors.founder.profileId]);
     await db.query("update public.profile_ui_preferences set default_task_view='table' where profile_id=$1", [actors.founder.profileId]);
-    const complete = await read({}); expect(complete.status).toBe(200);
+    const beforeTable = observed.length;
+    const table = await read({}); expect(table.status).toBe(200);
+    const tableModel = (await table.json()).model;
+    expect(tableModel.query.view).toBe("table");
+    expect(tableModel.query.filters).toMatchObject({ query: prefix, priority: "P1", quick: ["mine"] });
+    expect(tableModel.table.rowIds).toEqual([owned]);
+    expect(tableModel.table.page).toMatchObject({ total: 1, loaded: 1, completeness: "complete", continuation: null });
+    expect(tableModel.coverage.items).toBe("partial");
+    expect(tableModel.items.some((item: { id: string }) => [root, child, hidden].includes(item.id))).toBe(false);
+    expect(observed.slice(beforeTable).some(value => /\/(active_tasks|tasks)$/.test(value.path))).toBe(false);
+    // Explicit complete consumers retain their established machine contract.
+    const complete = await read({ view: "complete" }); expect(complete.status).toBe(200);
     const completeModel = (await complete.json()).model;
     expect(completeModel.board).toBeUndefined();
     expect(completeModel.coverage.items).toBe("complete");
