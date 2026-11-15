@@ -7,7 +7,7 @@ import { taskPlanningAttentionSignals } from "@/features/tasks/model/task-attent
 import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 
 test("table rows precede their independent complete directed risk summary", async () => {
-  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, local, request, observed }) => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, local, request, rpc, observed }) => {
     const key = `${prefix}-table-risks`, rowId = `${key}-row`, endpoints = ["wait-out", "wait-in", "blocked", "related"].map(value => `${key}-${value}`);
     await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,assignee,acceptance_criteria,definition_of_done)
       values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'approved','Offen','P1',$4,'Synthetic AC','Synthetic DoD')`, [rowId, key, initiativeId, actors.founder.profileId]);
@@ -40,7 +40,7 @@ test("table rows precede their independent complete directed risk summary", asyn
       expect(first.kind).toBe("rows");
       if (first.kind !== "rows") throw new Error("Table content waited for its independent risk read");
       expect(first.response.status).toBe(200);
-      const { model } = await first.response.json();
+      const initialBody = await first.response.json(), { model } = initialBody;
       expect(model.table.rowIds).toEqual([rowId]);
       expect(model.table.page).toMatchObject({ total: 1, loaded: 1, completeness: "complete", continuation: null });
       expect(model.table.risksById).toEqual({ [rowId]: null });
@@ -61,6 +61,53 @@ test("table rows precede their independent complete directed risk summary", asyn
       const denied = await GET(request("unmapped", `/api/planning-board-data?summaries=${encodeURIComponent(summary.token)}`));
       expect(denied.status).toBe(403);
       expect(await denied.json()).not.toHaveProperty("summaries");
+      const direct = await rpc("planning_table_risks", { p_actor_profile_id: actors.founder.profileId, p_selected_ids: [rowId],
+        p_source_revision: model.scopeRevision, p_evaluated_at: model.table.observedAt, p_valid_until: model.table.validUntil }, "founder");
+      expect(direct.status).toBe(403);
+
+      const parsed = JSON.parse(Buffer.from(summary.token, "base64url").toString("utf8"));
+      const tampered = Buffer.from(JSON.stringify({ ...parsed, cardIds: [endpoints[0]] })).toString("base64url");
+      const changedBatch = await GET(request("founder", `/api/planning-board-data?summaries=${encodeURIComponent(tampered)}`));
+      expect(changedBatch.status).toBe(409);
+      const changedBody = await changedBatch.json();
+      for (const field of ["summaries", "readAuthority"]) expect(changedBody).not.toHaveProperty(field);
+
+      let reached!: () => void, finish!: () => void;
+      const arrived = new Promise<void>(resolve => { reached = resolve; }), deadlineGate = new Promise<void>(resolve => { finish = resolve; });
+      vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+        const next = new Request(input, init), response = await transport(next);
+        if (new URL(next.url).pathname.endsWith("/rpc/planning_table_risks")) {
+          expect(response.status).toBe(200);
+          expect(await response.clone().json()).toMatchObject({ status: "ready" });
+          reached(); await deadlineGate;
+        }
+        return response;
+      });
+      const jwt = JSON.parse(Buffer.from(actors.founder.token.split(".")[1], "base64url").toString("utf8"));
+      expect(initialBody.readAuthority.deadline).toBeLessThan(jwt.exp * 1000);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(initialBody.readAuthority.deadline - 1000);
+      const late: Promise<Response> = GET(request("founder", `/api/planning-board-data?summaries=${encodeURIComponent(summary.token)}`));
+      try {
+        await Promise.race([arrived, late.then(() => { throw new Error("Risk retry completed before its held SQL response"); })]);
+        vi.setSystemTime(initialBody.readAuthority.deadline);
+        expect(Date.now()).toBeLessThan(jwt.exp * 1000);
+        finish();
+        const expired = await late;
+        expect(expired.status).toBe(403);
+        const expiredBody = await expired.json();
+        for (const field of ["summaries", "readAuthority"]) expect(expiredBody).not.toHaveProperty(field);
+      } finally { finish(); await late; vi.useRealTimers(); }
+
+      await db.query("update public.tasks set status='Erledigt' where id=$1", [endpoints[0]]);
+      // The old token still names the original source; it cannot publish counts
+      // or a healthy empty state from a different compatible-basis evaluation.
+      vi.stubGlobal("fetch", transport);
+      const stale = await GET(request("founder", `/api/planning-board-data?summaries=${encodeURIComponent(summary.token)}`));
+      expect(stale.status).toBe(409);
+      const staleBody = await stale.json();
+      expect(staleBody.code).toBe("stale_continuation");
+      for (const field of ["summaries", "readAuthority"]) expect(staleBody).not.toHaveProperty(field);
     } finally { release(); await initial; }
-  });
+  }, "linking");
 }, 120_000);

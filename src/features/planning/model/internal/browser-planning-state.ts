@@ -464,6 +464,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || typeof body?.version !== "string") throw Object.assign(new Error(body?.error || "Planungsänderungen konnten nicht geprüft werden."), { status: response.status });
         return body.version;
       },
+      async readTableRisks(token, options) {
+        const { response, body } = await ownedApiClient.requestJson<{ summaries?: import("../planning-table-result").PlanningTableRiskFrame; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; error?: string; code?: string }>(`/api/planning-board-data?summaries=${encodeURIComponent(token)}`, options);
+        if (!response.ok || body?.summaries?.kind !== "table-risks") throw Object.assign(new Error(body?.error || "Risiken konnten nicht geladen werden."), { status: response.status, code: body?.code });
+        requireReadAuthority(body.readAuthority);
+        return { summaries: body.summaries, readAuthority: body.readAuthority! };
+      },
       async readBoardSummaries(token, options) {
         const { response, body } = await ownedApiClient.requestJson<{ summaries?: import("../planning-board-summaries").PlanningBoardSummaryFrame; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; error?: string; code?: string }>(`/api/planning-board-data?summaries=${encodeURIComponent(token)}`, options);
         if (!response.ok || !body?.summaries) throw Object.assign(new Error(body?.error || "Fortschritt und Signale konnten nicht geladen werden."), { status: response.status, code: body?.code });

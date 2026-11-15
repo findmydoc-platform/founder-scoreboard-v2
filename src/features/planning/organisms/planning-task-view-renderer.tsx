@@ -132,6 +132,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       : controller.planningBoard?.result?.cardIds.every(id => controller.planningBoard.result!.attentionById?.[id] != null)
         ? "Fortschritt und Signale aktuell." : "Kindfortschritt aktuell. Signale unbekannt.";
 
+  const tableRiskRequests = controller.planningBoard?.table?.summaryRequests;
+  const tableRiskStatus = tableRiskRequests?.some(request => request.status === "unavailable") ? "unavailable"
+    : tableRiskRequests?.some(request => request.status === "loading") ? "loading" : "current";
+  const tableRiskLabel = summariesStale ? "Risiken veraltet." : tableRiskStatus === "loading" ? "Risiken werden geladen …"
+    : tableRiskStatus === "unavailable" ? "Risiken unbekannt." : "Risiken aktuell.";
+
   const canChangeTaskStatus = (task: (typeof data.tasks)[number]) => mayChangeTaskStatus(task) && controller.planningState.taskDetail(task.id).saveStatus !== "unconfirmed";
 
   // Table, Gantt and structure stay deliberately delivery-only in V1.  The
@@ -192,6 +198,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
         <UiButton type="button" aria-label="Fortschritt und Signale erneut laden" disabled={summariesStale || summaryStatus === "current"}
           className={summariesStale || summaryStatus === "current" ? "invisible min-h-11" : "min-h-11"}
           onClick={() => { void controller.planningState.refreshBoardSummaries(); }}>Erneut laden</UiButton>
+      </div> : null}
+      {view === "table" && tableRiskRequests?.length ? <div role="status" aria-label={tableRiskLabel} className="mx-4 mb-3 flex min-h-11 items-center gap-2 text-xs leading-5 text-slate-600 lg:mx-6">
+        <span className="min-w-0 flex-1">{tableRiskLabel}</span>
+        <UiButton type="button" aria-label="Risiken erneut laden" disabled={summariesStale || tableRiskStatus !== "unavailable"}
+          className={summariesStale || tableRiskStatus !== "unavailable" ? "invisible min-h-11" : "min-h-11"}
+          onClick={() => { void controller.planningState.refreshTableRisks(); }}>Erneut laden</UiButton>
       </div> : null}
       {controller.planningBoard?.freshness === "stale" || controller.planningBoard?.readStatus === "loading" ? <span role="status" aria-label={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} title={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} className="mx-6 inline-flex text-slate-500">
         <RefreshCw size={14} aria-hidden="true" className={controller.planningBoard.readStatus === "loading" ? "animate-spin motion-reduce:animate-none" : undefined} />
@@ -281,6 +293,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
           {view === "table" && (
             <TaskTableView
+              risksById={controller.planningBoard?.table?.risksById}
               page={controller.planningBoard?.table?.page}
               pageStatus={controller.planningBoard?.pageStatus}
               onLoadMore={() => { void controller.planningState.loadTablePage(); }}

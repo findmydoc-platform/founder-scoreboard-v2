@@ -90,6 +90,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
   readPlanningSourceVersion?: (options?: { signal?: AbortSignal }) => Promise<string>;
+  readTableRisks?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: import("../planning-table-result").PlanningTableRiskFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;
   readTaskDetail?: (taskId: string) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[] }>;
@@ -171,7 +172,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (workspace !== "planning" && workspaceReadCoverage(workspace).tasks && workspaceStatuses.get(workspace) !== "forbidden") workspaceStatuses.set(workspace, "stale");
     }
     scheduleAffectedRefresh();
-    if (tableResult) tableResult = { ...tableResult, page: { ...tableResult.page, continuation: null } };
+    if (tableResult) tableResult = { ...tableResult, page: { ...tableResult.page, continuation: null }, risksById: Object.fromEntries(tableResult.rowIds.map(id => [id, null])) };
     if (!boardResult) {
       pageStatus = "stale";
       if (workspaceStatuses.has("planning")) workspaceStatuses.set("planning", "stale");
@@ -958,7 +959,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (!options?.immediate && failedQueryDemand?.query === signature && failedQueryDemand.generation === sessionGeneration && failedQueryDemand.sourceEpoch === planningSourceEpoch) return Promise.resolve(false);
       failedQueryDemand = undefined;
       discardQueuedQuery();
-      if ((boardRead || workspaceReads.has("planning") || columnReads.size || heldReads.size) && (!boardQuery || planningBoardQueryKey(boardQuery) !== planningBoardQueryKey(normalized))) {
+      if ((boardRead || workspaceReads.has("planning") || columnReads.size || summaryReads.size || heldReads.size) && (!boardQuery || planningBoardQueryKey(boardQuery) !== planningBoardQueryKey(normalized))) {
         acceptedRead.set("planning", ++sequence);
         releaseHeldReads();
         cancelPlanningReads();
@@ -1011,6 +1012,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         weekBasis = retained.weekBasis;
         planningAuthority = retained.readAuthority;
         pageStatus = retained.pageStatus === "loading" ? "stale" : retained.pageStatus;
+        cancelPlanningReads();
+        summaryReads.clear(); summarySequences.clear();
         columnReads.clear(); columnRequests.clear();
         for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
         for (const [column, status] of Object.entries(retained.columnReadStatus)) columnReadStatus[column as TaskStatus] = status === "loading" ? "stale" : status;
@@ -1018,6 +1021,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         completeness.set("planning", retained.completeness);
         workspaceStatuses.set("planning", "current");
         publish();
+        if (tableResult) queueMicrotask(loadPendingTableRisks);
         return Promise.resolve(true);
       }
       boardQuery = normalizePlanningBoardQuery(query);
@@ -1033,6 +1037,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     loadBoardColumn(status) { return readBoardColumn(status, false); },
     refreshBoardColumn(status) { return readBoardColumn(status, true); },
     acceptServerBoardSummary: (readId, outcome) => acceptServerSummary(readId, outcome),
+    refreshTableRisks() {
+      if (!isActive() || !tableResult || freshness === "stale") return Promise.resolve(false);
+      return Promise.all((tableResult.summaryRequests || []).filter(request => request.status !== "current").map(readTableRisk)).then(results => results.every(Boolean));
+    },
     refreshBoardSummaries() {
       if (!isActive() || !boardResult || freshness === "stale") return Promise.resolve(false);
       return Promise.all((boardResult.summaryRequests || []).filter(request => request.status !== "current").map(readBoardSummary)).then(results => results.every(Boolean));
@@ -1534,6 +1542,72 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     summaryReads.set(request.token, { result, controller });
     return result;
   }
+  function loadPendingTableRisks() {
+    if (!isActive() || freshness === "stale") return;
+    for (const request of tableResult?.summaryRequests || []) if (request.status === "loading") void readTableRisk(request);
+  }
+  function beginTableRiskRead(request: PlanningBoardSummaryRequest) {
+    const table = tableResult!, started = ++sequence;
+    summarySequences.set(request.token, started);
+    return { started, request, generation: sessionGeneration, sessionRevision, sourceEpoch: planningSourceEpoch,
+      baseRead: acceptedRead.get("planning"), queryKey: table.queryKey, revision: table.revision,
+      scopeRevision, observedAt: table.observedAt, validUntil: table.validUntil ?? null, authority: planningAuthority };
+  }
+  function tableRiskIsCurrent(token: ReturnType<typeof beginTableRiskRead>) {
+    const now = adapter.now?.() ?? Date.now();
+    return isActive() && token.generation === sessionGeneration && token.sessionRevision === sessionRevision
+      && token.sourceEpoch === planningSourceEpoch && token.baseRead === acceptedRead.get("planning")
+      && summarySequences.get(token.request.token) === token.started && tableResult?.queryKey === token.queryKey
+      && tableResult.revision === token.revision && scopeRevision === token.scopeRevision
+      && tableResult.observedAt === token.observedAt && (tableResult.validUntil ?? null) === token.validUntil
+      && (!token.authority || token.authority.userId === userId && token.authority.deadline > now)
+      && (!token.validUntil || Date.parse(token.validUntil) > now);
+  }
+  function setTableRiskStatus(key: string, status: PlanningBoardSummaryRequest["status"]) {
+    if (tableResult) tableResult = { ...tableResult, summaryRequests: tableResult.summaryRequests?.map(request => request.token === key ? { ...request, status } : request) };
+  }
+  function applyTableRisk(token: ReturnType<typeof beginTableRiskRead>, outcome: import("../planning-table-result").PlanningTableRiskFrame | 403 | 409 | 503) {
+    if (outcome === 403 && isActive() && token.generation === sessionGeneration && token.sessionRevision === sessionRevision) {
+      denyPlanningScope(); cancelPlanningReads(); publish(); return false;
+    }
+    if (!tableRiskIsCurrent(token)) return false;
+    if (typeof outcome === "number") {
+      if (outcome === 409) { invalidatePlanningSource(); cancelPlanningReads(); }
+      else setTableRiskStatus(token.request.token, "unavailable");
+      publish(); return false;
+    }
+    const valid = outcome.kind === "table-risks" && outcome.token === token.request.token && outcome.scopeRevision === token.scopeRevision
+      && outcome.queryRevision === token.revision && outcome.observedAt === token.observedAt && outcome.validUntil === token.validUntil
+      && JSON.stringify(outcome.cardIds) === JSON.stringify(token.request.cardIds) && token.request.cardIds.every(id => {
+        const risk = outcome.risksById?.[id];
+        return tableResult?.rowIds.includes(id) && risk && [risk.waitsOn, risk.blocks].every(count => Number.isSafeInteger(count) && count >= 0)
+          && typeof risk.hasOpenWait === "boolean" && (!risk.hasOpenWait || risk.waitsOn > 0) && Array.isArray(risk.attention)
+          && risk.attention.every(signal => typeof signal.id === "string" && typeof signal.label === "string" && (signal.kind === "critical" || signal.kind === "quality"))
+          && risk.attention.some(signal => signal.id === "waiting") === risk.hasOpenWait;
+      });
+    if (!valid || !tableResult) { setTableRiskStatus(token.request.token, "unavailable"); publish(); return false; }
+    tableResult = { ...tableResult, risksById: { ...tableResult.risksById, ...Object.fromEntries(token.request.cardIds.map(id => [id, outcome.risksById[id]])) } };
+    setTableRiskStatus(token.request.token, "current");
+    rememberPlanningQuery(); publish(); return true;
+  }
+  function readTableRisk(request: PlanningBoardSummaryRequest): Promise<boolean> {
+    const existing = summaryReads.get(request.token);
+    if (existing) return existing.result;
+    if (!adapter.readTableRisks || !tableResult) return Promise.resolve(false);
+    const token = beginTableRiskRead(request), controller = new AbortController();
+    setTableRiskStatus(request.token, "loading"); publish();
+    const result = Promise.resolve().then(async () => {
+      try {
+        const read = await adapter.readTableRisks!(request.token, { signal: controller.signal });
+        if (read.readAuthority.userId !== userId || read.readAuthority.deadline <= (adapter.now?.() ?? Date.now())) return applyTableRisk(token, 403);
+        return applyTableRisk(token, read.summaries);
+      } catch (error) {
+        return applyTableRisk(token, readErrorStatus(error) === "forbidden" ? 403 : typeof error === "object" && error !== null && "status" in error && error.status === 409 ? 409 : 503);
+      }
+    }).finally(() => { if (summaryReads.get(request.token)?.result === result) summaryReads.delete(request.token); });
+    summaryReads.set(request.token, { result, controller });
+    return result;
+  }
   function beginWorkspaceRead(workspace: AppWorkspace, query?: PlanningBoardQueryInput) {
     const tablePage = query?.view === "table" && tableResult ? { queryKey: tableResult.queryKey, revision: tableResult.revision, baseRead: acceptedRead.get(workspace) } : undefined;
     const page = query?.column && boardResult ? { column: query.column, queryKey: boardResult.queryKey, revision: boardResult.revision, baseRead: acceptedRead.get(workspace), continuation: query.continuation } : undefined;
@@ -1588,7 +1662,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (result.append) pageStatus = "unavailable"; else workspaceStatuses.set("planning", "unavailable");
         publish(); return false;
       }
-      tableResult = { ...next, rowIds, page: { ...next.page, loaded: rowIds.length },
+      const risksById = { ...previous?.risksById };
+      for (const [id, value] of Object.entries(next.risksById || {})) if (value !== null || risksById[id] == null) risksById[id] = value;
+      tableResult = { ...next, rowIds, risksById, page: { ...next.page, loaded: rowIds.length },
         attentionById: { ...previous?.attentionById, ...next.attentionById },
         summaryRequests: [...new Map([...(previous?.summaryRequests || []), ...(next.summaryRequests || [])].map(request => [request.token, request])).values()] };
       boardResult = undefined;
@@ -1744,6 +1820,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
     if (workspace === "planning" && !result.append && result.board?.delivery) reserveBoardDelivery(result.board.delivery.id, result);
     publish();
+    if (workspace === "planning" && result.table) queueMicrotask(loadPendingTableRisks);
     return true;
   }
   function suspendProtected() {
@@ -1926,6 +2003,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     });
   }
   rememberPlanningQuery();
+  queueMicrotask(loadPendingTableRisks);
   queueMicrotask(() => commentCreations.restore());
   return { planning, internal: {
     getSnapshot: () => visible,

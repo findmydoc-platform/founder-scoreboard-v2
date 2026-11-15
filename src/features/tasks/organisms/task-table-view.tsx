@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { PlanningReadStatus } from "@/features/planning/model/planning-state";
-import type { PlanningTablePage } from "@/features/planning/model/planning-table-result";
+import type { PlanningTablePage, PlanningTableRisk } from "@/features/planning/model/planning-table-result";
 import type { PlanningState } from "@/features/planning/model/planning-state";
 import type { BacklogAssignmentEditor } from "@/features/backlog/model/backlog-assignment";
 
@@ -23,6 +23,7 @@ import { buildTaskTableViewModel, type TaskTableSort } from "@/features/tasks/mo
 import { projectDeliverableSchedule } from "@/features/planning-items/model/deliverable-schedule";
 
 type TaskTableViewProps = {
+  risksById?: Record<string, PlanningTableRisk | null>;
   page?: PlanningTablePage;
   pageStatus?: PlanningReadStatus;
   onLoadMore?: () => void;
@@ -61,29 +62,36 @@ function TaskTableRiskBadges({
   allTasks,
   blockers,
   maxVisible = 3,
+  scoped = false,
+  risk,
 }: {
   task: Task;
   relations: TaskRelation[];
   allTasks: Task[];
   blockers: TaskBlocker[];
   maxVisible?: number;
+  scoped?: boolean;
+  risk?: PlanningTableRisk | null;
 }) {
-  const relationGroups = taskRelationsFor(task.id, relations);
-  const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
+  if (scoped && !risk) return <div className="min-h-14 text-xs text-slate-500">Risiken unbekannt</div>;
+  const relationGroups = scoped ? null : taskRelationsFor(task.id, relations);
+  const waitsOn = scoped ? risk!.waitsOn : relationGroups!.waitsOn.length;
+  const blocks = scoped ? risk!.blocks : relationGroups!.blocks.length;
+  const hasOpenWait = scoped ? risk!.hasOpenWait : hasOpenWaitingRelation(task.id, allTasks, relations);
   const signals = [
-    ...taskPlanningAttentionSignals(task, { taskBlockers: blockers, taskRelations: relations, tasks: allTasks })
+    ...(scoped ? risk!.attention : taskPlanningAttentionSignals(task, { taskBlockers: blockers, taskRelations: relations, tasks: allTasks }))
       .map((signal) => ({ id: signal.id, label: signal.label, tone: attentionTone(signal) })),
-    relationGroups.waitsOn.length ? { id: "waits-on", label: `Wartet auf ${relationGroups.waitsOn.length}`, tone: hasOpenWait ? "amber" : "slate" } : null,
-    relationGroups.blocks.length ? { id: "blocks", label: `Blockiert ${relationGroups.blocks.length}`, tone: "blue" } : null,
+    waitsOn ? { id: "waits-on", label: `Wartet auf ${waitsOn}`, tone: hasOpenWait ? "amber" : "slate" } : null,
+    blocks ? { id: "blocks", label: `Blockiert ${blocks}`, tone: "blue" } : null,
   ].filter((signal): signal is TableRiskSignal => Boolean(signal));
 
-  if (!signals.length) return <span className="text-xs text-slate-400">-</span>;
+  if (!signals.length) return <div className={scoped ? "min-h-14 text-xs text-slate-400" : "text-xs text-slate-400"}>-</div>;
 
   const visibleSignals = signals.slice(0, maxVisible);
   const hiddenCount = signals.length - visibleSignals.length;
 
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className={`flex flex-wrap gap-1.5 ${scoped ? "min-h-14 content-start items-start" : ""}`}>
       {visibleSignals.map((signal) => (
         <UiBadge key={signal.id} tone={signal.tone} size="xs" className="px-1.5 text-[10px]">
           {signal.label}
@@ -99,7 +107,7 @@ function TaskTableRiskBadges({
 }
 
 export function TaskTableView({
-  page, pageStatus, onLoadMore, onRefresh,
+  page, pageStatus, onLoadMore, onRefresh, risksById,
   planningState,
   visibleTasks,
   profiles,
@@ -187,7 +195,7 @@ export function TaskTableView({
                   <span><strong className="font-semibold text-slate-700">Sprint-Zeitraum:</strong> {schedule.sprint ? dateRange(schedule.sprint) : "–"}</span>
                   <span><strong className="font-semibold text-slate-700">Fixtermin:</strong> {schedule.fixedDate || "–"}</span>
                 </div>
-                <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
+                <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} scoped={Boolean(page)} risk={risksById?.[task.id]} />
               </article>
             );
           })}
@@ -244,7 +252,7 @@ export function TaskTableView({
                 <DataCell>{schedule.sprint ? dateRange(schedule.sprint) : "–"}</DataCell>
                 <DataCell>{schedule.fixedDate || "–"}</DataCell>
                 <DataCell className="max-w-52">
-                  <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
+                  <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} scoped={Boolean(page)} risk={risksById?.[task.id]} />
                 </DataCell>
               </DataRow>
             );

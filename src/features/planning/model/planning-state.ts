@@ -142,6 +142,7 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   scheduleBoardQuery(query: import("./planning-board-query").PlanningBoardQueryInput, options?: { immediate?: boolean }): Promise<boolean>;
   acceptServerBoardColumn(readId: string, outcome: import("./planning-board-delivery").PlanningBoardColumnOutcome): Promise<boolean>;
   acceptServerBoardSummary(readId: string, outcome: import("./planning-board-delivery").PlanningBoardSummaryOutcome): Promise<boolean>;
+  refreshTableRisks(): Promise<boolean>;
   refreshBoardSummaries(): Promise<boolean>;
   loadTablePage(): Promise<boolean>;
   refreshTablePage(): Promise<boolean>;
