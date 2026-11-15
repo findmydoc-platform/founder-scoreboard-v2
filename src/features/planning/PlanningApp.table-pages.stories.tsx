@@ -43,6 +43,7 @@ function TablePagesFlow() {
       return { ...base, query, items: [epic, parent, ...selected, ...(!continuation ? [rows[2]] : [])],
         table: { query, queryKey: planningBoardQueryKey(query), revision: base.revision, observedAt, validUntil: null, rowIds: selected.map(row => row.id),
           page: { total: 4, loaded: 2, completeness: continuation ? "complete" : "partial", continuation: continuation ? null : "table-next" },
+          ...{ statusOptions: ["In Arbeit", "Offen", "Review", "Pausiert"] as TaskStatus[] },
           metrics: { total: 4, open: 4, done: 0, blocked: 0 }, attentionById: Object.fromEntries(selected.map(row => [row.id, null])), workspaceRevision: initial.board!.workspaceRevision } };
     };
     return { initial, page };
@@ -123,3 +124,22 @@ export const ScopedTablePagesRetainBoardAndRowInteraction: Story = { play: async
   await expect(canvas.getByLabelText("Tabellenanfragen")).toHaveTextContent("2");
   await expect(canvas.getByLabelText("Fremde Planungsanfragen")).toHaveTextContent("0");
 } };
+
+export const OffPageStatusesRetainTheCompleteTableOptionBasis: Story = {
+  parameters: { viewport: { defaultViewport: "desktop" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement), document = within(canvasElement.ownerDocument.body);
+    await canvas.findByRole("link", { name: "Synthetic needle remembered Epic" });
+    await userEvent.click(canvas.getByRole("button", { name: "Tabelle" }));
+    await canvas.findByRole("link", { name: "Synthetic needle table row 1" });
+    await userEvent.click(canvas.getByRole("button", { name: "Aufgaben nach Status filtern" }));
+    await userEvent.click(document.getByRole("combobox", { name: "Status wählen" }));
+    await expect(document.getByRole("option", { name: "Review", exact: true })).toBeVisible();
+    await expect(document.getByRole("option", { name: "Pausiert", exact: true })).toBeVisible();
+    await expect(document.getAllByRole("option").map(option => option.textContent)).toEqual(["Alle Status", "In Arbeit", "Offen", "Review", "Pausiert"]);
+    await userEvent.keyboard("{Escape}");
+    await expect(canvas.getByRole("link", { name: "Synthetic needle table row 1" })).toBeVisible();
+    await expect(canvas.getByLabelText("Tabellenanfragen")).toHaveTextContent("1");
+    await expect(canvas.getByLabelText("Fremde Planungsanfragen")).toHaveTextContent("0");
+  },
+};
