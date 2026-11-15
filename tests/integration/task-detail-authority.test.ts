@@ -13,13 +13,27 @@ test("detail certificates retain mapped team reads and deny privileged source ac
     expect(await response.json()).toMatchObject({ taskDetail: { item: { id: f.initiativeId }, readActor: { profileId: f.actors[name].profileId } }, readAuthority: { userId: f.actors[name].userId } });
     expect((await f.rpc("planning_detail_source", args, name)).status).toBe(403);
   }
-  expect((await f.rpc("planning_detail_source", args, "service")).status).toBe(200);
+  const server = await f.rpc("planning_detail_source", args, "service"); expect(server.status).toBe(200);
+  expect(await server.json()).toMatchObject({ target_id: f.initiativeId, ancestor_ids: [`${f.prefix}-epic`] });
+  const publicCertificate = await f.rpc("planning_detail_publication_context", args, "founder"); expect(publicCertificate.status).toBe(200);
+  const certificate = await publicCertificate.json();
+  for (const key of ["target_id", "ancestor_ids", "descriptor"]) expect(certificate).not.toHaveProperty(key);
   expect((await f.rpc("planning_detail_publication_context", args, "service")).status).toBe(403);
   for (const name of ["unmapped", "administrator", "anonymous"] as const) expect([401,403]).toContain((await f.rpc("planning_detail_publication_context", args, name)).status);
   expect((await GET(f.request("unmapped", `/api/tasks/${f.initiativeId}/detail-data?area=target`), routeContext(f.initiativeId))).status).toBe(403);
   const direct = await f.db.query(`select role_name as role,has_table_privilege(role_name,'workspace_private.planning_detail_area_revision','SELECT') readable
     from unnest(array['anon','authenticated','service_role']) roles(role_name)`);
   expect(direct.rows).toEqual([{ role: "anon", readable: false }, { role: "authenticated", readable: false }, { role: "service_role", readable: false }]);
+  const foreign = `${f.prefix}-foreign-descriptor`;
+  await f.db.query("insert into public.tasks(id,project_id,title,task_type,status) values($1,'findmydoc-founder-execution','Unrelated descriptor ancestor','epic','Offen')", [foreign]);
+  const transport = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), response = await transport(request);
+    if (!new URL(request.url).pathname.endsWith("/rpc/planning_detail_source") || !response.ok) return response;
+    return Response.json({ ...await response.json(), target_id: f.initiativeId, ancestor_ids: [foreign] });
+  });
+  const inconsistent = await GET(f.request("founder", `/api/tasks/${f.initiativeId}/detail-data?area=target`), routeContext(f.initiativeId));
+  expect(inconsistent.status).toBe(503); expect(await inconsistent.json()).not.toHaveProperty("taskDetail");
 }, "linking"));
 
 test("prepared target and secondary content cannot outlive original authority or a changed mapped role", () => withPlanningCredentialDatabase(async f => {

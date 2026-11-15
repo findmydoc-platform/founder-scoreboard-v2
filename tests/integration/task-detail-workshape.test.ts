@@ -30,7 +30,8 @@ test("canonical detail keeps its content read shape across independent history, 
     expect(model.relationships).toEqual([]); expect(model.coverage).toEqual({});
     expect(content.some(value => /\/(task_relationship_edges|task_blockers|task_dependencies|task_comments|task_external_comments|task_audit_timeline|task_reviews)(\?|$)/.test(value))).toBe(false);
     const taskReads = content.filter(value => value.startsWith("/rest/v1/active_tasks?"));
-    expect(taskReads).toHaveLength(3);
+    expect(taskReads).toHaveLength(1);
+    expect(new URL(taskReads[0], "http://localhost:3000").searchParams.get("id")).toBe(`in.(${target},${f.prefix}-epic,${f.initiativeId})`);
     expect(taskReads.every(value => new URL(value, "http://localhost:3000").searchParams.has("id"))).toBe(true);
     return { item: model.item, ancestors: model.ancestors, content: [...content].sort() };
   };
