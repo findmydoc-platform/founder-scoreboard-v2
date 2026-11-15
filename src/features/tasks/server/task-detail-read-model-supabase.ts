@@ -143,6 +143,9 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
       const normalizedItemId = itemId.trim();
       if (!normalizedItemId) return { status: "notFound", people: [] };
 
+      const source = area === "target" ? await supabase.rpc("planning_source_version") : null;
+      if (source && (source.error || typeof source.data !== "string")) return { status: "unavailable" };
+
       const [targetResult, profileResult, projectResult, sprintResult] = await Promise.all([
         supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("id", normalizedItemId).maybeSingle<DbTask>(),
         supabase.from("profiles").select(profileSelect).order("name"),
@@ -166,7 +169,7 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
         const item = tasks.get(normalizedItemId);
         if (!item) return { status: "unavailable" };
         return { status: "ready", model: {
-          revision: item.updatedAt || target.updated_at, coverage: {},
+          revision: item.updatedAt || target.updated_at, sourceRevision: source!.data, coverage: {},
           project: project(projectResult.data), item,
           ancestors: ancestors.rows.flatMap(row => tasks.get(row.id) || []),
           children: [], relatedItems: [], people,

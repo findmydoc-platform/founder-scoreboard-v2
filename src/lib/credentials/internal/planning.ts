@@ -157,7 +157,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   // Preserve the existing explicit local profile-override path. Ordinary Board
   // publications use only the original user's bound data capability.
   const localProfileOverride = "localProfileOverride" in permission && permission.localProfileOverride === true;
-  const publicationSource = action === "planning.board.read" && !localProfileOverride
+  const publicationSource = (action === "planning.board.read" || action === "planning.task.read") && !localProfileOverride
     ? planningPublicationSource(resourceData, profile, assertKnown) : undefined;
   const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
   const readSession = cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
@@ -328,6 +328,12 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     async loadDetail(options?: { area?: "target" | "complete" }) {
       if (action !== "planning.task.read" || !targetId || await current()) return { status: "forbidden" as const };
       const result = await createSupabaseTaskDetailReadModel(service).load({ itemId: targetId, area: options?.area }, { authorized: true, actorProfileId: profile?.id || null });
+      if (options?.area === "target" && result.status === "ready") {
+        const publication = publicationSource ? await publicationSource.read() : await current() ? { status: "forbidden" as const } : await service.rpc("planning_source_version").then(value => value.error ? { status: "unavailable" as const } : { status: "ready" as const, revision: value.data });
+        if (publication.status !== "ready") return { status: publication.status };
+        if (publication.revision !== result.model.sourceRevision) return { status: "staleContinuation" as const };
+        try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      }
       if (result.status === "notFound") detailPeople = structuredClone([...result.people]);
       return result;
     },

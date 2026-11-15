@@ -26,6 +26,7 @@ export type TaskDetailUnavailableArea = "discussion" | "relationships" | "timeli
 
 export type TaskDetailModel = Readonly<{
   revision: string;
+  sourceRevision?: string;
   coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea, "complete" | "partial">>>;
   project: Project;
   item: Task;
@@ -54,7 +55,8 @@ export type TaskDetailLoadResult =
   | { status: "degraded"; model: TaskDetailModel; unavailable: readonly TaskDetailUnavailableArea[] }
   | { status: "notFound"; people: readonly Profile[] }
   | { status: "forbidden" }
-  | { status: "unavailable" };
+  | { status: "unavailable" }
+  | { status: "staleContinuation" };
 
 export interface TaskDetailReadModel {
   load(input: { itemId: string; area?: "target" | "complete" }, context: TaskDetailReadContext): Promise<TaskDetailLoadResult>;

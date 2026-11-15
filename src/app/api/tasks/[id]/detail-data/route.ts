@@ -11,6 +11,7 @@ async function handleGET(request: NextRequest, context: { params: Promise<{ id: 
   if (area !== null && area !== "target" && area !== "complete") return apiError("Ungültiger Detailbereich.", 400);
   const result = await apiContext.planning.loadDetail({ area: area || "complete" });
   if (result.status === "forbidden") return apiError("Aufgabe darf nicht geladen werden.", 403);
+  if (result.status === "staleContinuation") return apiError("Die Detailgrundlage hat sich geändert.", 409);
   if (result.status === "notFound") return apiError("Aufgabe wurde nicht gefunden.", 404);
   if (result.status === "unavailable") return apiError("Task-Details konnten nicht geladen werden.", 503);
 
