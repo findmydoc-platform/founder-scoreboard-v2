@@ -96,7 +96,8 @@ export const ScopedTablePagesRetainBoardAndRowInteraction: Story = { play: async
   await expect(canvas.queryByRole("link", { name: "Synthetic needle table row 3" })).not.toBeInTheDocument();
   await expect(canvas.queryByRole("link", { name: "Synthetic required ancestor" })).not.toBeInTheDocument();
   await expect(canvas.queryByRole("link", { name: "Synthetic needle remembered Epic" })).not.toBeInTheDocument();
-  await expect(canvas.getByText((_, element) => element?.tagName === "SPAN" && element.textContent === "2 von 4")).toBeVisible();
+  const tableHeader = within(canvas.getByRole("heading", { name: "Aufgaben", level: 2 }).parentElement!);
+  await expect(tableHeader.getByText((_, element) => element?.tagName === "SPAN" && element.textContent === "2 von 4")).toBeVisible();
   await expect(canvas.getByLabelText("Tabellenanfragen")).toHaveTextContent("1");
   const load = canvas.getByRole("button", { name: "Weitere Aufgaben laden" });
   fireEvent.click(load); fireEvent.click(load);
@@ -114,7 +115,7 @@ export const ScopedTablePagesRetainBoardAndRowInteraction: Story = { play: async
   const rendered = canvas.getAllByRole("link", { name: /Synthetic needle table row/ });
   await expect(rendered.map(link => link.textContent)).toEqual([1, 2, 3, 4].map(index => `Synthetic needle table row ${index}`));
   await expect(canvas.queryByRole("button", { name: "Weitere Aufgaben laden" })).not.toBeInTheDocument();
-  await expect(canvas.getByText((_, element) => element?.tagName === "SPAN" && element.textContent === "4 von 4")).toBeVisible();
+  await expect(tableHeader.getByText((_, element) => element?.tagName === "SPAN" && element.textContent === "4 von 4")).toBeVisible();
   await expect(canvas.getByLabelText("Tabellenanfragen")).toHaveTextContent("2");
   await userEvent.click(canvas.getByRole("button", { name: "Board" }));
   await canvas.findByRole("link", { name: "Synthetic needle remembered Epic" });
