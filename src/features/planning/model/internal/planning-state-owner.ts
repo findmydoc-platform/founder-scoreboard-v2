@@ -21,7 +21,8 @@ import { createPublishedWorkweekCalendars } from "./published-workweek-calendars
 import { createHeaderNotificationsState, type HeaderNotificationsAdapter } from "./header-notifications-state";
 import { isThisWeek } from "../planning-app-model";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
-import type { PlanningBoardColumnOutcome } from "../planning-board-delivery";
+import type { PlanningBoardColumnOutcome, PlanningBoardOutcome, PlanningBoardSummaryOutcome } from "../planning-board-delivery";
+import type { PlanningBoardSummaryFrame, PlanningBoardSummaryRequest } from "../planning-board-summaries";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import type { AuthenticatedProfile, PlanningHeaderData, PlanningShellState, Task, TaskActivity, TaskStatus } from "@/lib/types";
 import type { PlanningState, PlanningTaskSaveStatus, PlanningReadStatus, PlanningWorkspaceView, PlanningTaskSaveView } from "../planning-state";
@@ -53,7 +54,7 @@ export type PlanningWorkspaceProgress =
   | { kind: "basis"; readId: string; read: PlanningWorkspaceRead }
   | { kind: "column"; readId: string; column: TaskStatus; read: PlanningWorkspaceRead }
   | { kind: "failure"; readId: string; column?: TaskStatus; error: { status: number; code?: string } }
-  | { kind: "outcome"; outcome: PlanningBoardColumnOutcome };
+  | { kind: "outcome"; outcome: PlanningBoardOutcome };
 type PlanningWeekBasis = { observedAt: number; sprints: import("@/lib/types").Sprint[] };
 function planningWeekBasis(board: PlanningBoardResult | undefined, coverage: PlanningReadCoverage | undefined, sprints: readonly import("@/lib/types").Sprint[]): PlanningWeekBasis | undefined {
   const observedAt = Date.parse(board?.observedAt || "");
@@ -86,6 +87,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
   readPlanningSourceVersion?: (options?: { signal?: AbortSignal }) => Promise<string>;
+  readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;
   readTaskDetail?: (taskId: string) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[] }>;
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
@@ -195,6 +197,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     pageStatus = "not-loaded";
     columnReads.clear();
     columnRequests.clear();
+    for (const read of summaryReads.values()) read.controller.abort();
+    summaryReads.clear(); summarySequences.clear();
     for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
   }
   function denyPlanningScope() {
@@ -216,6 +220,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const readTransports = new Map<number, { workspace: AppWorkspace; controller: AbortController }>();
   function cancelPlanningReads() {
     for (const read of readTransports.values()) if (read.workspace === "planning") read.controller.abort();
+    for (const read of summaryReads.values()) read.controller.abort();
   }
   const hydrationRequests = new Map<AppWorkspace, ReturnType<typeof beginWorkspaceRead>>();
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
@@ -230,7 +235,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   for (const [column, coverage] of Object.entries(boardResult?.columns || {})) if (coverage.availability === "not-loaded") columnReadStatus[column as TaskStatus] = "not-loaded";
   const columnReads = new Map<TaskStatus, { key: string; result: Promise<boolean> }>();
   const columnRequests = new Map<TaskStatus, number>();
-  const boardDeliveries = new Map<string, { basis: PlanningWorkspaceRead; tokens: Map<TaskStatus, ReturnType<typeof beginWorkspaceRead>>; pending: Set<TaskStatus> }>();
+  const summarySequences = new Map<string, number>();
+  const summaryReads = new Map<string, { result: Promise<boolean>; controller: AbortController }>();
+  const boardDeliveries = new Map<string, { basis: PlanningWorkspaceRead; tokens: Map<TaskStatus, ReturnType<typeof beginWorkspaceRead>>; pending: Set<TaskStatus>; summaries: Map<string, ReturnType<typeof beginBoardSummaryRead>> }>();
   let boardRead: { key: string; result: Promise<boolean>; sequence: number; sourceEpoch: number } | undefined;
   let queryRevision = initialWorkspaceRead?.queryRevision || boardResult?.revision;
   let scopeRevision = initialWorkspaceRead?.scopeRevision;
@@ -1009,6 +1016,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     loadCompletedHistory() { return planning.loadBoardColumn("Erledigt"); },
     loadBoardColumn(status) { return readBoardColumn(status, false); },
     refreshBoardColumn(status) { return readBoardColumn(status, true); },
+    acceptServerBoardSummary: (readId, outcome) => acceptServerSummary(readId, outcome),
+    refreshBoardSummaries() {
+      if (!isActive() || !boardResult || freshness === "stale") return Promise.resolve(false);
+      return Promise.all((boardResult.summaryRequests || []).filter(request => request.status !== "current").map(readBoardSummary)).then(results => results.every(Boolean));
+    },
     workspace: workspace => { isActive(); return ({ tasks: workspaceStatuses.get(workspace) === "forbidden" ? [] : visible.tasks.filter(task => memberships.get(workspace)?.has(task.id) || ((workspace === "planning" || workspace === "projects") && lifecycle.isTemporary(task.id))), readStatus: workspaceStatuses.get(workspace) || "not-loaded", completeness: completeness.get(workspace) || "none" }); },
     taskDetail: taskId => { isActive(); const childList = childLists.get(taskId); return ({
       removed: lifecycle.isRemoved({ id: taskId } as Task),
@@ -1213,7 +1225,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   async function readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, append = false) {
     if (!isActive()) return false;
-    if (workspace === "planning" && !append) { releaseHeldReads(); cancelPlanningReads(); columnReads.clear(); columnRequests.clear(); }
+    if (workspace === "planning" && !append) { releaseHeldReads(); cancelPlanningReads(); columnReads.clear(); columnRequests.clear(); summaryReads.clear(); summarySequences.clear(); }
     const token = beginWorkspaceRead(workspace, append ? query : undefined);
     const { eventRead, toolRead } = token;
     const setPageStatus = (status: PlanningReadStatus) => { if (!token.page || token.page.column === "Erledigt") pageStatus = status; if (token.page) columnReadStatus[token.page.column] = status; };
@@ -1258,7 +1270,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       } else {
         const readId = event.kind === "outcome" ? event.outcome.readId : event.readId;
         if (readId !== streamId) return;
-        const accept = () => event.kind === "outcome" ? acceptServerColumn(streamId, event.outcome) : acceptBoardProgress(event);
+        const accept = () => event.kind === "outcome"
+          ? event.outcome.kind === "summaries" || event.outcome.kind === "failure" && event.outcome.area === "summaries"
+            ? acceptServerSummary(streamId, event.outcome) : acceptServerColumn(streamId, event.outcome)
+          : acceptBoardProgress(event);
         if (heldBasis) progressReads.push(heldBasis.then(accepted => accepted ? accept() : false));
         else if (streamAccepted) progressReads.push(accept());
       }
@@ -1335,7 +1350,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       tokens.set(column, beginWorkspaceRead("planning", { ...basis.query, column }));
       columnReadStatus[column] = "loading";
     }
-    boardDeliveries.set(id, { basis, tokens, pending: new Set(tokens.keys()) });
+    const summaries = new Map((basis.board.summaryRequests || []).filter(request => request.status === "loading")
+      .map(request => [request.token, beginBoardSummaryRead(request, basis)]));
+    boardDeliveries.set(id, { basis, tokens, pending: new Set(tokens.keys()), summaries });
   }
   function finishBoardDelivery(id: string) {
     const delivery = boardDeliveries.get(id);
@@ -1346,6 +1363,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       delivery.tokens.delete(column);
     }
     delivery.pending.clear();
+    for (const [key, token] of delivery.summaries) if (boardSummaryIsCurrent(key, token)) setSummaryStatus(key, "unavailable");
+    delivery.summaries.clear();
     if (!delivery.tokens.size) boardDeliveries.delete(id);
     publish();
   }
@@ -1371,7 +1390,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return await receiveWorkspaceRead("planning", { ...event.read, readAuthority: delivery.basis.readAuthority, append: true }, token, { ...delivery.basis.query, column }, true);
     } finally {
       delivery.tokens.delete(column);
-      if (!delivery.tokens.size) boardDeliveries.delete(event.readId);
+      if (!delivery.tokens.size && !delivery.summaries.size) boardDeliveries.delete(event.readId);
     }
   }
   function acceptServerColumn(readId: string, outcome: PlanningBoardColumnOutcome): Promise<boolean> {
@@ -1386,11 +1405,97 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       ...basis, taskOmittedFields: outcome.taskOmittedFields, taskCoverage: "partial", coverage: { tasks: "partial", taskRelations: "partial", taskBlockers: "partial" },
       data: { ...basis.data, tasks: [...outcome.items], taskRelations: [...outcome.relationships], taskBlockers: [] },
       board: { ...basis.board, delivery: undefined, column: outcome.column, cardIds: outcome.cardIds,
+        summaryRequests: undefined,
         columns: { ...basis.board.columns, [outcome.column]: outcome.columnState },
         childProgressById: Object.fromEntries(outcome.cardIds.map(id => [id, null])), attentionById: Object.fromEntries(outcome.cardIds.map(id => [id, null])),
         viewerOpenSubIssueIdsByDeliverableId: outcome.personalChildren },
     };
     return acceptBoardProgress({ kind: "column", readId, column: outcome.column, read });
+  }
+  function beginBoardSummaryRead(request: PlanningBoardSummaryRequest, basis?: PlanningWorkspaceRead) {
+    const board = basis?.board || boardResult!;
+    const started = ++sequence;
+    summarySequences.set(request.token, started);
+    return { started, request, generation: sessionGeneration, sessionRevision, sourceEpoch: planningSourceEpoch,
+      baseRead: acceptedRead.get("planning"), queryKey: board.queryKey, revision: board.revision,
+      scopeRevision: basis?.scopeRevision || scopeRevision, observedAt: board.observedAt, validUntil: board.validUntil ?? null,
+      authority: basis?.readAuthority || planningAuthority };
+  }
+  function boardSummaryIsCurrent(key: string, token: ReturnType<typeof beginBoardSummaryRead>) {
+    const now = adapter.now?.() ?? Date.now();
+    return isActive() && token.generation === sessionGeneration && token.sessionRevision === sessionRevision
+      && token.sourceEpoch === planningSourceEpoch && token.baseRead === acceptedRead.get("planning")
+      && summarySequences.get(key) === token.started && boardResult?.queryKey === token.queryKey
+      && boardResult.revision === token.revision && scopeRevision === token.scopeRevision
+      && (!token.authority || token.authority.userId === userId && token.authority.deadline > now)
+      && (!token.validUntil || Date.parse(token.validUntil) > now);
+  }
+  function setSummaryStatus(key: string, status: PlanningBoardSummaryRequest["status"]) {
+    if (boardResult) boardResult = { ...boardResult, summaryRequests: boardResult.summaryRequests?.map(request => request.token === key ? { ...request, status } : request) };
+  }
+  async function applyBoardSummary(outcome: PlanningBoardSummaryOutcome, token: ReturnType<typeof beginBoardSummaryRead>) {
+    if (outcome.kind === "failure" && outcome.status === 403 && isActive()
+      && token.generation === sessionGeneration && token.sessionRevision === sessionRevision) {
+      denyPlanningScope(); cancelPlanningReads(); boardDeliveries.clear(); publish(); return false;
+    }
+    if (!boardSummaryIsCurrent(token.request.token, token)) return false;
+    if (outcome.kind === "failure") {
+      if (outcome.status === 409) { invalidatePlanningSource(); cancelPlanningReads(); }
+      else setSummaryStatus(token.request.token, "unavailable");
+      publish(); return false;
+    }
+    const complete = outcome.token === token.request.token && outcome.scopeRevision === token.scopeRevision
+      && outcome.queryRevision === token.revision && outcome.observedAt === token.observedAt && outcome.validUntil === token.validUntil
+      && JSON.stringify(outcome.cardIds) === JSON.stringify(token.request.cardIds)
+      && token.request.cardIds.every(id => {
+        const value = outcome.childProgressById[id];
+        return value && [value.completed, value.total, value.unfinished, value.percentage].every(Number.isSafeInteger)
+          && value.completed >= 0 && value.unfinished >= 0 && value.total === value.completed + value.unfinished
+          && value.percentage === (value.total ? Math.round((value.completed / value.total) * 100) : 0)
+          && (!outcome.attentionById || Array.isArray(outcome.attentionById[id]) && outcome.attentionById[id]!.every(signal =>
+            typeof signal.id === "string" && typeof signal.label === "string" && (signal.kind === "critical" || signal.kind === "quality")));
+      });
+    if (!complete) { setSummaryStatus(token.request.token, "unavailable"); publish(); return false; }
+    if (boardInteractions.size) await new Promise<void>(resolve => heldReads.add(resolve));
+    if (!boardSummaryIsCurrent(token.request.token, token) || !boardResult) return false;
+    boardResult = { ...boardResult, childProgressById: { ...boardResult.childProgressById,
+      ...Object.fromEntries(token.request.cardIds.map(id => [id, outcome.childProgressById[id]])) },
+      ...(outcome.attentionById ? { attentionById: { ...boardResult.attentionById,
+        ...Object.fromEntries(token.request.cardIds.map(id => [id, outcome.attentionById![id]])) } } : {}) };
+    setSummaryStatus(token.request.token, "current");
+    rememberPlanningQuery(); publish(); return true;
+  }
+  async function acceptServerSummary(readId: string, outcome: PlanningBoardSummaryOutcome) {
+    const delivery = boardDeliveries.get(readId);
+    if (!delivery || outcome.readId !== readId) return false;
+    const key = outcome.token || (outcome.kind === "failure" && delivery.summaries.size === 1 ? delivery.summaries.keys().next().value : undefined);
+    if (!key) return false;
+    const token = delivery.summaries.get(key);
+    if (!token) return false;
+    delivery.summaries.delete(key);
+    try { return await applyBoardSummary(outcome, token); }
+    finally { if (!delivery.tokens.size && !delivery.summaries.size) boardDeliveries.delete(readId); }
+  }
+  function readBoardSummary(request: PlanningBoardSummaryRequest): Promise<boolean> {
+    const existing = summaryReads.get(request.token);
+    if (existing) return existing.result;
+    if (!adapter.readBoardSummaries) return Promise.resolve(false);
+    const token = beginBoardSummaryRead(request), controller = new AbortController();
+    setSummaryStatus(request.token, "loading"); publish();
+    const result = Promise.resolve().then(async () => {
+      try {
+        const read = await adapter.readBoardSummaries!(request.token, { signal: controller.signal });
+        if (read.readAuthority.userId !== userId || read.readAuthority.deadline <= (adapter.now?.() ?? Date.now())) {
+          return applyBoardSummary({ kind: "failure", readId: "", area: "summaries", token: request.token, status: 403, error: "Planung darf nicht geladen werden." }, token);
+        }
+        return await applyBoardSummary(read.summaries, token);
+      } catch (error) {
+        const status = readErrorStatus(error) === "forbidden" ? 403 : typeof error === "object" && error !== null && "status" in error && error.status === 409 ? 409 : 503;
+        return applyBoardSummary({ kind: "failure", readId: "", area: "summaries", token: request.token, status, error: "Fortschritt und Signale konnten nicht geladen werden." }, token);
+      }
+    }).finally(() => { if (summaryReads.get(request.token)?.result === result) summaryReads.delete(request.token); });
+    summaryReads.set(request.token, { result, controller });
+    return result;
   }
   function beginWorkspaceRead(workspace: AppWorkspace, query?: PlanningBoardQueryInput) {
     const page = query?.column && boardResult ? { column: query.column, queryKey: boardResult.queryKey, revision: boardResult.revision, baseRead: acceptedRead.get(workspace), continuation: query.continuation } : undefined;
@@ -1458,10 +1563,19 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         for (const [column, coverage] of Object.entries(columns)) if (coverage.availability === "not-loaded") columnReadStatus[column as TaskStatus] = "not-loaded";
       }
       if (!result.append) weekBasis = planningWeekBasis(result.board, result.coverage, result.data.sprints);
+      const compatible = previous?.revision === result.board.revision && scopeRevision === result.scopeRevision;
+      function mergeSummaries<T>(oldValues: Record<string, T | null> | undefined, nextValues: Record<string, T | null> | undefined) {
+        const merged: Record<string, T | null> = compatible ? { ...oldValues } : Object.fromEntries((previous?.cardIds || []).map(id => [id, null]));
+        for (const [id, value] of Object.entries(nextValues || {})) if (value !== null || merged[id] == null) merged[id] = value;
+        return merged;
+      }
+      const requests = new Map((compatible ? previous?.summaryRequests || [] : []).map(request => [request.token, request]));
+      for (const request of result.board.summaryRequests || []) requests.set(request.token, request);
       boardResult = {
         ...result.board, column: undefined, cardIds, columns,
-        attentionById: { ...previous?.attentionById, ...result.board.attentionById },
-        childProgressById: { ...previous?.childProgressById, ...result.board.childProgressById },
+        ...(result.board.summaryRequests || previous?.summaryRequests ? { summaryRequests: [...requests.values()] } : {}),
+        attentionById: mergeSummaries(previous?.attentionById, result.board.attentionById),
+        childProgressById: mergeSummaries(previous?.childProgressById, result.board.childProgressById),
         viewerOpenSubIssueIdsByDeliverableId: { ...previous?.viewerOpenSubIssueIdsByDeliverableId, ...result.board.viewerOpenSubIssueIdsByDeliverableId },
       };
       boardQuery = result.board.query;
@@ -1575,6 +1689,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     releaseHeldReads();
     sourceTransport?.abort();
     for (const read of readTransports.values()) read.controller.abort();
+    for (const read of summaryReads.values()) read.controller.abort();
     discardQueuedQuery();
     clearAutomaticRefresh();
     planningAuthority = undefined;
@@ -1622,6 +1737,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     boardResult = undefined; weekBasis = undefined; boardQuery = undefined; displayedQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
     planningQueries.clear(); queryRevision = undefined; scopeRevision = undefined; sourceObservation = undefined; sourceStatus = "unverified";
     columnReads.clear(); columnRequests.clear(); boardDeliveries.clear();
+    summaryReads.clear(); summarySequences.clear();
     for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
     workspaceReads.clear();
     hydrationRequests.clear();

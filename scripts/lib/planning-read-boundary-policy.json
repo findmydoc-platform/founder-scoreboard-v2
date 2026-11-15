@@ -10,8 +10,8 @@
     "BOARD": {
       "consumer": "BOARD / PERSONAL",
       "owner": "Planning feature owner",
-      "reason": "The declared credential-bound Deliverable adapter owns one bounded query plan, selected-only column hydration and fresh source checks at publication. Complete and JSON column consumers keep their established shared source.",
-      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts",
+      "reason": "The declared credential-bound Deliverable adapter owns one bounded query basis, selected-only column hydration, one independent selected-identity summary batch and fresh source/time checks at publication. Complete and JSON column consumers keep compatible contracts.",
+      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts; tests/unit/planning/planning-summary-delivery.test.ts; tests/integration/planning-board-aggregates.test.ts; tests/integration/planning-summary-consistency.test.ts; tests/integration/planning-summary-semantics.test.ts",
       "expiresWhen": "Revalidate when the BOARD or PERSONAL contract changes under #641."
     },
     "COMPLETE": {
@@ -470,7 +470,8 @@
       "target": "planning_source_version",
       "fingerprint": "bdac449e03f793dc9526a44db629fb35193943bf7d96d9ef03b391fe12c2fd73",
       "contract": "BOARD",
-      "references": 2
+      "references": 1,
+      "reason": "Trusted direct reference loaders and the existing explicit local profile override retain this exact admitted source read. Ordinary Board publications use the fixed user-bound atomic source capability."
     },
     {
       "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
@@ -491,16 +492,16 @@
     {
       "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
       "kind": "rpc",
-      "target": "planning_source_version",
-      "fingerprint": "8aec5c83d232665674dbb0be8a4d9fd2ed23afdb2ba07a22873e9b0327af811d",
+      "target": "planning_deliverable_column",
+      "fingerprint": "0b6a370e8839972ae94b43935c795325a0b0908dbd338c228cd7ca7824399bd2",
       "contract": "BOARD",
-      "references": 2
+      "references": 1
     },
     {
       "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
       "kind": "rpc",
-      "target": "planning_deliverable_column",
-      "fingerprint": "0b6a370e8839972ae94b43935c795325a0b0908dbd338c228cd7ca7824399bd2",
+      "target": "planning_deliverable_summaries",
+      "fingerprint": "caa7354060d42736b20bbde909a67e5c65731fc43ab776da0ad92795cc89a63e",
       "contract": "BOARD",
       "references": 1
     },
@@ -1023,6 +1024,15 @@
       "fingerprint": "8640556ca84882aaf66070778d0afc13af7ceef944aea1ba9ac9fdfcd1ff5331",
       "contract": "GITHUB",
       "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-service.ts",
+      "kind": "rpc",
+      "target": "planning_board_publication_context",
+      "fingerprint": "2f1c1efffe029db9ee6ab19e69306b70ba9ca2ace29c72aab8ab1dca32e491ce",
+      "contract": "BOARD",
+      "references": 1,
+      "reason": "This fixed original-user RPC reads the live mapped actor, role and Planning source together at each publication boundary, retaining the original JWT, Workspace dispatch preparation and permit."
     }
   ]
 }

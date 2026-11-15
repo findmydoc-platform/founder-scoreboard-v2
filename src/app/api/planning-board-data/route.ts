@@ -8,6 +8,16 @@ import { apiError, authzError } from "@/lib/api-response";
 async function handleGET(request: NextRequest) {
   const permission = await observeRuntimePhase("board.authorization", () => authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning.board.read" }));
   if (!permission.ok) return authzError(permission);
+  const summaryToken = request.nextUrl.searchParams.get("summaries");
+  if (summaryToken !== null) {
+    if (!summaryToken || summaryToken.length > 90000 || request.nextUrl.searchParams.has("scope")) return apiError("Ungültiger Zusammenfassungsbereich.", 400);
+    const result = await permission.planning.loadBoardSummaries(summaryToken, { signal: request.signal });
+    if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Fortschritt und Signale konnten nicht geladen werden.", 503);
+    if (!result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Planung darf nicht geladen werden.", 403);
+    return NextResponse.json({ summaries: result.summaries, readAuthority: result.readAuthority }, { headers: { "cache-control": "no-store" } });
+  }
   let query: PlanningBoardQueryInput | undefined;
   const rawQuery = request.nextUrl.searchParams.get("scope");
   if (rawQuery) {
@@ -34,7 +44,9 @@ async function handleGET(request: NextRequest) {
           if (!cancelled) controller.enqueue(encoder.encode(`${JSON.stringify(frame)}\n`));
         };
         emit({ kind: "basis", readId: delivery.id, model: started.model, readAuthority: authority, currentProfile });
-        await Promise.allSettled(Object.values(delivery.columns).map(async outcome => {
+        const outcomes: Array<Promise<import("@/features/planning/model/planning-board-delivery").PlanningBoardOutcome>> = Object.values(delivery.columns).filter(outcome => outcome !== undefined);
+        if (delivery.summaries) outcomes.push(delivery.summaries);
+        await Promise.allSettled(outcomes.map(async outcome => {
           let frame = await delivery.checkPublication(await outcome!);
           if (cancelled || terminal) return;
           if (authority.deadline <= Date.now()) frame = { kind: "failure", readId: delivery.id, status: 403, error: "Planung darf nicht geladen werden." };
@@ -52,7 +64,9 @@ async function handleGET(request: NextRequest) {
   if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
   if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
   if (result.status === "unavailable") return apiError("Planung konnte nicht geladen werden.", 503);
-  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, readAuthority: permission.readAuthority, headerData: emptyPlanningHeaderData, currentProfile }));
+  const readAuthority = "readAuthority" in result ? result.readAuthority : permission.readAuthority;
+  if (readAuthority && readAuthority.deadline <= Date.now()) return apiError("Planung darf nicht geladen werden.", 403);
+  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, readAuthority, headerData: emptyPlanningHeaderData, currentProfile }));
 }
 
 export const GET = observeRuntimeHandler("planning.board", handleGET);

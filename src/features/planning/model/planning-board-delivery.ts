@@ -2,6 +2,7 @@ import type { PlanningWorkspaceModel } from "@/features/planning-items/model/pla
 import type { PlanningBoardColumn } from "./planning-board-query";
 import type { PlanningReadAuthority } from "./planning-server-header-read";
 import type { AuthenticatedProfile, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import type { PlanningBoardSummaryFrame } from "./planning-board-summaries";
 
 export type PlanningBoardColumnFrame = Readonly<{
   kind: "column";
@@ -22,11 +23,15 @@ export type PlanningBoardFailureFrame = Readonly<{
   kind: "failure";
   readId: string;
   column?: TaskStatus;
+  area?: "summaries";
+  token?: string;
   status: 403 | 409 | 503;
   error: string;
   code?: string;
 }>;
 export type PlanningBoardColumnOutcome = PlanningBoardColumnFrame | PlanningBoardFailureFrame;
+export type PlanningBoardSummaryOutcome = PlanningBoardSummaryFrame | PlanningBoardFailureFrame;
+export type PlanningBoardOutcome = PlanningBoardColumnOutcome | PlanningBoardSummaryOutcome;
 export type PlanningBoardBasisFrame = Readonly<{
   kind: "basis";
   readId: string;
@@ -34,12 +39,13 @@ export type PlanningBoardBasisFrame = Readonly<{
   readAuthority: PlanningReadAuthority;
   currentProfile?: AuthenticatedProfile | null;
 }>;
-export type PlanningBoardStreamFrame = PlanningBoardBasisFrame | PlanningBoardColumnOutcome | Readonly<{ kind: "end"; readId: string }>;
+export type PlanningBoardStreamFrame = PlanningBoardBasisFrame | PlanningBoardOutcome | Readonly<{ kind: "end"; readId: string }>;
 export type PlanningBoardDelivery = Readonly<{
   id: string;
   abort(): void;
-  checkPublication(outcome: PlanningBoardColumnOutcome): Promise<PlanningBoardColumnOutcome>;
+  checkPublication<T extends PlanningBoardOutcome>(outcome: T): Promise<T | PlanningBoardFailureFrame>;
   columns: Partial<Record<TaskStatus, Promise<PlanningBoardColumnOutcome>>>;
+  summaries?: Promise<PlanningBoardSummaryOutcome>;
 }>;
 export type PlanningBoardQueryLoadResult =
   | { status: "ready"; model: PlanningWorkspaceModel; delivery?: PlanningBoardDelivery }

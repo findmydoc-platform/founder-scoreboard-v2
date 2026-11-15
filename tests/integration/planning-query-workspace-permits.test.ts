@@ -104,10 +104,11 @@ async function prepare() {
           // Hashes, tokens and row bindings remain in memory. Assertions expose
           // only booleans/counts, never the values used to bind the permit.
           const binding = (await fixture.database.query(`select
-            user_id=$2::uuid and jwt_hash=$3 and method='POST' and path='/rpc/current_authenticated_profile'
+            user_id=$2::uuid and jwt_hash=$3 and method='POST' and path=$4
+            and path in ('/rpc/current_authenticated_profile','/rpc/planning_board_publication_context')
             and access_generation=(select access_generation from workspace_private.configuration where singleton)
             and expires_at>clock_timestamp() as matches
-            from workspace_private.request_permits where permit_hash=$1`, [body.p_hash, actor.userId, digest(actor.session.access_token)])).rows;
+            from workspace_private.request_permits where permit_hash=$1`, [body.p_hash, actor.userId, digest(actor.session.access_token), body.p_path])).rows;
           safe(binding.length === 1 && binding[0].matches === true, "prepared permit must have the original user/JWT/method/path/generation binding");
           safe(!prepared.has(body.p_hash), "each preparation must issue a distinct permit");
           prepared.add(body.p_hash);
@@ -115,7 +116,7 @@ async function prepare() {
         }
         return response;
       }
-      if (url.pathname.endsWith("/current_authenticated_profile")) {
+      if (["/current_authenticated_profile", "/planning_board_publication_context"].some(path => url.pathname.endsWith(path))) {
         profileDispatches++;
         safe(request.headers.get("authorization") === `Bearer ${actor.session.access_token}`, "live profile must use the original JWT");
         const permit = request.headers.get("x-founderops-workspace-permit");

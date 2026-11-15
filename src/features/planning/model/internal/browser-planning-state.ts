@@ -464,6 +464,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || typeof body?.version !== "string") throw Object.assign(new Error(body?.error || "Planungsänderungen konnten nicht geprüft werden."), { status: response.status });
         return body.version;
       },
+      async readBoardSummaries(token, options) {
+        const { response, body } = await ownedApiClient.requestJson<{ summaries?: import("../planning-board-summaries").PlanningBoardSummaryFrame; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; error?: string; code?: string }>(`/api/planning-board-data?summaries=${encodeURIComponent(token)}`, options);
+        if (!response.ok || !body?.summaries) throw Object.assign(new Error(body?.error || "Fortschritt und Signale konnten nicht geladen werden."), { status: response.status, code: body?.code });
+        requireReadAuthority(body.readAuthority);
+        return { summaries: body.summaries, readAuthority: body.readAuthority! };
+      },
       async readWorkspace(workspace, query, options) {
         if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && (query.level || "deliverable") === "deliverable" && !query.column && !query.continuation) {
           const response = await ownedApiClient.requestResponse(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal, headers: { accept: "application/x-ndjson" } });

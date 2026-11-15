@@ -122,6 +122,15 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
   });
 
   const deniedChildListIds = controller.planningBoard?.deniedChildListIds || [];
+  const summaryRequests = controller.planningBoard?.result?.summaryRequests;
+  const summariesStale = controller.planningBoard?.freshness === "stale";
+  const summaryStatus = summaryRequests?.some(request => request.status === "unavailable") ? "unavailable"
+    : summaryRequests?.some(request => request.status === "loading") ? "loading" : "current";
+  const summaryLabel = summariesStale ? "Fortschritt und Signale veraltet."
+    : summaryStatus === "loading" ? "Fortschritt und Signale werden geladen …"
+    : summaryStatus === "unavailable" ? "Fortschritt und Signale unbekannt."
+      : controller.planningBoard?.result?.cardIds.every(id => controller.planningBoard.result!.attentionById?.[id] != null)
+        ? "Fortschritt und Signale aktuell." : "Kindfortschritt aktuell. Signale unbekannt.";
 
   const canChangeTaskStatus = (task: (typeof data.tasks)[number]) => mayChangeTaskStatus(task) && controller.planningState.taskDetail(task.id).saveStatus !== "unconfirmed";
 
@@ -178,6 +187,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       onPointerCancelCapture={() => { pointerInteraction.current?.(); pointerInteraction.current = undefined; }}
       onDragEndCapture={() => { pointerInteraction.current?.(); pointerInteraction.current = undefined; }}
     >
+      {view === "board" && summaryRequests?.length ? <div role="status" aria-label={summaryLabel} className="mx-4 mb-3 flex min-h-11 items-center gap-2 text-xs leading-5 text-slate-600 lg:mx-6">
+        <span className="min-w-0 flex-1">{summaryLabel}</span>
+        <UiButton type="button" aria-label="Fortschritt und Signale erneut laden" disabled={summariesStale || summaryStatus === "current"}
+          className={summariesStale || summaryStatus === "current" ? "invisible min-h-11" : "min-h-11"}
+          onClick={() => { void controller.planningState.refreshBoardSummaries(); }}>Erneut laden</UiButton>
+      </div> : null}
       {controller.planningBoard?.freshness === "stale" || controller.planningBoard?.readStatus === "loading" ? <span role="status" aria-label={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} title={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} className="mx-6 inline-flex text-slate-500">
         <RefreshCw size={14} aria-hidden="true" className={controller.planningBoard.readStatus === "loading" ? "animate-spin motion-reduce:animate-none" : undefined} />
       </span> : null}

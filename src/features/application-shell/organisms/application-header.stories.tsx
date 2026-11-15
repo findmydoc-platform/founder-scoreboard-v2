@@ -15,6 +15,7 @@ import { teamWorkweekTourId } from "@/features/product-tours/model/feature-tour-
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { ApplicationHeader } from "./application-header";
 import { mockAccountLifecycle } from "../../../../tests/helpers/account-lifecycle-browser-fixture";
+import { setAdvancingStoryDate } from "../../../../tests/helpers/story-date";
 
 function PlanningComposition({ state = "ready", tours = false, areaTitle = "Planung" }: { state?: "ready" | "loading" | "empty" | "failed" | "denied"; tours?: boolean; areaTitle?: string }) {
   const [owner] = useState(() => createPlanningState({
@@ -307,6 +308,7 @@ export const PhoneTourRevealsGithubAfterAccount: Story = {
 };
 
 export const PhoneTourBackRevealsHelpAgain: Story = {
+  beforeEach: () => setAdvancingStoryDate("2026-11-13T12:00:00Z"),
   args: { tours: true },
   globals: { viewport: { value: "phone" } },
   parameters: { viewport: { options: { phone: { name: "Phone", styles: { width: "390px", height: "844px" } } } } },

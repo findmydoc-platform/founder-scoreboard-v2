@@ -19,6 +19,14 @@ function planningProtocol(notificationsUnavailable = true) {
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname === "/rest/v1/rpc/planning_source_version") return Response.json("42");
+    if (url.pathname === "/rest/v1/rpc/planning_board_publication_context") {
+      const identity = await authFetch(new Request(new URL("/rest/v1/rpc/current_authenticated_profile", url), {
+        method: "POST", headers: request.headers, body: "{}", signal: request.signal,
+      }));
+      if (!identity.ok) return identity;
+      const profile: { id: string; platform_role: string } | null = await identity.json();
+      return Response.json(profile ? { profile_id: profile.id, platform_role: profile.platform_role, source_revision: "42" } : null);
+    }
     if (["/rest/v1/rpc/planning_deliverable_selection", "/rest/v1/rpc/planning_deliverable_query_plan"].includes(url.pathname)) {
       const plan = url.pathname.endsWith("planning_deliverable_query_plan");
       if (plan) queryPlanRead();

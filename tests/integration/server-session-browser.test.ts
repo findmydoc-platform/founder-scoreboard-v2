@@ -138,6 +138,7 @@ beforeAll(async () => {
     if (url.pathname === "/rest/v1/rpc/current_authenticated_profile") { send(mapped ? { id: "synthetic-profile", name: "Synthetic Founder", platform_role: role } : null); return; }
     if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: activeAdministrator, active: activeAdministrator, expiresAt: activeAdministrator ? new Date(Date.now() + 60000).toISOString() : null }); return; }
     if (url.pathname === "/rest/v1/rpc/planning_source_version") { send("synthetic-planning-revision"); return; }
+    if (url.pathname === "/rest/v1/rpc/planning_board_publication_context") { send(mapped ? { profile_id: "synthetic-profile", platform_role: role, source_revision: "synthetic-planning-revision" } : null); return; }
     if (["planning_deliverable_selection", "planning_deliverable_query_plan", "planning_deliverable_column"].some(name => url.pathname === `/rest/v1/rpc/${name}`)) {
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");

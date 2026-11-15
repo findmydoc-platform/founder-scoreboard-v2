@@ -23,12 +23,16 @@ export type PlanningWorkspaceLoadContext = Readonly<{
   authorized: boolean;
   actorProfileId: string | null;
   authorityKey?: string;
+  authorityDeadline?: number;
   signal?: AbortSignal;
+  publicationSource?: Readonly<{
+    read(signal?: AbortSignal): Promise<{ status: "ready"; revision: string } | { status: "forbidden" | "unavailable" }>;
+  }>;
   query?: import("@/features/planning/model/planning-board-query").PlanningBoardQueryInput;
 }>;
 
 export type PlanningWorkspaceLoadResult =
-  | { status: "ready"; model: PlanningWorkspaceModel }
+  | { status: "ready"; model: PlanningWorkspaceModel; authorityDeadline?: number }
   | { status: "forbidden" }
   | { status: "unavailable" }
   | { status: "staleContinuation" };

@@ -16,12 +16,13 @@ export async function consumePlanningBoardStream(response: Response, receive: (f
         if (!line.trim()) continue;
         const frame = JSON.parse(line) as PlanningBoardStreamFrame;
         if (!frame || typeof frame !== "object" || ended || typeof frame.readId !== "string" || !frame.readId
-          || !["basis", "column", "failure", "end"].includes(frame.kind)) throw new Error("Die Planungsantwort ist ungültig.");
+          || !["basis", "column", "summaries", "failure", "end"].includes(frame.kind)) throw new Error("Die Planungsantwort ist ungültig.");
         if (frame.kind === "basis") {
           if (readId || !frame.model?.board || !frame.model.query || !frame.readAuthority) throw new Error("Die Planungsbasis ist ungültig.");
           readId = frame.readId;
         } else if (!readId || frame.readId !== readId) throw new Error("Die Planungsantwort gehört zu einem anderen Abruf.");
         if (frame.kind === "column" && (!Array.isArray(frame.items) || !Array.isArray(frame.cardIds) || !Array.isArray(frame.relationships) || !frame.columnState)) throw new Error("Die Spaltenantwort ist ungültig.");
+        if (frame.kind === "summaries" && (typeof frame.token !== "string" || !Array.isArray(frame.cardIds) || !frame.childProgressById)) throw new Error("Die Zusammenfassung ist ungültig.");
         if (frame.kind === "failure" && ![403, 409, 503].includes(frame.status)) throw new Error("Der Spaltenfehler ist ungültig.");
         if (frame.kind === "end") ended = true;
         receive(frame);

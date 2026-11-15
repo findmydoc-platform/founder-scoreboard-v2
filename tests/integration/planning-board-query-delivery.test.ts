@@ -251,12 +251,12 @@ test.each(["source", "role", "deadline"] as const)("a settled SQL hydration must
     try {
       const [firstDraft, laterDraft] = await Promise.all([delivery.columns.Review!, delivery.columns.Offen!]);
       expect(firstDraft.kind).toBe("column"); expect(laterDraft.kind).toBe("column");
-      const beforePublish = observed.filter(value => value.path.endsWith("/planning_source_version")).length;
+      const beforePublish = observed.filter(value => value.path.endsWith("/planning_board_publication_context")).length;
       const first = await delivery.checkPublication(firstDraft);
       expect(first.kind).toBe("column");
       if (first.kind === "column") expect(first.cardIds).toEqual([review]);
-      expect(observed.filter(value => value.path.endsWith("/planning_source_version"))).toHaveLength(beforePublish + 1);
-      const liveBeforeLater = observed.filter(value => value.path.endsWith("/current_authenticated_profile")).length;
+      expect(observed.filter(value => value.path.endsWith("/planning_board_publication_context"))).toHaveLength(beforePublish + 1);
+      const liveBeforeLater = observed.filter(value => value.path.endsWith("/planning_board_publication_context")).length;
       if (change === "source") await db.query("update public.tasks set sort_order=44 where id=$1", [open]);
       if (change === "role") await db.query("update public.profiles set platform_role='viewer' where id=$1", [actors.founder.profileId]);
       if (change === "deadline") {
@@ -266,7 +266,7 @@ test.each(["source", "role", "deadline"] as const)("a settled SQL hydration must
       const rejected = await delivery.checkPublication(laterDraft);
       expect(rejected).toMatchObject({ kind: "failure", status: change === "source" ? 409 : 403 });
       expect(rejected).not.toHaveProperty("items");
-      if (change !== "deadline") expect(observed.filter(value => value.path.endsWith("/current_authenticated_profile")).length).toBeGreaterThan(liveBeforeLater);
+      if (change !== "deadline") expect(observed.filter(value => value.path.endsWith("/planning_board_publication_context")).length).toBeGreaterThan(liveBeforeLater);
       const previousPayloadCannotBeRepublished = await delivery.checkPublication(firstDraft);
       expect(previousPayloadCannotBeRepublished).toMatchObject({ kind: "failure", status: change === "source" ? 409 : 403 });
     } finally { vi.useRealTimers(); delivery.abort(); }

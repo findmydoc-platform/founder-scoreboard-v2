@@ -3,10 +3,10 @@ import "server-only";
 import { Suspense } from "react";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 import type { TaskStatus } from "@/lib/types";
-import type { PlanningBoardColumnOutcome, PlanningBoardDelivery, PlanningBoardQueryLoadResult } from "../model/planning-board-delivery";
+import type { PlanningBoardColumnOutcome, PlanningBoardDelivery, PlanningBoardOutcome, PlanningBoardQueryLoadResult } from "../model/planning-board-delivery";
 import { PlanningServerBoardReceipt } from "../organisms/planning-server-board-receipt";
 
-function failedColumn(readId: string, column: TaskStatus, error: unknown): PlanningBoardColumnOutcome {
+function failedColumn(readId: string, column: TaskStatus | undefined, error: unknown): Extract<PlanningBoardColumnOutcome, { kind: "failure" }> {
   const status = typeof error === "object" && error !== null && "status" in error
     ? error.status === 401 || error.status === 403 ? 403 : error.status === 409 ? 409 : 503 : 503;
   return { kind: "failure", readId, column, status,
@@ -30,7 +30,7 @@ function mergeInitialColumn(model: PlanningWorkspaceModel, outcome: Extract<Plan
     taskOmittedFields: outcome.taskOmittedFields,
     board: {
       ...board,
-      delivery: pending.length ? { id: board.delivery!.id, columns: pending } : undefined,
+      delivery: pending.length || board.summaryRequests?.some(request => request.status === "loading") ? { id: board.delivery!.id, columns: pending } : undefined,
       cardIds: outcome.cardIds,
       columns: { ...board.columns, [outcome.column]: outcome.columnState },
       childProgressById: Object.fromEntries(outcome.cardIds.map(id => [id, null])),
@@ -47,7 +47,9 @@ export async function preparePlanningServerBoardColumns(result: Extract<Planning
     promise!.catch(error => failedColumn(delivery.id, column as TaskStatus, error)),
   ])) as PlanningBoardDelivery["columns"];
   const entries = Object.entries(columns) as Array<[TaskStatus, Promise<PlanningBoardColumnOutcome>]>;
-  if (!entries.length) return { status: "ready" as const, model: { ...model, board: { ...model.board, delivery: undefined } }, delivery: undefined };
+  if (!entries.length) return delivery.summaries
+    ? { status: "ready" as const, model, delivery }
+    : { status: "ready" as const, model: { ...model, board: { ...model.board, delivery: undefined } }, delivery: undefined };
 
   // One settled column can seed operable HTML; no particular status gates it.
   const first = await Promise.race(entries.map(async ([column, promise]) => ({ column, outcome: await promise })));
@@ -64,11 +66,23 @@ export async function preparePlanningServerBoardColumns(result: Extract<Planning
   }
   const remaining = { ...columns };
   delete remaining[first.column];
-  return { status: "ready" as const, model: mergeInitialColumn(model, outcome), delivery: Object.keys(remaining).length ? { ...delivery, columns: remaining } : undefined };
+  return { status: "ready" as const, model: mergeInitialColumn(model, outcome), delivery: Object.keys(remaining).length || delivery.summaries ? { ...delivery, columns: remaining } : undefined };
 }
 
 async function BoardColumn({ delivery, column, result }: { delivery: PlanningBoardDelivery; column: TaskStatus; result: Promise<PlanningBoardColumnOutcome> }) {
   const outcome = await publishColumn(delivery, column, result);
+  return <PlanningServerBoardReceipt readId={delivery.id} outcome={outcome} />;
+}
+
+async function BoardSummaries({ delivery }: { delivery: PlanningBoardDelivery }) {
+  let outcome: PlanningBoardOutcome;
+  try {
+    outcome = await delivery.checkPublication(await delivery.summaries!);
+  } catch (error) {
+    const failed = failedColumn(delivery.id, undefined, error);
+    outcome = { ...failed, area: "summaries",
+      error: failed.status === 503 ? "Fortschritt und Signale konnten nicht geladen werden." : failed.error };
+  }
   return <PlanningServerBoardReceipt readId={delivery.id} outcome={outcome} />;
 }
 
@@ -77,5 +91,5 @@ export function PlanningServerBoardColumns({ delivery }: { delivery: PlanningBoa
     <Suspense key={`${delivery.id}:${column}`} fallback={null}>
       <BoardColumn delivery={delivery} column={column} result={result} />
     </Suspense>
-  ))}</>;
+  ))}{delivery.summaries ? <Suspense key={`${delivery.id}:summaries`} fallback={null}><BoardSummaries delivery={delivery} /></Suspense> : null}</>;
 }

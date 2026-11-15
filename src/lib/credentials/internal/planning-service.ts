@@ -1,6 +1,6 @@
 import { observedSupabaseFetch } from "./observed-fetch";
 import "server-only";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AuthErrorCode } from "../../auth-error-contract";
 import { WorkspaceAccessError } from "../../workspace-identity";
 
@@ -31,11 +31,45 @@ export function planningService(strict: boolean, beforeDispatch?: () => Promise<
         if (active?.url !== captured.url || active.key !== captured.key) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
         const url = new URL(request.url), expected = new URL(captured.url);
         if (url.origin !== expected.origin || !url.pathname.startsWith("/rest/v1/")) throw new WorkspaceAccessError(403, "workspace_access_denied");
-        return observedSupabaseFetch(request);
+        // Keep the SDK's explicit operation signal through framework fetch wrappers.
+        // Request inputs still use the normalized request because construction can transfer their body.
+        return input instanceof Request ? observedSupabaseFetch(request) : observedSupabaseFetch(input, init);
       } catch (error) {
         if (error instanceof WorkspaceAccessError || error instanceof PlanningDispatchError) return Response.json({ code: error.code, message: error.message }, { status: error.status });
         return Response.json({ code: "workspace_access_unavailable", message: "Berechtigung konnte nicht geprüft werden." }, { status: 503 });
       }
     } },
   });
+}
+
+// The user-bound dispatch already checks the original JWT, Workspace binding
+// and permit. Read its live profile and source together instead of following
+// the profile check with another privileged source-only dispatch.
+export function planningPublicationSource(data: SupabaseClient | null, profile: { id: string; platformRole: string } | null, assertCurrent: () => void) {
+  const captured = configuration(false);
+  if (!data || !profile || !captured) return undefined;
+  return { async read(signal?: AbortSignal) {
+    try {
+      assertCurrent();
+      if (signal?.aborted) return { status: "unavailable" as const };
+      const assertEnvironment = () => {
+        const active = configuration(false);
+        if (active?.url !== captured.url || active.key !== captured.key) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
+      };
+      assertEnvironment();
+      const read = data.rpc("planning_board_publication_context");
+      const result = await (signal ? read.abortSignal(signal) : read);
+      assertCurrent();
+      assertEnvironment();
+      if (result.error) return { status: result.status === 401 || result.status === 403 ? "forbidden" as const : "unavailable" as const };
+      if (signal?.aborted) return { status: "unavailable" as const };
+      if (!result.data || result.data.profile_id !== profile.id || result.data.platform_role !== profile.platformRole) return { status: "forbidden" as const };
+      if (typeof result.data.source_revision !== "string") return { status: "unavailable" as const };
+      return { status: "ready" as const, revision: result.data.source_revision };
+    } catch (error) {
+      return { status: error instanceof WorkspaceAccessError || error instanceof PlanningDispatchError
+        ? error.status === 401 || error.status === 403 ? "forbidden" as const : "unavailable" as const
+        : "unavailable" as const };
+    }
+  } };
 }

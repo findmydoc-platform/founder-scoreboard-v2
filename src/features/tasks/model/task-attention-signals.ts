@@ -9,6 +9,25 @@ export type TaskAttentionSignal = {
   kind: "critical" | "quality" | "review";
 };
 
+const planningSignals = {
+  "owner-missing": { id: "owner-missing", label: "Owner fehlt", kind: "critical" },
+  "blocker-missing": { id: "blocker-missing", label: "Blocker fehlt", kind: "critical" },
+  waiting: { id: "waiting", label: "Wartet", kind: "critical" },
+  "sync-failed": { id: "sync-failed", label: "Sync fehlgeschlagen", kind: "critical" },
+  "acceptance-criteria-missing": { id: "acceptance-criteria-missing", label: "AC fehlt", kind: "quality" },
+  "definition-of-done-missing": { id: "definition-of-done-missing", label: "DoD fehlt", kind: "quality" },
+  "evidence-missing": { id: "evidence-missing", label: "Evidence fehlt", kind: "quality" },
+} satisfies Record<string, TaskAttentionSignal>;
+
+function planningSignal(id: keyof typeof planningSignals): TaskAttentionSignal {
+  return { ...planningSignals[id] };
+}
+
+export function planningAttentionSignalsFromIds(ids: readonly string[]): TaskAttentionSignal[] | null {
+  if (ids.some(id => !Object.hasOwn(planningSignals, id))) return null;
+  return ids.map(id => planningSignal(id as keyof typeof planningSignals));
+}
+
 type SignalData = Pick<PlanningShellState, "taskBlockers" | "taskRelations" | "tasks">;
 
 function taskHasOpenBlocker(taskId: string, data: Pick<PlanningShellState, "taskBlockers">) {
@@ -42,16 +61,16 @@ export function taskCriticalAttentionSignals(task: Task, data: SignalData): Task
   const status = normalizeStatus(task.status);
 
   if (task.taskType === "deliverable" && task.priority === "P0" && !taskHasOwner(task)) {
-    signals.push({ id: "owner-missing", label: "Owner fehlt", kind: "critical" });
+    signals.push(planningSignal("owner-missing"));
   }
   if (status === "Blockiert" && !taskHasOpenBlocker(task.id, data)) {
-    signals.push({ id: "blocker-missing", label: "Blocker fehlt", kind: "critical" });
+    signals.push(planningSignal("blocker-missing"));
   }
   if (hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)) {
-    signals.push({ id: "waiting", label: "Wartet", kind: "critical" });
+    signals.push(planningSignal("waiting"));
   }
   if ((task.taskType === "deliverable" || task.taskType === "sub_issue") && task.githubIssueSyncStatus === "failed") {
-    signals.push({ id: "sync-failed", label: "Sync fehlgeschlagen", kind: "critical" });
+    signals.push(planningSignal("sync-failed"));
   }
 
   return signals;
@@ -62,13 +81,13 @@ export function taskQualityAttentionSignals(task: Task): TaskAttentionSignal[] {
   const signals: TaskAttentionSignal[] = [];
 
   if (!task.acceptanceCriteria?.trim()) {
-    signals.push({ id: "acceptance-criteria-missing", label: "AC fehlt", kind: "quality" });
+    signals.push(planningSignal("acceptance-criteria-missing"));
   }
   if (!task.definitionOfDone?.trim()) {
-    signals.push({ id: "definition-of-done-missing", label: "DoD fehlt", kind: "quality" });
+    signals.push(planningSignal("definition-of-done-missing"));
   }
   if (taskMissingEvidence(task)) {
-    signals.push({ id: "evidence-missing", label: "Evidence fehlt", kind: "quality" });
+    signals.push(planningSignal("evidence-missing"));
   }
 
   return signals;
