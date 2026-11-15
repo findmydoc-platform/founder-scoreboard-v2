@@ -1,4 +1,5 @@
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardQuery, type PlanningBoardQueryInput, type PlanningBoardResult } from "../planning-board-query";
+import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { createDecisionLogState } from "./decision-log-state";
 import { createHierarchyCommands } from "./hierarchy-commands";
 import { createMeetingAttendanceState } from "./meeting-attendance-state";
@@ -20,7 +21,7 @@ import { createEventsState } from "./event-state";
 import { createPublishedWorkweekCalendars } from "./published-workweek-calendars";
 import { createHeaderNotificationsState, type HeaderNotificationsAdapter } from "./header-notifications-state";
 import { isThisWeek } from "../planning-app-model";
-import { normalizeStatus, taskStatuses } from "@/lib/status";
+import { normalizeStatus } from "@/lib/status";
 import type { PlanningBoardColumnOutcome, PlanningBoardOutcome, PlanningBoardSummaryOutcome } from "../planning-board-delivery";
 import type { PlanningBoardSummaryFrame, PlanningBoardSummaryRequest } from "../planning-board-summaries";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
@@ -1254,7 +1255,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (event.kind === "basis") {
         if (!readIsCurrent(workspace, token) || streamAccepted || heldBasis || !event.read.board || !event.read.query
           || query && planningBoardQueryKey(event.read.query) !== planningBoardQueryKey(query)) return;
-        const pending = taskStatuses.filter(column => event.read.board!.columns[column].availability === "not-loaded" && (event.read.board!.columns[column].total || 0) > 0);
+        const visibleStatuses = allowedPlanningItemStatuses(event.read.query.level || "deliverable");
+        const pending = visibleStatuses.filter(column => event.read.board!.columns[column].availability === "not-loaded" && (event.read.board!.columns[column].total || 0) > 0);
         const basis = { ...event.read, board: { ...event.read.board, delivery: { id: event.readId, columns: pending } } };
         streamId = event.readId;
         if (boardInteractions.size && (!boardQueryKey || !query || boardQueryKey === planningBoardQueryKey(query))) {
@@ -1344,9 +1346,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function reserveBoardDelivery(id: string, basis: PlanningWorkspaceRead) {
     if (!basis.board || !basis.query || boardDeliveries.has(id)) return;
     const pending = new Set(basis.board.delivery?.columns || []);
+    const visibleStatuses = allowedPlanningItemStatuses(basis.query.level || "deliverable");
     const tokens = new Map<TaskStatus, ReturnType<typeof beginWorkspaceRead>>();
     for (const column of pending) {
-      if (!taskStatuses.includes(column) || basis.board.columns[column].availability !== "not-loaded" || !(basis.board.columns[column].total! > 0)) continue;
+      if (!visibleStatuses.includes(column) || basis.board.columns[column].availability !== "not-loaded" || !(basis.board.columns[column].total! > 0)) continue;
       tokens.set(column, beginWorkspaceRead("planning", { ...basis.query, column }));
       columnReadStatus[column] = "loading";
     }

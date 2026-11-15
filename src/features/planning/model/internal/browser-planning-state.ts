@@ -471,7 +471,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         return { summaries: body.summaries, readAuthority: body.readAuthority! };
       },
       async readWorkspace(workspace, query, options) {
-        if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && (query.level || "deliverable") === "deliverable" && !query.column && !query.continuation) {
+        if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && !query.column && !query.continuation) {
           const response = await ownedApiClient.requestResponse(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal, headers: { accept: "application/x-ndjson" } });
           if (!response.ok) {
             const error = await response.json().catch(() => null) as { error?: string; code?: string } | null;
