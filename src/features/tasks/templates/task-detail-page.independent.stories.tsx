@@ -4,6 +4,7 @@ import { TaskDetailPage } from "./task-detail-page";
 import { itemPageHeaderData, itemPageModel, itemPageProfile, itemPageUser, mockItemPageBrowser } from "../../../../tests/helpers/task-detail-page-browser-fixture";
 
 let reads = 0;
+const areas: string[] = [];
 const releases: Array<() => void> = [];
 const model = () => ({ ...itemPageModel(), readArea: "target" as const, sourceRevision: "target-source", observedAt: new Date().toISOString(), validUntil: null, authorityDeadline: Date.now() + 60_000, coverage: {} });
 const meta = {
@@ -15,10 +16,10 @@ const meta = {
     ...{ initialTaskDetailRead: { readAuthority: { userId: itemPageUser.id, deadline: Date.now() + 60_000 }, session: { userId: itemPageUser.id, user: itemPageUser, revision: "item-page-session", expiresAt: Math.floor(Date.now()/1000) + 3600 } } },
   },
   beforeEach: async () => {
-    reads = 0;
+    reads = 0; areas.splice(0);
     const restore = await mockItemPageBrowser({ respond: input => {
       if (!new URL(String(input), window.location.origin).pathname.endsWith("/detail-data")) return undefined;
-      reads++;
+      reads++; areas.push(new URL(String(input), window.location.origin).searchParams.get("area") || "complete");
       return new Promise<Response>(resolve => { releases.push(() => resolve(Response.json({ error: "Secondary unavailable" }, { status: 503 }))); });
     } });
     return () => { releases.splice(0).forEach(release => release()); restore(); };
@@ -31,6 +32,7 @@ export const UsableTargetDoesNotWaitForVisibleActivity: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await waitFor(() => expect(reads).toBeGreaterThan(0));
+    await waitFor(() => expect([...areas].sort()).toEqual(["discussion", "timeline"]));
     await expect(canvas.getByRole("heading", { name: "Reliable planning", level: 1 })).toBeVisible();
     const edit = canvas.getByRole("button", { name: "Bearbeiten" });
     await expect(edit).toBeEnabled();
