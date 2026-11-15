@@ -46,3 +46,37 @@ test("equivalent detail consumers abort shared work only after the last release 
   expect(await two).toMatchObject({ ok: false });
   expect(planning.taskDetail(task.id).task).toBeNull();
 });
+
+const actor = { id: "detail-actor", name: "Synthetic actor", platformRole: "founder" as const, githubLogin: "" };
+const session = { userId: "user-a", user: { id: "user-a" }, revision: "detail-session", expiresAt: Math.floor(Date.now()/1000) + 3600 };
+
+test.each(["missing-deadline", "foreign-session", "foreign-target", "foreign-actor"] as const)("an initial %s receipt cannot establish current canonical detail", kind => {
+  const model = { ...target, authorityDeadline: kind === "missing-deadline" ? undefined : Date.now() + 60_000,
+    readActor: { profileId: kind === "foreign-actor" ? "other-actor" : actor.id, platformRole: actor.platformRole } };
+  const read = { itemId: kind === "foreign-target" ? "other-target" : task.id, model,
+    readAuthority: { userId: "user-a", deadline: Date.now()+60_000 },
+    session: { ...session, revision: kind === "foreign-session" ? "other-session" : session.revision } };
+  const { planning } = createPlanningState({ userId: "user-a", initialSession: session, initialCurrentProfile: actor,
+    initialData: { ...emptyPlanningShellState, tasks: [task] }, initialTaskDetailRead: read,
+    adapter: { readWorkspace: async () => null, saveTask: async () => ({ task }) },
+  });
+  expect(planning.taskDetail(task.id).task).toBeNull();
+  expect(planning.taskDetail(task.id).readStatus).not.toBe("current");
+});
+
+test("an accepted detail retains its original deadline and clears protected fields when that deadline expires", async () => {
+  let now = 1_000;
+  const model = { ...target, observedAt: new Date(now).toISOString(), authorityDeadline: 2_000,
+    readActor: { profileId: actor.id, platformRole: actor.platformRole } };
+  const { planning } = createPlanningState({ userId: "user-a", initialData: emptyPlanningShellState, initialCurrentProfile: actor,
+    initialSession: { ...session, expiresAt: 10 },
+    adapter: { now: () => now, readWorkspace: async () => null, saveTask: async () => ({ task }),
+      readTaskDetail: async () => ({ model, readAuthority: { userId: "user-a", deadline: 2_000 } }) },
+  });
+  expect(await planning.loadTaskDetail(task.id, { area: "target" })).toMatchObject({ ok: true });
+  expect(planning.taskDetail(task.id).task?.description).toBe(task.description);
+  expect(planning.taskDetail(task.id).task?.id).toBe(task.id);
+  now = 2_001;
+  expect(planning.taskDetail(task.id).task).toBeNull();
+  expect(planning.taskDetail(task.id).readStatus).not.toBe("current");
+});
