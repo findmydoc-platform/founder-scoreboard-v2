@@ -54,7 +54,7 @@ it("complete enumeration and selected SQL reads reject source shifts at their ac
         const next = mutation; mutation = undefined; mutations++;
         await next.run();
       }
-      if (url.pathname === "/rest/v1/rpc/planning_source_version") {
+      if (["/rest/v1/rpc/planning_source_version", "/rest/v1/rpc/planning_board_publication_context"].includes(url.pathname)) {
         sourceTransports++;
         if (failFence) { failFence = false; return Response.json({ code: "XX000", message: "Synthetic unavailable source fence" }, { status: 503 }); }
       }

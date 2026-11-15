@@ -50,6 +50,7 @@ for (const source of [
   "client.rpc('planning_deliverable_selection');", "client.rpc('planning_workspace_snapshot');",
   "client.rpc('planning_deliverable_query_plan');", "client.rpc('planning_deliverable_column');", "client.rpc('planning_deliverable_query_basis');",
   "client.rpc('planning_deliverable_summaries');",
+  "client.rpc('planning_board_publication_context');",
   "client['from']('task_relationship_edges').select('id');",
 ]) test(`a competing Planning read is rejected: ${source}`, () => fixture({ "src/neighbor.ts": source, "src/constants.ts": "export const ACTIVE_TASKS_TABLE = 'active_tasks';" }, root => assert.ok(verifyPlanningReadBoundary({ root, policy }).some(value => /competing/.test(value)))));
 
@@ -69,7 +70,7 @@ test("an exact accounted read remains allowed while a second neighboring read is
   });
 });
 
-for (const operation of ["planning_deliverable_query_plan", "planning_deliverable_column", "planning_deliverable_query_basis", "planning_deliverable_summaries"])
+for (const operation of ["planning_deliverable_query_plan", "planning_deliverable_column", "planning_deliverable_query_basis", "planning_deliverable_summaries", "planning_board_publication_context"])
   test(`only the exact accounted ${operation} expression is allowed`, () => {
     const source = `client.rpc('${operation}', { p_actor_profile_id: actor });`;
     fixture({ "src/adapter.ts": source }, root => {

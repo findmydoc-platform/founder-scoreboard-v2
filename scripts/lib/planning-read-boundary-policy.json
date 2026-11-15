@@ -470,8 +470,8 @@
       "target": "planning_source_version",
       "fingerprint": "bdac449e03f793dc9526a44db629fb35193943bf7d96d9ef03b391fe12c2fd73",
       "contract": "BOARD",
-      "references": 3,
-      "reason": "These exact scalar source reads fence preference resolution, selected JSON page publication and aggregate-only retry publication. Native and NDJSON publication guards have separately accounted expressions."
+      "references": 1,
+      "reason": "Trusted direct reference loaders and the existing explicit local profile override retain this exact admitted source read. Ordinary Board publications use the fixed user-bound atomic source capability."
     },
     {
       "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
@@ -488,14 +488,6 @@
       "fingerprint": "379a1dcb11683c96339e65a58b378a44be115bdc5ca88ccf38f4d608b580d4f1",
       "contract": "BOARD",
       "references": 1
-    },
-    {
-      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
-      "kind": "rpc",
-      "target": "planning_source_version",
-      "fingerprint": "8aec5c83d232665674dbb0be8a4d9fd2ed23afdb2ba07a22873e9b0327af811d",
-      "contract": "BOARD",
-      "references": 2
     },
     {
       "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
@@ -1032,6 +1024,15 @@
       "fingerprint": "8640556ca84882aaf66070778d0afc13af7ceef944aea1ba9ac9fdfcd1ff5331",
       "contract": "GITHUB",
       "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-service.ts",
+      "kind": "rpc",
+      "target": "planning_board_publication_context",
+      "fingerprint": "2f1c1efffe029db9ee6ab19e69306b70ba9ca2ace29c72aab8ab1dca32e491ce",
+      "contract": "BOARD",
+      "references": 1,
+      "reason": "This fixed original-user RPC reads the live mapped actor, role and Planning source together at each publication boundary, retaining the original JWT, Workspace dispatch preparation and permit."
     }
   ]
 }
