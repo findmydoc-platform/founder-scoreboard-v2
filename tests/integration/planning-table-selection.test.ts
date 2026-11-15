@@ -17,7 +17,7 @@ test("the table pages its own Deliverable scope with the complete stable sort ch
         case when n>1000 then $4 else 'Synthetic unrelated Deliverable' end,
         'deliverable',$2,'approved','Offen',case when n=1002 then 'P4' else 'P0' end,$3,
         case when n=1001 then 9 else 2 end from generate_series(1,1004) n`, [key, initiativeId, actors.founder.profileId, title]);
-    await db.query("update public.tasks set status='Review' where id=$1", [`${key}-0001`]);
+    await db.query("update public.tasks set status='Review',review_status='requested',review_owner_profile_id=$2,evidence_link='https://example.test/synthetic-review-evidence',review_requested_at=now() where id=$1", [`${key}-0001`, actors.ceo.profileId]);
     const foreign = `${key}-foreign`, child = `${key}-assigned-child`, draft = `${key}-draft`, epic = `${key}-stored-board-epic`;
     await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,assignee)
       values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'approved','Offen','P0',$4),
