@@ -76,7 +76,7 @@ test("detail cancellation reaches the SDK signal while the actual SQL read remai
   await f.db.query("lock table public.task_links in access exclusive mode");
   const cancellation = new AbortController();
   const options = { area: "target" as const, signal: cancellation.signal };
-  const pending = permission.planning.loadDetail(options);
+  const pending: Promise<import("@/features/tasks/model/task-detail-read-model").TaskDetailLoadResult> = permission.planning.loadDetail(options);
   try {
     const first = await Promise.race([dispatched.then(() => "io-dispatched"), pending.then(result => "read-settled-"+result.status)]);
     expect(first).toBe("io-dispatched");
