@@ -80,7 +80,7 @@ async function operateLaterCard(canvasElement: HTMLElement, failed: boolean) {
   await expect(within(card).getByText("Signale unbekannt")).toBeVisible();
   const control = within(card).getByRole("button", { name: `Status für ${review.title} ändern` });
   await userEvent.click(control); await userEvent.keyboard("{Escape}");
-  await expect(control).toHaveFocus();
+  await waitFor(() => expect(control).toHaveFocus());
   board.scrollTo({ left: 420 });
   await waitFor(() => expect(board.scrollLeft).toBeGreaterThan(0));
   const left = card.getBoundingClientRect().left, top = card.getBoundingClientRect().top, scroll = board.scrollLeft, pageTop = window.scrollY;
