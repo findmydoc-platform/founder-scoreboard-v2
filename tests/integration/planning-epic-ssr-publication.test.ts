@@ -7,8 +7,8 @@ test("Epic initial publication accepts only its issued summary and consumes the 
     const epicId = `${prefix}-native-summary`, childId = `${prefix}-native-child`;
     await db.query(`insert into public.tasks(id,project_id,title,task_type,status,owner)
       values($1,'findmydoc-founder-execution',$1,'epic','Offen',$2)`, [epicId, actors.founder.profileId]);
-    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,owner)
-      values($1,'findmydoc-founder-execution',$1,'initiative',$2,'proposed','Offen',$3)`, [childId, epicId, actors.founder.profileId]);
+    await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,owner)
+      values($1,'findmydoc-founder-execution',$1,'initiative',$2,'proposed','Offen','P2',$3)`, [childId, epicId, actors.founder.profileId]);
     const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
     const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: request("founder", "/api/planning-board-data") }, action: "planning.board.read" });
     expect(permission.ok).toBe(true);
