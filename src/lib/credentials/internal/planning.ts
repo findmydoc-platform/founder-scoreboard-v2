@@ -344,8 +344,8 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       try { assertKnown(); } catch { if (result.status === "ready") result.delivery?.abort(); return { status: "forbidden" as const }; }
       if (result.status !== "ready" || !result.delivery) return result;
       const delivery = result.delivery;
-      return { ...result, delivery: { ...delivery, async checkPublication<T extends import("@/features/planning/model/planning-board-delivery").PlanningBoardOutcome>(outcome: T): Promise<T | import("@/features/planning/model/planning-board-delivery").PlanningBoardFailureFrame> {
-        const frame = await delivery.checkPublication(outcome);
+      return { ...result, delivery: { ...delivery, async checkPublication<T extends import("@/features/planning/model/planning-board-delivery").PlanningBoardOutcome>(outcome: T, initialSummary?: import("@/features/planning/model/planning-board-summaries").PlanningBoardSummaryFrame): Promise<T | import("@/features/planning/model/planning-board-delivery").PlanningBoardFailureFrame> {
+        const frame = initialSummary ? await delivery.checkPublication(outcome, initialSummary) : await delivery.checkPublication(outcome);
         try { assertKnown(); return frame; } catch {
           delivery.abort();
           return { kind: "failure" as const, readId: delivery.id, status: 403 as const, error: "Planung darf nicht geladen werden." };

@@ -16,7 +16,7 @@ import type { Task, TaskStatus } from "@/lib/types";
 import type { PlanningWorkspaceLoadContext, PlanningWorkspaceLoadResult } from "../model/planning-workspace-model";
 import { observeRuntimePhase } from "@/lib/runtime-logging";
 import type { PlanningBoardColumnOutcome, PlanningBoardOutcome, PlanningBoardFailureFrame, PlanningBoardQueryLoadResult, PlanningBoardSummaryOutcome } from "@/features/planning/model/planning-board-delivery";
-import type { PlanningBoardSummaryLoadResult, PlanningBoardSummaryRequest } from "@/features/planning/model/planning-board-summaries";
+import type { PlanningBoardSummaryFrame, PlanningBoardSummaryLoadResult, PlanningBoardSummaryRequest } from "@/features/planning/model/planning-board-summaries";
 import { isHttpUrl } from "@/lib/planning-task-mappers";
 import { planningAttentionSignalsFromIds, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
 
@@ -441,25 +441,33 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
     }
     const unpublished = new Set(pending);
     let summaryUnpublished = Boolean(rawSummaries);
-    async function checkPublication<T extends PlanningBoardOutcome>(outcome: T): Promise<T | PlanningBoardFailureFrame> {
+    async function checkPublication<T extends PlanningBoardOutcome>(outcome: T, initialSummary?: PlanningBoardSummaryFrame): Promise<T | PlanningBoardFailureFrame> {
       if (terminal) return terminal;
       const column = outcome.kind === "summaries" ? undefined : outcome.column;
       const area = outcome.kind === "summaries" || outcome.kind === "failure" && outcome.area === "summaries" ? "summaries" : undefined;
+      let summaryPublished = false;
       try {
         if (outcome.kind === "failure" && outcome.status !== 503) return outcome;
+        if (initialSummary && (query.level !== "epic" || outcome.kind !== "column" || initialSummary.readId !== id
+          || initialSummary.token !== request.token || initialSummary.scopeRevision !== plan.source_revision
+          || initialSummary.queryRevision !== revision || initialSummary.observedAt !== plan.evaluated_at
+          || initialSummary.validUntil !== plan.valid_until || (initialSummary.authorityDeadline ?? null) !== (context.authorityDeadline ?? null)
+          || JSON.stringify(initialSummary.cardIds) !== JSON.stringify(summaryIds)
+          || JSON.stringify(initialSummary.cardIds) !== JSON.stringify(outcome.cardIds))) return failure(column, 503, "summaries");
         // Run at the actual HTTP/SSR publication boundary, even if hydration
         // settled earlier. The guarded client rechecks original JWT/live access.
         const fence = await readSourceRevision(supabase, bound);
         if (terminal) return terminal;
         if (fence.error || typeof fence.data !== "string") return failure(column, fence.status === 401 || fence.status === 403 ? 403 : 503, area);
         if (fence.data !== plan.source_revision || plan.valid_until && Date.parse(plan.valid_until) <= Date.now()) return failure(column, 409, area);
+        summaryPublished = Boolean(initialSummary);
         return outcome;
       } catch (error) {
         const status = typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? 403 : 503;
         return terminal || failure(column, status, area);
       } finally {
         if (column) unpublished.delete(column);
-        if (area) summaryUnpublished = false;
+        if (area || summaryPublished) summaryUnpublished = false;
         if (!unpublished.size && !summaryUnpublished) cleanup();
       }
     }

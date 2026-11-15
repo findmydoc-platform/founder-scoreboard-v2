@@ -43,7 +43,7 @@ export type PlanningBoardStreamFrame = PlanningBoardBasisFrame | PlanningBoardOu
 export type PlanningBoardDelivery = Readonly<{
   id: string;
   abort(): void;
-  checkPublication<T extends PlanningBoardOutcome>(outcome: T): Promise<T | PlanningBoardFailureFrame>;
+  checkPublication<T extends PlanningBoardOutcome>(outcome: T, initialSummary?: PlanningBoardSummaryFrame): Promise<T | PlanningBoardFailureFrame>;
   columns: Partial<Record<TaskStatus, Promise<PlanningBoardColumnOutcome>>>;
   summaries?: Promise<PlanningBoardSummaryOutcome>;
 }>;
