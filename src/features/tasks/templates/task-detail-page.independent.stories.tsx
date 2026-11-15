@@ -32,10 +32,10 @@ export const UsableTargetDoesNotWaitForVisibleActivity: Story = {
     const canvas = within(canvasElement);
     await waitFor(() => expect(reads).toBeGreaterThan(0));
     await expect(canvas.getByRole("heading", { name: "Reliable planning", level: 1 })).toBeVisible();
-    const edit = canvas.getByRole("button", { name: "Bearbeiten", exact: true });
+    const edit = canvas.getByRole("button", { name: "Bearbeiten" });
     await expect(edit).toBeEnabled();
     await userEvent.click(edit);
-    const title = await canvas.findByRole("textbox", { name: "Titel", exact: true });
+    const title = await canvas.findByRole("textbox", { name: "Titel" });
     await userEvent.clear(title);
     await userEvent.type(title, "Independent target draft");
     releases.splice(0).forEach(release => release());
