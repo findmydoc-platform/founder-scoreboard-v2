@@ -1290,6 +1290,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           if (!result.unavailable?.length) detailStatuses.set(taskId, "stale");
           if (includesChildren) childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: "stale" });
         }
+        if (demand) demand.settled = true;
         publish();
         return { ok: true, unavailable: result.unavailable };
       })();
