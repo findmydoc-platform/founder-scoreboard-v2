@@ -31,7 +31,9 @@ export function planningService(strict: boolean, beforeDispatch?: () => Promise<
         if (active?.url !== captured.url || active.key !== captured.key) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
         const url = new URL(request.url), expected = new URL(captured.url);
         if (url.origin !== expected.origin || !url.pathname.startsWith("/rest/v1/")) throw new WorkspaceAccessError(403, "workspace_access_denied");
-        return observedSupabaseFetch(request);
+        // Keep the SDK's explicit operation signal through framework fetch wrappers.
+        // Request inputs still use the normalized request because construction can transfer their body.
+        return input instanceof Request ? observedSupabaseFetch(request) : observedSupabaseFetch(input, init);
       } catch (error) {
         if (error instanceof WorkspaceAccessError || error instanceof PlanningDispatchError) return Response.json({ code: error.code, message: error.message }, { status: error.status });
         return Response.json({ code: "workspace_access_unavailable", message: "Berechtigung konnte nicht geprüft werden." }, { status: 503 });
