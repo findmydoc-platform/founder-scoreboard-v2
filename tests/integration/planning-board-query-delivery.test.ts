@@ -160,15 +160,21 @@ test.each(["source", "authority", "column-failure", "column-failure-source", "co
     const planFacts: Array<{ actorBinding: boolean; queryBinding: boolean; status: string; columns: ReturnType<typeof safeColumns> }> = [];
     const transport = globalThis.fetch;
     const selectedIds: string[][] = [];
-    let release!: () => void, hydrationCompleted!: () => void, held = false;
+    let release!: () => void, releaseSummary!: () => void, hydrationCompleted!: () => void, held = false;
     const earlierHydrated = new Promise<void>(resolve => { hydrationCompleted = resolve; });
     const gate = new Promise<void>(resolve => { release = resolve; });
+    const summaryGate = new Promise<void>(resolve => { releaseSummary = resolve; });
     vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
       const next = new Request(input, init), url = new URL(next.url);
       const isColumn = url.pathname.endsWith("/rpc/planning_deliverable_column");
       const isPlan = url.pathname.endsWith("/rpc/planning_deliverable_query_plan");
       const body = isColumn || isPlan ? await next.clone().json() : null;
       const response = await transport(next);
+      if (url.pathname.endsWith("/rpc/planning_deliverable_summaries")) {
+        // This case targets the column publication fence. The independent summary
+        // must not win the query-wide fatal race before that column is observed.
+        await summaryGate;
+      }
       if (isPlan) {
         const plan = await response.clone().json();
         planFacts.push({ actorBinding: body.p_actor_profile_id === actors.founder.profileId, queryBinding: JSON.stringify(body.p_query) === JSON.stringify(expectedQuery), status: plan.status, columns: safeColumns(plan.columns || {}) });
@@ -216,6 +222,7 @@ test.each(["source", "authority", "column-failure", "column-failure-source", "co
           if (change.endsWith("authority")) await db.query("delete from auth.sessions where id=$1", [actors.founder.sessionId]);
           release();
         }
+        if (frame.kind === "failure") releaseSummary();
       }
       expect(received.filter(frame => frame.kind === "basis")).toHaveLength(1);
       expect(received.some(frame => frame.kind === "column" && frame.column === "Offen")).toBe(false);
@@ -231,7 +238,7 @@ test.each(["source", "authority", "column-failure", "column-failure-source", "co
         const retry = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ ...scope, column: "Offen" }))}`));
         expect(retry.status).toBe(200); expect((await retry.json()).model.board.cardIds).toEqual([open]);
       }
-    } finally { release(); abort.abort(); }
+    } finally { release(); releaseSummary(); abort.abort(); }
     expect((await db.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actors.founder.userId])).rows[0].remaining).toBe(0);
   });
 }, 120_000);

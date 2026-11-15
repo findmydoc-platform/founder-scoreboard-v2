@@ -83,6 +83,7 @@ function mentionAnchorAtCaret(textarea: HTMLTextAreaElement, caret: number, opti
 export function TaskMentionTextArea({ profiles = [], containerClassName, value, onValueChange, onSelect, onScroll, onKeyDown, onBlur, ...props }: Props) {
   const mentionListId = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingSelection = useRef<{ value: string; caret: number } | null>(null);
   const text = typeof value === "string" ? value : "";
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
@@ -95,6 +96,15 @@ export function TaskMentionTextArea({ profiles = [], containerClassName, value, 
   const listOpen = menuOpen && options.length > 0;
   const duplicateOnly = menuOpen && suggestedOptions.length > 0 && options.length === 0;
   const selectedIndex = Math.min(activeMentionIndex, Math.max(options.length - 1, 0));
+
+  useLayoutEffect(() => {
+    const pending = pendingSelection.current;
+    const textarea = textareaRef.current;
+    if (!pending || !textarea || text !== pending.value) return;
+    pendingSelection.current = null;
+    textarea.focus();
+    textarea.setSelectionRange(pending.caret, pending.caret);
+  }, [text]);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -116,13 +126,10 @@ export function TaskMentionTextArea({ profiles = [], containerClassName, value, 
     const replacement = replaceActiveMention(text, activeMention, option);
     const textarea = textareaRef.current;
     if (!replacement || !textarea) return;
+    pendingSelection.current = replacement;
     onValueChange(replacement.value);
     setSelection({ start: replacement.caret, end: replacement.caret });
     setMentionDismissed(true);
-    requestAnimationFrame(() => {
-      textarea.focus();
-      textarea.setSelectionRange(replacement.caret, replacement.caret);
-    });
   }
 
   return (
@@ -132,6 +139,7 @@ export function TaskMentionTextArea({ profiles = [], containerClassName, value, 
         ref={textareaRef}
         value={value}
         onChange={(event) => {
+          pendingSelection.current = null;
           onValueChange(event.currentTarget.value);
           rememberSelection(event.currentTarget);
           setActiveMentionIndex(0);
