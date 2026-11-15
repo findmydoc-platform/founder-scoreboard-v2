@@ -290,3 +290,43 @@ test("Epic SSR includes an already ready exact summary in its first operable sna
   expect(page.props.initialWorkspaceRead?.board?.delivery).toBeUndefined();
   expect(Children.toArray(page.props.children).filter(child => isValidElement<{ delivery?: PlanningBoardDelivery }>(child) && child.props.delivery)).toEqual([]);
 });
+
+test("Epic SSR does not wait for its independently pending summary", async () => {
+  const controlled = fixture(false, false, true, "epic");
+  const rendering = planningPage("epic");
+  await controlled.entered;
+  const column = ready("Offen");
+  controlled.open.resolve({ ...column, items: [{ ...column.items[0], taskType: "epic" as const, parentTaskId: "" }] });
+  const page = await rendering;
+  expect(controlled.summaries.settled()).toBe(false);
+  expect(page.props.initialData.tasks.map(task => task.id)).toEqual(["selected-open-card"]);
+  expect(page.props.initialWorkspaceRead?.board?.childProgressById).toEqual({ "selected-open-card": null });
+  const delivery = pendingDelivery(page);
+  controlled.summaries.resolve({ kind: "summaries", readId, token: "native-summary-batch", cardIds: ["selected-open-card"],
+    scopeRevision: "selected-source", queryRevision: "selected-query", observedAt, validUntil: null,
+    childProgressById: { "selected-open-card": { completed: 0, total: 1, unfinished: 1, percentage: 0 } },
+    attentionById: { "selected-open-card": [] } });
+  await expect(delivery.summaries).resolves.toMatchObject({ kind: "summaries", cardIds: ["selected-open-card"] });
+  expect(controlled.checkPublication).toHaveBeenCalledWith(expect.objectContaining({ kind: "column" }));
+});
+
+test.each([403, 409] as const)("Epic SSR withholds both ready payloads when their fresh atomic guard returns %s", async status => {
+  const controlled = fixture(false, true, true, "epic");
+  const checking = deferred<void>(), publication = deferred<PlanningBoardColumnOutcome>();
+  controlled.checkPublication.mockImplementationOnce(async () => { checking.resolve(); return publication.promise; });
+  const rendering = PlanningPage({ searchParams: Promise.resolve({ "board.level": "epic", "tasks.query": "receipt" }) });
+  await controlled.entered;
+  controlled.summaries.resolve({ kind: "summaries", readId, token: "native-summary-batch", cardIds: ["selected-open-card"],
+    scopeRevision: "selected-source", queryRevision: "selected-query", observedAt, validUntil: null,
+    childProgressById: { "selected-open-card": { completed: 0, total: 1, unfinished: 1, percentage: 0 } },
+    attentionById: { "selected-open-card": [] } });
+  const column = ready("Offen");
+  controlled.open.resolve({ ...column, items: [{ ...column.items[0], taskType: "epic" as const, parentTaskId: "" }] });
+  await checking.promise;
+  expect(controlled.checkPublication).toHaveBeenCalledWith(expect.objectContaining({ kind: "column" }), expect.objectContaining({ kind: "summaries" }));
+  publication.resolve({ kind: "failure", readId, status, error: "Synthetic joint publication denied" });
+  const page = await rendering;
+  expect(page.type).toBe(WorkspaceDataUnavailablePage);
+  for (const field of ["initialData", "initialWorkspaceRead", "children"]) expect(page.props).not.toHaveProperty(field);
+  expect(controlled.abort).toHaveBeenCalledOnce();
+});
