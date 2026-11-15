@@ -5,7 +5,7 @@ import { importTestModule } from "../helpers/vitest-module.mjs";
 import { createClient } from "@supabase/supabase-js";
 
 test("the actual selected API preserves saved personal defaults and discovers options outside hydrated cards", async () => {
-  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed }) => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors, request, observed, local }) => {
     const root = `${prefix}-personal-parent`, child = `${prefix}-personal-child`, hidden = `${prefix}-hidden`, otherInitiative = `${prefix}-other-initiative`, sprint = `${prefix}-other-sprint`;
     const epic = (await db.query("select parent_task_id from public.tasks where id=$1", [initiativeId])).rows[0].parent_task_id;
     await db.query("insert into public.tasks(id,project_id,title,task_type,status,priority,approval_status,parent_task_id,assignee,owner,workstream) values($1,'findmydoc-founder-execution',$2,'deliverable','Offen','P1','approved',$3,$4,$4,'Visible workstream')", [root, `${prefix} personal parent`, initiativeId, actors.other.profileId]);
@@ -40,6 +40,14 @@ test("the actual selected API preserves saved personal defaults and discovers op
     expect(tableModel.table.page).toMatchObject({ total: 1, loaded: 1, completeness: "complete", continuation: null });
     expect(tableModel.coverage.items).toBe("partial");
     expect(tableModel.items.some((item: { id: string }) => [root, child, hidden].includes(item.id))).toBe(false);
+    const { createSupabasePlanningBoardReadModel } = await importTestModule("src/features/planning/server/planning-board-read-model-supabase.ts", { "server-only": {} });
+    const source = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    const entry = await createSupabasePlanningBoardReadModel(source).startQuery({ authorized: true, actorProfileId: actors.founder.profileId, query: {} });
+    expect(entry.status).toBe("ready");
+    expect(entry.model.table.rowIds).toEqual([owned]);
+    expect(entry.model.table.page).toEqual(tableModel.table.page);
+    expect(entry.model.coverage.items).toBe("partial");
+    expect(entry.model).not.toHaveProperty("board");
     expect(observed.slice(beforeTable).some(value => /\/(active_tasks|tasks)$/.test(value.path))).toBe(false);
     // Explicit complete consumers retain their established machine contract.
     const complete = await read({ view: "complete" }); expect(complete.status).toBe(200);

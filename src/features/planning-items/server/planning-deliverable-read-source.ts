@@ -185,7 +185,7 @@ async function resolveQuery(supabase: SupabaseClient, context: PlanningWorkspace
     if (preferenceResult.error) return { status: "unavailable" };
     const preference = preferenceResult.data ? mapProfileUiPreference(preferenceResult.data as DbProfileUiPreference) : undefined;
     const filters = preference && { ...preference.planningFilters, ...(preference.defaultWorkspace === "mine" ? { assignee: "Alle", quick: [...preference.planningFilters.quick, "mine"] } : {}) };
-    query = normalizePlanningBoardQuery({ ...input, view: input.view || (preference?.defaultTaskView && preference.defaultTaskView !== "board" ? "complete" : "board"), filters: input.filters || filters });
+    query = normalizePlanningBoardQuery({ ...input, view: input.view || (preference?.defaultTaskView === "table" ? "table" : preference?.defaultTaskView && preference.defaultTaskView !== "board" ? "complete" : "board"), filters: input.filters || filters });
     if (query.view === "complete") {
       const complete = await loadPlanningWorkspaceModel(supabase, { ...context, query });
       return complete.status === "ready" && complete.model.scopeRevision !== preferenceRevision ? { status: "unavailable" as const } : complete;
@@ -201,9 +201,12 @@ function cursorSigner(context: PlanningWorkspaceLoadContext, query: ReturnType<t
 
 export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
-  const input = context.query || {};
-  const resolved = await resolveQuery(supabase, context);
+  return loadSelectedPlanningPage(supabase, context, await resolveQuery(supabase, context));
+}
+
+async function loadSelectedPlanningPage(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, resolved: Awaited<ReturnType<typeof resolveQuery>>): Promise<PlanningWorkspaceLoadResult> {
   if (resolved.status !== "query") return resolved;
+  const input = context.query || {};
   const { query, preferenceRevision } = resolved;
   const queryKey = planningBoardQueryKey(query);
   const tableView = query.view === "table";
@@ -333,6 +336,10 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
     const resolved = await resolveQuery(supabase, bound);
     if (resolved.status !== "query") { cleanup(); return resolved; }
     const { query, preferenceRevision } = resolved;
+    if (query.view === "table") {
+      const result = await loadSelectedPlanningPage(supabase, bound, resolved);
+      cleanup(); return result;
+    }
     const visibleStatuses: readonly TaskStatus[] = query.level === "deliverable" ? taskStatuses : strategicPlanningStatuses;
     const limit = Math.min(20, Math.max(1, Math.trunc(Number(context.query?.limit) || 20)));
     const planRead = supabase.rpc("planning_deliverable_query_plan", { p_actor_profile_id: context.actorProfileId, p_query: query, p_limit: limit });
