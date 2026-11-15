@@ -23,10 +23,11 @@ const observedAt = new Date().toISOString();
 
 // The controlled HTTP response uses the real browser adapter and existing owner.
 // API/SQL membership, ordering and authority have separate integration evidence.
-function TablePagesFlow() {
+function TablePagesFlow({ startWithTable = false }: { startWithTable?: boolean }) {
   const [ready, setReady] = useState(false), [reads, setReads] = useState(0), [foreignReads, setForeignReads] = useState(0);
+  const [boardReads, setBoardReads] = useState(0), [releaseBoard, setReleaseBoard] = useState<(() => void) | null>(null);
   const [release, setRelease] = useState<(() => void) | null>(null);
-  const { initial, page } = useMemo(() => {
+  const { initial, page, rows } = useMemo(() => {
     const epic = taskDetailStoryTask({ id: "table-epic", title: "Synthetic needle remembered Epic", taskType: "epic", status: "In Arbeit" });
     const parent = taskDetailStoryTask({ id: "table-parent", title: "Synthetic required ancestor", taskType: "initiative", parentTaskId: epic.id });
     const rows = Array.from({ length: 4 }, (_, index) => taskDetailStoryTask({ id: `table-row-${index}`, title: `Synthetic needle table row ${index + 1}`, taskType: "deliverable", status: "Offen", order: index, priority: "P1", parentTaskId: parent.id, assigneeId: profile.id }));
@@ -36,7 +37,7 @@ function TablePagesFlow() {
     const query = normalizePlanningBoardQuery({ level: "epic", filters: { query: "needle" } });
     const columns = Object.fromEntries([...taskStatuses, "Pausiert"].map(status => [status, { total: status === "In Arbeit" ? 1 : 0, loaded: status === "In Arbeit" ? 1 : 0, completeness: "complete", continuation: null } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
     const initial: PlanningWorkspaceModel = { ...base, query, items: [epic], board: { query, queryKey: planningBoardQueryKey(query), revision: base.revision, observedAt, cardIds: [epic.id], columns,
-      metrics: { total: 1, open: 1, done: 0, blocked: 0 }, childProgressById: { [epic.id]: null }, attentionById: { [epic.id]: [] }, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: { activeTaskCount: 6, latestUpdatedAt: base.revision } } };
+      metrics: { total: 1, open: 1, done: 0, blocked: 0 }, childProgressById: { [epic.id]: null }, attentionById: { [epic.id]: [] }, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: { activeTaskCount: 8, latestUpdatedAt: base.revision } } };
     const page = (continuation: boolean): PlanningWorkspaceModel => {
       const query = normalizePlanningBoardQuery({ view: "table", filters: { query: "needle" } });
       const selected = continuation ? rows.slice(2) : rows.slice(0, 2);
@@ -46,18 +47,31 @@ function TablePagesFlow() {
           ...{ statusOptions: ["In Arbeit", "Offen", "Review", "Pausiert"] as TaskStatus[] },
           metrics: { total: 4, open: 4, done: 0, blocked: 0 }, attentionById: Object.fromEntries(selected.map(row => [row.id, null])), workspaceRevision: initial.board!.workspaceRevision } };
     };
-    return { initial, page };
-  }, []);
+    return { initial: startWithTable ? page(false) : initial, page, rows };
+  }, [startWithTable]);
   useEffect(() => {
     const key = `founderops.product-updates.seen.${profile.id}`, previous = localStorage.getItem(key);
     localStorage.setItem(key, JSON.stringify(productUpdates.map(update => update.id)));
-    let finish: (() => void) | undefined;
+    let finish: (() => void) | undefined, finishBoard: (() => void) | undefined;
     const restore = mockAccountLifecycle("google", { linked: true }, input => {
       const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost:3000");
       if (url.pathname === "/api/auth/session") return Response.json({ session });
       if (url.pathname === "/api/planning-source-version") return Response.json({ version: "51" });
       if (url.pathname === "/api/planning-board-data") {
         const scope = JSON.parse(url.searchParams.get("scope") || "{}");
+        if (startWithTable && scope.view === "board" && !scope.column && !scope.continuation) {
+          setBoardReads(value => value + 1);
+          const query = normalizePlanningBoardQuery(scope), basis = page(false);
+          const columns = Object.fromEntries([...taskStatuses, "Pausiert"].map(status => [status, { total: status === "Offen" ? 4 : 0, loaded: 0,
+            availability: status === "Offen" ? "not-loaded" : "ready", completeness: status === "Offen" ? "partial" : "complete", continuation: null } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
+          const model: PlanningWorkspaceModel = { ...basis, table: undefined, query, items: [], board: { query, queryKey: planningBoardQueryKey(query), revision: "table-r1", observedAt,
+            cardIds: [], columns, metrics: { total: 4, open: 4, done: 0, blocked: 0 }, childProgressById: {}, attentionById: {}, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: basis.table!.workspaceRevision } };
+          const frames = [{ kind: "basis", readId: "cold-table-board", model, currentProfile: profile, readAuthority: authority },
+            { kind: "column", readId: "cold-table-board", column: "Offen", scopeRevision: "51", queryRevision: "table-r1", observedAt, validUntil: null,
+              cardIds: rows.map(row => row.id), items: rows, relationships: [], personalChildren: {}, taskOmittedFields: [], columnState: { total: 4, loaded: 4, availability: "ready", completeness: "complete", continuation: null } },
+            { kind: "end", readId: "cold-table-board" }];
+          return new Promise<Response>(resolve => { finishBoard = () => resolve(new Response(frames.map(frame => JSON.stringify(frame)).join("\n") + "\n", { headers: { "content-type": "application/x-ndjson" } })); setReleaseBoard(() => finishBoard!); });
+        }
         if (scope.view !== "table" || scope.column || scope.filters?.query !== "needle") {
           setForeignReads(value => value + 1);
           return Response.json({ error: "Synthetic table requires its own scoped query" }, { status: 503 });
@@ -73,9 +87,11 @@ function TablePagesFlow() {
       return Response.json({ error: "Synthetic optional area unavailable" }, { status: 503 });
     });
     queueMicrotask(() => setReady(true));
-    return () => { finish?.(); restore(); if (previous === null) localStorage.removeItem(key); else localStorage.setItem(key, previous); };
-  }, [page]);
+    return () => { finish?.(); finishBoard?.(); restore(); if (previous === null) localStorage.removeItem(key); else localStorage.setItem(key, previous); };
+  }, [page, rows, startWithTable]);
   return <><button type="button" onMouseDown={event => event.preventDefault()} disabled={!release} onClick={() => release?.()}>Tabellenseite liefern</button>
+    <button type="button" onMouseDown={event => event.preventDefault()} disabled={!releaseBoard} onClick={() => releaseBoard?.()}>Boardantwort liefern</button>
+    <output aria-label="Boardanfragen">{boardReads}</output>
     <output aria-label="Tabellenanfragen">{reads}</output><output aria-label="Fremde Planungsanfragen">{foreignReads}</output>
     {ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, authority)}
       initialData={{ ...emptyPlanningShellState, tasks: [...initial.items], profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData}
@@ -140,6 +156,33 @@ export const OffPageStatusesRetainTheCompleteTableOptionBasis: Story = {
     await userEvent.keyboard("{Escape}");
     await expect(canvas.getByRole("link", { name: "Synthetic needle table row 1" })).toBeVisible();
     await expect(canvas.getByLabelText("Tabellenanfragen")).toHaveTextContent("1");
+    await expect(canvas.getByLabelText("Fremde Planungsanfragen")).toHaveTextContent("0");
+  },
+};
+
+export const ColdTableRemainsVisibleUntilItsRequestedBoardIsReady: Story = {
+  args: { startWithTable: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const first = await canvas.findByRole("link", { name: "Synthetic needle table row 1" });
+    await canvas.findByRole("heading", { name: "Aufgaben", level: 2 });
+    await userEvent.click(canvas.getByRole("button", { name: "Board" }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Boardantwort liefern" })).toBeEnabled());
+    await expect(canvas.getByRole("heading", { name: "Aufgaben", level: 2 })).toBeVisible();
+    await expect(canvas.queryByRole("region", { name: "Board nach Status" })).not.toBeInTheDocument();
+    await expect(first).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "Synthetic needle table row 1" })).toBe(first);
+    await expect(canvas.getByRole("status", { name: "Vorherige Suchergebnisse" })).toHaveTextContent("Vorherige Suche: needle.");
+    await expect(canvas.getByRole("searchbox", { name: "Aufgaben durchsuchen" })).toHaveValue("needle");
+    fireEvent.click(canvas.getByRole("button", { name: "Boardantwort liefern" }));
+    await canvas.findByRole("region", { name: "Board nach Status" });
+    await canvas.findByRole("link", { name: "Synthetic needle table row 4" });
+    await expect(canvas.queryByRole("heading", { name: "Aufgaben", level: 2 })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Tabelle" }));
+    await canvas.findByRole("heading", { name: "Aufgaben", level: 2 });
+    await expect(canvas.queryByRole("link", { name: "Synthetic needle table row 4" })).not.toBeInTheDocument();
+    await expect(canvas.getByLabelText("Boardanfragen")).toHaveTextContent("1");
+    await expect(canvas.getByLabelText("Tabellenanfragen")).toHaveTextContent("0");
     await expect(canvas.getByLabelText("Fremde Planungsanfragen")).toHaveTextContent("0");
   },
 };
