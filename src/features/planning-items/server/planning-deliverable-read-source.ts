@@ -100,6 +100,35 @@ function summaryRequest(context: PlanningWorkspaceLoadContext, basis: SummaryBas
   return { token: Buffer.from(JSON.stringify({ ...basis, binding: signSummary(context, basis) })).toString("base64url"), cardIds: basis.cardIds, status: "loading" };
 }
 
+async function loadSelectedTableRisks(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, basis: SummaryBasis): Promise<
+  | { status: "ready"; risks: import("@/features/planning/model/planning-table-result").PlanningTableRiskFrame["risksById"] }
+  | { status: "forbidden" | "staleContinuation" | "unavailable" }
+> {
+  const read = supabase.rpc("planning_table_risks", { p_actor_profile_id: context.actorProfileId, p_selected_ids: basis.cardIds,
+    p_source_revision: basis.source, p_evaluated_at: basis.evaluatedAt, p_valid_until: basis.validUntil });
+  const result = await observeRuntimePhase("table.risks", () => context.signal ? read.abortSignal(context.signal) : read);
+  if (result.error || !result.data) return { status: result.status === 401 || result.status === 403 ? "forbidden" : "unavailable" };
+  const value = result.data as { status: string; source_revision: string; evaluated_at: string;
+    relations: Record<string, { waitsOn: number; blocks: number; hasOpenWait: boolean }>;
+    attention_inputs: Record<string, { signal_ids: string[]; evidence_required: boolean; evidence_urls: string[] }> };
+  if (value.status === "forbidden" || value.status === "staleContinuation") return { status: value.status };
+  if (value.status !== "ready" || value.source_revision !== basis.source || Date.parse(value.evaluated_at) !== Date.parse(basis.evaluatedAt)) return { status: "unavailable" };
+  const risks: import("@/features/planning/model/planning-table-result").PlanningTableRiskFrame["risksById"] = {};
+  for (const id of basis.cardIds) {
+    const input = value.attention_inputs?.[id], relations = value.relations?.[id];
+    if (!input || !relations || ![relations.waitsOn, relations.blocks].every(count => Number.isSafeInteger(count) && count >= 0)
+      || typeof relations.hasOpenWait !== "boolean" || relations.hasOpenWait && relations.waitsOn === 0
+      || !Array.isArray(input.signal_ids) || input.signal_ids.some(signal => typeof signal !== "string") || new Set(input.signal_ids).size !== input.signal_ids.length
+      || typeof input.evidence_required !== "boolean" || !Array.isArray(input.evidence_urls) || input.evidence_urls.some(url => typeof url !== "string")) return { status: "unavailable" };
+    const ids = [...input.signal_ids];
+    if (input.evidence_required && !input.evidence_urls.some(isHttpUrl)) ids.push("evidence-missing");
+    const attention = planningAttentionSignalsFromIds(ids);
+    if (!attention || attention.some(signal => signal.id === "waiting") !== relations.hasOpenWait) return { status: "unavailable" };
+    risks[id] = { attention, ...relations };
+  }
+  return { status: "ready", risks };
+}
+
 export async function loadPlanningDeliverableSummaries(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, token: string): Promise<PlanningBoardSummaryLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
   let basis: SummaryBasis;
@@ -118,6 +147,17 @@ export async function loadPlanningDeliverableSummaries(supabase: SupabaseClient,
   if (basis.authorityDeadline !== null && basis.authorityDeadline <= Date.now()) return { status: "forbidden" };
   if (basis.validUntil && Date.parse(basis.validUntil) <= Date.now()) return { status: "staleContinuation" };
   try {
+    if (basis.query.view === "table") {
+      const result = await loadSelectedTableRisks(supabase, context, basis);
+      if (result.status !== "ready") return result;
+      const fence = await readSourceRevision(supabase, context);
+      if (fence.error || typeof fence.data !== "string") return { status: fence.status === 401 || fence.status === 403 ? "forbidden" : "unavailable" };
+      if (basis.authorityDeadline !== null && basis.authorityDeadline <= Date.now()) return { status: "forbidden" };
+      if (fence.data !== basis.source || basis.validUntil && Date.parse(basis.validUntil) <= Date.now()) return { status: "staleContinuation" };
+      return { status: "ready", summaries: { kind: "table-risks", readId: basis.readId, token, cardIds: basis.cardIds,
+        scopeRevision: basis.source, queryRevision: createHash("sha256").update(JSON.stringify([basis.source, basis.temporalKey])).digest("hex"),
+        observedAt: basis.evaluatedAt, validUntil: basis.validUntil, authorityDeadline: basis.authorityDeadline, risksById: result.risks } };
+    }
     const result = await loadSelectedSummaries(supabase, context, { card_ids: basis.cardIds, source_revision: basis.source, evaluated_at: basis.evaluatedAt, valid_until: basis.validUntil });
     if (result.status !== "ready") return result;
     const fence = await readSourceRevision(supabase, context);
@@ -211,14 +251,14 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   const avatarController = new AbortController();
   const avatarSignal = context.signal ? AbortSignal.any([context.signal, avatarController.signal]) : avatarController.signal;
   const peopleRead = withWorkspaceProfileAvatars(selected.profiles.map(mapProfile), supabase, avatarSignal);
-  const summaries = await loadSelectedSummaries(supabase, context, selected);
-  if (authorityDeadline !== null && authorityDeadline <= Date.now() || summaries.status === "forbidden") {
+  const summaries = tableView ? null : await loadSelectedSummaries(supabase, context, selected);
+  if (authorityDeadline !== null && authorityDeadline <= Date.now() || summaries?.status === "forbidden") {
     avatarController.abort();
     return { status: "forbidden" };
   }
   // The initial JSON read has no accepted page basis to continue. Preserve its
   // established unavailable result when the new summary detects a source shift.
-  if (summaries.status === "staleContinuation") {
+  if (summaries?.status === "staleContinuation") {
     avatarController.abort();
     return { status: cursor ? "staleContinuation" : "unavailable" };
   }
@@ -249,11 +289,12 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
         rowIds: selected.card_ids, page: { total, loaded: selected.card_ids.length, completeness: next >= total ? "complete" : "partial",
           continuation: next < total ? Buffer.from(JSON.stringify({ ...basis, binding: sign(basis) })).toString("base64url") : null },
         metrics: selected.metrics, workstreams: selected.workstreams, initiativeOptions: selected.initiative_options,
-        summaryRequests: selected.card_ids.length ? [{ ...request, status: summaries.status === "ready" ? "current" : "unavailable" }] : [],
-        attentionById: summaries.status === "ready" ? summaries.attention : Object.fromEntries(selected.card_ids.map(id => [id, null])),
+        summaryRequests: selected.card_ids.length ? [request] : [],
+        risksById: Object.fromEntries(selected.card_ids.map(id => [id, null])),
         workspaceRevision: selected.workspace_revision },
     } };
   }
+  if (!summaries) return { status: "unavailable" };
   const columns = Object.fromEntries(statuses.map(status => {
     const total = selected.columns[status]?.total;
     const loaded = status === column ? selected.card_ids.length : 0;

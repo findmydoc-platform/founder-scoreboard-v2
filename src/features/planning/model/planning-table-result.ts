@@ -1,4 +1,25 @@
 import type { PlanningBoardResult } from "./planning-board-query";
+import type { TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
+
+export type PlanningTableRisk = Readonly<{
+  attention: readonly TaskAttentionSignal[];
+  waitsOn: number;
+  blocks: number;
+  hasOpenWait: boolean;
+}>;
+
+export type PlanningTableRiskFrame = Readonly<{
+  kind: "table-risks";
+  readId: string;
+  token: string;
+  scopeRevision: string;
+  queryRevision: string;
+  observedAt: string;
+  validUntil: string | null;
+  authorityDeadline?: number | null;
+  cardIds: readonly string[];
+  risksById: Record<string, PlanningTableRisk>;
+}>;
 
 export type PlanningTablePage = Readonly<{
   total: number;
@@ -14,4 +35,5 @@ export type PlanningTableResult = Readonly<Pick<PlanningBoardResult,
 > & {
   rowIds: readonly string[];
   page: PlanningTablePage;
+  risksById?: Record<string, PlanningTableRisk | null>;
 }>;
