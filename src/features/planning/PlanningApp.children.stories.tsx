@@ -135,7 +135,7 @@ export const SummaryFailureKeepsCardsAndRetriesOnlySummaries: Story = { args: { 
   const card = cardLink.closest("article")!;
   const control = within(card).getByRole("button", { name: "Status für Parent deliverable ändern" });
   await userEvent.click(control); await userEvent.keyboard("{Escape}");
-  await expect(control).toHaveFocus();
+  await waitFor(() => expect(control).toHaveFocus());
   const top = card.getBoundingClientRect().top, scroll = window.scrollY;
   completeSummaryRead?.();
   await expect(control).toHaveFocus();
