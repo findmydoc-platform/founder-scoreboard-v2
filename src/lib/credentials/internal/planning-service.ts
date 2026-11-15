@@ -49,6 +49,7 @@ export function planningPublicationSource(data: SupabaseClient | null, profile: 
   return { async read(signal?: AbortSignal) {
     try {
       assertCurrent();
+      if (signal?.aborted) return { status: "unavailable" as const };
       const assertEnvironment = () => {
         const active = configuration(false);
         if (active?.url !== captured.url || active.key !== captured.key) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
