@@ -325,20 +325,26 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.sprint.read" || await current()) return { status: "forbidden" as const };
       return createSupabaseSprintReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
     },
-    async loadDetail(options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea | "complete" }) {
+    async loadDetail(options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea | "complete"; signal?: AbortSignal }) {
       if (action !== "planning.task.read" || !targetId || await current()) return { status: "forbidden" as const };
-      const result = await createSupabaseTaskDetailReadModel(service).load({ itemId: targetId, area: options?.area }, { authorized: true, actorProfileId: profile?.id || null });
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const detailService = signal ? planningService(strictService, () => current(), () => assertKnown(), signal) : service;
+      if (!detailService) return { status: "unavailable" as const };
+      const result = await createSupabaseTaskDetailReadModel(detailService).load({ itemId: targetId, area: options?.area }, { authorized: true, actorProfileId: profile?.id || null });
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      if (signal?.aborted) return { status: "unavailable" as const };
       if (options?.area && options.area !== "complete") {
         try { assertKnown(); } catch { return { status: "forbidden" as const }; }
         if (result.status !== "ready" && result.status !== "degraded") {
           const denial = await current();
-          if (denial && denial.status !== 503) return { status: "forbidden" as const };
+          if (denial && !("status" in denial && denial.status === 503)) return { status: "forbidden" as const };
           if (denial) return { status: "unavailable" as const };
         }
       }
       if (options?.area && options.area !== "complete" && (result.status === "ready" || result.status === "degraded")) {
         const detailPublication = !localProfileOverride ? planningPublicationSource(resourceData, profile, assertKnown, { itemId: targetId, area: options.area }) : undefined;
-        const publication = detailPublication ? await detailPublication.read() : await current() ? { status: "forbidden" as const } : await service.rpc("planning_detail_source", { p_item_id: targetId, p_area: options.area }).then(value => value.error ? { status: "unavailable" as const } : { status: "ready" as const, revision: value.data?.source_revision });
+        const publication = detailPublication ? await detailPublication.read(signal) : await current() ? { status: "forbidden" as const } : await service.rpc("planning_detail_source", { p_item_id: targetId, p_area: options.area }).then(value => value.error ? { status: "unavailable" as const } : { status: "ready" as const, revision: value.data?.source_revision });
         if (publication.status === "forbidden") return { status: "forbidden" as const };
         if (publication.status !== "ready") return { status: "unavailable" as const };
         if (publication.revision !== result.model.sourceRevision || result.model.validUntil && Date.parse(result.model.validUntil) <= Date.now()) return { status: "staleContinuation" as const };

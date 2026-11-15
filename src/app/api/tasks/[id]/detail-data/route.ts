@@ -9,7 +9,7 @@ async function handleGET(request: NextRequest, context: { params: Promise<{ id: 
   if (!apiContext.ok) return apiContext.response;
   const area = request.nextUrl.searchParams.get("area");
   if (area !== null && area !== "target" && area !== "discussion" && area !== "timeline" && area !== "complete") return apiError("Ungültiger Detailbereich.", 400);
-  const result = await apiContext.planning.loadDetail({ area: area || "complete" });
+  const result = await apiContext.planning.loadDetail({ area: area || "complete", signal: request.signal });
   if (result.status === "forbidden") return apiError("Aufgabe darf nicht geladen werden.", 403);
   if (result.status === "staleContinuation") return apiError("Die Detailgrundlage hat sich geändert.", 409);
   if (result.status === "notFound") return apiError("Aufgabe wurde nicht gefunden.", 404);
