@@ -21,7 +21,7 @@ import { createEventsState } from "./event-state";
 import { createPublishedWorkweekCalendars } from "./published-workweek-calendars";
 import { createHeaderNotificationsState, type HeaderNotificationsAdapter } from "./header-notifications-state";
 import { isThisWeek } from "../planning-app-model";
-import { normalizeStatus } from "@/lib/status";
+import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { PlanningBoardColumnOutcome, PlanningBoardOutcome, PlanningBoardSummaryOutcome } from "../planning-board-delivery";
 import type { PlanningBoardSummaryFrame, PlanningBoardSummaryRequest } from "../planning-board-summaries";
 import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
@@ -1652,6 +1652,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const valid = next && !result.board && next.query.view === "table" && next.queryKey === planningBoardQueryKey(result.query)
         && next.queryKey === planningBoardQueryKey(next.query) && next.revision === result.queryRevision
         && Number.isFinite(Date.parse(next.observedAt)) && (!next.validUntil || Date.parse(next.validUntil) > (adapter.now?.() ?? Date.now()))
+        && Array.isArray(next.statusOptions) && new Set(next.statusOptions).size === next.statusOptions.length
+        && next.statusOptions.every(status => [...taskStatuses, "Pausiert"].includes(status))
         && Number.isSafeInteger(next.page.total) && next.page.total >= 0 && next.page.loaded === ids.length
         && new Set(ids).size === ids.length && rowIds.length <= next.page.total
         && ids.every(id => result.data.tasks.some(task => task.id === id && task.taskType === "deliverable"))

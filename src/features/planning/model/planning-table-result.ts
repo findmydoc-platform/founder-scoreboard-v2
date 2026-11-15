@@ -34,6 +34,7 @@ export type PlanningTableResult = Readonly<Pick<PlanningBoardResult,
   | "summaryRequests" | "attentionById" | "workstreams" | "initiativeOptions" | "workspaceRevision"
 > & {
   rowIds: readonly string[];
+  statusOptions?: readonly import("@/lib/types").TaskStatus[];
   page: PlanningTablePage;
   risksById?: Record<string, PlanningTableRisk | null>;
 }>;

@@ -31,6 +31,7 @@ type Selection = {
   personal_children: Record<string, string[]>;
   workstreams: string[]; initiative_options: Array<{ id: string; title: string }>;
   epic_options?: Array<{ id: string; title: string }>;
+  status_options?: TaskStatus[];
   workspace_revision: { activeTaskCount: number; latestUpdatedAt: string };
 };
 type Cursor = { offset: number; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; authorityDeadline: number | null; binding: string };
@@ -251,6 +252,8 @@ async function loadSelectedPlanningPage(supabase: SupabaseClient, context: Plann
     || !selected.columns || !selected.metrics) return { status: "unavailable" };
   if (cursor && (cursor.source !== selected.source_revision || cursor.temporalKey !== selected.temporal_key)) return { status: "staleContinuation" };
   if (preferenceRevision && preferenceRevision !== selected.source_revision) return { status: "unavailable" };
+  if (tableView && (!Array.isArray(selected.status_options) || new Set(selected.status_options).size !== selected.status_options.length
+    || selected.status_options.some(status => !statuses.includes(status)))) return { status: "unavailable" };
   const avatarController = new AbortController();
   const avatarSignal = context.signal ? AbortSignal.any([context.signal, avatarController.signal]) : avatarController.signal;
   const peopleRead = withWorkspaceProfileAvatars(selected.profiles.map(mapProfile), supabase, avatarSignal);
@@ -289,7 +292,7 @@ async function loadSelectedPlanningPage(supabase: SupabaseClient, context: Plann
     const basis = { offset: next, source: selected.source_revision, evaluatedAt: selected.evaluated_at, temporalKey: selected.temporal_key, validUntil: selected.valid_until, authorityDeadline };
     return { status: "ready", authorityDeadline: authorityDeadline ?? undefined, model: { ...content,
       table: { query, queryKey, revision, observedAt: selected.evaluated_at, validUntil: selected.valid_until,
-        rowIds: selected.card_ids, page: { total, loaded: selected.card_ids.length, completeness: next >= total ? "complete" : "partial",
+        rowIds: selected.card_ids, statusOptions: selected.status_options, page: { total, loaded: selected.card_ids.length, completeness: next >= total ? "complete" : "partial",
           continuation: next < total ? Buffer.from(JSON.stringify({ ...basis, binding: sign(basis) })).toString("base64url") : null },
         metrics: selected.metrics, workstreams: selected.workstreams, initiativeOptions: selected.initiative_options,
         summaryRequests: selected.card_ids.length ? [request] : [],

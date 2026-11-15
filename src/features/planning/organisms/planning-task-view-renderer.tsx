@@ -293,6 +293,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
           {view === "table" && (
             <TaskTableView
+              availableStatuses={controller.planningBoard?.table?.statusOptions}
               risksById={controller.planningBoard?.table?.risksById}
               page={controller.planningBoard?.table?.page}
               pageStatus={controller.planningBoard?.pageStatus}

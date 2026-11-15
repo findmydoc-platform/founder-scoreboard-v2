@@ -23,6 +23,7 @@ import { buildTaskTableViewModel, type TaskTableSort } from "@/features/tasks/mo
 import { projectDeliverableSchedule } from "@/features/planning-items/model/deliverable-schedule";
 
 type TaskTableViewProps = {
+  availableStatuses?: readonly TaskStatus[];
   risksById?: Record<string, PlanningTableRisk | null>;
   page?: PlanningTablePage;
   pageStatus?: PlanningReadStatus;
@@ -107,7 +108,7 @@ function TaskTableRiskBadges({
 }
 
 export function TaskTableView({
-  page, pageStatus, onLoadMore, onRefresh, risksById,
+  page, pageStatus, onLoadMore, onRefresh, risksById, availableStatuses,
   planningState,
   visibleTasks,
   profiles,
@@ -136,7 +137,7 @@ export function TaskTableView({
   const sortedTasks = page ? visibleTasks : buildTaskTableViewModel({ tasks: visibleTasks, profiles, sprints, filters: { sort: sortKey, direction: filters.direction } }).rows;
   const toggleSort = (key: TaskTableSort) => onFiltersChange({ ...filters, sort: key, direction: sortKey === key && filters.direction === "asc" ? "desc" : "asc" });
   const directionFor = (key: TaskTableSort): SortDirection => sortKey === key ? filters.direction : null;
-  const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...Array.from(new Set(allTasks.map((task) => normalizeStatus(task.status)))).map((status) => ({ value: status, label: status }))];
+  const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...(page ? availableStatuses || [] : Array.from(new Set(allTasks.map((task) => normalizeStatus(task.status))))).map((status) => ({ value: status, label: status }))];
   const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
   const priorityOptions = ["Alle", "P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority === "Alle" ? "Alle Prioritäten" : priority }));
   const sprintOptions = [{ value: "Alle", label: "Alle Sprints" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))];
@@ -210,7 +211,7 @@ export function TaskTableView({
         <DataTableHead>
           <tr>
             <DataColumnHeader label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky />
-            <DataColumnHeader label="Status" direction={directionFor("status")} onSort={() => toggleSort("status")} filter={<ColumnFilterPopover label="Aufgaben nach Status filtern" activeCount={filters.status === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, status: "Alle" })}><CustomSelect aria-label="Status wählen" value={filters.status} onChange={(status) => onFiltersChange({ ...filters, status })} options={statusOptions} className="h-10" /></ColumnFilterPopover>} />
+            <DataColumnHeader label="Status" direction={directionFor("status")} onSort={() => toggleSort("status")} filter={<ColumnFilterPopover label="Aufgaben nach Status filtern" activeCount={filters.status === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, status: "Alle" })}>{page && !availableStatuses ? <p role="status">Statusoptionen unbekannt.</p> : <CustomSelect aria-label="Status wählen" value={filters.status} onChange={(status) => onFiltersChange({ ...filters, status })} options={statusOptions} className="h-10" />}</ColumnFilterPopover>} />
             <DataColumnHeader label="Zuständig" direction={directionFor("assignee")} onSort={() => toggleSort("assignee")} filter={<ColumnFilterPopover label="Aufgaben nach Zuständigkeit filtern" activeCount={filters.assignee === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, assignee: "Alle" })}><CustomSelect aria-label="Zuständigkeit wählen" value={filters.assignee} onChange={(assignee) => onFiltersChange({ ...filters, assignee })} options={assigneeOptions} className="h-10" /></ColumnFilterPopover>} />
             <DataColumnHeader label="Priorität" direction={directionFor("priority")} onSort={() => toggleSort("priority")} filter={<ColumnFilterPopover label="Aufgaben nach Priorität filtern" activeCount={filters.priority === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, priority: "Alle" })}><CustomSelect aria-label="Priorität wählen" value={filters.priority} onChange={(priority) => onFiltersChange({ ...filters, priority })} options={priorityOptions} className="h-10" /></ColumnFilterPopover>} />
             <DataColumnHeader label="Sprint" direction={directionFor("sprint")} onSort={() => toggleSort("sprint")} filter={<ColumnFilterPopover label="Aufgaben nach Sprint filtern" activeCount={filters.sprintId === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, sprintId: "Alle" })}><CustomSelect aria-label="Sprint wählen" value={filters.sprintId} onChange={(sprintId) => onFiltersChange({ ...filters, sprintId })} options={sprintOptions} className="h-10" /></ColumnFilterPopover>} />
