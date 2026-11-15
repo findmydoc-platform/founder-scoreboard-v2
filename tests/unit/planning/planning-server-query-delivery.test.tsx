@@ -56,9 +56,9 @@ function ready(column: "Offen" | "Review"): Extract<PlanningBoardColumnOutcome, 
   };
 }
 
-function fixture(empty = false, protectedBasis = false, summaryOnly = false, level: "deliverable" | "epic" = "deliverable") {
+function fixture(empty = false, protectedBasis = false, summaryOnly = false, level: "deliverable" | "epic" | "initiative" = "deliverable") {
   const selectedQuery = normalizePlanningBoardQuery({ ...query, level });
-  const primaryColumn = level === "epic" ? "Offen" : "Review";
+  const primaryColumn = level !== "deliverable" ? "Offen" : "Review";
   const primaryId = primaryColumn === "Offen" ? "selected-open-card" : "selected-review-card";
   const open = deferred<PlanningBoardColumnOutcome>(), review = deferred<PlanningBoardColumnOutcome>();
   const summaries = deferred<PlanningBoardSummaryOutcome>();
@@ -80,7 +80,7 @@ function fixture(empty = false, protectedBasis = false, summaryOnly = false, lev
       query: selectedQuery, queryKey: planningBoardQueryKey(selectedQuery), revision: "selected-query", observedAt, validUntil: null,
       delivery: { id: readId, columns: empty ? [] : summaryOnly ? [primaryColumn] : ["Offen", "Review"] }, columns, cardIds: [],
       ...(summaryOnly ? { summaryRequests: [{ token: "native-summary-batch", cardIds: [primaryId], status: "loading" as const }] } : {}),
-      metrics: { total: empty ? 0 : level === "epic" ? 1 : 2, open: empty ? 0 : level === "epic" ? 1 : 2, done: 0, blocked: null },
+      metrics: { total: empty ? 0 : level !== "deliverable" ? 1 : 2, open: empty ? 0 : level !== "deliverable" ? 1 : 2, done: 0, blocked: null },
       childProgressById: {}, attentionById: {}, viewerOpenSubIssueIdsByDeliverableId: {},
       ...(protectedBasis ? { workstreams: ["protected-workstream-marker"], initiativeOptions: [{ id: "protected-option-marker", title: "Synthetic private Initiative option" }] } : {}),
       workspaceRevision: { activeTaskCount: empty ? 0 : 2, latestUpdatedAt: "workspace-revision" },
@@ -109,7 +109,7 @@ function fixture(empty = false, protectedBasis = false, summaryOnly = false, lev
   return { open, review, summaries, entered: entered.promise, model, checkPublication, abort, loadBoard, startBoardQuery, signal: () => signal };
 }
 
-async function planningPage(level: "deliverable" | "epic" = "deliverable"): Promise<Page> {
+async function planningPage(level: "deliverable" | "epic" | "initiative" = "deliverable"): Promise<Page> {
   const result = await PlanningPage({ searchParams: Promise.resolve({ "board.level": level, "board.parentId": "all", "tasks.query": "receipt" }) });
   expect(result.type).toBe(PlanningApp);
   return result as Page;
@@ -329,4 +329,21 @@ test.each([403, 409] as const)("Epic SSR withholds both ready payloads when thei
   expect(page.type).toBe(WorkspaceDataUnavailablePage);
   for (const field of ["initialData", "initialWorkspaceRead", "children"]) expect(page.props).not.toHaveProperty(field);
   expect(controlled.abort).toHaveBeenCalledOnce();
+});
+
+
+test("Initiative SSR retains its existing separate delivery even when the summary is ready", async () => {
+  const controlled = fixture(false, false, true, "initiative");
+  const rendering = planningPage("initiative");
+  await controlled.entered;
+  controlled.summaries.resolve({ kind: "summaries", readId, token: "native-summary-batch", cardIds: ["selected-open-card"],
+    scopeRevision: "selected-source", queryRevision: "selected-query", observedAt, validUntil: null,
+    childProgressById: { "selected-open-card": { completed: 0, total: 1, unfinished: 1, percentage: 0 } },
+    attentionById: { "selected-open-card": [] } });
+  const column = ready("Offen");
+  controlled.open.resolve({ ...column, items: [{ ...column.items[0], taskType: "initiative" as const }] });
+  const page = await rendering;
+  expect(page.props.initialWorkspaceRead?.board?.childProgressById).toEqual({ "selected-open-card": null });
+  expect(pendingDelivery(page).summaries).toBeDefined();
+  expect(controlled.checkPublication).toHaveBeenCalledWith(expect.objectContaining({ kind: "column" }));
 });
