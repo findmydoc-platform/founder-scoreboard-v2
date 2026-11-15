@@ -588,18 +588,20 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   async function checkOrdering(): Promise<import("../planning-state").PlanningTaskSaveCheck> { const task = confirmed.tasks.find(task => backlogOrdering.blocksTask(task.id)); if (task) await backlogOrdering.checkTask(task.id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }
   function protectedPublication(data: PlanningShellState): PlanningShellState {
     const permitted = (id: string) => !deniedTaskReads.has(id);
+    const permittedArea = (id: string, area: "discussion" | "timeline") => permitted(id) && !(scopedDetailIds.has(id) && detailAreaStatuses.get(id+":"+area) === "stale" && !detailReceipts.has(id+":"+area));
     return { ...data,
       profiles: data.profiles.filter(profile => canPresentProfile(profile.id)),
       tasks: data.tasks.filter(task => permitted(task.id)),
-      taskComments: data.taskComments.filter(row => permitted(row.taskId)),
-      taskExternalComments: data.taskExternalComments.filter(row => permitted(row.taskId)),
+      taskComments: data.taskComments.filter(row => permittedArea(row.taskId, "discussion")),
+      taskExternalComments: data.taskExternalComments.filter(row => permittedArea(row.taskId, "discussion")),
       taskBlockers: data.taskBlockers.filter(row => permitted(row.taskId)),
       taskRelations: data.taskRelations.filter(row => permitted(row.taskId) && permitted(row.relatedTaskId)),
-      taskActivity: data.taskActivity.filter(row => permitted(row.taskId)),
-      taskReviews: data.taskReviews.filter(row => permitted(row.taskId)),
+      taskActivity: data.taskActivity.filter(row => permittedArea(row.taskId, "timeline")),
+      taskReviews: data.taskReviews.filter(row => permittedArea(row.taskId, "timeline")),
     };
   }
   function publish() {
+    isActive();
     confirmed = attendanceState.projectConfirmed(tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(relationshipChanges.projectConfirmed(attachmentUploads.projectConfirmed(githubImports.projectConfirmed(commentCreations.projectConfirmed(blockerReports.projectConfirmed(confirmed))))))))));
     if (boardResult && boardQuery && workspaceStatuses.get("planning") === "stale") {
       const byId = new Map(confirmed.tasks.map(task => [task.id, task]));
