@@ -5,6 +5,12 @@ import { withPlanningCredentialDatabase } from "./helpers/planning-credential-da
 const routeContext = (id: string) => ({ params: Promise.resolve({ id }) });
 
 test("detail certificates retain mapped team reads and deny privileged source access and unmapped callers", () => withPlanningCredentialDatabase(async f => {
+  const admittedCertificates: Record<string, unknown>[] = [], delegate = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), response = await delegate(request);
+    if (new URL(request.url).pathname.endsWith("/rpc/planning_detail_publication_context") && response.ok) admittedCertificates.push(await response.clone().json());
+    return response;
+  });
   const { GET } = await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts", { "server-only": {} });
   const args = { p_item_id: f.initiativeId, p_area: "target" };
   for (const name of ["ceo", "deputy", "founder", "other", "viewer"] as const) {
@@ -15,9 +21,13 @@ test("detail certificates retain mapped team reads and deny privileged source ac
   }
   const server = await f.rpc("planning_detail_source", args, "service"); expect(server.status).toBe(200);
   expect(await server.json()).toMatchObject({ target_id: f.initiativeId, ancestor_ids: [`${f.prefix}-epic`] });
-  const publicCertificate = await f.rpc("planning_detail_publication_context", args, "founder"); expect(publicCertificate.status).toBe(200);
-  const certificate = await publicCertificate.json();
-  for (const key of ["target_id", "ancestor_ids", "descriptor"]) expect(certificate).not.toHaveProperty(key);
+  expect(admittedCertificates).toHaveLength(5);
+  expect(f.observed.filter(row => row.path.endsWith("/rpc/planning_detail_publication_context") && row.permit && row.actor)).toHaveLength(5);
+  for (const certificate of admittedCertificates) {
+    expect(certificate.source_revision).toEqual(expect.any(String));
+    for (const key of ["target_id", "ancestor_ids", "descriptor"]) expect(certificate).not.toHaveProperty(key);
+  }
+  expect((await f.rpc("planning_detail_publication_context", args, "founder")).status).toBe(403);
   expect((await f.rpc("planning_detail_publication_context", args, "service")).status).toBe(403);
   for (const name of ["unmapped", "administrator", "anonymous"] as const) expect([401,403]).toContain((await f.rpc("planning_detail_publication_context", args, name)).status);
   expect((await GET(f.request("unmapped", `/api/tasks/${f.initiativeId}/detail-data?area=target`), routeContext(f.initiativeId))).status).toBe(403);
