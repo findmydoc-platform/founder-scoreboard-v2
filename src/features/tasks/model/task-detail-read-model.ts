@@ -33,6 +33,7 @@ export type TaskDetailModel = Readonly<{
   observedAt?: string;
   validUntil?: string | null;
   authorityDeadline?: number;
+  readActor?: Readonly<{ profileId: string; platformRole: Profile["platformRole"] }>;
   coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea, "complete" | "partial">>>;
   project: Project;
   item: Task;
@@ -52,6 +53,7 @@ export type TaskDetailModel = Readonly<{
 }>;
 
 export type TaskDetailHydration = Readonly<{
+  itemId: string;
   model: TaskDetailModel;
   readAuthority: import("@/features/planning/model/planning-server-header-read").PlanningReadAuthority;
   session: import("@/lib/credentials/session-types").ServerSessionView;

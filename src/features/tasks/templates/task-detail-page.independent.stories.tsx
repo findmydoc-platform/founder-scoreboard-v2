@@ -6,14 +6,14 @@ import { itemPageHeaderData, itemPageModel, itemPageProfile, itemPageUser, mockI
 let reads = 0;
 const areas: string[] = [];
 const releases: Array<() => void> = [];
-const model = () => ({ ...itemPageModel(), readArea: "target" as const, sourceRevision: "target-source", observedAt: new Date().toISOString(), validUntil: null, authorityDeadline: Date.now() + 60_000, coverage: {} });
+const model = () => ({ ...itemPageModel(), readArea: "target" as const, sourceRevision: "target-source", observedAt: new Date().toISOString(), validUntil: null, authorityDeadline: Date.now() + 60_000, readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole }, coverage: {} });
 const meta = {
   title: "Application shell/Independent Item detail",
   component: TaskDetailPage,
   parameters: { layout: "fullscreen", nextjs: { appDirectory: true } },
   args: { taskId: "item-page-task", initialModel: model(), headerData: itemPageHeaderData, source: "supabase", authRequired: true,
     initialAuthUser: itemPageUser, initialCurrentProfile: itemPageProfile, initialCommentTarget: "local:649",
-    ...{ initialTaskDetailRead: { readAuthority: { userId: itemPageUser.id, deadline: Date.now() + 60_000 }, session: { userId: itemPageUser.id, user: itemPageUser, revision: "item-page-session", expiresAt: Math.floor(Date.now()/1000) + 3600 } } },
+    ...{ initialTaskDetailRead: { itemId: "item-page-task", readAuthority: { userId: itemPageUser.id, deadline: Date.now() + 60_000 }, session: { userId: itemPageUser.id, user: itemPageUser, revision: "item-page-session", expiresAt: Math.floor(Date.now()/1000) + 3600 } } },
   },
   beforeEach: async () => {
     reads = 0; areas.splice(0);

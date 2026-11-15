@@ -335,7 +335,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
         if (publication.status !== "ready") return { status: "unavailable" as const };
         if (publication.revision !== result.model.sourceRevision || result.model.validUntil && Date.parse(result.model.validUntil) <= Date.now()) return { status: "staleContinuation" as const };
         try { assertKnown(); } catch { return { status: "forbidden" as const }; }
-        return { ...result, model: { ...result.model, authorityDeadline: readAuthority?.deadline } };
+        return { ...result, model: { ...result.model, authorityDeadline: readAuthority?.deadline, readActor: profile ? { profileId: profile.id, platformRole: profile.platformRole } : undefined } };
       }
       if (result.status === "notFound") detailPeople = structuredClone([...result.people]);
       return result;

@@ -68,7 +68,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
     <TaskDetailPage
       taskId={taskDetailResult.model.item.id}
       initialModel={taskDetailResult.model}
-      initialTaskDetailRead={permission.readAuthority && permission.readSession ? { readAuthority: permission.readAuthority, session: permission.readSession } : undefined}
+      initialTaskDetailRead={permission.readAuthority && permission.readSession ? { itemId: id, readAuthority: permission.readAuthority, session: permission.readSession } : undefined}
       headerData={headerData}
       source="supabase"
       authRequired={authRequired}

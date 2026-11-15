@@ -114,14 +114,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   publishCache?: (data: PlanningShellState | null, workspace?: AppWorkspace) => void;
   acceptWorkspaceContext?: (result: PlanningWorkspaceRead) => void;
 }) {
-  function validDetailReceipt(model: TaskDetailModel, authority: import("../planning-server-header-read").PlanningReadAuthority | undefined) {
+  function validDetailReceipt(model: TaskDetailModel, authority: import("../planning-server-header-read").PlanningReadAuthority | undefined, actor = initialCurrentProfile) {
     const now = adapter.now?.() ?? Date.now();
-    return Boolean(authority && authority.userId === userId && Number.isFinite(authority.deadline) && authority.deadline > now
+    return Boolean((!actor || model.readActor?.profileId === actor.id && model.readActor?.platformRole === actor.platformRole)
+      && authority && authority.userId === userId && Number.isFinite(authority.deadline) && authority.deadline > now
       && typeof model.authorityDeadline === "number" && Number.isFinite(model.authorityDeadline) && model.authorityDeadline > now
       && typeof model.sourceRevision === "string" && model.sourceRevision.length && typeof model.observedAt === "string" && Number.isFinite(Date.parse(model.observedAt))
       && (model.validUntil === null || typeof model.validUntil === "string" && Number.isFinite(Date.parse(model.validUntil)) && Date.parse(model.validUntil) > now));
   }
-  if (initialTaskDetailRead && (!validDetailReceipt(initialTaskDetailRead.model, initialTaskDetailRead.readAuthority)
+  if (initialTaskDetailRead && (initialTaskDetailRead.itemId !== initialTaskDetailRead.model.item.id || !validDetailReceipt(initialTaskDetailRead.model, initialTaskDetailRead.readAuthority)
     || initialTaskDetailRead.session.userId !== userId || initialSession?.revision !== initialTaskDetailRead.session.revision)) initialData = emptyPlanningShellState;
   let actorIdentity = initialCurrentProfile || null;
   let confirmed = initialData;
@@ -333,6 +334,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const detailStatuses = new Map<string, PlanningReadStatus>(initialData.tasks.filter(task=>task.detailAvailability === "stale").map(task=>[task.id,"stale"]));
   const childLists = new Map<string, { ids: Set<string>; started: number; readStatus: PlanningReadStatus }>();
   const scopedDetailIds = new Set<string>();
+  const detailReceipts = new Map<string, { taskId: string; area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; ids: string[]; deadline: number; validUntil: string | null; sourceRevision: string }>();
+  function rememberDetailReceipt(taskId: string, area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea, model: TaskDetailModel, authority: import("../planning-server-header-read").PlanningReadAuthority) {
+    detailReceipts.set(taskId+":"+area, { taskId, area, ids: [model.item.id, ...model.ancestors.map(row => row.id)],
+      deadline: Math.min(authority.deadline, model.authorityDeadline!), validUntil: model.validUntil!, sourceRevision: model.sourceRevision! });
+  }
   const detailAreaStatuses = new Map<string, PlanningReadStatus>();
   const detailReads = new Map<string, ReturnType<PlanningState["loadTaskDetail"]>>();
   const detailDemands = new Map<string, { controller: AbortController; consumers: Set<symbol>; settled: boolean; previous: PlanningReadStatus }>();
@@ -374,6 +380,26 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const commentDrafts = new Map<string, { text: string }>();
   function isActive() {
     if (active && sessionExpiresAt !== undefined && sessionExpiresAt * 1000 <= (adapter.now?.() ?? Date.now())) suspendProtected();
+    if (active) {
+      const now = adapter.now?.() ?? Date.now();
+      const expired = [...detailReceipts].filter(([,read]) => read.deadline <= now || read.validUntil && Date.parse(read.validUntil) <= now);
+      for (const [key] of expired) detailReceipts.delete(key);
+      for (const [,read] of expired) {
+        if (read.area === "discussion") {
+          confirmed = { ...confirmed, taskComments: confirmed.taskComments.filter(row => row.taskId !== read.taskId), taskExternalComments: confirmed.taskExternalComments.filter(row => row.taskId !== read.taskId) };
+          visible = { ...visible, taskComments: visible.taskComments.filter(row => row.taskId !== read.taskId), taskExternalComments: visible.taskExternalComments.filter(row => row.taskId !== read.taskId) };
+          detailAreaStatuses.set(read.taskId+":discussion", "stale");
+        }
+        if (read.area === "timeline") {
+          confirmed = { ...confirmed, taskActivity: confirmed.taskActivity.filter(row => row.taskId !== read.taskId), taskReviews: confirmed.taskReviews.filter(row => row.taskId !== read.taskId) };
+          visible = { ...visible, taskActivity: visible.taskActivity.filter(row => row.taskId !== read.taskId), taskReviews: visible.taskReviews.filter(row => row.taskId !== read.taskId) };
+          detailAreaStatuses.set(read.taskId+":timeline", "stale");
+        }
+        for (const id of read.ids) if (![...detailReceipts.values()].some(other => other.ids.includes(id))) deniedTaskReads.add(id);
+        if (deniedTaskReads.has(read.taskId)) detailStatuses.set(read.taskId, "stale");
+      }
+      if (expired.length) { visible = protectedPublication(visible); publishCache?.(null); }
+    }
     if (active && planningAuthority && (planningAuthority.userId !== userId || !Number.isFinite(planningAuthority.deadline) || planningAuthority.deadline <= (adapter.now?.() ?? Date.now()))) {
       planningAuthority = undefined;
       const expired = memberships.get("planning") || new Set<string>();
@@ -1186,7 +1212,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         try {
           result = await readTaskDetail(taskId, area ? { area, signal: demand!.controller.signal } : options);
           if (demand?.controller.signal.aborted) return { ok: false };
-          if (area && (result.model.readArea !== area || !validDetailReceipt(result.model, result.readAuthority))) {
+          if (area && (result.model.readArea !== area || !validDetailReceipt(result.model, result.readAuthority, actorIdentity))) {
             throw Object.assign(new Error("Die ursprüngliche Detailberechtigung ist nicht mehr gültig."), { status: 403 });
           }
           if (result.model.item.id !== taskId) throw new Error("Die Detailantwort gehört zu einer anderen Aufgabe.");
@@ -1211,7 +1237,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         }
         if (demand?.controller.signal.aborted || !isActive() || generation !== sessionGeneration) return { ok: false };
         if ((taskDeniedAt.get(taskId) || 0) > started) return { ok: false };
-        if (area) scopedDetailIds.add(taskId);
+        if (area) { scopedDetailIds.add(taskId); rememberDetailReceipt(taskId, area, result.model, result.readAuthority!); }
         const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
         // A changed known record disproves retained aggregate freshness. New detail coverage alone does not.
         if (returnedTasks.some(task => {
@@ -1953,6 +1979,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     backlogCoverage = {};
     detailStatuses.clear();
     detailAreaStatuses.clear();
+    detailReceipts.clear();
     scopedDetailIds.clear();
     childLists.clear();
     deniedTaskReads.clear();
@@ -2064,8 +2091,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     publish();
   }
   function acceptTaskDetailHydration(read: import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration, notify = true) {
-    if (!isActive() || read.session.userId !== userId || read.session.revision !== sessionRevision
-      || read.model.readArea !== "target" || !validDetailReceipt(read.model, read.readAuthority)) return false;
+    if (!isActive() || read.itemId !== read.model.item.id || read.session.userId !== userId || read.session.revision !== sessionRevision
+      || read.model.readArea !== "target" || !validDetailReceipt(read.model, read.readAuthority, actorIdentity)) return false;
     const tasks = [read.model.item, ...read.model.ancestors];
     if (tasks.some(task => {
       const known = confirmed.tasks.find(row => row.id === task.id);
@@ -2074,6 +2101,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     confirmed = applyTaskDetailModel(confirmed, read.model, [], {});
     for (const task of tasks) { deniedTaskReads.delete(task.id); acceptTaskFieldCoverage(task); }
     scopedDetailIds.add(read.model.item.id);
+    rememberDetailReceipt(read.model.item.id, "target", read.model, read.readAuthority);
     detailStatuses.set(read.model.item.id, "current");
     acceptProfileScope("task:"+read.model.item.id, read.model.people);
     if (notify) publish();
