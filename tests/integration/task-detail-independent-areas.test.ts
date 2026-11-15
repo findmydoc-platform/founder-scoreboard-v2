@@ -23,7 +23,7 @@ test("canonical target and root-first ancestors are usable before requested disc
     if (first.kind !== "target") throw new Error("Canonical detail waited for unrelated secondary content");
     expect(first.response.status).toBe(200);
     const { taskDetail } = await first.response.json();
-    expect(taskDetail.item).toMatchObject({ id: taskId, description: "Complete synthetic content", acceptanceCriteria: "Synthetic AC", definitionOfDone: "Synthetic DoD", owner: f.actors.founder.profileId });
+    expect(taskDetail.item).toMatchObject({ id: taskId, description: "Complete synthetic content", acceptanceCriteria: "Synthetic AC", definitionOfDone: "Synthetic DoD", ownerId: f.actors.founder.profileId });
     expect(taskDetail.ancestors.map((item: { id: string }) => item.id)).toEqual([`${f.prefix}-epic`, f.initiativeId]);
     expect(taskDetail.coverage).not.toHaveProperty("discussion");
     expect(taskDetail.coverage).not.toHaveProperty("timeline");
