@@ -29,7 +29,7 @@ async function handleGET(request: NextRequest) {
   }
   const currentProfile = permission.profile;
   const normalized = query && normalizePlanningBoardQuery(query);
-  if (request.headers.get("accept")?.includes("application/x-ndjson") && query && !query.column && !query.continuation && normalized?.view === "board" && normalized.level === "deliverable") {
+  if (request.headers.get("accept")?.includes("application/x-ndjson") && query && !query.column && !query.continuation && normalized?.view === "board") {
     const authority = permission.readAuthority;
     if (!authority || authority.deadline <= Date.now()) return apiError("Planung darf nicht geladen werden.", 403);
     const started = await permission.planning.startBoardQuery(query, { signal: request.signal });

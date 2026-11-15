@@ -12,7 +12,7 @@ export function createSupabasePlanningBoardReadModel(supabase: SupabaseClient): 
     const query = context.query || { view: "complete" as const };
     const normalized = normalizePlanningBoardQuery(query);
     if (normalized.view === "table") return loadPlanningDeliverableBoard(supabase, { ...context, query });
-    return normalized.view === "board" && normalized.level === "deliverable"
+    return normalized.view === "board"
       ? startPlanningDeliverableQuery(supabase, { ...context, query })
       : loadPlanningWorkspaceModel(supabase, { ...context, query });
   }, load: (context) => {

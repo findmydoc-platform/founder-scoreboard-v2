@@ -11,6 +11,7 @@ import { mapSprint } from "@/lib/planning-sprint-mappers";
 import { mapTaskRelation } from "@/lib/planning-row-mappers";
 import type { DbProfile, DbProfileUiPreference, DbSprint, DbTask, DbTaskRelation } from "@/lib/planning-row-types";
 import { taskStatuses } from "@/lib/status";
+import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import type { Task, TaskStatus } from "@/lib/types";
 import type { PlanningWorkspaceLoadContext, PlanningWorkspaceLoadResult } from "../model/planning-workspace-model";
 import { observeRuntimePhase } from "@/lib/runtime-logging";
@@ -165,8 +166,9 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
   const { query, preferenceRevision } = resolved;
   const queryKey = planningBoardQueryKey(query);
   const tableView = query.view === "table";
+  const allowedStatuses: readonly TaskStatus[] = query.level === "deliverable" ? statuses : strategicPlanningStatuses;
   const column = tableView ? undefined : input.column || (input.continuation ? "Erledigt" : query.filters.status !== "Alle" && statuses.includes(query.filters.status as TaskStatus) ? query.filters.status as TaskStatus : "Offen");
-  if (tableView ? Boolean(input.column) : !column || !statuses.includes(column)) return { status: "staleContinuation" };
+  if (tableView ? Boolean(input.column) : !column || !allowedStatuses.includes(column)) return { status: "staleContinuation" };
   const sign = cursorSigner(context, query, column);
   let cursor: Cursor | undefined;
   if (input.continuation) {
@@ -287,6 +289,7 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
     const resolved = await resolveQuery(supabase, bound);
     if (resolved.status !== "query") { cleanup(); return resolved; }
     const { query, preferenceRevision } = resolved;
+    const visibleStatuses: readonly TaskStatus[] = query.level === "deliverable" ? taskStatuses : strategicPlanningStatuses;
     const limit = Math.min(20, Math.max(1, Math.trunc(Number(context.query?.limit) || 20)));
     const planRead = supabase.rpc("planning_deliverable_query_plan", { p_actor_profile_id: context.actorProfileId, p_query: query, p_limit: limit });
     const result = await observeRuntimePhase("board.selection", () => planRead.abortSignal(controller.signal));
@@ -300,10 +303,10 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
       || !Array.isArray(plan.initiative_options) || plan.initiative_options.some(value => !value || typeof value.id !== "string" || typeof value.title !== "string")
       || statuses.some(status => !Number.isSafeInteger(plan.columns?.[status]?.total) || plan.columns[status].total < 0 || !Array.isArray(plan.columns[status].ids)
         || plan.columns[status].ids.some(id => typeof id !== "string") || new Set(plan.columns[status].ids).size !== plan.columns[status].ids.length
-        || status !== "Pausiert" && plan.columns[status].ids.length !== Math.min(limit, plan.columns[status].total))
+        || plan.columns[status].ids.length !== (visibleStatuses.includes(status) ? Math.min(limit, plan.columns[status].total) : 0))
       || !plan.metrics || !plan.level_totals || !plan.workspace_revision || !plan.personal_children) { cleanup(); return { status: "unavailable" }; }
     if (preferenceRevision && plan.source_revision !== preferenceRevision) { cleanup(); return { status: "unavailable" }; }
-    const pending = taskStatuses.filter(status => plan.columns[status].ids.length > 0);
+    const pending = visibleStatuses.filter(status => plan.columns[status].ids.length > 0);
     const id = randomUUID(), summaryIds = pending.flatMap(column => plan.columns[column].ids);
     const request = summaryRequest(context, { readId: id, query, cardIds: summaryIds, source: plan.source_revision,
       evaluatedAt: plan.evaluated_at, temporalKey: plan.temporal_key, validUntil: plan.valid_until, authorityDeadline: context.authorityDeadline ?? null });
