@@ -409,8 +409,10 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
       const summary = await rawSummaries!;
       if (terminal) return terminal;
       if (summary.status !== "ready") return failure(undefined, summary.status === "forbidden" ? 403 : summary.status === "staleContinuation" ? 409 : 503, "summaries");
-      return { kind: "summaries", readId: id, token: request.token, scopeRevision: plan.source_revision, queryRevision: revision,
+      const outcome: PlanningBoardSummaryFrame = { kind: "summaries", readId: id, token: request.token, scopeRevision: plan.source_revision, queryRevision: revision,
         observedAt: plan.evaluated_at, validUntil: plan.valid_until, authorityDeadline: context.authorityDeadline ?? null, cardIds: summaryIds, childProgressById: summary.progress, attentionById: summary.attention };
+      if (query.level === "epic") { summaryReservation.outcome = outcome; summaryReservation.digest = payloadDigest(outcome); }
+      return outcome;
     }
     async function hydrate(column: TaskStatus): Promise<PlanningBoardColumnOutcome> {
       try {
@@ -427,48 +429,60 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
           || !Array.isArray(selected.card_ids) || JSON.stringify(selected.card_ids) !== JSON.stringify(ids)) return failure(column, 503);
         const basis = { offset: ids.length, source: plan.source_revision, evaluatedAt: plan.evaluated_at, temporalKey: plan.temporal_key, validUntil: plan.valid_until, authorityDeadline: context.authorityDeadline ?? null };
         const total = plan.columns[column].total;
-        return { kind: "column", readId: id, column, scopeRevision: plan.source_revision, queryRevision: revision, observedAt: plan.evaluated_at, validUntil: plan.valid_until,
+        const outcome: Extract<PlanningBoardColumnOutcome, { kind: "column" }> = { kind: "column", readId: id, column, scopeRevision: plan.source_revision, queryRevision: revision, observedAt: plan.evaluated_at, validUntil: plan.valid_until,
           cardIds: ids, items: mapPlanningItemRows(selected.rows, people, [], [], []).map(task => compactPlanningCard(task, selectedOmittedFields)),
           relationships: selected.relationships.map(mapTaskRelation), taskOmittedFields: selectedOmittedFields,
           personalChildren: Object.fromEntries(ids.filter(cardId => plan.personal_children[cardId]?.length).map(cardId => [cardId, plan.personal_children[cardId]])),
           columnState: { total, loaded: ids.length, availability: "ready", completeness: ids.length >= total ? "complete" : "partial",
             continuation: ids.length < total ? Buffer.from(JSON.stringify({ ...basis, binding: cursorSigner(context, query, column)(basis) })).toString("base64url") : null },
         };
+        if (query.level === "epic") unpublished.set(column, { outcome, digest: payloadDigest(outcome) });
+        return outcome;
       } catch (error) {
         const status = typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? 403 : 503;
         return terminal || failure(column, status);
       }
     }
-    const unpublished = new Set(pending);
-    let summaryUnpublished = Boolean(rawSummaries);
+    const unpublished = new Map<TaskStatus, { outcome: PlanningBoardColumnOutcome; digest: string } | undefined>(pending.map(column => [column, undefined]));
+    const summaryReservation = { pending: Boolean(rawSummaries), outcome: undefined as PlanningBoardSummaryFrame | undefined, digest: "" };
+    function payloadDigest(outcome: PlanningBoardOutcome) { return createHash("sha256").update(JSON.stringify(outcome)).digest("hex"); }
     async function checkPublication<T extends PlanningBoardOutcome>(outcome: T, initialSummary?: PlanningBoardSummaryFrame): Promise<T | PlanningBoardFailureFrame> {
       if (terminal) return terminal;
       const column = outcome.kind === "summaries" ? undefined : outcome.column;
       const area = outcome.kind === "summaries" || outcome.kind === "failure" && outcome.area === "summaries" ? "summaries" : undefined;
-      let summaryPublished = false;
-      try {
-        if (outcome.kind === "failure" && outcome.status !== 503) return outcome;
-        if (initialSummary && (query.level !== "epic" || outcome.kind !== "column" || initialSummary.readId !== id
-          || initialSummary.token !== request.token || initialSummary.scopeRevision !== plan.source_revision
+      if (initialSummary) {
+        const columnReservation = column ? unpublished.get(column) : undefined;
+        if (query.level !== "epic" || outcome.kind !== "column" || !columnReservation || columnReservation.outcome !== outcome
+          || columnReservation.digest !== payloadDigest(outcome) || !summaryReservation.pending
+          || summaryReservation.outcome !== initialSummary || summaryReservation.digest !== payloadDigest(initialSummary)
+          || initialSummary.readId !== id || initialSummary.token !== request.token || initialSummary.scopeRevision !== plan.source_revision
           || initialSummary.queryRevision !== revision || initialSummary.observedAt !== plan.evaluated_at
           || initialSummary.validUntil !== plan.valid_until || (initialSummary.authorityDeadline ?? null) !== (context.authorityDeadline ?? null)
           || JSON.stringify(initialSummary.cardIds) !== JSON.stringify(summaryIds)
-          || JSON.stringify(initialSummary.cardIds) !== JSON.stringify(outcome.cardIds))) return failure(column, 503, "summaries");
+          || JSON.stringify(initialSummary.cardIds) !== JSON.stringify(outcome.cardIds)) return failure(column, 503, "summaries");
+        // Claim both existing reservations synchronously, before the live check.
+        // A competing or late caller cannot reuse either admitted payload.
+        unpublished.delete(outcome.column);
+        summaryReservation.pending = false;
+      } else if (query.level === "epic" && (column && !unpublished.has(column) || area && !summaryReservation.pending)) {
+        return failure(column, 503, area);
+      }
+      try {
+        if (outcome.kind === "failure" && outcome.status !== 503) return outcome;
         // Run at the actual HTTP/SSR publication boundary, even if hydration
         // settled earlier. The guarded client rechecks original JWT/live access.
         const fence = await readSourceRevision(supabase, bound);
         if (terminal) return terminal;
         if (fence.error || typeof fence.data !== "string") return failure(column, fence.status === 401 || fence.status === 403 ? 403 : 503, area);
         if (fence.data !== plan.source_revision || plan.valid_until && Date.parse(plan.valid_until) <= Date.now()) return failure(column, 409, area);
-        summaryPublished = Boolean(initialSummary);
         return outcome;
       } catch (error) {
         const status = typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403) ? 403 : 503;
         return terminal || failure(column, status, area);
       } finally {
         if (column) unpublished.delete(column);
-        if (area || summaryPublished) summaryUnpublished = false;
-        if (!unpublished.size && !summaryUnpublished) cleanup();
+        if (area) summaryReservation.pending = false;
+        if (!unpublished.size && !summaryReservation.pending) cleanup();
       }
     }
     // Start every nonempty column now. No column waits for Offen or a sibling.
