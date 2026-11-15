@@ -179,7 +179,7 @@ export function usePlanningAppController({
     setEpicDialogDefaults,
     setTaskDialogDefaults,
     statusGuardTaskId,
-    view: displayedPlanningQuery?.view === "board" ? "board" : view,
+    view: displayedPlanningQuery && displayedPlanningQuery.view !== "complete" ? displayedPlanningQuery.view : view,
     workspace,
   });
   const commandRegistry = usePlanningCommandRegistry({

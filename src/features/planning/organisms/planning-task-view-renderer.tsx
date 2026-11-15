@@ -70,7 +70,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
   const filters = controller.displayedPlanningQuery?.filters || requestedFilters;
   const planningLevel = controller.displayedPlanningQuery?.level || requestedLevel;
   const planningParentFilterId = controller.displayedPlanningQuery?.parentId || requestedParentId;
-  const view = controller.displayedPlanningQuery?.view === "board" ? "board" : requestedView;
+  const view = controller.displayedPlanningQuery && controller.displayedPlanningQuery.view !== "complete" ? controller.displayedPlanningQuery.view : requestedView;
   const resultsRef = useRef<HTMLElement>(null);
   const focusInteraction = useRef<(() => void) | undefined>(undefined);
   const pointerInteraction = useRef<(() => void) | undefined>(undefined);
