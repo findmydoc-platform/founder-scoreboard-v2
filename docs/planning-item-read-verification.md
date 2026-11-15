@@ -31,6 +31,8 @@ The fixture covers literal `%`, `_`, backslash and brackets with a wildcard-look
 
 Do not seed a production database or a shared local stack. Preserve real profile-to-Auth-user binding when mapping synthetic fixture roles into the disposable database. If the browser baseline uses a CEO while the semantic fixture reader is a founder, record both roles and do not call those runs matched role evidence. Keep target identity independent of list membership.
 
+`planning-summary-scheduling.test.ts` holds a real completed summary response and checks that selected JSON avatar work proceeds independently while the public response remains pending. `planning-publication-source.test.ts` verifies the complete public result and the original-user atomic publication dispatch budget. Its negative cases cover direct role/session grants, missing or expired Workspace permits, revoked authorization, changed source, unavailable publication evidence and the original abort/deadline ceiling. The migration-specific publication test verifies preserved rows, source revision and direct execution privileges. Existing enumeration, query-delivery and permit cases retain their source-conflict, fatal-denial, original-JWT and cleanup assertions against the atomic publication boundary.
+
 ## Boundary distributions
 
 Create independent fixture variants. Change one dimension at a time and record exact resulting counts, deterministic identity ranges, distribution and reason. Sizes below are experiment inputs, never product limits. Reset to the same complete variant between compared samples. For a limit `L`, include `L-1`, `L` and `L+1`; cover multiple pages where enumeration is promised.
