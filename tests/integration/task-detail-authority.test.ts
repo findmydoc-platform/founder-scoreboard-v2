@@ -59,6 +59,8 @@ test("detail cancellation reaches the SDK signal while the actual SQL read remai
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: f.request("founder", `/api/tasks/${f.initiativeId}/detail-data?area=target`) }, action: "planning.task.read", targetId: f.initiativeId });
   if (!permission.ok) throw new Error("Fresh detail admission unavailable");
+  let entered!: () => void;
+  const dispatched = new Promise<void>(resolve => { entered = resolve; });
   const io: { signal?: AbortSignal | null; open: boolean; abortWhileOpen: boolean } = { open: false, abortWhileOpen: false };
   const transport = globalThis.fetch;
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -66,6 +68,7 @@ test("detail cancellation reaches the SDK signal while the actual SQL read remai
     if (!path.endsWith("/task_links")) return transport(input, init);
     io.signal = init?.signal;
     io.open = true;
+    entered();
     io.signal?.addEventListener("abort", () => { io.abortWhileOpen = io.open; }, { once: true });
     try { return await transport(input, init); } finally { io.open = false; }
   });
@@ -75,7 +78,12 @@ test("detail cancellation reaches the SDK signal while the actual SQL read remai
   const options = { area: "target" as const, signal: cancellation.signal };
   const pending = permission.planning.loadDetail(options);
   try {
-    await vi.waitFor(async () => expect((await f.db.query("select exists(select 1 from pg_stat_activity where pid<>pg_backend_pid() and wait_event_type='Lock' and query ilike '%task_links%') blocked")).rows[0].blocked).toBe(true), { timeout: 10_000 });
+    const first = await Promise.race([dispatched.then(() => "io-dispatched"), pending.then(result => "read-settled-"+result.status)]);
+    expect(first).toBe("io-dispatched");
+    await vi.waitFor(async () => {
+      await f.db.query("select pg_stat_clear_snapshot()");
+      expect((await f.db.query("select exists(select 1 from pg_stat_activity where pid<>pg_backend_pid() and wait_event_type='Lock' and query ilike '%task_links%') blocked")).rows[0].blocked).toBe(true);
+    }, { timeout: 10_000 });
     expect(io.open).toBe(true);
     expect(io.signal?.aborted).toBe(false);
     cancellation.abort();
