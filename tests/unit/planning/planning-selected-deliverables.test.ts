@@ -4,29 +4,31 @@ import { createSupabasePlanningBoardReadModel } from "@/features/planning/server
 
 vi.mock("server-only", () => ({}));
 
-function source() {
+function source(level: "deliverable" | "epic" | "initiative" = "deliverable") {
   const calls: Array<{ name: string; args: Record<string, unknown> | undefined }> = [];
   let revision = "42";
   let preference: Record<string, unknown> | null = null;
   let validUntil: string | null = null, failure = false, choices = true;
   const signals: AbortSignal[] = [];
+  const tables: string[] = [];
   const client = { from(table: string) {
-    if (table !== "profile_ui_preferences") throw new Error("A selected Deliverable read must not enumerate tables.");
+    tables.push(table);
+    if (table !== "profile_ui_preferences") throw new Error("A selected Board read must not enumerate tables.");
     const read = { select() { return read; }, eq() { return read; }, abortSignal() { return read; }, maybeSingle() { return Promise.resolve({ data: preference, error: null }); } };
     return read;
   }, rpc(name: string, args?: Record<string, unknown>) {
     calls.push({ name, args });
     const data = name === "planning_source_version" ? revision : name === "workspace_access_contexts" ? [] : {
       status: "ready", source_revision: revision, evaluated_at: "2026-11-13T12:00:00Z", temporal_key: "stable", valid_until: validUntil,
-      project: { id: "findmydoc-founder-execution", name: "Synthetic Planning" }, rows: [{ id: "selected", title: "Selected", task_type: "deliverable", approval_status: "approved", status: args?.p_column || "Offen" }],
+      project: { id: "findmydoc-founder-execution", name: "Synthetic Planning" }, rows: [{ id: "selected", title: "Selected", task_type: level, approval_status: "approved", status: args?.p_column || "Offen" }],
       card_ids: ["selected"], context_ids: ["selected"], profiles: [], sprints: [], preferences: [], relationships: [], blockers: [], strategies: [], raci: [], links: [],
       columns: Object.fromEntries(["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt", "Pausiert"].map(status => [status, { total: status === (args?.p_column || "Offen") ? 25 : 0 }])),
-      metrics: { total: 25, open: 25, done: 0, blocked: 0 }, level_totals: { epic: 0, initiative: 0, deliverable: 25 }, child_progress: {}, personal_children: {}, workspace_revision: { activeTaskCount: 25, latestUpdatedAt: "2026-11-01T00:00:00Z" },
-      ...(choices ? { workstreams: [], initiative_options: [] } : {}),
+      metrics: { total: 25, open: 25, done: 0, blocked: 0 }, level_totals: { epic: level === "epic" ? 25 : 0, initiative: level === "initiative" ? 25 : 0, deliverable: level === "deliverable" ? 25 : 0 }, child_progress: {}, personal_children: {}, workspace_revision: { activeTaskCount: 25, latestUpdatedAt: "2026-11-01T00:00:00Z" },
+      ...(choices ? { workstreams: [], initiative_options: [], epic_options: [] } : {}),
     };
     return { abortSignal(signal: AbortSignal) { signals.push(signal); return this; }, then(resolve: (value: unknown) => unknown) { return Promise.resolve({ data, error: failure ? { message: "Synthetic source unavailable" } : null }).then(resolve); } };
   } } as unknown as SupabaseClient;
-  return { client, calls, signals, changeRevision() { revision = "43"; }, expires(value: string) { validUntil = value; }, fail() { failure = true; }, omitChoices() { choices = false; }, preferMine() { preference = { profile_id: "reader", default_workspace: "mine", default_task_view: "board", planning_filters: { query: "saved", assignee: "other", quick: ["high"] } }; } };
+  return { client, calls, signals, tables, changeRevision() { revision = "43"; }, expires(value: string) { validUntil = value; }, fail() { failure = true; }, omitChoices() { choices = false; }, preferMine() { preference = { profile_id: "reader", default_workspace: "mine", default_task_view: "board", planning_filters: { query: "saved", assignee: "other", quick: ["high"] } }; } };
 }
 const context = { authorized: true, actorProfileId: "reader", authorityKey: "session" };
 
@@ -113,7 +115,8 @@ test("selected summary and source-fence reads propagate cancellation while unava
   expect(result.model.items[0]).not.toHaveProperty("evidenceLink");
 });
 
-test.each([{ view: "complete" as const }, { view: "board" as const, level: "epic" as const }])("the established complete and unmigrated strategic request stays on its compatible source: %j", async query => {
+test("the explicit complete request retains its compatible source", async () => {
+  const query = { view: "complete" as const };
   const calls: string[] = [];
   const client = { rpc(name: string) { calls.push(name); return Promise.resolve({ data: { id: "findmydoc-founder-execution", name: "Synthetic", scope_revision: "42" }, error: null }); }, from(table: string) {
     calls.push(table);
@@ -124,4 +127,26 @@ test.each([{ view: "complete" as const }, { view: "board" as const, level: "epic
   expect(result.status).toBe("ready");
   expect(calls).toContain("active_tasks");
   expect(calls).not.toContain("planning_deliverable_selection");
+});
+
+
+test.each(["epic", "initiative"] as const)("the migrated %s adapter binds selected scope and original continuation authority without a complete read", async level => {
+  const fixture = source(level), reader = createSupabasePlanningBoardReadModel(fixture.client);
+  const query = { view: "board" as const, level, filters: { query: "selected" } };
+  const first = await reader.load({ ...context, query });
+  expect(first.status).toBe("ready");
+  if (first.status !== "ready") throw new Error("Expected migrated strategic selection");
+  expect(fixture.calls[0]).toMatchObject({ name: "planning_deliverable_selection", args: { p_actor_profile_id: "reader", p_column: "Offen", p_limit: 20, p_query: { view: "board", level, filters: { query: "selected" } } } });
+  expect(first.model.board?.cardIds).toEqual(["selected"]);
+  expect(first.model.items.map(item => [item.id, item.taskType])).toEqual([["selected", level]]);
+  expect(first.model.board?.columns.Offen).toMatchObject({ total: 25, loaded: 1, completeness: "partial", continuation: expect.any(String) });
+  expect(first.model.coverage?.items).toBe("partial");
+  expect(fixture.tables).toEqual([]);
+  const continuation = first.model.board!.columns.Offen.continuation!, count = fixture.calls.length;
+  for (const changed of [
+    { ...context, authorityKey: "replacement", query: { ...query, column: "Offen" as const, continuation } },
+    { ...context, actorProfileId: "other-reader", query: { ...query, column: "Offen" as const, continuation } },
+    { ...context, query: { ...query, level: level === "epic" ? "initiative" as const : "epic" as const, column: "Offen" as const, continuation } },
+  ]) expect(await reader.load(changed)).toEqual({ status: "staleContinuation" });
+  expect(fixture.calls).toHaveLength(count);
 });

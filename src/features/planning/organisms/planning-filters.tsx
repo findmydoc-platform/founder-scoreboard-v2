@@ -38,6 +38,7 @@ type PlanningFiltersProps = {
   levelTotals?: Partial<Record<PlanningLevel, number>>;
   profiles: Profile[];
   initiatives: readonly Pick<Task, "id" | "title">[];
+  epics?: readonly Pick<Task, "id" | "title">[];
   sprints: Sprint[];
   tasks: Task[];
   workstreams: string[];
@@ -60,6 +61,7 @@ export function PlanningFilters({
   levelTotals,
   profiles,
   initiatives,
+  epics,
   sprints,
   tasks,
   workstreams,
@@ -84,7 +86,7 @@ export function PlanningFilters({
   const sprintName = sprints.find((sprint) => sprint.id === filters.sprintId)?.name || filters.sprintId;
   const isStrategicBoard = showPlanningLevel && planningLevel !== "deliverable";
   const parentTasks = planningLevel === "initiative"
-    ? tasks.filter((task) => task.taskType === "epic")
+    ? epics || tasks.filter((task) => task.taskType === "epic")
     : planningLevel === "deliverable"
       ? initiatives
       : [];

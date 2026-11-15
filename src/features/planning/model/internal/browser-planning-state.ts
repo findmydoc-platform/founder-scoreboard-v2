@@ -464,6 +464,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || typeof body?.version !== "string") throw Object.assign(new Error(body?.error || "Planungsänderungen konnten nicht geprüft werden."), { status: response.status });
         return body.version;
       },
+      async readTableRisks(token, options) {
+        const { response, body } = await ownedApiClient.requestJson<{ summaries?: import("../planning-table-result").PlanningTableRiskFrame; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; error?: string; code?: string }>(`/api/planning-board-data?summaries=${encodeURIComponent(token)}`, options);
+        if (!response.ok || body?.summaries?.kind !== "table-risks") throw Object.assign(new Error(body?.error || "Risiken konnten nicht geladen werden."), { status: response.status, code: body?.code });
+        requireReadAuthority(body.readAuthority);
+        return { summaries: body.summaries, readAuthority: body.readAuthority! };
+      },
       async readBoardSummaries(token, options) {
         const { response, body } = await ownedApiClient.requestJson<{ summaries?: import("../planning-board-summaries").PlanningBoardSummaryFrame; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; error?: string; code?: string }>(`/api/planning-board-data?summaries=${encodeURIComponent(token)}`, options);
         if (!response.ok || !body?.summaries) throw Object.assign(new Error(body?.error || "Fortschritt und Signale konnten nicht geladen werden."), { status: response.status, code: body?.code });
@@ -471,7 +477,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         return { summaries: body.summaries, readAuthority: body.readAuthority! };
       },
       async readWorkspace(workspace, query, options) {
-        if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && (query.level || "deliverable") === "deliverable" && !query.column && !query.continuation) {
+        if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && !query.column && !query.continuation) {
           const response = await ownedApiClient.requestResponse(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal, headers: { accept: "application/x-ndjson" } });
           if (!response.ok) {
             const error = await response.json().catch(() => null) as { error?: string; code?: string } | null;
@@ -504,7 +510,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
           const { response, body } = await planningApi.requestPlanningWorkspaceData(ownedApiClient, workspace, workspace === "planning" ? query || { view: "board" } : query, { signal: options?.signal });
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status, code: body?.code });
           if (workspace === "planning") requireReadAuthority(body?.readAuthority);
-          return body?.model ? { readAuthority: body.readAuthority, scopeRevision: body.model.scopeRevision, board: body.model.board, query: body.model.query || query, queryRevision: body.model.queryRevision || body.model.board?.revision, data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), coverage: hierarchyReadCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: hierarchyOmittedFields(body.model), headerData: body.headerData, currentProfile: body.currentProfile } : null;
+          return body?.model ? { readAuthority: body.readAuthority, scopeRevision: body.model.scopeRevision, board: body.model.board, table: body.model.table, query: body.model.query || body.model.table?.query || query, queryRevision: body.model.queryRevision || body.model.board?.revision || body.model.table?.revision, data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), coverage: hierarchyReadCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: hierarchyOmittedFields(body.model), headerData: body.headerData, currentProfile: body.currentProfile } : null;
         }
         if (workspace === "backlog") {
           const { response, body } = await requestBacklogModel(ownedApiClient);

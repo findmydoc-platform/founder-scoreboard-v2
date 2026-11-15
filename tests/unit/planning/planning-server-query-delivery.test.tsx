@@ -56,16 +56,19 @@ function ready(column: "Offen" | "Review"): Extract<PlanningBoardColumnOutcome, 
   };
 }
 
-function fixture(empty = false, protectedBasis = false, summaryOnly = false) {
+function fixture(empty = false, protectedBasis = false, summaryOnly = false, level: "deliverable" | "epic" | "initiative" = "deliverable") {
+  const selectedQuery = normalizePlanningBoardQuery({ ...query, level });
+  const primaryColumn = level !== "deliverable" ? "Offen" : "Review";
+  const primaryId = primaryColumn === "Offen" ? "selected-open-card" : "selected-review-card";
   const open = deferred<PlanningBoardColumnOutcome>(), review = deferred<PlanningBoardColumnOutcome>();
   const summaries = deferred<PlanningBoardSummaryOutcome>();
   const entered = deferred<void>();
   const columns = Object.fromEntries(statuses.map(column => {
-    const total = !empty && (column === "Review" || !summaryOnly && column === "Offen") ? 1 : 0;
+    const total = !empty && (column === primaryColumn || !summaryOnly && column === "Offen") ? 1 : 0;
     return [column, { total, loaded: 0, availability: total ? "not-loaded" : "ready", completeness: total ? "partial" : "complete", continuation: null } satisfies PlanningBoardColumn];
   })) as Record<TaskStatus, PlanningBoardColumn>;
   const model: PlanningWorkspaceModel = {
-    revision: "workspace-revision", scopeRevision: "selected-source", query, queryRevision: "selected-query",
+    revision: "workspace-revision", scopeRevision: "selected-source", query: selectedQuery, queryRevision: "selected-query",
     project: { ...emptyPlanningShellState.project, id: "ssr-project", name: "Synthetic SSR Planning" },
     items: [], relationships: [],
     people: protectedBasis ? [person, { ...person, id: "protected-directory-marker", name: "Synthetic private directory entry" }] : [person],
@@ -74,10 +77,10 @@ function fixture(empty = false, protectedBasis = false, summaryOnly = false) {
     taskOmittedFields: ["description", "definitionOfDone"],
     coverage: { items: "partial", people: "complete", sprints: "complete", preferences: "complete", relationships: "partial" },
     board: {
-      query, queryKey: planningBoardQueryKey(query), revision: "selected-query", observedAt, validUntil: null,
-      delivery: { id: readId, columns: empty ? [] : summaryOnly ? ["Review"] : ["Offen", "Review"] }, columns, cardIds: [],
-      ...(summaryOnly ? { summaryRequests: [{ token: "native-summary-batch", cardIds: ["selected-review-card"], status: "loading" as const }] } : {}),
-      metrics: { total: empty ? 0 : 2, open: empty ? 0 : 2, done: 0, blocked: null },
+      query: selectedQuery, queryKey: planningBoardQueryKey(selectedQuery), revision: "selected-query", observedAt, validUntil: null,
+      delivery: { id: readId, columns: empty ? [] : summaryOnly ? [primaryColumn] : ["Offen", "Review"] }, columns, cardIds: [],
+      ...(summaryOnly ? { summaryRequests: [{ token: "native-summary-batch", cardIds: [primaryId], status: "loading" as const }] } : {}),
+      metrics: { total: empty ? 0 : level !== "deliverable" ? 1 : 2, open: empty ? 0 : level !== "deliverable" ? 1 : 2, done: 0, blocked: null },
       childProgressById: {}, attentionById: {}, viewerOpenSubIssueIdsByDeliverableId: {},
       ...(protectedBasis ? { workstreams: ["protected-workstream-marker"], initiativeOptions: [{ id: "protected-option-marker", title: "Synthetic private Initiative option" }] } : {}),
       workspaceRevision: { activeTaskCount: empty ? 0 : 2, latestUpdatedAt: "workspace-revision" },
@@ -92,7 +95,7 @@ function fixture(empty = false, protectedBasis = false, summaryOnly = false) {
     entered.resolve();
     return { status: "ready" as const, model, delivery: {
       id: readId, abort, checkPublication: checkPublication as PlanningBoardDelivery["checkPublication"],
-      columns: empty ? {} : summaryOnly ? { Review: review.promise } : { Offen: open.promise, Review: review.promise },
+      columns: empty ? {} : summaryOnly ? { [primaryColumn]: primaryColumn === "Offen" ? open.promise : review.promise } : { Offen: open.promise, Review: review.promise },
       ...(summaryOnly ? { summaries: summaries.promise } : {}),
     } satisfies PlanningBoardDelivery };
   });
@@ -106,8 +109,8 @@ function fixture(empty = false, protectedBasis = false, summaryOnly = false) {
   return { open, review, summaries, entered: entered.promise, model, checkPublication, abort, loadBoard, startBoardQuery, signal: () => signal };
 }
 
-async function planningPage(): Promise<Page> {
-  const result = await PlanningPage({ searchParams: Promise.resolve({ "board.level": "deliverable", "board.parentId": "all", "tasks.query": "receipt" }) });
+async function planningPage(level: "deliverable" | "epic" | "initiative" = "deliverable"): Promise<Page> {
+  const result = await PlanningPage({ searchParams: Promise.resolve({ "board.level": level, "board.parentId": "all", "tasks.query": "receipt" }) });
   expect(result.type).toBe(PlanningApp);
   return result as Page;
 }
@@ -264,4 +267,83 @@ test.each([403, 409] as const)("Planning SSR withholds its private basis when th
   for (const marker of [...privateMarkers, "protected-item-marker"]) expect(JSON.stringify(page.props)).not.toContain(marker);
   expect(controlled.abort).toHaveBeenCalledOnce();
   expect(controlled.loadBoard).not.toHaveBeenCalled();
+});
+
+test("Epic SSR includes an already ready exact summary in its first operable snapshot", async () => {
+  const controlled = fixture(false, false, true, "epic");
+  const rendering = planningPage("epic");
+  await controlled.entered;
+  controlled.summaries.resolve({ kind: "summaries", readId, token: "native-summary-batch", cardIds: ["selected-open-card"],
+    scopeRevision: "selected-source", queryRevision: "selected-query", observedAt, validUntil: null,
+    childProgressById: { "selected-open-card": { completed: 0, total: 1, unfinished: 1, percentage: 0 } },
+    attentionById: { "selected-open-card": [] } });
+  const column = ready("Offen");
+  controlled.open.resolve({ ...column, items: [{ ...column.items[0], taskType: "epic" as const, parentTaskId: "" }] });
+  const page = await rendering;
+
+  expect(page.props.initialData.tasks.map(task => task.id)).toEqual(["selected-open-card"]);
+  expect(page.props.initialWorkspaceRead?.board?.childProgressById).toEqual({
+    "selected-open-card": { completed: 0, total: 1, unfinished: 1, percentage: 0 },
+  });
+  expect(page.props.initialWorkspaceRead?.board?.attentionById).toEqual({ "selected-open-card": [] });
+  expect(page.props.initialWorkspaceRead?.board?.summaryRequests?.some(request => request.status === "loading")).not.toBe(true);
+  expect(page.props.initialWorkspaceRead?.board?.delivery).toBeUndefined();
+  expect(Children.toArray(page.props.children).filter(child => isValidElement<{ delivery?: PlanningBoardDelivery }>(child) && child.props.delivery)).toEqual([]);
+});
+
+test("Epic SSR does not wait for its independently pending summary", async () => {
+  const controlled = fixture(false, false, true, "epic");
+  const rendering = planningPage("epic");
+  await controlled.entered;
+  const column = ready("Offen");
+  controlled.open.resolve({ ...column, items: [{ ...column.items[0], taskType: "epic" as const, parentTaskId: "" }] });
+  const page = await rendering;
+  expect(controlled.summaries.settled()).toBe(false);
+  expect(page.props.initialData.tasks.map(task => task.id)).toEqual(["selected-open-card"]);
+  expect(page.props.initialWorkspaceRead?.board?.childProgressById).toEqual({ "selected-open-card": null });
+  const delivery = pendingDelivery(page);
+  controlled.summaries.resolve({ kind: "summaries", readId, token: "native-summary-batch", cardIds: ["selected-open-card"],
+    scopeRevision: "selected-source", queryRevision: "selected-query", observedAt, validUntil: null,
+    childProgressById: { "selected-open-card": { completed: 0, total: 1, unfinished: 1, percentage: 0 } },
+    attentionById: { "selected-open-card": [] } });
+  await expect(delivery.summaries).resolves.toMatchObject({ kind: "summaries", cardIds: ["selected-open-card"] });
+  expect(controlled.checkPublication).toHaveBeenCalledWith(expect.objectContaining({ kind: "column" }));
+});
+
+test.each([403, 409] as const)("Epic SSR withholds both ready payloads when their fresh atomic guard returns %s", async status => {
+  const controlled = fixture(false, true, true, "epic");
+  const checking = deferred<void>(), publication = deferred<PlanningBoardColumnOutcome>();
+  controlled.checkPublication.mockImplementationOnce(async () => { checking.resolve(); return publication.promise; });
+  const rendering = PlanningPage({ searchParams: Promise.resolve({ "board.level": "epic", "tasks.query": "receipt" }) });
+  await controlled.entered;
+  controlled.summaries.resolve({ kind: "summaries", readId, token: "native-summary-batch", cardIds: ["selected-open-card"],
+    scopeRevision: "selected-source", queryRevision: "selected-query", observedAt, validUntil: null,
+    childProgressById: { "selected-open-card": { completed: 0, total: 1, unfinished: 1, percentage: 0 } },
+    attentionById: { "selected-open-card": [] } });
+  const column = ready("Offen");
+  controlled.open.resolve({ ...column, items: [{ ...column.items[0], taskType: "epic" as const, parentTaskId: "" }] });
+  await checking.promise;
+  expect(controlled.checkPublication).toHaveBeenCalledWith(expect.objectContaining({ kind: "column" }), expect.objectContaining({ kind: "summaries" }));
+  publication.resolve({ kind: "failure", readId, status, error: "Synthetic joint publication denied" });
+  const page = await rendering;
+  expect(page.type).toBe(WorkspaceDataUnavailablePage);
+  for (const field of ["initialData", "initialWorkspaceRead", "children"]) expect(page.props).not.toHaveProperty(field);
+  expect(controlled.abort).toHaveBeenCalledOnce();
+});
+
+
+test("Initiative SSR retains its existing separate delivery even when the summary is ready", async () => {
+  const controlled = fixture(false, false, true, "initiative");
+  const rendering = planningPage("initiative");
+  await controlled.entered;
+  controlled.summaries.resolve({ kind: "summaries", readId, token: "native-summary-batch", cardIds: ["selected-open-card"],
+    scopeRevision: "selected-source", queryRevision: "selected-query", observedAt, validUntil: null,
+    childProgressById: { "selected-open-card": { completed: 0, total: 1, unfinished: 1, percentage: 0 } },
+    attentionById: { "selected-open-card": [] } });
+  const column = ready("Offen");
+  controlled.open.resolve({ ...column, items: [{ ...column.items[0], taskType: "initiative" as const }] });
+  const page = await rendering;
+  expect(page.props.initialWorkspaceRead?.board?.childProgressById).toEqual({ "selected-open-card": null });
+  expect(pendingDelivery(page).summaries).toBeDefined();
+  expect(controlled.checkPublication).toHaveBeenCalledWith(expect.objectContaining({ kind: "column" }));
 });

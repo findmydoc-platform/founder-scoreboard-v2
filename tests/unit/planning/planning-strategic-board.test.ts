@@ -30,11 +30,14 @@ function fixture(level: "epic" | "initiative", count = 47) {
     } };
     return query;
   } } as unknown as SupabaseClient;
-  return { rows, data, reader: createSupabasePlanningBoardReadModel(client), reference: createCompletePlanningReference(client) };
+  // These provider fixtures preserve the independent complete TypeScript oracle.
+  // Real migrated selection/SQL contracts have their own integration fixtures.
+  const reference = createCompletePlanningReference(client);
+  return { rows, data, reader: reference, reference };
 }
 const context = { authorized: true, actorProfileId: "reader", authorityKey: "strategic-session" };
 
-test.each(["epic", "initiative"] as const)("%s Board pages each strategic status independently with complete totals and stable ties", async level => {
+test.each(["epic", "initiative"] as const)("the complete TypeScript %s reference pages each status with exact totals and stable ties", async level => {
   const { reader } = fixture(level);
   const query: PlanningBoardQueryInput = { level, filters: { query: "Strategic" }, limit: 1000 };
   const first = await reader.load({ ...context, query });
@@ -56,7 +59,7 @@ test.each(["epic", "initiative"] as const)("%s Board pages each strategic status
   }
 });
 
-test.each(["epic", "initiative"] as const)("%s page keeps direct-child aggregates and required old parent context without serializing unrelated cards", async level => {
+test.each(["epic", "initiative"] as const)("the complete TypeScript %s reference preserves direct-child aggregates and old parent context", async level => {
   const { reader, reference, rows } = fixture(level);
   const parentId = `${level}-Erledigt-0046`;
   const childType = level === "epic" ? "initiative" : "deliverable";
@@ -80,7 +83,7 @@ test.each(["epic", "initiative"] as const)("%s page keeps direct-child aggregate
   expect(children.model.items.find(task => task.id === parentId)).toMatchObject({ status: "Erledigt" });
 });
 
-test("Initiative parent and complete filters bind continuations and preserve empty and denied scopes", async () => {
+test("the complete TypeScript Initiative reference binds parent/filter continuations and preserves empty and denied scopes", async () => {
   const { reader, rows } = fixture("initiative");
   rows.push({ id: "other-epic", title: "Other Epic", task_type: "epic" }, { id: "outside-parent", task_type: "initiative", title: "Strategic outside", parent_task_id: "other-epic", status: "Offen" });
   const query = { level: "initiative", parentId: "parent-epic", filters: { priority: "P2" } } as const;
@@ -97,14 +100,30 @@ test("Initiative parent and complete filters bind continuations and preserve emp
   await expect(reader.load({ ...context, authorized: false, query })).resolves.toEqual({ status: "forbidden" });
 });
 
-test.each(["epic", "initiative"] as const)("%s cannot request a Deliverable-only status page", async level => {
+test.each(["epic", "initiative"] as const)("the complete TypeScript %s reference rejects Deliverable-only status pages", async level => {
   const { reader } = fixture(level);
   await expect(reader.load({ ...context, query: { level, column: "Review" } })).resolves.toEqual({ status: "staleContinuation" });
 });
 
 test("a late Epic page cannot populate a newly selected Initiative scope", async () => {
-  const { reader } = fixture("epic");
-  const first = await reader.load({ ...context, query: { level: "epic" } });
+  const rows = [0, 1].map(index => ({ id: `selected-epic-${index}`, title: `Selected Epic ${index}`, task_type: "epic", status: "Offen", priority: "P2", sort_order: index }));
+  // Literal RPC responses exercise the migrated production adapter. They do not
+  // reimplement SQL filtering or replace the independent complete oracle.
+  const client = { from() { throw new Error("Selected strategic reads must not enumerate Item tables"); }, rpc(name: string, args?: Record<string, unknown>) {
+    const input = args?.p_query as { level?: string } | undefined;
+    const selected = input?.level === "epic" ? [rows[Number(args?.p_offset) || 0]] : [];
+    const data = name === "planning_source_version" ? "42" : {
+      status: "ready", source_revision: "42", evaluated_at: "2026-11-13T12:00:00Z", temporal_key: "stable", valid_until: null,
+      project: { id: "findmydoc-founder-execution", name: "Synthetic" }, rows: selected, card_ids: selected.map(row => row.id), context_ids: selected.map(row => row.id),
+      profiles: [], sprints: [], preferences: [], relationships: [], workstreams: [], initiative_options: [], epic_options: [],
+      columns: Object.fromEntries(["Offen", "In Arbeit", "Pausiert", "Blockiert", "Erledigt"].map(status => [status, { total: status === "Offen" && input?.level === "epic" ? 2 : 0 }])),
+      metrics: { total: input?.level === "epic" ? 2 : 0, open: input?.level === "epic" ? 2 : 0, done: 0, blocked: 0 }, level_totals: { epic: 2, initiative: 0, deliverable: 0 },
+      personal_children: {}, workspace_revision: { activeTaskCount: 2, latestUpdatedAt: "same-source" },
+    };
+    return { abortSignal() { return this; }, then(resolve: (value: unknown) => unknown) { return Promise.resolve({ data, error: null }).then(resolve); } };
+  } } as unknown as SupabaseClient;
+  const reader = createSupabasePlanningBoardReadModel(client);
+  const first = await reader.load({ ...context, query: { view: "board", level: "epic", filters: {} } });
   if (first.status !== "ready") throw new Error("Expected Epic Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "strategic-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   let release: (() => void) | undefined;
@@ -119,9 +138,10 @@ test("a late Epic page cannot populate a newly selected Initiative scope", async
   } });
   const late = owner.planning.loadBoardColumn("Offen");
   await vi.waitFor(() => expect(release).toBeTypeOf("function"));
-  await expect(owner.planning.ensureBoardQuery({ level: "initiative" })).resolves.toBe(true);
+  await expect(owner.planning.ensureBoardQuery({ view: "board", level: "initiative", filters: {} })).resolves.toBe(true);
   release!();
   await expect(late).resolves.toBe(false);
   expect(owner.planning.board().result?.query.level).toBe("initiative");
   expect(owner.planning.board().tasks).toEqual([]);
+  expect(owner.planning.taskDetail("selected-epic-1").task).toBeNull();
 });

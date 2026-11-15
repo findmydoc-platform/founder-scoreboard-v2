@@ -21,5 +21,5 @@ export type PlanningBoardSummaryFrame = Readonly<{
 }>;
 
 export type PlanningBoardSummaryLoadResult =
-  | { status: "ready"; summaries: PlanningBoardSummaryFrame }
+  | { status: "ready"; summaries: PlanningBoardSummaryFrame | import("./planning-table-result").PlanningTableRiskFrame }
   | { status: "forbidden" | "unavailable" | "staleContinuation" };
