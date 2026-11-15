@@ -13,15 +13,20 @@ afterEach(() => { for (const callback of context.afterCallbacks.splice(0)) callb
 function planningProtocol(notificationsUnavailable = true) {
   const protocol = administratorProtocol({ role: "founder", origin: "http://localhost:19000" });
   context.jar = protocol.cookieJar();
-  protocol.state.responses.planning_board_publication_context = () => protocol.state.profileError
-    ? Response.json({ code: "PGRST116", message: "Ambiguous profile" }, { status: 400 })
-    : Response.json(protocol.state.profile ? { profile_id: protocol.state.profileId || "synthetic-profile", platform_role: protocol.state.role, source_revision: "42" } : null);
   const authFetch = globalThis.fetch;
   const notificationRead = vi.fn();
   const queryPlanRead = vi.fn();
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname === "/rest/v1/rpc/planning_source_version") return Response.json("42");
+    if (url.pathname === "/rest/v1/rpc/planning_board_publication_context") {
+      const identity = await authFetch(new Request(new URL("/rest/v1/rpc/current_authenticated_profile", url), {
+        method: "POST", headers: request.headers, body: "{}", signal: request.signal,
+      }));
+      if (!identity.ok) return identity;
+      const profile: { id: string; platform_role: string } | null = await identity.json();
+      return Response.json(profile ? { profile_id: profile.id, platform_role: profile.platform_role, source_revision: "42" } : null);
+    }
     if (["/rest/v1/rpc/planning_deliverable_selection", "/rest/v1/rpc/planning_deliverable_query_plan"].includes(url.pathname)) {
       const plan = url.pathname.endsWith("planning_deliverable_query_plan");
       if (plan) queryPlanRead();
