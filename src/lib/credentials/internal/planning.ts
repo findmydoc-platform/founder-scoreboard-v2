@@ -156,7 +156,8 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   }) : permission.data;
   // Preserve the existing explicit local profile-override path. Ordinary Board
   // publications use only the original user's bound data capability.
-  const publicationSource = action === "planning.board.read" && !request.headers.has("x-fmd-dev-profile-id")
+  const localProfileOverride = "localProfileOverride" in permission && permission.localProfileOverride === true;
+  const publicationSource = action === "planning.board.read" && !localProfileOverride
     ? planningPublicationSource(resourceData, profile, assertKnown) : undefined;
   const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
   const readSession = cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
