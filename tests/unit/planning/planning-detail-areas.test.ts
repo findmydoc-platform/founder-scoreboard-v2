@@ -21,3 +21,28 @@ test("target readiness neither completes unrequested children nor invents discus
   expect(planning.taskDetail(task.id).childrenReadStatus).toBe("not-loaded");
   expect(planning.taskDetail(task.id)).toMatchObject({ readStatus: "current", areaReadStatus: { discussion: "not-loaded", timeline: "not-loaded" } });
 });
+
+test("equivalent detail consumers abort shared work only after the last release and reject its late success", async () => {
+  let resolve!: (value: { model: TaskDetailModel; readAuthority: { userId: string; deadline: number } }) => void;
+  const pending = new Promise<{ model: TaskDetailModel; readAuthority: { userId: string; deadline: number } }>(done => { resolve = done; });
+  let reads = 0;
+  let transportSignal: AbortSignal | undefined;
+  const { planning } = createPlanningState({ userId: "user-a", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async () => ({ task }),
+    readTaskDetail: async (_id, options) => { reads++; transportSignal = options?.signal; return pending; },
+  } });
+  const first = new AbortController(), second = new AbortController();
+  const firstOptions = { area: "target" as const, signal: first.signal };
+  const secondOptions = { area: "target" as const, signal: second.signal };
+  const one = planning.loadTaskDetail(task.id, firstOptions);
+  const two = planning.loadTaskDetail(task.id, secondOptions);
+  expect(reads).toBe(1);
+  first.abort();
+  expect(transportSignal?.aborted).toBe(false);
+  second.abort();
+  expect(transportSignal?.aborted).toBe(true);
+  resolve({ model: target, readAuthority: { userId: "user-a", deadline: Date.now() + 60_000 } });
+  expect(await one).toMatchObject({ ok: false });
+  expect(await two).toMatchObject({ ok: false });
+  expect(planning.taskDetail(task.id).task).toBeNull();
+});
