@@ -86,3 +86,49 @@ test.each(["epic", "initiative"] as const)("%s query reveals independently ready
     } finally { release(); await reader?.cancel().catch(() => undefined); }
   });
 }, 120_000);
+
+test.each(["epic", "initiative"] as const)("%s SQL pages traverse 47 matching Items per strategic status against complete TypeScript and fixed IDs", async level => {
+  await withPlanningCredentialDatabase(async ({ db, prefix, actors, local, request, observed }) => {
+    const key = `${prefix}-traversal-${level}`, statuses = ["Offen", "Pausiert", "Erledigt"] as const;
+    const parentId = level === "initiative" ? `${prefix}-epic` : "all";
+    for (const [statusIndex, status] of statuses.entries()) await db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,approval_status,status,priority,sort_order,owner)
+      select $1||'-'||$2::text||'-'||lpad(n::text,4,'0'),'findmydoc-founder-execution',$1,$3,$4,
+        case when $3='initiative' then 'approved' else null end,$5,'P2',0,$6 from generate_series(0,46) n`,
+    [key, statusIndex, level, level === "initiative" ? parentId : null, status, actors.founder.profileId]);
+    const { loadPlanningWorkspaceModel } = await importTestModule("src/features/planning-items/server/planning-workspace-read-source.ts", { "server-only": {} });
+    const { projectPlanningBoard } = await importTestModule("src/features/planning/server/planning-board-projection.ts", { "server-only": {} });
+    const client = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    const complete = await loadPlanningWorkspaceModel(client, { authorized: true, actorProfileId: actors.founder.profileId, query: { view: "complete" } });
+    if (complete.status !== "ready") throw new Error("Complete strategic traversal reference unavailable");
+    const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+    const before = observed.length;
+    for (const [statusIndex, status] of statuses.entries()) {
+      const expected = Array.from({ length: 47 }, (_, index) => `${key}-${statusIndex}-${String(index).padStart(4, "0")}`), actual: string[] = [];
+      const scope = { view: "board" as const, level, parentId, column: status, filters: { query: key }, limit: 1000 };
+      let continuation: string | undefined, referenceContinuation: string | undefined;
+      for (let offset = 0; offset < 47; offset += 20) {
+        const literal = expected.slice(offset, offset + 20);
+        const reference = projectPlanningBoard(complete.model, { authorized: true, actorProfileId: actors.founder.profileId, query: { ...scope, continuation: referenceContinuation } });
+        if (reference.status !== "ready") throw new Error("Complete strategic page reference unavailable");
+        expect(reference.model.board!.cardIds).toEqual(literal);
+        expect(reference.model.board!.metrics).toEqual({ total: 141, open: 94, done: 47, blocked: 0 });
+        referenceContinuation = reference.model.board!.columns[status].continuation || undefined;
+        const response = await GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ ...scope, continuation }))}`));
+        expect(response.status).toBe(200);
+        const { model } = await response.json();
+        expect(model.board.cardIds).toEqual(literal);
+        expect(model.board.cardIds).toEqual(reference.model.board!.cardIds);
+        expect(model.board.metrics).toEqual(reference.model.board!.metrics);
+        expect(model.board.columns[status]).toMatchObject({ total: 47, loaded: literal.length, completeness: offset + literal.length === 47 ? "complete" : "partial" });
+        expect(model.items.filter((item: { taskType: string }) => item.taskType === level)).toHaveLength(literal.length);
+        expect(model.coverage.items).toBe("partial");
+        actual.push(...model.board.cardIds);
+        continuation = model.board.columns[status].continuation || undefined;
+        expect(Boolean(continuation)).toBe(offset + literal.length < 47);
+      }
+      expect(actual).toEqual(expected);
+      expect(new Set(actual).size).toBe(47);
+    }
+    expect(observed.slice(before).some(entry => /\/(active_tasks|tasks)$/.test(entry.path))).toBe(false);
+  });
+}, 120_000);
