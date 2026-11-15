@@ -30,6 +30,7 @@ type Selection = {
   level_totals: { epic: number; initiative: number; deliverable: number };
   personal_children: Record<string, string[]>;
   workstreams: string[]; initiative_options: Array<{ id: string; title: string }>;
+  epic_options?: Array<{ id: string; title: string }>;
   workspace_revision: { activeTaskCount: number; latestUpdatedAt: string };
 };
 type Cursor = { offset: number; source: string; evaluatedAt: string; temporalKey: string; validUntil: string | null; authorityDeadline: number | null; binding: string };
@@ -203,6 +204,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
     || !(selected.valid_until === null || typeof selected.valid_until === "string" && Number.isFinite(Date.parse(selected.valid_until)))
     || !Array.isArray(selected.workstreams) || selected.workstreams.some(value => typeof value !== "string")
     || !Array.isArray(selected.initiative_options) || selected.initiative_options.some(value => !value || typeof value.id !== "string" || typeof value.title !== "string")
+    || query.level === "initiative" && (!Array.isArray(selected.epic_options) || selected.epic_options.some(value => !value || typeof value.id !== "string" || typeof value.title !== "string"))
     || !selected.columns || !selected.metrics) return { status: "unavailable" };
   if (cursor && (cursor.source !== selected.source_revision || cursor.temporalKey !== selected.temporal_key)) return { status: "staleContinuation" };
   if (preferenceRevision && preferenceRevision !== selected.source_revision) return { status: "unavailable" };
@@ -266,6 +268,7 @@ export async function loadPlanningDeliverableBoard(supabase: SupabaseClient, con
       cardIds: selected.card_ids, columns, metrics: selected.metrics, levelTotals: selected.level_totals,
       summaryRequests: selected.card_ids.length ? [{ ...request, status: summaries.status === "ready" ? "current" : "unavailable" }] : [],
       workstreams: selected.workstreams, initiativeOptions: selected.initiative_options,
+      epicOptions: query.level === "initiative" ? selected.epic_options : undefined,
       childProgressById: summaries.status === "ready" ? summaries.progress : Object.fromEntries(selected.card_ids.map(id => [id, null])),
       attentionById: summaries.status === "ready" ? summaries.attention : Object.fromEntries(selected.card_ids.map(id => [id, null])),
       viewerOpenSubIssueIdsByDeliverableId: selected.personal_children, workspaceRevision: selected.workspace_revision },
@@ -301,6 +304,7 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
       || !Array.isArray(plan.profiles) || !Array.isArray(plan.sprints) || !Array.isArray(plan.preferences)
       || !Array.isArray(plan.workstreams) || plan.workstreams.some(value => typeof value !== "string")
       || !Array.isArray(plan.initiative_options) || plan.initiative_options.some(value => !value || typeof value.id !== "string" || typeof value.title !== "string")
+      || query.level === "initiative" && (!Array.isArray(plan.epic_options) || plan.epic_options.some(value => !value || typeof value.id !== "string" || typeof value.title !== "string"))
       || statuses.some(status => !Number.isSafeInteger(plan.columns?.[status]?.total) || plan.columns[status].total < 0 || !Array.isArray(plan.columns[status].ids)
         || plan.columns[status].ids.some(id => typeof id !== "string") || new Set(plan.columns[status].ids).size !== plan.columns[status].ids.length
         || plan.columns[status].ids.length !== (visibleStatuses.includes(status) ? Math.min(limit, plan.columns[status].total) : 0))
@@ -338,7 +342,8 @@ export async function startPlanningDeliverableQuery(supabase: SupabaseClient, co
       board: { query, queryKey: planningBoardQueryKey(query), revision, observedAt: plan.evaluated_at, validUntil: plan.valid_until, delivery: { id, columns: pending },
         summaryRequests: summaryIds.length ? [request] : [],
         cardIds: [], columns, metrics: plan.metrics, levelTotals: plan.level_totals,
-        workstreams: plan.workstreams, initiativeOptions: plan.initiative_options, childProgressById: {}, attentionById: {}, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: plan.workspace_revision },
+        workstreams: plan.workstreams, initiativeOptions: plan.initiative_options, epicOptions: query.level === "initiative" ? plan.epic_options : undefined,
+        childProgressById: {}, attentionById: {}, viewerOpenSubIssueIdsByDeliverableId: {}, workspaceRevision: plan.workspace_revision },
     } satisfies import("../model/planning-workspace-model").PlanningWorkspaceModel;
     let terminal: PlanningBoardFailureFrame | undefined;
     function failure(column: TaskStatus | undefined, status: 403 | 409 | 503, area?: "summaries"): PlanningBoardFailureFrame {

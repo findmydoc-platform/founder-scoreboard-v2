@@ -31,6 +31,7 @@ export type PlanningBoardResult = Readonly<{
   cardIds: readonly string[];
   workstreams?: readonly string[];
   initiativeOptions?: readonly Pick<import("@/lib/types").Task, "id" | "title">[];
+  epicOptions?: readonly Pick<import("@/lib/types").Task, "id" | "title">[];
   levelTotals?: Record<PlanningLevel, number>;
   attentionById?: Record<string, import("@/features/tasks/model/task-attention-signals").TaskAttentionSignal[] | null>;
   childProgressById: Record<string, { completed: number; total: number; unfinished: number; percentage: number } | null>;

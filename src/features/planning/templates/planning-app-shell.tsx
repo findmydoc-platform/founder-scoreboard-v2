@@ -172,6 +172,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
             levelTotals={controller.planningBoard?.result?.levelTotals}
             profiles={data.profiles}
             initiatives={controller.view === "board" && controller.planningBoard?.result?.initiativeOptions || initiativePlanningItems(data.tasks)}
+            epics={controller.view === "board" ? controller.planningBoard?.result?.epicOptions : undefined}
             sprints={data.sprints}
             tasks={data.tasks}
             workstreams={controller.view === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
