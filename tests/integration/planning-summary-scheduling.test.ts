@@ -32,7 +32,7 @@ test("a selected JSON page resolves avatar identity while its complete summary r
     const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
     const scope = { view: "board", column: "Offen", filters: { query: parent } };
     const pending = GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`))
-      .then(response => { published = true; return response; });
+      .then((response: Response) => { published = true; return response; });
     try {
       await held;
       expect(published).toBe(false);
