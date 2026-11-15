@@ -13,7 +13,7 @@ const target: TaskDetailModel = {
 
 test("target readiness neither completes unrequested children nor invents discussion or timeline coverage", async () => {
   const { planning } = createPlanningState({ userId: "user-a", initialData: emptyPlanningShellState,
-    adapter: { saveTask: async () => ({ task }), readTaskDetail: async () => ({ model: target }) },
+    adapter: { saveTask: async () => ({ task }), readTaskDetail: async () => ({ model: target, readAuthority: { userId: "user-a", deadline: Date.now() + 60_000 } }) },
   });
   const result = await Reflect.apply(planning.loadTaskDetail, planning, [task.id, { area: "target" }]);
   expect(result.ok).toBe(true);

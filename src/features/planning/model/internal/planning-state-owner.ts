@@ -93,7 +93,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   readTableRisks?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: import("../planning-table-result").PlanningTableRiskFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;
-  readTaskDetail?: (taskId: string) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[] }>;
+  readTaskDetail?: (taskId: string, options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; signal?: AbortSignal }) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[]; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority }>;
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
@@ -322,6 +322,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
 
   const detailStatuses = new Map<string, PlanningReadStatus>(initialData.tasks.filter(task=>task.detailAvailability === "stale").map(task=>[task.id,"stale"]));
   const childLists = new Map<string, { ids: Set<string>; started: number; readStatus: PlanningReadStatus }>();
+  const detailAreaStatuses = new Map<string, PlanningReadStatus>();
   const detailReads = new Map<string, ReturnType<PlanningState["loadTaskDetail"]>>();
   const tails = new Map<string, { context: symbol; result: Promise<TaskUpdateResult> }>();
   const pending = new Map<symbol, { taskId: string; patch: Partial<Task>; submitted: Partial<Task>; phase: PlanningTaskSaveView["phase"] }>();
@@ -1050,6 +1051,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       removed: lifecycle.isRemoved({ id: taskId } as Task),
       children: deniedTaskReads.has(taskId) || childList?.readStatus === "forbidden" ? [] : visible.tasks.filter(task => task.parentTaskId === taskId && (childList?.ids.has(task.id) || (childList && (taskConfirmedAt.get(task.id) || 0) > childList.started))),
       childrenReadStatus: childList?.readStatus || "not-loaded",
+      areaReadStatus: { discussion: detailAreaStatuses.get(taskId+":discussion") || "not-loaded", timeline: detailAreaStatuses.get(taskId+":timeline") || "not-loaded" },
       task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
       saveStatus: githubSync.blocksTask(taskId) ? githubSync.view(taskId)?.phase === "syncing" ? "saving" : "unconfirmed" : taskReviews.blocksTask(taskId) ? taskReviews.blockingOperation(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : relationshipChanges.blocksTask(taskId) ? relationshipChanges.pendingViews(taskId).some(view => view.phase === "saving") ? "saving" : "unconfirmed" : attachmentUploads.blocksTask(taskId) ? attachmentUploads.views(taskId).some(view => view.phase === "uploading") ? "saving" : "unconfirmed" : githubImports.blocksTask(taskId) ? githubImports.view(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : blockerReports.saveStatus(taskId) || backlogOrdering.saveStatus(taskId) || backlogAssignments.saveStatus(taskId) || status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
       comments: deniedTaskReads.has(taskId) ? [] : visible.taskComments.filter(item => item.taskId === taskId),
@@ -1118,27 +1120,37 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     taskEdits: taskId => { isActive(); return editing.views(taskId); },
     beginTaskEdit: taskId => editing.begin(taskId),
     saveTask: (task, patch) => saveTaskWithContext(task, patch, Symbol(task.id)),
-    loadTaskDetail(taskId) {
+    loadTaskDetail(taskId, options) {
       if (!isActive() || !adapter.readTaskDetail) return Promise.resolve({ ok: false });
-      const existing = detailReads.get(taskId);
+      const area = options?.area;
+      const key = area ? taskId+":"+area : taskId;
+      const includesDiscussion = !area || area === "discussion";
+      const includesTimeline = !area || area === "timeline";
+      const includesRelationships = !area;
+      const includesChildren = !area;
+      const existing = detailReads.get(key);
       if (existing) return existing;
       const readTaskDetail = adapter.readTaskDetail;
-      detailStatuses.set(taskId, "loading");
-      childLists.set(taskId, { ids: childLists.get(taskId)?.ids || new Set(visible.tasks.filter(task => task.parentTaskId === taskId).map(task => task.id)), started: childLists.get(taskId)?.started || 0, readStatus: "loading" });
-      commentCreations.beginRead(taskId);
+      if (!area || area === "target") detailStatuses.set(taskId, "loading");
+      if (area && area !== "target") detailAreaStatuses.set(key, "loading");
+      if (includesChildren) childLists.set(taskId, { ids: childLists.get(taskId)?.ids || new Set(visible.tasks.filter(task => task.parentTaskId === taskId).map(task => task.id)), started: childLists.get(taskId)?.started || 0, readStatus: "loading" });
+      if (includesDiscussion) commentCreations.beginRead(taskId);
       publish();
       const loaded = (async () => {
         const generation = sessionGeneration;
         const started = ++sequence;
         let result: Awaited<ReturnType<typeof readTaskDetail>>;
         try {
-          result = await readTaskDetail(taskId);
+          result = await readTaskDetail(taskId, options);
+          if (area && (result.model.readArea !== area || !result.readAuthority || result.readAuthority.userId !== userId
+            || !Number.isFinite(result.readAuthority.deadline) || result.readAuthority.deadline <= (adapter.now?.() ?? Date.now()))) {
+            throw Object.assign(new Error("Die ursprüngliche Detailberechtigung ist nicht mehr gültig."), { status: 403 });
+          }
           if (result.model.item.id !== taskId) throw new Error("Die Detailantwort gehört zu einer anderen Aufgabe.");
         } catch (error) {
           if (!isActive() || generation !== sessionGeneration) return { ok: false };
           const failedStatus = readErrorStatus(error);
-          commentCreations.failed(taskId, failedStatus);
-          githubImports.failed(taskId, failedStatus);
+          if (includesDiscussion) { commentCreations.failed(taskId, failedStatus); githubImports.failed(taskId, failedStatus); }
           if (failedStatus === "forbidden") {
             deniedTaskReads.add(taskId);
             const deniedAt = ++sequence;
@@ -1148,8 +1160,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
             if (workspaceStatuses.get("planning") !== "forbidden") workspaceStatuses.set("planning", "stale");
             taskReviews.deny(taskId); githubSync.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId);
           }
-          detailStatuses.set(taskId, failedStatus);
-          childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: failedStatus });
+          if (!area || area === "target" || failedStatus === "forbidden") detailStatuses.set(taskId, failedStatus);
+          if (area && area !== "target") detailAreaStatuses.set(key, failedStatus);
+          if (includesChildren) childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: failedStatus });
           publish();
           return { ok: false, error: error instanceof Error ? error.message : "Aufgabendetails konnten nicht geladen werden." };
         }
@@ -1165,11 +1178,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         const profileRead = profileSettings.acceptRead(detailProjection, { profiles: "partial" }, started, "planning", { ...detailProjection, profiles: [...result.model.people] }, ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"]);
         const sprintRead = sprintState.acceptRead(profileRead.data, { sprints: "partial" }, started, { ...detailProjection, sprints: [...result.model.sprints] });
         const next = sprintRead.data;
-        if (!result.unavailable?.includes("relationships")) lifecycle.acceptRelationshipRead(next, started, result.model.coverage?.relationships === "complete", taskId);
+        if (includesRelationships && !result.unavailable?.includes("relationships")) lifecycle.acceptRelationshipRead(next, started, result.model.coverage?.relationships === "complete", taskId);
         deniedTaskReads.delete(taskId);
         acceptProfileScope(`task:${taskId}`, result.model.people);
-        detailUnavailable.set(taskId, result.unavailable || []);
-        detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
+        detailUnavailable.set(taskId, area ? [...(detailUnavailable.get(taskId) || []).filter(value => value !== area), ...(result.unavailable || [])] : result.unavailable || []);
+        if (!area || area === "target") detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
+        for (const scope of ["discussion", "timeline"] as const) if (!area || area === scope) detailAreaStatuses.set(taskId+":"+scope, result.unavailable?.includes(scope) ? "unavailable" : "current");
         const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started || (taskDeniedAt.get(task.id) || 0) > started).map(task => task.id));
         const unresolvedIds = new Set(next.tasks.filter(task => !confirmed.tasks.some(current => current.id === task.id) && Math.max(taskConfirmedAt.get(task.id) || 0, taskDeniedAt.get(task.id) || 0) > started).map(task => task.id));
         confirmed = {
@@ -1177,19 +1191,21 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           tasks: next.tasks.filter(task => !unresolvedIds.has(task.id)).map(task => protectedIds.has(task.id) ? confirmed.tasks.find(item => item.id === task.id)! : task),
           ...((taskConfirmedAt.get(taskId) || 0) > started ? { taskActivity: confirmed.taskActivity, taskReviews: confirmed.taskReviews } : {}),
         };
-        if (result.unavailable?.includes("discussion")) commentCreations.failed(taskId, "unavailable");
-        else commentCreations.acceptRead(result.model.discussion.comments, started, result.model.coverage?.discussion === "complete", taskId);
-        commentCreations.restore();
-        if (result.unavailable?.includes("discussion")) githubImports.failed(taskId, "unavailable");
-        else githubImports.acceptRead(result.model.discussion.externalComments, started, result.model.coverage?.discussion === "complete", taskId);
-        if (!result.unavailable?.includes("timeline")) attachmentUploads.acceptRead(result.model.activity, started, result.model.coverage?.timeline === "complete", taskId);
-        if (!result.unavailable?.includes("relationships")) relationshipChanges.acceptRead(result.model.relationships, started, result.model.coverage?.relationships === "complete", taskId);
+        if (includesDiscussion) {
+          if (result.unavailable?.includes("discussion")) commentCreations.failed(taskId, "unavailable");
+          else commentCreations.acceptRead(result.model.discussion.comments, started, result.model.coverage?.discussion === "complete", taskId);
+          commentCreations.restore();
+          if (result.unavailable?.includes("discussion")) githubImports.failed(taskId, "unavailable");
+          else githubImports.acceptRead(result.model.discussion.externalComments, started, result.model.coverage?.discussion === "complete", taskId);
+        }
+        if (includesTimeline && !result.unavailable?.includes("timeline")) attachmentUploads.acceptRead(result.model.activity, started, result.model.coverage?.timeline === "complete", taskId);
+        if (includesRelationships && !result.unavailable?.includes("relationships")) relationshipChanges.acceptRead(result.model.relationships, started, result.model.coverage?.relationships === "complete", taskId);
         relationshipChanges.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         attachmentUploads.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         githubSync.acceptTaskRead(taskId,started,!protectedIds.has(taskId)&&!unresolvedIds.has(taskId),result.model.item.updatedAt);
         githubImports.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
-        blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
-        childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current" });
+        if (includesRelationships) blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
+        if (includesChildren) childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current" });
         for (const task of returnedTasks) if (!lifecycle.isRemoved(task) && (taskDeniedAt.get(task.id) || 0) <= started) deniedTaskReads.delete(task.id);
         for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) acceptTaskFieldCoverage(task);
         for (const task of returnedTasks) {
@@ -1198,13 +1214,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (profileRead.stale || sprintRead.stale || unresolvedIds.size || returnedTasks.some(task => protectedIds.has(task.id))) {
           freshness = "stale";
           if (!result.unavailable?.length) detailStatuses.set(taskId, "stale");
-          childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: "stale" });
+          if (includesChildren) childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: "stale" });
         }
         publish();
         return { ok: true, unavailable: result.unavailable };
       })();
-      detailReads.set(taskId, loaded);
-      void loaded.finally(() => { if (detailReads.get(taskId) === loaded) detailReads.delete(taskId); }).catch(() => undefined);
+      detailReads.set(key, loaded);
+      void loaded.finally(() => { if (detailReads.get(key) === loaded) detailReads.delete(key); }).catch(() => undefined);
       return loaded;
     },
     prepareWorkspaceHydration(workspace) {
