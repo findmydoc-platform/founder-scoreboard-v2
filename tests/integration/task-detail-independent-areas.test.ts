@@ -29,3 +29,24 @@ test("canonical target and root-first ancestors are usable before requested disc
     expect(taskDetail.coverage).not.toHaveProperty("timeline");
   } finally { release(); await initial; }
 }));
+
+test("a contributing source change during target hydration cannot publish the earlier detail", () => withPlanningCredentialDatabase(async f => {
+  const transport = globalThis.fetch;
+  let release!: () => void, entered!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const held = new Promise<void>(resolve => { entered = resolve; });
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const next = new Request(input, init);
+    if (new URL(next.url).pathname.endsWith("/task_links")) { entered(); await gate; }
+    return transport(next);
+  });
+  const { GET } = await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts", { "server-only": {} });
+  const pending: Promise<Response> = GET(f.request("founder", `/api/tasks/${f.initiativeId}/detail-data?area=target`), { params: Promise.resolve({ id: f.initiativeId }) });
+  await held;
+  try {
+    await f.db.query("update public.tasks set description='Concurrent canonical content' where id=$1", [f.initiativeId]);
+  } finally { release(); }
+  const response = await pending;
+  expect(response.status).toBe(409);
+  expect(await response.json()).not.toHaveProperty("taskDetail");
+}));
