@@ -139,6 +139,15 @@ beforeAll(async () => {
     if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot") { send({ eligible: activeAdministrator, active: activeAdministrator, expiresAt: activeAdministrator ? new Date(Date.now() + 60000).toISOString() : null }); return; }
     if (url.pathname === "/rest/v1/rpc/planning_source_version") { send("synthetic-planning-revision"); return; }
     if (url.pathname === "/rest/v1/rpc/planning_board_publication_context") { send(mapped ? { profile_id: "synthetic-profile", platform_role: role, source_revision: "synthetic-planning-revision" } : null); return; }
+    if (["planning_detail_source", "planning_detail_publication_context"].some(name => url.pathname === `/rest/v1/rpc/${name}`)) {
+      const chunks = []; for await (const chunk of request) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      if (!itemPageFixture || body.p_item_id !== itemPageTaskId || !["target", "discussion", "timeline"].includes(body.p_area)) {
+        send({ message: "Unscripted synthetic detail scope" }, 400); return;
+      }
+      const basis = { source_revision: `synthetic-detail:${body.p_item_id}:${body.p_area}`, observed_at: new Date().toISOString(), valid_until: null };
+      send(url.pathname.endsWith("planning_detail_source") ? basis : mapped ? { ...basis, profile_id: "synthetic-profile", platform_role: role } : null); return;
+    }
     if (["planning_deliverable_selection", "planning_deliverable_query_plan", "planning_deliverable_column"].some(name => url.pathname === `/rest/v1/rpc/${name}`)) {
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
