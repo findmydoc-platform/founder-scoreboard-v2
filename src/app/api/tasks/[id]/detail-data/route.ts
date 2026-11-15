@@ -18,6 +18,7 @@ async function handleGET(request: NextRequest, context: { params: Promise<{ id: 
   const model = result.model;
   return observeRuntimePreparation(() => NextResponse.json({
     taskDetail: model,
+    ...(area && area !== "complete" ? { readAuthority: apiContext.permission.readAuthority } : {}),
     unavailable: result.status === "degraded" ? result.unavailable : [],
   }));
 }

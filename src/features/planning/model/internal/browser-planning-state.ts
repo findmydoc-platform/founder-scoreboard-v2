@@ -39,6 +39,7 @@ import type { AppWorkspace } from "../workspace-routes";
 export type PlanningPageState = {
   initialServerHeaderRead?: import("../planning-server-header-read").PlanningServerHeaderRead;
   initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
+  initialTaskDetailRead?: import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration;
   initialData: PlanningShellState;
   initialHeaderData: PlanningHeaderData;
   initialCurrentProfile: AuthenticatedProfile | null;
@@ -49,7 +50,7 @@ export type PlanningPageState = {
 };
 
 export function createBrowserPlanningState(options: PlanningPageState, isCurrent: () => boolean = () => true) {
-  const runtime = { apiClient: createBrowserApiClient() as BrowserApiClient, workspace: options.initialWorkspace, userId: options.initialUserId, session: (options.initialWorkspaceRead?.session || null) as BrowserSessionSnapshot | null, currentProfile: options.initialCurrentProfile };
+  const runtime = { apiClient: createBrowserApiClient() as BrowserApiClient, workspace: options.initialWorkspace, userId: options.initialUserId, session: (options.initialWorkspaceRead?.session || options.initialTaskDetailRead?.session || null) as BrowserSessionSnapshot | null, currentProfile: options.initialCurrentProfile };
   async function currentOperationSession() {
     const session = runtime.session || await createBrowserSessionAdapter().current();
     if (!session || session.expiresAt * 1000 <= Date.now()) throw Object.assign(new Error("Für diese Aktion ist eine aktive Sitzung erforderlich."), { status: 401 });
@@ -107,7 +108,8 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
   const owner = createPlanningState({
     initialWorkspaceRead: options.initialWorkspaceRead,
     initialServerHeaderRead: options.initialServerHeaderRead,
-    initialSession: options.initialWorkspaceRead?.session,
+    initialSession: options.initialWorkspaceRead?.session || options.initialTaskDetailRead?.session,
+    initialTaskDetailRead: options.initialTaskDetailRead,
     userId: options.initialUserId,
     initialData: options.initialData,
     initialWorkspace: options.initialWorkspace,
@@ -454,10 +456,11 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!response.ok||!body?.commitment)throw Object.assign(new Error(body?.error||"Commitment konnte nicht gespeichert werden."),{status:response.status,code:body?.code});
         return {commitment:body.commitment,auditError:body.auditError};
       },
-      async readTaskDetail(taskId) {
-        const { response, body } = await taskApi.requestTaskDetailData(ownedApiClient, taskId);
+      async readTaskDetail(taskId, options) {
+        const { response, body } = await taskApi.requestTaskDetailData(ownedApiClient, taskId, options);
         if (!response.ok || !body?.taskDetail) throw Object.assign(new Error(body?.error || "Aufgabendetails konnten nicht geladen werden."), { status: response.status });
-        return { model: body.taskDetail, unavailable: body.unavailable };
+        if (options?.area) requireReadAuthority(body.readAuthority);
+        return { model: body.taskDetail, unavailable: body.unavailable, readAuthority: body.readAuthority };
       },
       async readPlanningSourceVersion(options) {
         const { response, body } = await ownedApiClient.requestJson<{ version?: string; error?: string }>("/api/planning-source-version", options);

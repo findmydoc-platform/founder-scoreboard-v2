@@ -80,12 +80,13 @@ export function restoreTaskRequest(apiClient: BrowserApiClient, taskId: string, 
   });
 }
 
-export function requestTaskDetailData(apiClient: BrowserApiClient, taskId: string) {
+export function requestTaskDetailData(apiClient: BrowserApiClient, taskId: string, options?: { area?: import("./task-detail-read-model").TaskDetailReadArea; signal?: AbortSignal }) {
   return apiClient.requestJson<{
     error?: string;
     taskDetail?: TaskDetailModel;
+    readAuthority?: import("@/features/planning/model/planning-server-header-read").PlanningReadAuthority;
     unavailable?: TaskDetailUnavailableArea[];
-  }>(`/api/tasks/${taskId}/detail-data`);
+  }>(`/api/tasks/${taskId}/detail-data${options?.area ? "?area="+options.area : ""}`, { signal: options?.signal });
 }
 
 export function createTaskRequest(apiClient: BrowserApiClient, draft: unknown) {

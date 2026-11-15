@@ -26,7 +26,8 @@ export function usePlanningStateOwner(options: PlanningPageState) {
     if (hydratedBundle.current === bundle) return;
     hydratedBundle.current = bundle;
     if (bundle.initialPage !== initialPage) {
-      bundle.acceptProtectedData(initialPage.initialData, initialPage.initialUserId, initialPage.initialWorkspace, initialPage.initialWorkspaceRead);
+      if (initialPage.initialTaskDetailRead) bundle.owner.internal.acceptTaskDetailHydration(initialPage.initialTaskDetailRead);
+      else bundle.acceptProtectedData(initialPage.initialData, initialPage.initialUserId, initialPage.initialWorkspace, initialPage.initialWorkspaceRead);
       bundle.acceptHeaderHydration(initialPage.initialHeaderData);
       bundle.owner.internal.acceptDecisionLogHydration(initialPage.initialDecisionLogResult);
     }

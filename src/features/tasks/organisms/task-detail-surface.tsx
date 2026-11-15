@@ -1,5 +1,6 @@
 "use client";
 
+import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
 import type { PlanningTaskEditor, PlanningTaskSaveView, PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
 import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
 
@@ -204,6 +205,16 @@ function HydratedTaskDetailSurface({
     if (requestedCommentTarget.startsWith("field:") || requestedCommentTarget.startsWith("blocker:")) return "overview";
     return requestedCommentTarget ? "activity" : "overview";
   });
+  const detailOwner = usePlanningBusinessState();
+  const scopedDetail = detailOwner?.taskDetail(task.id).scopedRead === true;
+  useEffect(() => {
+    if (!detailOwner || !scopedDetail || activeTab !== "activity") return;
+    const controller = new AbortController();
+    for (const area of ["discussion", "timeline"] as const) {
+      if (detailOwner.taskDetail(task.id).areaReadStatus?.[area] !== "current") void detailOwner.loadTaskDetail(task.id, { area, signal: controller.signal });
+    }
+    return () => controller.abort();
+  }, [detailOwner, scopedDetail, task.id, activeTab]);
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
   const [reviewEvidenceTask,setReviewEvidenceTask]=useState<Task|null>(null);
   const [reviewEvidenceGateIntent, setReviewEvidenceGateIntent] = useState<"request" | "reopen" | null>(null);

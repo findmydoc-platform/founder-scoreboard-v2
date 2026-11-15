@@ -35,6 +35,7 @@ import type { AuthenticatedProfile, PlanningHeaderData } from "@/lib/types";
 type Props = {
   taskId: string;
   initialModel: TaskDetailModel;
+  initialTaskDetailRead?: Omit<import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration, "model">;
   headerData: PlanningHeaderData;
   source: "supabase";
   authRequired?: boolean;
@@ -50,6 +51,7 @@ type Props = {
 export function TaskDetailPage({
   taskId,
   initialModel,
+  initialTaskDetailRead,
   headerData,
   source,
   authRequired = false,
@@ -69,7 +71,9 @@ export function TaskDetailPage({
     initialAccess: initialAdministratorAccess,
     platformRole: initialCurrentProfile?.platformRole || null,
   });
+  const detailHydration = useMemo(() => initialTaskDetailRead ? { ...initialTaskDetailRead, model: initialModel } : undefined, [initialTaskDetailRead, initialModel]);
   const controller = usePlanningAppController({
+    initialTaskDetailRead: detailHydration,
     initialData,
     initialHeaderData: headerData,
     initialWorkspace: "planning",
@@ -83,6 +87,8 @@ export function TaskDetailPage({
   const task = controller.data.tasks.find((item) => item.id === taskId) || null;
   const [, startDetailTransition] = useTransition();
   const detailLoader = useTaskDetailDataLoader({
+    scoped: Boolean(detailHydration),
+    initiallyCurrent: Boolean(detailHydration && controller.planningState.taskDetail(taskId).readStatus === "current"),
     planningState: controller.planningState,
     selectedTask: task,
     taskId: controller.authUser && controller.protectedDataLoaded ? taskId : undefined,

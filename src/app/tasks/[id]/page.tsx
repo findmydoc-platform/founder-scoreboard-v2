@@ -42,7 +42,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
 
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.task.read", targetId: id });
   if (!permission.ok) return <WorkspaceDataUnavailablePage workspace="planning" />;
-  const [taskDetailResult, header] = await Promise.all([permission.planning.loadDetail(), permission.planning.loadHeader()]);
+  const [taskDetailResult, header] = await Promise.all([permission.planning.loadDetail({ area: "target" }), permission.planning.loadHeader()]);
   if (!header.ok) return <WorkspaceDataUnavailablePage workspace="planning" />;
   const headerData = header.headerData;
   if (taskDetailResult.status === "unavailable" || taskDetailResult.status === "forbidden" || taskDetailResult.status === "staleContinuation") {
@@ -68,6 +68,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
     <TaskDetailPage
       taskId={taskDetailResult.model.item.id}
       initialModel={taskDetailResult.model}
+      initialTaskDetailRead={permission.readAuthority && permission.readSession ? { readAuthority: permission.readAuthority, session: permission.readSession } : undefined}
       headerData={headerData}
       source="supabase"
       authRequired={authRequired}

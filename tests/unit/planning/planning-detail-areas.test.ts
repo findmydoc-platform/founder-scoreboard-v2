@@ -6,7 +6,7 @@ import type { Task } from "@/lib/types";
 
 const task = { id: "canonical-detail", title: "Complete canonical target", updatedAt: "target-version", taskType: "deliverable" } as Task;
 const target: TaskDetailModel = {
-  revision: "target-version", sourceRevision: "target-source", readArea: "target", observedAt: "2026-11-15T12:00:00Z", validUntil: null,
+  revision: "target-version", sourceRevision: "target-source", readArea: "target", observedAt: "2026-11-15T12:00:00Z", validUntil: null, authorityDeadline: Date.now() + 60_000,
   project: emptyPlanningShellState.project, item: task, ancestors: [], children: [], relatedItems: [], people: [], sprints: [],
   coverage: {}, discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
 };

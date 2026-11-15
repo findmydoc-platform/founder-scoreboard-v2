@@ -51,6 +51,12 @@ export type TaskDetailModel = Readonly<{
   reviews: readonly TaskReview[];
 }>;
 
+export type TaskDetailHydration = Readonly<{
+  model: TaskDetailModel;
+  readAuthority: import("@/features/planning/model/planning-server-header-read").PlanningReadAuthority;
+  session: import("@/lib/credentials/session-types").ServerSessionView;
+}>;
+
 export type TaskDetailReadContext = Readonly<{
   authorized: boolean;
   actorProfileId: string | null;
