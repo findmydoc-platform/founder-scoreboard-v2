@@ -44,10 +44,11 @@ export async function mockItemPageBrowser({ administrator = false, headerData = 
       const model: TaskDetailModel = body.taskDetail;
       if (model.readArea !== undefined || model.sourceRevision !== undefined || model.authorityDeadline !== undefined || body.readAuthority !== undefined) return response;
       const unavailable = (body.unavailable || []) as import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[];
+      const actor = model.people.find(profile => profile.id === itemPageProfile.id) || itemPageProfile;
       const coverage = area !== "target" && !unavailable.includes(area) ? { [area]: model.coverage?.[area] || "complete" } : {};
       return Response.json({ ...body, readAuthority: { userId: itemPageUser.id, deadline }, taskDetail: {
         ...model, readArea: area, sourceRevision: `fixture-detail:${model.item.id}:${model.revision}:${area}`, observedAt, validUntil: null,
-        authorityDeadline: deadline, readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole }, coverage,
+        authorityDeadline: deadline, readActor: { profileId: actor.id, platformRole: actor.platformRole }, coverage,
         children: [], relatedItems: [], blockers: [], relationships: [],
         discussion: area === "discussion" ? model.discussion : { comments: [], externalComments: [] },
         activity: area === "timeline" ? model.activity : [], reviews: area === "timeline" ? model.reviews : [],
