@@ -15,8 +15,9 @@ async function handleGET(request: NextRequest, context: { params: Promise<{ id: 
   if (result.status === "notFound") return apiError("Aufgabe wurde nicht gefunden.", 404);
   if (result.status === "unavailable") return apiError("Task-Details konnten nicht geladen werden.", 503);
 
+  const model = result.model;
   return observeRuntimePreparation(() => NextResponse.json({
-    taskDetail: result.model,
+    taskDetail: model,
     unavailable: result.status === "degraded" ? result.unavailable : [],
   }));
 }
