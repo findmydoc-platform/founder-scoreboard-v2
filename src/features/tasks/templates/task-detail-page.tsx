@@ -37,6 +37,8 @@ type Props = {
   initialModel: TaskDetailModel;
   initialTaskDetailRead?: Omit<import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration, "model">;
   headerData: PlanningHeaderData;
+  initialServerHeaderRead?: import("@/features/planning/model/planning-server-header-read").PlanningServerHeaderRead;
+  children?: import("react").ReactNode;
   source: "supabase";
   authRequired?: boolean;
   initialAuthUser?: User | null;
@@ -53,6 +55,8 @@ export function TaskDetailPage({
   initialModel,
   initialTaskDetailRead,
   headerData,
+  initialServerHeaderRead,
+  children,
   source,
   authRequired = false,
   initialAuthUser = null,
@@ -73,6 +77,7 @@ export function TaskDetailPage({
   });
   const detailHydration = useMemo(() => initialTaskDetailRead ? { ...initialTaskDetailRead, model: initialModel } : undefined, [initialTaskDetailRead, initialModel]);
   const controller = usePlanningAppController({
+    initialServerHeaderRead,
     initialTaskDetailRead: detailHydration,
     initialData,
     initialHeaderData: headerData,
@@ -130,7 +135,7 @@ export function TaskDetailPage({
   };
 
   return (
-    <PlanningBusinessStateContext.Provider value={controller.planningState}><main className="app-sidebar-main min-h-screen bg-white text-slate-950">
+    <PlanningBusinessStateContext.Provider value={controller.planningState}>{children}<main className="app-sidebar-main min-h-screen bg-white text-slate-950">
       <AppSidebar
         activeWorkspace="planning"
         source={source}

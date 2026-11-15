@@ -17,6 +17,14 @@ function configuration(strict: boolean) {
   return url && key ? { url, key } : null;
 }
 
+export function planningServiceEnvironmentGuard(strict: boolean) {
+  const captured = configuration(strict);
+  return () => {
+    const active = configuration(strict);
+    return Boolean(captured && active && captured.url === active.url && captured.key === active.key);
+  };
+}
+
 export function planningService(strict: boolean, beforeDispatch?: () => Promise<Denial | null>, assertCurrent?: () => void, operationSignal?: AbortSignal) {
   const captured = configuration(strict);
   if (!captured) return null;
