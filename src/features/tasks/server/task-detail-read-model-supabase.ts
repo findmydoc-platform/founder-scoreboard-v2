@@ -138,7 +138,7 @@ function byIds(tasks: readonly Task[]) {
 
 export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): TaskDetailReadModel {
   return {
-    async load({ itemId }, context): Promise<TaskDetailLoadResult> {
+    async load({ itemId, area = "complete" }, context): Promise<TaskDetailLoadResult> {
       if (!context.authorized) return { status: "forbidden" };
       const normalizedItemId = itemId.trim();
       if (!normalizedItemId) return { status: "notFound", people: [] };
@@ -156,6 +156,25 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
       if (!targetResult.data) return { status: "notFound", people };
 
       const target = targetResult.data;
+      if (area === "target") {
+        const ancestors = await loadAncestors(supabase, target.parent_task_id);
+        if (ancestors.error) return { status: "unavailable" };
+        const rows = uniqueRows([target, ...ancestors.rows]);
+        const supporting = await loadSupportingRows(supabase, rows.map(row => row.id));
+        if (supporting.error) return { status: "unavailable" };
+        const tasks = byIds(mapTasks(rows, people, supporting));
+        const item = tasks.get(normalizedItemId);
+        if (!item) return { status: "unavailable" };
+        return { status: "ready", model: {
+          revision: item.updatedAt || target.updated_at, coverage: {},
+          project: project(projectResult.data), item,
+          ancestors: ancestors.rows.flatMap(row => tasks.get(row.id) || []),
+          children: [], relatedItems: [], people,
+          sprints: ((sprintResult.data || []) as DbSprint[]).map(mapSprint),
+          discussion: { comments: [], externalComments: [] },
+          blockers: [], relationships: [], activity: [], reviews: [],
+        } };
+      }
       const [ancestorsResult, childrenResult, outgoingResult, incomingResult] = await Promise.all([
         loadAncestors(supabase, target.parent_task_id),
         target.task_type === "sub_issue"

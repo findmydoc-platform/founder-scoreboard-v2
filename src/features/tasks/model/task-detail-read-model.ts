@@ -57,6 +57,6 @@ export type TaskDetailLoadResult =
   | { status: "unavailable" };
 
 export interface TaskDetailReadModel {
-  load(input: { itemId: string }, context: TaskDetailReadContext): Promise<TaskDetailLoadResult>;
+  load(input: { itemId: string; area?: "target" | "complete" }, context: TaskDetailReadContext): Promise<TaskDetailLoadResult>;
 }
 

@@ -325,9 +325,9 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.sprint.read" || await current()) return { status: "forbidden" as const };
       return createSupabaseSprintReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
     },
-    async loadDetail() {
+    async loadDetail(options?: { area?: "target" | "complete" }) {
       if (action !== "planning.task.read" || !targetId || await current()) return { status: "forbidden" as const };
-      const result = await createSupabaseTaskDetailReadModel(service).load({ itemId: targetId }, { authorized: true, actorProfileId: profile?.id || null });
+      const result = await createSupabaseTaskDetailReadModel(service).load({ itemId: targetId, area: options?.area }, { authorized: true, actorProfileId: profile?.id || null });
       if (result.status === "notFound") detailPeople = structuredClone([...result.people]);
       return result;
     },

@@ -7,7 +7,9 @@ async function handleGET(request: NextRequest, context: { params: Promise<{ id: 
   const { id } = await context.params;
   const apiContext = await requirePlanningContext(request, "planning.task.read", id);
   if (!apiContext.ok) return apiContext.response;
-  const result = await apiContext.planning.loadDetail();
+  const area = request.nextUrl.searchParams.get("area");
+  if (area !== null && area !== "target" && area !== "complete") return apiError("Ungültiger Detailbereich.", 400);
+  const result = await apiContext.planning.loadDetail({ area: area || "complete" });
   if (result.status === "forbidden") return apiError("Aufgabe darf nicht geladen werden.", 403);
   if (result.status === "notFound") return apiError("Aufgabe wurde nicht gefunden.", 404);
   if (result.status === "unavailable") return apiError("Task-Details konnten nicht geladen werden.", 503);
