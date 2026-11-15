@@ -34,7 +34,7 @@ test("table rows precede their independent complete directed risk summary", asyn
     });
     const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
     const before = observed.length;
-    const initial = GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ view: "table", filters: { query: key } }))}`));
+    const initial: Promise<Response> = GET(request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ view: "table", filters: { query: key } }))}`));
     try {
       const first = await Promise.race([initial.then(response => ({ kind: "rows" as const, response })), held.then(() => ({ kind: "aggregate" as const }))]);
       expect(first.kind).toBe("rows");
