@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { PlanningReadStatus } from "@/features/planning/model/planning-state";
+import type { PlanningTablePage } from "@/features/planning/model/planning-table-result";
 import type { PlanningState } from "@/features/planning/model/planning-state";
 import type { BacklogAssignmentEditor } from "@/features/backlog/model/backlog-assignment";
 
@@ -21,6 +23,10 @@ import { buildTaskTableViewModel, type TaskTableSort } from "@/features/tasks/mo
 import { projectDeliverableSchedule } from "@/features/planning-items/model/deliverable-schedule";
 
 type TaskTableViewProps = {
+  page?: PlanningTablePage;
+  pageStatus?: PlanningReadStatus;
+  onLoadMore?: () => void;
+  onRefresh?: () => void;
   planningState: PlanningState;
   visibleTasks: Task[];
   profiles: Profile[];
@@ -93,6 +99,7 @@ function TaskTableRiskBadges({
 }
 
 export function TaskTableView({
+  page, pageStatus, onLoadMore, onRefresh,
   planningState,
   visibleTasks,
   profiles,
@@ -118,7 +125,7 @@ export function TaskTableView({
   const assignments=planningState.backlogAssignments().filter(view=>view.tasks.some(task=>allTasks.some(shown=>shown.id===task.id)) && ["conflict","unconfirmed","blocked","rejected"].includes(view.phase));
   const sortKeys: TaskTableSort[] = ["title", "status", "assignee", "priority", "sprint", "start", "fixedDate"];
   const sortKey: TaskTableSort = sortKeys.includes(filters.sort as TaskTableSort) ? filters.sort as TaskTableSort : "priority";
-  const { rows: sortedTasks } = buildTaskTableViewModel({ tasks: visibleTasks, profiles, sprints, filters: { sort: sortKey, direction: filters.direction } });
+  const sortedTasks = page ? visibleTasks : buildTaskTableViewModel({ tasks: visibleTasks, profiles, sprints, filters: { sort: sortKey, direction: filters.direction } }).rows;
   const toggleSort = (key: TaskTableSort) => onFiltersChange({ ...filters, sort: key, direction: sortKey === key && filters.direction === "asc" ? "desc" : "asc" });
   const directionFor = (key: TaskTableSort): SortDirection => sortKey === key ? filters.direction : null;
   const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...Array.from(new Set(allTasks.map((task) => normalizeStatus(task.status)))).map((status) => ({ value: status, label: status }))];
@@ -135,7 +142,7 @@ export function TaskTableView({
       title="Aufgaben"
       description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "fixedDate" ? "Fixtermin" : "Status"}`}
       caption="Gefilterte Planungsaufgaben"
-      results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: allTasks.filter((task) => task.taskType !== "sub_issue").length }]}
+      results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: page?.total ?? allTasks.filter((task) => task.taskType !== "sub_issue").length }]}
       filtering={{ mode: "external", labelledBy: "planning-filters" }}
       minWidth={1040}
       mobileContentBreakpoint="xl"
@@ -249,6 +256,16 @@ export function TaskTableView({
           )}
         </tbody>
     </DataTableFrame>
+    {page && (page.continuation || pageStatus === "stale" || pageStatus === "unavailable") ? <div className="flex min-h-14 items-center px-4 py-2">
+      <button type="button" className="min-h-11 rounded border border-slate-300 px-4 text-sm font-semibold"
+        aria-disabled={pageStatus === "loading"}
+        onClick={() => {
+          if (pageStatus === "loading") return;
+          if (pageStatus === "stale" || !page.continuation) onRefresh?.(); else onLoadMore?.();
+        }}>
+        {pageStatus === "loading" ? "Weitere Aufgaben werden geladen …" : pageStatus === "stale" ? "Tabelle aktualisieren" : pageStatus === "unavailable" ? "Aufgaben erneut laden" : "Weitere Aufgaben laden"}
+      </button>
+    </div> : null}
     </>
   );
 }

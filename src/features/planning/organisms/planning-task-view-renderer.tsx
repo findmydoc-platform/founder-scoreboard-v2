@@ -281,6 +281,10 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
           {view === "table" && (
             <TaskTableView
+              page={controller.planningBoard?.table?.page}
+              pageStatus={controller.planningBoard?.pageStatus}
+              onLoadMore={() => { void controller.planningState.loadTablePage(); }}
+              onRefresh={() => { void controller.planningState.refreshTablePage(); }}
               planningState={controller.planningState}
               visibleTasks={planningBoardTasks}
               profiles={data.profiles}

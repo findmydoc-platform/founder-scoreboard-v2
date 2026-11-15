@@ -50,20 +50,22 @@ import { applyPlanningItemApprovalPatch } from "../approval-domain";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
-export type PlanningWorkspaceRead = { readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+type PlanningTableResult = import("../planning-table-result").PlanningTableResult;
+
+export type PlanningWorkspaceRead = { table?: PlanningTableResult; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 export type PlanningWorkspaceProgress =
   | { kind: "basis"; readId: string; read: PlanningWorkspaceRead }
   | { kind: "column"; readId: string; column: TaskStatus; read: PlanningWorkspaceRead }
   | { kind: "failure"; readId: string; column?: TaskStatus; error: { status: number; code?: string } }
   | { kind: "outcome"; outcome: PlanningBoardOutcome };
 type PlanningWeekBasis = { observedAt: number; sprints: import("@/lib/types").Sprint[] };
-function planningWeekBasis(board: PlanningBoardResult | undefined, coverage: PlanningReadCoverage | undefined, sprints: readonly import("@/lib/types").Sprint[]): PlanningWeekBasis | undefined {
+function planningWeekBasis(board: Pick<PlanningBoardResult, "observedAt"> | undefined, coverage: PlanningReadCoverage | undefined, sprints: readonly import("@/lib/types").Sprint[]): PlanningWeekBasis | undefined {
   const observedAt = Date.parse(board?.observedAt || "");
   if (coverage?.sprints !== "complete" || !Number.isFinite(observedAt)) return undefined;
   return { observedAt, sprints: sprints.map(sprint => ({ ...sprint })) };
 }
 function planningWeekIsCurrent(query: PlanningBoardQuery | undefined, basis: PlanningWeekBasis | undefined, now: number) {
-  if (query?.view !== "board" || !query.filters.quick.includes("week")) return true;
+  if (!query || query.view === "complete" || !query.filters.quick.includes("week")) return true;
   return Boolean(basis && basis.sprints.every(sprint =>
     isThisWeek({ sprintId: sprint.id }, [sprint], new Date(basis.observedAt)) === isThisWeek({ sprintId: sprint.id }, [sprint], new Date(now))));
 }
@@ -169,7 +171,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (workspace !== "planning" && workspaceReadCoverage(workspace).tasks && workspaceStatuses.get(workspace) !== "forbidden") workspaceStatuses.set(workspace, "stale");
     }
     scheduleAffectedRefresh();
+    if (tableResult) tableResult = { ...tableResult, page: { ...tableResult.page, continuation: null } };
     if (!boardResult) {
+      pageStatus = "stale";
       if (workspaceStatuses.has("planning")) workspaceStatuses.set("planning", "stale");
       return;
     }
@@ -189,6 +193,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     planningSourceEpoch++;
     freshness = "stale";
     boardResult = undefined;
+    tableResult = undefined;
+    tableRead = undefined; tableRequest = undefined;
     boardQueryKey = undefined;
     planningQueries.clear();
     queryRevision = undefined;
@@ -227,8 +233,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
   let freshness: "current" | "stale" = "current";
   let boardResult = initialWorkspaceRead?.board;
-  let weekBasis = planningWeekBasis(boardResult, initialWorkspaceRead?.coverage, initialData.sprints);
-  let boardQuery = initialWorkspaceRead?.query || boardResult?.query;
+  let tableResult = initialWorkspaceRead?.table;
+  let tableRead: { key: string; result: Promise<boolean> } | undefined;
+  let tableRequest: number | undefined;
+  let weekBasis = planningWeekBasis(boardResult || tableResult, initialWorkspaceRead?.coverage, initialData.sprints);
+  let boardQuery = initialWorkspaceRead?.query || boardResult?.query || tableResult?.query;
   let displayedQuery = boardQuery;
   let boardQueryKey = boardQuery ? planningBoardQueryKey(boardQuery) : undefined;
   let pageStatus: PlanningReadStatus = "current";
@@ -240,7 +249,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const summaryReads = new Map<string, { result: Promise<boolean>; controller: AbortController }>();
   const boardDeliveries = new Map<string, { basis: PlanningWorkspaceRead; tokens: Map<TaskStatus, ReturnType<typeof beginWorkspaceRead>>; pending: Set<TaskStatus>; summaries: Map<string, ReturnType<typeof beginBoardSummaryRead>> }>();
   let boardRead: { key: string; result: Promise<boolean>; sequence: number; sourceEpoch: number } | undefined;
-  let queryRevision = initialWorkspaceRead?.queryRevision || boardResult?.revision;
+  let queryRevision = initialWorkspaceRead?.queryRevision || boardResult?.revision || tableResult?.revision;
   let scopeRevision = initialWorkspaceRead?.scopeRevision;
   let scopeRevisionReadAt = 0;
   let sourceStatus: import("../planning-state").PlanningSourceStatus = "current";
@@ -250,6 +259,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     query: NonNullable<typeof boardQuery>;
     revision: string;
     result: typeof boardResult;
+    table: typeof tableResult;
     taskIds: Set<string>;
     completeness: PlanningWorkspaceView["completeness"];
     pageStatus: PlanningReadStatus;
@@ -269,7 +279,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function rememberPlanningQuery() {
     if (!boardQuery || !boardQueryKey || !queryRevision || workspaceStatuses.get("planning") !== "current") return;
     planningQueries.set(boardQueryKey, {
-      query: boardQuery, revision: queryRevision, result: boardResult,
+      query: boardQuery, revision: queryRevision, result: boardResult, table: tableResult,
       taskIds: new Set(memberships.get("planning")), completeness: completeness.get("planning") || "none",
       pageStatus, columnReadStatus: { ...columnReadStatus }, sourceEpoch: planningSourceEpoch, weekBasis, readAuthority: planningAuthority,
     });
@@ -935,8 +945,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       isActive();
       const tasks = planning.workspace("planning").tasks;
       const byId = new Map(tasks.map(task => [task.id, task]));
-      const boardTasks = boardResult ? [...boardResult.cardIds.flatMap(id => byId.get(id) ? [byId.get(id)!] : []), ...tasks.filter(task => lifecycle.isTemporary(task.id))] : tasks;
-      return { query: active ? displayedQuery : undefined, sourceStatus, requiresQueryRead: Boolean(boardQuery && !boardQueryKey), deniedChildListIds: [...childLists].filter(([id, list]) => list.readStatus === "forbidden" || (deniedTaskReads.has(id) && list.readStatus === "loading")).map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
+      const selectedIds = tableResult?.rowIds || boardResult?.cardIds;
+      const boardTasks = selectedIds ? [...selectedIds.flatMap(id => byId.get(id) ? [byId.get(id)!] : []), ...tasks.filter(task => lifecycle.isTemporary(task.id))] : tasks;
+      return { query: active ? displayedQuery : undefined, sourceStatus, requiresQueryRead: Boolean(boardQuery && !boardQueryKey), deniedChildListIds: [...childLists].filter(([id, list]) => list.readStatus === "forbidden" || (deniedTaskReads.has(id) && list.readStatus === "loading")).map(([id]) => id), tasks: boardTasks, freshness, scopeRevision: active ? scopeRevision : undefined, result: active ? boardResult : undefined, table: active ? tableResult : undefined, queryKey: active ? boardQueryKey : undefined, pageStatus: tableResult ? pageStatus : columnReadStatus.Erledigt || pageStatus, columnReadStatus: { ...columnReadStatus }, readStatus: workspaceStatuses.get("planning") || "not-loaded" };
     },
     scheduleBoardQuery(query, options) {
       if (!isActive()) return Promise.resolve(false);
@@ -995,6 +1006,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         boardQueryKey = key;
         displayedQuery = normalizePlanningBoardQuery(query);
         boardResult = retained.result;
+        tableResult = retained.table;
+        tableRead = undefined; tableRequest = undefined;
         weekBasis = retained.weekBasis;
         planningAuthority = retained.readAuthority;
         pageStatus = retained.pageStatus === "loading" ? "stale" : retained.pageStatus;
@@ -1014,6 +1027,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return result;
     },
     acceptServerBoardColumn(readId, outcome) { return acceptServerColumn(readId, outcome); },
+    loadTablePage() { return readTablePage(false); },
+    refreshTablePage() { return readTablePage(true); },
     loadCompletedHistory() { return planning.loadBoardColumn("Erledigt"); },
     loadBoardColumn(status) { return readBoardColumn(status, false); },
     refreshBoardColumn(status) { return readBoardColumn(status, true); },
@@ -1201,6 +1216,22 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       return result;
     },
   };
+  function readTablePage(refresh: boolean) {
+    if (!isActive() || !tableResult || boardQuery?.view !== "table") return Promise.resolve(false);
+    if (!planningWeekIsCurrent(boardQuery, weekBasis, adapter.now?.() ?? Date.now())) {
+      invalidatePlanningSource();
+      return planning.refreshWorkspace("planning");
+    }
+    if (refresh) return planning.refreshWorkspace("planning");
+    const continuation = tableResult.page.continuation;
+    if (!continuation) return Promise.resolve(true);
+    const key = JSON.stringify([tableResult.queryKey, tableResult.revision, continuation]);
+    if (tableRead?.key === key) return tableRead.result;
+    const result = readWorkspace("planning", { ...boardQuery, continuation }, true);
+    tableRead = { key, result };
+    void result.finally(() => { if (tableRead?.result === result) tableRead = undefined; }).catch(() => undefined);
+    return result;
+  }
   function readBoardColumn(column: TaskStatus, refresh: boolean) {
     if (!isActive() || !boardResult || !boardQuery) return Promise.resolve(false);
     if (!planningWeekIsCurrent(boardQuery, weekBasis, adapter.now?.() ?? Date.now())) {
@@ -1220,13 +1251,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function readIsCurrent(workspace: AppWorkspace, token: ReturnType<typeof beginWorkspaceRead>) {
     if (!isActive() || token.generation !== sessionGeneration || token.sessionRevision !== sessionRevision || (workspace === "planning" && token.sourceEpoch !== planningSourceEpoch)) return false;
+    if (token.tablePage) return acceptedRead.get(workspace) === token.tablePage.baseRead && tableRequest === token.started
+      && boardQueryKey === token.tablePage.queryKey && tableResult?.queryKey === token.tablePage.queryKey && tableResult.revision === token.tablePage.revision;
     if (!token.page) return acceptedRead.get(workspace) === token.started;
     return acceptedRead.get(workspace) === token.page.baseRead && columnRequests.get(token.page.column) === token.started
       && boardQueryKey === token.page.queryKey && boardResult?.queryKey === token.page.queryKey && boardResult?.revision === token.page.revision;
   }
   async function readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, append = false) {
     if (!isActive()) return false;
-    if (workspace === "planning" && !append) { releaseHeldReads(); cancelPlanningReads(); columnReads.clear(); columnRequests.clear(); summaryReads.clear(); summarySequences.clear(); }
+    if (workspace === "planning" && !append) { releaseHeldReads(); cancelPlanningReads(); columnReads.clear(); columnRequests.clear(); tableRead = undefined; tableRequest = undefined; summaryReads.clear(); summarySequences.clear(); }
     const token = beginWorkspaceRead(workspace, append ? query : undefined);
     const { eventRead, toolRead } = token;
     const setPageStatus = (status: PlanningReadStatus) => { if (!token.page || token.page.column === "Erledigt") pageStatus = status; if (token.page) columnReadStatus[token.page.column] = status; };
@@ -1292,6 +1325,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (append) {
         const staleContinuation = typeof error === "object" && error !== null && "code" in error && error.code === "stale_continuation";
         setPageStatus(staleContinuation ? "stale" : readErrorStatus(error));
+        if (staleContinuation && tableResult && token.tablePage) tableResult = { ...tableResult, page: { ...tableResult.page, continuation: null } };
         if (staleContinuation && boardResult && token.page) {
           const column = token.page.column;
           boardResult = { ...boardResult, columns: { ...boardResult.columns, [column]: { ...boardResult.columns[column], continuation: null } } };
@@ -1333,7 +1367,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       publish();
       return false;
     }
-    if (append && (!result.board || result.board.column !== token.page?.column)) { setPageStatus("unavailable"); publish(); return false; }
+    if (append && (token.tablePage ? !result.table : !result.board || result.board.column !== token.page?.column)) { setPageStatus("unavailable"); publish(); return false; }
     const collapsesColumn = append && token.page && result.board?.columns[token.page.column].total === 0 && boardResult?.columns[token.page.column].total !== 0;
     if (workspace === "planning" && boardInteractions.size && (!append || collapsesColumn) && (!boardQueryKey || !query || boardQueryKey === planningBoardQueryKey(query))) {
       if (append) setPageStatus("stale");
@@ -1501,9 +1535,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return result;
   }
   function beginWorkspaceRead(workspace: AppWorkspace, query?: PlanningBoardQueryInput) {
+    const tablePage = query?.view === "table" && tableResult ? { queryKey: tableResult.queryKey, revision: tableResult.revision, baseRead: acceptedRead.get(workspace) } : undefined;
     const page = query?.column && boardResult ? { column: query.column, queryKey: boardResult.queryKey, revision: boardResult.revision, baseRead: acceptedRead.get(workspace), continuation: query.continuation } : undefined;
     const token = {
-      page,
+      page, tablePage,
       generation: sessionGeneration,
       sessionRevision,
       sourceEpoch: planningSourceEpoch,
@@ -1512,7 +1547,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       eventRead: workspace === "events" ? events.beginRead() : null,
       toolRead: workspace === "tools" ? tools.beginRead() : null,
     };
-    if (page) columnRequests.set(page.column, token.started);
+    if (tablePage) tableRequest = token.started;
+    else if (page) columnRequests.set(page.column, token.started);
     else acceptedRead.set(workspace, token.started);
     return token;
   }
@@ -1535,7 +1571,31 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         return false;
       }
     }
-    if (workspace === "planning" && result.board) {
+    if (workspace === "planning" && result.query?.view === "table") {
+      const next = result.table, previous = result.append ? tableResult : undefined;
+      const ids = next?.rowIds || [];
+      const rowIds = [...new Set([...(previous?.rowIds || []), ...ids])];
+      const valid = next && !result.board && next.query.view === "table" && next.queryKey === planningBoardQueryKey(result.query)
+        && next.queryKey === planningBoardQueryKey(next.query) && next.revision === result.queryRevision
+        && Number.isFinite(Date.parse(next.observedAt)) && (!next.validUntil || Date.parse(next.validUntil) > (adapter.now?.() ?? Date.now()))
+        && Number.isSafeInteger(next.page.total) && next.page.total >= 0 && next.page.loaded === ids.length
+        && new Set(ids).size === ids.length && rowIds.length <= next.page.total
+        && ids.every(id => result.data.tasks.some(task => task.id === id && task.taskType === "deliverable"))
+        && (next.page.completeness === "complete" ? next.page.continuation === null && rowIds.length === next.page.total : typeof next.page.continuation === "string" && next.page.continuation.length > 0)
+        && (!result.append || token.tablePage && previous && previous.queryKey === next.queryKey && previous.revision === next.revision
+          && previous.observedAt === next.observedAt && previous.validUntil === next.validUntil && previous.page.total === next.page.total && scopeRevision === result.scopeRevision);
+      if (!valid) {
+        if (result.append) pageStatus = "unavailable"; else workspaceStatuses.set("planning", "unavailable");
+        publish(); return false;
+      }
+      tableResult = { ...next, rowIds, page: { ...next.page, loaded: rowIds.length },
+        attentionById: { ...previous?.attentionById, ...next.attentionById },
+        summaryRequests: [...new Map([...(previous?.summaryRequests || []), ...(next.summaryRequests || [])].map(request => [request.token, request])).values()] };
+      boardResult = undefined;
+      if (!result.append) weekBasis = planningWeekBasis(next, result.coverage, result.data.sprints);
+      boardQuery = next.query; displayedQuery = boardQuery; boardQueryKey = next.queryKey; pageStatus = "current";
+    } else if (workspace === "planning" && result.board) {
+      tableResult = undefined;
       if (result.query && result.board.queryKey !== planningBoardQueryKey(result.query)) {
         if (token.page) columnReadStatus[token.page.column] = "unavailable";
         else workspaceStatuses.set("planning", "unavailable");
@@ -1587,6 +1647,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       pageStatus = "current";
     } else if (workspace === "planning" && result.query) {
       boardResult = undefined;
+      tableResult = undefined;
       weekBasis = undefined;
       boardQuery = normalizePlanningBoardQuery(result.query);
       displayedQuery = boardQuery;
@@ -1596,7 +1657,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
     if (workspace === "planning") {
       if (started >= scopeRevisionReadAt) { scopeRevision = result.scopeRevision; scopeRevisionReadAt = started; sourceStatus = "current"; }
-      const revision = result.queryRevision || result.board?.revision;
+      const revision = result.queryRevision || result.board?.revision || result.table?.revision;
       if (!revision || revision !== queryRevision) planningQueries.clear();
       queryRevision = revision;
     }
@@ -1666,7 +1727,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     completeness.set(workspace, taskCoverage || "none");
     const stale = scoreRead.stale || commitmentRead.stale || projectRead.stale || rawIncoming.length !== incoming.length || sprintRead.stale || profileRead.stale || incoming.some(task => protectedIds.has(task.id) && (!token.page || (taskConfirmedAt.get(task.id) || 0) > started)) || (taskCoverage === "complete" && [...protectedIds].some(id => memberships.get(workspace)?.has(id)));
     workspaceStatuses.set(workspace, stale ? "stale" : "current");
-    if (workspace === "planning" && boardResult && stale) { pageStatus = "stale"; if (token.page) columnReadStatus[token.page.column] = "stale"; }
+    if (workspace === "planning" && (boardResult || tableResult) && stale) { pageStatus = "stale"; if (token.page) columnReadStatus[token.page.column] = "stale"; }
     if (toolRead !== null) tools.acceptRead({ tools: result.data.fmdTools, completeness: result.toolCoverage || "partial" }, toolRead, Boolean(result.headerData && result.headerData.quickLinks.state === "ready"));
     if (eventRead !== null) events.acceptRead({ events: result.data.events, coverage: result.eventCoverage || { range: null, completeness: "partial" } }, eventRead, Boolean(result.headerData && result.headerData.calendarEvents.state !== "idle"));
     notifications.acceptWorkspaceRead(workspace, result.data, result.headerData, notificationRead, result.notificationCoverage);
@@ -1737,7 +1798,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     completeness.clear();
     acceptedRead.clear();
     hydrationReads.clear();
-    boardResult = undefined; weekBasis = undefined; boardQuery = undefined; displayedQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
+    boardResult = undefined; tableResult = undefined; tableRead = undefined; tableRequest = undefined; weekBasis = undefined; boardQuery = undefined; displayedQuery = undefined; boardQueryKey = undefined; boardRead = undefined; pageStatus = "not-loaded";
     planningQueries.clear(); queryRevision = undefined; scopeRevision = undefined; sourceObservation = undefined; sourceStatus = "unverified";
     columnReads.clear(); columnRequests.clear(); boardDeliveries.clear();
     summaryReads.clear(); summarySequences.clear();
@@ -1808,7 +1869,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const identity = read;
       if (workspaceStatuses.get(workspace) === "current" && hydrationReads.get(workspace) === identity) return;
       if (requested && acceptWorkspaceRead(workspace, {
-        data, readAuthority: read.readAuthority, scopeRevision: read.scopeRevision, board: read.board, query: read.query || read.board?.query, queryRevision: read.queryRevision, coverage: read.coverage, taskCoverage: read.coverage.tasks,
+        data, readAuthority: read.readAuthority, scopeRevision: read.scopeRevision, board: read.board, table: read.table, query: read.query || read.board?.query || read.table?.query, queryRevision: read.queryRevision, coverage: read.coverage, taskCoverage: read.coverage.tasks,
         taskOmittedFields: read.taskOmittedFields,
         profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
         projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"],
