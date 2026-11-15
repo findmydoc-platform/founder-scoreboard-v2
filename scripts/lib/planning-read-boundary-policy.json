@@ -8,18 +8,18 @@
   ],
   "contracts": {
     "BOARD": {
-      "consumer": "BOARD / PERSONAL",
+      "consumer": "BOARD / PERSONAL / TABLE selection",
       "owner": "Planning feature owner",
-      "reason": "The declared credential-bound Deliverable adapter owns one bounded query basis, selected-only column hydration, one independent selected-identity summary batch and fresh source/time checks at publication. Complete and JSON column consumers keep compatible contracts.",
-      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts; tests/unit/planning/planning-summary-delivery.test.ts; tests/integration/planning-board-aggregates.test.ts; tests/integration/planning-summary-consistency.test.ts; tests/integration/planning-summary-semantics.test.ts",
+      "reason": "The declared credential-bound adapter owns bounded Board and Table selection and selected scalar content. All Board levels use independent column hydration and a separate complete direct-child/attention batch. Table pages use their own ordering, scalar discovery and the separately declared TABLE risk contract; no complete-read fallback or performance equivalence is implied.",
+      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts; tests/unit/planning/planning-summary-delivery.test.ts; tests/integration/planning-board-aggregates.test.ts; tests/integration/planning-summary-consistency.test.ts; tests/integration/planning-summary-semantics.test.ts; tests/integration/planning-hierarchy-selection.test.ts; tests/integration/planning-epic-selection.test.ts; tests/integration/planning-strategic-query-delivery.test.ts; tests/integration/planning-strategic-parent-options.test.ts; tests/integration/planning-table-selection.test.ts; tests/integration/planning-table-ordering.test.ts; tests/integration/planning-table-unicode-ordering.test.ts",
       "expiresWhen": "Revalidate when the BOARD or PERSONAL contract changes under #641."
     },
     "COMPLETE": {
-      "consumer": "BOARD strategic / TABLE / STRATEGY / TEAM / PROFILE / NOTIFICATIONS / SPRINT / GANTT compatibility",
+      "consumer": "Explicit complete / legacy unscoped / STRATEGY / TEAM / PROFILE / NOTIFICATIONS / SPRINT / GANTT compatibility",
       "owner": "Owner of each named feature in the consumer inventory",
-      "reason": "Preserve the established complete shared source while each remaining consumer migrates. No new caller or changed SELECT is covered.",
+      "reason": "Preserve explicit complete and legacy unscoped contracts and the existing shared source for remaining consumers. Migrated Boards and Table use scoped reads; sufficient compatible complete cache reuse remains valid. No new caller or changed SELECT is covered.",
       "evidence": "tests/unit/planning/planning-compact-board.test.ts; tests/integration/planning-enumeration-consistency.test.ts; consumer-specific evidence in docs/planning-item-read-contracts.md",
-      "expiresWhen": "Remove each source statement after its last caller passes #648, #652, #653, #654, #655, #656 or #658."
+      "expiresWhen": "Remove each source statement only after its final named consumer and compatible machine path pass their governing #641 gate."
     },
     "BACKLOG": {
       "consumer": "BACKLOG",
@@ -125,6 +125,13 @@
       "reason": "The exact public-resource capability probes only id presence on the fixed profiles/tasks tuple with limit 1 and returns a boolean. It does not return Planning Items or bypass the existing public-resource action binding.",
       "evidence": "tests/integration/resource-credential-closeout.test.ts; src/lib/credentials/internal/public-resources.ts",
       "expiresWhen": "Recheck on any material change to health.inspect or its fixed table tuple; remove when this exact probe is retired."
+    },
+    "TABLE": {
+      "consumer": "TABLE risks",
+      "owner": "Planning feature owner",
+      "reason": "One fixed service-only Table risk read supplies complete directed relation counts and Planning attention for the signed selected row batch on its original source/time/authority basis. It returns no child progress or Item content and does not authorize neighboring reads.",
+      "evidence": "tests/integration/planning-table-risk-delivery.test.ts; src/features/planning/PlanningApp.table-risks.stories.tsx; tests/architecture/planning-read-boundary.test.mjs",
+      "expiresWhen": "Revalidate when the TABLE risk contract changes under #641."
     }
   },
   "allowedEdges": [
@@ -146,7 +153,7 @@
     {
       "from": "src/features/planning/server/planning-board-read-model-supabase.ts",
       "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
-      "contract": "BOARD"
+      "contract": "COMPLETE"
     },
     {
       "from": "src/features/planning/server/planning-board-read-model-supabase.ts",
