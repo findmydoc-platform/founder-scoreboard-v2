@@ -13,6 +13,9 @@ afterEach(() => { for (const callback of context.afterCallbacks.splice(0)) callb
 function planningProtocol(notificationsUnavailable = true) {
   const protocol = administratorProtocol({ role: "founder", origin: "http://localhost:19000" });
   context.jar = protocol.cookieJar();
+  protocol.state.responses.planning_board_publication_context = () => protocol.state.profileError
+    ? Response.json({ code: "PGRST116", message: "Ambiguous profile" }, { status: 400 })
+    : Response.json(protocol.state.profile ? { profile_id: protocol.state.profileId || "synthetic-profile", platform_role: protocol.state.role, source_revision: "42" } : null);
   const authFetch = globalThis.fetch;
   const notificationRead = vi.fn();
   const queryPlanRead = vi.fn();
