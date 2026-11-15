@@ -50,3 +50,22 @@ test("a contributing source change during target hydration cannot publish the ea
   expect(response.status).toBe(409);
   expect(await response.json()).not.toHaveProperty("taskDetail");
 }));
+
+test("discussion has independent source evidence for comment-only changes without a timeline read", () => withPlanningCredentialDatabase(async f => {
+  const { GET } = await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts", { "server-only": {} });
+  const read = (area: string) => GET(f.request("founder", `/api/tasks/${f.initiativeId}/detail-data?area=${area}`), { params: Promise.resolve({ id: f.initiativeId }) });
+  const coreBefore = await (await read("target")).json();
+  const before = f.observed.length;
+  const response = await read("discussion");
+  expect(response.status).toBe(200);
+  const discussionBefore = await response.json();
+  expect(discussionBefore.taskDetail.coverage).toEqual({ discussion: "complete" });
+  expect(f.observed.slice(before).some(entry => /\/(task_audit_timeline|task_reviews)$/.test(entry.path))).toBe(false);
+  await f.db.query("insert into public.task_comments(task_id,profile_id,comment) values($1,$2,'Comment-only source change')", [f.initiativeId, f.actors.founder.profileId]);
+  const discussionAfter = await (await read("discussion")).json();
+  const coreAfter = await (await read("target")).json();
+  expect(discussionAfter.taskDetail.discussion.comments).toMatchObject([{ comment: "Comment-only source change" }]);
+  expect(discussionAfter.taskDetail.sourceRevision).not.toBe(discussionBefore.taskDetail.sourceRevision);
+  expect(coreAfter.taskDetail.item.updatedAt).toBe(coreBefore.taskDetail.item.updatedAt);
+  expect(coreAfter.taskDetail.sourceRevision).toBe(coreBefore.taskDetail.sourceRevision);
+}));
