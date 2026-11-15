@@ -330,7 +330,8 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       const result = await createSupabaseTaskDetailReadModel(service).load({ itemId: targetId, area: options?.area }, { authorized: true, actorProfileId: profile?.id || null });
       if (options?.area === "target" && result.status === "ready") {
         const publication = publicationSource ? await publicationSource.read() : await current() ? { status: "forbidden" as const } : await service.rpc("planning_source_version").then(value => value.error ? { status: "unavailable" as const } : { status: "ready" as const, revision: value.data });
-        if (publication.status !== "ready") return { status: publication.status };
+        if (publication.status === "forbidden") return { status: "forbidden" as const };
+        if (publication.status !== "ready") return { status: "unavailable" as const };
         if (publication.revision !== result.model.sourceRevision) return { status: "staleContinuation" as const };
         try { assertKnown(); } catch { return { status: "forbidden" as const }; }
       }

@@ -45,7 +45,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
   const [taskDetailResult, header] = await Promise.all([permission.planning.loadDetail(), permission.planning.loadHeader()]);
   if (!header.ok) return <WorkspaceDataUnavailablePage workspace="planning" />;
   const headerData = header.headerData;
-  if (taskDetailResult.status === "unavailable" || taskDetailResult.status === "forbidden") {
+  if (taskDetailResult.status === "unavailable" || taskDetailResult.status === "forbidden" || taskDetailResult.status === "staleContinuation") {
     return <WorkspaceDataUnavailablePage workspace="planning" />;
   }
 
