@@ -11,7 +11,7 @@ import { TaskTypeIndicator } from "@/features/tasks/atoms/task-type-indicator";
 import { directChildPluralLabel, taskChildProgress } from "@/features/tasks/model/task-card-presentation";
 import type { PlanningState } from "@/features/planning/model/planning-state";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
-import { normalizeStatus } from "@/lib/status";
+import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { Sprint, Task } from "@/lib/types";
 import { classNames, UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
 
@@ -285,7 +285,8 @@ function ParentGroup({ owner, parent, collectionCoverage, independentMembership,
   const currentChildren = detail?.childrenReadStatus === "current" && ["complete", "complete-empty"].includes(detail.childrenCoverage);
   const forbidden = detail?.childrenReadStatus === "forbidden";
   const displayed = forbidden ? [] : independent && currentChildren && independentMembership
-    ? detail.children.filter(child => child.taskType === itemType) : tasks;
+    ? detail.children.filter(child => child.taskType === itemType && (itemType !== "deliverable"
+      || ((taskStatuses as readonly string[]).includes(child.status) || child.status === "Pausiert") && normalizeStatus(child.status) !== "Erledigt")) : tasks;
   const progress = owner && collectionCoverage !== "complete" ? detail?.childProgress || null : undefined;
   const failed = detail?.childrenReadStatus === "unavailable" || detail?.childrenReadStatus === "stale";
   const retry = () => { if (owner && parentId && lease.current) void owner.loadTaskDetail(parentId, { area: "children", signal: lease.current.signal }); };
