@@ -18,6 +18,10 @@ type CustomSelectProps = {
   options: CustomSelectOption[];
   onChange: (value: string) => void;
   onOpen?: () => void;
+  onOpenChange?: (open: boolean) => void;
+  selectedOptionLabel?: string;
+  search?: { label: string; value: string; onChange: (value: string) => void; onSubmit: () => void };
+  feedback?: ReactNode;
   disabled?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
@@ -34,6 +38,10 @@ export function CustomSelect({
   options,
   onChange,
   onOpen,
+  onOpenChange,
+  selectedOptionLabel,
+  search,
+  feedback,
   disabled = false,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
@@ -46,8 +54,10 @@ export function CustomSelect({
 }: CustomSelectProps) {
   const id = useId();
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
-  const closeOnOutside = useCallback(() => setOpen(false), []);
+  const searchable = Boolean(search);
+  const closeOnOutside = useCallback(() => { setOpen(false); onOpenChange?.(false); }, [onOpenChange]);
   const { rootRef, triggerRef, popoverRef: menuRef, position: menuPosition } = useAnchoredPopover({
     open,
     onClose: closeOnOutside,
@@ -66,13 +76,14 @@ export function CustomSelect({
 
   const openMenu = (index = selectedIndex) => {
     if (disabled) return;
-    if (!open) onOpen?.();
+    if (!open) { onOpen?.(); onOpenChange?.(true); }
     setActiveIndex(clampIndex(index));
     setOpen(true);
   };
 
   const closeMenu = (focusTrigger = false) => {
     setOpen(false);
+    onOpenChange?.(false);
     if (focusTrigger) requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
@@ -81,10 +92,19 @@ export function CustomSelect({
     closeMenu(true);
   };
 
+  const menuReady = Boolean(menuPosition);
   useEffect(() => {
-    if (!open) return;
-    requestAnimationFrame(() => optionRefs.current[activeIndex]?.focus());
-  }, [activeIndex, open]);
+    if (!open || !menuReady) return;
+    const frame = requestAnimationFrame(() => {
+      if (searchable && document.activeElement === triggerRef.current) searchRef.current?.focus();
+      else if (!searchable || document.activeElement !== searchRef.current) optionRefs.current[activeIndex]?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeIndex, open, searchable, triggerRef, menuReady]);
+
+  useEffect(() => {
+    if (open && searchable && document.activeElement === document.body) searchRef.current?.focus();
+  }, [open, searchable, feedback, options.length]);
 
   return (
     <div ref={rootRef} className={`relative min-w-0 ${className}`}>
@@ -128,7 +148,7 @@ export function CustomSelect({
       >
         <span className="flex min-w-0 items-center gap-2">
           {selectedOption?.icon}
-          <span className="truncate">{selectedOption?.label || stringValue || "Nicht verfügbar"}</span>
+          <span className="truncate">{selectedOption?.label || selectedOptionLabel || stringValue || "Nicht verfügbar"}</span>
           {selectedOption?.current && <CircleDot size={13} className="shrink-0 text-emerald-500" aria-label="Aktueller Sprint" />}
           {selectedOption?.locked && <Lock size={13} className="shrink-0 text-slate-400" aria-label="Geschützter Sprint" />}
         </span>
@@ -138,16 +158,14 @@ export function CustomSelect({
         <div
           ref={menuRef}
           data-custom-control-popover
-          id={id}
-          role="listbox"
           tabIndex={-1}
-          aria-activedescendant={activeOptionId}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
               closeMenu(true);
               return;
             }
+            if (event.target instanceof HTMLElement && event.target.closest("[data-select-feedback]")) return;
             if (event.key === "ArrowDown") {
               event.preventDefault();
               setActiveIndex((current) => clampIndex(current + 1));
@@ -177,6 +195,16 @@ export function CustomSelect({
           style={{ top: menuPosition.top, left: menuPosition.left, width: menuPosition.triggerWidth }}
           className={`fixed z-[120] max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl shadow-slate-900/10 ${menuClassName}`}
         >
+          {search && <div className="sticky top-0 bg-white p-1">
+            <input ref={searchRef} type="search" aria-label={search.label} value={search.value} onChange={event => { setActiveIndex(0); search.onChange(event.target.value); }}
+              onKeyDown={event => {
+                if (event.key === "Escape") return;
+                event.stopPropagation();
+                if (event.key === "Enter") { event.preventDefault(); search.onSubmit(); }
+                if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex(0); optionRefs.current[0]?.focus(); }
+              }} className="min-h-11 w-full rounded-md border border-slate-200 px-3 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          </div>}
+          <div id={id} role="listbox" aria-activedescendant={activeOptionId}>
           {options.map((option, index) => {
             const selected = option.value === stringValue;
             const active = index === activeIndex;
@@ -208,6 +236,8 @@ export function CustomSelect({
               </button>
             );
           })}
+          </div>
+          {feedback && <div data-select-feedback>{feedback}</div>}
         </div>,
         document.body,
       )}

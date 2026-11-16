@@ -1,5 +1,7 @@
 "use client";
 
+import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
+import { PlanningItemCandidateSelect } from "./planning-item-candidate-select";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
 import { UiButton } from "@/shared/atoms/ui-primitives";
@@ -13,6 +15,7 @@ export type TaskRelationshipDraft = {
 };
 
 type TaskRelationshipFormProps = {
+  sourceTaskId: string;
   relationDraft: TaskRelationshipDraft;
   relationTargetOptions: Array<{ value: string; label: string }>;
   allowedRelationTypes: TaskRelationType[];
@@ -26,6 +29,7 @@ type TaskRelationshipFormProps = {
 };
 
 export function TaskRelationshipForm({
+  sourceTaskId,
   relationDraft,
   relationTargetOptions,
   allowedRelationTypes,
@@ -37,6 +41,7 @@ export function TaskRelationshipForm({
   onRelationDraftChange,
   onAddRelation,
 }: TaskRelationshipFormProps) {
+  const candidateOwner = usePlanningBusinessState();
   return (
     <form
       className={className}
@@ -62,14 +67,14 @@ export function TaskRelationshipForm({
           {relationTypeLabel(allowedRelationTypes[0] || "blocked_by")}
         </div>
       )}
-      <CustomSelect
+      {candidateOwner ? <PlanningItemCandidateSelect kind="relationship" sourceId={sourceTaskId} label="Verknüpftes Item" emptyLabel="Aufgabe auswählen" owner={candidateOwner} value={relationDraft.relatedTaskId} disabled={pending} onChange={relatedTaskId => onRelationDraftChange({ relatedTaskId })} /> : <CustomSelect
         value={relationDraft.relatedTaskId}
         onChange={(value) => onRelationDraftChange({ relatedTaskId: value })}
         disabled={pending}
         className="h-11 text-sm sm:h-9"
         aria-label="Verknüpftes Item"
         options={[{ value: "", label: "Aufgabe auswählen" }, ...relationTargetOptions]}
-      />
+      />}
       <TaskMentionTextArea
         profiles={profiles}
         value={relationDraft.note}

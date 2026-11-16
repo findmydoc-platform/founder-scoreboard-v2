@@ -51,6 +51,8 @@ for (const source of [
   "client.rpc('planning_deliverable_query_plan');", "client.rpc('planning_deliverable_column');", "client.rpc('planning_deliverable_query_basis');",
   "client.rpc('planning_deliverable_summaries');",
   "client.rpc('planning_table_risks');",
+  "client.rpc('planning_initiative_candidates');",
+  "client.rpc('planning_item_candidates');",
   "client.rpc('planning_detail_source');",
   "client.rpc('planning_detail_publication_context');",
   "client.rpc('planning_board_publication_context');",

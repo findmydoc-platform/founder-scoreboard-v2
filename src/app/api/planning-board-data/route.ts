@@ -4,6 +4,7 @@ import { authorizeCredentialAction } from "@/lib/credentials";
 import { normalizePlanningBoardQuery, type PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { apiError, authzError } from "@/lib/api-response";
+import { normalizePlanningItemCandidateQuery } from "@/features/planning-items/model/planning-item-candidates";
 
 async function handleGET(request: NextRequest) {
   const permission = await observeRuntimePhase("board.authorization", () => authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning.board.read" }));
@@ -19,13 +20,26 @@ async function handleGET(request: NextRequest) {
     return NextResponse.json({ summaries: result.summaries, readAuthority: result.readAuthority }, { headers: { "cache-control": "no-store" } });
   }
   let query: PlanningBoardQueryInput | undefined;
+  let candidateQuery: ReturnType<typeof normalizePlanningItemCandidateQuery> = null;
   const rawQuery = request.nextUrl.searchParams.get("scope");
   if (rawQuery) {
     try {
       const parsed = JSON.parse(rawQuery);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || rawQuery.length > 16000 || (parsed.continuation && (typeof parsed.continuation !== "string" || parsed.continuation.length > 4096))) throw new Error("Invalid scope");
-      query = parsed;
+      if (parsed.view === "candidates") {
+        candidateQuery = normalizePlanningItemCandidateQuery(parsed);
+        if (!candidateQuery) return apiError("Ungültiger Auswahlbereich.", 400);
+      } else query = parsed;
     } catch { return apiError("Ungültiger Planungsbereich.", 400); }
+  }
+  if (candidateQuery) {
+    const result = await permission.planning.loadCandidates(candidateQuery, { signal: request.signal });
+    if (result.status === "forbidden") return apiError("Auswahl darf nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Auswahl hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Auswahl konnte nicht geladen werden.", 503);
+    if (!result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Auswahl darf nicht geladen werden.", 403);
+    return NextResponse.json({ candidates: result.candidates, readAuthority: result.readAuthority,
+      readActor: { profileId: permission.profile!.id, platformRole: permission.profile!.platformRole } }, { headers: { "cache-control": "no-store" } });
   }
   const currentProfile = permission.profile;
   const normalized = query && normalizePlanningBoardQuery(query);

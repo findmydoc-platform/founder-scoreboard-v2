@@ -23,6 +23,8 @@ import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlo
 import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
 import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
+import { loadPlanningItemCandidates } from "@/features/planning-items/server/planning-item-candidates-read-source";
+import type { PlanningItemCandidateQuery } from "@/features/planning-items/model/planning-item-candidates";
 import { loadPlanningTrashTaskDetail } from "../../planning-trash-detail";
 import type { Profile } from "../../types";
 import { loadPlanningHeaderData } from "../../planning-header-data";
@@ -394,6 +396,21 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
         if (deadline <= Date.now()) return { status: "forbidden" as const };
         return { ...result, readAuthority: { userId: readAuthority!.userId, deadline } };
       }
+      return result;
+    },
+    async loadCandidates(query: PlanningItemCandidateQuery, options?: { signal?: AbortSignal }) {
+      const denial = action === "planning.board.read" ? await current() : forbidden();
+      if (denial) return { status: "forbidden" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const result = await loadPlanningItemCandidates(service, { authorized: true, actorProfileId: profile?.id || null,
+        authorityDeadline: readAuthority?.deadline, signal, publicationSource,
+        authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
+          .update(JSON.stringify(["planning-candidate-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") }, query);
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      if (result.status === "ready") return readAuthority
+        ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } }
+        : { status: "forbidden" as const };
       return result;
     },
     async loadBoard(query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {

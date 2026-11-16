@@ -6,6 +6,8 @@ import { codepointLength } from "@/lib/github-issue-content";
 import type { PlanningTaskLifecycleView } from "@/features/planning/model/planning-task-lifecycle";
 import type { PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
 import { TaskLifecycleNotice } from "@/features/tasks/molecules/task-lifecycle-notice";
+import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
+import { PlanningItemCandidateSelect } from "@/features/tasks/molecules/planning-item-candidate-select";
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
@@ -219,6 +221,7 @@ function PlanningFields({ accent = false, draft, setDraft }: { accent?: boolean;
 }
 
 function RelationshipFields({ accent = false, draft, data, setDraft }: { accent?: boolean; draft: NewTaskDraft; data: TaskDialogData; setDraft: DraftSetter }) {
+  const candidateOwner = usePlanningBusinessState();
   return (
     <section className="grid gap-3">
       <SectionHeading accent={accent}>Erste Abhängigkeit</SectionHeading>
@@ -230,12 +233,12 @@ function RelationshipFields({ accent = false, draft, data, setDraft }: { accent?
           onChange={(value) => setDraft((current) => ({ ...current, relationType: value as TaskRelationType }))}
           options={taskRelationTypeOptions}
         />
-        <UiSelectField
+        {candidateOwner ? <PlanningItemCandidateSelect kind="relationship" sourceId={null} label="Verknüpfte Aufgabe" owner={candidateOwner} value={draft.relatedTaskId} onChange={relatedTaskId => setDraft(current => ({ ...current, relatedTaskId }))} /> : <UiSelectField
           label="Verknüpfte Aufgabe"
           value={draft.relatedTaskId}
           onChange={(value) => setDraft((current) => ({ ...current, relatedTaskId: value }))}
           options={relatedTaskOptions(data.tasks)}
-        />
+        />}
       </div>
       <UiField>
         Hinweis
@@ -268,13 +271,15 @@ function DeliverableForm({
   titleError: string;
   titleValidationId: string;
 }) {
+  const candidateOwner = usePlanningBusinessState();
   const initiatives = initiativePlanningItems(data.tasks);
   const selectedInitiative = initiatives.find((initiative) => initiative.id === draft.parentTaskId);
-  const initiativeApproved = selectedInitiative?.approvalStatus === "approved";
+  const selectedCandidate = candidateOwner?.candidate(draft.parentTaskId);
+  const initiativeApproved = (selectedCandidate || selectedInitiative)?.approvalStatus === "approved";
   const githubHelpId = useId();
 
   const selectInitiative = (parentTaskId: string) => {
-    const nextInitiative = initiatives.find((initiative) => initiative.id === parentTaskId);
+    const nextInitiative = candidateOwner?.candidate(parentTaskId) || initiatives.find((initiative) => initiative.id === parentTaskId);
     setDraft((current) => ({
       ...current,
       parentTaskId,
@@ -317,7 +322,7 @@ function DeliverableForm({
         </section>
 
         <UiField>
-          Zusätzlicher Kontext <span className="font-normal text-slate-400">(optional)</span>
+          Zusätzlicher Kontext <span className="font-normal text-slate-500">(optional)</span>
           <TaskMentionTextArea profiles={data.profiles}
             value={draft.description}
             onValueChange={(value) => setDraft((current) => ({ ...current, description: value }))}
@@ -332,14 +337,14 @@ function DeliverableForm({
       <div className="grid content-start gap-5 bg-slate-50/40 p-5 sm:p-6">
         <section className="grid gap-3">
           <SectionHeading>Struktur</SectionHeading>
-          <UiSelectField
+          {candidateOwner ? <PlanningItemCandidateSelect owner={candidateOwner} value={draft.parentTaskId} selectedContext={selectedInitiative} onChange={selectInitiative} /> : <UiSelectField
             label="Initiative"
             value={draft.parentTaskId}
             onChange={selectInitiative}
             options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...initiativeOptions(initiatives)]}
             aria-label="Initiative"
-          />
-          {selectedInitiative ? (
+          />}
+          {selectedInitiative && (!selectedCandidate || selectedCandidate.updatedAt === selectedInitiative.updatedAt) ? (
             <div className="rounded-md border border-slate-200 bg-white p-3">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">RACI-Kontext</div>
               <InitiativeRaciList initiative={selectedInitiative} profiles={data.profiles} className="mt-2 grid gap-1 text-xs text-slate-600" />
@@ -393,6 +398,7 @@ function StrategicItemForm({
   titleError: string;
   titleValidationId: string;
 }) {
+  const candidateOwner = usePlanningBusinessState();
   const isInitiative = draft.taskType === "initiative";
   const strategicStatusOptions = strategicPlanningStatuses.map((status) => ({ value: status, label: status }));
   const epicOptions = [
@@ -428,7 +434,7 @@ function StrategicItemForm({
         </UiField>
 
         <UiField>
-          Kontext <span className="font-normal text-slate-400">(optional)</span>
+          Kontext <span className="font-normal text-slate-500">(optional)</span>
           <TaskMentionTextArea profiles={data.profiles}
             value={draft.description}
             onValueChange={(value) => setDraft((current) => ({ ...current, description: value }))}
@@ -486,7 +492,7 @@ function StrategicItemForm({
         <section className="grid gap-3">
           <SectionHeading>Einordnung</SectionHeading>
           {isInitiative ? (
-            <UiSelectField
+            candidateOwner ? <PlanningItemCandidateSelect kind="epic" label="Parent-Epic" owner={candidateOwner} value={draft.parentTaskId} onChange={parentTaskId => setDraft(current => ({ ...current, parentTaskId }))} /> : <UiSelectField
               label="Parent-Epic"
               value={draft.parentTaskId}
               onChange={(parentTaskId) => setDraft((current) => ({ ...current, parentTaskId }))}
@@ -543,13 +549,14 @@ function SubIssueForm({
   titleError: string;
   titleValidationId: string;
 }) {
+  const candidateOwner = usePlanningBusinessState();
   return (
     <div className="grid content-start gap-5 p-5 sm:p-6">
       <p className="text-xs font-medium text-slate-500">
         <span aria-hidden="true" className="text-blue-700">*</span> Pflichtfeld
       </p>
 
-      <UiSelectField
+      {candidateOwner ? <PlanningItemCandidateSelect kind="deliverable" label="Übergeordnetes Deliverable, Pflichtfeld" owner={candidateOwner} value={draft.parentTaskId} onChange={value => setDraft(current => withSubIssueParentHierarchy(current, data.tasks, value))} /> : <UiSelectField
         label={<RequiredLabel>Übergeordnetes Deliverable</RequiredLabel>}
         value={draft.parentTaskId}
         onChange={(value) => setDraft((current) => withSubIssueParentHierarchy(current, data.tasks, value))}
@@ -558,7 +565,7 @@ function SubIssueForm({
         aria-required
         data-autofocus
         selectClassName="h-11 text-sm"
-      />
+      />}
 
       <p className="-mt-2 text-xs leading-5 text-slate-500">
         Initiative, Epic und Freigabe werden vom Parent-Deliverable übernommen.
@@ -593,7 +600,7 @@ function SubIssueForm({
       />
 
       <UiField>
-        Kontext <span className="font-normal text-slate-400">(optional)</span>
+        Kontext <span className="font-normal text-slate-500">(optional)</span>
         <TaskMentionTextArea profiles={data.profiles}
           value={draft.description}
           onValueChange={(value) => setDraft((current) => ({ ...current, description: value }))}
@@ -644,6 +651,7 @@ export function NewTaskDialog({
   taskLifecycle?: readonly PlanningTaskLifecycleView[];
   onCheckTaskLifecycle?: (id: string) => Promise<PlanningTaskSaveCheck>;
 }) {
+  const candidateOwner = usePlanningBusinessState();
   const initiatives = initiativePlanningItems(data.tasks);
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
   const errorSummaryRef = useRef<HTMLDivElement>(null);
@@ -738,7 +746,7 @@ export function NewTaskDialog({
         ? "Übergeordnetes Deliverable auswählen."
         : ""
     : "";
-  const canApproveSelectedInitiative = canApproveNow && selectedInitiative?.approvalStatus === "approved";
+  const canApproveSelectedInitiative = canApproveNow && (candidateOwner?.candidate(draft.parentTaskId) || selectedInitiative)?.approvalStatus === "approved";
   const title = draft.taskType === "sub_issue"
     ? "Neues Sub-Issue"
     : draft.taskType === "initiative"

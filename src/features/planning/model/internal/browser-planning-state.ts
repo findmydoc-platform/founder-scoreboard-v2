@@ -467,6 +467,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || typeof body?.version !== "string") throw Object.assign(new Error(body?.error || "Planungsänderungen konnten nicht geprüft werden."), { status: response.status });
         return body.version;
       },
+      async readCandidates(query, options) {
+        const { response, body } = await ownedApiClient.requestJson<Partial<import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateReceipt> & { error?: string; code?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, options);
+        if (!response.ok || !body?.candidates || !body.readActor) throw Object.assign(new Error(body?.error || "Initiativen konnten nicht geladen werden."), { status: response.status, code: body?.code });
+        requireReadAuthority(body.readAuthority);
+        return { candidates: body.candidates, readAuthority: body.readAuthority!, readActor: body.readActor };
+      },
       async readTableRisks(token, options) {
         const { response, body } = await ownedApiClient.requestJson<{ summaries?: import("../planning-table-result").PlanningTableRiskFrame; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; error?: string; code?: string }>(`/api/planning-board-data?summaries=${encodeURIComponent(token)}`, options);
         if (!response.ok || body?.summaries?.kind !== "table-risks") throw Object.assign(new Error(body?.error || "Risiken konnten nicht geladen werden."), { status: response.status, code: body?.code });
