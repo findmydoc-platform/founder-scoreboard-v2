@@ -40,7 +40,7 @@ test("Backlog controls and Sprint receipts remain independent of held selected m
     initialSession: { userId, user: { id: userId }, revision: "support-session", expiresAt: (now + 3_600_000) / 1000 }, adapter: {
       now: () => now, saveTask: async () => ({ task: selected }), readWorkspace: async () => { throw new Error("No workspace fallback"); },
       readBacklogSelection: async (_query, options) => { reads.push("selection"); memberSignal = options?.signal; return member.promise; },
-      readBacklogSupport: async (query: BacklogSupportQuery) => { reads.push(query.area); return query.area === "controls" ? controls(controlsDeadline) : { ...frame(sprintDeadline), backlogSprintBasis: sprintBasis }; },
+      ...{ readBacklogSupport: async (query: BacklogSupportQuery) => { reads.push(query.area); return query.area === "controls" ? controls(controlsDeadline) : { ...frame(sprintDeadline), backlogSprintBasis: sprintBasis }; } },
     } });
   try {
     const port = owner.planning as typeof owner.planning & SupportPort;
@@ -65,10 +65,10 @@ test("a failed or wrong-Actor support read cannot replace current selected Backl
   const owner = createPlanningState({ userId, initialData: emptyPlanningShellState, initialCurrentProfile: actor,
     initialSession: { userId, user: { id: userId }, revision: "support-session", expiresAt: (Date.now() + 3_600_000) / 1000 }, adapter: {
       saveTask: async () => ({ task: selected }), readWorkspace: async () => { throw new Error("No workspace fallback"); },
-      readBacklogSelection: async () => selectedFrame(deadline), readBacklogSupport: async () => {
+      readBacklogSelection: async () => selectedFrame(deadline), ...{ readBacklogSupport: async () => {
         if (fail) throw Object.assign(new Error("Synthetic support unavailable"), { status: 503 });
         return { ...controls(deadline), readActor: { profileId: "another-mapped-reader", platformRole: "founder" as const } };
-      },
+      } },
     } });
   try {
     const port = owner.planning as typeof owner.planning & SupportPort;
