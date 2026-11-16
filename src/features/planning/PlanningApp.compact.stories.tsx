@@ -12,10 +12,14 @@ import { productUpdates } from "@/features/product-updates/model/product-update-
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import { itemPageModel, itemPageProfile, itemPageUser, itemPageHeaderData, mockItemPageBrowser } from "../../../tests/helpers/task-detail-page-browser-fixture";
 
-const full = taskDetailStoryTask({ id: "compact-card", title: "Compact card", description: "Complete description", problemStatement: "Full problem statement", acceptanceCriteria: "Full acceptance criteria", definitionOfDone: "Full definition of done", evidenceLink: "https://example.test/evidence", status: "Offen" });
+const full = taskDetailStoryTask({ id: "compact-card", title: "Compact card", description: "Complete description", problemStatement: "Full problem statement", acceptanceCriteria: "Full acceptance criteria", definitionOfDone: "Full definition of done", evidenceLink: "https://example.test/evidence", status: "Offen", updatedAt: "2026-11-01T12:00:00.000Z" });
 const omitted: (keyof Task)[] = ["description", "problemStatement", "acceptanceCriteria", "definitionOfDone"];
 const compact = { ...full, detailAvailability: "summary" as const };
 for (const field of omitted) delete compact[field];
+const childOmittedFields: (keyof Task)[] = ["description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "note",
+  "strategy", "raciAssignments", "evidenceLinks", "linkedPullRequests", "reviewEvidenceExceptionNote", "githubIssueSyncError", "decisionNote", "carryoverReason", "dependsOn", "evidenceLink", "assignee", "owner", "createdBy"];
+const compactDetail = { ...full, detailAvailability: "summary" as const };
+for (const field of childOmittedFields) delete compactDetail[field];
 const query = normalizePlanningBoardQuery({ view: "board" });
 const columns = Object.fromEntries([...taskStatuses, "Pausiert"].map(status => [status, { total: status === "Offen" ? 1 : 0, loaded: status === "Offen" ? 1 : 0, completeness: "complete", continuation: null } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
 const model = { revision: "compact-r1", project: emptyPlanningShellState.project, items: [compact], people: [itemPageProfile], sprints: [], relationships: [], blockers: [], preferences: [], query, taskOmittedFields: omitted,
@@ -40,6 +44,9 @@ function CompactBoardFlow({ bootstrap = false, paging = false }: { bootstrap?: b
     localStorage.setItem(key, JSON.stringify(productUpdates.map(update => update.id)));
     let active = true;
     let restore: (() => void) | undefined;
+    const deadline = Math.min(session.expiresAt * 1000, Date.now() + 60_000);
+    const detailReceipt = { revision: full.updatedAt!, sourceRevision: "compact-detail-source", observedAt: new Date().toISOString(), validUntil: null,
+      authorityDeadline: deadline, readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole } };
     void mockItemPageBrowser({ respond: input => {
       const url = new URL(String(input), window.location.origin);
       if (url.pathname === "/api/planning-board-data") {
@@ -50,7 +57,17 @@ function CompactBoardFlow({ bootstrap = false, paging = false }: { bootstrap?: b
       if (url.pathname === `/api/tasks/${full.id}/detail-data`) {
         setDetailReads(value => value + 1);
         setDetailAreas(value => [...value, url.searchParams.get("area") || "complete"]);
-        return Response.json({ taskDetail: { ...itemPageModel("deliverable"), item: full, children: [] }, unavailable: [] });
+        const readAuthority = { userId: session.userId, deadline };
+        if (url.searchParams.get("area") === "children") return Response.json({ readAuthority, taskDetail: {
+          ...detailReceipt, readArea: "children", supportingData: "omitted", taskOmittedFields: childOmittedFields,
+          item: compactDetail, ancestors: [], children: [], relatedItems: [], coverage: { children: "complete" },
+          childProgress: { completed: 0, total: 0, unfinished: 0, percentage: 0 },
+          discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+        }, unavailable: [] });
+        if (url.searchParams.get("area") === "target") return Response.json({ readAuthority, taskDetail: {
+          ...itemPageModel("deliverable"), ...detailReceipt, readArea: "target", item: full, children: [], coverage: {},
+        }, unavailable: [] });
+        return Response.json({ error: "Independent target or children demand required" }, { status: 400 });
       }
       return undefined;
     } }).then(cleanup => { if (!active) cleanup(); else { restore = cleanup; setReady(true); } });
@@ -73,7 +90,7 @@ export const CompactSignalsAndFullDetail: Story = { play: async ({ canvasElement
     const panel = await canvas.findByRole("dialog", { name: "Compact card" }, { timeout: 5000 });
   await expect(await within(panel).findByText("Full acceptance criteria")).toBeVisible();
   await expect(await within(panel).findByText("Full definition of done")).toBeVisible();
-  await waitFor(() => expect(canvas.getByLabelText("Detail read areas")).toHaveTextContent(/^target,children$/));
+  await waitFor(() => expect(canvas.getByLabelText("Detail read areas").textContent?.split(",").sort()).toEqual(["children", "target"]));
   await expect(canvas.getByLabelText("Detail reads")).toHaveTextContent("2");
   await expect(canvas.getByLabelText("Unscoped reads")).toHaveTextContent("0");
 } };
