@@ -219,7 +219,10 @@ async function openHeldChild(canvasElement: HTMLElement) {
   completeChildRead?.();
   await userEvent.click(await canvas.findByRole("link", { name: "On-demand child, Status Offen" }));
   await waitFor(() => expect(completeOpenedTarget).toBeDefined());
-  return { canvas, panel: await canvas.findByRole("dialog", { name: "On-demand child" }) };
+  const panel = await canvas.findByRole("dialog");
+  await expect(within(panel).getByRole("link", { name: "Große Ansicht" })).toHaveAttribute("href", "/tasks/on-demand-child");
+  await expect(within(panel).getByText("Aufgabendetails werden geladen …")).toBeVisible();
+  return { canvas, panel };
 }
 
 export const ChildrenStartWhileTargetIsHeldWithoutUnlockingTheEditor: Story = {
@@ -264,7 +267,8 @@ export const SelectionChangeAbortsEarlyChildrenAndRejectsLateResults: Story = {
   play: async ({ canvasElement }) => {
     const { canvas, panel } = await openHeldChild(canvasElement);
     await waitFor(() => expect(completeOpenedChildren).toBeDefined());
-    await userEvent.click(within(panel).getByRole("button", { name: "Detailpanel schließen" }));
+    await expect(panel).toBeVisible();
+    await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(openedChildrenSignal?.aborted).toBe(true));
     await expect(openedTargetSignal?.aborted).toBe(true);
     await userEvent.click(canvas.getByRole("link", { name: "Parent initiative" }));
