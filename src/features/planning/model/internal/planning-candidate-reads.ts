@@ -1,8 +1,8 @@
 import { normalizeInitiativeCandidateQuery, type InitiativeCandidateQuery, type InitiativeCandidateReceipt, type InitiativeCandidateView, type PlanningCandidateAccess } from "@/features/planning-items/model/planning-item-candidates";
 
 type Binding = { active: boolean; generation: number; sourceEpoch: number; sessionRevision?: string; userId: string; actor: { id: string; platformRole: string } | null };
-type Pending = { controller: AbortController; consumers: Set<symbol>; result: Promise<{ ok: boolean }>; resolve: (value: { ok: boolean }) => void; timer?: ReturnType<typeof setTimeout>; previous: InitiativeCandidateView; binding: Binding; sequence: number };
-type Entry = { view: InitiativeCandidateView; receipt?: InitiativeCandidateReceipt; acceptedBinding?: Binding; pending?: Pending; expiry?: ReturnType<typeof setTimeout> };
+type Pending = { controller: AbortController; consumers: Set<symbol>; result: Promise<{ ok: boolean }>; resolve: (value: { ok: boolean }) => void; timer?: ReturnType<typeof setTimeout>; previous: InitiativeCandidateView; binding: Binding; sequence: number; append: boolean; base?: InitiativeCandidateReceipt };
+type Entry = { view: InitiativeCandidateView; receipt?: InitiativeCandidateReceipt; acceptedBinding?: Binding; pending?: Pending; expiry?: ReturnType<typeof setTimeout>; consumed?: Set<string> };
 
 // Query receipts belong to the existing Planning owner. These scalar option
 // fields never certify or replace canonical Task content or write authority.
@@ -11,7 +11,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
   binding: () => Binding; publish: () => void; now: () => number;
 }): PlanningCandidateAccess & { invalidate(): void; clear(): void } {
   const entries = new Map<string, Entry>();
-  const invalidView: InitiativeCandidateView = { query: { view: "candidates", kind: "initiative", query: "", limit: 20 }, readStatus: "unavailable", items: [], total: null, coverage: "unknown", continuation: null };
+  const invalidView: InitiativeCandidateView = { query: { view: "candidates", kind: "initiative", query: "", limit: 20 }, readStatus: "unavailable", furtherReadStatus: "not-loaded", items: [], total: null, coverage: "unknown", continuation: null };
   let sequence = 0, acceptedSequence = 0, acceptedSource: string | undefined;
   const key = (query: InitiativeCandidateQuery) => JSON.stringify([query.kind, query.query, query.limit]);
   const sameSession = (a: Binding, b: Binding) => b.active && a.generation === b.generation && a.sessionRevision === b.sessionRevision && a.userId === b.userId
@@ -19,7 +19,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
   function entry(query: InitiativeCandidateQuery) {
     const normalized = normalizeInitiativeCandidateQuery(query)!;
     const signature = key(normalized);
-    if (!entries.has(signature)) entries.set(signature, { view: { query: normalized, readStatus: "not-loaded", items: [], total: null, coverage: "unknown", continuation: null } });
+    if (!entries.has(signature)) entries.set(signature, { view: { query: normalized, readStatus: "not-loaded", furtherReadStatus: "not-loaded", items: [], total: null, coverage: "unknown", continuation: null } });
     return entries.get(signature)!;
   }
   function valid(value: Entry) {
@@ -57,7 +57,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
       aborted = true; pending.consumers.delete(consumer);
       if (!pending.consumers.size && value.pending === pending) {
         release(value); expire(value);
-        value.view = valid(value) ? { ...value.view, readStatus: "stale" } : { ...pending.previous, readStatus: "not-loaded", items: [], coverage: "unknown", total: null, continuation: null };
+        value.view = valid(value) ? pending.append ? pending.previous : { ...value.view, readStatus: "stale" } : { ...pending.previous, readStatus: "not-loaded", items: [], coverage: "unknown", total: null, continuation: null };
         publish();
       }
     };
@@ -86,21 +86,42 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
           release(other); other.view = { ...other.view, readStatus: "stale", coverage: "unknown", continuation: null };
         }
       }
+      const base = pending.base;
+      const previousIds = new Set(base?.candidates.items.map(item => item.id));
+      if (pending.append && (!base || page.sourceRevision !== base.candidates.sourceRevision || page.observedAt !== base.candidates.observedAt
+        || page.validUntil !== base.candidates.validUntil || page.total !== base.candidates.total
+        || base.readAuthority.deadline <= now() || page.items.some(item => previousIds.has(item.id)))) {
+        value.view = { ...value.view, readStatus: "stale", coverage: "unknown", continuation: null, furtherReadStatus: "stale" }; return;
+      }
+      const items = pending.append ? [...base!.candidates.items, ...page.items] : page.items;
+      if (items.length > page.total || page.coverage === "complete" && items.length !== page.total
+        || page.coverage === "partial" && (items.length >= page.total || !page.continuation)) {
+        value.view = { ...value.view, readStatus: "stale", coverage: "unknown", continuation: null, furtherReadStatus: "stale" }; return;
+      }
+      const accepted = { ...receipt, candidates: { ...page, items }, readAuthority: { ...receipt.readAuthority,
+        deadline: Math.min(receipt.readAuthority.deadline, pending.append ? base!.readAuthority.deadline : Infinity) } };
       acceptedSource = page.sourceRevision; acceptedSequence = Math.max(acceptedSequence, pending.sequence);
-      value.receipt = receipt;
+      value.receipt = accepted;
       value.acceptedBinding = current;
-      value.view = { query, readStatus: "current", items: page.items, total: page.total, coverage: page.coverage, continuation: page.continuation };
+      if (!pending.append) value.consumed = new Set();
+      if (query.continuation) value.consumed?.add(query.continuation);
+      const baseQuery = { ...query, continuation: undefined };
+      value.view = { query: baseQuery, readStatus: "current", furtherReadStatus: pending.append ? "current" : "not-loaded", items, total: page.total, coverage: page.coverage, continuation: page.continuation };
       clearTimeout(value.expiry);
-      value.expiry = setTimeout(() => { expire(value); publish(); }, Math.max(0, Math.min(receipt.readAuthority.deadline, Date.parse(page.validUntil)) - now()));
+      value.expiry = setTimeout(() => { expire(value); publish(); }, Math.max(0, Math.min(accepted.readAuthority.deadline, Date.parse(page.validUntil)) - now()));
     } catch (error) {
       const current = binding();
       if (sameSession(pending.binding, current) && typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403)) {
         clear(); entries.set(key(query), value); value.receipt = undefined;
         value.view = { ...value.view, readStatus: "forbidden", items: [], total: null, coverage: "unknown", continuation: null };
         publish();
-      } else if (value.pending === pending) value.view = { ...value.view, readStatus: "unavailable", coverage: "unknown", continuation: null };
+      } else if (value.pending === pending) {
+        if (pending.append && valid(value) && typeof error === "object" && error !== null && "status" in error && error.status !== 409) {
+          value.view = { ...pending.previous, furtherReadStatus: "unavailable" };
+        } else value.view = { ...value.view, readStatus: "unavailable", furtherReadStatus: "unavailable", coverage: "unknown", continuation: null };
+      }
     } finally {
-      if (value.pending === pending) { value.pending = undefined; pending.resolve({ ok: value.view.readStatus === "current" }); publish(); }
+      if (value.pending === pending) { value.pending = undefined; pending.resolve({ ok: value.view.readStatus === "current" && value.view.furtherReadStatus !== "unavailable" }); publish(); }
     }
   }
   return {
@@ -118,19 +139,26 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
       return null;
     },
     loadCandidates(input, options) {
-      const query = normalizeInitiativeCandidateQuery(input), current = binding();
-      if (!query || !read || !current.active || options?.signal?.aborted) return Promise.resolve({ ok: false });
-      const value = entry(query); expire(value);
-      if (!options?.refresh && value.view.readStatus === "current" && valid(value)) return Promise.resolve({ ok: true });
+      const normalized = normalizeInitiativeCandidateQuery(input);
+      const current = binding();
+      if (!normalized || !read || !current.active || options?.signal?.aborted) return Promise.resolve({ ok: false });
+      const value = entry(normalized); expire(value);
+      const fresh = value.view.readStatus === "current" && valid(value);
+      if (normalized.continuation && fresh && value.consumed?.has(normalized.continuation)) return Promise.resolve({ ok: true });
+      const append = Boolean(normalized.continuation && fresh && value.view.continuation === normalized.continuation);
+      const restart = Boolean(normalized.continuation && !append);
+      const query = restart ? { ...normalized, continuation: undefined } : normalized;
+      if (!append && !restart && !options?.refresh && fresh) return Promise.resolve({ ok: true });
       if (value.pending) {
         const pending = value.pending;
+        if (pending.append !== append || append && pending.base?.candidates.continuation !== query.continuation) return Promise.resolve({ ok: false });
         if (options?.immediate && pending.timer) { clearTimeout(pending.timer); pending.timer = undefined; void execute(value, pending, query); }
         return retain(value, pending, options?.signal);
       }
       let resolve!: Pending["resolve"];
       const result = new Promise<{ ok: boolean }>(done => { resolve = done; });
-      const pending: Pending = { controller: new AbortController(), consumers: new Set(), result, resolve, previous: value.view, binding: current, sequence: ++sequence };
-      value.pending = pending; value.view = { ...value.view, query, readStatus: "loading" };
+      const pending: Pending = { controller: new AbortController(), consumers: new Set(), result, resolve, previous: value.view, binding: current, sequence: ++sequence, append, base: append ? value.receipt : undefined };
+      value.pending = pending; value.view = append ? { ...value.view, furtherReadStatus: "loading" } : { ...value.view, query, readStatus: "loading", furtherReadStatus: "not-loaded" };
       const retained = retain(value, pending, options?.signal);
       if (options?.immediate) void execute(value, pending, query);
       else pending.timer = setTimeout(() => { pending.timer = undefined; void execute(value, pending, query); }, 250);

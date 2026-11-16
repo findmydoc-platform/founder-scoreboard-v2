@@ -25,6 +25,7 @@ export type InitiativeCandidateReceipt = Readonly<{
 export type InitiativeCandidateView = Readonly<{
   query: InitiativeCandidateQuery;
   readStatus: import("@/features/planning/model/planning-state").PlanningReadStatus;
+  furtherReadStatus: import("@/features/planning/model/planning-state").PlanningReadStatus;
   items: InitiativeCandidatePage["items"];
   total: number | null;
   coverage: "complete" | "partial" | "unknown";
